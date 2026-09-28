@@ -5,6 +5,8 @@
 
 **Status:** `[ ]`
 
+**Note:** Quantifier policies and action-expression quantifiers lower to the same `foreach` in simulate and print. Tests cover policy bodies, action `if` / `assign` / short-circuit `and`, void and entity-returning create initializers, for-each invoke arguments, path-prefix hops whose target contains a quantifier, a temporal date-add with a quantifier child, action-parameter names winning inside a quantifier body, and a `for` whose predicate policy is itself a quantifier. Tasks below that are not that lowering stay `[ ]`.
+
 ## Task order
 
 | ID | File | Size | Status |

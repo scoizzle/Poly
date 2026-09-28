@@ -25,9 +25,11 @@ namespace Poly.DomainModeling.Lowering;
 /// are structurally unfolded into nested Member chains.
 /// Existence queries (Exists/NotExists) become null comparisons.
 /// Arithmetic, boolean, and comparison nodes map 1:1 to their Syntax AST
-/// counterparts.
+/// counterparts. Filtered quantifiers become foreach loops whose statements
+/// sit immediately before the statement that reads the result.
 /// </remarks>
-public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node> {
+public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<LoweredExpression> {
+    private readonly LoweringContext _context;
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
     private readonly bool _useThisReference;
@@ -37,10 +39,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     private readonly Func<string, bool>? _isRelationshipNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Domain? _domain;
+    private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
     private string? _sourceEntityName;
     private Node _currentSubject = null!;
+    private readonly LocalNames _names;
 
     /// <param name="parameters">
     /// Optional map of parameter names to their Syntax AST nodes.
@@ -60,6 +64,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
     /// names to generated member names (pascal-cased navs).
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
+        _context = context.Names is null ? context with { Names = new LocalNames() } : context;
+        _names = _context.Names!;
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
         _useThisReference = context.UseThisReference;
@@ -69,6 +75,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         _isRelationshipNavigation = context.IsRelationshipNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _domain = context.Domain;
+        _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
         _sourceEntityName = context.SourceEntityName;
@@ -90,11 +97,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
             : new ExpressionFormRegistry());
 
     /// <summary>
-    /// Lowers <paramref name="expression"/> to a Syntax AST <see cref="Node"/>,
-    /// using <paramref name="subject"/> as the current-instance root for
-    /// property and owned-navigation resolution.
+    /// Lowers <paramref name="expression"/> to statements plus a value, using
+    /// <paramref name="subject"/> as the current-instance root. Callers that emit
+    /// a surrounding statement place the statements immediately before it via
+    /// <see cref="LoweredExpression.Before"/>.
     /// </summary>
-    public Node Lower(DomainExpression expression, Node subject) {
+    public LoweredExpression LowerExpression(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
         _currentSubject = _useThisReference && subject is Parameter { Name: "entity" }
@@ -103,38 +111,52 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return Route(expression);
     }
 
-    protected override Node Default() => throw new NotSupportedException(
+    /// <summary>
+    /// Lowers the expression to a single Syntax node for callers that compile it
+    /// on its own (policy Evaluate, VM). When the expression produced statements,
+    /// they wrap the value in a Block.
+    /// </summary>
+    public Node Lower(DomainExpression expression, Node subject) {
+        var lowered = LowerExpression(expression, subject);
+        return lowered.Statements.Count == 0
+            ? lowered.Value
+            : new Block([.. lowered.Statements, lowered.Value], lowered.Variables);
+    }
+
+    protected override LoweredExpression Default() => throw new NotSupportedException(
         $"DomainExpression node type is not supported");
 
-    protected override Node PropertyAccess(PropertyAccess p) {
+    protected override LoweredExpression PropertyAccess(PropertyAccess p) {
         // Export (UseThisReference) resolves session ident folds (clocks) and Guid
         // through LowerDefaultExpression. Bare fragments without those tables stay
         // Member so analysis can fail closed on unknown property.
         if (_useThisReference) {
             var runtime = EffectLoweringPass.LowerDefaultExpression(
                 p, typeHint: null, EffectiveMeaning, EffectiveForms);
-            if (runtime is not null) return runtime;
+            if (runtime is not null) return LoweredExpression.Of(runtime);
         }
 
-        // When UseThisReference is set, action parameters render as bare names
+        // Action parameters win over a property of the same name, including
+        // inside a quantifier body (the nested pass inherits ActionParameterNames).
         if (_useThisReference && _actionParameterNames?.Contains(p.Name) == true)
-            return new Parameter(p.Name);
-        return new Member(_currentSubject, ResolveName(p.Name));
+            return LoweredExpression.Of(new Parameter(p.Name));
+        return LoweredExpression.Of(new Member(_currentSubject, ResolveName(p.Name)));
     }
 
     /// <summary>Applies the navigation name resolver (DSL nav → generated member name).</summary>
     private string ResolveName(string name) => _navigationNameResolver?.Invoke(name) ?? name;
 
-    protected override Node ParameterAccess(ParameterAccess p)
-        => _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name);
+    protected override LoweredExpression ParameterAccess(ParameterAccess p)
+        => LoweredExpression.Of(
+            _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name));
 
-    protected override Node Literal(Literal l)
-        => new Constant(l.Value);
+    protected override LoweredExpression Literal(Literal l)
+        => LoweredExpression.Of(new Constant(l.Value));
 
-    protected override Node OwnedAccess(OwnedAccess oa)
+    protected override LoweredExpression OwnedAccess(OwnedAccess oa)
         => Route(oa.Inner, new Member(_currentSubject, ResolveName(oa.OwnedName)));
 
-    protected override Node RelationshipNavigation(RelationshipNavigation rn) {
+    protected override LoweredExpression RelationshipNavigation(RelationshipNavigation rn) {
         // Peer binder / other parameter-backed path-prefix roots: subject is the
         // parameter node, not Member(this, name). Nested path-prefix under that
         // root is unsupported (analysis rejects; fail loud here for defense).
@@ -165,7 +187,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
                 ? new TypeCast(related, new TypeReference(targetName))
                 : related;
             var whenPresent = Route(rn.TargetProperty, typedHop, targetName);
-            return new Conditional(exists, whenPresent, new Constant(false));
+            if (whenPresent.Statements.Count == 0)
+                return LoweredExpression.Of(new Conditional(exists, whenPresent.Value, new Constant(false)));
+            var t = _names.Next("t");
+            var thenBlock = new Block(
+                [.. whenPresent.Statements, new Assignment(t, whenPresent.Value)],
+                whenPresent.Variables);
+            return new LoweredExpression(
+                [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
+                [t],
+                t);
         }
 
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
@@ -183,8 +214,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         expr is RelationshipNavigation
         || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
-    // --- Recurse into a new subject — helper to avoid confusion with Route(expr) ---
-    private Node Route(DomainExpression expr, Node subject, string? sourceEntityName = null) {
+    private LoweredExpression Route(DomainExpression expr, Node subject, string? sourceEntityName = null) {
         var saved = _currentSubject;
         var savedSource = _sourceEntityName;
         _currentSubject = subject;
@@ -197,35 +227,58 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         }
     }
 
-    protected override Node Exists(Exists e) {
+    /// <summary>
+    /// Library handlers receive a value-only route. This records each child's
+    /// statements and combines them with the handler's node.
+    /// </summary>
+    private bool TryLowerLibrary(DomainExpression expr, [NotNullWhen(true)] out LoweredExpression? lowered) {
+        var children = new List<LoweredExpression>();
+        Node RouteChild(DomainExpression child) {
+            var routed = Route(child);
+            children.Add(routed);
+            return routed.Value;
+        }
+        if (EffectiveMeaning.Lowering.TryLower(expr, RouteChild, _propertyTypeResolver, out var node)) {
+            lowered = LoweredExpression.Combine(children, node);
+            return true;
+        }
+        lowered = null;
+        return false;
+    }
+
+    protected override LoweredExpression Exists(Exists e) {
         if (!_useThisReference && e.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return new Invoke(
+            return LoweredExpression.Of(new Invoke(
                 new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name));
+                new Constant(pa.Name)));
         }
         // Collection (`many`) relationship: the export's `collection != null` is
         // always true (ctor-initialized) while the runtime answers store-link
         // presence (false on empty) — lower to a real non-empty check instead.
         if (e.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
-            return new NotEqual(
-                new Member(Lower(e.Target, _currentSubject), "Count"),
-                new Constant(0));
+            var target = Route(e.Target);
+            return target with {
+                Value = new NotEqual(new Member(target.Value, "Count"), new Constant(0))
+            };
         }
-        return new NotEqual(Lower(e.Target, _currentSubject), new Constant(null));
+        var other = Route(e.Target);
+        return other with { Value = new NotEqual(other.Value, new Constant(null)) };
     }
 
-    protected override Node NotExists(NotExists ne) {
+    protected override LoweredExpression NotExists(NotExists ne) {
         if (!_useThisReference && ne.Target is PropertyAccess pa && IsRelationship(pa.Name)) {
-            return new SN.Not(new Invoke(
+            return LoweredExpression.Of(new SN.Not(new Invoke(
                 new Member(_currentSubject, "ExistsRelated"),
-                new Constant(pa.Name)));
+                new Constant(pa.Name))));
         }
         if (ne.Target is PropertyAccess col && IsCollectionNav(col.Name)) {
-            return new Equal(
-                new Member(Lower(ne.Target, _currentSubject), "Count"),
-                new Constant(0));
+            var target = Route(ne.Target);
+            return target with {
+                Value = new Equal(new Member(target.Value, "Count"), new Constant(0))
+            };
         }
-        return new Equal(Lower(ne.Target, _currentSubject), new Constant(null));
+        var other = Route(ne.Target);
+        return other with { Value = new Equal(other.Value, new Constant(null)) };
     }
 
     private bool IsCollectionNav(string name) =>
@@ -244,36 +297,75 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return rel?.Target.TypeName;
     }
 
-    protected override Node Add(Add a) {
-        if (EffectiveMeaning.Lowering.TryLower(a, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
-            return node;
-        return new SN.Add(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+    protected override LoweredExpression Add(Add a) {
+        if (TryLowerLibrary(a, out var lowered))
+            return lowered;
+        var left = Route(a.Left);
+        var right = Route(a.Right);
+        return LoweredExpression.Combine([left, right], new SN.Add(left.Value, right.Value));
     }
 
-    protected override Node Subtract(Subtract s) {
-        if (EffectiveMeaning.Lowering.TryLower(s, e => Lower(e, _currentSubject), _propertyTypeResolver, out var node))
-            return node;
-        return new SN.Subtract(Lower(s.Left, _currentSubject), Lower(s.Right, _currentSubject));
+    protected override LoweredExpression Subtract(Subtract s) {
+        if (TryLowerLibrary(s, out var lowered))
+            return lowered;
+        var left = Route(s.Left);
+        var right = Route(s.Right);
+        return LoweredExpression.Combine([left, right], new SN.Subtract(left.Value, right.Value));
     }
 
-    protected override Node Multiply(Multiply m)
-        => new SN.Multiply(Lower(m.Left, _currentSubject), Lower(m.Right, _currentSubject));
+    protected override LoweredExpression Multiply(Multiply m) {
+        var left = Route(m.Left);
+        var right = Route(m.Right);
+        return LoweredExpression.Combine([left, right], new SN.Multiply(left.Value, right.Value));
+    }
 
-    protected override Node Divide(Divide d)
-        => new SN.Divide(Lower(d.Left, _currentSubject), Lower(d.Right, _currentSubject));
+    protected override LoweredExpression Divide(Divide d) {
+        var left = Route(d.Left);
+        var right = Route(d.Right);
+        return LoweredExpression.Combine([left, right], new SN.Divide(left.Value, right.Value));
+    }
 
-    protected override Node And(And a)
-        => new SN.And(Lower(a.Left, _currentSubject), Lower(a.Right, _currentSubject));
+    protected override LoweredExpression And(And a) {
+        var left = Route(a.Left);
+        var right = Route(a.Right);
+        if (right.Statements.Count == 0)
+            return LoweredExpression.Combine([left, right], new SN.And(left.Value, right.Value));
+        return ShortCircuit(left, right, whenTrue: true);
+    }
 
-    protected override Node Or(Or o)
-        => new SN.Or(Lower(o.Left, _currentSubject), Lower(o.Right, _currentSubject));
+    protected override LoweredExpression Or(Or o) {
+        var left = Route(o.Left);
+        var right = Route(o.Right);
+        if (right.Statements.Count == 0)
+            return LoweredExpression.Combine([left, right], new SN.Or(left.Value, right.Value));
+        return ShortCircuit(left, right, whenTrue: false);
+    }
 
-    protected override Node Not(Not n)
-        => new SN.Not(Lower(n.Operand, _currentSubject));
+    /// <summary>
+    /// Preserves source-order short-circuit when the right operand has statements:
+    /// evaluate left, then run the right statements only if the left requires it
+    /// (<c>if (t)</c> for and, <c>if (!t)</c> for or).
+    /// </summary>
+    private LoweredExpression ShortCircuit(LoweredExpression left, LoweredExpression right, bool whenTrue) {
+        var t = _names.Next("t");
+        Node gate = whenTrue ? t : new SN.Not(t);
+        var thenBlock = new Block(
+            [.. right.Statements, new Assignment(t, right.Value)],
+            right.Variables);
+        List<Node> statements = [.. left.Statements, new Assignment(t, left.Value), new IfStatement(gate, thenBlock)];
+        return new LoweredExpression(statements, [.. left.Variables, t], t);
+    }
 
-    protected override Node Comparison(Comparison c) {
-        var loweredLeft = Lower(c.Left, _currentSubject);
-        var loweredRight = Lower(c.Right, _currentSubject);
+    protected override LoweredExpression Not(Not n) {
+        var operand = Route(n.Operand);
+        return operand with { Value = new SN.Not(operand.Value) };
+    }
+
+    protected override LoweredExpression Comparison(Comparison c) {
+        var left = Route(c.Left);
+        var right = Route(c.Right);
+        var loweredLeft = left.Value;
+        var loweredRight = right.Value;
 
         // For enum-typed properties, replace string literal with qualified member
         // access: Status == "Active" becomes Status == PatronStatus.Active
@@ -286,24 +378,28 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
 
         // Simplify boolean comparisons: boolProp == true  → boolProp
         //                            boolProp == false → !boolProp
+        Node value;
         if (c.Kind == ComparisonKind.Equal
             && loweredRight is Constant { Value: bool b }) {
-            return b ? loweredLeft : new SN.Not(loweredLeft);
+            value = b ? loweredLeft : new SN.Not(loweredLeft);
         }
-        if (c.Kind == ComparisonKind.NotEqual
+        else if (c.Kind == ComparisonKind.NotEqual
             && loweredRight is Constant { Value: bool b2 }) {
-            return b2 ? new SN.Not(loweredLeft) : loweredLeft;
+            value = b2 ? new SN.Not(loweredLeft) : loweredLeft;
+        }
+        else {
+            value = c.Kind switch {
+                ComparisonKind.Equal => new Equal(loweredLeft, loweredRight),
+                ComparisonKind.NotEqual => new NotEqual(loweredLeft, loweredRight),
+                ComparisonKind.LessThan => new LessThan(loweredLeft, loweredRight),
+                ComparisonKind.LessThanOrEqual => new LessThanOrEqual(loweredLeft, loweredRight),
+                ComparisonKind.GreaterThan => new GreaterThan(loweredLeft, loweredRight),
+                ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(loweredLeft, loweredRight),
+                _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
+            };
         }
 
-        return c.Kind switch {
-            ComparisonKind.Equal => new Equal(loweredLeft, loweredRight),
-            ComparisonKind.NotEqual => new NotEqual(loweredLeft, loweredRight),
-            ComparisonKind.LessThan => new LessThan(loweredLeft, loweredRight),
-            ComparisonKind.LessThanOrEqual => new LessThanOrEqual(loweredLeft, loweredRight),
-            ComparisonKind.GreaterThan => new GreaterThan(loweredLeft, loweredRight),
-            ComparisonKind.GreaterThanOrEqual => new GreaterThanOrEqual(loweredLeft, loweredRight),
-            _ => throw new NotSupportedException($"Comparison kind '{c.Kind}' is not supported."),
-        };
+        return LoweredExpression.Combine([left, right], value);
     }
 
     /// <summary>
@@ -324,48 +420,118 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Node
         return null;
     }
 
-    // Filtered any/all/none/count: runtime Store jobs (Notify-shaped). C# export
-    // keeps in-memory collection Count for bare `count Rel`; filtered still throws.
-    protected override Node AnyExpr(AnyExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("any", a.RelationshipName)
-            : StoreQuantifier("AnyRelated", a.RelationshipName, a.Body);
+    // Filtered any/all/none/count: a foreach over the navigation collection
+    // (the same Member(subject, PascalCase(rel)) that ForEachInvoke loops over).
+    // The quantifier's statements are the init + loop; its value is the result variable
+    // (or sawItem && result for all, so an empty collection is false).
+    // Bare `count Rel` is the collection's Count.
+    protected override LoweredExpression AnyExpr(AnyExpr a) =>
+        LowerFilteredQuantifier(a.RelationshipName, a.Body, QuantifierKind.Any);
 
-    protected override Node AllExpr(AllExpr a) =>
-        _useThisReference
-            ? throw Q3NotSupported("all", a.RelationshipName)
-            : StoreQuantifier("AllRelated", a.RelationshipName, a.Body);
+    protected override LoweredExpression AllExpr(AllExpr a) =>
+        LowerFilteredQuantifier(a.RelationshipName, a.Body, QuantifierKind.All);
 
-    protected override Node NoneExpr(NoneExpr n) =>
-        _useThisReference
-            ? throw Q3NotSupported("none", n.RelationshipName)
-            : StoreQuantifier("NoneRelated", n.RelationshipName, n.Body);
+    protected override LoweredExpression NoneExpr(NoneExpr n) =>
+        LowerFilteredQuantifier(n.RelationshipName, n.Body, QuantifierKind.None);
 
-    protected override Node CountExpr(CountExpr c) {
-        if (_useThisReference) {
-            if (c.Body is not null)
-                throw Q3NotSupported("count", c.RelationshipName);
-            return new Member(
+    protected override LoweredExpression CountExpr(CountExpr c) {
+        if (c.Body is null)
+            return LoweredExpression.Of(new Member(
                 new Member(_currentSubject, ResolveNavName(c.RelationshipName)),
-                "Count");
-        }
-        return StoreQuantifier("CountRelated", c.RelationshipName, c.Body);
+                "Count"));
+        return LowerFilteredQuantifier(c.RelationshipName, c.Body, QuantifierKind.Count);
     }
 
-    private Node StoreQuantifier(string job, string relationshipName, DomainExpression? body) =>
-        new Invoke(
-            new Member(_currentSubject, job),
-            new Constant(relationshipName),
-            new Constant(body));
+    private enum QuantifierKind { Any, All, None, Count }
 
-    private static Exception Q3NotSupported(string quantifier, string relName) =>
-        new NotSupportedException(
-            $"Collection quantifier '{quantifier} {relName} …' requires store-aware evaluation " +
-            "which is not yet implemented on the VM compilation path.");
+    /// <summary>
+    /// One quantifier: <c>result = init; foreach (var itemN in collection) { body; if (...) }</c>,
+    /// value is <c>result</c>.
+    /// <list type="bullet">
+    /// <item><c>any</c>: true at the first match; false when nothing matches or there are no items.</item>
+    /// <item><c>all</c>: false at the first miss; also false when there are no items (via sawItem).</item>
+    /// <item><c>none</c>: false at the first match; true otherwise.</item>
+    /// <item><c>count … where</c>: the number of matching items.</item>
+    /// </list>
+    /// </summary>
+    private LoweredExpression LowerFilteredQuantifier(
+        string relationshipName, DomainExpression body, QuantifierKind kind) {
+        var collection = new Member(_currentSubject, ResolveNavName(relationshipName));
+        var item = _names.Next("item");
+        var bodyLowered = LowerQuantifierBody(relationshipName, body, item);
 
-    protected override Node Library(DomainExpression expr) {
-        if (EffectiveMeaning.Lowering.TryLower(expr, Route, _propertyTypeResolver, out var node))
-            return node;
+        var result = _names.Next(kind switch {
+            QuantifierKind.Any => "any",
+            QuantifierKind.All => "all",
+            QuantifierKind.None => "none",
+            _ => "count",
+        });
+        Node initial = kind switch {
+            QuantifierKind.Any => new Constant(false),
+            QuantifierKind.All => new Constant(true),
+            QuantifierKind.None => new Constant(true),
+            _ => new Constant(0L),
+        };
+        Node onItem = kind switch {
+            QuantifierKind.Any => new IfStatement(bodyLowered.Value, new Block([
+                new Assignment(result, new Constant(true)), new BreakStatement()])),
+            QuantifierKind.All => new IfStatement(new SN.Not(bodyLowered.Value), new Block([
+                new Assignment(result, new Constant(false)), new BreakStatement()])),
+            QuantifierKind.None => new IfStatement(bodyLowered.Value, new Block([
+                new Assignment(result, new Constant(false)), new BreakStatement()])),
+            _ => new IfStatement(bodyLowered.Value, new Block([
+                new Assignment(result, new SN.Add(result, new Constant(1L)))])),
+        };
+
+        if (kind == QuantifierKind.All) {
+            // `all` over no items is false, so the loop also records that it saw one.
+            var sawItem = _names.Next("sawItem");
+            Node[] statements = [
+                new Assignment(result, initial),
+                new Assignment(sawItem, new Constant(false)),
+                new ForEachLoop(item, collection,
+                    new Block(
+                        [.. bodyLowered.Statements, new Assignment(sawItem, new Constant(true)), onItem],
+                        bodyLowered.Variables)),
+            ];
+            return new LoweredExpression(statements, [result, sawItem], new SN.And(sawItem, result));
+        }
+
+        Node[] loopStatements = [
+            new Assignment(result, initial),
+            new ForEachLoop(item, collection,
+                new Block([.. bodyLowered.Statements, onItem], bodyLowered.Variables)),
+        ];
+        return new LoweredExpression(loopStatements, [result], result);
+    }
+
+    /// <summary>
+    /// Lowers a quantifier body against the loop's <paramref name="item"/>, using the
+    /// related entity's enum properties. Nested quantifiers in the body produce
+    /// statements that run inside the outer loop, once per item, and share this
+    /// pass's local-name generator so names stay unique.
+    /// </summary>
+    private LoweredExpression LowerQuantifierBody(
+        string relationshipName, DomainExpression body, Variable item) {
+        var targetName = ResolveRelationshipTarget(relationshipName);
+        IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
+        if (_domain is not null && targetName is not null) {
+            var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+                string.Equals(e.Name, targetName, StringComparison.Ordinal));
+            if (targetEntity is not null)
+                enums = DomainToCSharpExporter.GetEnumPropertyNames(
+                    targetEntity, _domain, _analysis);
+        }
+        var nested = new DomainExpressionLoweringPass(_context with {
+            EnumPropertyNames = enums,
+            SourceEntityName = targetName ?? _sourceEntityName
+        });
+        return nested.LowerExpression(body, item);
+    }
+
+    protected override LoweredExpression Library(DomainExpression expr) {
+        if (TryLowerLibrary(expr, out var lowered))
+            return lowered;
         throw new NotSupportedException(
             $"DomainExpression node type '{expr.GetType().Name}' is not supported");
     }

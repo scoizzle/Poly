@@ -88,27 +88,6 @@ public sealed partial record DomainEntityInstance {
         TryLinkCreateInBackReference(child);
     }
 
-    public bool AnyRelated(string relationshipName, object? body) =>
-        EvaluateAnyExpr(new AnyExpr(relationshipName, RequirePredicate(body, "AnyRelated")));
-
-    public bool AllRelated(string relationshipName, object? body) =>
-        EvaluateAllExpr(new AllExpr(relationshipName, RequirePredicate(body, "AllRelated")));
-
-    public bool NoneRelated(string relationshipName, object? body) =>
-        EvaluateNoneExpr(new NoneExpr(relationshipName, RequirePredicate(body, "NoneRelated")));
-
-    public long CountRelated(string relationshipName, object? body) =>
-        EvaluateCountExpr(body is null
-            ? new CountExpr(relationshipName, Body: null)
-            : new CountExpr(relationshipName, RequirePredicate(body, "CountRelated")));
-
-    private static DomainExpression RequirePredicate(object? body, string job) {
-        if (body is DomainExpression expr)
-            return expr;
-        throw new InvalidOperationException(
-            $"{job} predicate must be a domain expression, got {body?.GetType().Name ?? "null"}.");
-    }
-
     private static bool IsConstraintFailureMessage(string message) =>
         message.Contains("Unique", StringComparison.Ordinal)
         || message.Contains("required", StringComparison.Ordinal)

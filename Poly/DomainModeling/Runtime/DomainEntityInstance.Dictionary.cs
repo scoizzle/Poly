@@ -21,8 +21,8 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
                 return stored;
             if (TryGetOneToOneNavigation(key, out var nav))
                 return nav;
-            if (TryGetCollectionNavigation(key, out var col))
-                return col;
+            if (MatchCollectionNavigation(key) is { } collection)
+                return ReadLinkedTargets(collection);
             return _values[key];
         }
         set => _values[key] = value;
@@ -33,7 +33,7 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
     bool IDictionary<string, object?>.ContainsKey(string key) =>
         _values.ContainsKey(key)
         || TryGetOneToOneNavigation(key, out _)
-        || TryGetCollectionNavigation(key, out _);
+        || MatchCollectionNavigation(key) is not null;
 
     bool IDictionary<string, object?>.Remove(string key) => _values.Remove(key);
 
@@ -42,8 +42,10 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
             return true;
         if (TryGetOneToOneNavigation(key, out value))
             return true;
-        if (TryGetCollectionNavigation(key, out value))
+        if (MatchCollectionNavigation(key) is { } collection) {
+            value = ReadLinkedTargets(collection);
             return true;
+        }
         value = null;
         return false;
     }

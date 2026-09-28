@@ -768,14 +768,25 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                         $"ForEachInvoke predicate policy '{policyName}' does not exist on entity '{targetEntity.Name}'.",
                         DomainModelDiagnosticCodes.EffectBinding);
                 }
-                else if (ContainsStoreDependentExpression(predicatePolicy.Expression)) {
-                    // The export lowers such policies to a NotSupportedException-throwing
-                    // method — a `for` predicate calling it would dead-end the whole action.
+                else if (EnumerateRelationshipNavigations(predicatePolicy.Expression).Any()) {
+                    // An unlinked hop simulates false, but the export dereferences
+                    // null, so a `for` must not call such a policy.
                     context.ReportError(
                         efe,
-                        $"ForEachInvoke predicate policy '{policyName}' is store-dependent " +
-                        "(quantifiers / path-prefix / exists) and cannot be compiled to standalone C#. " +
+                        $"ForEachInvoke predicate policy '{policyName}' reads a path-prefix hop; " +
+                        "an unlinked hop simulates false but the export dereferences null. " +
                         "Use a local policy over the record's own properties.",
+                        DomainModelDiagnosticCodes.EffectInvokeShape);
+                }
+                else if (TestsPropertyExists(context, domain, predicatePolicy.Expression, targetEntity)) {
+                    // Simulate and export disagree on whether an unset property exists
+                    // (an unset Text simulates present; the export's unset Number is
+                    // never null), so the two would pick different records.
+                    context.ReportError(
+                        efe,
+                        $"ForEachInvoke predicate policy '{policyName}' tests 'exists' on a property; " +
+                        "simulate and export disagree on whether an unset property exists. " +
+                        "Compare the property to a value instead.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
                 }
                 break;
@@ -841,13 +852,36 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 yield return nested;
     }
 
-    /// <summary>True when an expression contains a construct the standalone export cannot
-    /// lower (collection quantifiers, path-prefix, exists) — such policies lower to a
-    /// NotSupportedException-throwing method.</summary>
-    private static bool ContainsStoreDependentExpression(DomainExpression expr) => expr switch {
-        AnyExpr or AllExpr or NoneExpr or CountExpr or Exists or NotExists or RelationshipNavigation => true,
-        _ => expr.Children.OfType<DomainExpression>().Any(ContainsStoreDependentExpression),
-    };
+    /// <summary>True when an expression tests <c>exists</c> / <c>not exists</c> on a property
+    /// (not a relationship) of <paramref name="entity"/>, or, inside an
+    /// <c>any</c>/<c>all</c>/<c>none</c>/<c>count</c> body, of the related entity.</summary>
+    private static bool TestsPropertyExists(
+        AnalysisContext context, Domain domain, DomainExpression expr, Entity entity) {
+        var target = expr switch { Exists e => e.Target, NotExists ne => ne.Target, _ => null };
+        if (target is PropertyAccess pa
+            && entity.Properties.Any(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal)))
+            return true;
+        var quantified = expr switch {
+            AnyExpr a => a.RelationshipName,
+            AllExpr a => a.RelationshipName,
+            NoneExpr n => n.RelationshipName,
+            CountExpr c => c.RelationshipName,
+            _ => null
+        };
+        var scope = entity;
+        if (quantified is not null) {
+            // Quantifiers are source-side only. An unresolved quantifier at the top of the
+            // policy is reported by the policy analyzer; one nested inside another
+            // quantifier's body is not validated anywhere yet, so its body goes unchecked here.
+            if (!TryResolveRelationship(context, domain, entity.Name, quantified, expr, out var relationship)
+                || relationship is null
+                || !TryResolveEntity(context, domain, relationship.Target.TypeName, expr, out var related)
+                || related is null)
+                return false;
+            scope = related;
+        }
+        return expr.Children.OfType<DomainExpression>().Any(child => TestsPropertyExists(context, domain, child, scope));
+    }
 
     private static void ValidateInvokeAction(
         AnalysisContext context, InvokeActionEffect iae, Entity entity, Domain domain,

@@ -1107,31 +1107,84 @@ public sealed class MinimalApiGenerator {
 /// </summary>
 public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
     private readonly IStorageSyntaxEmitter? _emitter;
-    private readonly DbmsPack _dbms;
+    private readonly DbmsPack? _dbmsOverride;
 
+    /// <summary>
+    /// Compile registration always passes a non-null <paramref name="dbms"/>;
+    /// that pack always wins for Program.cs provider selection. When null
+    /// (harness / Load without an override), DBMS is resolved from domain
+    /// extensions at contribute time via ResolveDbms.
+    /// </summary>
     public MinimalApiHostArtifactContributor(
         IStorageSyntaxEmitter? emitter = null,
-        DbmsPack dbms = DbmsPack.Generic) {
+        DbmsPack? dbms = null) {
         _emitter = emitter;
-        _dbms = dbms;
+        _dbmsOverride = dbms;
     }
 
     public IReadOnlyList<(string FileName, string Source)> Contribute(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage
-            ?? throw new InvalidOperationException(
-                "Minimal API artifacts require StorageMappingMetadata.");
+
+        var http = analysis.GetMetadata<HttpSurfaceMetadata>(domain);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate;
+
+        // NoOp only when both http and storage are null (Load gating + both-null harness).
+        // http-null + storage-present still emits (intentional harness path).
+        if (http is null && storage is null)
+            return [];
+
+        if (storage is null || aggregate is null) {
+            throw new InvalidOperationException(
+                "HTTP artifacts require storage and aggregate analysis metadata.");
+        }
+
         var behavior = BehaviorMetadata.From(domain, analysis);
-        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
-            ?? throw new InvalidOperationException(
-                "Minimal API artifacts require OwnershipAggregateMetadata.");
+        var dbms = _dbmsOverride ?? ResolveDbms(domain);
+        var module = RuntimeAnalysisCache.GetOrLower(
+            domain, RuntimeAnalysisCache.Session(domain), analysis);
+        RequireHttpActionsInModule(domain, analysis, module);
+
         var dbContextName = $"{domain.Name}DbContext";
-        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, _dbms);
+        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms);
         var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
         return [
             ("Program.cs", new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))),
             ("demo.http", httpGen.Generate()),
         ];
+    }
+
+    private static DbmsPack ResolveDbms(Domain domain) {
+        foreach (var id in domain.Extensions) {
+            if (string.Equals(id, "sqlite", StringComparison.Ordinal))
+                return DbmsPack.Sqlite;
+            if (string.Equals(id, "sqlserver", StringComparison.Ordinal))
+                return DbmsPack.SqlServer;
+        }
+        return DbmsPack.Generic;
+    }
+
+    /// <summary>
+    /// HTTP names catalog actions; those operations must already exist on the
+    /// lowered module. Program.cs calls them — it does not copy effect walks.
+    /// </summary>
+    private static void RequireHttpActionsInModule(
+        Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        foreach (var entity in behavior.Entities) {
+            var type = module.FirstOrDefault(t =>
+                string.Equals(t.Name, entity.Name, StringComparison.Ordinal));
+            if (type is null)
+                throw new InvalidOperationException(
+                    $"HTTP names entity '{entity.Name}' that is not in the operation module.");
+            foreach (var action in entity.Actions) {
+                if (type.Methods?.Any(m =>
+                    string.Equals(m.Name, action.Name, StringComparison.Ordinal)) != true) {
+                    throw new InvalidOperationException(
+                        $"HTTP names action '{entity.Name}.{action.Name}' that is not in the operation module.");
+                }
+            }
+        }
     }
 }

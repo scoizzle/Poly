@@ -161,35 +161,7 @@ public sealed class DslCompiler {
 
         var domain = outcome.Root;
         try {
-            var module = session.Lower(domain, outcome.Analysis);
             var files = session.Emit(domain, outcome.Analysis).ToList();
-            var persist = outcome.Analysis.GetMetadata<PersistenceSurfaceMetadata>(domain);
-            var http = outcome.Analysis.GetMetadata<HttpSurfaceMetadata>(domain);
-            var storageModel = outcome.Analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
-
-            if (persist is not null) {
-                if (storageModel is null)
-                    throw new InvalidOperationException(
-                        "Infrastructure pipeline did not produce storage mapping metadata.");
-                var dbContextName = $"{domain.Name}DbContext";
-                files.Add(($"{dbContextName}.cs",
-                    new CSharpGenerator().Generate(
-                        new DbContextGenerator(domain, storageModel).GenerateCompilationUnit())));
-            }
-
-            if (http is not null) {
-                if (storageModel is null
-                    || BehaviorMetadata.From(domain, outcome.Analysis) is null
-                    || outcome.Analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate is null) {
-                    throw new InvalidOperationException(
-                        "HTTP artifacts require storage, behavior, and aggregate analysis metadata.");
-                }
-                RequireHttpActionsInModule(domain, outcome.Analysis, module);
-                foreach (var file in new MinimalApiHostArtifactContributor(dbms: dbms)
-                    .Contribute(domain, outcome.Analysis))
-                    files.Add(file);
-            }
-
             foreach (var contributor in session.Artifacts.Concat(_extraArtifacts))
                 foreach (var file in contributor.Contribute(domain, outcome.Analysis))
                     files.Add(file);
@@ -217,29 +189,6 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// HTTP names catalog actions; those operations must already exist on the
-    /// lowered module. Program.cs calls them — it does not copy effect walks.
-    /// </summary>
-    private static void RequireHttpActionsInModule(
-        Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
-        var behavior = BehaviorMetadata.From(domain, analysis);
-        foreach (var entity in behavior.Entities) {
-            var type = module.FirstOrDefault(t =>
-                string.Equals(t.Name, entity.Name, StringComparison.Ordinal));
-            if (type is null)
-                throw new InvalidOperationException(
-                    $"HTTP names entity '{entity.Name}' that is not in the operation module.");
-            foreach (var action in entity.Actions) {
-                if (type.Methods?.Any(m =>
-                    string.Equals(m.Name, action.Name, StringComparison.Ordinal)) != true) {
-                    throw new InvalidOperationException(
-                        $"HTTP names action '{entity.Name}.{action.Name}' that is not in the operation module.");
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// One session for parse, analyze, and artifacts. Source <c>uses</c> wins
     /// over the DBMS seed; <paramref name="extraLibraries"/> are always loaded.
     /// CompileMode never seeds <c>http</c> — that id arrives via source <c>uses</c>
@@ -260,11 +209,42 @@ public sealed class DslCompiler {
             if (seen.Add(library.Id))
                 ids.Add(library.Id);
         }
-        if (mode is CompileMode.Db or CompileMode.All
-            && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")
-            && seen.Add("persistence"))
-            ids.Add("persistence");
-        return DomainSession.ForExtensions(ids, catalog);
+        if (mode is CompileMode.Db or CompileMode.All) {
+            // Prefer the compile-selected vendor over bare persistence so host
+            // Program.cs provider matches DbmsPack (Load-time, not bag invent).
+            if (dbms is DbmsPack.Sqlite) {
+                ids.RemoveAll(id => id == "persistence");
+                seen.Remove("persistence");
+                if (seen.Add("sqlite"))
+                    ids.Add("sqlite");
+            }
+            else if (dbms is DbmsPack.SqlServer) {
+                ids.RemoveAll(id => id == "persistence");
+                seen.Remove("persistence");
+                if (seen.Add("sqlserver"))
+                    ids.Add("sqlserver");
+            }
+            else if (!ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")
+                     && seen.Add("persistence")) {
+                ids.Add("persistence");
+            }
+        }
+
+        // Load-time registration (not bag invent): host producers for loaded doors.
+        var builder = SessionBuilder.CreateEmpty();
+        var loaded = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in ids) {
+            if (string.IsNullOrWhiteSpace(id))
+                throw new InvalidOperationException("Domain extension id must be non-empty.");
+            if (!loaded.Add(id))
+                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
+            builder.Load(catalog.Resolve(id));
+        }
+        if (ids.Exists(id => id is "persistence" or "sqlite" or "sqlserver" or "mysql"))
+            builder.AddArtifactContributor(new DbContextArtifactContributor());
+        if (ids.Exists(id => id == "http"))
+            builder.AddArtifactContributor(new MinimalApiHostArtifactContributor(dbms: dbms));
+        return builder.Build();
     }
 
     /// <summary>

@@ -96,7 +96,7 @@ All of: property/param/literal access; `+ - * /`; `and`/`or`/`not`; `== != < <= 
 | `none Rel where …` | true | ✅ |
 | `count Rel` / filtered | 0 | ✅ |
 
-Runtime: store-linked `DomainEntityInstance` preprocess + VM. Analysis: OneToMany-only (fail-closed shapes; codes in `DomainModelDiagnosticCodes` / effect analyzers, e.g. **DMEFF007** invoke/quantifier shape).
+Runtime: each quantifier lowers to a `ForEachLoop` over the collection nav with a `BreakStatement` once the answer is known; simulate and the printed C# run the same loop. Analysis: OneToMany-only (fail-closed shapes; codes in `DomainModelDiagnosticCodes` / effect analyzers, e.g. **DMEFF007** invoke/quantifier shape).
 
 ### 3.7 Date operations
 

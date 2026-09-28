@@ -21,7 +21,7 @@ This document preserves deeper history and cross-links. Prefer not to duplicate 
 
 ### Authoritative operational version
 
-See **`AGENTS.md` → Core principles** for the current **Rule** and **How** of all seven principles, their **intentional order**, and the **when principles pull opposite ways** conflict rule. That section is what agents and day-to-day humans are expected to follow.
+See **`AGENTS.md` → Core tenets** for the scannable always-on summary (first section), and **`AGENTS.md` → Core principles** for **Rule** + **How** of all seven, their **intentional order**, and the conflict rule. Tenets first is what agents are expected to load; Rule+How is the procedure.
 
 **Order rationale (Poly-specific):** domain first (this platform’s center of gravity); end-to-end ownership next (CORE pipeline); customer/scope filter; then motion (test→code loops), amount (thin slice), structure (abstract late), and process last (guardrails as servant, not master).
 

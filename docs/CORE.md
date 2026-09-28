@@ -4,11 +4,11 @@
 **Job:** Purpose, boundaries, and **existing machinery you must not reinvent**.  
 **Not this doc:** Execution plans (`docs/plans/`), decision history (`docs/decisions/`), product recipes, pass-writing tutorials.
 
-**Load rule:** Read this end-to-end before changing `Poly.Ast`, `Poly.Analysis`, `Interpretation`, `Introspection`, `DomainModeling`, or `Poly.Mcp`. Keep it short — if a change needs more prose here, link out instead of growing this file.
+**Load rule:** Read [`AGENTS.md`](../AGENTS.md) **Core tenets** first (always-on). Then read this file end-to-end before changing `Poly.Ast`, `Poly.Analysis`, `Interpretation`, `Introspection`, `DomainModeling`, or `Poly.Mcp`. Keep it short — if a change needs more prose here, link out instead of growing this file.
 
 **Maintenance:** Update this file in the same change that alters a listed mechanism. Stale CORE is worse than no CORE.
 
-**Frozen vs current:** §0 is the architecture (agents **must** respect it). §3 is **current** machinery — compose it, do not reinvent a parallel copy, do not freeze consumer shapes or grow dual-paths. Policy: [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md). Always-on: [`AGENTS.md`](../AGENTS.md) **Frozen core**.
+**Frozen vs current:** §0 is the architecture (agents **must** respect it). §3 is **current** machinery — compose it, do not reinvent a parallel copy, do not freeze consumer shapes or grow dual-paths. Policy: [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](decisions/2026-09-04-frozen-core-pipeline.md). Always-on: [`AGENTS.md`](../AGENTS.md) **Core tenets** · **Frozen core** · **Agent target**.
 
 **Module split:** `Poly.Syntax` has been split into `Poly.Ast` (node records, NodeId, fluent API) + `Poly.Analysis` (analysis framework, metadata, node replacement). See [`docs/plans/archive/completed-2026-08-late/poly-ast-analysis-module-split.md`](plans/archive/completed-2026-08-late/poly-ast-analysis-module-split.md) (completed 2026-07-26). Paths in this file use the new layout.
 

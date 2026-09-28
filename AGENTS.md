@@ -1,21 +1,30 @@
 # Poly Workspace Instructions
 
-## Doc roles
+**This file** is the authoritative always-on policy for agents in this repo. User-wide defaults (e.g. `~/.agents/AGENTS.md`) are a baseline when present; rules here take precedence. Start with **Core tenets**, then Frozen core / Agent target; open [`docs/CORE.md`](docs/CORE.md) before changing platform machinery.
 
-| Doc | Role |
-|-----|------|
-| **[`docs/CORE.md`](docs/CORE.md)** | Platform map: purpose, ownership, critical machinery, “use this / not that.” **Read before changing Syntax, Interpretation, Introspection, DomainModeling, or Poly.Mcp.** |
-| **This file** | Always-on first instructions: frozen core, Session Compile target, principles, placement, build/test, coding ops |
-| **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
-| **[`docs/plans/session-lower-plan-2026-09-21.md`](docs/plans/session-lower-plan-2026-09-21.md)** · [`session-lower-abstractions-2026-09-21.md`](docs/plans/session-lower-abstractions-2026-09-21.md) | Session Compile locked defs (vision + glossary). Not CURRENT / not suite admission |
-| **`docs/plans/`** | Execution work only — not evergreen rules. DONE/executed material lives under `docs/plans/archive/` |
-| **`docs/probes/`** | Live probe fixtures (tests + discovery). Historical rounds: `docs/plans/archive/probes-2026-08/` |
-| **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
-| **[`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md)** | Sole CURRENT/DONE for suite admission. Other plan indexes mirror or link here — do not invent a second CURRENT. |
+---
 
-When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR. **Frozen core** (below) is the architecture; CORE §3 is current machinery — use it, do not reinvent a parallel copy, do not treat it as frozen.
+## Core tenets
 
-> Note: **This file** (`AGENTS.md` at the repo root) is the authoritative workspace policy for agents. User-wide defaults (e.g. `~/.agents/AGENTS.md`) are a baseline when present; repo rules here take precedence inside this workspace.
+Non-negotiable. Read these before Doc roles, plans, or code. Depth: [`docs/decisions/2026-core-engineering-principles.md`](docs/decisions/2026-core-engineering-principles.md) · Frozen core and Agent target below · machinery in [`docs/CORE.md`](docs/CORE.md).
+
+**What this platform is:** A domain is a **library of legal operations**, not a process. Session Compile is Load → **one** analyze (fail-closed) → **`session.Lower`** → **artifact set** on the session. The **Syntax module** is privileged for operation meaning + Interpreter sim; other library producer artifacts are delivery (they call/bind the module — **not** a second sim). Shipped ⊆ lowerable to a complete generic Syntax tree. Product doors are opt-in `uses`. **Poly.MCP** is the interactive harness, not the customer API. We are our own first customer (T2 = market trust).
+
+**How we work** (order intentional: why → connect → whether → motion → amount → abstract → process):
+
+1. **Domain model is the key artifact** — tools serve domain expression; fix lower/analyze/replace when infra and domain disagree.
+2. **End-to-end ownership** — coherent path through CORE seams; no accidental side paths.
+3. **Only what helps the customer** — time-to-value, correctness, or operability; cut the rest.
+4. **Go well to go fast** — small test→code loops; tests more specific, production more generic.
+5. **Shipped capability over completeness** — thinnest vertical slice; shrink the language before host escapes.
+6. **Working code before abstractions** — extract only on a second real use.
+7. **Guardrails only with real consumers** — no ceremony for zero callers.
+
+**When tenets pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a “cleaner” framework without a second real use.
+
+**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer lowering flags · Lower-inside-analysis · twin trees (`UseThisReference`) · DEI/MCP walk as product-surface proof · empty artifact catalog when required · inventing a second CURRENT.
+
+Rule + How for each numbered tenet: [Core principles](#core-principles). Platform map: [Frozen core](#frozen-core) · [Agent target](#agent-target).
 
 ---
 
@@ -73,15 +82,9 @@ All agent implementation work aims here: `session.Lower` produces the artifact s
 
 ## Core principles
 
-Non-negotiable. Each principle has a **one-line rule** and a short **how** for agents and humans who will not open the ADR. Depth and history: [`docs/decisions/2026-core-engineering-principles.md`](docs/decisions/2026-core-engineering-principles.md).
+**Rule + How** for each [Core tenet](#core-tenets). Depth and history: [`docs/decisions/2026-core-engineering-principles.md`](docs/decisions/2026-core-engineering-principles.md). Trust bar: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md). Domain-library / MCP harness: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md).
 
-**Order is intentional** (why this repo → how pieces connect → whether to do it → how we move → how much → when to abstract → when to add process).
-
-**When principles pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a “cleaner” framework without a second real use. “More generic” production under green means fewer special cases — not a premature pattern catalog.
-
-**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. Session Compile is Load → one analyze (fail-closed) → `session.Lower` → artifact set on the session. The Syntax module is privileged for meaning + Interpreter sim; other library producer artifacts are delivery (not a second sim). Shipped ⊆ lowerable. Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context**. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, treat MCP as the customer API, add a consumer-specific lowering flag, revive Lower-inside-analysis, or grow twin trees. Scratch simulate is not product-surface proof. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen: [`docs/CORE.md`](docs/CORE.md) §0.
-
-**Platform trust bar:** **We are our own first customer.** Product surface (including **external contracts**) is built *through* domain + modules; substrate ops glue is separate. **Customer product generation funds neurosymbolic work over time** — generation is the engine, not a side demo; substrate depth is steered by what generation and honesty need. Contract surface pains *us* first by design. Market platform trust = **T2**; **T1** = design partners. Dogfood pain → fix the seam or narrow the claim. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
+**Platform trust bar:** Product surface (including **external contracts**) is built *through* domain + modules; substrate ops glue is separate. **Customer product generation funds neurosymbolic work over time** — generation is the engine, not a side demo. Dogfood pain → fix the seam or narrow the claim. T2 = market; T1 = design partners.
 
 ### 1. The domain model is the key artifact
 
@@ -167,6 +170,23 @@ The **Modeling Principles** in [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs
 
 Do not let experimental or lab grammar docs (`docs/plans/archive/experiments/`) become the de-facto agent reference.
 The product guide is the single source of truth for MCP `apply_dsl`.
+
+---
+
+## Doc roles
+
+| Doc | Role |
+|-----|------|
+| **This file** | Always-on: **Core tenets** first, then Frozen core / Agent target, principles, placement, build/test |
+| **[`docs/CORE.md`](docs/CORE.md)** | Platform map: purpose, ownership, critical machinery, “use this / not that.” **Read before changing Syntax, Interpretation, Introspection, DomainModeling, or Poly.Mcp.** |
+| **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
+| **[`docs/plans/session-lower-plan-2026-09-21.md`](docs/plans/session-lower-plan-2026-09-21.md)** · [`session-lower-abstractions-2026-09-21.md`](docs/plans/session-lower-abstractions-2026-09-21.md) | Session Compile locked defs (vision + glossary). Not CURRENT / not suite admission |
+| **`docs/plans/`** | Execution work only — not evergreen rules. DONE/executed material lives under `docs/plans/archive/` |
+| **`docs/probes/`** | Live probe fixtures (tests + discovery). Historical rounds: `docs/plans/archive/probes-2026-08/` |
+| **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
+| **[`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md)** | Sole CURRENT/DONE for suite admission. Other plan indexes mirror or link here — do not invent a second CURRENT. |
+
+When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR. **Frozen core** is the architecture; CORE §3 is current machinery — use it, do not reinvent a parallel copy, do not treat it as frozen.
 
 ---
 

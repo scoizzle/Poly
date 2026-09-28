@@ -2,7 +2,7 @@
 
 These docs are **source of truth for agent workflows** in this repo. They are plain markdown: any AI tool, human, or CI step can open and follow them.
 
-**Always-on first instructions:** [`../../AGENTS.md`](../../AGENTS.md) (Frozen core + **Agent target** / Session Compile). Architecture depth: [`../CORE.md`](../CORE.md) §0 · [`../decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · Lower vision [`../plans/session-lower-plan-2026-09-21.md`](../plans/session-lower-plan-2026-09-21.md). Agents must respect the freeze; do not grow consumer dual-paths or twin trees.
+**Always-on first instructions:** [`../../AGENTS.md`](../../AGENTS.md) — start at **Core tenets**, then Frozen core / Agent target. Architecture depth: [`../CORE.md`](../CORE.md) §0 · [`../decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · Lower vision [`../plans/session-lower-plan-2026-09-21.md`](../plans/session-lower-plan-2026-09-21.md). Agents must respect the freeze; do not grow consumer dual-paths or twin trees.
 
 | Protocol | When to use |
 |---|---|

@@ -96,11 +96,7 @@ All of: property/param/literal access; `+ - * /`; `and`/`or`/`not`; `== != < <= 
 | `none Rel where …` | true | ✅ |
 | `count Rel` / filtered | 0 | ✅ |
 
-<<<<<<< Updated upstream
-Runtime: each quantifier lowers to a `ForEachLoop` over the collection nav with a `BreakStatement` once the answer is known; simulate and the printed C# run the same loop. Analysis: OneToMany-only (fail-closed shapes; codes in `DomainModelDiagnosticCodes` / effect analyzers, e.g. **DMEFF007** invoke/quantifier shape).
-=======
 Runtime: `any`/`all`/`none` and filtered `count … where` lower to a `ForEachLoop` over the collection nav (`BreakStatement` once `any`/`all`/`none` know the answer; filtered `count` accumulates with no break). Bare `count Rel` is `this.Rel.Count` (no loop). Simulate and the printed C# run the same nodes. Analysis: OneToMany-only (fail-closed shapes; codes in `DomainModelDiagnosticCodes` / effect analyzers, e.g. **DMEFF007** invoke/quantifier shape).
->>>>>>> Stashed changes
 
 ### 3.7 Date operations
 

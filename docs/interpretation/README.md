@@ -7,7 +7,7 @@ complementing the module README at `Poly/Interpretation/README.md`.
 
 | Document | Purpose |
 |----------|---------|
-| `domain-execution-model.md` | **Domain → executable pipeline**: dual-path effect execution, policy evaluation, quantifier preprocessing, cross-entity invoke, lowering architecture |
+| `domain-execution-model.md` | **Domain → executable pipeline**: effect execution, policy evaluation, quantifier loops, cross-entity invoke, lowering architecture |
 | `vm-abi-reference.md` | Complete VM ABI reference: frame layout, call convention, register model |
 | `analysis-pass-guide.md` | Step-by-step guide to creating and registering analysis passes |
 | `debugging-and-tracing.md` | Using `VmDebugger`, trace writers, and breakpoints |

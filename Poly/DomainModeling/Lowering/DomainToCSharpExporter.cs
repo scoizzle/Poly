@@ -375,18 +375,11 @@ public sealed partial class DomainToCSharpExporter {
         AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
+        // A policy that cannot be lowered fails the whole export (no per-policy stub).
         foreach (var policy in entity.Policies) {
-            Node? lowered = LowerExpressionToMethodBody(
-                policy.Expression, entity, domain, analysis: metadata);
-            if (lowered is not null)
-                policyBodies?.Add((entity.Name, policy.Name), lowered);
-
-            Node? body = lowered;
-            if (body is not null && ContainsStoreQuantifierJob(body)) {
-                // Packed DomainExpression Store jobs are not valid C#. Print a throw
-                // stub; simulate keeps `lowered` via policyBodies (same Lower call).
-                body = StoreAwarePolicyThrowStub(policy.Name);
-            }
+            var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
+            if (body is not null)
+                policyBodies?.Add((entity.Name, policy.Name), body);
             methods.Add(new MethodDefinitionNode(
                 policy.Name,
                 new PrimitiveTypeReference(PrimType.Boolean),

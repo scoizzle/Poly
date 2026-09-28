@@ -72,6 +72,10 @@ namespace Poly.DomainModeling.Lowering;
 /// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
 /// expression context (policies, if conditions, initializers), not just assign.
 /// </param>
+/// <param name="Names">
+/// Shared generator of unique local names for one method. Passes built from
+/// this context via <c>with</c> keep the same instance.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -88,5 +92,6 @@ public sealed record LoweringContext(
     Node? ActionResultType = null,
     bool EmitInstanceNotify = true,
     ExpressionMeaning? Meaning = null,
-    ExpressionFormRegistry? Forms = null
+    ExpressionFormRegistry? Forms = null,
+    LocalNames? Names = null
 );

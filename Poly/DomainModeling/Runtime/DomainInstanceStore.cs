@@ -422,6 +422,23 @@ public sealed class DomainInstanceStore {
     }
 
     /// <summary>
+    /// Outbound links only: targets of <paramref name="relationshipName"/> where
+    /// <paramref name="source"/> is the link source.
+    /// </summary>
+    public IReadOnlyList<DomainEntityInstance> GetLinkedTargets(
+        string relationshipName, DomainEntityInstance source) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(source);
+        var results = new List<DomainEntityInstance>();
+        foreach (var l in _links) {
+            if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
+                && ReferenceEquals(l.Source, source))
+                results.Add(l.Target);
+        }
+        return results;
+    }
+
+    /// <summary>
     /// Called after an instance transitions to a new stage.
     /// Finds subscriber instances whose stage-scoped or entity-level subscription matches
     /// the transition <b>and</b> that are instance-linked to the transitioned entity, then runs effects.

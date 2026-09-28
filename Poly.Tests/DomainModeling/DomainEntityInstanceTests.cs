@@ -3066,20 +3066,112 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EvaluatePolicy_Quantifier_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("HasBig", DomainExpression.Any("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_None_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("NoneBig", DomainExpression.None("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_All_WithoutStore_Throws() {
+        var (src, policy) = QuantifierPolicyWithoutStore("AllBig", DomainExpression.All("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task ContainsKey_CollectionNavigation_WithoutStore_DoesNotThrow() {
+        var (src, _) = QuantifierPolicyWithoutStore("HasBig", DomainExpression.Any("items",
+            DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))));
+        IDictionary<string, object?> bag = src;
+        await Assert.That(bag.ContainsKey("Items")).IsTrue();
+    }
+
+    [Test]
+    public async Task ForEachInvoke_WithoutStore_Throws() {
+        var target = new Entity("Target", [
+            new Property("Status", new DomainTypeReference("Text"), [])
+        ], Actions: [
+            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
+                new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
+            ], [])
+        ], [], []);
+        var source = new Entity("Source", [], Actions: [
+            new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item", null, "Process", [])
+            ], [])
+        ], [], []);
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
+    }
+
+    [Test]
+    public async Task Indexer_OneToOne_WithoutStore_ReturnsNull() {
+        var target = new Entity("Target", [], [], [], []);
+        var source = new Entity("Source", [], [], [], []);
+        var rel = new Relationship("team",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        IDictionary<string, object?> bag = src;
+        await Assert.That(bag.ContainsKey("Team")).IsTrue();
+        await Assert.That(bag["Team"]).IsNull();
+    }
+
+    private static (DomainEntityInstance Src, Policy Policy) QuantifierPolicyWithoutStore(
+        string policyName, DomainExpression expr) {
         var target = new Entity("Target", [
             new Property("Value", new DomainTypeReference("Number"), [])
         ], [], [], []);
         var source = new Entity("Source", [], [], [
-            new Policy("HasBig", DomainExpression.Any("items",
-                DomainExpression.GreaterThan(DomainExpression.Property("Value"), DomainExpression.Literal(10L))))
+            new Policy(policyName, expr)
         ], []);
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
         var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
-        var src = DomainEntityInstance.Create(source, domain: domain); // no store
-        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == "HasBig");
-        await Assert.That(() => src.EvaluatePolicy(policy)).Throws<InvalidOperationException>();
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == policyName);
+        return (src, policy);
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_SelfRelationship_OutboundOnly_TargetSeesNoReports() {
+        var employee = new Entity("Employee", [
+            new Property("Flag", new DomainTypeReference("Boolean"), [])
+        ], [], [
+            new Policy("HasReports", DomainExpression.Any("reports", DomainExpression.Property("Flag")))
+        ], []);
+        var rel = new Relationship("reports",
+            new DomainTypeReference("Employee"), new DomainTypeReference("Employee"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Org", [employee], [rel]);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Employee");
+        var store = new DomainInstanceStore();
+        var mgr = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = true }, domain);
+        var emp = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Flag"] = true }, domain);
+        store.Add(mgr); store.Add(emp);
+        store.Link("reports", mgr, emp);
+        var policy = entity.Policies.First(p => p.Name == "HasReports");
+        await Assert.That(mgr.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(emp.EvaluatePolicy(policy)).IsFalse();
     }
 
     // ── owned-3: to-one RelationshipNavigation in policy evaluation ──
@@ -3661,6 +3753,19 @@ public class DomainEntityInstanceTests {
         var r2 = withFlag.InvokeAction("Go");
         await Assert.That(r2.Succeeded).IsTrue();
         await Assert.That(withFlag.CurrentStage).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task Create_BooleanProperty_CoercesOnlyZeroAndOne() {
+        var entity = new Entity("Item",
+            [new Property("Flag", new DomainTypeReference("Boolean"), [])], [], [], []);
+
+        object? Stored(object value) =>
+            CreateWithDomain(entity, new Dictionary<string, object?> { ["Flag"] = value }).Snapshot()["Flag"];
+
+        await Assert.That(Stored(1L) is true).IsTrue();
+        await Assert.That(Stored(0) is false).IsTrue();
+        await Assert.That(Stored(5L)).IsEqualTo(5L);
     }
 
     [Test]

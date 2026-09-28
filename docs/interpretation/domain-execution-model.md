@@ -19,7 +19,7 @@ The lowering passes (`DomainExpressionLoweringPass`, `EffectLoweringPass`) produ
 | What Syntax AST node represents an `AssignEffect` | **Lowering pass** (the domain model's semantics) |
 | How to compile a `Member` node | **`DirectVmAbiEmitter`** (or any other consumer) |
 | Whether a `Block` with zero expressions is valid | **Syntax AST** type system (all consumers must agree) |
-| How to execute store-aware quantifiers | **Lowering** to Notify-shaped Store reads (`ExistsRelated` / `AnyRelated` / `GetRelatedOne`); the VM invokes those methods |
+| How to execute quantifiers and store-aware reads | **Lowering**: `any`/`all`/`none`/`count` become a `ForEachLoop` over the collection nav; `Rel exists` and to-one path-prefix become Notify-shaped Store reads (`ExistsRelated` / `GetRelatedOne`) that the VM invokes |
 | Register allocation, frame layout, calling convention | **VM** — not the lowering pass |
 
 The lowering pass should never produce `Constant(0L)` as a NOP placeholder because the VM needs a value to consume. If the Syntax AST's type system disallows certain shapes (e.g., empty `Block`), the fix is in the Syntax AST itself — not a workaround in lowering. If the VM's ABI requires a value where the domain has none, the VM handles that — not the lowering pass.
@@ -78,10 +78,10 @@ Two distinct lowering passes produce Syntax AST nodes:
 
 | Pass | Input | Output | Inherits |
 |------|-------|--------|----------|
-| `DomainExpressionLoweringPass` | `DomainExpression` tree | `Syntax.Node` | `DomainExpressionDispatch<Node>` |
+| `DomainExpressionLoweringPass` | `DomainExpression` tree | `LoweredExpression` (statements + variables + value node) | `DomainExpressionDispatch<LoweredExpression>` |
 | `EffectLoweringPass` | `Effect` tree | `Syntax.Node` (never `null` for a shipped effect) | `EffectDispatch<Node?>` |
 
-Both consume a `LoweringContext` that carries the current-instance `Subject` and optional parameter map.
+Both consume a `LoweringContext` that carries the current-instance `Subject`, the parameter map, and the rest of the shared lowering state (§6c).
 
 ---
 
@@ -157,7 +157,7 @@ ExecuteEffectList(effects)
 
 ## 3. Policy Evaluation
 
-Policies are boolean guard expressions attached to entities, stages, or actions. Evaluation is **lower → compile → execute**. Store-aware reads (`Rel exists`, quantifiers, path-prefix) stay in the tree as Notify-shaped Store jobs.
+Policies are boolean guard expressions attached to entities, stages, or actions. Evaluation is **lower → compile → execute**. Quantifiers stay in the tree as `ForEachLoop`s; `Rel exists` and path-prefix stay in the tree as Notify-shaped Store jobs.
 
 ### 3a. Full Path
 
@@ -165,8 +165,9 @@ Policies are boolean guard expressions attached to entities, stages, or actions.
 Policy.Expression (DomainExpression)
   │
   ├─ DomainExpressionLoweringPass.Lower(expr, entityParam)
-  │   Rel exists → ExistsRelated; any/all/none/count → AnyRelated/…;
-  │   to-one path-prefix → GetRelatedOne + TypeCast to the target entity.
+  │   Rel exists → ExistsRelated; any/all/none/count → ForEachLoop over
+  │   the collection nav (§4); to-one path-prefix → GetRelatedOne + TypeCast
+  │   to the target entity.
   │   Action-parameter roots stay bag Member reads.
   │
   ├─ Interpreter.CompileChecked(lowered, typeDefAnalyzer)
@@ -205,27 +206,34 @@ InvokeAction(actionName, args)
 
 ---
 
-## 4. Store reads in the tree
+## 4. Quantifiers and store reads in the tree
 
-Q3′ quantifiers (`any`, `all`, `none`, `count`), `Rel exists`, and to-one path-prefix lower to Notify-shaped methods on `This`. Dictionary `This` cannot Member-read `Store`. The VM invokes those methods; the implementation walks outbound links.
+Q3′ quantifiers (`any`, `all`, `none`, `count … where`) lower to plain loop nodes, the same tree on simulate and print (`DomainExpressionLoweringPass.LowerFilteredQuantifier`):
+
+```
+result = init;                       // any: false, all/none: true, count: 0
+foreach (var itemN in this.Rel) {    // all also sets sawItem = true
+    <body statements>
+    if (<match>) { result = …; break; }   // count: result = result + 1, no break
+}
+// value: result (all: sawItem && result, so an empty collection is false)
+```
+
+The quantifier's statements sit immediately before the statement that reads its value (`LoweredExpression.Before`). Nested quantifiers put their loops inside the outer loop body, and all locals in one method come from one `LocalNames`. The VM runs `ForEachLoop` / `BreakStatement` directly (`DirectVmAbiEmitter`). The C# export prints the same loop. Bare `count Rel` is `this.Rel.Count`.
+
+On the simulate path the collection is the dictionary read of the nav on `This`: the outbound linked targets from the Store (`ReadLinkedTargets`, an empty list when unlinked). Without a Store it throws. The export reads the entity's own collection property.
 
 Execute-time `PreprocessQuantifiers` → literals is gone. A rewrite to literals is wrong when the same action creates then queries.
 
-### 4a. Lowered jobs
+### 4a. Store reads
 
-| Domain | Runtime tree | Notes |
-|--------|--------------|-------|
-| `Rel exists` | `ExistsRelated(relName)` | False when no links; unknown rel throws |
-| `any` / `all` / `none` | `AnyRelated` / `AllRelated` / `NoneRelated` | Predicate is a `Constant` of the domain expression; `all` on empty is false |
-| `count` | `CountRelated` | Bare count or filtered |
-| to-one path-prefix | `GetRelatedOne(relName)` then TypeCast to the target entity | Zero or many links fail closed |
-| action-parameter root (`sku ListPrice`) | `Member(param, leaf)` | Not a store hop |
+On the simulate path, `Rel exists` and to-one path-prefix lower to Notify-shaped methods on `This`. Dictionary `This` cannot Member-read `Store`, so the VM invokes those methods, and their bodies walk outbound links.
 
-C# export may still throw Q3 except bare `count Rel`, and may keep coalesce-throw for path-prefix — persistence print until an EF Store exists.
-
-### 4b. Job bodies
-
-`AnyRelated` / `AllRelated` / `CountRelated` still iterate `GetOutboundRelatedInstances` and evaluate the predicate on each target through Interpreter. That is the **implementation of the Store job**, not a preprocess that replaces the tree with a literal.
+| Domain | Runtime tree | C# export | Notes |
+|--------|--------------|-----------|-------|
+| `Rel exists` | `ExistsRelated(relName)` | to-one: `this.Rel != null`; collection: `this.Rel.Count != 0` | False when no links; unknown rel throws |
+| to-one path-prefix | `ExistsRelated(rel) ? ((Target)GetRelatedOne(rel)).Leaf : false` | `this.Rel!.Leaf` | Simulate: false when unlinked, many links fail closed. Export: an unlinked hop throws `NullReferenceException` (known gap); `require` gates return `DomainResult.Failure` first |
+| action-parameter root (`sku ListPrice`) | `Member(param, leaf)` | same | Not a store hop |
 
 ## 5. Cross-Entity and For-Invoke Flow
 
@@ -278,19 +286,21 @@ public abstract class EffectDispatch<TResult> {
 
 | Concern | Subclass | Result Type | Pattern |
 |---------|----------|-------------|---------|
-| Expression → Syntax AST | `DomainExpressionLoweringPass` | `Node` | Inherits `DomainExpressionDispatch<Node>` |
+| Expression → Syntax AST | `DomainExpressionLoweringPass` | `LoweredExpression` | Inherits `DomainExpressionDispatch<LoweredExpression>` |
 | Effect → Syntax AST | `EffectLoweringPass` | `Node?` | Inherits `EffectDispatch<Node?>`; shipped effects lower to a real node |
 | Effect → DSL text | `EffectPrinter` (nested in `DomainDslPrinter`) | `object?` | Inherits `EffectDispatch<object?>` |
 | Expression → DSL text | `ExpressionPrinter` (nested in `DomainDslPrinter`) | `string` | Inherits `DomainExpressionDispatch<string>` |
 
 ### 6c. LoweringContext
 
-Both lowering passes accept `LoweringContext`, a bundle carrying the current-instance `Subject` and optional `Parameters`:
+Both lowering passes accept `LoweringContext` (`Poly/DomainModeling/Lowering/LoweringContext.cs`). It is a record whose first members are the current-instance `Subject` and optional `Parameters`, followed by optional lowering state: analysis metadata, domain, `UseThisReference` (export vs runtime shape), stage and enum names, navigation resolvers, the action result type, and `Names`, the shared `LocalNames` generator that keeps every local in one method unique.
 
 ```csharp
 public sealed record LoweringContext(
     Node Subject,
-    IReadOnlyDictionary<string, Node>? Parameters = null
+    IReadOnlyDictionary<string, Node>? Parameters = null,
+    // … optional members; see LoweringContext.cs
+    LocalNames? Names = null
 );
 ```
 
@@ -341,10 +351,9 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 
 | Area | Current | Desired |
 |------|---------|---------|
-| **Quantifier lowering** | Runtime: Store jobs in the tree. C# export still limited (Q3 except bare `count Rel`) | EF Store so export can print the same jobs |
-| **Relationship navigation** | Runtime: `GetRelatedOne` + TypeCast. C#: coalesce-throw | Same Store job on both paths |
+| **Quantifier lowering** | `ForEachLoop` + `BreakStatement` over the collection nav; simulate and print run the same loop | — |
+| **Relationship navigation** | Runtime: `ExistsRelated` guard + `GetRelatedOne` + TypeCast (unlinked → false). C#: `this.Rel!.Leaf` (unlinked → `NullReferenceException`) | Same answer on both paths |
 | **Effect lowering** | One operation tree (`this.Create` / `CreateIn` / `EnsureUnique`). Named invoke looks up `session.Lower` cache. Sequential transitions update `SourceStageName`. | Bind an EF Store so C# factories do not wrap `Stay.Create` / `CreateNav` |
-| **VM quantifier eval** | Per-target re-lowering + compile inside the Store job | Cached lowering or batch evaluation |
 | **ParameterAccess in DSL** | Product spelling is a **bare identifier** (`PropertyAccess`) | L3 — no separate parameter authoring syntax |
 | **Clock keywords** | Clocks lower to BCL members (`DateTime.UtcNow`, `DateOnly.FromDateTime`, `Guid.NewGuid`); VM executes them | Injectable `TimeProvider` (not a product seam) |
 

@@ -6,6 +6,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -929,8 +930,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("foreach (var target0 in this.Lines)");
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
-        await Assert.That(cs).Contains("target1.CurrentStage == LineStage.Active");
-        await Assert.That(cs).Contains("return DomainResult.Failure(result0.ErrorMessage ?? \"\");");
+        await Assert.That(cs).Contains("target3.CurrentStage == LineStage.Active");
+        await Assert.That(cs).Contains("return DomainResult.Failure(result2.ErrorMessage ?? \"\");");
         await Assert.That(cs).Contains("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
     }
@@ -964,23 +965,22 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Analysis_ForEachInvoke_StoreDependentPredicatePolicy_Rejected() {
-        // A `for` predicate referencing a store-dependent policy (any/all/path-prefix/
-        // exists) would lower to a NotSupportedException-throwing method and dead-end the
-        // action — reject at authoring instead.
+    public async Task Analysis_ForEachInvoke_PathPrefixPredicatePolicy_Rejected() {
+        // A `for` predicate whose named policy reads a path-prefix hop is rejected:
+        // an unlinked hop simulates false but the export dereferences null.
         var poly = """
             domain Test
-            Tag: entity { Label: Text }
+            Team: entity { Active: Boolean }
             Line: entity {
               Qty: Number
-              tags: many Tag
-              HasTag: policy { any tags where Label is "x" }
+              team: Team
+              TeamActive: policy { team Active }
               Mark: action (amount: Number) { assign Qty to amount }
             }
             Order: entity {
               lines: many Line
               Go: action {
-                for lines as line where line HasTag invoke line.Mark(amount: 1)
+                for lines as line where line TeamActive invoke line.Mark(amount: 1)
               }
             }
             """;
@@ -990,7 +990,62 @@ public class DomainToCSharpExporterTests {
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
         await Assert.That(diagnostics.Any(d =>
-            d.Message.Contains("store-dependent"))).IsTrue();
+            d.Message.Contains("reads a path-prefix hop;"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Analysis_ForEachInvoke_PropertyExistsPredicatePolicy_Rejected() {
+        var poly = """
+            domain Test
+            Line: entity {
+              Name: Text
+              Qty: Number
+              HasName: policy { Name exists }
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action {
+                for lines as line where line HasName invoke line.Mark(amount: 1)
+              }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("predicate policy 'HasName' tests 'exists' on a property"))).IsTrue();
+    }
+
+    [Test]
+    [Arguments("any parts where Qty exists")]
+    [Arguments("all parts where Qty exists")]
+    [Arguments("none parts where Qty exists")]
+    [Arguments("count parts where Qty exists > 0")]
+    public async Task Analysis_ForEachInvoke_PropertyExistsInsideQuantifier_Rejected(string pick) {
+        var poly = $$"""
+            domain Yard
+            Part: entity { Qty: Number }
+            Widget: entity {
+              Flag: Boolean default(false)
+              parts: many Part
+              Pick: policy { {{pick}} }
+              Mark: action { assign Flag to true }
+            }
+            Bin: entity {
+              widgets: many Widget
+              Go: action { for widgets as w where w Pick invoke w.Mark() }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var diagnostics = evolved.Analysis?.Diagnostics
+            ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
+
+        await Assert.That(diagnostics.Any(d =>
+            d.Message.Contains("predicate policy 'Pick' tests 'exists' on a property"))).IsTrue();
     }
 
     [Test]
@@ -2012,19 +2067,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         await Assert.That(cs).Contains("this.Create(");
 
-        var fineCreateStart = cs.IndexOf("static DomainResult<Fine> Create(", StringComparison.Ordinal);
-        await Assert.That(fineCreateStart).IsGreaterThanOrEqualTo(0);
-        var fineCreateBrace = cs.IndexOf('{', fineCreateStart);
-        var depth = 0;
-        var fineCreateEnd = fineCreateBrace;
-        for (var i = fineCreateBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { fineCreateEnd = i + 1; break; }
-            }
-        }
-        var fineCreate = cs[fineCreateStart..fineCreateEnd];
+        var fineCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Fine> Create(");
         await Assert.That(fineCreate).Contains("AttachFines");
 
         var bindStart = cs.IndexOf("BindCreate(string typeName", StringComparison.Ordinal);
@@ -2043,36 +2086,12 @@ public class DomainToCSharpExporterTests {
         await Assert.That(fineCreateCall).DoesNotContain("ContainsKey(\"patron\")");
         await Assert.That(fineCreateCall).DoesNotContain("null");
 
-        var assessStart = cs.IndexOf("DomainResult<Fine> AssessByType(", StringComparison.Ordinal);
-        await Assert.That(assessStart).IsGreaterThanOrEqualTo(0);
-        var assessBrace = cs.IndexOf('{', assessStart);
-        depth = 0;
-        var assessEnd = assessBrace;
-        for (var i = assessBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { assessEnd = i + 1; break; }
-            }
-        }
-        var assessByType = cs[assessStart..assessEnd];
+        var assessByType = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> AssessByType(");
         await Assert.That(assessByType).Contains("this.Create(");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
 
         // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createFinesStart = cs.IndexOf("DomainResult<Fine> CreateFines(", StringComparison.Ordinal);
-        await Assert.That(createFinesStart).IsGreaterThanOrEqualTo(0);
-        var createFinesBrace = cs.IndexOf('{', createFinesStart);
-        depth = 0;
-        var createFinesEnd = createFinesBrace;
-        for (var i = createFinesBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createFinesEnd = i + 1; break; }
-            }
-        }
-        var createFines = cs[createFinesStart..createFinesEnd];
+        var createFines = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> CreateFines(");
         await Assert.That(createFines).Contains("Fine.Create(");
         await Assert.That(createFines).DoesNotContain("_fines.Add");
     }
@@ -2780,36 +2799,11 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var createStart = cs.IndexOf("static DomainResult<Reservation> Create(", StringComparison.Ordinal);
-        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createStart);
-        var depth = 0;
-        var createEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createEnd = i + 1; break; }
-            }
-        }
-        var createBody = cs[createStart..createEnd];
+        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Reservation> Create(");
         await Assert.That(createBody).Contains("AttachReservations");
         await Assert.That(createBody).Contains("AttachStays");
 
-        // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createReservationsStart = cs.IndexOf("DomainResult<Reservation> CreateReservations(", StringComparison.Ordinal);
-        await Assert.That(createReservationsStart).IsGreaterThanOrEqualTo(0);
-        var createReservationsBrace = cs.IndexOf('{', createReservationsStart);
-        depth = 0;
-        var createReservationsEnd = createReservationsBrace;
-        for (var i = createReservationsBrace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createReservationsEnd = i + 1; break; }
-            }
-        }
-        var createReservations = cs[createReservationsStart..createReservationsEnd];
+        var createReservations = ExportedCSharp.ExtractMethod(cs, "DomainResult<Reservation> CreateReservations(");
         await Assert.That(createReservations).Contains("Reservation.Create(");
         await Assert.That(createReservations).DoesNotContain("_reservations.Add");
 
@@ -2938,19 +2932,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(analysis.HasErrors).IsFalse();
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        var createStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
-        await Assert.That(createStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createStart);
-        var depth = 0;
-        var createEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createEnd = i + 1; break; }
-            }
-        }
-        var createBody = cs[createStart..createEnd];
+        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
         await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
         await Assert.That(createBody).DoesNotContain("AttachPrimary");
         await Assert.That(createBody).DoesNotContain("AttachSecondary");
@@ -2980,38 +2962,14 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var createPrimaryStart = cs.IndexOf("DomainResult<Child> CreatePrimary(", StringComparison.Ordinal);
-        await Assert.That(createPrimaryStart).IsGreaterThanOrEqualTo(0);
-        var brace = cs.IndexOf('{', createPrimaryStart);
-        var depth = 0;
-        var createPrimaryEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { createPrimaryEnd = i + 1; break; }
-            }
-        }
-        var createPrimary = cs[createPrimaryStart..createPrimaryEnd];
+        var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreatePrimary(");
         await Assert.That(createPrimary).Contains("Child.Create(");
         await Assert.That(createPrimary).Contains("_primary.Add");
         await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
         await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
         await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
 
-        var childCreateStart = cs.IndexOf("static DomainResult<Child> Create(", StringComparison.Ordinal);
-        await Assert.That(childCreateStart).IsGreaterThanOrEqualTo(0);
-        brace = cs.IndexOf('{', childCreateStart);
-        depth = 0;
-        var childCreateEnd = brace;
-        for (var i = brace; i < cs.Length; i++) {
-            if (cs[i] == '{') depth++;
-            else if (cs[i] == '}') {
-                depth--;
-                if (depth == 0) { childCreateEnd = i + 1; break; }
-            }
-        }
-        var childCreate = cs[childCreateStart..childCreateEnd];
+        var childCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
         await Assert.That(childCreate).DoesNotContain("AttachPrimary");
         await Assert.That(childCreate).DoesNotContain("AttachSecondary");
         await Assert.That(childCreate).DoesNotContain("has no unique inverse collection");
@@ -3070,6 +3028,92 @@ public class DomainToCSharpExporterTests {
         await Assert.That(child).IsNotNull();
         var childPeer = childType.GetProperty("Peer")!.GetValue(child);
         await Assert.That(ReferenceEquals(childPeer, peer)).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_HasOverdueLoans_PrintsForeachOverLoans() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var method = ExportedCSharp.ExtractMethod(cs, "bool HasOverdueLoans(");
+        await Assert.That(method).Contains("foreach");
+        await Assert.That(method).Contains("this.Loans");
+    }
+
+    [Test]
+    public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
+        var policy = E("Patron").Policies.First(p => p.Name == "HasOverdueLoans");
+        var store = new DomainInstanceStore();
+
+        DomainEntityInstance NewPatron(string email) {
+            var p = DomainEntityInstance.Create(E("Patron"), new Dictionary<string, object?> {
+                ["Name"] = "Ada",
+                ["Email"] = email,
+                ["MaxItems"] = 5L
+            }, domain);
+            store.Add(p);
+            return p;
+        }
+
+        DomainEntityInstance NewLoan(string status) {
+            var loan = DomainEntityInstance.Create(E("Loan"), new Dictionary<string, object?> {
+                ["Status"] = status
+            }, domain);
+            store.Add(loan);
+            return loan;
+        }
+
+        var withOverdue = NewPatron("ada-overdue@lib.test");
+        store.Link("loans", withOverdue, NewLoan("Active"));
+        store.Link("loans", withOverdue, NewLoan("Overdue"));
+        var withoutOverdue = NewPatron("ada-clear@lib.test");
+        store.Link("loans", withoutOverdue, NewLoan("Active"));
+        store.Link("loans", withoutOverdue, NewLoan("Returned"));
+
+        var simTrue = withOverdue.EvaluatePolicy(policy);
+        var simFalse = withoutOverdue.EvaluatePolicy(policy);
+        await Assert.That(simTrue).IsTrue();
+        await Assert.That(simFalse).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+        var asm = ExportedCSharp.CompileAndLoad(cs, "HasOverdueLoansPrint");
+        var patronType = asm.GetType("Patron")!;
+        var loanType = asm.GetType("Loan")!;
+
+        object MakeLoan(string status) =>
+            ExportedCSharp.CreateEntity(loanType, ("status", status));
+
+        object LoanList(params object[] loans) {
+            var arr = Array.CreateInstance(loanType, loans.Length);
+            for (var i = 0; i < loans.Length; i++)
+                arr.SetValue(loans[i], i);
+            return arr;
+        }
+
+        object MakePatron(string email, params object[] loans) =>
+            ExportedCSharp.CreateEntity(patronType,
+                ("name", "Ada"),
+                ("email", email),
+                ("maxItems", 5L),
+                ("loans", LoanList(loans)));
+
+        bool HasOverdue(object patron) =>
+            (bool)patronType.GetMethod("HasOverdueLoans")!.Invoke(patron, null)!;
+
+        var printTrue = HasOverdue(MakePatron("ada-overdue@lib.test",
+            MakeLoan("Active"), MakeLoan("Overdue")));
+        var printFalse = HasOverdue(MakePatron("ada-clear@lib.test",
+            MakeLoan("Active"), MakeLoan("Returned")));
+        await Assert.That(printTrue).IsEqualTo(simTrue);
+        await Assert.That(printFalse).IsEqualTo(simFalse);
+        await Assert.That(printTrue).IsTrue();
+        await Assert.That(printFalse).IsFalse();
     }
 
     private static string[] CompileExported(string cs) {

@@ -1,17 +1,15 @@
 # session.Lower — abstractions (for Scot)
 
 **Date:** 2026-09-21
-**Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`.
-**When:** **Before accept / eng.** This glossary does **not** accept the Lower plan. Slices A–E stay unapproved. Eng WIP = **0**.
+**Status:** Glossary / decision record — **not CURRENT** (does not admit a suite). Locked names are summarized in [`AGENTS.md`](../../AGENTS.md) **Agent target**.
 **Scot decision (2026-09-21):** post-analyze Lower is product SoT. **Lower-inside-analysis** is superseded / not SoT.
 **Scot addendum (2026-09-21):** Lower’s result = **artifact set** from **1+ producers** / **multiple compilation units**. The Syntax module is the **sim tree among them**, not the entire output.
 **Scot locked defs (2026-09-21):** compilation unit = **library**; catalog = **on the session** (fail closed if empty when required); Syntax module **privileged** for meaning + sim.
 **Parked (locked):** **Item 5** Occupancy / `BusySections`. **PR 73**. Do not touch. Do not unpark.
-**This file does not** implement C#, delete product code, start a slice, or invent residual / cache / This-bind / accept.
-**Audience:** Scot
+**Audience:** Agents and Scot
 **Grounding:** tip `d5e1a9cc` on `ontology/talk-alignment-2026-09-21` · [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) (SoT for the **vision**)
 
-**This note is SoT for the named concepts.** The Lower plan is SoT for post-analyze Lower + artifact-set addendum.
+**This note is SoT for the named concepts.** The Lower plan is SoT for post-analyze Lower + artifact-set addendum. Always-on agent summary: [`AGENTS.md`](../../AGENTS.md).
 
 ---
 

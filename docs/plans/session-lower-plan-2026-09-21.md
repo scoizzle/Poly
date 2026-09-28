@@ -1,25 +1,20 @@
 # session.Lower — plan (for Scot)
 
 **Date:** 2026-09-21
-**Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`.
+**Status:** Vision / decision record — **not CURRENT** (does not admit a suite; do not invent a second CURRENT). Locked defs are always-on in [`AGENTS.md`](../../AGENTS.md) **Agent target** and [`docs/CORE.md`](../CORE.md) §0.
 **Scot decision (2026-09-21):** **post-analyze Lower is product SoT.** Clean analyze (fail-closed) → **then** Lower.
 **Scot addendum (2026-09-21):** **Lower’s result = a set of artifacts from 1+ producers.** May come from **multiple compilation units** producing **varying different concepts** — not solely “one Syntax module” as the entire output story.
 **Scot locked defs (2026-09-21):** compilation unit = **library**; artifact-set catalog = **on the session** after Lower (**fail closed** if empty when required); Syntax module = **privileged for operation meaning + Interpreter sim**.
 **Superseded:** **Lower-inside-analysis** is **not** product SoT. Retracted. Do not revive.
 **Grounds:** tip `d5e1a9cc` on `ontology/talk-alignment-2026-09-21`.
-**Slices:** A–E stay **unapproved** until Scot **accepts this plan**. Eng WIP = **0**. This file does **not** accept the plan.
+**Shipped (2026-09):** Slices A–C via PRs #74–#76; P3-A/P3-B via #79–#80. Remaining slice greenlight is still per-slice; Item 5 and PR 73 stay **PARKED**.
 **Parked (locked):** **Item 5** Occupancy / `BusySections`. **PR 73**. Do not touch. Do not unpark.
-**This file does not** implement C#, delete product code, or start a slice.
-**Audience:** Scot
+**Audience:** Agents and Scot
 **Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) · [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md)
 
 **Product rule (unchanged):** simulation = **Interpreter** on the **real lowered Syntax** (the sim tree in that set). Producers are **not** a fake runtime and **not** a second simulate path. DEI / Effect-IR are not product sim.
 
-**This note is SoT** for the Lower **vision**. Glossary: [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) — SoT for named concepts.
-
----
-
-**Execution note (2026-09-28):** Slices A–C shipped on master via PRs #74–#76; P3-A/P3-B via #79–#80. This file remains the consultant SoT / decision record — it does not admit a suite and does not change PIPELINE-STATUS.
+**This note is SoT** for the Lower **vision**. Glossary: [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) — SoT for named concepts. Always-on agent summary: [`AGENTS.md`](../../AGENTS.md).
 
 
 ## 1) What `session.Lower` is

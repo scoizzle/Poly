@@ -16,15 +16,17 @@
 
 ## 0. Frozen core
 
-Committed: **AST / Node / Analysis**, session-loaded libraries, two products from one analyze. Not committed: a particular store, print target, door implementation, or actor runtime.
+Committed: **AST / Node / Analysis**, session-loaded libraries, Session Compile (analyze → Lower → artifact set). Not committed: a particular store, print target, door implementation, or actor runtime.
 
 ```text
 Domain (facts + uses ids)
-  → DomainSession (libraries: analyzers + maps + artifact contributors)
+  → DomainSession (libraries = compilation units: analyzers + maps + artifact contributors)
   → session.Analyze  → bags on nodes, replacements (tree stays immutable)
-  → operation module (generic Syntax; lowering may read bags, the tree does not)
-    and surface bags → host artifacts (persistence / HTTP / later CLI)
-  → consumers (execute / print / doors) bind; they do not fork analyze/lower
+  → dirty analyze → STOP (no Lower, no artifacts)
+  → session.Lower → artifact set cataloged on the session (fail closed if empty when required)
+       · Syntax operation module (privileged: meaning + Interpreter sim; no bags in the tree)
+       · other library producer artifacts (host / HTTP / … — delivery; call/bind the module)
+  → consumers (execute / print / doors) bind the module; they do not fork analyze/lower
 MCP: harness over cataloged operations + session instances — not a product door
 ```
 
@@ -32,9 +34,10 @@ MCP: harness over cataloged operations + session instances — not a product doo
 |-------------|-------------|
 | Nodes are the symbolic primary | No product-path primitive IR; shipped meaning is a complete Syntax tree |
 | Analysis owns facts and rewrite | Bags on nodes; `SetNodeReplacement`; semantic consume requires `AnalysisResult` |
-| Libraries extend the session | `uses` ids; no new spell; unknown/duplicate ids fail closed |
+| Libraries extend the session | `uses` ids; compilation unit = library that registers producers; unknown/duplicate ids fail closed |
+| Post-analyze Lower → artifact set | Clean analyze then Lower; catalog on the session; Syntax module privileged for meaning + sim; other artifacts are not a second sim |
 | Doors map the catalog | Opt-in host libraries; core has no `Main`; doors do not invent operations |
-| No consumer lowering flags | Do not add consumer-specific lowering flags |
+| No consumer lowering flags | Do not add consumer-specific lowering flags; do not revive `UseThisReference` twin trees or Lower-inside-analysis |
 
 **Forbidden:** Effect/Domain walk as shipped meaning; emitter/ABI special case for one host; MCP as customer API; treating `Stay.Create`, scratch `DomainInstanceStore`, or Store job names as frozen; treating a green `DomainEntityInstance` / MCP walk as product-surface proof (the module is).
 
@@ -64,7 +67,7 @@ MCP: create_instance → evaluate_policy(instanceId) / invoke_action
 | Domain lowers to **generic** ops | No domain-specific VM opcodes. StageTransition is type-def + Assignment + `Invoke(Member(This, "Notify"))`. Self-invoke is `Invoke(Member(This, action))`. Cross-entity invoke is `this.Rel.Action(args)` with a caller `DomainResult`/`DomainResult<T>.Failure` linked-target guard. For-invoke is a fail-fast `ForEachLoop` over a **OneToMany** collection nav (`if (!result.IsSuccess) return caller.Failure(error)`, zero-match caller `Failure`). Self/cross-entity wrap the same rewrap so nested Failure is CS0029-free across DomainResult arities. Unique assign lowers to `EnsureUnique` on the bound Store (Notify-shaped instance method; dictionary `This` cannot Member-read `Store`). Create / create-in lower to `Create` / `CreateIn` / `ProbeCreate` on the same tree. Clocks lower to static BCL members (`DateTime.UtcNow`, `DateOnly.FromDateTime`) which the VM executes |
 | Product doors are **opt-in extensions** | REST and the like load via `uses`. CLI flags seed ids only. Core seed does not emit a host |
 | MCP is the **interactive harness** | Author, inspect, simulate a named policy/action on a store instance (`create_instance` then `evaluate_policy(instanceId)` / `invoke_action`). Not the `DomainSession`. Not the customer API |
-| Lowered module is **domain meaning** | `session.Lower` is the domain (complete operation trees). Simulate and print consume that module. `DomainEntityInstance` is scratch bind, not product-surface proof. When execute and emit disagree, fix lowering. Policy: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](decisions/2026-09-05-lowered-module-is-domain-meaning.md) |
+| Lowered module is **domain meaning** | `session.Lower` yields an **artifact set** on the session; the Syntax module is privileged for operation meaning + Interpreter sim. Simulate and print consume that module. Other producer artifacts call/bind it — not a second sim. `DomainEntityInstance` is scratch bind, not product-surface proof. When execute and emit disagree, fix lowering. Policy: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](decisions/2026-09-05-lowered-module-is-domain-meaning.md) · vision: [`plans/session-lower-plan-2026-09-21.md`](plans/session-lower-plan-2026-09-21.md) |
 | Extend the platform **in the pipeline** | New meaning: lower to existing nodes, analyze, and/or **replace nodes** — not special-case the emitter, ABI, or one host’s type filter |
 | Analysis is required for downstream semantics | Domain/runtime/tooling paths that resolve semantic meaning must consume an `AnalysisResult`; no semantic execution path without analysis |
 | One coherent path | Prefer composing existing mechanisms over a parallel rewriter, evaluator, or type registry |

@@ -5,8 +5,9 @@
 | Doc | Role |
 |-----|------|
 | **[`docs/CORE.md`](docs/CORE.md)** | Platform map: purpose, ownership, critical machinery, “use this / not that.” **Read before changing Syntax, Interpretation, Introspection, DomainModeling, or Poly.Mcp.** |
-| **This file** | Principles, placement, build/test, coding ops |
+| **This file** | Always-on first instructions: frozen core, Session Compile target, principles, placement, build/test, coding ops |
 | **`docs/decisions/`** | Why (ADRs). Index: [`docs/decisions/README.md`](docs/decisions/README.md) |
+| **[`docs/plans/session-lower-plan-2026-09-21.md`](docs/plans/session-lower-plan-2026-09-21.md)** · [`session-lower-abstractions-2026-09-21.md`](docs/plans/session-lower-abstractions-2026-09-21.md) | Session Compile locked defs (vision + glossary). Not CURRENT / not suite admission |
 | **`docs/plans/`** | Execution work only — not evergreen rules. DONE/executed material lives under `docs/plans/archive/` |
 | **`docs/probes/`** | Live probe fixtures (tests + discovery). Historical rounds: `docs/plans/archive/probes-2026-08/` |
 | **[`docs/agent/`](docs/agent/)** | Tool-agnostic agent protocols (review, etc.). Index: [`docs/agent/README.md`](docs/agent/README.md) |
@@ -14,7 +15,7 @@
 
 When a change alters a mechanism listed in CORE, update CORE in the same change. Significant cross-cutting choices get an ADR. **Frozen core** (below) is the architecture; CORE §3 is current machinery — use it, do not reinvent a parallel copy, do not treat it as frozen.
 
-> Note: This repo treats `Poly/AGENTS.md` as the authoritative workspace policy. User-wide agent defaults in `~/.agents/AGENTS.md` are respected as a baseline for all sessions, but repo-specific rules in this file take precedence inside this workspace.
+> Note: **This file** (`AGENTS.md` at the repo root) is the authoritative workspace policy for agents. User-wide defaults (e.g. `~/.agents/AGENTS.md`) are a baseline when present; repo rules here take precedence inside this workspace.
 
 ---
 
@@ -30,7 +31,8 @@ The committed platform is **AST / Node / Analysis** plus libraries that publish 
 | Analysis: `INodeAnalyzer`, bags on nodes, **node replacement** | Side tables; product rewriters; semantic consume without `AnalysisResult` |
 | `Domain` = facts (`uses` ids); session loads libraries | `Domain.ResolveHost`; dialects; `Main` / `Program.cs` in core |
 | Shipped ⊆ complete generic Syntax tree | `Comment` / `null` lower / second interpreter / domain VM opcodes |
-| One analyze → **operation module** (tree has no bags) **and** **surface bags → host artifacts** | Door that invents operations; lowering flag per consumer |
+| Clean analyze → **`session.Lower`** → **artifact set** on the session (Syntax module + library producer artifacts) | Lower-inside-analysis; empty catalog when required; door that invents operations; lowering flag per consumer |
+| Syntax module = privileged for **operation meaning + Interpreter sim** | Twin trees (`UseThisReference`); producers / DEI / Effect-IR as a second sim |
 | Catalog / capability = operation menu; doors are opt-in `uses` | Core process entry; MCP as customer API |
 | New meaning: lower / analyze / **replace nodes** | Emitter patch, ABI one-off, new consumer-specific lowering flag |
 
@@ -42,18 +44,30 @@ MCP tool `Description` text is usage (call / pass / result), not Interpreter, AS
 
 ## Agent target
 
-**The lowered operation module is the domain.** Depth: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md). Pipeline stages: [`docs/plans/pipeline-transformation-2026-09-04.md`](docs/plans/pipeline-transformation-2026-09-04.md).
+**Session Compile → artifact set; the Syntax module is privileged for meaning + sim.**  
+Depth: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/plans/session-lower-plan-2026-09-21.md`](docs/plans/session-lower-plan-2026-09-21.md) · [`docs/plans/session-lower-abstractions-2026-09-21.md`](docs/plans/session-lower-abstractions-2026-09-21.md) · [`docs/plans/pipeline-transformation-2026-09-04.md`](docs/plans/pipeline-transformation-2026-09-04.md).
 
-All agent implementation work aims here: `session.Lower` produces complete Syntax trees for every shipped action, policy, subscription, create, and transition. Simulate and C# print **consume that module**. When they diverge, fix lowering — one tree.
+**Locked pipeline:** Load libraries → **one** analyze (dirty → **STOP**) → **`session.Lower`** → **artifact set** cataloged **on the session** (**fail closed** if empty when required).
+
+| Locked | Meaning |
+|--------|---------|
+| **Compilation unit** | A **library** (`uses` / `IDomainLibrary`) that registers producers |
+| **Artifact-set catalog** | Held on the **session** after Lower |
+| **Syntax operation module** | **Privileged** for operation meaning + Interpreter sim (generic Syntax; no bags in the tree). Simulate and C# print share **that** tree |
+| **Other producer artifacts** | Delivery / other concepts (host, HTTP, …). They **call/bind** the module. **Not** a second sim |
+
+All agent implementation work aims here: `session.Lower` produces the artifact set; the module holds complete Syntax trees for every shipped action, policy, subscription, create, and transition. When simulate and print diverge, fix **Lower** — one sim tree.
 
 | Do | Do not |
 |----|--------|
 | Put domain meaning in the operation AST | Put it in `DomainEntityInstance` preludes, Effect-IR walks, or MCP `link_instances` the module does not name |
 | Prove a path by executing the **same** body print uses (VM on bound `This`, or generated CLR method) | Treat a green DEI / MCP walk as product-surface proof |
-| Lower subscriptions, transition batches, and policies into the module | Call `LowerActionBody` / per-invoke policy lower as shipped execute input |
+| Lower subscriptions, OnEntry/OnExit, and entity policies into the module | Call `LowerActionBody` / per-invoke policy lower as shipped execute input; revive `UseThisReference` twin trees; fold Lower into analyze |
 | Shrink the language if a construct cannot lower | Ship a keyword whose implementation is a harness escape |
 
 `DomainEntityInstance` is scratch bind for MCP/authoring (dictionary `This` + Store). It is **not** the customer API and **not** T2 proof. Harness tests stay labeled as harness.
+
+**Residual debt** (still belongs in `session.Lower`; do not grow it): action-/stage-scoped policy side-lower; nested StageTransition flush / Domain-null standalone; execute-time expression lower sites in [`docs/plans/p3b-followups-2026-09-27.md`](docs/plans/p3b-followups-2026-09-27.md).
 
 ---
 
@@ -65,7 +79,7 @@ Non-negotiable. Each principle has a **one-line rule** and a short **how** for a
 
 **When principles pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a “cleaner” framework without a second real use. “More generic” production under green means fewer special cases — not a premature pattern catalog.
 
-**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. It lowers to complete Syntax ASTs **per operation** (shipped ⊆ lowerable). Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context**. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, treat MCP as the customer API, or add a consumer-specific lowering flag. Residual execute-time `LowerActionBody` (subscriptions / transition batches) and per-call policy lower are debt — they belong in `session.Lower`. Scratch simulate is not product-surface proof. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen: [`docs/CORE.md`](docs/CORE.md) §0.
+**Platform facts (must adhere):** A domain is a **library of legal operations**, not a process. Session Compile is Load → one analyze (fail-closed) → `session.Lower` → artifact set on the session. The Syntax module is privileged for meaning + Interpreter sim; other library producer artifacts are delivery (not a second sim). Shipped ⊆ lowerable. Product entry points (REST, …) are **opt-in extensions** (`uses`). **Poly.MCP** is the interactive harness: author, inspect, simulate a named policy/action only with **caller-supplied context**. Do not invent `Main` in core, grow `Comment` / a second interpreter as shipped meaning, treat MCP as the customer API, add a consumer-specific lowering flag, revive Lower-inside-analysis, or grow twin trees. Scratch simulate is not product-surface proof. Policy: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen: [`docs/CORE.md`](docs/CORE.md) §0.
 
 **Platform trust bar:** **We are our own first customer.** Product surface (including **external contracts**) is built *through* domain + modules; substrate ops glue is separate. **Customer product generation funds neurosymbolic work over time** — generation is the engine, not a side demo; substrate depth is steered by what generation and honesty need. Contract surface pains *us* first by design. Market platform trust = **T2**; **T1** = design partners. Dogfood pain → fix the seam or narrow the claim. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
 

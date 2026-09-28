@@ -17,5 +17,4 @@ These still lower a `DomainExpression` at execute time rather than binding a mod
 | `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:510` | `EvaluateExprOnPeer` |
 | `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:659` | `PrevalidateCreateInitializers` |
 | `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:721` | `CreateChildInstance` initializer eval |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.Runtime.cs:451` | `GetRelatedTargets` filter |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.Runtime.cs:506` | `EvaluateBodyOnTarget` (any/all/none/count predicates) |
+| (removed by P3-A #79) | Quantifier predicates no longer re-lower at execute (`EvaluateBodyOnTarget` / Store quantifier jobs gone) |

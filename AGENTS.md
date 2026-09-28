@@ -16,11 +16,11 @@ Non-negotiable. Depth: [`docs/decisions/2026-core-engineering-principles.md`](do
 2. **End-to-end ownership** — coherent path through CORE seams; no accidental side paths.
 3. **Only what helps the customer** — time-to-value, correctness, or operability; cut the rest.
 4. **Go well to go fast** — small test→code loops; tests more specific, production more generic.
-5. **Shipped capability over completeness** — thinnest vertical slice; shrink the language before host escapes.
-6. **Working code before abstractions** — extract only on a second real use.
+5. **Shipped capability over completeness** — thinnest vertical slice through the *right* seam; shrink the language before host escapes. Completeness theater is out; so is shipping a known-wrong single-path shape and calling it done.
+6. **Seam when multiplicity is known** — if the design already needs multiple implementations (libraries, artifact producers, `uses` doors), name the seam and ship against it. Do not wait for a second copy of a one-off. Speculative frameworks for imagined futures stay out. Cautionary tale: DEI (`DomainEntityInstance`) as “working” public path.
 7. **Guardrails only with real consumers** — no ceremony for zero callers.
 
-**When tenets pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer **no new abstraction** over a framework without a second real use.
+**When tenets pull opposite ways:** prefer **domain fidelity and end-to-end ownership via CORE seams** over a locally smaller wrong path; prefer a **smaller tested loop** over a larger untested batch; prefer a **known multi-impl seam** over a single-path hack that will be ripped out; prefer **no speculative framework** when the second use is imaginary.
 
 **Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer lowering flags · Lower-inside-analysis · twin trees (`UseThisReference`) · DEI/MCP walk as product-surface proof · empty artifact catalog when required · inventing a second CURRENT.
 

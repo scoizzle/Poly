@@ -2,6 +2,7 @@
 
 **Date:** 2026-05-31  
 **Updated:** 2026-07-11 — seven principles; **Go well to go fast** added; AGENTS carries **Rule + How** for each; **order** = domain → E2E ownership → customer → test loops → thin slice → abstract late → guardrails; conflict-priority sentence in AGENTS  
+**Updated:** 2026-09-28 — retire dogmatic “extract only on a second real use.” **Seam when multiplicity is known** replaces **Working code before abstractions**. Thin slice (§5) must hit the *right* seam — not a known-wrong single-path shape. Cautionary tale: DEI (`DomainEntityInstance`) as “working” public path; libraries / artifact producers / `uses` doors already proved multi-impl. Conflict rule in AGENTS updated accordingly.  
 **Status:** Accepted  
 **Deciders:** Primary author (with review)
 
@@ -9,9 +10,11 @@
 
 Over time, a set of strong, recurring principles emerged for how work should be conducted in this repository. These principles were originally captured as a dense paragraph in `AGENTS.md`. As the project grew (particularly with the major V2 → V3 domain modeling shift), it became clear that these ideas deserved explicit treatment as foundational decisions rather than just inline instructions.
 
-A further gap: “ship fast” without a feedback discipline produces the opposite of speed (rework, ABI hacks, parallel evaluators, speculative frameworks). The TDD / Clean Code dynamic—“the only way to go fast is to go well,” with tests growing more specific and production code more generic—needed an explicit seat next to “working code before abstractions.”
+A further gap: “ship fast” without a feedback discipline produces the opposite of speed (rework, ABI hacks, parallel evaluators, speculative frameworks). The TDD / Clean Code dynamic—“the only way to go fast is to go well,” with tests growing more specific and production code more generic—needed an explicit seat in the principles set.
 
-One-line principles alone proved insufficient for smaller-context agents and earlier-career humans: they need a short **how** (ordered steps) without opening this ADR. As of 2026-07-11, `AGENTS.md` therefore holds **Rule + How** for each principle; this file remains rationale and history.
+A later correction (2026-09-28): “working code before abstractions / wait for a second real use” was read as a license to ship single-path host shapes (notably DEI) when multiplicity was already certain. Libraries, artifact producers, and `uses` doors proved the multi-impl seam; pretend-one-impl “working” code became the wrong public path. Speculative frameworks for *imagined* futures remain out; known multiplicity gets a named seam now.
+
+One-line principles alone proved insufficient for smaller-context agents and earlier-career humans: they need a short **how** (ordered steps) without opening this ADR. As of 2026-07-11, `AGENTS.md` therefore holds the enforceable summary; this file remains rationale and history. After the 2026-09 lean of AGENTS, the always-on form is **Core tenets** (one-liners + conflict rule); depth stays here and in CORE.
 
 ## Decision
 
@@ -21,9 +24,9 @@ This document preserves deeper history and cross-links. Prefer not to duplicate 
 
 ### Authoritative operational version
 
-See **`AGENTS.md` → Core tenets** for the scannable always-on summary (first section), and **`AGENTS.md` → Core principles** for **Rule** + **How** of all seven, their **intentional order**, and the conflict rule. Tenets first is what agents are expected to load; Rule+How is the procedure.
+See **`AGENTS.md` → Core tenets** for the scannable always-on summary (first section): seven how-we-work lines, intentional order, and the conflict rule. Tenets first is what agents are expected to load.
 
-**Order rationale (Poly-specific):** domain first (this platform’s center of gravity); end-to-end ownership next (CORE pipeline); customer/scope filter; then motion (test→code loops), amount (thin slice), structure (abstract late), and process last (guardrails as servant, not master).
+**Order rationale (Poly-specific):** domain first (this platform’s center of gravity); end-to-end ownership next (CORE pipeline); customer/scope filter; then motion (test→code loops), amount (thin slice through the right seam), structure (**seam when multiplicity is known** — not speculative frameworks), and process last (guardrails as servant, not master).
 
 ### Principle: Go well to go fast (extra detail)
 
@@ -31,7 +34,7 @@ Uncle Bob’s line *“The only way to go fast is to go well”* is policy, not 
 
 - **Asymmetry over time:** tests become **more specific** (pin behavior); production code becomes **more generic** (special cases collapse under those pins).
 - **Not** coverage theater or “never spike.” Spikes for learning are fine; they do not ship until pulled through the test→code loop in AGENTS.
-- Complements **working code before abstractions** and **shipped capability over completeness**.
+- Complements **shipped capability over completeness** and **seam when multiplicity is known**.
 
 **Violations:** large production changes with no new/tightened check; special-casing production to silence a vague test; parallel product paths without a failing case that forced a pipeline-native solution.
 

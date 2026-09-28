@@ -359,26 +359,20 @@ public sealed partial class DomainToCSharpExporter {
         // defaults — `create in { DefaultedProp: value }` flows through construction.
         ctorParams.AddRange(defaultedCtorParams);
 
-        // ── Build post-transition notification nodes ──────────────
-        Dictionary<string, IReadOnlyList<Node>>? postTransitionNodes = null;
+        // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass builds
+        // the invoke with a unique previousStageN capture for when-all.
+        IReadOnlySet<string>? postTransitionNotifyStages = null;
         if (targetSubs is { Count: > 0 }) {
-            postTransitionNodes = new Dictionary<string, IReadOnlyList<Node>>(
-                StringComparer.Ordinal);
-            foreach (var stageGroup in targetSubs.GroupBy(s => s.StageName)) {
-                var nodes = new List<Node> {
-                    new Invoke(
-                        new Member(new ThisReference(),
-                            $"Notify{stageGroup.Key}Subscribers"))
-                };
-                postTransitionNodes[stageGroup.Key] = nodes;
-            }
+            postTransitionNotifyStages = targetSubs
+                .Select(s => s.StageName)
+                .ToHashSet(StringComparer.Ordinal);
         }
 
         // ── Actions as void methods ───────────────────────────────
         // Same action name on multiple stages is one C# method that dispatches on
         // CurrentStage. Emitting one method per stage produced illegal duplicate members
         // (FieldService WorkOrder.Cancel on Draft/Scheduled/Blocked).
-        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNodes, domain, metadata);
+        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
         foreach (var policy in entity.Policies) {

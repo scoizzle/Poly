@@ -6,10 +6,10 @@ using Poly.DomainModeling.Ontology;
 namespace Poly.Tests.DomainModeling;
 
 /// <summary>
-/// p4 suite goldens: DSL-authored `when any|all Rel Stage` subscriptions dispatch
-/// through the existing store runtime with set-state-after-transition semantics,
-/// and the default Each path (no keyword) stays per-element. Zero runtime changes
-/// — these prove the store already implements Any/All for DSL-authored plans.
+/// p4 suite goldens: DSL-authored <c>when any|all Rel Stage</c> subscriptions fire
+/// through the lowered handler session.Lower produces (the same body print emits).
+/// The default Each path (no keyword) stays per-element. These prove Any/All live
+/// in that shared tree, not in a store-side gate.
 /// </summary>
 public class P4SubscriptionQuantifierDslTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {

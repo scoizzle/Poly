@@ -36,10 +36,12 @@ namespace Poly.DomainModeling.Lowering;
 /// default <c>{EntityName}Stage</c> derivation — necessary for inherited entities
 /// where the stage enum is defined on the root ancestor.
 /// </param>
-/// <param name="PostTransitionNodes">
-/// Optional map of stage name to Syntax AST nodes to emit <em>after</em> the
-/// <c>CurrentStage</c> assignment when lowering a transition to that stage.
-/// Used for cross-entity subscription notifications in C# codegen mode.
+/// <param name="PostTransitionNotifyStages">
+/// Optional set of stage names that have subscription notify methods. When a
+/// transition targets one of these stages, <see cref="EffectLoweringPass"/>
+/// captures <c>CurrentStage</c> before the assign and emits
+/// <c>Notify{Stage}Subscribers(previousStageN)</c> after it. The pass builds
+/// that invoke; callers only name the watched stages.
 /// </param>
 /// <param name="SourceStageName">
 /// Optional name of the source stage from which a transition originates.
@@ -77,7 +79,7 @@ public sealed record LoweringContext(
     HashSet<string>? ActionParameterNames = null,
     Domain? Domain = null,
     string? StageEnumTypeName = null,
-    IReadOnlyDictionary<string, IReadOnlyList<Node>>? PostTransitionNodes = null,
+    IReadOnlySet<string>? PostTransitionNotifyStages = null,
     string? SourceStageName = null,
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
     Func<string, string>? NavigationNameResolver = null,

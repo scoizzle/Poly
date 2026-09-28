@@ -34,13 +34,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
     private readonly string? _stageEnumTypeName;
-    private readonly IReadOnlyDictionary<string, IReadOnlyList<Node>>? _postTransitionNodes;
+    private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
     private int _forEachInvokeSequence;
     private int _createInProbeSequence;
+    private int _previousStageSequence;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -54,7 +55,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _domain = context.Domain;
         _analysis = context.Analysis;
         _stageEnumTypeName = context.StageEnumTypeName;
-        _postTransitionNodes = context.PostTransitionNodes;
+        _postTransitionNotifyStages = context.PostTransitionNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
         _emitInstanceNotify = context.EmitInstanceNotify;
@@ -493,9 +494,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
     /// source-stage exit effects (when known), CurrentStage assignment, target-stage
-    /// entry effects (in try), post-transition notification nodes, then
-    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> in finally.
-    /// Not a host-ABI node.
+    /// entry effects (in try), then <c>Notify{Target}Subscribers(previousStageN)</c>
+    /// when the target is a watched stage (see
+    /// <see cref="LoweringContext.PostTransitionNotifyStages"/>), and finally
+    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> when instance notify is on.
+    /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
+    /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
+    /// outer pre-stage. Not a host-ABI node.
     /// </summary>
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
@@ -504,9 +509,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var nodes = new List<Node>();
         Variable? previousStage = null;
-        if (_postTransitionNodes is not null
-            && _postTransitionNodes.ContainsKey(t.TargetStage.StageName)) {
-            previousStage = new Variable("previousStage");
+        var notifyTarget = _postTransitionNotifyStages is not null
+            && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
+        if (notifyTarget) {
+            previousStage = new Variable($"previousStage{_previousStageSequence++}");
             nodes.Add(new Assignment(
                 previousStage,
                 new Member(Subject, "CurrentStage")));
@@ -571,22 +577,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(Subject, "CurrentStage"),
             stageValue));
 
-        if (_postTransitionNodes is not null
-            && _postTransitionNodes.TryGetValue(t.TargetStage.StageName, out var postNodes)) {
-            foreach (var postNode in postNodes) {
-                if (previousStage is not null
-                    && postNode is Invoke {
-                        Delegate: Member { MemberName: { } notifyName }
-                    } inv
-                    && notifyName.StartsWith("Notify", StringComparison.Ordinal)
-                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
-                    && inv.Arguments.Length == 0) {
-                    tryNodes.Add(new Invoke(inv.Delegate, [previousStage]));
-                }
-                else {
-                    tryNodes.Add(postNode);
-                }
-            }
+        if (previousStage is not null) {
+            tryNodes.Add(new Invoke(
+                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                [previousStage]));
         }
 
         Node tryBody = tryNodes.Count switch {

@@ -32,7 +32,7 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
 
     bool IDictionary<string, object?>.ContainsKey(string key) =>
         _values.ContainsKey(key)
-        || TryGetOneToOneNavigation(key, out _)
+        || MatchOneToOneNavigation(key) is not null
         || MatchCollectionNavigation(key) is not null;
 
     bool IDictionary<string, object?>.Remove(string key) => _values.Remove(key);

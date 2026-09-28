@@ -3120,7 +3120,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task Indexer_OneToOne_WithoutStore_ReturnsNull() {
+    public async Task Indexer_OneToOne_WithoutStore_ContainsKey_True_Get_Throws() {
         var target = new Entity("Target", [], [], [], []);
         var source = new Entity("Source", [], [], [], []);
         var rel = new Relationship("team",
@@ -3130,7 +3130,8 @@ public class DomainEntityInstanceTests {
         var src = DomainEntityInstance.Create(source, domain: domain);
         IDictionary<string, object?> bag = src;
         await Assert.That(bag.ContainsKey("Team")).IsTrue();
-        await Assert.That(bag["Team"]).IsNull();
+        await Assert.That(() => bag["Team"]).Throws<InvalidOperationException>()
+            .WithMessageContaining("without a DomainInstanceStore");
     }
 
     private static (DomainEntityInstance Src, Policy Policy) QuantifierPolicyWithoutStore(

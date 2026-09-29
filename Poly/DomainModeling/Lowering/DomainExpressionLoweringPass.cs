@@ -166,10 +166,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         // Predicate leaves: an unlinked to-one is false. A value-only leaf is
         // `rel != null && <leaf>`. When the leaf has statements (a quantifier on
         // the target), those statements run only inside `if (rel != null)` after
-        // a temp is set to false. Value leaves stay the hop; an enclosing
-        // comparison ANDs `rel != null` so both operands fail closed when
-        // unlinked. NullForgiving on the hop is CS8602 only; require gates own
-        // DomainResult.Failure ("requires a linked") in BuildActionBodyWithGuards.
+        // a temp is set to false. Value leaves stay the hop. NullForgiving on the
+        // hop is CS8602 only; require gates own DomainResult.Failure
+        // ("requires a linked") in BuildActionBodyWithGuards.
         // Collection hops cannot be a singular path-prefix — fail closed (use any/all).
         if (IsCollectionNav(rn.RelationshipName)) {
             throw new InvalidOperationException(
@@ -378,25 +377,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             };
         }
 
-        value = GuardUnlinkedToOneValueOperand(c.Left, value);
-        value = GuardUnlinkedToOneValueOperand(c.Right, value);
         return LoweredExpression.Combine([left, right], value);
-    }
-
-    /// <summary>
-    /// A comparison whose operand is a to-one path-prefix value (<c>Age &lt; advisor Age</c>)
-    /// is <c>rel != null &amp;&amp; comparison</c>, so an unlinked target is false.
-    /// Predicate hops already carry that guard at the hop.
-    /// </summary>
-    private Node GuardUnlinkedToOneValueOperand(DomainExpression operand, Node value) {
-        if (operand is RelationshipNavigation rn
-            && !IsPathPrefixPredicate(rn.TargetProperty)
-            && !_parameters.ContainsKey(rn.RelationshipName)
-            && !IsCollectionNav(rn.RelationshipName)) {
-            var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-            return new SN.And(new NotEqual(relMember, new Constant(null)), value);
-        }
-        return value;
     }
 
     /// <summary>

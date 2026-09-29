@@ -1012,11 +1012,13 @@ public sealed partial record DomainEntityInstance {
             Assignment a => new Assignment(
                 BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
             Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-                when DomainToCSharpExporter.TryParseNotifySubscribersMethod(notifyName, out var stageName)
+                when notifyName.StartsWith("Notify", StringComparison.Ordinal)
+                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
+                    && notifyName.Length > "NotifySubscribers".Length
                 => new Invoke(
                     new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
                     [
-                        new Constant(stageName),
+                        new Constant(notifyName["Notify".Length..^"Subscribers".Length]),
                         .. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))
                     ]),
             // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is

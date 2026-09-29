@@ -584,7 +584,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (previousStage is not null) {
             tryNodes.Add(new Invoke(
-                new Member(Subject, DomainToCSharpExporter.NotifySubscribersMethodName(t.TargetStage.StageName)),
+                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
                 [previousStage]));
         }
 

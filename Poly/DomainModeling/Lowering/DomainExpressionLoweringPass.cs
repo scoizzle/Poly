@@ -406,8 +406,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         // (`Age < advisor Age + advisor mentor Age`) is guarded once.
         var valueHops = new List<Node>();
         var seenPaths = new HashSet<string>(StringComparer.Ordinal);
-        CollectValueHops(c.Left, valueHops, seenPaths);
-        CollectValueHops(c.Right, valueHops, seenPaths);
+        CollectValueHops(c.Left, _currentSubject, "", valueHops, seenPaths);
+        CollectValueHops(c.Right, _currentSubject, "", valueHops, seenPaths);
         for (var i = valueHops.Count - 1; i >= 0; i--)
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
@@ -415,33 +415,37 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     /// <summary>
-    /// Collects the to-one hops an operand reads through, starting at this
-    /// comparison's subject: <c>advisor mentor Age</c> yields <c>.Advisor</c> and
-    /// <c>.Advisor.Mentor</c>. Arithmetic and <c>not</c>/<c>and</c>/<c>or</c> are
-    /// looked through; any other operand adds no hop (a quantifier body runs
-    /// against its loop item and guards its own comparisons). The chain stops at
-    /// a navigation to a condition (<c>advisor where …</c>), which guards its own
-    /// hop, and at a subscription binder name (<c>order Total</c>).
+    /// Collects the to-one hops an operand reads through from <paramref name="subject"/>
+    /// (the comparison's subject, or the hop a navigation's target is read on):
+    /// <c>advisor mentor Age</c> and <c>advisor where mentor Age * 2</c> both yield
+    /// <c>.Advisor</c> and <c>.Advisor.Mentor</c>. Arithmetic and
+    /// <c>not</c>/<c>and</c>/<c>or</c> are looked through; any other operand adds no
+    /// hop (a quantifier body runs against its loop item and guards its own
+    /// comparisons). The chain stops at a subscription binder name
+    /// (<c>order Total</c>) and at a navigation to a condition
+    /// (<c>advisor where Age &lt; 30</c>): lowering guards that navigation's own
+    /// hop, and hops inside the condition are guarded by the comparisons there.
     /// Known issue: lowering treats a binder name as the binder at any depth, so
     /// <c>advisor order Total</c> reads the binder, not the advisor's order. The
     /// chain matches lowering rather than guarding a hop lowering never reads.
     /// </summary>
+    /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
+    /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
     private void CollectValueHops(
-        DomainExpression operand, List<Node> hops, HashSet<string> seenPaths) {
+        DomainExpression operand, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
         switch (operand) {
             case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide
                 or Ontology.Not or Ontology.And or Ontology.Or:
                 foreach (var child in operand.Children.OfType<DomainExpression>())
-                    CollectValueHops(child, hops, seenPaths);
+                    CollectValueHops(child, subject, subjectPath, hops, seenPaths);
                 break;
             case RelationshipNavigation rn:
-                CollectHopChain(rn, _currentSubject, "", hops, seenPaths);
+                CollectHopChain(rn, subject, subjectPath, hops, seenPaths);
                 break;
         }
     }
 
-    /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
-    /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
     private void CollectHopChain(
         RelationshipNavigation rn, Node subject, string subjectPath,
         List<Node> hops, HashSet<string> seenPaths) {
@@ -454,8 +458,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         var hop = new Member(subject, navName);
         if (seenPaths.Add(hopPath))
             hops.Add(hop);
-        if (rn.TargetProperty is RelationshipNavigation next)
-            CollectHopChain(next, hop, hopPath, hops, seenPaths);
+        CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
     }
 
     /// <summary>

@@ -254,4 +254,62 @@ public class UnlinkedComparisonAgreeTests {
         await Assert.That(sim).IsFalse();
         await Assert.That(print).IsFalse();
     }
+
+    // Advisor Age 25, Mentor Age 30, Customer Age 20. With both linked the value is
+    // 60 and 55 respectively, so the comparison is true; any unlinked hop makes it false.
+    [Test]
+    [Arguments("Age < (advisor where mentor Age * 2)", false, false, false)]
+    [Arguments("Age < (advisor where mentor Age * 2)", true, false, false)]
+    [Arguments("Age < (advisor where mentor Age * 2)", true, true, true)]
+    [Arguments("Age < (advisor where Age + mentor Age)", false, false, false)]
+    [Arguments("Age < (advisor where Age + mentor Age)", true, false, false)]
+    [Arguments("Age < (advisor where Age + mentor Age)", true, true, true)]
+    public async Task HopInsideNavigationTargetArithmetic_AgreesOnSimulateAndPrintedCsharp(
+        string condition, bool linkAdvisor, bool linkMentor, bool expected) {
+        var (domain, analysis) = EvolvedDomain.FromDsl($$"""
+            domain Shop
+            Mentor: entity {
+              Age: Number
+            }
+            Advisor: entity {
+              Age: Number
+              mentor: Mentor
+            }
+            Customer: entity {
+              Age: Number
+              advisor: Advisor
+              P: policy { {{condition}} }
+            }
+            """);
+        Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
+        var store = new DomainInstanceStore();
+        var mentor = DomainEntityInstance.Create(E("Mentor"),
+            new Dictionary<string, object?> { ["Age"] = 30L }, domain);
+        var advisor = DomainEntityInstance.Create(E("Advisor"),
+            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
+        var customer = DomainEntityInstance.Create(E("Customer"),
+            new Dictionary<string, object?> { ["Age"] = 20L }, domain);
+        store.Add(mentor);
+        store.Add(advisor);
+        store.Add(customer);
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 30L));
+        var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
+        var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
+        if (linkAdvisor) {
+            store.Link("advisor", customer, advisor);
+            printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+        }
+        if (linkMentor) {
+            store.Link("mentor", advisor, mentor);
+            printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
+        }
+
+        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "P"));
+        var print = (bool)printedCustomer.GetType().GetMethod("P")!.Invoke(printedCustomer, null)!;
+        await Assert.That(sim).IsEqualTo(expected);
+        await Assert.That(print).IsEqualTo(expected);
+    }
 }

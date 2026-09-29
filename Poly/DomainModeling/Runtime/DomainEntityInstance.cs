@@ -898,8 +898,9 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
-    /// stays. Simulate reports as <c>DomainResult.Failure</c> what the printed C#
-    /// throws; the remaining arms are:
+    /// stays. The first arm works around the VM's root-program slot layout; the
+    /// other two are result-shape choices where simulate reports as
+    /// <c>DomainResult.Failure</c> what the printed C# throws:
     /// <list type="bullet">
     /// <item>
     /// Action parameters and subscription <c>previousStage</c> — the VM runs the

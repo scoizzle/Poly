@@ -266,7 +266,7 @@ public sealed partial record DomainEntityInstance {
             var cached = body;
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            cached = BindScratchStore(
+            cached = BindForSimulate(
                 cached, previousStageName: previousStageName, bindPreviousStage: true);
             ThrowIfEffectListFailed(
                 ExecuteCachedSubscriptionTree(cached),

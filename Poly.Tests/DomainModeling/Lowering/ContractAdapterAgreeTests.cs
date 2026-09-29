@@ -71,13 +71,10 @@ public class ContractAdapterAgreeTests {
         reqType.GetProperty("Currency")!.SetValue(req, "USD");
         var pay = printed.GetType().GetMethod("Pay")
             ?? throw new InvalidOperationException("Pay missing");
-        try {
-            var result = pay.Invoke(printed, [req])!;
-            var ok = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
-            await Assert.That(ok).IsFalse();
-        }
-        catch (TargetInvocationException ex) {
-            await Assert.That(ex.InnerException is not null).IsTrue();
-        }
+        // The printed adapter stub throws until a host supplies an implementation;
+        // simulate reports the same missing adapter as a failed result.
+        var thrown = await Assert.That(() => pay.Invoke(printed, [req]))
+            .Throws<TargetInvocationException>();
+        await Assert.That(thrown!.InnerException).IsTypeOf<NotImplementedException>();
     }
 }

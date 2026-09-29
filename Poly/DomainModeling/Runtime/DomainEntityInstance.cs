@@ -732,20 +732,20 @@ public sealed partial record DomainEntityInstance {
                     throw new InvalidOperationException(
                         $"Entry/exit segment body {kind} '{stageName}'[{segmentIndex}] is missing on entity '{Entity.Name}'.");
                 }
-                tree = BindScratchStore(segmentBody);
+                tree = BindForSimulate(segmentBody);
             }
             else if (hasStageName) {
                 if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    tree = BindScratchStore(exitBody);
+                    tree = BindForSimulate(exitBody);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, entryStageName, "entry", out var entryBody)
                     && entryBody is not null) {
-                    tree = BindScratchStore(entryBody);
+                    tree = BindForSimulate(entryBody);
                 }
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
@@ -893,11 +893,11 @@ public sealed partial record DomainEntityInstance {
             foreach (var p in methodParams)
                 paramMap[p.Name] = p;
         }
-        return BindScratchStore(body, paramMap);
+        return BindForSimulate(body, paramMap);
     }
 
     /// <summary>
-    /// Scratch-store bind of a printed module body. <see cref="ThisReference"/>
+    /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
     /// stays. Remaining arms are dictionary-This / VM gaps that cannot move
     /// without a change in Poly/Interpretation or a runtime-only tree:
     /// <list type="bullet">
@@ -920,13 +920,13 @@ public sealed partial record DomainEntityInstance {
     /// </item>
     /// </list>
     /// </summary>
-    private Node BindScratchStore(
+    private Node BindForSimulate(
         Node node,
         IReadOnlyDictionary<string, Parameter>? actionParameters = null,
         string? previousStageName = null,
         bool bindPreviousStage = false) {
         Node Recurse(Node n) =>
-            BindScratchStore(n, actionParameters, previousStageName, bindPreviousStage);
+            BindForSimulate(n, actionParameters, previousStageName, bindPreviousStage);
         return node switch {
             Parameter p when bindPreviousStage
                 && string.Equals(p.Name, "previousStage", StringComparison.Ordinal) =>
@@ -972,9 +972,6 @@ public sealed partial record DomainEntityInstance {
             TypeCast tc => new TypeCast(
                 Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
             New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
-            // Void export trees fail closed with throw; simulate needs DomainResult.Failure.
-            // Catching InvalidOperationException at Execute would also swallow host
-            // fail-loud throws (missing store, create mismatch, missing subscription).
             ThrowStatement {
                 Exception: New {
                     Type: NamedTypeReference { TypeName: "InvalidOperationException" },
@@ -1003,7 +1000,7 @@ public sealed partial record DomainEntityInstance {
                 or NamedTypeReference or TypeReference
                 or PrimitiveTypeReference or ClrTypeReference => node,
             _ => throw new InvalidOperationException(
-                $"Cannot bind scratch-store body on {node.GetType().Name}.")
+                $"Cannot bind simulate body on {node.GetType().Name}.")
         };
     }
 

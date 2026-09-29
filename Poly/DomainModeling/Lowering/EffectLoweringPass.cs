@@ -47,6 +47,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     public EffectLoweringPass(Entity entity, Node subject)
         : this(entity, new LoweringContext(subject)) { }
 
+    /// <summary>
+    /// Creates a pass for <paramref name="entity"/>. The effect's entity always sets
+    /// <see cref="LoweringContext.SourceEntityName"/>, overriding any value in
+    /// <paramref name="context"/>.
+    /// </summary>
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
         _context = (context.Names is null ? context with { Names = new LocalNames() } : context)

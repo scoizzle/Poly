@@ -77,8 +77,9 @@ namespace Poly.DomainModeling.Lowering;
 /// this context via <c>with</c> keep the same instance.
 /// </param>
 /// <param name="SourceEntityName">
-/// Current-subject entity type name. Quantifier bodies resolve relationship
-/// targets on this entity, then on each nested target. A missing name yields
+/// Entity whose members the current subject exposes. Path-prefix hops and
+/// quantifier bodies lower against the target entity. Relationship targets
+/// resolve on this entity, then on each nested target. A missing name yields
 /// no target (no domain-wide scan).
 /// </param>
 public sealed record LoweringContext(

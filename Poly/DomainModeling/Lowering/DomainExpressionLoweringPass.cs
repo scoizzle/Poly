@@ -54,14 +54,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
-    /// The instance root is <see cref="LoweringContext.Subject"/> (module bodies
-    /// pass <see cref="ThisReference"/>). Names in
+    /// The instance root is the <c>subject</c> passed to <see cref="LowerExpression"/>
+    /// and <see cref="Lower"/> (<see cref="LoweringContext.Subject"/> is not read
+    /// by this pass). Names in
     /// <see cref="LoweringContext.ActionParameterNames"/> render as bare parameters
     /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
-    /// <see cref="LoweringContext.SourceEntityName"/> is the current-subject entity
-    /// for quantifier target resolution.
+    /// <see cref="LoweringContext.SourceEntityName"/> is the entity whose members
+    /// the current subject exposes; path-prefix hops and quantifier bodies lower
+    /// against the target entity.
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;
@@ -163,9 +165,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Predicate leaves: an unlinked to-one is false. A value-only leaf is
-        // `rel != null && <leaf>`. When the leaf has statements (a quantifier on
-        // the target), those statements run only inside `if (rel != null)` after
+        // Predicate leaves: an unlinked to-one is false. A statement-free predicate
+        // leaf is `rel != null && <leaf>`. When the leaf has statements (a quantifier
+        // on the target), those statements run only inside `if (rel != null)` after
         // a temp is set to false. Value leaves stay the hop. NullForgiving on the
         // hop is CS8602 only; require gates own DomainResult.Failure
         // ("requires a linked") in BuildActionBodyWithGuards.
@@ -176,7 +178,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
                 "Use any/all quantifiers for collections.");
         }
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        var leaf = Route(rn.TargetProperty, new NullForgiving(relMember));
+        var leaf = LowerAgainstEntity(
+            ResolveRelationshipTarget(rn.RelationshipName),
+            rn.TargetProperty,
+            new NullForgiving(relMember));
         if (!IsPathPrefixPredicate(rn.TargetProperty))
             return leaf;
         var exists = new NotEqual(relMember, new Constant(null));
@@ -490,21 +495,31 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// pass's local-name generator so names stay unique.
     /// </summary>
     private LoweredExpression LowerQuantifierBody(
-        string relationshipName, DomainExpression body, Variable item) {
-        var targetName = ResolveRelationshipTarget(relationshipName);
+        string relationshipName, DomainExpression body, Variable item) =>
+        LowerAgainstEntity(ResolveRelationshipTarget(relationshipName), body, item);
+
+    /// <summary>
+    /// Lowers <paramref name="expression"/> against <paramref name="subject"/> using
+    /// <paramref name="entityName"/> as the entity whose members the subject exposes
+    /// (that entity's SourceEntityName and enum map). Path-prefix hops and quantifier
+    /// bodies share this so nested resolution sees the target. Shares this pass's
+    /// local-name generator.
+    /// </summary>
+    private LoweredExpression LowerAgainstEntity(
+        string? entityName, DomainExpression expression, Node subject) {
         IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
-        if (_domain is not null && targetName is not null) {
+        if (_domain is not null && entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-                string.Equals(e.Name, targetName, StringComparison.Ordinal));
+                string.Equals(e.Name, entityName, StringComparison.Ordinal));
             if (targetEntity is not null)
                 enums = DomainToCSharpExporter.GetEnumPropertyNames(
                     targetEntity, _domain, _analysis);
         }
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
-            SourceEntityName = targetName ?? _context.SourceEntityName
+            SourceEntityName = entityName ?? _context.SourceEntityName
         });
-        return nested.LowerExpression(body, item);
+        return nested.LowerExpression(expression, subject);
     }
 
     protected override LoweredExpression Library(DomainExpression expr) {

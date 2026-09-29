@@ -417,17 +417,20 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// <summary>
     /// Collects the to-one hops an operand reads through, starting at this
     /// comparison's subject: <c>advisor mentor Age</c> yields <c>.Advisor</c> and
-    /// <c>.Advisor.Mentor</c>. Only arithmetic is looked through; any other
-    /// operand adds no hop (a quantifier body runs against its loop item and
-    /// guards its own comparisons). The chain stops at a navigation
-    /// to a condition (<c>advisor where …</c>), which guards its own hop, and at
-    /// a name that is a subscription binder (<c>order Total</c>), which lowering
-    /// reads from the binder parameter at any depth.
+    /// <c>.Advisor.Mentor</c>. Arithmetic and <c>not</c>/<c>and</c>/<c>or</c> are
+    /// looked through; any other operand adds no hop (a quantifier body runs
+    /// against its loop item and guards its own comparisons). The chain stops at
+    /// a navigation to a condition (<c>advisor where …</c>), which guards its own
+    /// hop, and at a subscription binder name (<c>order Total</c>).
+    /// Known issue: lowering treats a binder name as the binder at any depth, so
+    /// <c>advisor order Total</c> reads the binder, not the advisor's order. The
+    /// chain matches lowering rather than guarding a hop lowering never reads.
     /// </summary>
     private void CollectValueHops(
         DomainExpression operand, List<Node> hops, HashSet<string> seenPaths) {
         switch (operand) {
-            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide:
+            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide
+                or Ontology.Not or Ontology.And or Ontology.Or:
                 foreach (var child in operand.Children.OfType<DomainExpression>())
                     CollectValueHops(child, hops, seenPaths);
                 break;

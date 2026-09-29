@@ -223,4 +223,35 @@ public class UnlinkedComparisonAgreeTests {
         await Assert.That(sim).IsFalse();
         await Assert.That(print).IsFalse();
     }
+
+    [Test]
+    [Arguments("Ready is (not advisor Active)")]
+    [Arguments("Ready is (advisor Active and Ready)")]
+    [Arguments("Ready is (advisor Active or Ready)")]
+    public async Task HopInsideLogicalOperand_UnlinkedIsFalse_OnSimulateAndPrintedCsharp(string condition) {
+        var (domain, analysis) = EvolvedDomain.FromDsl($$"""
+            domain Shop
+            Advisor: entity {
+              Active: Boolean default(false)
+            }
+            Customer: entity {
+              Ready: Boolean default(true)
+              advisor: Advisor
+              P: policy { {{condition}} }
+            }
+            """);
+        var customerE = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
+        var store = new DomainInstanceStore();
+        var customer = DomainEntityInstance.Create(customerE, domain: domain);
+        store.Add(customer);
+        var sim = customer.EvaluatePolicy(customerE.Policies.First(p => p.Name == "P"));
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var printed = ExportedCSharp.CreateEntity(asm, "Customer");
+        var print = (bool)printed.GetType().GetMethod("P")!.Invoke(printed, null)!;
+
+        await Assert.That(sim).IsFalse();
+        await Assert.That(print).IsFalse();
+    }
 }

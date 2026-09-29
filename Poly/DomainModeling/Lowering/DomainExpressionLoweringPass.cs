@@ -399,10 +399,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
         // Value hops (`Age < advisor Age`) do not get the predicate-shape
         // `rel != null && leaf` from RelationshipNavigation. Guard every to-one
-        // hop on both sides here so an unlinked hop anywhere in the path makes
-        // the comparison false instead of dereferencing null. Guards are folded
-        // inner-to-outer so each dereference is protected by the guard before it.
-        // A hop reached twice (`Age < advisor Age + advisor mentor Age`) is guarded once.
+        // hop rooted on this comparison's subject, on both sides, so an unlinked
+        // hop anywhere in the path makes the comparison false instead of
+        // dereferencing null. Guards are folded inner-to-outer so each
+        // dereference is protected by the guard before it. A hop reached twice
+        // (`Age < advisor Age + advisor mentor Age`) is guarded once. Paths
+        // rooted elsewhere are not guarded here: a quantifier body is lowered
+        // against its loop item, whose own comparisons guard their hops, and a
+        // subscription binder (`order Total`) is a bound peer parameter.
         var valueHops = new List<Node>();
         var seenPaths = new HashSet<string>(StringComparer.Ordinal);
         CollectValueHops(c.Left, _currentSubject, "", valueHops, seenPaths);
@@ -418,6 +422,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private void CollectValueHops(
         DomainExpression expr, Node subject, string subjectPath,
         List<Node> hops, HashSet<string> seenPaths) {
+        if (expr is Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr or Ontology.CountExpr)
+            return;
+        if (expr is RelationshipNavigation binder && _parameters.ContainsKey(binder.RelationshipName))
+            return;
         if (expr is RelationshipNavigation rn
             && !IsCollectionNav(rn.RelationshipName)
             && !IsPathPrefixPredicate(rn.TargetProperty)) {

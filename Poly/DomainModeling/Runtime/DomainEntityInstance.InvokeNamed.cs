@@ -80,7 +80,8 @@ public sealed partial record DomainEntityInstance {
             || !name.EndsWith(suffix, StringComparison.Ordinal))
             return false;
         var stage = name[prefix.Length..^suffix.Length];
-        if (stage.Length == 0)
+        if (stage.Length == 0
+            || !Entity.Stages.Any(s => string.Equals(s.Name, stage, StringComparison.Ordinal)))
             return false;
         string? previous = null;
         if (args.Length > 0)

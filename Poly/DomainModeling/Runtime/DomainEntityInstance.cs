@@ -898,8 +898,8 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
-    /// stays. Remaining arms are dictionary-This / VM gaps that cannot move
-    /// without a change in Poly/Interpretation or a runtime-only tree:
+    /// stays. Simulate reports as <c>DomainResult.Failure</c> what the printed C#
+    /// throws; the remaining arms are:
     /// <list type="bullet">
     /// <item>
     /// Action parameters and subscription <c>previousStage</c> — the VM runs the
@@ -910,12 +910,12 @@ public sealed partial record DomainEntityInstance {
     /// </item>
     /// <item>
     /// Unbound contract adapters — printed <c>{Contract}Adapters.{Endpoint}(…)</c>
-    /// is a void statement that throws <c>NotImplementedException</c>. Simulate must
-    /// return <c>DomainResult.Failure</c> rather than throw or silently succeed.
+    /// throws <c>NotImplementedException</c>; simulate returns
+    /// <c>DomainResult.Failure</c> instead.
     /// </item>
     /// <item>
     /// Void fail-closed <c>throw new InvalidOperationException(msg)</c> — OnEntry /
-    /// ctor trees throw; simulate needs <c>return DomainResult.Failure(msg)</c>.
+    /// ctor trees throw; simulate returns <c>DomainResult.Failure(msg)</c> instead.
     /// Catching at Execute would also swallow host fail-loud throws.
     /// </item>
     /// </list>

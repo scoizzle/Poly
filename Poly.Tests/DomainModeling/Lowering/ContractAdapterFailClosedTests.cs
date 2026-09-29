@@ -2,7 +2,6 @@ using System.Reflection;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -11,27 +10,10 @@ using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
-public class ContractAdapterAgreeTests {
-    private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
-        var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
-        if (!result.Succeeded)
-            throw new InvalidOperationException(string.Join("; ",
-                result.Analysis.Diagnostics
-                    .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
-                    .Select(d => d.Message)));
-        var analysis = DomainModelAnalyzer.Analyze(result.Root!);
-        if (analysis.HasErrors)
-            throw new InvalidOperationException(string.Join("; ",
-                analysis.Diagnostics
-                    .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
-                    .Select(d => d.Message)));
-        return (result.Root!, analysis);
-    }
-
+public class ContractAdapterFailClosedTests {
     [Test]
     public async Task UnboundContractAdapter_FailsClosed_OnSimulateAndPrintedCsharp() {
-        var (domain, analysis) = Evolve("""
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop
             Order: entity {
               Total: Number default(0)

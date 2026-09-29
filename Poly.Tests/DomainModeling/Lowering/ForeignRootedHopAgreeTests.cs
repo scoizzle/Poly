@@ -112,4 +112,53 @@ public class ForeignRootedHopAgreeTests {
         await Assert.That((bool)activate.GetType().GetProperty("IsSuccess")!.GetValue(activate)!).IsTrue();
         await Assert.That((bool)printedCustomer.GetType().GetProperty("Flag")!.GetValue(printedCustomer)!).IsTrue();
     }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task ConditionNavigationOperand_IsGuardedOnItsOwnHop(bool outerHasMentor) {
+        var outerMentor = outerHasMentor ? "mentor: Mentor" : "";
+        var (domain, analysis) = EvolvedDomain.FromDsl($$"""
+            domain Shop
+            Mentor: entity {
+              Age: Number
+            }
+            Advisor: entity {
+              Age: Number
+              mentor: Mentor
+            }
+            Customer: entity {
+              Ready: Boolean default(true)
+              advisor: Advisor
+              {{outerMentor}}
+              ReadyMatchesAdvisor: policy { Ready is (advisor where Age < mentor Age) }
+            }
+            """);
+        Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
+
+        var store = new DomainInstanceStore();
+        var mentor = DomainEntityInstance.Create(E("Mentor"),
+            new Dictionary<string, object?> { ["Age"] = 50L }, domain);
+        var advisor = DomainEntityInstance.Create(E("Advisor"),
+            new Dictionary<string, object?> { ["Age"] = 40L }, domain);
+        var customer = DomainEntityInstance.Create(E("Customer"), domain: domain);
+        store.Add(mentor);
+        store.Add(advisor);
+        store.Add(customer);
+        store.Link("mentor", advisor, mentor);
+        store.Link("advisor", customer, advisor);
+        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "ReadyMatchesAdvisor"));
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 50L));
+        var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 40L));
+        printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
+        var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer");
+        printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+        var print = (bool)printedCustomer.GetType().GetMethod("ReadyMatchesAdvisor")!.Invoke(printedCustomer, null)!;
+
+        await Assert.That(sim).IsTrue();
+        await Assert.That(print).IsTrue();
+    }
 }

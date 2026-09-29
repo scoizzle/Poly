@@ -398,47 +398,61 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Value hops (`Age < advisor Age`) do not get the predicate-shape
-        // `rel != null && leaf` from RelationshipNavigation. Guard every to-one
-        // hop rooted on this comparison's subject, on both sides, so an unlinked
-        // hop anywhere in the path makes the comparison false instead of
+        // `rel != null && leaf` from RelationshipNavigation. Guard each to-one hop
+        // that an operand reads through from this comparison's subject, on both
+        // sides, so an unlinked hop makes the comparison false instead of
         // dereferencing null. Guards are folded inner-to-outer so each
         // dereference is protected by the guard before it. A hop reached twice
-        // (`Age < advisor Age + advisor mentor Age`) is guarded once. Paths
-        // rooted elsewhere are not guarded here: a quantifier body is lowered
-        // against its loop item, whose own comparisons guard their hops, and a
-        // subscription binder (`order Total`) is a bound peer parameter.
+        // (`Age < advisor Age + advisor mentor Age`) is guarded once.
         var valueHops = new List<Node>();
         var seenPaths = new HashSet<string>(StringComparer.Ordinal);
-        CollectValueHops(c.Left, _currentSubject, "", valueHops, seenPaths);
-        CollectValueHops(c.Right, _currentSubject, "", valueHops, seenPaths);
+        CollectValueHops(c.Left, valueHops, seenPaths);
+        CollectValueHops(c.Right, valueHops, seenPaths);
         for (var i = valueHops.Count - 1; i >= 0; i--)
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
         return LoweredExpression.Combine([left, right], value);
     }
 
+    /// <summary>
+    /// Collects the to-one hops an operand reads through, starting at this
+    /// comparison's subject: <c>advisor mentor Age</c> yields <c>.Advisor</c> and
+    /// <c>.Advisor.Mentor</c>. Only arithmetic is looked through; any other
+    /// operand adds no hop (a quantifier body runs against its loop item and
+    /// guards its own comparisons). The chain stops at a navigation
+    /// to a condition (<c>advisor where …</c>), which guards its own hop, and at
+    /// a name that is a subscription binder (<c>order Total</c>), which lowering
+    /// reads from the binder parameter at any depth.
+    /// </summary>
+    private void CollectValueHops(
+        DomainExpression operand, List<Node> hops, HashSet<string> seenPaths) {
+        switch (operand) {
+            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide:
+                foreach (var child in operand.Children.OfType<DomainExpression>())
+                    CollectValueHops(child, hops, seenPaths);
+                break;
+            case RelationshipNavigation rn:
+                CollectHopChain(rn, _currentSubject, "", hops, seenPaths);
+                break;
+        }
+    }
+
     /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
     /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
-    private void CollectValueHops(
-        DomainExpression expr, Node subject, string subjectPath,
+    private void CollectHopChain(
+        RelationshipNavigation rn, Node subject, string subjectPath,
         List<Node> hops, HashSet<string> seenPaths) {
-        if (expr is Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr or Ontology.CountExpr)
+        if (_parameters.ContainsKey(rn.RelationshipName)
+            || IsCollectionNav(rn.RelationshipName)
+            || IsPathPrefixPredicate(rn.TargetProperty))
             return;
-        if (expr is RelationshipNavigation binder && _parameters.ContainsKey(binder.RelationshipName))
-            return;
-        if (expr is RelationshipNavigation rn
-            && !IsCollectionNav(rn.RelationshipName)
-            && !IsPathPrefixPredicate(rn.TargetProperty)) {
-            var navName = ResolveNavName(rn.RelationshipName);
-            var hopPath = subjectPath + "." + navName;
-            var hop = new Member(subject, navName);
-            if (seenPaths.Add(hopPath))
-                hops.Add(hop);
-            CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
-            return;
-        }
-        foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectValueHops(child, subject, subjectPath, hops, seenPaths);
+        var navName = ResolveNavName(rn.RelationshipName);
+        var hopPath = subjectPath + "." + navName;
+        var hop = new Member(subject, navName);
+        if (seenPaths.Add(hopPath))
+            hops.Add(hop);
+        if (rn.TargetProperty is RelationshipNavigation next)
+            CollectHopChain(next, hop, hopPath, hops, seenPaths);
     }
 
     /// <summary>

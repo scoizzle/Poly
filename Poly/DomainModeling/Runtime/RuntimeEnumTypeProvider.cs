@@ -58,7 +58,9 @@ internal sealed class RuntimeEnumTypeProvider : ITypeDefinitionProvider {
         IEnumerable<string> members,
         ITypeDefinition stringType) {
         if (enums.ContainsKey(typeName))
-            return;
+            throw new InvalidOperationException(
+                $"Enum type name '{typeName}' is declared more than once. " +
+                "A domain enum cannot share a name with a generated stage enum.");
         var type = new RuntimeEnumType(typeName, members, stringType);
         enums[typeName] = type;
     }

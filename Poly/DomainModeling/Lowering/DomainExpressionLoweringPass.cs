@@ -398,32 +398,31 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Value hops (`Age < advisor Age`) do not get the predicate-shape
-        // `rel != null && leaf` from RelationshipNavigation. Guard them here so
-        // an unlinked to-one makes the comparison false instead of dereferencing null.
-        foreach (var relName in PathPrefixValueHopNames(c)) {
-            var relMember = new Member(_currentSubject, ResolveNavName(relName));
-            value = new SN.And(new NotEqual(relMember, new Constant(null)), value);
-        }
+        // `rel != null && leaf` from RelationshipNavigation. Guard every to-one
+        // hop on both sides here so an unlinked hop anywhere in the path makes
+        // the comparison false instead of dereferencing null. Guards are folded
+        // inner-to-outer so each dereference is protected by the guard before it.
+        var valueHops = new List<Node>();
+        CollectValueHops(c.Left, _currentSubject, valueHops);
+        CollectValueHops(c.Right, _currentSubject, valueHops);
+        for (var i = valueHops.Count - 1; i >= 0; i--)
+            value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
         return LoweredExpression.Combine([left, right], value);
     }
 
-    private List<string> PathPrefixValueHopNames(DomainExpression expr) {
-        var names = new List<string>();
-        CollectPathPrefixValueHopNames(expr, names);
-        return names;
-    }
-
-    private void CollectPathPrefixValueHopNames(DomainExpression expr, List<string> names) {
+    private void CollectValueHops(DomainExpression expr, Node subject, List<Node> hops) {
         if (expr is RelationshipNavigation rn
             && !IsCollectionNav(rn.RelationshipName)
             && !IsPathPrefixPredicate(rn.TargetProperty)) {
-            if (!names.Contains(rn.RelationshipName, StringComparer.Ordinal))
-                names.Add(rn.RelationshipName);
+            var hop = new Member(subject, ResolveNavName(rn.RelationshipName));
+            if (!hops.Contains(hop))
+                hops.Add(hop);
+            CollectValueHops(rn.TargetProperty, hop, hops);
             return;
         }
         foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectPathPrefixValueHopNames(child, names);
+            CollectValueHops(child, subject, hops);
     }
 
     /// <summary>

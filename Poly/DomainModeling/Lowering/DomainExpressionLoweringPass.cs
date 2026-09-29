@@ -402,27 +402,35 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         // hop on both sides here so an unlinked hop anywhere in the path makes
         // the comparison false instead of dereferencing null. Guards are folded
         // inner-to-outer so each dereference is protected by the guard before it.
+        // A hop reached twice (`Age < advisor Age + advisor mentor Age`) is guarded once.
         var valueHops = new List<Node>();
-        CollectValueHops(c.Left, _currentSubject, valueHops);
-        CollectValueHops(c.Right, _currentSubject, valueHops);
+        var seenPaths = new HashSet<string>(StringComparer.Ordinal);
+        CollectValueHops(c.Left, _currentSubject, "", valueHops, seenPaths);
+        CollectValueHops(c.Right, _currentSubject, "", valueHops, seenPaths);
         for (var i = valueHops.Count - 1; i >= 0; i--)
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
         return LoweredExpression.Combine([left, right], value);
     }
 
-    private void CollectValueHops(DomainExpression expr, Node subject, List<Node> hops) {
+    /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
+    /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
+    private void CollectValueHops(
+        DomainExpression expr, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
         if (expr is RelationshipNavigation rn
             && !IsCollectionNav(rn.RelationshipName)
             && !IsPathPrefixPredicate(rn.TargetProperty)) {
-            var hop = new Member(subject, ResolveNavName(rn.RelationshipName));
-            if (!hops.Contains(hop))
+            var navName = ResolveNavName(rn.RelationshipName);
+            var hopPath = subjectPath + "." + navName;
+            var hop = new Member(subject, navName);
+            if (seenPaths.Add(hopPath))
                 hops.Add(hop);
-            CollectValueHops(rn.TargetProperty, hop, hops);
+            CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
             return;
         }
         foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectValueHops(child, subject, hops);
+            CollectValueHops(child, subject, subjectPath, hops, seenPaths);
     }
 
     /// <summary>

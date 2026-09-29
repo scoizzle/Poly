@@ -181,4 +181,46 @@ public class UnlinkedComparisonAgreeTests {
             await Assert.That(print).IsEqualTo(expected).Because($"print {name}");
         }
     }
+
+    [Test]
+    public async Task HopReachedTwice_IsGuardedOnce_AndIsFalseWhenInnerHopUnlinked() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Shop
+            Mentor: entity {
+              Age: Number
+            }
+            Advisor: entity {
+              Age: Number
+              mentor: Mentor
+            }
+            Customer: entity {
+              Age: Number
+              advisor: Advisor
+              YoungerThanBoth: policy { Age < advisor Age + advisor mentor Age }
+            }
+            """);
+        Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
+        var source = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var policyLine = source.Split('\n').First(l => l.Contains("bool YoungerThanBoth()"));
+        await Assert.That(policyLine.Split("this.Advisor != null").Length - 1).IsEqualTo(1);
+
+        var store = new DomainInstanceStore();
+        var advisor = DomainEntityInstance.Create(E("Advisor"),
+            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
+        var customer = DomainEntityInstance.Create(E("Customer"),
+            new Dictionary<string, object?> { ["Age"] = 20L }, domain);
+        store.Add(advisor);
+        store.Add(customer);
+        store.Link("advisor", customer, advisor);
+
+        var asm = ExportedCSharp.CompileAndLoad(source);
+        var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
+        var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
+        printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+
+        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "YoungerThanBoth"));
+        var print = (bool)printedCustomer.GetType().GetMethod("YoungerThanBoth")!.Invoke(printedCustomer, null)!;
+        await Assert.That(sim).IsFalse();
+        await Assert.That(print).IsFalse();
+    }
 }

@@ -31,7 +31,7 @@ From [`AGENTS.md`](../AGENTS.md) — always read before non-trivial changes:
 1. **Domain model is the key artifact** — tools serve domain expression, not fashion
 2. **Placement rules** — module boundaries are strict one-way deps (Syntax → Interpretation, DomainModeling → Syntax, etc.)
 3. **Go well to go fast** — smallest fix that passes a failing test; production gets simpler, tests get more specific
-4. **Working code before abstractions** — no "for the future" interfaces without a second consumer
+4. **Seam when multiplicity is known** — libraries / producers / `uses` doors get a real seam now; no speculative frameworks for imagined futures (DEI as public path is the cautionary tale)
 
 ## Module Map
 

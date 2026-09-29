@@ -61,9 +61,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
-    /// <see cref="LoweringContext.SourceEntityName"/> is the entity whose members
-    /// the current subject exposes; path-prefix hops and quantifier bodies lower
-    /// against the target entity.
+    /// <see cref="LoweringContext.SourceEntityName"/> is the entity used to resolve
+    /// relationship targets and enum literals. For path-prefix hops and quantifier
+    /// bodies, only that name and the enum map switch to the target entity; the
+    /// property-type, navigation-name and collection resolvers stay scoped to the
+    /// source entity, and binder roots keep the source name and enum map.
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;

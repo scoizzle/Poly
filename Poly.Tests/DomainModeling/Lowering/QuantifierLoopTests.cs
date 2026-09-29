@@ -718,6 +718,132 @@ public class QuantifierLoopTests {
     }
 
     [Test]
+    public async Task TwoHopPathPrefix_QuantifierNavigationNameCollision_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Shop
+            WorkerState: enum { Idle, Busy }
+            TempState: enum { Busy, Idle }
+            TeamState: enum { Done, Busy }
+            Worker: entity { State: WorkerState }
+            Temp: entity { State: TempState }
+            Team: entity {
+              Active: Boolean
+              State: TeamState
+              workers: many Worker
+            }
+            Org: entity {
+              team: Team
+              workers: many Temp
+            }
+            Dept: entity {
+              org: Org
+              workers: many Temp
+              P: policy { org team Active == any workers where State == "Busy" }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        DomainEntityInstance SimDept(string workerState) {
+            var worker = DomainEntityInstance.Create(E("Worker"),
+                new Dictionary<string, object?> { ["State"] = workerState }, domain);
+            var team = DomainEntityInstance.Create(E("Team"),
+                new Dictionary<string, object?> { ["Active"] = true, ["State"] = "Done" }, domain);
+            var org = DomainEntityInstance.Create(E("Org"), domain: domain);
+            var dept = DomainEntityInstance.Create(E("Dept"), domain: domain);
+            store.Add(worker); store.Add(team); store.Add(org); store.Add(dept);
+            store.Link("workers", team, worker);
+            store.Link("team", org, team);
+            store.Link("org", dept, org);
+            return dept;
+        }
+        var policy = E("Dept").Policies.First(p => p.Name == "P");
+        var simTrue = SimDept("Busy").EvaluatePolicy(policy);
+        var simFalse = SimDept("Idle").EvaluatePolicy(policy);
+        await Assert.That(simTrue).IsTrue();
+        await Assert.That(simFalse).IsFalse();
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var workerType = asm.GetType("Worker")!;
+        var teamType = asm.GetType("Team")!;
+        var orgType = asm.GetType("Org")!;
+        var deptType = asm.GetType("Dept")!;
+        var workerStateType = asm.GetType("WorkerState")!;
+        var teamStateType = asm.GetType("TeamState")!;
+        object PrintDept(string workerState) {
+            var workers = Array.CreateInstance(workerType, 1);
+            workers.SetValue(ExportedCSharp.CreateEntity(workerType,
+                ("state", Enum.Parse(workerStateType, workerState))), 0);
+            var team = ExportedCSharp.CreateEntity(teamType,
+                ("active", true),
+                ("state", Enum.Parse(teamStateType, "Done")),
+                ("workers", workers));
+            var org = ExportedCSharp.CreateEntity(orgType, ("team", team));
+            return ExportedCSharp.CreateEntity(deptType, ("org", org));
+        }
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        await Assert.That(PrintedP(PrintDept("Busy"))).IsEqualTo(simTrue);
+        await Assert.That(PrintedP(PrintDept("Idle"))).IsEqualTo(simFalse);
+
+        var unlinked = DomainEntityInstance.Create(E("Dept"), domain: domain);
+        store.Add(unlinked);
+        await Assert.That(unlinked.EvaluatePolicy(policy)).IsFalse();
+        await Assert.That(PrintedP(ExportedCSharp.CreateEntity(deptType))).IsFalse();
+    }
+
+    [Test]
+    public async Task PathPrefixHop_EnumCompareOnTarget_UsesTargetEnum_SimulateAndGeneratedCSharp_Agree() {
+        var poly = """
+            domain Shop
+            TeamState: enum { Done, Busy }
+            DeptState: enum { Open, Done }
+            Team: entity { State: TeamState }
+            Dept: entity {
+              State: DeptState
+              team: Team
+              P: policy { team State == "Done" }
+            }
+            """;
+        var (domain, analysis) = Evolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var store = new DomainInstanceStore();
+        DomainEntityInstance SimDept(string teamState) {
+            var team = DomainEntityInstance.Create(E("Team"),
+                new Dictionary<string, object?> { ["State"] = teamState }, domain);
+            var dept = DomainEntityInstance.Create(E("Dept"),
+                new Dictionary<string, object?> { ["State"] = "Open" }, domain);
+            store.Add(team); store.Add(dept);
+            store.Link("team", dept, team);
+            return dept;
+        }
+        var policy = E("Dept").Policies.First(p => p.Name == "P");
+        var simTrue = SimDept("Done").EvaluatePolicy(policy);
+        var simFalse = SimDept("Busy").EvaluatePolicy(policy);
+        await Assert.That(simTrue).IsTrue();
+        await Assert.That(simFalse).IsFalse();
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var teamType = asm.GetType("Team")!;
+        var deptType = asm.GetType("Dept")!;
+        var teamStateType = asm.GetType("TeamState")!;
+        var deptStateType = asm.GetType("DeptState")!;
+        object PrintDept(string teamState) {
+            var team = ExportedCSharp.CreateEntity(teamType,
+                ("state", Enum.Parse(teamStateType, teamState)));
+            return ExportedCSharp.CreateEntity(deptType,
+                ("state", Enum.Parse(deptStateType, "Open")),
+                ("team", team));
+        }
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        await Assert.That(PrintedP(PrintDept("Done"))).IsEqualTo(simTrue);
+        await Assert.That(PrintedP(PrintDept("Busy"))).IsEqualTo(simFalse);
+    }
+
+    [Test]
     public async Task DatePlusCountWhere_SimulateAndGeneratedCSharp_Agree() {
         var poly = """
             domain Jobs

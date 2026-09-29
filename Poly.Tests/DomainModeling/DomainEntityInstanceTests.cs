@@ -2,7 +2,9 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling;
 
@@ -3360,7 +3362,8 @@ public class DomainEntityInstanceTests {
             new Property("Age", new DomainTypeReference("Number"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), []),
+            new Property("Age", new DomainTypeReference("Number"), [])
         ], [], [
             new Policy("NamedPat", DomainExpression.RelationshipNav("advisor",
                 DomainExpression.Equal(
@@ -3373,7 +3376,11 @@ public class DomainEntityInstanceTests {
             new Policy("Young", DomainExpression.RelationshipNav("advisor",
                 DomainExpression.LessThan(
                     DomainExpression.Property("Age"),
-                    DomainExpression.Literal(30L))))
+                    DomainExpression.Literal(30L)))),
+            new Policy("YoungerThanAdvisor", DomainExpression.LessThan(
+                DomainExpression.Property("Age"),
+                DomainExpression.RelationshipNav("advisor",
+                    DomainExpression.Property("Age"))))
         ], []);
         var rel = new Relationship("advisor",
             new DomainTypeReference("Customer"), new DomainTypeReference("Advisor"),
@@ -3381,12 +3388,24 @@ public class DomainEntityInstanceTests {
         var domain = DomainTestFactory.Create("Test", [customer, advisor], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(customer,
-            new Dictionary<string, object?> { ["Name"] = "Sam" }, domain: domain);
+            new Dictionary<string, object?> { ["Name"] = "Sam", ["Age"] = 20L }, domain: domain);
         store.Add(cust);
 
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "NamedPat"))).IsFalse();
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "NotPat"))).IsFalse();
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.First(p => p.Name == "Young"))).IsFalse();
+        var customerEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
+        await Assert.That(cust.EvaluatePolicy(customerEntity.Policies.First(p => p.Name == "NamedPat"))).IsFalse();
+        await Assert.That(cust.EvaluatePolicy(customerEntity.Policies.First(p => p.Name == "NotPat"))).IsFalse();
+        await Assert.That(cust.EvaluatePolicy(customerEntity.Policies.First(p => p.Name == "Young"))).IsFalse();
+        await Assert.That(cust.EvaluatePolicy(customerEntity.Policies.First(p => p.Name == "YoungerThanAdvisor"))).IsFalse();
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var customerType = asm.GetType("Customer")!;
+        var printed = ExportedCSharp.CreateEntity(customerType, ("name", "Sam"), ("age", 20L));
+        await Assert.That((bool)customerType.GetMethod("NamedPat")!.Invoke(printed, null)!).IsFalse();
+        await Assert.That((bool)customerType.GetMethod("NotPat")!.Invoke(printed, null)!).IsFalse();
+        await Assert.That((bool)customerType.GetMethod("Young")!.Invoke(printed, null)!).IsFalse();
+        await Assert.That((bool)customerType.GetMethod("YoungerThanAdvisor")!.Invoke(printed, null)!).IsFalse();
     }
 
     [Test]

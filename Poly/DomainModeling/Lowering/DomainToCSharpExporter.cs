@@ -465,7 +465,7 @@ public sealed partial class DomainToCSharpExporter {
                             new Block(notifyCalls))));
                 }
                 methods.Add(new MethodDefinitionNode(
-                    $"Notify{stageGroup.Key}Subscribers",
+                    NotifySubscribersMethodName(stageGroup.Key),
                     new TypeReference("void"),
                     Parameters: [notifyPrevious],
                     Body: new Block(notifyNodes),

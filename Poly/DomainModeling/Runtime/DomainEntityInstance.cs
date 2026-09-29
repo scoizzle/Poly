@@ -663,7 +663,8 @@ public sealed partial record DomainEntityInstance {
                 result[binding.PropertyName] = fromParam;
                 continue;
             }
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain));
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(
+                new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name));
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,
@@ -1011,13 +1012,11 @@ public sealed partial record DomainEntityInstance {
             Assignment a => new Assignment(
                 BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
             Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-                when notifyName.StartsWith("Notify", StringComparison.Ordinal)
-                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
-                    && notifyName.Length > "NotifySubscribers".Length
+                when DomainToCSharpExporter.TryParseNotifySubscribersMethod(notifyName, out var stageName)
                 => new Invoke(
                     new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
                     [
-                        new Constant(notifyName["Notify".Length..^"Subscribers".Length]),
+                        new Constant(stageName),
                         .. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))
                     ]),
             // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is

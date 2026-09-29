@@ -39,7 +39,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
-    private int _previousStageSequence;
     private readonly LocalNames _names;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
@@ -50,7 +49,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     public EffectLoweringPass(Entity entity, LoweringContext context) {
         _entity = entity;
-        _context = context.Names is null ? context with { Names = new LocalNames() } : context;
+        _context = (context.Names is null ? context with { Names = new LocalNames() } : context)
+            with { SourceEntityName = entity.Name };
         _names = _context.Names!;
         _domain = context.Domain;
         _analysis = context.Analysis;
@@ -71,10 +71,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             parameters = merged;
         }
         _expressionPass = new DomainExpressionLoweringPass(_context with {
-            // Parameter typed with the entity name seeds quantifier target resolution
-            // without resurrecting LoweringContext.SourceEntityName; tree roots still
-            // use EffectLoweringPass.Subject (ThisReference for module bodies).
-            Subject = new Parameter("entity", new TypeReference(entity.Name)),
             Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
@@ -521,7 +517,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var notifyTarget = _postTransitionNotifyStages is not null
             && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
         if (notifyTarget) {
-            previousStage = new Variable($"previousStage{_previousStageSequence++}");
+            previousStage = _names.Next("previousStage");
             nodes.Add(new Assignment(
                 previousStage,
                 new Member(Subject, "CurrentStage")));
@@ -588,7 +584,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (previousStage is not null) {
             tryNodes.Add(new Invoke(
-                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                new Member(Subject, DomainToCSharpExporter.NotifySubscribersMethodName(t.TargetStage.StageName)),
                 [previousStage]));
         }
 

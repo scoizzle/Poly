@@ -76,6 +76,11 @@ namespace Poly.DomainModeling.Lowering;
 /// Shared generator of unique local names for one method. Passes built from
 /// this context via <c>with</c> keep the same instance.
 /// </param>
+/// <param name="SourceEntityName">
+/// Current-subject entity type name. Quantifier bodies resolve relationship
+/// targets on this entity, then on each nested target. A missing name yields
+/// no target (no domain-wide scan).
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -93,5 +98,6 @@ public sealed record LoweringContext(
     bool EmitInstanceNotify = true,
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,
-    LocalNames? Names = null
+    LocalNames? Names = null,
+    string? SourceEntityName = null
 );

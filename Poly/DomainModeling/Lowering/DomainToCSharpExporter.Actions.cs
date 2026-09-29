@@ -463,13 +463,14 @@ public sealed partial class DomainToCSharpExporter {
         INodeMetadataProvider? analysis = null) {
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
             Domain: domain,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity));
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+            SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.LowerExpression(expr, new ThisReference());
         var body = lowered.Before(new Return(lowered.Value));
@@ -831,6 +832,22 @@ public sealed partial class DomainToCSharpExporter {
     internal static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
 
     internal static string ToPascalCase(string name) => DomainTypeMapping.ToPascalCase(name);
+
+    internal static string NotifySubscribersMethodName(string stageName) =>
+        $"Notify{stageName}Subscribers";
+
+    internal static bool TryParseNotifySubscribersMethod(string methodName, [NotNullWhen(true)] out string? stageName) {
+        const string prefix = "Notify";
+        const string suffix = "Subscribers";
+        if (methodName.StartsWith(prefix, StringComparison.Ordinal)
+            && methodName.EndsWith(suffix, StringComparison.Ordinal)
+            && methodName.Length > prefix.Length + suffix.Length) {
+            stageName = methodName[prefix.Length..^suffix.Length];
+            return true;
+        }
+        stageName = null;
+        return false;
+    }
 
     /// <summary>
     /// The auto-wire back-reference for a <c>create in Rel</c> export: the single

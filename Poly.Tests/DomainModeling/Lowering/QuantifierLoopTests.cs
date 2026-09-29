@@ -646,6 +646,12 @@ public class QuantifierLoopTests {
         bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
         await Assert.That(PrintedP(PrintDept(true, true))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept(true, false))).IsEqualTo(simFalse);
+
+        var unlinked = DomainEntityInstance.Create(E("Dept"), domain: domain);
+        store.Add(unlinked);
+        await Assert.That(unlinked.EvaluatePolicy(policy)).IsFalse();
+        var printedUnlinked = ExportedCSharp.CreateEntity(deptType);
+        await Assert.That(PrintedP(printedUnlinked)).IsFalse();
     }
 
     [Test]

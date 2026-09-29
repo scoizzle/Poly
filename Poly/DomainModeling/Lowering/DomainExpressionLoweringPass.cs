@@ -41,7 +41,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
-    private string? _relationshipSourceEntityName;
     private Node _currentSubject = null!;
     private readonly LocalNames _names;
 
@@ -61,6 +60,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
+    /// <see cref="LoweringContext.SourceEntityName"/> is the current-subject entity
+    /// for quantifier target resolution.
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;
@@ -75,7 +76,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
-        _relationshipSourceEntityName = TypeNameOf(context.Subject);
     }
 
     private ExpressionMeaning EffectiveMeaning {
@@ -102,8 +102,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     public LoweredExpression LowerExpression(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        if (_relationshipSourceEntityName is null)
-            _relationshipSourceEntityName = TypeNameOf(subject);
         _currentSubject = subject;
         return Route(expression);
     }
@@ -165,12 +163,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Predicate leaves: `this.Rel != null && <leaf>` so an unlinked to-one is
-        // false (same meaning as Conditional(exists, whenPresent, false)). Value
-        // leaves stay the hop. NullForgiving on the hop is CS8602 only; require
-        // gates own DomainResult.Failure ("requires a linked") in
-        // BuildActionBodyWithGuards. Collection hops cannot be a singular
-        // path-prefix — fail closed (use any/all).
+        // Predicate leaves: an unlinked to-one is false. A value-only leaf is
+        // `rel != null && <leaf>`. When the leaf has statements (a quantifier on
+        // the target), those statements run only inside `if (rel != null)` after
+        // a temp is set to false. Value leaves stay the hop; an enclosing
+        // comparison ANDs `rel != null` so both operands fail closed when
+        // unlinked. NullForgiving on the hop is CS8602 only; require gates own
+        // DomainResult.Failure ("requires a linked") in BuildActionBodyWithGuards.
+        // Collection hops cannot be a singular path-prefix — fail closed (use any/all).
         if (IsCollectionNav(rn.RelationshipName)) {
             throw new InvalidOperationException(
                 $"Path-prefix on relationship '{rn.RelationshipName}' requires exactly one linked target. " +
@@ -180,9 +180,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         var leaf = Route(rn.TargetProperty, new NullForgiving(relMember));
         if (!IsPathPrefixPredicate(rn.TargetProperty))
             return leaf;
-        return leaf with {
-            Value = new SN.And(new NotEqual(relMember, new Constant(null)), leaf.Value)
-        };
+        var exists = new NotEqual(relMember, new Constant(null));
+        if (leaf.Statements.Count == 0)
+            return leaf with { Value = new SN.And(exists, leaf.Value) };
+        var t = _names.Next("t");
+        var thenBlock = new Block(
+            [.. leaf.Statements, new Assignment(t, leaf.Value)],
+            leaf.Variables);
+        return new LoweredExpression(
+            [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
+            [t],
+            t);
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map
@@ -259,41 +267,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _isCollectionNavigation?.Invoke(name) == true;
 
     private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null)
-            return null;
-        var sourceName = _relationshipSourceEntityName;
-        if (sourceName is null) {
-            foreach (var entity in _domain.Types.OfType<Entity>()) {
-                var candidate = entity.Navigations.FirstOrDefault(n =>
-                    string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
-                if (candidate is null)
-                    continue;
-                if (_isCollectionNavigation is not null) {
-                    var isCol = candidate.Cardinality is RelationshipCardinality.OneToMany
-                        or RelationshipCardinality.ManyToMany;
-                    if (_isCollectionNavigation(relationshipName) != isCol)
-                        continue;
-                }
-                sourceName = entity.Name;
-                break;
-            }
-        }
-        if (sourceName is null)
+        if (_domain is null || _context.SourceEntityName is null)
             return null;
         var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, sourceName, StringComparison.Ordinal));
+            string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
         var rel = source?.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
         return rel?.Target.TypeName;
     }
-
-    private static string? TypeNameOf(Node? node) => node switch {
-        Parameter { TypeReference: TypeReference tr } => tr.TypeName,
-        Parameter { TypeReference: NamedTypeReference ntr } => ntr.TypeName,
-        TypeReference tr => tr.TypeName,
-        NamedTypeReference ntr => ntr.TypeName,
-        _ => null,
-    };
 
     protected override LoweredExpression Add(Add a) {
         if (TryLowerLibrary(a, out var lowered))
@@ -397,7 +378,25 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             };
         }
 
+        value = GuardUnlinkedToOneValueOperand(c.Left, value);
+        value = GuardUnlinkedToOneValueOperand(c.Right, value);
         return LoweredExpression.Combine([left, right], value);
+    }
+
+    /// <summary>
+    /// A comparison whose operand is a to-one path-prefix value (<c>Age &lt; advisor Age</c>)
+    /// is <c>rel != null &amp;&amp; comparison</c>, so an unlinked target is false.
+    /// Predicate hops already carry that guard at the hop.
+    /// </summary>
+    private Node GuardUnlinkedToOneValueOperand(DomainExpression operand, Node value) {
+        if (operand is RelationshipNavigation rn
+            && !IsPathPrefixPredicate(rn.TargetProperty)
+            && !_parameters.ContainsKey(rn.RelationshipName)
+            && !IsCollectionNav(rn.RelationshipName)) {
+            var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
+            return new SN.And(new NotEqual(relMember, new Constant(null)), value);
+        }
+        return value;
     }
 
     /// <summary>
@@ -522,8 +521,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
+            SourceEntityName = targetName ?? _context.SourceEntityName
         });
-        nested._relationshipSourceEntityName = targetName ?? _relationshipSourceEntityName;
         return nested.LowerExpression(body, item);
     }
 

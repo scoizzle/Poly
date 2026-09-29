@@ -397,7 +397,33 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             };
         }
 
+        // Value hops (`Age < advisor Age`) do not get the predicate-shape
+        // `rel != null && leaf` from RelationshipNavigation. Guard them here so
+        // an unlinked to-one makes the comparison false instead of dereferencing null.
+        foreach (var relName in PathPrefixValueHopNames(c)) {
+            var relMember = new Member(_currentSubject, ResolveNavName(relName));
+            value = new SN.And(new NotEqual(relMember, new Constant(null)), value);
+        }
+
         return LoweredExpression.Combine([left, right], value);
+    }
+
+    private List<string> PathPrefixValueHopNames(DomainExpression expr) {
+        var names = new List<string>();
+        CollectPathPrefixValueHopNames(expr, names);
+        return names;
+    }
+
+    private void CollectPathPrefixValueHopNames(DomainExpression expr, List<string> names) {
+        if (expr is RelationshipNavigation rn
+            && !IsCollectionNav(rn.RelationshipName)
+            && !IsPathPrefixPredicate(rn.TargetProperty)) {
+            if (!names.Contains(rn.RelationshipName, StringComparer.Ordinal))
+                names.Add(rn.RelationshipName);
+            return;
+        }
+        foreach (var child in expr.Children.OfType<DomainExpression>())
+            CollectPathPrefixValueHopNames(child, names);
     }
 
     /// <summary>

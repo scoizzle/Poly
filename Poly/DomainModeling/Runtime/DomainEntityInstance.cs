@@ -6,6 +6,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.Vm;
 using Poly.Introspection;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -383,9 +384,8 @@ public sealed partial record DomainEntityInstance {
             || cached is null)
             throw new InvalidOperationException(
                 $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
-        var boundPolicy = BindExportBody(cached);
-        var compiledModule = Interpreter.CompileChecked(boundPolicy, _typeDefAnalyzer);
-        using var execModule = Interpreter.Execute(compiledModule,
+        using var execModule = Interpreter.Execute(
+            CompileBody(cached, _typeDefAnalyzer),
             s => s.SetArgs(new object?[] { this }));
         var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
         return CoercePolicyBool(policy.Name, boxedModule);
@@ -579,7 +579,7 @@ public sealed partial record DomainEntityInstance {
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
-                actionName: action.Name, args: args, actionParameters: action.Parameters);
+                actionName: action.Name, actionParameters: action.Parameters);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
@@ -685,9 +685,9 @@ public sealed partial record DomainEntityInstance {
     /// One operation AST through <see cref="Interpreter"/>. Named actions always
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
     /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
-    /// Domain-bound OnEntry/OnExit batches bind GetOrLower export-shaped bodies
-    /// (BindThis) / module methods / mixed-list segment bodies and throw on miss.
-    /// Slice B: execute never lowers; Domain-null fail-closed.
+    /// Domain-bound OnEntry/OnExit batches bind the GetOrLower export-shaped
+    /// body, module method, or mixed-list segment and throw on miss.
+    /// Execute never lowers; Domain-null fail-closed.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
@@ -695,9 +695,7 @@ public sealed partial record DomainEntityInstance {
         string? actionName = null,
         string? entryStageName = null,
         string? exitStageName = null,
-        IReadOnlyDictionary<string, object?>? args = null,
         IReadOnlyList<Property>? actionParameters = null,
-        object? peerArg = null,
         int? entryExitSegmentIndex = null) {
         // Named actions always bind the module Body (require Failure + Success),
         // even when Ontology effects are empty — gated no-ops still run guards
@@ -734,20 +732,20 @@ public sealed partial record DomainEntityInstance {
                     throw new InvalidOperationException(
                         $"Entry/exit segment body {kind} '{stageName}'[{segmentIndex}] is missing on entity '{Entity.Name}'.");
                 }
-                tree = BindExportBody(segmentBody);
+                tree = BindScratchStore(segmentBody);
             }
             else if (hasStageName) {
                 if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    tree = BindExportBody(exitBody);
+                    tree = BindScratchStore(exitBody);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, entryStageName, "entry", out var entryBody)
                     && entryBody is not null) {
-                    tree = BindExportBody(entryBody);
+                    tree = BindScratchStore(entryBody);
                 }
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
@@ -778,24 +776,38 @@ public sealed partial record DomainEntityInstance {
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
-        var compiled = Interpreter.CompileChecked(
+        // Void entry/exit/segment bodies fall through on success; give the VM
+        // root the DomainResult shape void action bodies already carry so an
+        // injected fail-closed return is visible after execution.
+        if (actionName is null)
+            tree = AsVoidResultBody(tree);
+        var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(typeProvider, actionParameters));
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(peerArg is null
-                ? new object?[] { this }
-                : new object?[] { this, peerArg }));
+            s => s.SetArgs(new object?[] { this }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
     }
 
     /// <summary>
-    /// Consumer bind of dictionary <c>this</c>: module bodies keep
-    /// <see cref="ThisReference"/> in the cached TypeDef; execute rewrites
-    /// them to a typed <c>entity</c> parameter so the VM ABI (slot 0 =
-    /// instance, action args at 1+) matches SetArgs(this, ...args). Not a
-    /// second lower — same method body nodes, rebound for the scratch store.
+    /// Void export bodies throw on failure and fall through on success. Simulate
+    /// binds the throw to <c>return DomainResult.Failure</c>, but the VM types a
+    /// block's root from its last statement unless a top-level return dominates —
+    /// a trailing assignment would surface a scalar and hide the failure. A
+    /// trailing success return (the same tail void action bodies carry) makes the
+    /// root a DomainResult.
     /// </summary>
+    private static Node AsVoidResultBody(Node tree) {
+        var success = new Return(new Invoke(
+            new Member(new NamedTypeReference("DomainResult"), "Success")));
+        if (tree is Block block) {
+            if (block.Nodes.Count > 0 && block.Nodes[^1] is ThrowStatement or Return)
+                return block;
+            return new Block([.. block.Nodes, success], block.Variables);
+        }
+        return new Block([tree, success]);
+    }
 
     private ITypeDefinitionProvider ModuleAwareTypeProvider(
         ITypeDefinitionProvider inner,
@@ -820,7 +832,7 @@ public sealed partial record DomainEntityInstance {
             moduleTypes.Analyze(ctx, td);
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
-        // module method stubs (Notify*Subscribers, etc.) — consumer bind, not a second lower.
+        // module method stubs (Notify*Subscribers, etc.).
         var runtimeEntity = BuildTypeDefNode(Entity, actionParameters, Domain);
         if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
             var names = new HashSet<string>(
@@ -838,209 +850,99 @@ public sealed partial record DomainEntityInstance {
                 };
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
-        // Module/stage enums + merged entity first; wrapped as fallback.
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
     }
 
     /// <summary>
-    /// Consumer bind for module trees from session.Lower —
-    /// rewrites <see cref="ThisReference"/> to <c>Parameter("entity")</c> for VM SetArgs,
-    /// and void fail-closed <c>throw new InvalidOperationException(…)</c> to
-    /// <c>return DomainResult.Failure(…)</c> (VM has no 1-arg IOE ctor). Not a second lower.
+    /// Compiles a module body that still contains <see cref="ThisReference"/>.
+    /// Root-program analysis does not type <c>this</c>; annotate it as this
+    /// entity so member access resolves, then emit the same nodes.
     /// </summary>
-    private Node BindExportBody(Node body) {
-        var entity = new Parameter("entity", new TypeReference(Entity.Name));
-        var bound = BindThis(body, entity, null, EnumTypeNames());
-        return RewriteVoidFailClosedThrow(bound);
+    private VmProgram CompileBody(Node tree, ITypeDefinitionProvider types) {
+        types = RuntimeEnumTypeProvider.Wrap(types, Domain);
+        var entityType = types.GetTypeDefinition(Entity.Name)
+            ?? throw new InvalidOperationException(
+                $"Type '{Entity.Name}' is missing from the type provider.");
+        var analysis = Interpreter.Analyzer.Analyze(
+            tree,
+            typeDefinitions: types,
+            setup: ctx => AnnotateThisReferences(ctx, tree, entityType));
+        return Interpreter.Compile(tree, analysis);
     }
 
+    private static void AnnotateThisReferences(
+        AnalysisContext ctx, Node node, ITypeDefinition entityType) {
+        if (node is ThisReference thisRef)
+            ctx.SetResolvedType(thisRef, entityType);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                AnnotateThisReferences(ctx, child, entityType);
+        }
+    }
 
-
-    /// <summary>
-    /// Export void bodies fail closed with throw; Domain-bound execute needs DomainResult.Failure.
-    /// Same tree as print — consumer bind only (not a second lower).
-    /// </summary>
-    private static Node RewriteVoidFailClosedThrow(Node node) => node switch {
-        ThrowStatement {
-            Exception: New {
-                Type: NamedTypeReference { TypeName: "InvalidOperationException" },
-                Arguments: var args
-            }
-        } => new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Failure"),
-            args.Length > 0 ? RewriteVoidFailClosedThrow(args[0]) : new Constant(""))),
-        Block b => new Block(
-            b.Nodes.Select(RewriteVoidFailClosedThrow),
-            b.Variables.Select(RewriteVoidFailClosedThrow)),
-        IfStatement i => new IfStatement(
-            RewriteVoidFailClosedThrow(i.Condition),
-            RewriteVoidFailClosedThrow(i.ThenBranch),
-            i.ElseBranch is null ? null : RewriteVoidFailClosedThrow(i.ElseBranch)),
-        Return r => r.Value is null ? r : new Return(RewriteVoidFailClosedThrow(r.Value)),
-        Assignment a => new Assignment(
-            RewriteVoidFailClosedThrow(a.Destination),
-            RewriteVoidFailClosedThrow(a.Value)),
-        Invoke inv => new Invoke(
-            RewriteVoidFailClosedThrow(inv.Delegate),
-            [.. inv.Arguments.Select(RewriteVoidFailClosedThrow)]) {
-            TypeArguments = inv.TypeArguments
-        },
-        Member m => new Member(RewriteVoidFailClosedThrow(m.Value), m.MemberName),
-        Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(RewriteVoidFailClosedThrow(n.Value)),
-        Equal e => new Equal(
-            RewriteVoidFailClosedThrow(e.LeftHandValue), RewriteVoidFailClosedThrow(e.RightHandValue)),
-        NotEqual ne => new NotEqual(
-            RewriteVoidFailClosedThrow(ne.LeftHandValue), RewriteVoidFailClosedThrow(ne.RightHandValue)),
-        LessThan lt => new LessThan(
-            RewriteVoidFailClosedThrow(lt.LeftHandValue), RewriteVoidFailClosedThrow(lt.RightHandValue)),
-        LessThanOrEqual le => new LessThanOrEqual(
-            RewriteVoidFailClosedThrow(le.LeftHandValue), RewriteVoidFailClosedThrow(le.RightHandValue)),
-        GreaterThan gt => new GreaterThan(
-            RewriteVoidFailClosedThrow(gt.LeftHandValue), RewriteVoidFailClosedThrow(gt.RightHandValue)),
-        GreaterThanOrEqual ge => new GreaterThanOrEqual(
-            RewriteVoidFailClosedThrow(ge.LeftHandValue), RewriteVoidFailClosedThrow(ge.RightHandValue)),
-        Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
-            RewriteVoidFailClosedThrow(add.LeftHandValue), RewriteVoidFailClosedThrow(add.RightHandValue)),
-        Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
-            RewriteVoidFailClosedThrow(sub.LeftHandValue), RewriteVoidFailClosedThrow(sub.RightHandValue)),
-        Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
-            RewriteVoidFailClosedThrow(mul.LeftHandValue), RewriteVoidFailClosedThrow(mul.RightHandValue)),
-        Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
-            RewriteVoidFailClosedThrow(div.LeftHandValue), RewriteVoidFailClosedThrow(div.RightHandValue)),
-        Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
-            RewriteVoidFailClosedThrow(and.LeftHandValue), RewriteVoidFailClosedThrow(and.RightHandValue)),
-        Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
-            RewriteVoidFailClosedThrow(or.LeftHandValue), RewriteVoidFailClosedThrow(or.RightHandValue)),
-        Coalesce c => new Coalesce(
-            RewriteVoidFailClosedThrow(c.LeftHandValue), RewriteVoidFailClosedThrow(c.RightHandValue)),
-        TypeCast tc => new TypeCast(
-            RewriteVoidFailClosedThrow(tc.Operand),
-            RewriteVoidFailClosedThrow(tc.TargetTypeReference)),
-        New n => new New(
-            RewriteVoidFailClosedThrow(n.Type),
-            [.. n.Arguments.Select(RewriteVoidFailClosedThrow)]),
-        ThrowStatement ts => new ThrowStatement(RewriteVoidFailClosedThrow(ts.Exception)),
-        TryCatchFinally t => new TryCatchFinally(
-            RewriteVoidFailClosedThrow(t.TryBlock),
-            t.CatchClauses is null ? null : [.. t.CatchClauses.Select(cc => cc with {
-                ExceptionType = cc.ExceptionType is null
-                    ? null
-                    : RewriteVoidFailClosedThrow(cc.ExceptionType),
-                Body = RewriteVoidFailClosedThrow(cc.Body)
-            })],
-            t.FinallyBlock is null ? null : RewriteVoidFailClosedThrow(t.FinallyBlock)),
-        ForEachLoop f => new ForEachLoop(
-            f.LoopVariable,
-            RewriteVoidFailClosedThrow(f.Collection),
-            RewriteVoidFailClosedThrow(f.Body),
-            f.Label),
-        LabelDeclaration ld => new LabelDeclaration(
-            ld.Name, RewriteVoidFailClosedThrow(ld.Statement)),
-        Conditional cond => new Conditional(
-            RewriteVoidFailClosedThrow(cond.Condition),
-            RewriteVoidFailClosedThrow(cond.IfTrue),
-            RewriteVoidFailClosedThrow(cond.IfFalse)),
-        UnaryMinus um => new UnaryMinus(RewriteVoidFailClosedThrow(um.Operand)),
-        NullForgiving nf => new NullForgiving(RewriteVoidFailClosedThrow(nf.Operand)),
-        _ => node
-    };
-
-    private Node BindModuleMethodBody(MethodDefinitionNode method, bool keepParametersAsSlots = false) {
+    private Node BindModuleMethodBody(MethodDefinitionNode method) {
         var body = method.Body
             ?? throw new InvalidOperationException(
                 $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
-        var entity = new Parameter("entity", new TypeReference(Entity.Name));
         Dictionary<string, Parameter>? paramMap = null;
-        // Action params are injected into the instance bag and rewritten to
-        // Member(entity, name). Peer subscription params stay as Parameter slots
-        // for SetArgs(this, peer).
-        if (!keepParametersAsSlots && method.Parameters is { Count: > 0 } methodParams) {
+        // Action arguments are injected into the instance bag for the call.
+        // The VM runs the method body as a root program (slot 0 is This), so
+        // parameter reads become member reads of that bag.
+        if (method.Parameters is { Count: > 0 } methodParams) {
             paramMap = new Dictionary<string, Parameter>(StringComparer.Ordinal);
             foreach (var p in methodParams)
                 paramMap[p.Name] = p;
         }
-        return BindThis(body, entity, paramMap, EnumTypeNames());
+        return BindScratchStore(body, paramMap);
     }
 
     /// <summary>
-    /// Emit module uses stage / domain enums; dictionary This stores those as strings.
-    /// Consumer bind rewrites <c>Enum.Name</c> to string constants — not a second lower.
+    /// Scratch-store bind of a printed module body. <see cref="ThisReference"/>
+    /// stays. Remaining arms are dictionary-This / VM gaps that cannot move
+    /// without a change in Poly/Interpretation or a runtime-only tree:
+    /// <list type="bullet">
+    /// <item>
+    /// Action parameters and subscription <c>previousStage</c> — the VM runs the
+    /// body as a root program with SetArgs slot 0 = This. Extra <see cref="Parameter"/>
+    /// nodes also claim slot 0, so they cannot be extra SetArgs slots. Action args
+    /// are injected into the instance bag and read as members; <c>previousStage</c>
+    /// is the string the store passed in.
+    /// </item>
+    /// <item>
+    /// Unbound contract adapters — printed <c>{Contract}Adapters.{Endpoint}(…)</c>
+    /// is a void statement that throws <c>NotImplementedException</c>. Simulate must
+    /// return <c>DomainResult.Failure</c> rather than throw or silently succeed.
+    /// </item>
+    /// <item>
+    /// Void fail-closed <c>throw new InvalidOperationException(msg)</c> — OnEntry /
+    /// ctor trees throw; simulate needs <c>return DomainResult.Failure(msg)</c>.
+    /// Catching at Execute would also swallow host fail-loud throws.
+    /// </item>
+    /// </list>
     /// </summary>
-    private IReadOnlySet<string> EnumTypeNames() {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        if (Domain is null)
-            return names;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        foreach (var e in Domain.Types.OfType<Entity>()) {
-            if (e.Stages.Count == 0)
-                continue;
-            var meta = analysis.GetStructure(e);
-            names.Add(meta?.StageEnumTypeName ?? $"{e.Name}Stage");
-        }
-        foreach (var enumType in Domain.Types.OfType<EnumType>())
-            names.Add(enumType.Name);
-        return names;
-    }
-
-    private static Node BindThis(
+    private Node BindScratchStore(
         Node node,
-        Parameter entity,
-        IReadOnlyDictionary<string, Parameter>? parameters,
-        IReadOnlySet<string> stageEnums) => node switch {
-            ThisReference => entity,
-            NullForgiving nf => new NullForgiving(
-                BindThis(nf.Operand, entity, parameters, stageEnums)),
-            Parameter p when parameters is not null
-                && parameters.ContainsKey(p.Name) => new Member(entity, p.Name),
-            Parameter p when p.TypeReference is NamedTypeReference ntr
-                && stageEnums.Contains(ntr.TypeName) =>
-                new Parameter(p.Name, new PrimitiveTypeReference(Prim.String), p.DefaultValue),
-            Variable v when parameters is not null
-                && parameters.ContainsKey(v.Name) => new Member(entity, v.Name),
-            // Emit stage enum member → runtime string (CurrentStage is string on This).
-            Member { Value: NamedTypeReference ntr } m
-                when stageEnums.Contains(ntr.TypeName) => new Constant(m.MemberName),
+        IReadOnlyDictionary<string, Parameter>? actionParameters = null,
+        string? previousStageName = null,
+        bool bindPreviousStage = false) {
+        Node Recurse(Node n) =>
+            BindScratchStore(n, actionParameters, previousStageName, bindPreviousStage);
+        return node switch {
+            Parameter p when bindPreviousStage
+                && string.Equals(p.Name, "previousStage", StringComparison.Ordinal) =>
+                new Constant(previousStageName),
+            Parameter p when actionParameters is not null
+                && actionParameters.ContainsKey(p.Name) =>
+                new Member(new ThisReference(), p.Name),
             Block b => new Block(
-                b.Nodes.Select(n => BindThis(n, entity, parameters, stageEnums)),
-                b.Variables.Select(n => BindThis(n, entity, parameters, stageEnums))),
+                b.Nodes.Select(Recurse),
+                b.Variables.Select(Recurse)),
             IfStatement i => new IfStatement(
-                BindThis(i.Condition, entity, parameters, stageEnums),
-                BindThis(i.ThenBranch, entity, parameters, stageEnums),
-                i.ElseBranch is null ? null : BindThis(i.ElseBranch, entity, parameters, stageEnums)),
-            Return r => r.Value is null ? r : new Return(BindThis(r.Value, entity, parameters, stageEnums)),
-            Assignment a => new Assignment(
-                BindThis(a.Destination, entity, parameters, stageEnums), BindThis(a.Value, entity, parameters, stageEnums)),
-            Invoke { Delegate: Member { MemberName: { } notifyName } } inv
-                when notifyName.StartsWith("Notify", StringComparison.Ordinal)
-                    && notifyName.EndsWith("Subscribers", StringComparison.Ordinal)
-                    && notifyName.Length > "NotifySubscribers".Length
-                => new Invoke(
-                    new Member(BindThis(((Member)inv.Delegate).Value, entity, parameters, stageEnums), "Notify"),
-                    [
-                        new Constant(notifyName["Notify".Length..^"Subscribers".Length]),
-                        .. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))
-                    ]),
-            // Module emit uses DomainResult<T>.Success(value). VM CLR DomainResult is
-            // non-generic; entity TypeDefs are not assignable-to object under PR53
-            // overload scoring. Typed return still comes from CreatedChildren.
-            // Success(value) → Success(); Failure(msg) keeps the string arg.
-            Invoke {
-                Delegate: Member {
-                    Value: NamedTypeReference { TypeName: "DomainResult" },
-                    MemberName: "Success"
-                }
-            } inv
-                => new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")),
-            Invoke {
-                Delegate: Member {
-                    Value: NamedTypeReference { TypeName: "DomainResult" },
-                    MemberName: "Failure"
-                }
-            } inv
-                => new Invoke(
-                    new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                    [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
-            // Fail closed: export adapter throws; simulate must not silent-success.
+                Recurse(i.Condition),
+                Recurse(i.ThenBranch),
+                i.ElseBranch is null ? null : Recurse(i.ElseBranch)),
+            Return r => r.Value is null ? r : new Return(Recurse(r.Value)),
+            Assignment a => new Assignment(Recurse(a.Destination), Recurse(a.Value)),
             Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
                 when AdapterTypeName(inv) is { } adapter
                 => new Return(new Invoke(
@@ -1048,73 +950,62 @@ public sealed partial record DomainEntityInstance {
                     new Constant(
                         $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
             Invoke inv => new Invoke(
-                BindThis(inv.Delegate, entity, parameters, stageEnums),
-                [.. inv.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]) {
+                Recurse(inv.Delegate),
+                [.. inv.Arguments.Select(Recurse)]) {
                 TypeArguments = inv.TypeArguments
             },
-            Member m => new Member(BindThis(m.Value, entity, parameters, stageEnums), m.MemberName),
-            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(BindThis(n.Value, entity, parameters, stageEnums)),
-            Equal e => new Equal(
-                BindThis(e.LeftHandValue, entity, parameters, stageEnums), BindThis(e.RightHandValue, entity, parameters, stageEnums)),
-            NotEqual ne => new NotEqual(
-                BindThis(ne.LeftHandValue, entity, parameters, stageEnums), BindThis(ne.RightHandValue, entity, parameters, stageEnums)),
-            LessThan lt => new LessThan(
-                BindThis(lt.LeftHandValue, entity, parameters, stageEnums), BindThis(lt.RightHandValue, entity, parameters, stageEnums)),
-            LessThanOrEqual le => new LessThanOrEqual(
-                BindThis(le.LeftHandValue, entity, parameters, stageEnums), BindThis(le.RightHandValue, entity, parameters, stageEnums)),
-            GreaterThan gt => new GreaterThan(
-                BindThis(gt.LeftHandValue, entity, parameters, stageEnums), BindThis(gt.RightHandValue, entity, parameters, stageEnums)),
-            GreaterThanOrEqual ge => new GreaterThanOrEqual(
-                BindThis(ge.LeftHandValue, entity, parameters, stageEnums), BindThis(ge.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
-                BindThis(add.LeftHandValue, entity, parameters, stageEnums), BindThis(add.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
-                BindThis(sub.LeftHandValue, entity, parameters, stageEnums), BindThis(sub.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
-                BindThis(mul.LeftHandValue, entity, parameters, stageEnums), BindThis(mul.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
-                BindThis(div.LeftHandValue, entity, parameters, stageEnums), BindThis(div.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
-                BindThis(and.LeftHandValue, entity, parameters, stageEnums), BindThis(and.RightHandValue, entity, parameters, stageEnums)),
-            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
-                BindThis(or.LeftHandValue, entity, parameters, stageEnums), BindThis(or.RightHandValue, entity, parameters, stageEnums)),
-            Coalesce c => new Coalesce(
-                BindThis(c.LeftHandValue, entity, parameters, stageEnums), BindThis(c.RightHandValue, entity, parameters, stageEnums)),
+            Member m => new Member(Recurse(m.Value), m.MemberName),
+            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(Recurse(n.Value)),
+            Equal e => new Equal(Recurse(e.LeftHandValue), Recurse(e.RightHandValue)),
+            NotEqual ne => new NotEqual(Recurse(ne.LeftHandValue), Recurse(ne.RightHandValue)),
+            LessThan lt => new LessThan(Recurse(lt.LeftHandValue), Recurse(lt.RightHandValue)),
+            LessThanOrEqual le => new LessThanOrEqual(Recurse(le.LeftHandValue), Recurse(le.RightHandValue)),
+            GreaterThan gt => new GreaterThan(Recurse(gt.LeftHandValue), Recurse(gt.RightHandValue)),
+            GreaterThanOrEqual ge => new GreaterThanOrEqual(Recurse(ge.LeftHandValue), Recurse(ge.RightHandValue)),
+            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(Recurse(add.LeftHandValue), Recurse(add.RightHandValue)),
+            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(Recurse(sub.LeftHandValue), Recurse(sub.RightHandValue)),
+            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(Recurse(mul.LeftHandValue), Recurse(mul.RightHandValue)),
+            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(Recurse(div.LeftHandValue), Recurse(div.RightHandValue)),
+            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(Recurse(and.LeftHandValue), Recurse(and.RightHandValue)),
+            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(Recurse(or.LeftHandValue), Recurse(or.RightHandValue)),
+            Coalesce c => new Coalesce(Recurse(c.LeftHandValue), Recurse(c.RightHandValue)),
             TypeCast tc => new TypeCast(
-                BindThis(tc.Operand, entity, parameters, stageEnums),
-                BindThis(tc.TargetTypeReference, entity, parameters, stageEnums),
-                tc.IsChecked),
-            New n => new New(
-                BindThis(n.Type, entity, parameters, stageEnums),
-                [.. n.Arguments.Select(a => BindThis(a, entity, parameters, stageEnums))]),
-            ThrowStatement ts => new ThrowStatement(BindThis(ts.Exception, entity, parameters, stageEnums)),
+                Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
+            New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
+            // Void export trees fail closed with throw; simulate needs DomainResult.Failure.
+            // Catching InvalidOperationException at Execute would also swallow host
+            // fail-loud throws (missing store, create mismatch, missing subscription).
+            ThrowStatement {
+                Exception: New {
+                    Type: NamedTypeReference { TypeName: "InvalidOperationException" },
+                    Arguments: var args
+                }
+            } => new Return(new Invoke(
+                new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                args.Length > 0 ? Recurse(args[0]) : new Constant(""))),
+            ThrowStatement ts => new ThrowStatement(Recurse(ts.Exception)),
             TryCatchFinally t => new TryCatchFinally(
-                BindThis(t.TryBlock, entity, parameters, stageEnums),
+                Recurse(t.TryBlock),
                 t.CatchClauses?.Select(cc => cc with {
-                    ExceptionType = cc.ExceptionType is null
-                        ? null
-                        : BindThis(cc.ExceptionType, entity, parameters, stageEnums),
-                    Body = BindThis(cc.Body, entity, parameters, stageEnums)
+                    ExceptionType = cc.ExceptionType is null ? null : Recurse(cc.ExceptionType),
+                    Body = Recurse(cc.Body)
                 }).ToList(),
-                t.FinallyBlock is null ? null : BindThis(t.FinallyBlock, entity, parameters, stageEnums)),
+                t.FinallyBlock is null ? null : Recurse(t.FinallyBlock)),
             ForEachLoop f => new ForEachLoop(
-                f.LoopVariable,
-                BindThis(f.Collection, entity, parameters, stageEnums),
-                BindThis(f.Body, entity, parameters, stageEnums),
-                f.Label),
+                f.LoopVariable, Recurse(f.Collection), Recurse(f.Body), f.Label),
             ContinueStatement or BreakStatement => node,
-            LabelDeclaration ld => new LabelDeclaration(
-                ld.Name, BindThis(ld.Statement, entity, parameters, stageEnums)),
+            LabelDeclaration ld => new LabelDeclaration(ld.Name, Recurse(ld.Statement)),
             Conditional cond => new Conditional(
-                BindThis(cond.Condition, entity, parameters, stageEnums),
-                BindThis(cond.IfTrue, entity, parameters, stageEnums),
-                BindThis(cond.IfFalse, entity, parameters, stageEnums)),
-            UnaryMinus um => new UnaryMinus(BindThis(um.Operand, entity, parameters, stageEnums)),
-            Parameter or Variable or Constant or NamedTypeReference or TypeReference
+                Recurse(cond.Condition), Recurse(cond.IfTrue), Recurse(cond.IfFalse)),
+            UnaryMinus um => new UnaryMinus(Recurse(um.Operand)),
+            NullForgiving nf => new NullForgiving(Recurse(nf.Operand)),
+            ThisReference or Parameter or Variable or Constant
+                or NamedTypeReference or TypeReference
                 or PrimitiveTypeReference or ClrTypeReference => node,
             _ => throw new InvalidOperationException(
-                $"Cannot bind module method this on {node.GetType().Name}.")
+                $"Cannot bind scratch-store body on {node.GetType().Name}.")
         };
+    }
 
     private static string? AdapterTypeName(Invoke inv) =>
         inv.Delegate is Member { Value: Node type } && TypeNameOf(type) is { } name

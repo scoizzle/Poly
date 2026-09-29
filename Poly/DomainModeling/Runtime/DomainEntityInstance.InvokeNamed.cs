@@ -25,6 +25,9 @@ public sealed partial record DomainEntityInstance {
         if (name is "Create" or "CreateIn" or "ProbeCreate")
             return RuntimeCreateFactory(name, args);
 
+        if (TryNotifyStageSubscribers(name, args))
+            return null;
+
         var action = ResolveActionForNamedInvoke(name);
         if (action is null) {
             var policy = ResolvePolicyForNamedInvoke(name);
@@ -62,6 +65,28 @@ public sealed partial record DomainEntityInstance {
                     : $"invoke '{name}' failed."));
         }
         return DomainResult.Success(result.ResultInstance);
+    }
+
+    /// <summary>
+    /// Printed stage transitions call <c>Notify{Stage}Subscribers(previousStage)</c>.
+    /// The dictionary instance has no per-stage CLR method; this is the same
+    /// store fan-out as <see cref="Notify(string, string?)"/>.
+    /// </summary>
+    private bool TryNotifyStageSubscribers(string name, object?[] args) {
+        const string prefix = "Notify";
+        const string suffix = "Subscribers";
+        if (name.Length <= prefix.Length + suffix.Length
+            || !name.StartsWith(prefix, StringComparison.Ordinal)
+            || !name.EndsWith(suffix, StringComparison.Ordinal))
+            return false;
+        var stage = name[prefix.Length..^suffix.Length];
+        if (stage.Length == 0)
+            return false;
+        string? previous = null;
+        if (args.Length > 0)
+            previous = args[0] as string ?? args[0]?.ToString();
+        Notify(stage, previous);
+        return true;
     }
 
     private Action? ResolveActionForNamedInvoke(string name) {

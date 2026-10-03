@@ -1,8 +1,8 @@
-# Convergence plan v2: decisions V1 to V11 (answered)
+# Convergence plan v2: decisions V1 to V11 (V10 reopened)
 
 ## Scot's answers, 2026-10-03
 
-V1 to V11 all taken as **RECOMMENDED**. Standing approval in V11 does not release any wave (principle 7).
+V1–V9 and V11 answered as recommended. V10 reopened. Standing approval in V11 does not release any wave (principle 7).
 
 Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Five older ones (13, 16, 18, 19, 20) are still open; each is asked only when its lane reaches it.
 
@@ -178,17 +178,15 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 ## V10. Put the three 09-27 defects into this plan?
 
-**Answer:** (a) yes, Q1a, Q1b, Q2 are in the plan.
+**REOPENED to Scot.** The first answer (yes, all three) rested on a premise that is false on master: defect (1) quantifier rules are already lowered into tree nodes (PR 79) and the AnyRelated/AllRelated/CountRelated host methods no longer exist; defect (2) the printer already fails the whole export for a policy it cannot lower; the throwing method exists only in the stale checked-in demo/Poly.RestApi/Patron.cs. Defect (3) (the harness cannot open a domain that says `uses sqlite` or `uses http`; Q2) still stands. Proposed revised answer: Q2 yes; Q1a only as parity-test rows; Q1b only as 'regenerate the demo and test it equals fresh output'. Needs Scot's word. Until then Q1a, Q1b and Q2 stay in the plan marked pending V10 and are not started.
 
-**What it is.** Three defects from the 09-27 reviews have no slice, as the Ontologist noted: (1) collection rules (any/all/none/filtered count) carry the author's expression inside the tree and are re-lowered at run time; (2) printed policies that use them are replaced by a method that throws, so the checked-in demo's `Patron.HasOverdueLoans()` can never succeed and `POST /reinstate` can never work; (3) the MCP harness cannot open a domain that says `uses sqlite` or `uses http`. They are new scope for a plan about convergence.
+**What it is.** Three items from the 09-27 reviews had no slice: (1) collection rules (any/all/none/filtered count) — already lowered into foreach tree nodes in PR 79 (`DomainExpressionLoweringPass.LowerFilteredQuantifier`; `AnyRelated`/`AllRelated`/`CountRelated` are gone); residue is parity-test rows. (2) printed policies — the exporter already fails the whole export for a policy it cannot lower (no per-policy stub); the throwing `HasOverdueLoans` exists only in the stale checked-in `demo/Poly.RestApi/Patron.cs`. (3) the MCP harness cannot open a domain that says `uses sqlite` or `uses http`. They remain named in this plan, with (1) and (2) reduced as above.
 
-**Options.** (a) **Yes.** Q1a and Q1b (rules lowered into real tree nodes, printed policies stop throwing) in wave 2 lane B, Q2 (harness catalog) in wave 2 lane A. (b) **No**, keep them in a separate plan. (c) **Q1 now, Q2 later.**
+**Options.** (a) **Yes, revised scope.** Q2 yes; Q1a only as parity-test rows for any/all/none/filtered count; Q1b only as regenerate `demo/Poly.RestApi` and test it equals fresh output. Wave 2, pending this answer. (b) **No**, keep them in a separate plan. (c) **Q1 now, Q2 later.**
 
-**Recommendation: (a).** Q1 is a principle-zero blocker (the tree is the meaning) and it is what makes "simulate equals print" false for quantifier rules; Q2 is what lets the harness hold the domain the compiler ships.
+**Recommendation: (a)** with the revised scope. Q2 is what lets the harness hold the domain the compiler ships. Q1a and Q1b as originally written rested on a false premise; the revised scope is parity rows and demo regeneration.
 
-**Blocks.** Q1a, Q1b, Q2. (C5a depends on Q1a.)
-
-**If you do not answer.** Answered. Q1a, Q1b and Q2 are in the plan.
+**Blocks.** Q1a, Q1b, Q2 until Scot answers. C5a no longer depends on Q1a (lowering is done).
 
 ---
 
@@ -196,7 +194,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** (a) standing merge on SHIP + gate YES for the pure-deletion, rename, docs, test-only and unwired-new-code slices listed in V11; hand-merge the rest. Standing approval does not release any wave (principle 7).
 
-**What it is.** The plan has 82 slices, so about 82 merges by you, and Final Boss is the only verifier for both lanes now that Warden and Sentinel are gone. PR 82 took six Final Boss rounds. 41 slices get one review pass and 41 get two (Razor's exhaustive first pass, then Final Boss).
+**What it is.** The plan has 82 slices, so about 82 merges by you, and Final Boss is the only verifier for both lanes now that Warden and Sentinel are gone. PR 82 took six Final Boss rounds. 42 slices get one review pass and 40 get two (Razor's exhaustive first pass, then Final Boss).
 
 **Options.**
 - (a) **Standing approval to merge** when Final Boss says SHIP and the gate is YES, for the pure-deletion, rename, docs, test-only and unwired-new-code slices: T0, A1, A2a, A2b, K1, H1, N3, N1, C0, C3b, C7b, C7c, C7d, K3a, K3c, K6, F6, R1, R2. You hand-merge the rest, in particular anything that changes printed output or MCP behavior (C4b, C6a and others) and the risky ones (A3a, A5a, A5b, C1a to C1c, C3a, C5a, C5b, Q1a, C8 series, K2, K5).

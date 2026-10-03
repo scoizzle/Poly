@@ -2,7 +2,7 @@
 
 Status: revision 2 of the plan in PR 84. It folds in five team reviews (Foreman, 100x, Razor, Final Boss, Ontologist). Code slices are still HELD until Scot signs off PR 84 (docs only; nothing implemented). It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
-Base: PR 84 head `abc6181` (`docs/domain-modeling/pipeline-convergence-plan.md`, with decisions 1 to 20 and your 2026-10-02 rulings). Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11, answered 2026-10-03).
+Base: PR 84 head `abc6181` (`docs/domain-modeling/pipeline-convergence-plan.md`, with decisions 1 to 20 and your 2026-10-02 rulings). Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1–V9 and V11 answered as recommended 2026-10-03; V10 reopened).
 
 Method for this revision: I read all five reviews, re-ran the headline experiment myself (the Analyze gate patch, full suite), and checked the other disputed claims against master `9db8868f` with `git grep` in a throwaway clone. Hand-written code is truth; docs are ideation. Where I could not check a claim myself I say so and name the reviewer's probe.
 
@@ -12,7 +12,7 @@ Method for this revision: I read all five reviews, re-ran the headline experimen
 - Every PR lists its exact test command (a `dotnet test` filter or TUnit tree filter, the named test classes) and any `git grep` probe with the expected output. Use `git grep`, not `rg`: `rg` hangs in these clones. Before editing, re-check every file and line claim on current master and report any that moved; the line numbers below are from master `9db8868f`, taken before 82 and 83 merged, and have moved; re-check at slice start.
 - **Hand-edit gate (applies to every code slice).** Beyond the yes/no line, a reviewer runs three probes: (1) no new unreachable branch or unused member in touched files with warnings on; (2) `git grep` for every name the PR removed or renamed, in code, comments and docs, returns nothing; (3) no "fallback", "legacy" or "interim" branch is added without a named removal slice. Tangled code is moved behind a clearer abstraction before it is deleted.
 - **Review depth.** Review 1 = Final Boss alone (small, deletion-only or mechanical). Review 2 = Razor's exhaustive first pass, then Final Boss verifies the listed fixes. In both cases the reviewer runs on the opposite mill from the implementer. See section 13.
-- Slice ids are labels. New in v2: T (test and measurement foundations), B (bug triage), E, M, N4, P, Q (work that reviews showed had no owner). Divergence numbers D1 to D10 still match stage map section 7. Decisions 1 to 20 are the numbered list in section 19. **V1 to V11** are in the decisions file, all answered 2026-10-03.
+- Slice ids are labels. New in v2: T (test and measurement foundations), B (bug triage), E, M, N4, P, Q (work that reviews showed had no owner). Divergence numbers D1 to D10 still match stage map section 7. Decisions 1 to 20 are the numbered list in section 19. **V1 to V11** are in the decisions file; V1–V9 and V11 answered as recommended 2026-10-03, V10 reopened.
 - Slices that were conditional on an open decision in v1 are unconditional in v2 wherever you already ruled (decisions 8, 10, 11, 12, 14, 17).
 
 ## 1. Rules every slice is held to, and the test that proves each
@@ -23,7 +23,7 @@ Method for this revision: I read all five reviews, re-ran the headline experimen
 | Every mutation enforces every invariant | Mutation-by-invariant matrix over sample domains, both modes; every empty cell is a listed gap with a slice id | T3 (with C2b, C4a to C4d, C6b, C6c) |
 | Only named actions mutate their own entity (create, link, unlink are the one exception; the relationship owns them). V4 = a: entry, exit and `when` count as named actions; recommended style is to invoke an action from those blocks rather than assigning own state directly | Analyze Error for a mutation whose target is not the owner; negative and positive tests | M1 (rule stated in stage map 2.4 by K1) |
 | Interpreter keeps only session-aware storage after DEI retires | Structural test: storage type references nothing from the ontology or `Domain`, holds no link table, uniqueness registry or notify code, and the link/unique/cardinality/notify tests pass with storage swapped for a plain per-session dictionary store | C8a1 (T5 is the test inside it) |
-| No auto-link guessing | Helpers gone (`git grep`), an unlinked navigation stays unlinked, guide edited | C6a |
+| No auto-link guessing | `TryAutoLinkUnambiguousOutbound` gone (`git grep`), printed by-name create no longer auto-links, an unlinked navigation stays unlinked, guide edited | C6a |
 | Artifact ids are name path plus type | `ArtifactId` tests; ids survive recompilation; catalog text identical across fresh sessions | A1, A2a, T0 |
 | Hand-editability | The three-probe gate above, plus scripted commands for mechanical diffs | every slice |
 | Opposite-mill review | Lane rules in section 13 | process |
@@ -287,7 +287,7 @@ _Lane A · Size S · Review: Final Boss alone · Depends on: decision V8 (decisi
 - Hand-edit: Yes.
 
 **Q2. MCP harness opens domains that use sqlite or http**  
-_Lane A · Size M · Review: Razor then Final Boss · Depends on: A5a_
+_Lane A · Size M · Review: Razor then Final Boss · Depends on: A5a · pending V10_
 - Scope: From the 09-27 reviews; no slice owned it. `apply_dsl` calls `DomainSession.ForSource(polyText, seed)` with the default catalog, so a domain with `uses sqlite` or `uses http` fails with 'Unknown domain extension' (`DomainTools.cs:1273-1276`, `ExtensionCatalog.cs:29-32`). Give the harness the same catalog the compiler uses, as a library composition that ends at core. Open design point for the slice: where the shared catalog lives so `Poly.Mcp` does not depend on `src/Poly.DslCompiler` the wrong way; the PR starts with one paragraph on that.
 - Files: `Poly.Mcp/Tools/DomainTools.cs`, `Compile/ExtensionCatalog.cs`.
 - Done when: MCP test: apply a domain with `uses sqlite` and `uses http`, then analyze, simulate and export.
@@ -314,7 +314,7 @@ This is the DEI problem. DEI is retired with no replacement layer (your ruling).
 | Policies on actions | Printed (`require` guard) | Done. Gap is only policies with no entity method |
 | Policies on stages | Simulator enforces; exporter never reads `stage.Policies` | K4 |
 | Subscription fan-out | Store matches links in C#; `when any` differs (>=1 vs exactly 1) | `Notify{Stage}Subscribers` trees exist. C5a, C5b |
-| Collection rules (any/all/none/count) | Author expression carried inside the tree as a Constant; host re-lowers per instance; printed policy throws | Q1a, Q1b |
+| Collection rules (any/all/none/count) | Already lowered to foreach loops (PR 79). Residue: parity tests (Q1a) and the stale checked-in demo (Q1b) | Q1a, Q1b |
 | Link cardinality | none | C6b |
 | Unlink minimum | none | C6c |
 | Create initializers | Lowered at run time when no store | C2a |
@@ -414,20 +414,20 @@ _Lane B · Size M · Review: Razor then Final Boss · Depends on: C4c, decision 
 - SHIP if no silent no-op remains for an unknown or illegal stage. NOT SHIP if the table has no stated source.
 - Hand-edit: Partly.
 
-**Q1a. Collection rules (any/all/none/count) lowered into tree nodes**  
-_Lane B · Size L · Review: Razor then Final Boss · Depends on: C1c, T2_
-- Scope: From the 09-27 reviews; no slice owned it. Quantifier bodies ride into the tree as a `Constant` holding the author's `DomainExpression` (`DomainExpressionLoweringPass.cs:355-359`), and at run time the host re-lowers and compiles a new program per related instance (`Runtime.cs:461-464, 539-547`). Lower the body into real tree nodes (a loop over the navigation). Delete `AnyRelated`/`AllRelated`/`CountRelated` and the run-time re-lowering. Nothing from the authoring layer crosses into a tree.
-- Files: `Lowering/DomainExpressionLoweringPass.cs`, `Runtime/DomainEntityInstance.HostAbi.cs`, `.Runtime.cs`.
-- Done when: Parity rows for any, all, none, filtered count; H4 later checks no tree holds an authoring-node constant.
-- SHIP if the three host methods are gone and parity passes. NOT SHIP if a `DomainExpression` object still appears inside a tree.
-- Hand-edit: Partly: new lowering, review carefully.
+**Q1a. Parity rows for collection rules (any/all/none/filtered count)**  
+_Lane B · Size S · Review: Final Boss alone · Depends on: T2 · pending V10_
+- Scope: Quantifier lowering already landed in PR 79: `DomainExpressionLoweringPass` lowers filtered quantifiers (any/all/none/filtered count) to foreach loops (class remarks at lines 27-31; `LowerFilteredQuantifier` at ~475-481), and `git grep AnyRelated|AllRelated|CountRelated` is empty in Poly, Poly.Mcp and Poly.Tests. Add `ParityScenario` rows (T2) for any, all, none and filtered count so the guarantee is tested in both simulate and print, plus the H4 check that no tree holds a `Constant` of an authoring `DomainExpression`. Existing tests `Export_HasOverdueLoans_PrintsForeachOverLoans` and `Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree` (`DomainToCSharpExporterTests.cs` ~3034, ~3045) cover one any-quantifier case.
+- Files: Poly.Tests only.
+- Done when: Parity rows for any, all, none and filtered count pass in both simulate and print; the H4 Constant check is present.
+- SHIP if the rows pass in both modes. NOT SHIP if any row is skipped.
+- Hand-edit: Yes.
 
-**Q1b. Printed policies stop throwing where simulation answers**  
-_Lane B · Size M · Review: Razor then Final Boss · Depends on: Q1a_
-- Scope: The exporter lowers a policy rooted on `this`, catches `NotSupportedException`, and emits a method whose whole body throws (`DomainToCSharpExporter.cs:350-366`; the checked-in demo's `Patron.HasOverdueLoans()` always throws). With Q1a the printer consumes the same loop. A policy that cannot be printed becomes a compile-time Error, never a run-time throw stub.
-- Files: `Lowering/DomainToCSharpExporter.cs`.
-- Done when: The `Patron_HasOverdueLoans` parity row passes with a quantifier; `git grep` for the throw-stub message is empty.
-- SHIP if the demo policy returns the same answer in both. NOT SHIP if any throw stub remains.
+**Q1b. Regenerate demo/Poly.RestApi and test the checked-in demo equals fresh output**  
+_Lane B · Size S · Review: Final Boss alone · Depends on: none · pending V10_
+- Scope: The printer already fails the whole export for an unlowerable policy (no per-policy stub; `DomainToCSharpExporter.cs` ~378). The only throwing `HasOverdueLoans` is the stale checked-in `demo/Poly.RestApi/Patron.cs:112`; nothing under `Poly/` produces that message. No test compares the checked-in demo to fresh output. Regenerate `demo/Poly.RestApi` with the current exporter and add a test that exports the same domain and compares to the checked-in files. There is no `.poly` next to the demo; obtain the domain from the `LibraryCheckoutDsl` constant in `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs` (the Library domain those exporter tests already parse for `HasOverdueLoans`). The slice decides how that constant is shared with the comparison test.
+- Files: `demo/Poly.RestApi/*` and one test.
+- Done when: `git grep` for the throw message is empty under `demo/`; the comparison test passes; `POST /reinstate` in `demo.http` works if it runs in this environment (otherwise the PR says it was not checked).
+- SHIP if the throw is gone and the comparison test passes. NOT SHIP if the demo was edited by hand to match.
 - Hand-edit: Yes.
 
 **C3a. Peer passed as a real argument**  
@@ -447,7 +447,7 @@ _Lane B · Size S · Review: Final Boss alone · Depends on: C3a_
 - Hand-edit: Yes.
 
 **C5a. Store calls the compiled Notify trees**  
-_Lane B · Size M · Review: Razor then Final Boss · Depends on: C3b, Q1a_
+_Lane B · Size M · Review: Razor then Final Boss · Depends on: C3b_
 - Scope: `DomainInstanceStore.NotifyTransition` calls the compiled `Notify{Stage}Subscribers` trees instead of matching links itself. First row: the known `when any` mismatch (simulate fires when at least one linked target matches; print only when exactly one does).
 - Files: `Runtime/DomainInstanceStore.cs`, HostAbi.
 - Done when: Parity rows for `when any`, `when all`, single hop.
@@ -463,12 +463,12 @@ _Lane B · Size M · Review: Razor then Final Boss · Depends on: C5a_
 - Hand-edit: Partly.
 
 **C6a. Remove auto-link; linking is explicit**  
-_Lane B · Size S · Review: Final Boss alone · Depends on: PRs 82 and 83 merged_
-- Scope: Decision 10 (no guessing) is unconditional. Delete the three auto-link helpers (`DomainInstanceStore.cs:~224`). Edit `Poly.Mcp/Docs/poly-dsl-guide.md:73-75, 141`, which documents auto-link (no slice owned that edit before).
-- Files: `Runtime/DomainInstanceStore.cs`, `Poly.Mcp/Docs/poly-dsl-guide.md`.
-- Done when: `git grep` for the helper names is empty; test: an unlinked navigation stays unlinked.
-- SHIP if both hold and the guide no longer describes auto-link. NOT SHIP if behavior changed without the doc edit.
-- Hand-edit: Yes.
+_Lane B · Size M · Review: Razor then Final Boss · Depends on: PRs 82 and 83 merged_
+- Scope: Decision 10 (no guessing) is unconditional. Delete `TryAutoLinkUnambiguousOutbound` (`DomainEntityInstance.HostAbi.cs:820`; callers `HostAbi.cs:782` and `DomainInstanceStore.cs:226`) and its printed C# twin in `DomainToCSharpExporter.StoreBind.cs:105-116` (`autoLink = outs.Count == 1`, `wireUnambiguousBackRef: autoLink`) and `BuildTargetCreateArgs` at `StoreBind.cs:237-243` (via `FindAutoWireBackReference`, `Actions.cs:846`). Edit `Poly.Mcp/Docs/poly-dsl-guide.md:73-75, 141`, which documents auto-link. Other callers of `FindAutoWireBackReference`: `Notify.cs:126` (explicit `create in Rel` names the relationship, so the link itself is explicit; the back-reference slot is picked by "exactly one singular navigation to the source", the same pattern as the guessed outbound) and `StoreBind.cs:277` (by-name create args). `TryLinkCreateInBackReference` (`HostAbi.cs` ~833) is the runtime twin of that back-ref wiring and is also used after explicit create-in. C6a leaves that wiring in place and pins it with a parity row. Whether decision 10 covers the slot choice is for Scot when C6a starts (not a new numbered decision).
+- Files: `Runtime/DomainEntityInstance.HostAbi.cs`, `Runtime/DomainInstanceStore.cs`, `Lowering/DomainToCSharpExporter.StoreBind.cs`, `Poly.Mcp/Docs/poly-dsl-guide.md`.
+- Done when: `git grep -n TryAutoLinkUnambiguousOutbound` is empty; the `autoLink` / `wireUnambiguousBackRef` printing of by-name create is gone; a T2 parity row: bare `create Type` with one matching many-relationship is unlinked in both simulate and print. A second parity row pins explicit `create in Rel` back-ref wiring.
+- SHIP if the greps hold, the guide no longer describes auto-link, and both parity rows pass. NOT SHIP if simulate and print disagree, or if `FindAutoWireBackReference` at Notify was deleted without Scot's word.
+- Hand-edit: Partly: runtime and printer both change.
 
 **C6b. Link cardinality as a tree**  
 _Lane B · Size M · Review: Razor then Final Boss · Depends on: C6a, C2b_
@@ -583,7 +583,7 @@ _Lane B · Size M · Review: Razor then Final Boss · **RUNS ALONE** · Depends 
 - Hand-edit: Yes, deletion.
 
 **C10. End check: the interpreter runs exactly the artifact**  
-_Lane B · Size M · Review: Razor then Final Boss · Depends on: C1c, C3b, C2b, E1, Q1a, C8d_
+_Lane B · Size M · Review: Razor then Final Boss · Depends on: C1c, C3b, C2b, E1, C8d_
 - Scope: The old grep (`Rewrite|Bind(This|ForSimulate)`) is name-based and misses a renamed rewrite. Define a mechanism: record the node identity or structural hash that `Interpreter.Compile` receives for every sample-domain tree and assert it equals the catalog artifact's tree. Keep the grep as a second check. Dependencies now match the text.
 - Files: One test plus a small test seam if needed.
 - Done when: The test walks every compiled tree for all sample domains; the grep for rewrite names under `Runtime/` is empty.
@@ -813,8 +813,8 @@ Why this order: tests and measurements come first so every later claim is checka
 - Lane B: C4a first (live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
 
 **Wave 2: consumers move onto the catalog; Compile gaps close**
-- Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (V10 = yes), P1 (V8 = a)
-- Lane B: E1, C2a, C2b, C4b, C4c, C4d (V5 = a), Q1a, Q1b (V10 = yes), C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a to C7d
+- Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (pending V10; Q2 is expected yes), P1 (V8 = a)
+- Lane B: E1, C2a, C2b, C4b, C4c, C4d (V5 = a), Q1a, Q1b (pending V10), C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a to C7d
 
 **Wave 3: retire DEI and the cache (hold point HP5: every C slice merged)**
 - Lane A: K6, F1 to F4, F6, N2 (F1 after decision 13, N2 after decision 19)
@@ -837,7 +837,7 @@ Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1
 
 **Slices that run alone** (both lanes idle, no other open PR, scheduled right after a merge window): **K2, C8-pre, C8d, K5, R1, R2.** T1 is a partial freeze: no other PR may touch the 11 test files it edits.
 
-**Review capacity is the bottleneck, not implementation.** PR 82 took six Final Boss rounds, each finding a new variant. Count for v2: 41 slices get one review pass (Final Boss on the opposite mill) and 41 get two (Razor's exhaustive first pass, then Final Boss), about 123 review passes across 82 slices. Rules that keep this from stalling:
+**Review capacity is the bottleneck, not implementation.** PR 82 took six Final Boss rounds, each finding a new variant. Count for v2: 42 slices get one review pass (Final Boss on the opposite mill) and 40 get two (Razor's exhaustive first pass, then Final Boss), about 122 review passes across 82 slices. Rules that keep this from stalling:
 1. Every implementer TASK carries a shape matrix for the slice up front (kinds of input the change must handle), and Razor's first pass lists every finding in one table (id, severity, file:line, fix). Later passes check only those fixes and real regressions.
 2. The first review is an exhaustive sweep. The implementer's self-review sweep (full tests, hand-editability probes, grep for the same bug class) goes in the PR comment; no sweep, no review.
 3. A third NOT SHIP comes to you as a decision: waive, narrow or split.
@@ -877,6 +877,8 @@ flowchart TD
     A5a --> Q2
     T2 --> C4a
     T2 --> B1
+    T2 --> Q1a
+    Q1b
     T1 --> G1 --> G2
     G1 --> G3
     C0 --> C1a --> C1b --> C1c --> E1
@@ -887,8 +889,6 @@ flowchart TD
     C2b --> C4c
     E1 --> C4c --> C4d
     C1a --> C3a --> C3b --> C5a
-    C1c --> Q1a --> Q1b
-    Q1a --> C5a
     C5a --> C5b
     C2b --> C6b
     C6a --> C6b --> C6c
@@ -933,8 +933,8 @@ flowchart TD
 | Analysis hardening | N4, C4e, M1, P1 | S, S, M, S |
 | Pre-run rewrites | C1a, C1b, C1c, E1, C3a, C3b, C10 | M, M, S, M, M, S, M |
 | Create and constraints | C0, C4a, C2a, C2b, C4b, C4c, C4d | S, S, M, M, S, M, M |
-| Collection rules | Q1a, Q1b | L, M |
-| Subscriptions and links | C5a, C5b, C6a, C6b, C6c | M, M, S, M, M |
+| Collection rules | Q1a, Q1b | S, S |
+| Subscriptions and links | C5a, C5b, C6a, C6b, C6c | M, M, M, M, M |
 | Consumer lookups | C7-0, C7a, C7b, C7c, C7d | M, M, S, S, S |
 | Instances and DEI | C8-pre, C8a1, C8a2, C8b, C8c1, C8c2, C8d | M, M, M, M, M, M, M |
 | Compile inputs | K1, K2, K3c, K3a, K3b, K4, K5, K6 | S, M, S, S, M, M, M, S |
@@ -943,7 +943,7 @@ flowchart TD
 | Functions | F1, F2, F3, F4, F5, F6 | S, S, M, M, S, S |
 | Naming and rename | N1, N3, R1, R2 | S, S, S, M |
 
-82 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 13 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, plus the conditional P1). Sizes: 37 S, 43 M, 2 L. Overall: **L**. The risky slices are Q1a, C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 123.
+82 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 13 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, plus the conditional P1). Sizes: 38 S, 43 M, 1 L. Overall: **L**. The risky slices are C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 122.
 
 ## 17. Dogfood probes per wave (Ontologist)
 
@@ -986,5 +986,5 @@ Run by the Ontologist bot against the real MCP harness and the built C# API; the
 
 **Still open from v1, not needed until the lane reaches them (ask then):** 13 function body form (before F1), 16 `Information` to `Info` (before N1), 18 cascading errors (after N3 results), 19 contributor registration (before N2), 20 rename scope (before R2).
 
-V1 to V11 are in `pipeline-convergence-plan.decisions.md`, all answered by Scot 2026-10-03 as recommended.
+V1 to V11 are in `pipeline-convergence-plan.decisions.md`. V1–V9 and V11 answered as recommended 2026-10-03; V10 reopened.
 

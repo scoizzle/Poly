@@ -1,6 +1,6 @@
 # Poly pipeline stage map (DRAFT)
 
-Status: draft for Scot Murphy, 2026-10-02. Not a PR. Written from the design agreed in discussion today, then cross-checked against master `9db8868f` (2026-09-29). Rule: the hand-written code is the truth; this doc is ideation until the code matches it. PRs 82 (`d7c1da48`) and 83 (`c2265740`) are open and unmerged; where they change things it says so.
+Status: draft for Scot Murphy, 2026-10-02. Not a PR. Written from the design agreed in discussion today, then cross-checked against master `9db8868f` (2026-09-29). Rule: the hand-written code is the truth; this doc is ideation until the code matches it. PRs 82 (`d7c1da48`) and 83 (`c2265740`) merged into master `945a2164`; the doc's other line numbers and claims were taken on `9db8868f`.
 
 ## 1. Overview
 
@@ -155,8 +155,8 @@ Checked against master `9db8868f`. Code is truth. File names are under `Poly/Dom
 10. **Analysis default.** `AnalysisOptions.Full` runs every pass even after the first error, which fits "report everything" but means a failed analysis can contain cascading errors.
 
 **What the open PRs change**
-- **PR 82** (`refactor/p3c-retire-prerun-rewrites`): deletes `BindThis`, `RewriteVoidFailClosedThrow`, `BindExportBody`. Simulation compiles the printed module body directly. It leaves two smaller helpers, `BindForSimulate` (binds action params and previous-stage slot, maps adapter and void-throw cases to a failure result) and `AsVoidResultBody`; the planned P3-D slice retires those. It also moves an unlinked-comparison guard into lowering and adds `RuntimeEnumTypeProvider`. This closes difference 5 in part and moves toward "simulate = print".
-- **PR 83** (`fix/pr80-postmerge`): fixes previous-stage local names, the unlinked quantifier guard, and restores `LoweringContext.SourceEntityName`. Bug fixes in Compile; no change to the pipeline shape.
+- **PR 82** (merged, #82) (`refactor/p3c-retire-prerun-rewrites`): deleted `BindThis`, `RewriteVoidFailClosedThrow`, `BindExportBody`. Simulation compiles the printed module body directly. It left two smaller helpers, `BindForSimulate` (binds action params and previous-stage slot, maps adapter and void-throw cases to a failure result) and `AsVoidResultBody`; the planned P3-D slice retires those. It also moved an unlinked-comparison guard into lowering and added `RuntimeEnumTypeProvider`. This closed difference 5 in part and moved toward "simulate = print".
+- **PR 83** (merged, #83) (`fix/pr80-postmerge`): fixed previous-stage local names, the unlinked quantifier guard, and restored `LoweringContext.SourceEntityName`. Bug fixes in Compile; no change to the pipeline shape.
 - Neither PR adds an artifact catalog, an error gate in Lower, or removes consumer re-entry.
 
 **Rename sizing (Lower -> Compile)**

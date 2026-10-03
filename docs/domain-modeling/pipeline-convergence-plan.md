@@ -2,7 +2,7 @@
 
 Status: revision 2 of the plan in PR 84. The five reviews were read and folded in. Code slices are still HELD until Scot signs off PR 84 (docs only; nothing implemented). It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
-Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1–V9 and V11 answered as recommended 2026-10-03; V10 reopened).
+Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11 answered 2026-10-03; V10 as a revised scope).
 
 Method for this revision: the five reviews were read, the headline experiment (the Analyze gate patch, full suite) was re-run, and the other disputed claims were checked against master `9db8868f` with `git grep` in a throwaway clone. Hand-written code is truth; docs are ideation. Where a claim could not be checked, that is stated and the reviewer's probe is named.
 
@@ -14,7 +14,7 @@ Method for this revision: the five reviews were read, the headline experiment (t
 - Foreman is the coordinating agent; Final Boss is the verifying reviewer.
 - **Hand-edit gate (applies to every code slice).** Beyond the yes/no line, a reviewer runs three probes: (1) no new unreachable branch or unused member in touched files with warnings on; (2) `git grep` for every name the PR removed or renamed, in code, comments and docs, returns nothing; (3) no "fallback", "legacy" or "interim" branch is added without a named removal slice. Tangled code is moved behind a clearer abstraction before it is deleted.
 - **Review depth.** Review 1 = the verifying reviewer alone (small, deletion-only or mechanical). Review 2 = the exhaustive first review, then a verification review. In both cases the reviewer runs on the opposite mill from the implementer. See section 13.
-- Slice ids are labels. New in v2: T (test and measurement foundations), B (bug triage), E, M, N4, P, Q (work that reviews showed had no owner). Divergence numbers D1 to D10 still match stage map section 7. Decisions 1 to 20 are the numbered list in section 19. **V1 to V11** are in the decisions file; V1–V9 and V11 answered as recommended 2026-10-03, V10 reopened.
+- Slice ids are labels. New in v2: T (test and measurement foundations), B (bug triage), E, M, N4, P, Q (work that reviews showed had no owner). Divergence numbers D1 to D10 still match stage map section 7. Decisions 1 to 20 are the numbered list in section 19. **V1 to V11** are in the decisions file; V1 to V11 answered 2026-10-03 (V10 as a revised scope).
 - Slices that were conditional on an open decision in v1 are unconditional in v2 wherever you already ruled (decisions 8, 10, 11, 12, 14, 17).
 
 ## 1. Rules every slice is held to, and the test that proves each
@@ -57,7 +57,8 @@ Everything below says "simulate equals print" and "every mutation enforces every
 
 **Slices (in recommended order).**
 
-**T0. Golden emit baseline and reproducibility**  
+**T0. Golden emit baseline and reproducibility**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: Check in text snapshots of everything compile produces for every sample domain: `Emit` files, the catalog text (placeholder shape for now), and the DslCompiler outputs (DbContext, Program.cs, demo.http) for the CRM sample. A test compiles twice in separate sessions and twice on one session and asserts equal text (a reviewer's probe: Emit is already byte-identical, so this pins what is true today).
 - Files: New `Poly.Tests/DomainModeling/Compile/EmitGoldenTests.cs` plus a snapshot folder. No product file.
@@ -65,7 +66,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if `EmitGolden*` tests pass on master and the diff has no product file. NOT SHIP if any snapshot was edited by hand to make a test pass.
 - Hand-edit: Yes: data plus one small test. Probe: `git diff --stat` shows only Poly.Tests.
 
-**T2. Shared simulate-equals-print parity helper**  
+**T2. Shared simulate-equals-print parity helper**
+
 _Lane B · Size M · Review 2 · Depends on: none_
 - Scope: One helper built on `ExportedCSharp.CompileAndLoad`: run the same scenario (create, invoke, link, transition) through the interpreter and through the Roslyn-compiled printed code, then compare property values, stage, success versus failure, failure message and exception type. Seed it with the existing agreeing case (`Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree` pattern). Add a check that printed C# compiles for every sample domain (see B1). Every later C-slice adds a failing-first row; a green suite alone cannot see these divergences.
 - Files: `Poly.Tests/TestHelpers/ExportedCSharp.cs` (extend) or a sibling file; new `ParityTests`. `ExportedCSharp.cs` is untouched by PRs 82 and 83.
@@ -73,7 +75,8 @@ _Lane B · Size M · Review 2 · Depends on: none_
 - SHIP if deliberately breaking one check turns a parity row red. NOT SHIP if the helper only compares that both sides compile, or only text.
 - Hand-edit: Yes. Probe: helper under ~150 lines, no reflection tricks.
 
-**T1. Valid-domain fixture (measured gate precondition)**  
+**T1. Valid-domain fixture (measured gate precondition)**
+
 _Lane B · Size M · Review 2 · Depends on: PRs 82 and 83 merged, decision V3 (decisions file)_
 - Scope: Hand-built domains (`DomainTestFactory`, `new Domain(..)`) declare no primitive types, so Analyze says "Property 'X' references unknown type 'Text'". Add one test fixture that declares the core primitives and move the 11 affected test files onto it (DomainEntityInstanceTests holds about 91 of the failures; also DomainToCSharpExporterTests, OracleToolTests, ClockLoweringTests, SubscriptionAnalysisTests, HostAbi and StoreBind tests). The MCP oracle's throwaway domain is G3's job. Of the 110 failures reproduced (measured on master `9db8868f`, 2026-10-03; the count has since grown with PRs 82/83), 98 are the missing-primitives case; the other 12 need a one-by-one decision (one hand-built domain has a genuinely invalid relationship; others assert a lowering-time exception message that the gate now pre-empts): fix the domain, or move the assertion to the gate message, and list each in the PR. V3 = a, so this is the fixture; option (b) would have replaced it with an Analyze change.
 - Files: `Poly.Tests/TestHelpers/*` (new fixture), the 11 test files that fail under the gate probe.
@@ -81,7 +84,8 @@ _Lane B · Size M · Review 2 · Depends on: PRs 82 and 83 merged, decision V3 (
 - SHIP if the probe run is 0 failures and the normal run has the same pass count as master before and after, 0 new failures. NOT SHIP if any test was deleted or weakened, or the fixture silently adds types a real author would have to declare.
 - Hand-edit: Mostly (find and replace onto one helper); the PR gives the command so it can be re-run cold. Probe: no test body changed beyond the construction line.
 
-**B1. Printed C# that does not compile for a peer-tracking transition**  
+**B1. Printed C# that does not compile for a peer-tracking transition**
+
 _Lane B · Size S · Review 1 · Depends on: T2, PRs 82 and 83 merged_
 - Scope: A reviewer's probe (`Tr: Tracks: Paper; P: stage {when Tracks B {transition to Q}}`) produced printed C# that fails to compile ("'Tr' does not contain a definition for 'Notify'"). Not root-caused. Failing-first compile test, find the cause, fix it, or record it as not a bug with the reason.
 - Files: Probably `Lowering/DomainToCSharpExporter.Notify.cs`; confirm at start.
@@ -89,7 +93,8 @@ _Lane B · Size S · Review 1 · Depends on: T2, PRs 82 and 83 merged_
 - SHIP if the exact probe domain compiles and runs the same in parity. NOT SHIP if the fix special-cases the probe.
 - Hand-edit: Yes if the cause is local.
 
-**T3. Mutation by invariant matrix**  
+**T3. Mutation by invariant matrix**
+
 _Lane B · Size M · Review 2 · Depends on: C4d, C6c, M1_
 - Scope: Decision 11 (every mutation enforces every invariant) has no cross-cutting test. For each mutation kind (action assign, entry/exit effect, transition, create, create-in child, link, unlink, MCP tool) against each invariant kind (required, range, length, pattern, equality, unique, enum, cardinality), assert the outcome in both simulation and printed code. Every empty cell goes on the H4 known-gaps list with a slice id.
 - Files: New `MutationInvariantMatrixTests` using T2.
@@ -107,7 +112,8 @@ _Lane B · Size M · Review 2 · Depends on: C4d, C6c, M1_
 
 **Slices (in recommended order).**
 
-**K0. Null analysis no longer silently drops a create effect**  
+**K0. Null analysis no longer silently drops a create effect**
+
 _Lane B · Size S · Review 1 · Depends on: PRs 82 and 83 merged_
 - Scope: `LowerCreateInProbe` returns null when there is no analysis and the caller omits the effect (`EffectLoweringPass.cs:927-929, 1037-1038`). Make that branch throw now (about 3 lines) instead of waiting for K3.
 - Files: `Lowering/EffectLoweringPass.cs`.
@@ -115,7 +121,8 @@ _Lane B · Size S · Review 1 · Depends on: PRs 82 and 83 merged_
 - SHIP if the new test passes and no existing test needed a change. NOT SHIP if a test now passes an analysis only to dodge the throw.
 - Hand-edit: Yes.
 
-**G1. Compile refuses an analysis with Errors**  
+**G1. Compile refuses an analysis with Errors**
+
 _Lane A · Size M · Review 2 · Depends on: T1, PRs 82 and 83 merged_
 - Scope: Throw `InvalidOperationException` with the first error when the analysis has Errors, in `DomainSession.Lower`, `RuntimeAnalysisCache.GetOrLower` and `DomainProgramProjection.ToSyntax(domain, AnalysisResult)` (the public AnalysisResult wrapper). `GetOrLower` at `RuntimeAnalysisCache.cs:109` calls the internal 4-argument `ToSyntax` overload; the 2-argument `ToSyntax(domain, INodeMetadataProvider)` is the public wrapper and has no HasErrors; every caller of that wrapper reaches it through a checked path and a test says so. The catalog stays empty on refusal. Fix the stale comment on `IArtifactContributor`.
 - Files: `Lowering/DomainProgramProjection.cs`, `Analysis/RuntimeAnalysisCache.cs`, `Compile/DomainSession.cs`, `Compile/IArtifactContributor.cs` (comment).
@@ -123,7 +130,8 @@ _Lane A · Size M · Review 2 · Depends on: T1, PRs 82 and 83 merged_
 - SHIP if the new tests pass and the suite count is unchanged. NOT SHIP if any existing test was edited to avoid the gate.
 - Hand-edit: Yes, about 15 lines in three places. Probe: no new fallback branch.
 
-**G2. MCP export refuses error analyses; failed edits stop storing the error analysis**  
+**G2. MCP export refuses error analyses; failed edits stop storing the error analysis**
+
 _Lane A · Size S · Review 1 · Depends on: G1_
 - Scope: `export_domain_to_csharp` returns the errors instead of emitting. The follow-up in the old plan was optional; it is mandatory: `McpSessionStore.Evolve` stores the failed analysis next to the old domain (`McpSessionStore.cs:89-92`), so the new gate would refuse a valid old domain after a failed edit. Check the readers of `LatestAnalysis` first (for example `get_domain_analysis`) and keep any message they need. A failed `apply_dsl` stores nothing (it returns before `Replace`, `DomainTools.cs:1331`); only the `Evolve` path is affected. Replace the vacuous test `ExportDomainToCSharp_WithPeerAnalysisError_FailsClosed` (its DSL is rejected by `apply_dsl`, so it never reaches export).
 - Files: `Poly.Mcp/Tools/OracleTool.cs`, `Poly.Mcp/Sessions/McpSessionStore.cs`, `SurfaceExtensionDogfoodTests.cs`.
@@ -131,7 +139,8 @@ _Lane A · Size S · Review 1 · Depends on: G1_
 - SHIP if both tests pass and the old vacuous test is gone or fixed. NOT SHIP if export can still pair an error analysis with a domain.
 - Hand-edit: Yes.
 
-**G3. `oracle_expression` analyzes first**  
+**G3. `oracle_expression` analyzes first**
+
 _Lane A · Size S · Review 1 · Depends on: G1, T1_
 - Scope: The throwaway domain at `OracleTool.cs:399-412` uses `Property(k,"Text")` with no primitive declared, which is exactly the G1 failure. Declare the primitives it uses (same shape as the T1 fixture), run Analyze, return diagnostics.
 - Files: `Poly.Mcp/Tools/OracleTool.cs`.
@@ -154,7 +163,8 @@ _Lane A · Size S · Review 1 · Depends on: G1, T1_
 
 **Slices (in recommended order).**
 
-**A1. Artifact id**  
+**A1. Artifact id**
+
 _Lane A · Size S · Review 1 · Depends on: T0_
 - Scope: A tiny `ArtifactId` type: written name path plus type (for example `Hotel/Reservation/Confirm#method`), parse, format, equality. The id names the method, not a stage body: one method dispatches on current stage (exporter comment, `DomainToCSharpExporter.cs:371-374`), so same-named stage actions are one artifact. No wiring.
 - Files: New file under `Poly/DomainModeling/Compile/`.
@@ -162,7 +172,8 @@ _Lane A · Size S · Review 1 · Depends on: T0_
 - SHIP if the type is referenced only by its tests (`git grep ArtifactId` outside the new files is empty). NOT SHIP if it is wired into Lower or Emit.
 - Hand-edit: Yes, one small file.
 
-**A2a. Real catalog**  
+**A2a. Real catalog**
+
 _Lane A · Size S · Review 1 · Depends on: A1_
 - Scope: `Artifact` (descriptor plus payload) and a catalog class: register (duplicate id throws), look up by id, list, stable `ToText()`. The catalog is a value rebuilt whole by each compile; it has no public remove or replace (explicit rule, tested). `DomainSession.ArtifactCatalog` becomes this type. The old `SyntaxModule` placeholder stays for now and is removed in A3a.
 - Files: `Compile/ArtifactDescriptor.cs`, new catalog file, `Compile/DomainSession.cs`, `SliceCProducerLoopCatalogTests.cs` (the only test file that references the catalog; a reviewer counted 1, the old plan said 2).
@@ -170,7 +181,8 @@ _Lane A · Size S · Review 1 · Depends on: A1_
 - SHIP if T0 golden is unchanged. NOT SHIP if any golden snapshot changed.
 - Hand-edit: Yes.
 
-**A2b. Typed references and allowed edges**  
+**A2b. Typed references and allowed edges**
+
 _Lane A · Size S · Review 1 · Depends on: A2a_
 - Scope: An artifact lists references as id plus expected type. Each artifact type declares which types it may point at; the producer that defines the type owns that declaration. Registering a type without one is refused, so a library-added type can be dangling-checked. `FindDanglingOrWrongType()`.
 - Files: `Compile/ArtifactDescriptor.cs`, catalog file.
@@ -178,7 +190,8 @@ _Lane A · Size S · Review 1 · Depends on: A2a_
 - SHIP if each failure kind has its own test. NOT SHIP if an unknown type is accepted silently.
 - Hand-edit: Yes.
 
-**A3a. Lower registers its trees as artifacts**  
+**A3a. Lower registers its trees as artifacts**
+
 _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
 - Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map line 70 ("a tree per concept in the right place") is NOT met until A6.
 - Files: `Compile/DomainSession.cs` (Lower, Emit), `Lowering/DomainProgramProjection.cs` only if the split moves.
@@ -186,7 +199,8 @@ _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
 - SHIP if golden is byte-identical and the grep is empty. NOT SHIP if any snapshot changed or the placeholder remains.
 - Hand-edit: Yes. Probe: no "legacy" or "fallback" branch added.
 
-**A3b. Each tree points back to its source element**  
+**A3b. Each tree points back to its source element**
+
 _Lane A · Size S · Review 1 · Depends on: A3a_
 - Scope: Add a reference type from a tree artifact to the domain element it came from (id path), so a debugger step can be traced (principle 0.1). Entity granularity only: tree nodes carry no source positions today and this slice does not add them.
 - Files: Catalog and `DomainSession.cs`.
@@ -194,7 +208,8 @@ _Lane A · Size S · Review 1 · Depends on: A3a_
 - SHIP if removing an entity from the domain makes the dangling check report its tree. NOT SHIP if the reference is a free string.
 - Hand-edit: Yes.
 
-**A4. Analysis report as an artifact**  
+**A4. Analysis report as an artifact**
+
 _Lane A · Size S · Review 1 · Depends on: A3a_
 - Scope: First a test over every diagnostic produced by the analyzer test fixtures asserting it carries a domain element, with exceptions listed by diagnostic code in the test. Any gap becomes a small Analyze fix (own PR if larger than a few lines). Then register an `AnalysisReport` artifact; each finding carries the element's id path.
 - Files: `Compile/DomainSession.cs`, a small report payload type; the gap-check test.
@@ -202,7 +217,8 @@ _Lane A · Size S · Review 1 · Depends on: A3a_
 - SHIP if the exception list is explicit and short. NOT SHIP if the check silently skips diagnostics without an element.
 - Hand-edit: Yes.
 
-**A5a. Contributors return artifacts**  
+**A5a. Contributors return artifacts**
+
 _Lane A · Size M · Review 2 · Depends on: A3a_
 - Scope: `IArtifactContributor.Contribute` returns artifacts instead of `(fileName, text)` tuples (4 implementers: DbContext, Minimal API, two in tests). `DslCompiler` writes files from the catalog. Replace the source-text test (`SliceCProducerLoopCatalogTests.cs:75-90` reads `DslCompiler.cs` as text and greps it) with a behavioral one: compile a sample domain, assert the `demo.http` and DbContext artifacts come from registered contributors. Then N2 needs no test edit.
 - Files: `Compile/IArtifactContributor.cs`, `DbContextArtifactContributor.cs`, `MinimalApiGenerator.cs` (contributor class), `DslCompiler.cs`, `DomainSession.cs`; tests `SliceCProducerLoopCatalogTests.cs`, `DslCompilerArtifactContributorTests.cs`.
@@ -210,7 +226,8 @@ _Lane A · Size M · Review 2 · Depends on: A3a_
 - SHIP if golden is identical and no test reads product source as text. NOT SHIP otherwise.
 - Hand-edit: Yes. Public interface change, so the PR lists all four implementers.
 
-**A5b. Emit files and generator trees registered with references**  
+**A5b. Emit files and generator trees registered with references**
+
 _Lane A · Size M · Review 2 · Depends on: A5a_
 - Scope: `Emit` registers each per-entity `.cs` with a reference to its tree. The generators build a tree and print it immediately (`MinimalApiGenerator.cs:148-149`, `DbContextArtifactContributor.cs:28`); register those trees as Tree artifacts too. A declared list names the artifact types allowed to have no tree reference (`demo.http` only). The reference is checked by type, not just that some id resolves.
 - Files: `DomainSession.cs`, `MinimalApiGenerator.cs`, `DbContextArtifactContributor.cs`.
@@ -218,7 +235,8 @@ _Lane A · Size M · Review 2 · Depends on: A5a_
 - SHIP if a deliberately wrong-type reference fails the dangling check. NOT SHIP if text files can ship with no tree behind them and are unlisted.
 - Hand-edit: Yes.
 
-**C9. Generators stop asking for the module**  
+**C9. Generators stop asking for the module**
+
 _Lane A · Size S · Review 1 · Depends on: A5b_
 - Scope: The Minimal API contributor calls `GetOrLower` and checks action names against the module (`RequireHttpActionsInModule`). Hand it the tree artifacts from the catalog. Generators reading Domain plus analysis is fine (decision 5).
 - Files: `MinimalApiGenerator.cs`, `Compile/IArtifactContributor.cs`.
@@ -226,7 +244,8 @@ _Lane A · Size S · Review 1 · Depends on: A5b_
 - SHIP if golden unchanged and the grep is empty. NOT SHIP if a new cache read appears.
 - Hand-edit: Yes.
 
-**N2. Http library registers its own contributor**  
+**N2. Http library registers its own contributor**
+
 _Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
 - Scope: Do the Http one now: `HttpLibrary` (same assembly as the Minimal API contributor) registers it. DbContext only once the database kind is read from loaded libraries (decision 19, still open).
 - Files: `src/Poly.DslCompiler/HttpLibrary.cs`, `DslCompiler.cs`.
@@ -234,14 +253,16 @@ _Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
 - SHIP if the A5a test needed no change. NOT SHIP if it needed a string edit.
 - Hand-edit: Yes.
 
-**A6. Finer trees (deferred)**  
+**A6. Finer trees (deferred)**
+
 _Lane A · Size L · Review 2 · Depends on: A3a, H4_
 - Scope: One artifact per action, policy, subscription handler, entry/exit body. Scheduled only when a consumer needs it; closes the gap against stage map line 70 and lets H4 check at concept granularity.
 - Files: Decided when scheduled.
 - Done when: H4 known-gaps entries of the kind 'inside entity tree only' reach zero; scheduled only when a consumer needs it and Scot approves the wave.
 - Hand-edit: Decided when scheduled.
 
-**A7. Other artifact types: tests, docs, spec exports (deferred)**  
+**A7. Other artifact types: tests, docs, spec exports (deferred)**
+
 _Lane A · Size M · Review 1 · Depends on: A5b_
 - Scope: Added one at a time, when something consumes it.
 - Files: Decided when scheduled.
@@ -255,7 +276,8 @@ These slices have no home in v1's divergence list. N4, C4e and M1 close Analyze 
 
 **Slices (in recommended order).**
 
-**C4e. Analyze catches three unknown-name cases**  
+**C4e. Analyze catches three unknown-name cases**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: Analyze already rejects unknown stage and enum names in most places; three spots still pass with 0 errors (a reviewer's probes): (a) `when Tracks B { transition to Nope }` (simulate silently stays, print silently drops it), (b) `Level: Sev default(Nope)` (simulate creates "Nope", print throws at export), (c) `if (Level is Nope)` (both fail at run time). Three Analyze rules, one failing-first test each.
 - Files: Analysis passes for subscriptions, defaults and stage comparisons.
@@ -263,7 +285,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if each probe domain is rejected by Analyze and valid neighbours still pass. NOT SHIP if only some of the three are covered.
 - Hand-edit: Yes.
 
-**N4. Reserved generated names are an Analyze error**  
+**N4. Reserved generated names are an Analyze error**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: `Emit` splits files by type name, so a user type named like a generated stage enum collides (a reviewer's probe: `OrderStage: enum` plus entity `Order` with stages gives 0 Analyze errors and CS0101 when compiled). Add an Analyze error for names the generator reserves, plus a catalog-level unique-name test in A2a.
 - Files: `Analysis/DomainCatalogPass.cs` or the nearest naming pass.
@@ -271,7 +294,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if the probe domain is rejected by Analyze. NOT SHIP if only Emit throws.
 - Hand-edit: Yes.
 
-**M1. Only the owning entity's named behavior mutates its state (Analyze rule)**  
+**M1. Only the owning entity's named behavior mutates its state (Analyze rule)**
+
 _Lane A · Size M · Review 2 · Depends on: decision V4 (decisions file)_
 - Scope: Analyze Error for any mutation whose target is not the owning entity. First check whether an existing check (DMEFF001) already rejects `AssignEffect.Target` pointing at another entity (the parser already rejects cross-entity `assign`, but the effect target is any expression). Entry/exit blocks and `when` handlers assign their own entity's state today and Analyze accepts it; V4 = a, they count as named actions. Recommended authoring style: write state changes as named actions; use entry, exit and when blocks to invoke an action rather than assigning own state directly. Allowed (V4 a), not required; a stricter rule may come later as its own slice. Tests: negative (cross-entity assign), positive (create-in, link, unlink, cross-entity `invoke Rel.Action` still pass). The rule is stated in stage map section 2.4 (K1).
 - Files: `Analysis/EffectAnalyzer.cs` / `EffectInvariantAnalyzer.cs` or a new small pass.
@@ -279,7 +303,8 @@ _Lane A · Size M · Review 2 · Depends on: decision V4 (decisions file)_
 - SHIP if a cross-entity mutation is an Error with a code and every positive case passes. NOT SHIP if the rule only exists in the parser.
 - Hand-edit: Yes.
 
-**P1. (V8 = a) Equality constraint is authorable and printed**  
+**P1. (V8 = a) Equality constraint is authorable and printed**
+
 _Lane A · Size S · Review 1 · Depends on: decision V8 (decisions file)_
 - Scope: The parser never constructs `EqualityConstraint` and `DomainDslPrinter.cs:799` prints it as an empty string, so an API-built equality constraint is dropped in the DSL round trip. V8 = a: add syntax, parser and printer with a round-trip test.
 - Files: `Language/PolyDslParser.cs`, `DslGrammar.cs`, `DomainDslPrinter.cs`.
@@ -287,8 +312,9 @@ _Lane A · Size S · Review 1 · Depends on: decision V8 (decisions file)_
 - SHIP if the round trip is lossless. NOT SHIP if the printer still prints "" for it.
 - Hand-edit: Yes.
 
-**Q2. MCP harness opens domains that use sqlite or http**  
-_Lane A · Size M · Review 2 · Depends on: A5a · pending V10_
+**Q2. MCP harness opens domains that use sqlite or http**
+
+_Lane A · Size M · Review 2 · Depends on: A5a_
 - Scope: From the 09-27 reviews; no slice owned it. `apply_dsl` calls `DomainSession.ForSource(polyText, seed)` with the default catalog, so a domain with `uses sqlite` or `uses http` fails with 'Unknown domain extension' (`DomainTools.cs:1273-1276`; `ExtensionCatalog.Resolve` throws at `ExtensionCatalog.cs:57-58`; `ExtensionCatalog.Core` is the in-assembly chain at `:29-32`). Give the harness the same catalog the compiler uses, as a library composition that ends at core. Open design point for the slice: where the shared catalog lives so `Poly.Mcp` does not depend on `src/Poly.DslCompiler` the wrong way; the PR starts with one paragraph on that.
 - Files: `Poly.Mcp/Tools/DomainTools.cs`, `Compile/ExtensionCatalog.cs`.
 - Done when: MCP test: apply a domain with `uses sqlite` and `uses http`, then analyze, simulate and export.
@@ -327,7 +353,8 @@ This is the DEI problem. DEI is retired with no replacement layer (your ruling).
 
 **Slices (in recommended order).**
 
-**C4a. Equality constraint on create, interim fix (live divergence)**  
+**C4a. Equality constraint on create, interim fix (live divergence)**
+
 _Lane B · Size S · Review 1 · Depends on: T2, PRs 82 and 83 merged_
 - Scope: The simulator's `ValidateConstraints` switch (`DomainEntityInstance.cs:179-215`) has no equality case; the printed factory enforces it (`DomainToCSharpExporter.Notify.cs:438`). Reachable only through API-built domains (the DSL cannot author it, see P1), but still a live simulate-differs-from-print bug. Interim: add the case and the parity row. C2b deletes this code, so it is a named twin with a removal slice.
 - Files: `Runtime/DomainEntityInstance.cs`.
@@ -335,7 +362,8 @@ _Lane B · Size S · Review 1 · Depends on: T2, PRs 82 and 83 merged_
 - SHIP if the parity row is red before and green after. NOT SHIP if the fix is not tagged for removal in C2b.
 - Hand-edit: Yes, a few lines.
 
-**C0. Delete the dead DEI code**  
+**C0. Delete the dead DEI code**
+
 _Lane B · Size S · Review 1 · Depends on: PRs 82 and 83 merged_
 - Scope: Four helpers with no callers: `EvaluateParameterBindings`, `BindPeerInEffect` with `PeerBindingRewrite` and `EvaluateExprOnPeer`, `TryEvaluateRelationshipPresence`, `GetOutboundRelatedInstances`. Re-verified on master by two reviews.
 - Files: `Runtime/DomainEntityInstance.cs`, `.HostAbi.cs`, `.Runtime.cs`.
@@ -343,7 +371,8 @@ _Lane B · Size S · Review 1 · Depends on: PRs 82 and 83 merged_
 - SHIP if the diff is pure removal and suite counts are identical. NOT SHIP if any non-deleted line changed.
 - Hand-edit: Yes, pure deletion.
 
-**C1a. Interpreter: root program with declared parameters after `this`**  
+**C1a. Interpreter: root program with declared parameters after `this`**
+
 _Lane B · Size M · Review 2 · Depends on: PRs 82 and 83 merged, C0_
 - Scope: First of three parts of old C1 (P3-D). The module body runs as the root program, so parameter 0 aliases `this` (`DirectVmAbiEmitter.Statements.cs:424-430`: returns `InstanceHandle` when `ParamSlotOffset==0 && !HasInlineParameters && !IsCompiledFunctionBody`; verified). PR 82 tried `SetArgs(this, previousStage)` and `when all` fired twice. An existing mode, `IsCompiledFunctionBody` (`Invoke.cs:481`), already treats parameters as real slots. Allow it for the root program. P3-C was barred from `Poly/Interpretation`; this slice is explicitly allowed to touch it. Removes the `BindForSimulate` arm for action parameters and `previousStage`.
 - Files: `Poly/Interpretation/Vm/DirectVmAbiEmitter.Statements.cs`, `Invoke.cs`, `Runtime/DomainEntityInstance.*`.
@@ -351,7 +380,8 @@ _Lane B · Size M · Review 2 · Depends on: PRs 82 and 83 merged, C0_
 - SHIP if the `when all` row passes and `BindForSimulate` no longer rewrites parameter references. NOT SHIP if parameter 0 can still alias `this`.
 - Hand-edit: Partly: small diff, the risk is VM semantics.
 
-**C1b. Dedicated constraint-failure exception; delete `AsVoidResultBody`**  
+**C1b. Dedicated constraint-failure exception; delete `AsVoidResultBody`**
+
 _Lane B · Size M · Review 2 · Depends on: C1a_
 - Scope: Second part. Void `throw InvalidOperationException` is rewritten to `return Failure`, and `AsVoidResultBody` exists, only because host fail-loud throws are also `InvalidOperationException`. Printed trees throw a dedicated exception type for constraint failure; the host catches only that. Deletes the throw arm and `AsVoidResultBody`.
 - Files: `Lowering/DomainToCSharpExporter*.cs`, `Runtime/DomainEntityInstance.*`.
@@ -359,7 +389,8 @@ _Lane B · Size M · Review 2 · Depends on: C1a_
 - SHIP if a host fail-loud throw is still not swallowed (test) and `git grep AsVoidResultBody` is empty. NOT SHIP if Execute catches `InvalidOperationException` broadly.
 - Hand-edit: Partly.
 
-**C1c. Unbound adapter result shape; last `BindForSimulate` arm**  
+**C1c. Unbound adapter result shape; last `BindForSimulate` arm**
+
 _Lane B · Size S · Review 1 · Depends on: C1b, decision V7 (decisions file)_
 - Scope: Third part. Simulate returns Failure for a contract endpoint with no in-process adapter (`DomainEntityInstance.cs:~949-953`); print throws `NotImplementedException`. Make both do what V7 = a says (same Failure value), then delete the last arm.
 - Files: `Runtime/DomainEntityInstance.cs`, exporter adapter code.
@@ -367,7 +398,8 @@ _Lane B · Size S · Review 1 · Depends on: C1b, decision V7 (decisions file)_
 - SHIP if the row passes and the grep is empty. NOT SHIP if simulate and print still differ.
 - Hand-edit: Yes.
 
-**E1. Domain enums become real enum type definitions; delete `RuntimeEnumTypeProvider`**  
+**E1. Domain enums become real enum type definitions; delete `RuntimeEnumTypeProvider`**
+
 _Lane B · Size M · Review 2 · Depends on: C1c_
 - Scope: PR 82 adds `RuntimeEnumTypeProvider`, which reads `Domain` (`:31, :40`): a run-time shim and a reach-back. Emit domain enums as enum type definitions in the module so the provider can go (decision 17: removed in the enum slice). Scheduled before C4c and C10.
 - Files: `Lowering/*` (enum emission), `Runtime/RuntimeEnumTypeProvider.cs`.
@@ -375,7 +407,8 @@ _Lane B · Size M · Review 2 · Depends on: C1c_
 - SHIP if the grep is empty. NOT SHIP if the provider stays 'for now' (decision 17 allows no exception here).
 - Hand-edit: Partly.
 
-**C2a. Create initializers without re-lowering**  
+**C2a. Create initializers without re-lowering**
+
 _Lane B · Size M · Review 2 · Depends on: C0, C1c_
 - Scope: Remove the two run-time lowerings (`PrevalidateCreateInitializers`, `CreateChildInstance` when no store is attached). A simulator without a store gets a default internal one, so the compiled `Create` trees always run (that default store is a named twin, removed in C8d).
 - Files: `Runtime/DomainEntityInstance.HostAbi.cs`, maybe `DomainInstanceStore.cs`.
@@ -383,7 +416,8 @@ _Lane B · Size M · Review 2 · Depends on: C0, C1c_
 - SHIP if no `DomainExpressionLoweringPass` is constructed under `Runtime/` for creates. NOT SHIP if the default store is public API.
 - Hand-edit: Yes.
 
-**C2b. Run the compiled Create checks; delete the C# twins**  
+**C2b. Run the compiled Create checks; delete the C# twins**
+
 _Lane B · Size M · Review 2 · Depends on: C2a, C4a_
 - Scope: The simulator runs the `Create` factory tree for required, range, length, pattern, equality and defaults. Delete `ValidateCreateConstraints` and `FillCreateDefaults` and their callers, which the old plan did not list: store child-create paths (`DomainInstanceStore.cs:149-150, 174-175`) and `HostAbi.cs:658, 729` (verified). Delete C4a's interim case. Combines the old C4a deletion step with C2 on a reviewer's advice because both rewrite the same create path.
 - Files: `Runtime/DomainEntityInstance.cs`, `.HostAbi.cs`, `DomainInstanceStore.cs`.
@@ -391,7 +425,8 @@ _Lane B · Size M · Review 2 · Depends on: C2a, C4a_
 - SHIP if greps are empty and all parity rows pass. NOT SHIP if any check kind is covered only by suite-green.
 - Hand-edit: Partly: several call sites; the PR lists them.
 
-**C4b. Unique on create in the factory tree**  
+**C4b. Unique on create in the factory tree**
+
 _Lane B · Size S · Review 1 · Depends on: C2b_
 - Scope: Add the `EnsureUnique` call to the printed factory (as assign already does). Today the printed factory skips it (`DomainToCSharpExporter.Notify.cs:448-450`) and the simulator scans the store. Printed output changes (called out in the PR).
 - Files: `Lowering/DomainToCSharpExporter.Notify.cs`.
@@ -399,7 +434,8 @@ _Lane B · Size S · Review 1 · Depends on: C2b_
 - SHIP if the row is red on master. NOT SHIP if the printed change is not called out.
 - Hand-edit: Yes.
 
-**C4c. Constraints on set; enum value check**  
+**C4c. Constraints on set; enum value check**
+
 _Lane B · Size M · Review 2 · Depends on: C2b, E1_
 - Scope: Narrowed by a reviewer's probe: an action `assign` already enforces range in the trees. The only unchecked set is the public `DomainEntityInstance.SetProperty` (`DomainEntityInstance.cs:328`, unique only), with 0 product callers and 13 test callers (verified). Route it through the compiled check tree, or make it internal or delete it. Add the enum value check as a tree for create and set. Decision 11 is unconditional.
 - Files: `Runtime/DomainEntityInstance.cs`, exporter check trees, tests that call `SetProperty`.
@@ -407,7 +443,8 @@ _Lane B · Size M · Review 2 · Depends on: C2b, E1_
 - SHIP if `SetProperty` cannot bypass a check. NOT SHIP if the soundness test is missing.
 - Hand-edit: Partly.
 
-**C4d. Stage transition table as a tree**  
+**C4d. Stage transition table as a tree**
+
 _Lane B · Size M · Review 2 · Depends on: C4c, decision V5 (decisions file)_
 - Scope: Decision 12 is unconditional: transition tables compile as trees. The table's source is V5 = a (derive from transition effects; the DSL has no transition declarations). Replace the silent bare `return` in `TransitionStage` (`HostAbi.cs:85-87`, verified) with a failure. Unknown stage names are already Analyze errors (C4e covers the last three spots).
 - Files: `Runtime/DomainEntityInstance.HostAbi.cs`, exporter.
@@ -415,23 +452,26 @@ _Lane B · Size M · Review 2 · Depends on: C4c, decision V5 (decisions file)_
 - SHIP if no silent no-op remains for an unknown or illegal stage. NOT SHIP if the table has no stated source.
 - Hand-edit: Partly.
 
-**Q1a. Parity rows for collection rules (any/all/none/filtered count)**  
-_Lane B · Size S · Review 1 · Depends on: T2 · pending V10_
+**Q1a. Parity rows for collection rules (any/all/none/filtered count)**
+
+_Lane B · Size S · Review 1 · Depends on: T2_
 - Scope: Quantifier lowering already landed in PR 79: `DomainExpressionLoweringPass` lowers filtered quantifiers (any/all/none/filtered count) to foreach loops (class remarks at lines 27-31; `LowerFilteredQuantifier` at ~475-481), and `git grep AnyRelated|AllRelated|CountRelated` is empty in Poly, Poly.Mcp and Poly.Tests. Add `ParityScenario` rows (T2) for any, all, none and filtered count so the guarantee is tested in both simulate and print, plus the H4 check that no tree holds a `Constant` of an authoring `DomainExpression`. Existing tests `Export_HasOverdueLoans_PrintsForeachOverLoans` and `Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree` (`DomainToCSharpExporterTests.cs` ~3034, ~3045) cover one any-quantifier case.
 - Files: Poly.Tests only.
 - Done when: Parity rows for any, all, none and filtered count pass in both simulate and print; the H4 Constant check is present.
 - SHIP if the rows pass in both modes. NOT SHIP if any row is skipped.
 - Hand-edit: Yes.
 
-**Q1b. Regenerate demo/Poly.RestApi and test the checked-in demo equals fresh output**  
-_Lane B · Size S · Review 1 · Depends on: none · pending V10_
-- Scope: The printer already fails the whole export for an unlowerable policy (no per-policy stub; `DomainToCSharpExporter.cs` ~378). The only throwing `HasOverdueLoans` is the stale checked-in `demo/Poly.RestApi/Patron.cs:112`; nothing under `Poly/` produces that message. No test compares the checked-in demo to fresh output. Regenerate `demo/Poly.RestApi` with the current exporter and add a test that exports the same domain and compares to the checked-in files. There is no `.poly` next to the demo; obtain the domain from the `LibraryCheckoutDsl` constant in `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs` (the Library domain those exporter tests already parse for `HasOverdueLoans`). The slice decides how that constant is shared with the comparison test.
+**Q1b. Regenerate demo/Poly.RestApi and test the checked-in demo equals fresh output**
+
+_Lane B · Size S · Review 1 · Depends on: none_
+- Scope: The printer already fails the whole export for an unlowerable policy (no per-policy stub; `DomainToCSharpExporter.cs` ~378). The only throwing `HasOverdueLoans` is the stale checked-in `demo/Poly.RestApi/Patron.cs:112`; nothing under `Poly/` produces that message. No test compares the checked-in demo to fresh output. Regenerate `demo/Poly.RestApi` with the current exporter and add a test that exports the same domain and compares to the checked-in files. There is no `.poly` next to the demo; the Library domain (same five entities as the demo) is the `LibraryCheckoutDsl` constant in `Poly.Tests/DomainModeling/Lowering/DomainToCSharpExporterTests.cs` (the Library domain those exporter tests already parse for `HasOverdueLoans`). The slice decides how that constant is shared with the comparison test.
 - Files: `demo/Poly.RestApi/*` and one test.
 - Done when: `git grep` for the throw message is empty under `demo/`; the comparison test passes; `POST /reinstate` in `demo.http` works if it runs in this environment (otherwise the PR says it was not checked).
 - SHIP if the throw is gone and the comparison test passes. NOT SHIP if the demo was edited by hand to match.
 - Hand-edit: Yes.
 
-**C3a. Peer passed as a real argument**  
+**C3a. Peer passed as a real argument**
+
 _Lane B · Size M · Review 2 · Depends on: C1a_
 - Scope: The printed handler already takes the peer as a typed parameter (`DomainToCSharpExporter.cs:481-489`, verified); the old plan's pointer to `Notify.cs` was wrong. `MaterializePeerInSyntax` exists only because the VM could not pass a second argument (fixed by C1a). Call handlers with `SetArgs(this, previous, peer)`.
 - Files: `Runtime/DomainEntityInstance.HostAbi.cs`.
@@ -439,7 +479,8 @@ _Lane B · Size M · Review 2 · Depends on: C1a_
 - SHIP if `MaterializePeerInSyntax` has no callers. NOT SHIP if the exporter signature changed.
 - Hand-edit: Partly.
 
-**C3b. Delete `MaterializePeerInSyntax`**  
+**C3b. Delete `MaterializePeerInSyntax`**
+
 _Lane B · Size S · Review 1 · Depends on: C3a_
 - Scope: About 130 lines (`HostAbi.cs:294-423`), plus its twin tree-walker.
 - Files: `Runtime/DomainEntityInstance.HostAbi.cs`.
@@ -447,7 +488,8 @@ _Lane B · Size S · Review 1 · Depends on: C3a_
 - SHIP if pure deletion. NOT SHIP if behavior code moved.
 - Hand-edit: Yes.
 
-**C5a. Store calls the compiled Notify trees**  
+**C5a. Store calls the compiled Notify trees**
+
 _Lane B · Size M · Review 2 · Depends on: C3b_
 - Scope: `DomainInstanceStore.NotifyTransition` calls the compiled `Notify{Stage}Subscribers` trees instead of matching links itself. First row: the known `when any` mismatch (simulate fires when at least one linked target matches; print only when exactly one does).
 - Files: `Runtime/DomainInstanceStore.cs`, HostAbi.
@@ -455,7 +497,8 @@ _Lane B · Size M · Review 2 · Depends on: C3b_
 - SHIP if the `when any` row is red on master and green after. NOT SHIP if print and simulate still differ on any or all.
 - Hand-edit: Partly.
 
-**C5b. Multi-hop, depth and fan-out leave the store**  
+**C5b. Multi-hop, depth and fan-out leave the store**
+
 _Lane B · Size M · Review 2 · Depends on: C5a_
 - Scope: Delete the store's link matching and the silent depth limit of 10 for cascades (it becomes modeled behavior or an Error). The store keeps no subscription logic (decision 9).
 - Files: `Runtime/DomainInstanceStore.cs`.
@@ -463,15 +506,17 @@ _Lane B · Size M · Review 2 · Depends on: C5a_
 - SHIP if `NotifyTransition` contains no link matching. NOT SHIP if a cascade can stop silently.
 - Hand-edit: Partly.
 
-**C6a. Remove auto-link; linking is explicit**  
-_Lane B · Size M · Review 2 · Depends on: PRs 82 and 83 merged_
+**C6a. Remove auto-link; linking is explicit**
+
+_Lane B · Size M · Review 2 · Depends on: T2, PRs 82 and 83 merged_
 - Scope: Decision 10 (no guessing) is unconditional. Delete `TryAutoLinkUnambiguousOutbound` (`DomainEntityInstance.HostAbi.cs:820`; callers `HostAbi.cs:782` and `DomainInstanceStore.cs:226`) and its printed C# twin in `DomainToCSharpExporter.StoreBind.cs:105-116` (`autoLink = outs.Count == 1`, `wireUnambiguousBackRef: autoLink`) and `BuildTargetCreateArgs` at `StoreBind.cs:237-243` (via `FindAutoWireBackReference`, `Actions.cs:846`). Edit `Poly.Mcp/Docs/poly-dsl-guide.md:73-75, 141`, which documents auto-link. Other callers of `FindAutoWireBackReference`: `Notify.cs:126` (explicit `create in Rel` names the relationship, so the link itself is explicit; the back-reference slot is picked by "exactly one singular navigation to the source", the same pattern as the guessed outbound) and `StoreBind.cs:277` (by-name create args). `TryLinkCreateInBackReference` (`HostAbi.cs` ~833) is the runtime twin of that back-ref wiring and is also used after explicit create-in. C6a leaves that wiring in place and pins it with a parity row. Whether decision 10 covers the slot choice is for Scot when C6a starts (not a new numbered decision).
 - Files: `Runtime/DomainEntityInstance.HostAbi.cs`, `Runtime/DomainInstanceStore.cs`, `Lowering/DomainToCSharpExporter.StoreBind.cs`, `Poly.Mcp/Docs/poly-dsl-guide.md`.
 - Done when: `git grep -n TryAutoLinkUnambiguousOutbound` is empty; the `autoLink` / `wireUnambiguousBackRef` printing of by-name create is gone; a T2 parity row: bare `create Type` with one matching many-relationship is unlinked in both simulate and print. A second parity row pins explicit `create in Rel` back-ref wiring.
 - SHIP if the greps hold, the guide no longer describes auto-link, and both parity rows pass. NOT SHIP if simulate and print disagree, or if `FindAutoWireBackReference` at Notify was deleted without Scot's word.
 - Hand-edit: Partly: runtime and printer both change.
 
-**C6b. Link cardinality as a tree**  
+**C6b. Link cardinality as a tree**
+
 _Lane B · Size M · Review 2 · Depends on: C6a, C2b_
 - Scope: Cardinality has no tree today. The relationship owns link effects (decision 11): a compiled link check per relationship, enforced identically in simulation and print.
 - Files: Exporter, lowering, `DomainInstanceStore.cs`.
@@ -479,7 +524,8 @@ _Lane B · Size M · Review 2 · Depends on: C6a, C2b_
 - SHIP if the row is red on master. NOT SHIP if only MCP `link_instances` enforces it.
 - Hand-edit: Partly.
 
-**C6c. Unlink cannot drop below a required minimum**  
+**C6c. Unlink cannot drop below a required minimum**
+
 _Lane B · Size M · Review 2 · Depends on: C6b_
 - Scope: There is no instance delete operation anywhere in product code (checked), so delete semantics are out of scope (V9). Unlink gets a tree that refuses to drop a link count below the modeled minimum.
 - Files: Exporter, lowering.
@@ -487,7 +533,8 @@ _Lane B · Size M · Review 2 · Depends on: C6b_
 - SHIP if below-minimum unlink fails identically. NOT SHIP if unlink has no tree.
 - Hand-edit: Partly.
 
-**C7-0. Catalog index**  
+**C7-0. Catalog index**
+
 _Lane B · Size M · Review 2 · Depends on: A3a, C0_
 - Scope: A small index over the catalog: method by name on a tree, tree by name, navigation by name.
 - Files: `Compile/*`.
@@ -495,7 +542,8 @@ _Lane B · Size M · Review 2 · Depends on: A3a, C0_
 - SHIP if no consumer changed. NOT SHIP if the index duplicates cache logic.
 - Hand-edit: Yes.
 
-**C7a. Six 'get compiled module' sites use the catalog**  
+**C7a. Six 'get compiled module' sites use the catalog**
+
 _Lane B · Size M · Review 2 · Depends on: C7-0_
 - Scope: The 6 sites that feed `GetOrLower` hold the artifact list instead.
 - Files: `Runtime/*`.
@@ -503,7 +551,8 @@ _Lane B · Size M · Review 2 · Depends on: C7-0_
 - SHIP if the count drops by the stated number. NOT SHIP if a new cache read appears.
 - Hand-edit: Yes.
 
-**C7b. Three action-by-name lookups use the index**  
+**C7b. Three action-by-name lookups use the index**
+
 _Lane B · Size S · Review 1 · Depends on: C7a_
 - Scope: Stage-scoped fallthrough baked in at compile time.
 - Files: `Runtime/*`.
@@ -511,7 +560,8 @@ _Lane B · Size S · Review 1 · Depends on: C7a_
 - As C7a.
 - Hand-edit: Yes.
 
-**C7c. Entity and relationship lookups use index and navigation**  
+**C7c. Entity and relationship lookups use index and navigation**
+
 _Lane B · Size S · Review 1 · Depends on: C7b_
 - Scope: The 4 entity and 3 relationship lookups (two of the relationship ones sit in methods nobody calls; C0 removes those first).
 - Files: `Runtime/*`.
@@ -519,7 +569,8 @@ _Lane B · Size S · Review 1 · Depends on: C7b_
 - As C7a.
 - Hand-edit: Yes.
 
-**C7d. One-offs and `BehaviorMetadata`**  
+**C7d. One-offs and `BehaviorMetadata`**
+
 _Lane B · Size S · Review 1 · Depends on: C7c_
 - Scope: Stage enum names, subscription fan-out, storage target, `BehaviorMetadata`.
 - Files: `Runtime/*`.
@@ -527,7 +578,8 @@ _Lane B · Size S · Review 1 · Depends on: C7c_
 - As C7a.
 - Hand-edit: Yes.
 
-**C8-pre. Creation helper for tests (creation only)**  
+**C8-pre. Creation helper for tests (creation only)**
+
 _Lane B · Size M · Review 1 · **RUNS ALONE** · Depends on: C2b, C7d_
 - Scope: Replaces the old C-pre, demoted. One forwarding helper for `DomainEntityInstance.Create` (149 calls in `DomainEntityInstanceTests`, 37 test files), moved by a scripted find-and-replace whose command is in the PR so it can be re-run cold. `InvokeAction` and `GetProperty` stay on the instance; C8b keeps those names. It runs after the consumers are done, so it does not conflict with every open test lane, and it is paid for by C8b.
 - Files: `Poly.Tests/TestHelpers/*`, mechanical edits in 37 test files.
@@ -535,7 +587,8 @@ _Lane B · Size M · Review 1 · **RUNS ALONE** · Depends on: C2b, C7d_
 - SHIP if re-running the command reproduces the diff. NOT SHIP if any non-call-site line changed.
 - Hand-edit: No: mechanical and large; reproducible script instead.
 
-**C8a1. Session-aware storage (the only thing the interpreter keeps)**  
+**C8a1. Session-aware storage (the only thing the interpreter keeps)**
+
 _Lane B · Size M · Review 2 · Depends on: C5b, C6c, C7d, decision V2 (decisions file)_
 - Scope: Rewritten against Scot's storage-only decision: the old plan's generic link, uniqueness and notify host is NOT built. A storage type holds instances and state per session, with the surface chosen in V2 = a (minimal). Link checks, uniqueness, constraints, transitions and notify are already trees by this point (C2b, C4b, C4d, C5, C6). The storage type references nothing from the ontology or `Domain`. Adds the storage structure test (inside C8a1).
 - Files: New storage type under `Poly/Interpretation` or `Poly/DomainModeling/Runtime`; `DomainInstanceStore.cs` shrinks.
@@ -543,7 +596,8 @@ _Lane B · Size M · Review 2 · Depends on: C5b, C6c, C7d, decision V2 (decisio
 - SHIP if the storage structure test (inside C8a1) passes. NOT SHIP if storage contains any rule.
 - Hand-edit: Yes if it stays small. Probe: under ~200 lines, no domain terms.
 
-**C8a2. Dictionary-backed instance from a type definition**  
+**C8a2. Dictionary-backed instance from a type definition**
+
 _Lane B · Size M · Review 2 · Depends on: C8a1_
 - Scope: Interpreter-side factory: `TypeDefinitionNode` in, dictionary-backed instance out. Pieces exist (`TypeDefinitionNodeAnalyzer`, `DictionaryBackedValue`, `InvokeNamed`). No DEI change yet.
 - Files: `Poly/Interpretation/*`.
@@ -551,7 +605,8 @@ _Lane B · Size M · Review 2 · Depends on: C8a1_
 - SHIP if the factory runs a compiled Create tree for a sample domain. NOT SHIP if it takes `Domain`.
 - Hand-edit: Yes if small.
 
-**C8b. Move `Create` and the test helper over**  
+**C8b. Move `Create` and the test helper over**
+
 _Lane B · Size M · Review 2 · Depends on: C8a2, C8-pre_
 - Scope: Point the C8-pre helper and `Create` at the new factory.
 - Files: Test helper, `Runtime/*`.
@@ -559,7 +614,8 @@ _Lane B · Size M · Review 2 · Depends on: C8a2, C8-pre_
 - SHIP if suite counts are unchanged. NOT SHIP if DEI is still the factory for any test.
 - Hand-edit: Partly.
 
-**C8c1. MCP read tools move over**  
+**C8c1. MCP read tools move over**
+
 _Lane B · Size M · Review 2 · Depends on: C8b_
 - Scope: `get_instance`, `list_instances`, `evaluate_policy`, `oracle_expression`.
 - Files: `Poly.Mcp/Tools/*`.
@@ -567,7 +623,8 @@ _Lane B · Size M · Review 2 · Depends on: C8b_
 - SHIP if tool outputs are unchanged. NOT SHIP if any tool still builds a DEI.
 - Hand-edit: Yes.
 
-**C8c2. MCP mutating tools move over**  
+**C8c2. MCP mutating tools move over**
+
 _Lane B · Size M · Review 2 · Depends on: C8c1_
 - Scope: `create_instance`, `link_instances`, `unlink_instances`, `invoke_action`.
 - Files: `Poly.Mcp/Tools/*`.
@@ -575,7 +632,8 @@ _Lane B · Size M · Review 2 · Depends on: C8c1_
 - As C8c1.
 - Hand-edit: Yes.
 
-**C8d. Delete DEI**  
+**C8d. Delete DEI**
+
 _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: C8c2, T3_
 - Scope: Delete `DomainEntityInstance`, the `DomainInstanceStore` leftovers and everything else left. Mostly deletion. C2a's default internal store goes too (named removal).
 - Files: `Runtime/*`.
@@ -583,7 +641,8 @@ _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: C8c2, T3_
 - SHIP if greps are empty and suite counts match. NOT SHIP if any twin (default store, interim code) remains.
 - Hand-edit: Yes, deletion.
 
-**C10. End check: the interpreter runs exactly the artifact**  
+**C10. End check: the interpreter runs exactly the artifact**
+
 _Lane B · Size M · Review 2 · Depends on: C1c, C3b, C2b, E1, C8d_
 - Scope: The old grep (`Rewrite|Bind(This|ForSimulate)`) is name-based and misses a renamed rewrite. Define a mechanism: record the node identity or structural hash that `Interpreter.Compile` receives for every sample-domain tree and assert it equals the catalog artifact's tree. Keep the grep as a second check. Dependencies now match the text.
 - Files: One test plus a small test seam if needed.
@@ -599,7 +658,8 @@ _Lane B · Size M · Review 2 · Depends on: C1c, C3b, C2b, E1, C8d_
 
 **Slices (in recommended order).**
 
-**K1. Name the third input; fix the stage map**  
+**K1. Name the third input; fix the stage map**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: Docs only. Compile takes domain, analysis result, and the session's libraries. Edit stage map lines 66 ("exactly two things"), 92 (consumers never reach back; add a Domain-stage reader carve-out for generators and MCP read tools, decisions 5 and 6), 107 (compilation depends only on domain and analysis), and the headers that still say "no PR exists" and "Not a PR". Also lines 66-72, 123, 157-167 (stale "after PRs 82/83", "Suggested order after PRs 82/83") and line 169 (pointer to a raw-findings file kept outside the repo). Record the artifact id scheme (decision 1) and artifact analysis shape (decision 14). State the mutation rule (decision 11) in section 2.4. Note line 70 is not met until A6.
 - Files: `docs/domain-modeling/pipeline-stage-map.md` and the plan.
@@ -607,7 +667,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if the greps hold and no code changed. NOT SHIP if the doc still contradicts a settled decision.
 - Hand-edit: Yes.
 
-**K4. Stage-scoped policies reach the printed output**  
+**K4. Stage-scoped policies reach the printed output**
+
 _Lane A · Size M · Review 2 · Depends on: A3a_
 - Scope: K4 verifies decision 8 against the code. DSL-authored action `require` IS printed (`DomainToCSharpExporter.Actions.cs:238-257`; a reviewer's probe printed `if (!this.Funded()) return DomainResult.Failure("'Close' blocked by policy 'Funded'.")`). The real gap: the exporter never reads `stage.Policies`, while the simulator enforces them on every stage action (`DomainEntityInstance.cs:559`). Stage policies are API-only (no DSL syntax and no DSL printing). Also check an action-scoped policy that is not an entity policy: the guard calls `this.<name>()`, which would not exist. Failing-first test for each, then compile them into the output and delete `CompletePolicyBodies` if nothing reads it. If nothing is unprinted, the slice is closed with no change.
 - Files: `Lowering/DomainToCSharpExporter.Actions.cs`, `Analysis/RuntimeAnalysisCache.cs`.
@@ -615,7 +676,8 @@ _Lane A · Size M · Review 2 · Depends on: A3a_
 - SHIP if the stage-policy row is red on master and green after. NOT SHIP if the PR claims action `require` was unprinted.
 - Hand-edit: Yes.
 
-**K2. Session tables passed in**  
+**K2. Session tables passed in**
+
 _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: PRs 82 and 83 merged, C0_
 - Scope: `LoweringContext` already has optional meaning and forms. Make them required, pass them from the session, delete the lookups through the Domain-keyed cache (about 12 sites). Many lowering files and conflict-prone, so nothing else is open.
 - Files: Lowering passes, exporter, type-map lookups.
@@ -623,7 +685,8 @@ _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: PRs 82 and 83 mer
 - SHIP if golden is identical. NOT SHIP if any lookup still goes through the cache.
 - Hand-edit: Partly.
 
-**K3c. One helper for building a lowering context in tests**  
+**K3c. One helper for building a lowering context in tests**
+
 _Lane B · Size S · Review 1 · Depends on: K2_
 - Scope: `git grep "new LoweringContext("` finds 61 construction sites, most in tests, plus the convenience constructors at `DomainExpressionLoweringPass.cs:53` and `EffectLoweringPass.cs:48`. One test helper that always supplies analysis.
 - Files: `Poly.Tests/TestHelpers/*`, test files.
@@ -631,7 +694,8 @@ _Lane B · Size S · Review 1 · Depends on: K2_
 - SHIP if suite unchanged. NOT SHIP if the helper hides a null.
 - Hand-edit: Yes.
 
-**K3a. Delete the re-scan fallback in Actions.cs**  
+**K3a. Delete the re-scan fallback in Actions.cs**
+
 _Lane B · Size S · Review 1 · Depends on: K3c, K0, C2a_
 - Scope: The `analysis is not null` branches at `DomainToCSharpExporter.Actions.cs:484, 519, 529, 557`. In total there are 13 such branches (not the 3 the plan named).
 - Files: `Lowering/DomainToCSharpExporter.Actions.cs`, `LoweringContext.cs`.
@@ -639,7 +703,8 @@ _Lane B · Size S · Review 1 · Depends on: K3c, K0, C2a_
 - SHIP if the grep is empty and the suite builds. NOT SHIP if a null check was merely renamed.
 - Hand-edit: Yes.
 
-**K3b. Delete the re-scan fallback in EffectLoweringPass.cs**  
+**K3b. Delete the re-scan fallback in EffectLoweringPass.cs**
+
 _Lane B · Size M · Review 2 · Depends on: K3a_
 - Scope: The remaining 9 branches (`EffectLoweringPass.cs:97, 127, 266, 541, 573, 770, 1038, 1215, 1235`). Make analysis required in `LoweringContext`.
 - Files: `Lowering/EffectLoweringPass.cs`, `LoweringContext.cs`.
@@ -647,7 +712,8 @@ _Lane B · Size M · Review 2 · Depends on: K3a_
 - As K3a.
 - Hand-edit: Yes.
 
-**K5. Remove side tables and the cache**  
+**K5. Remove side tables and the cache**
+
 _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: C8d, K2, K3b, K4_
 - Scope: Delete the five body tables, `GetOrLower`, `GetOrAnalyze`, the fallback session and `RuntimeAnalysisCache`. 12 test files reference the cache and move to the catalog. G1's gate must already live on the catalog path; the refuse-on-Errors tests named in G1 must still pass.
 - Files: `Analysis/RuntimeAnalysisCache.cs`, 12 test files.
@@ -655,7 +721,8 @@ _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: C8d, K2, K3b, K4_
 - SHIP if the grep is empty and G1's refuse tests pass. NOT SHIP if the simulator gate was lost.
 - Hand-edit: Partly.
 
-**K6. Replace Emit's re-analysis**  
+**K6. Replace Emit's re-analysis**
+
 _Lane A · Size S · Review 1 · Depends on: H2_
 - Scope: Delete `TryAnalyzeForEmit` (it returns null on failure and silently falls back to `new CSharpGenerator()`, `DomainSession.cs:169-174`; the method is at `:203-208`); hand the printer the artifact analysis from H2.
 - Files: `Compile/DomainSession.cs`.
@@ -669,7 +736,8 @@ The VM analyzer already uses the same `Diagnostic` types as the domain analyzer 
 
 **Slices (in recommended order).**
 
-**H1. Report-only VM analyzer run**  
+**H1. Report-only VM analyzer run**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: Wrap compiled trees in a compilation unit, run the VM analyzer on the sample domains, print counts (no failure). Also record how many sample domains return null from `TryAnalyzeForEmit` or carry any Error today, since `Emit` is fail-open until H2/K6. The PR pastes the counts table; H2 cites it.
 - Files: One new test; optionally one small helper in `Compile/`.
@@ -677,7 +745,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if the table is in the PR. NOT SHIP if it asserts nothing and records nothing.
 - Hand-edit: Yes.
 
-**H2. Emit refuses VM-analysis Errors and registers the report**  
+**H2. Emit refuses VM-analysis Errors and registers the report**
+
 _Lane A · Size M · Review 2 · Depends on: A3a, H1_
 - Scope: The simulator half already exists: `Interpreter.Compile` throws on VM analysis errors (`Interpreter.cs:76-81`, used via `CompileChecked`). So H2 is Emit refusing plus registering the report as an artifact, analyzed over the whole module (cross-entity types).
 - Files: `Compile/DomainSession.cs`.
@@ -685,7 +754,8 @@ _Lane A · Size M · Review 2 · Depends on: A3a, H1_
 - SHIP if the refuse test passes and H1's count of failing sample domains is 0 or listed. NOT SHIP if H1's numbers were ignored.
 - Hand-edit: Yes.
 
-**H3. Dangling and wrong-type references as diagnostics**  
+**H3. Dangling and wrong-type references as diagnostics**
+
 _Lane A · Size S · Review 1 · Depends on: A2b, A5b_
 - Scope: Report catalog dangling and wrong-type results as diagnostics.
 - Files: `Compile/*`.
@@ -693,7 +763,8 @@ _Lane A · Size S · Review 1 · Depends on: A2b, A5b_
 - SHIP if both are reported with element paths. NOT SHIP if one kind is missing.
 - Hand-edit: Yes.
 
-**H4. Every concept has its tree (ratchet)**  
+**H4. Every concept has its tree (ratchet)**
+
 _Lane A · Size M · Review 2 · Depends on: A3a_
 - Scope: For each sample domain list entities, actions, policies, subscriptions, stages with effects and constraints, and assert each has its tree in the catalog (by name, inside the entity trees until A6). The known-gaps list is a checked-in file; each entry names the slice that closes it, or is a permanent entry with owner Scot (for example instance delete, V9); the test fails when a listed gap now has its tree (entry must be removed) and when an unlisted concept lacks one. Entries today include owned and aggregate rules (V9). Also fails if any tree holds a `Constant` of an authoring `DomainExpression` (Q1a's guarantee).
 - Files: One test plus a `known-gaps` file.
@@ -701,7 +772,8 @@ _Lane A · Size M · Review 2 · Depends on: A3a_
 - SHIP if adding or fixing a gap without editing the file fails the build. NOT SHIP if the list can drift.
 - Hand-edit: Yes.
 
-**H5. Dead code and read-never-assigned**  
+**H5. Dead code and read-never-assigned**
+
 _Lane A · Size M · Review 1 · Depends on: H2_
 - Scope: Turn definite-assignment results into diagnostics; decide which unreachable cases are Errors versus Warnings.
 - Files: VM analyzer wiring.
@@ -715,7 +787,8 @@ _Lane A · Size M · Review 1 · Depends on: H2_
 
 **Slices (in recommended order).**
 
-**F1. The function record**  
+**F1. The function record**
+
 _Lane A · Size S · Review 1 · Depends on: decision 13 (still open)_
 - Scope: `DomainFunction(Name, Parameters, ReturnType, Body)` on `Domain`, with printing. Body form per decision 13 (still open; recommended: single expression).
 - Files: Ontology, `Domain`.
@@ -723,7 +796,8 @@ _Lane A · Size S · Review 1 · Depends on: decision 13 (still open)_
 - SHIP if the round trip is lossless. NOT SHIP if the body form was chosen without decision 13.
 - Hand-edit: Yes.
 
-**F2. Parser**  
+**F2. Parser**
+
 _Lane A · Size S · Review 1 · Depends on: F1_
 - Scope: `function Name(p: Type): Type = expr`. Remove `"function"` from the unsupported list (`PolyDslParser.cs:1524-1525`, verified).
 - Files: `Language/PolyDslParser.cs`, `DslGrammar.cs`, `DomainDslPrinter`.
@@ -731,7 +805,8 @@ _Lane A · Size S · Review 1 · Depends on: F1_
 - SHIP if the round trip passes. NOT SHIP if 'function' is still on the unsupported list.
 - Hand-edit: Yes.
 
-**F3. Analysis of calls**  
+**F3. Analysis of calls**
+
 _Lane A · Size M · Review 2 · Depends on: F2_
 - Scope: Call expression; checks: argument count and types, unique names, return type matches body, no recursion in v1. A bad function is an Error and blocks Compile.
 - Files: `Analysis/ExpressionTypeAnalyzer.cs`, `StructuralDomainAnalyzer.cs`.
@@ -739,7 +814,8 @@ _Lane A · Size M · Review 2 · Depends on: F2_
 - SHIP if each check has a failing case. NOT SHIP if recursion is accepted.
 - Hand-edit: Yes.
 
-**F4. Compile functions**  
+**F4. Compile functions**
+
 _Lane A · Size M · Review 2 · Depends on: F3, A3a, T2_
 - Scope: Each function becomes a static method on one `{Domain}Functions` tree artifact; a call lowers to an invoke; callers' trees reference the function artifact by typed id. The PR adds the simulate-equals-print scenario for a function call using T2, with the simulate side marked as F5's work, before F4 merges.
 - Files: Lowering, catalog.
@@ -747,7 +823,8 @@ _Lane A · Size M · Review 2 · Depends on: F3, A3a, T2_
 - SHIP if the print side of the parity scenario passes and the reference resolves. NOT SHIP if the scenario is missing.
 - Hand-edit: Partly.
 
-**F5. Simulate and print agree on function calls**  
+**F5. Simulate and print agree on function calls**
+
 _Lane B · Size S · Review 1 · Depends on: F4, C7-0_
 - Scope: The simulator finds the function through the C7-0 index (not `TryGetModuleMethod` or DEI).
 - Files: Runtime lookup.
@@ -755,7 +832,8 @@ _Lane B · Size S · Review 1 · Depends on: F4, C7-0_
 - SHIP if the parity scenario passes. NOT SHIP if DEI gained a lookup.
 - Hand-edit: Yes.
 
-**F6. Docs and MCP guide**  
+**F6. Docs and MCP guide**
+
 _Lane A · Size S · Review 1 · Depends on: F4_
 - Scope: Update the DSL guide, which says `function` is unsupported.
 - Files: `Poly.Mcp/Docs/poly-dsl-guide.md`.
@@ -769,7 +847,8 @@ N1 (`Information` to `Info`), N3 (measure cascading errors) and N2 (libraries re
 
 **Slices (in recommended order).**
 
-**N3. Measure cascading errors**  
+**N3. Measure cascading errors**
+
 _Lane A · Size S · Review 1 · Depends on: none_
 - Scope: A script (not a product change) that breaks each sample domain one way at a time and counts diagnostics per root cause. The PR pastes the table; decision 18 cites it.
 - Files: `scripts/` or test output.
@@ -777,7 +856,8 @@ _Lane A · Size S · Review 1 · Depends on: none_
 - SHIP if the table is present. NOT SHIP if there are no numbers.
 - Hand-edit: n/a (measurement).
 
-**N1. `Information` to `Info`**  
+**N1. `Information` to `Info`**
+
 _Lane A · Size S · Review 1 · Depends on: decision 16 (still open)_
 - Scope: Counts disagree (one review: 14 lines in 6 files; another: 12 hits): re-count with `git grep` at slice start and put the command in the PR. Check whether MCP prints the severity as text (an outward change).
 - Files: `Diagnostic.cs`, `AnalysisDiagnosticConfiguration.cs`, `ControlFlowAnalysisPass.cs`, `SideEffectAnalysisPass.cs`, `DomainQueries.cs`, one comment in `DomainTools.cs`.
@@ -785,7 +865,8 @@ _Lane A · Size S · Review 1 · Depends on: decision 16 (still open)_
 - SHIP if `git grep` for the renamed identifiers is empty. NOT SHIP if MCP text changed unannounced.
 - Hand-edit: Yes, IDE rename.
 
-**R1. Rename stage-level names**  
+**R1. Rename stage-level names**
+
 _Lane B · Size S · Review 1 · **RUNS ALONE** · Depends on: K5_
 - Scope: `DomainSession.Lower` to `Compile`, `GetOrLower` if still alive, the `"Lower"` producer string, docs (`AGENTS.md`, `docs/CORE.md`, plan files).
 - Files: Many; scripted.
@@ -793,7 +874,8 @@ _Lane B · Size S · Review 1 · **RUNS ALONE** · Depends on: K5_
 - SHIP if the diff is renames only. NOT SHIP if behavior changed.
 - Hand-edit: No: mechanical; scripted command in the PR so it can be re-run.
 
-**R2. Rename types, namespace and folder**  
+**R2. Rename types, namespace and folder**
+
 _Lane B · Size M · Review 1 · **RUNS ALONE** · Depends on: R1, decision 20 (still open)_
 - Scope: `Poly.DomainModeling.Lowering` to a Compile namespace per decision 20 (still open). Counts disagree between docs (stage map: 27 files/~225 hits and 80/~490; plan: 32/~294 and 57/~414; a review: 36/350 and 57/466): the PR puts the `git grep` command and counts at the top.
 - Files: Many; scripted.
@@ -814,8 +896,8 @@ Why this order: tests and measurements come first so every later claim is checka
 - Lane B: C4a first (live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
 
 **Wave 2: consumers move onto the catalog; Compile gaps close**
-- Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (pending V10; Q2 is expected yes), P1 (V8 = a)
-- Lane B: E1, C2a, C2b, C4b, C4c, C4d (V5 = a), Q1a, Q1b (pending V10), C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a to C7d
+- Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (V10 = revised scope), P1 (V8 = a)
+- Lane B: E1, C2a, C2b, C4b, C4c, C4d (V5 = a), Q1a, Q1b (V10 = revised scope), C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a to C7d
 
 **Wave 3: retire DEI and the cache (hold point HP5: every C slice merged)**
 - Lane A: K6, F1 to F4, F6, N2 (F1 after decision 13, N2 after decision 19)
@@ -852,7 +934,7 @@ Hold points exist so the coordinating agent does not have to guess. Each release
 
 | Point | Event | Releases |
 |---|---|---|
-| HP0 | You sign off PR 84 (V1 to V11 are answered; V10 is reopened) | Wave 0: T0, A1, A2a, A2b, K1, H1, N3, T2. N1 also needs decision 16. |
+| HP0 | You sign off PR 84 (V1 to V11 are answered) | Wave 0: T0, A1, A2a, A2b, K1, H1, N3, T2. N1 also needs decision 16. |
 | HP1 | reached (82 and 83 merged); still needs Scot's word to release | C4a, C0, T1, K0, B1, C1a (then C1b, C1c after V7), A3a and the rest of wave 1 |
 | HP2 | T1 and G1 merged, and A3a merged | C7-0, K4 (needs A3a); G2, G3 follow G1 |
 | HP3 | C2b merged | C4b, C4c (also needs E1), C6b |
@@ -989,5 +1071,4 @@ Notes: v2 narrows the work on decision 8 to what is actually unprinted (K4). v2 
 
 **Still open from v1, not needed until the lane reaches them (ask then):** 13 function body form (before F1), 16 `Information` to `Info` (before N1), 18 cascading errors (after N3 results), 19 contributor registration (before N2), 20 rename scope (before R2).
 
-V1 to V11 are in `pipeline-convergence-plan.decisions.md`. V1–V9 and V11 answered as recommended 2026-10-03; V10 reopened.
-
+V1 to V11 are in `pipeline-convergence-plan.decisions.md`, all answered 2026-10-03 (V10 as a revised scope).

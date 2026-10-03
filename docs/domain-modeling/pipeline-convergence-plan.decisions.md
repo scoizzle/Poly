@@ -1,8 +1,8 @@
-# Convergence plan v2: decisions V1 to V11 (V10 reopened)
+# Convergence plan v2: decisions V1 to V11 (answered)
 
 ## Scot's answers, 2026-10-03
 
-V1–V9 and V11 answered as recommended. V10 reopened. Standing approval in V11 does not release any wave (the release rule).
+V1 to V11 are all answered. V1–V9 and V11 as recommended; V10 as the revised scope below (an earlier answer rested on a false premise and was replaced). Standing approval in V11 does not release any wave (the release rule).
 
 Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Five older ones (13, 16, 18, 19, 20) are still open; each is asked only when its lane reaches it.
 
@@ -178,15 +178,15 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 ## V10. Put the three 09-27 defects into this plan?
 
-**REOPENED to Scot.** The first answer (yes, all three) rested on a premise that is false on master: defect (1) quantifier rules are already lowered into tree nodes (PR 79) and the AnyRelated/AllRelated/CountRelated host methods no longer exist; defect (2) the printer already fails the whole export for a policy it cannot lower; the throwing method exists only in the stale checked-in demo/Poly.RestApi/Patron.cs. Defect (3) (the harness cannot open a domain that says `uses sqlite` or `uses http`; Q2) still stands. Proposed revised answer: Q2 yes; Q1a only as parity-test rows; Q1b only as 'regenerate the demo and test it equals fresh output'. Needs Scot's word. Until then Q1a, Q1b and Q2 stay in the plan marked pending V10 and are not started.
+**Answer (Scot, 2026-10-03): settled, revised scope.** Q2 (MCP harness catalog for domains that use `uses sqlite` or `uses http`) stays as a slice. Q1a shrinks to a simulate-equals-print parity test for any/all/none/filtered count. Q1b is: regenerate `demo/Poly.RestApi` (the stale `Patron.cs`) and add a test that the checked-in demo equals fresh output. Reason for the revision: an earlier "yes" described defects that master had already fixed (quantifiers lowered in PR 79; the printer fails the export rather than printing a stub).
 
-**What it is.** Three items from the 09-27 reviews had no slice: (1) collection rules (any/all/none/filtered count) — already lowered into foreach tree nodes in PR 79 (`DomainExpressionLoweringPass.LowerFilteredQuantifier`; `AnyRelated`/`AllRelated`/`CountRelated` are gone); residue is parity-test rows. (2) printed policies — the exporter already fails the whole export for a policy it cannot lower (no per-policy stub); the throwing `HasOverdueLoans` exists only in the stale checked-in `demo/Poly.RestApi/Patron.cs`. (3) the MCP harness cannot open a domain that says `uses sqlite` or `uses http`. They remain named in this plan, with (1) and (2) reduced as above.
+**What it is.** Three items from the 09-27 reviews had no slice: (1) collection rules (any/all/none/filtered count) — already lowered into foreach tree nodes in PR 79 (`DomainExpressionLoweringPass.LowerFilteredQuantifier`; `AnyRelated`/`AllRelated`/`CountRelated` are gone); residue is parity-test rows. (2) printed policies — the exporter already fails the whole export for a policy it cannot lower (no per-policy stub); the throwing `HasOverdueLoans` exists only in the stale checked-in `demo/Poly.RestApi/Patron.cs`. (3) the MCP harness cannot open a domain that says `uses sqlite` or `uses http`. They stay named in this plan, with (1) and (2) reduced as above.
 
-**Options.** (a) **Yes, revised scope.** Q2 yes; Q1a only as parity-test rows for any/all/none/filtered count; Q1b only as regenerate `demo/Poly.RestApi` and test it equals fresh output. Wave 2, pending this answer. (b) **No**, keep them in a separate plan. (c) **Q1 now, Q2 later.**
+**Options.** (a) **Yes, revised scope.** Q2 yes; Q1a only as parity-test rows for any/all/none/filtered count; Q1b only as regenerate `demo/Poly.RestApi` and test it equals fresh output. Wave 2. (b) **No**, keep them in a separate plan. (c) **Q1 now, Q2 later.**
 
-**Recommendation: (a)** with the revised scope. Q2 is what lets the harness hold the domain the compiler ships. Q1a and Q1b as originally written rested on a false premise; the revised scope is parity rows and demo regeneration.
+**Recommendation: (a)** with the revised scope; this is the option taken. Q2 is what lets the harness hold the domain the compiler ships. Q1a and Q1b as originally written rested on a false premise; the revised scope is parity rows and demo regeneration.
 
-**Blocks.** Q1a, Q1b, Q2 until Scot answers. C5a no longer depends on Q1a (lowering is done).
+**Blocks.** Q1a, Q1b, Q2 (now unblocked, still subject to the release rule). C5a no longer depends on Q1a (lowering is done).
 
 ---
 

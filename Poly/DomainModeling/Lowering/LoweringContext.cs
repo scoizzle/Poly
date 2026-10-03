@@ -76,6 +76,16 @@ namespace Poly.DomainModeling.Lowering;
 /// Shared generator of unique local names for one method. Passes built from
 /// this context via <c>with</c> keep the same instance.
 /// </param>
+/// <param name="SourceEntityName">
+/// Entity used to resolve relationship targets and enum literals. At the root
+/// this is the source entity. For a path-prefix hop or a quantifier body, only
+/// this name and <see cref="EnumPropertyNames"/> switch to the hop or quantifier
+/// target. <see cref="PropertyTypeResolver"/>, <see cref="NavigationNameResolver"/>
+/// and <see cref="IsCollectionNavigation"/> stay scoped to the source entity, and
+/// binder roots (parameter-backed path-prefix roots) keep the source name and
+/// enum map. Relationship targets resolve on this entity, then on each nested
+/// target. A missing name yields no target (no domain-wide scan).
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     IReadOnlyDictionary<string, Node>? Parameters = null,
@@ -93,5 +103,6 @@ public sealed record LoweringContext(
     bool EmitInstanceNotify = true,
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,
-    LocalNames? Names = null
+    LocalNames? Names = null,
+    string? SourceEntityName = null
 );

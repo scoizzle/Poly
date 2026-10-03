@@ -663,7 +663,8 @@ public sealed partial record DomainEntityInstance {
                 result[binding.PropertyName] = fromParam;
                 continue;
             }
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain));
+            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(
+                new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name));
             var lowered = loweringPass.Lower(binding.Expression, subjectParam);
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
             using var exec = Interpreter.Execute(compiled,

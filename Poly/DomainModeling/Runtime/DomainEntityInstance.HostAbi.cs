@@ -494,7 +494,8 @@ public sealed partial record DomainEntityInstance {
     /// Lowers and executes <paramref name="expr"/> against the peer instance bag.
     /// </summary>
     private static object? EvaluateExprOnPeer(DomainExpression expr, DomainEntityInstance peer) {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: peer.Domain));
+        var pass = new DomainExpressionLoweringPass(new LoweringContext(
+            new Parameter("entity"), Domain: peer.Domain, SourceEntityName: peer.Entity.Name));
         var lowered = pass.Lower(expr,
             new Parameter("entity", new TypeReference(peer.Entity.Name)));
         var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
@@ -643,7 +644,8 @@ public sealed partial record DomainEntityInstance {
                 values[binding.PropertyName] = fromParam;
                 continue;
             }
-            var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain)).Lower(
+            var lowered = new DomainExpressionLoweringPass(new LoweringContext(
+                new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name)).Lower(
                 binding.Expression,
                 new Parameter("entity", new TypeReference(Entity.Name)));
             var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
@@ -705,7 +707,8 @@ public sealed partial record DomainEntityInstance {
                 value = fromParam;
             }
             else {
-                var lowered = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity"), Domain: Domain)).Lower(
+                var lowered = new DomainExpressionLoweringPass(new LoweringContext(
+                    new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name)).Lower(
                     binding.Expression,
                     new Parameter("entity", new TypeReference(Entity.Name)));
                 var compiled = Interpreter.Compile(lowered, initializerTypeProvider);

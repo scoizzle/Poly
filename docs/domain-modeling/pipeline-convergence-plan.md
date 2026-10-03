@@ -62,7 +62,7 @@ Open PRs: PR 82 (`d7c1da48`) and PR 83 (`c2265740`) are unmerged. P3-D (retire `
 
 ### D3. Compile does not stop on Errors
 
-**Wrong today.** `DomainSession.Lower`, `RuntimeAnalysisCache.GetOrLower` and `DomainProgramProjection.ToSyntax` never look at `HasErrors`. Only evolution, `DslCompiler` and `apply_dsl` stop upstream. MCP `export_domain_to_csharp` only checks that an analysis exists, and a failed mutation through `McpSessionStore.Evolve` (Poly.Mcp/Sessions/McpSessionStore.cs, the failed-mutation branch that sets LatestAnalysis; used by the tools that evolve through the shared Evolve helper in DomainTools.cs) stores the error analysis next to the old domain, so export can pair the two; a failed `apply_dsl` (`ApplyDsl` in Poly.Mcp/Tools/DomainTools.cs) returns before it calls `McpSessionStore.Replace` and stores nothing. Simulation (`DomainEntityInstance`) lowers whatever it is given.
+**Wrong today.** `DomainSession.Lower`, `RuntimeAnalysisCache.GetOrLower` and `DomainProgramProjection.ToSyntax` never look at `HasErrors`. Only evolution, `DslCompiler` and `apply_dsl` stop upstream. MCP `export_domain_to_csharp` only checks that an analysis exists, and a failed mutation made through `McpSessionStore.Evolve` (used by the tools that edit through the shared `Evolve` helper in `DomainTools.cs`) stores the error analysis next to the old domain, so export can pair the two. A failed `apply_dsl` stores nothing: it returns before `McpSessionStore.Replace`. Simulation (`DomainEntityInstance`) lowers whatever it is given.
 
 **Target.** Lower refuses an analysis with Errors, with the first error in the message, in the same style the VM already uses (`InvalidOperationException`, as in `FailLoudOnAnalysisErrors`). The catalog stays empty when it refuses.
 

@@ -2,13 +2,13 @@
 
 ## Scot's answers, 2026-10-03
 
-V1–V9 and V11 answered as recommended. V10 reopened. Standing approval in V11 does not release any wave (principle 7).
+V1–V9 and V11 answered as recommended. V10 reopened. Standing approval in V11 does not release any wave (the release rule).
 
 Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Five older ones (13, 16, 18, 19, 20) are still open; each is asked only when its lane reaches it.
 
 Each entry says what it is in plain English, the options, the recommendation, what it blocked, and the answer.
 
-A note on numbering: your storage-only ruling is item 9 in PR 84's decision list ("what stays in the interpreter after DEI"). The chat has called it "decision 10" at times. I mean the same ruling in both places.
+A note on numbering: the storage-only ruling is item 9 in PR 84's decision list ("what stays in the interpreter after DEI"). The same ruling is meant in both places.
 
 Order: the first three unlocked the first waves of work. The rest wait until their slice is next.
 
@@ -18,7 +18,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** done (PRs 82 and 83 merged; HP1 reached).
 
-**What it is.** PR 82 and PR 83 had been approved to ship since Monday night. Ten slices depend on them directly (T1, B1, G1, K0, A3a, C0, C4a, C1a, C6a, K2) and most of the runtime and lowering work follows those, and Foreman said they merge cleanly in either order. They have now merged (squash, master `945a2164`).
+**What it is.** PR 82 and PR 83 had been approved to ship since Monday night. Ten slices depend on them directly (T1, B1, G1, K0, A3a, C0, C4a, C1a, C6a, K2) and most of the runtime and lowering work follows those, and they merge cleanly in either order. They have now merged (PR 82 squash `16a895dc`, PR 83 squash `945a2164`).
 
 **Options.** (a) Merge both now. (b) Hold them while v2 is reviewed.
 
@@ -26,15 +26,15 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Blocks.** HP1: C4a, C0, T1, K0, B1, C1a, A3a and everything after them.
 
-**If you do not answer.** Answered. HP1 is reached; later waves still start only on Scot's word (principle 7).
+**If you do not answer.** Answered. HP1 is reached; later waves still start only on Scot's word (the release rule).
 
 ---
 
-## V2. What does the interpreter's session storage offer? (the Razor R2 conflict)
+## V2. What does the interpreter's session storage offer? (the R2 conflict)
 
 **Answer:** (a) minimal storage (save, get by id, list by type, remove; lookup by property value only if a test domain makes the scan too slow).
 
-**The conflict.** v1 recommended a "generic piece inside the interpreter" with a link table, a uniqueness registry and notify callbacks (Decision 9, option a; slice C8a). Your ruling says the opposite: the interpreter keeps only session-aware storage, and uniqueness, links, constraints, transitions and notify must be trees. Razor flagged it as a contradiction, and he is right: PR 84's decision text already says your ruling wins, but section 1 and slice C8a still described the generic host. v2 removes that host. C8a is rewritten as C8a1 (storage only) and C8a2 (build an instance from a type definition). A structural test fails the build if storage ever contains a rule.
+**The conflict.** v1 recommended a "generic piece inside the interpreter" with a link table, a uniqueness registry and notify callbacks (Decision 9, option a; slice C8a). Your ruling says the opposite: the interpreter keeps only session-aware storage, and uniqueness, links, constraints, transitions and notify must be trees. A first review flagged it as a contradiction, and that reading is right: PR 84's decision text already says your ruling wins, but section 1 and slice C8a still described the generic host. v2 removes that host. C8a is rewritten as C8a1 (storage only) and C8a2 (build an instance from a type definition). A structural test fails the build if storage ever contains a rule.
 
 **What is left to decide.** Trees need to ask storage things like "is there another Reservation with this email?" (uniqueness) and "which instances watch this one?" (notify). What may storage answer?
 
@@ -55,7 +55,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** (a) declare core types in fixtures.
 
-**What it is.** With the "Compile refuses Errors" gate, 110 of 2895 existing tests fail (I re-ran it). 98 of those fail because a Domain built in code, in tests or in the MCP `oracle_expression` tool, never declares `Text`, `Number` and the other core types, so Analyze reports "unknown type". The DSL path adds them automatically; the code path does not. Today the simulator quietly runs on that error. After the gate it cannot.
+**What it is.** With the "Compile refuses Errors" gate, 110 of 2895 existing tests fail (measured on `9db8868f`; the suite was re-run). 98 of those fail because a Domain built in code, in tests or in the MCP `oracle_expression` tool, never declares `Text`, `Number` and the other core types, so Analyze reports "unknown type". The DSL path adds them automatically; the code path does not. Today the simulator quietly runs on that error. After the gate it cannot.
 
 **Options.**
 - (a) **Declare them.** A shared test fixture (and the oracle tool) declares the core types. The gate stays strict. Anyone outside this repo who builds a `Domain` in code must declare them too.
@@ -74,7 +74,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** (a) yes, entry/exit/when blocks count as named actions, but docs recommend authoring them as named actions (invoke an action; see M1).
 
-**What it is.** Your rule: only named actions mutate their own entity's state; create, link and unlink are the one exception. Today an `entry { assign Title to "x" }` block, an exit block, or a `when` handler can assign the entity's own state and Analyze accepts it (Razor's probe). Cross-entity assignment is already a parse error. The new Analyze rule (M1) needs to know which side of the line these fall on.
+**What it is.** Your rule: only named actions mutate their own entity's state; create, link and unlink are the one exception. Today an `entry { assign Title to "x" }` block, an exit block, or a `when` handler can assign the entity's own state and Analyze accepts it (a reviewer's probe). Cross-entity assignment is already a parse error. The new Analyze rule (M1) needs to know which side of the line these fall on.
 
 **Options.**
 - (a) **They count.** They are named behavior declared on the entity, so assigning its own state is allowed. The new Error fires only when a mutation targets another entity's state.
@@ -111,13 +111,13 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** (a) a rename is a new id; stands unless Scot overrides.
 
-**What it is.** Ids are written name path plus type (settled). The Ontologist points out that evolution treats a rename as delete plus create, so anything that referenced the old id would dangle. Inside one compile this cannot happen, because the catalog is rebuilt whole and references are recomputed. It only matters for ids someone stores outside the compile.
+**What it is.** Ids are written name path plus type (settled). A review points out that evolution treats a rename as delete plus create, so anything that referenced the old id would dangle. Inside one compile this cannot happen, because the catalog is rebuilt whole and references are recomputed. It only matters for ids someone stores outside the compile.
 
 **Options.** (a) **A rename is a new id.** Ids are derived by every compile; nothing stores them outside. (b) **A rename keeps the old id** through a recorded rename map in evolution.
 
 **Recommendation: (a).** It is the direct consequence of "id = written name path". (b) adds a second identity system you would have to maintain by hand.
 
-**Related, no decision needed.** Same-named actions in different stages are one method that dispatches on the current stage, so they are one artifact and the stage need not be in the id. I checked that in the exporter.
+**Related, no decision needed.** Same-named actions in different stages are one method that dispatches on the current stage, so they are one artifact and the stage need not be in the id. That was checked in the exporter.
 
 **Blocks.** Nothing hard. It fixes the wording of A1 and one dogfood probe.
 
@@ -161,7 +161,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer:** (a) analysis only for now, permanent entry on the H4 known-gaps list.
 
-**What it is.** The model has owned/aggregate rules, but only the analyzer uses them; nothing enforces them at run time. Separately, I checked: **there is no delete operation for instances anywhere in the product code or MCP tools.** The Ontologist asked what delete must do for owned children and for things that still point at the instance. That question has no code to apply to yet.
+**What it is.** The model has owned/aggregate rules, but only the analyzer uses them; nothing enforces them at run time. Separately, it was checked: **there is no delete operation for instances anywhere in the product code or MCP tools.** A review asked what delete must do for owned children and for things that still point at the instance. That question has no code to apply to yet.
 
 **Options.**
 - (a) **Analysis only for now.** Record it as a permanent entry on the H4 known-gaps list with an owner ("when a delete operation is designed"). Unlink still gets its minimum-link tree (C6c).
@@ -192,12 +192,12 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 ## V11. Merge and review cadence for about 80 slices
 
-**Answer:** (a) standing merge on SHIP + gate YES for the pure-deletion, rename, docs, test-only and unwired-new-code slices listed in V11; hand-merge the rest. Standing approval does not release any wave (principle 7).
+**Answer:** (a) standing merge on SHIP + gate YES for the pure-deletion, rename, docs, test-only and unwired-new-code slices listed in V11; hand-merge the rest. Standing approval does not release any wave (the release rule).
 
-**What it is.** The plan has 82 slices, so about 82 merges by you, and Final Boss is the only verifier for both lanes now that Warden and Sentinel are gone. PR 82 took six Final Boss rounds. 42 slices get one review pass and 40 get two (Razor's exhaustive first pass, then Final Boss).
+**What it is.** The plan has 82 slices, so about 82 merges by you, and the verifying reviewer is the only verifier for both lanes. PR 82 took six verification-review rounds. 42 slices get one review pass and 40 get two (the exhaustive first review, then a verification review). N1 can change MCP-visible severity text and K6 changes Emit behavior; they are on the list as approved; Scot can take them off.
 
 **Options.**
-- (a) **Standing approval to merge** when Final Boss says SHIP and the gate is YES, for the pure-deletion, rename, docs, test-only and unwired-new-code slices: T0, A1, A2a, A2b, K1, H1, N3, N1, C0, C3b, C7b, C7c, C7d, K3a, K3c, K6, F6, R1, R2. You hand-merge the rest, in particular anything that changes printed output or MCP behavior (C4b, C6a and others) and the risky ones (A3a, A5a, A5b, C1a to C1c, C3a, C5a, C5b, Q1a, C8 series, K2, K5).
+- (a) **Standing approval to merge** when the verifying reviewer says SHIP and the gate is YES, for the pure-deletion, rename, docs, test-only and unwired-new-code slices: T0, A1, A2a, A2b, K1, H1, N3, N1, C0, C3b, C7b, C7c, C7d, K3a, K3c, K6, F6, R1, R2. You hand-merge the rest, in particular anything that changes printed output or MCP behavior (C4b, C6a and others) and the risky ones (A3a, A5a, A5b, C1a to C1c, C3a, C5a, C5b, Q1a, C8 series, K2, K5).
 - (b) Hand-merge everything.
 - (c) Standing approval for every SHIP.
 
@@ -205,15 +205,15 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Blocks.** Nothing. It affects pace.
 
-**If you do not answer.** Answered. Standing merge as (a) for the listed slices; you hand-merge the rest. Standing approval does not release any wave (principle 7).
+**If you do not answer.** Answered. Standing merge as (a) for the listed slices; you hand-merge the rest. Standing approval does not release any wave (the release rule).
 
 ---
 
 ## Parked, not asking now
 
 - Decision 13 (function body form) before F1. Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 19 (registering contributors) before N2. Decision 20 (rename scope) before R2.
-- Pulling "tests and spec exports" (A7) forward for sellability: I recommend not now, because nothing consumes them yet. The Ontologist's sellable-proof scenario (author, compile, run on sqlite, replay over `demo.http`) needs no code and runs after wave 1.
+- Pulling "tests and spec exports" (A7) forward for sellability: recommended not now, because nothing consumes them yet. The sellable-proof scenario (author, compile, run on sqlite, replay over `demo.http`) needs no code and runs after wave 1.
 
-## What I did not need to ask you
+## What did not need to be asked
 
-These look like decisions but were answered by your earlier rulings or by the code: gating Errors everywhere (decision 7); no auto-link (decision 10); constraints on set, transitions as trees, unknown names as Analyze errors (decisions 11 and 12); policies compile into the printed output (decision 8, now narrowed to stage-scoped policies); same-named stage actions share one id (the exporter makes them one method).
+These look like decisions but were answered by earlier rulings or by the code: gating Errors everywhere (decision 7); no auto-link (decision 10); constraints on set, transitions as trees, unknown names as Analyze errors (decisions 11 and 12); action- and stage-scoped policies compile into the printed output (decision 8); same-named stage actions share one id (the exporter makes them one method).

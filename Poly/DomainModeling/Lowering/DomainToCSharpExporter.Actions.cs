@@ -463,13 +463,14 @@ public sealed partial class DomainToCSharpExporter {
         INodeMetadataProvider? analysis = null) {
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
+            new ThisReference(),
             Analysis: analysis,
             Domain: domain,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
-            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity));
+            PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+            SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.LowerExpression(expr, new ThisReference());
         var body = lowered.Before(new Return(lowered.Value));

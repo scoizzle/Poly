@@ -150,6 +150,19 @@ public sealed partial record DomainEntityInstance {
             "Notify", "EnsureUnique",
             "ExistsRelated", "GetRelatedOne", "LinkRelated"
         };
+        // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
+        // dispatches those names to Notify(stage, previousStage).
+        foreach (var stage in entity.Stages) {
+            var notifySubscribers = $"Notify{stage.Name}Subscribers";
+            if (!methodNames.Add(notifySubscribers))
+                continue;
+            methods.Add(new MethodDefinitionNode(
+                notifySubscribers,
+                new TypeReference("void"),
+                Parameters: [new Parameter("previousStage",
+                    new PrimitiveTypeReference(Prim.String))],
+                Body: new Block([])));
+        }
         // Runtime factories for mixed if+create. Dictionary slot plus pair
         // overloads so Invoke types as DomainResult (IsSuccess resolves).
         // Generated C# may still call Stay.Create inside the factory that binds this job.

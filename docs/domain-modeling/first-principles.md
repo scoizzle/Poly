@@ -195,17 +195,17 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 - Product door: `DomainSession.Lower` → `RuntimeAnalysisCache.GetOrLower` → `DomainProgramProjection.ToSyntax` (`Poly/DomainModeling/Compile/DomainSession.cs`, `Poly/DomainModeling/Analysis/RuntimeAnalysisCache.cs`, `Poly/DomainModeling/Lowering/DomainProgramProjection.cs`).
 - Projection builds entity types, stage enums, value types, `DomainResult` scaffolding, contract adapters, and operation methods. The heavy lifting of members and bodies is `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` (including `DomainToCSharpExporter.Actions.cs` and `DomainToCSharpExporter.StoreBind.cs`). Despite the exporter name, the output of this step is still syntax-tree `TypeDefinitionNode`s, not C# text.
-- Expression lowering (authoring `DomainExpression` → syntax `Node`): `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`. Effect lowering (authoring `Effect` → syntax `Node`): `Poly/DomainModeling/Lowering/EffectLoweringPass.cs`. Context flags such as whether the body uses `this` or a parameter named `entity`: `Poly/DomainModeling/Lowering/LoweringContext.cs`.
+- Expression lowering (authoring `DomainExpression` → syntax `Node`): `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`. Effect lowering (authoring `Effect` → syntax `Node`): `Poly/DomainModeling/Lowering/EffectLoweringPass.cs`. The instance root the body is lowered against (the `this` argument, or a peer-bound parameter): `Poly/DomainModeling/Lowering/LoweringContext.cs`.
 - Library-owned expression lowering (clocks, date arithmetic) registered at load, not hard-coded in the core switch: `Poly/DomainModeling/Libraries/Temporal/TemporalLowering.cs`, tables on `Poly/DomainModeling/Meaning/ExpressionMeaning.cs`.
 - Cache at `GetOrLower` also stores subscription effect bodies, entry/exit bodies and segments, and policy bodies so named execute can bind a tree instead of lowering again at invoke time (`RuntimeAnalysisCache.cs`).
 
 **Roadmap phase.** **Earning its place for phase 1.** This is the step that makes a business domain into snippets the interpreter can run and the printer can sell as C#.
 
-**Observation:** Lowering still has a twin. Export-shaped bodies use `this` (`UseThisReference: true`) so C# prints `this.Checkout()`. Some cached simulate bodies (policies, subscription effect-only trees) are rooted on a parameter named `entity` (`UseThisReference: false`). `RuntimeAnalysisCache` comments call the policy and subscription split a residual twin: module bool methods stay `this` for print; the VM path for quantifiers uses the parameter-rooted tree.
+**Observation:** Cached policy, subscription, and action bodies are the export-shaped trees (`this`). Simulate compiles those nodes; it does not lower a parameter-rooted twin at execute time.
 
 **Observation:** Named-action execute is written to bind `MethodDefinitionNode.Body` from the cached module and not to call `LowerActionBody` at invoke time (`DomainEntityInstance.ExecuteEffectList` in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`). `LowerActionBody` still exists on `EffectLoweringPass` and is used *while* `GetOrLower` builds those cached trees. Execute-time re-lower of named actions is what the runtime comments refuse; the authoring effect list is still the input to that compile step.
 
-**Observation:** Before the interpreter runs an export-shaped body against a dictionary-backed instance, `BindThis` / `BindModuleMethodBody` rewrite the tree (`DomainEntityInstance.cs`). Stepping then happens on the *rewritten* tree, not on the node identities the C# printer used. The mapping back to the author’s `.poly` snippet is therefore: `.poly` → domain facts → lowered syntax → (optional rewrite) → debug hook node.
+**Observation:** Simulate compiles the same module body print emits (`ThisReference` stays). Root-program analysis does not type `this`; execute annotates those nodes as the entity type before emit. A small simulate-only bind (`BindForSimulate`) remains for dictionary-This gaps the VM cannot run as printed: action parameters and subscription `previousStage` (root-program slot 0 is This), unbound contract adapters fail closed, void fail-closed throw becomes `return DomainResult.Failure` under a trailing success return so the VM surfaces the result. Mapping back to the author’s `.poly` snippet is therefore: `.poly` → domain facts → lowered syntax → (simulate-only bind) → debug hook node.
 
 ---
 
@@ -228,7 +228,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Observation:** C# store-job methods the exporter adds include `EnsureUnique` as a body that always returns `DomainResult.Success` (`DomainToCSharpExporter.StoreBind.cs`). Simulate’s `EnsureUnique` talks to `DomainInstanceStore`. Unique indexes on the printed side are treated as a persistence-schema concern. Create factories on the printed side may still call `Stay.Create` as the host bind of a job the tree names. Simulate and print therefore do not always execute the same host implementation of a named job.
 
-**Observation:** Policy evaluate uses a cached parameter-rooted tree (`TryGetPolicyBody`). Printed policy methods are `this`-shaped bool methods on the type definition. Same rule, two trees.
+**Observation:** Policy evaluate compiles the cached `this`-shaped body (`TryGetPolicyBody`) that print emits as a bool method on the type definition. Same rule, one tree.
 
 **Observation:** Generated C# that you then run under an ordinary CLR debugger is steppable as C#, not as `VmDebugger` nodes. The Principle 0.1 mapping “hook fires with the syntax-tree node” applies to interpreter simulate, not to the compiled customer process, unless you keep running the interpreter.
 

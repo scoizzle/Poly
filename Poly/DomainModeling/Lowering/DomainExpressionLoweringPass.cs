@@ -41,7 +41,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
-    private string? _relationshipSourceEntityName;
     private Node _currentSubject = null!;
     private readonly LocalNames _names;
 
@@ -55,12 +54,18 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
-    /// The instance root is <see cref="LoweringContext.Subject"/> (module bodies
-    /// pass <see cref="ThisReference"/>). Names in
+    /// The instance root is the <c>subject</c> passed to <see cref="LowerExpression"/>
+    /// and <see cref="Lower"/> (<see cref="LoweringContext.Subject"/> is not read
+    /// by this pass). Names in
     /// <see cref="LoweringContext.ActionParameterNames"/> render as bare parameters
     /// instead of <c>this.name</c>.
     /// <see cref="LoweringContext.NavigationNameResolver"/> maps DSL relationship
     /// names to generated member names (pascal-cased navs).
+    /// <see cref="LoweringContext.SourceEntityName"/> is the entity used to resolve
+    /// relationship targets and enum literals. For path-prefix hops and quantifier
+    /// bodies, only that name and the enum map switch to the target entity; the
+    /// property-type, navigation-name and collection resolvers stay scoped to the
+    /// source entity, and binder roots keep the source name and enum map.
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;
@@ -75,7 +80,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
         _forms = context.Forms;
-        _relationshipSourceEntityName = TypeNameOf(context.Subject);
     }
 
     private ExpressionMeaning EffectiveMeaning {
@@ -102,8 +106,6 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     public LoweredExpression LowerExpression(DomainExpression expression, Node subject) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(subject);
-        if (_relationshipSourceEntityName is null)
-            _relationshipSourceEntityName = TypeNameOf(subject);
         _currentSubject = subject;
         return Route(expression);
     }
@@ -165,24 +167,36 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
 
         // Every hop in a path-prefix is a relationship navigation.
-        // Predicate leaves: `this.Rel != null && <leaf>` so an unlinked to-one is
-        // false (same meaning as Conditional(exists, whenPresent, false)). Value
-        // leaves stay the hop. NullForgiving on the hop is CS8602 only; require
-        // gates own DomainResult.Failure ("requires a linked") in
-        // BuildActionBodyWithGuards. Collection hops cannot be a singular
-        // path-prefix — fail closed (use any/all).
+        // Predicate leaves: an unlinked to-one is false. A statement-free predicate
+        // leaf is `rel != null && <leaf>`. When the leaf has statements (a quantifier
+        // on the target), those statements run only inside `if (rel != null)` after
+        // a temp is set to false. Value leaves stay the hop. NullForgiving on the
+        // hop is CS8602 only; require gates own DomainResult.Failure
+        // ("requires a linked") in BuildActionBodyWithGuards.
+        // Collection hops cannot be a singular path-prefix — fail closed (use any/all).
         if (IsCollectionNav(rn.RelationshipName)) {
             throw new InvalidOperationException(
                 $"Path-prefix on relationship '{rn.RelationshipName}' requires exactly one linked target. " +
                 "Use any/all quantifiers for collections.");
         }
         var relMember = new Member(_currentSubject, ResolveNavName(rn.RelationshipName));
-        var leaf = Route(rn.TargetProperty, new NullForgiving(relMember));
+        var leaf = LowerAgainstEntity(
+            ResolveRelationshipTarget(rn.RelationshipName),
+            rn.TargetProperty,
+            new NullForgiving(relMember));
         if (!IsPathPrefixPredicate(rn.TargetProperty))
             return leaf;
-        return leaf with {
-            Value = new SN.And(new NotEqual(relMember, new Constant(null)), leaf.Value)
-        };
+        var exists = new NotEqual(relMember, new Constant(null));
+        if (leaf.Statements.Count == 0)
+            return leaf with { Value = new SN.And(exists, leaf.Value) };
+        var t = _names.Next("t");
+        var thenBlock = new Block(
+            [.. leaf.Statements, new Assignment(t, leaf.Value)],
+            leaf.Variables);
+        return new LoweredExpression(
+            [new Assignment(t, new Constant(false)), new IfStatement(exists, thenBlock)],
+            [t],
+            t);
     }
 
     /// <summary>Pascal-cases a relationship hop name the resolver did not map
@@ -259,41 +273,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _isCollectionNavigation?.Invoke(name) == true;
 
     private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null)
-            return null;
-        var sourceName = _relationshipSourceEntityName;
-        if (sourceName is null) {
-            foreach (var entity in _domain.Types.OfType<Entity>()) {
-                var candidate = entity.Navigations.FirstOrDefault(n =>
-                    string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
-                if (candidate is null)
-                    continue;
-                if (_isCollectionNavigation is not null) {
-                    var isCol = candidate.Cardinality is RelationshipCardinality.OneToMany
-                        or RelationshipCardinality.ManyToMany;
-                    if (_isCollectionNavigation(relationshipName) != isCol)
-                        continue;
-                }
-                sourceName = entity.Name;
-                break;
-            }
-        }
-        if (sourceName is null)
+        if (_domain is null || _context.SourceEntityName is null)
             return null;
         var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, sourceName, StringComparison.Ordinal));
+            string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
         var rel = source?.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
         return rel?.Target.TypeName;
     }
-
-    private static string? TypeNameOf(Node? node) => node switch {
-        Parameter { TypeReference: TypeReference tr } => tr.TypeName,
-        Parameter { TypeReference: NamedTypeReference ntr } => ntr.TypeName,
-        TypeReference tr => tr.TypeName,
-        NamedTypeReference ntr => ntr.TypeName,
-        _ => null,
-    };
 
     protected override LoweredExpression Add(Add a) {
         if (TryLowerLibrary(a, out var lowered))
@@ -397,7 +384,68 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             };
         }
 
+        // Value hops (`Age < advisor Age`) do not get the predicate-shape
+        // `rel != null && leaf` from RelationshipNavigation. Guard each to-one hop
+        // that an operand reads through from this comparison's subject, on both
+        // sides, so an unlinked hop makes the comparison false instead of
+        // dereferencing null. Guards are folded inner-to-outer so each
+        // dereference is protected by the guard before it. A hop reached twice
+        // (`Age < advisor Age + advisor mentor Age`) is guarded once.
+        var valueHops = new List<Node>();
+        var seenPaths = new HashSet<string>(StringComparer.Ordinal);
+        CollectValueHops(c.Left, _currentSubject, "", valueHops, seenPaths);
+        CollectValueHops(c.Right, _currentSubject, "", valueHops, seenPaths);
+        for (var i = valueHops.Count - 1; i >= 0; i--)
+            value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
+
         return LoweredExpression.Combine([left, right], value);
+    }
+
+    /// <summary>
+    /// Collects the to-one hops an operand reads through from <paramref name="subject"/>
+    /// (the comparison's subject, or the hop a navigation's target is read on):
+    /// <c>advisor mentor Age</c> and <c>advisor where mentor Age * 2</c> both yield
+    /// <c>.Advisor</c> and <c>.Advisor.Mentor</c>. Arithmetic and
+    /// <c>not</c>/<c>and</c>/<c>or</c> are looked through; any other operand adds no
+    /// hop (a quantifier body runs against its loop item and guards its own
+    /// comparisons). The chain stops at a subscription binder name
+    /// (<c>order Total</c>) and at a navigation to a condition
+    /// (<c>advisor where Age &lt; 30</c>): lowering guards that navigation's own
+    /// hop, and hops inside the condition are guarded by the comparisons there.
+    /// Known issue: lowering treats a binder name as the binder at any depth, so
+    /// <c>advisor order Total</c> reads the binder, not the advisor's order. The
+    /// chain matches lowering rather than guarding a hop lowering never reads.
+    /// </summary>
+    /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
+    /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
+    private void CollectValueHops(
+        DomainExpression operand, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
+        switch (operand) {
+            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide
+                or Ontology.Not or Ontology.And or Ontology.Or:
+                foreach (var child in operand.Children.OfType<DomainExpression>())
+                    CollectValueHops(child, subject, subjectPath, hops, seenPaths);
+                break;
+            case RelationshipNavigation rn:
+                CollectHopChain(rn, subject, subjectPath, hops, seenPaths);
+                break;
+        }
+    }
+
+    private void CollectHopChain(
+        RelationshipNavigation rn, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
+        if (_parameters.ContainsKey(rn.RelationshipName)
+            || IsCollectionNav(rn.RelationshipName)
+            || IsPathPrefixPredicate(rn.TargetProperty))
+            return;
+        var navName = ResolveNavName(rn.RelationshipName);
+        var hopPath = subjectPath + "." + navName;
+        var hop = new Member(subject, navName);
+        if (seenPaths.Add(hopPath))
+            hops.Add(hop);
+        CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
     }
 
     /// <summary>
@@ -510,21 +558,31 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// pass's local-name generator so names stay unique.
     /// </summary>
     private LoweredExpression LowerQuantifierBody(
-        string relationshipName, DomainExpression body, Variable item) {
-        var targetName = ResolveRelationshipTarget(relationshipName);
+        string relationshipName, DomainExpression body, Variable item) =>
+        LowerAgainstEntity(ResolveRelationshipTarget(relationshipName), body, item);
+
+    /// <summary>
+    /// Lowers <paramref name="expression"/> against <paramref name="subject"/> using
+    /// <paramref name="entityName"/> as the entity whose members the subject exposes
+    /// (that entity's SourceEntityName and enum map). Path-prefix hops and quantifier
+    /// bodies share this so nested resolution sees the target. Shares this pass's
+    /// local-name generator.
+    /// </summary>
+    private LoweredExpression LowerAgainstEntity(
+        string? entityName, DomainExpression expression, Node subject) {
         IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
-        if (_domain is not null && targetName is not null) {
+        if (_domain is not null && entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-                string.Equals(e.Name, targetName, StringComparison.Ordinal));
+                string.Equals(e.Name, entityName, StringComparison.Ordinal));
             if (targetEntity is not null)
                 enums = DomainToCSharpExporter.GetEnumPropertyNames(
                     targetEntity, _domain, _analysis);
         }
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
+            SourceEntityName = entityName ?? _context.SourceEntityName
         });
-        nested._relationshipSourceEntityName = targetName ?? _relationshipSourceEntityName;
-        return nested.LowerExpression(body, item);
+        return nested.LowerExpression(expression, subject);
     }
 
     protected override LoweredExpression Library(DomainExpression expr) {

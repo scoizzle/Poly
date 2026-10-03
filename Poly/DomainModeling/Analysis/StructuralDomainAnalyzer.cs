@@ -62,6 +62,24 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.StructuralDuplicate);
             }
         }
+
+        // A domain enum named after an entity's generated stage enum (`{Entity}Stage`)
+        // makes the exporter emit two types with that name (CS0101), and the runtime
+        // enum provider would resolve the shared name to a single type. Reject it here.
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            if (entity.Stages.Count == 0)
+                continue;
+            var stageEnumName = $"{entity.Name}Stage";
+            var collision = domain.Types.OfType<EnumType>()
+                .FirstOrDefault(e => string.Equals(e.Name, stageEnumName, StringComparison.Ordinal));
+            if (collision is not null) {
+                context.ReportError(
+                    collision,
+                    $"Enum '{stageEnumName}' collides with the stage enum generated for entity '{entity.Name}'. " +
+                    "Rename the enum.",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
+        }
     }
 
     private static bool IsReservedExpressionWord(string name) =>

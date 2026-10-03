@@ -26,7 +26,7 @@ internal static class RuntimeAnalysisCache {
         public IReadOnlyList<TypeDefinitionNode>? Module { get; set; }
         /// <summary>Plan entry → watched-stage → module handler body.</summary>
         public Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? SubscriptionBodies { get; set; }
-        /// <summary>OnEntry/OnExit bodies shared with module methods; execute BindThis.</summary>
+        /// <summary>OnEntry/OnExit bodies shared with module methods.</summary>
         public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
         /// <summary>
         /// Contiguous non-StageTransition segments of OnEntry/OnExit, lowered at GetOrLower.
@@ -204,7 +204,7 @@ internal static class RuntimeAnalysisCache {
     /// <summary>
     /// Module ToSyntax inlines first-stage entry in the ctor only — populate
     /// OnEntry{Stage}/OnExit{Stage} methods once. EntryExitBodies holds the same
-    /// bodies; Domain-bound execute BindThis.
+    /// bodies Domain-bound execute compiles.
     /// </summary>
     private static (IReadOnlyList<TypeDefinitionNode> Module,
         Dictionary<(string, string, string), Node> EntryExit,

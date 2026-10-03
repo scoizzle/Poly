@@ -250,7 +250,7 @@ public sealed partial record DomainEntityInstance {
             RuntimeAnalysisCache.GetOrLower(
                 Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
-            // Domain-bound: bind the module handler cached at GetOrLower (same tree print emits).
+            // Domain-bound: run the module handler cached at GetOrLower (same tree print emits).
             // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
             if (planEntry is null)
                 throw new InvalidOperationException(
@@ -263,11 +263,13 @@ public sealed partial record DomainEntityInstance {
                 || body is null)
                 throw new InvalidOperationException(
                     $"Subscription body is missing on entity '{Entity.Name}'.");
-            var cached = BindExportBody(body);
+            var cached = body;
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
+            cached = BindForSimulate(
+                cached, previousStageName: previousStageName, bindPreviousStage: true);
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, previousStageName),
+                ExecuteCachedSubscriptionTree(cached),
                 "subscription");
         }
         finally {
@@ -275,12 +277,11 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    private DomainResult? ExecuteCachedSubscriptionTree(
-        Node tree, object? previousStageName) {
-        var compiled = Interpreter.CompileChecked(
-            tree, ModuleAwareTypeProvider(_typeDefAnalyzer));
+    private DomainResult? ExecuteCachedSubscriptionTree(Node tree) {
+        var compiled = CompileBody(
+            AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer));
         using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { this, previousStageName }));
+            s => s.SetArgs(new object?[] { this }));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;

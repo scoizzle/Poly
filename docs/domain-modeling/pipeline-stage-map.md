@@ -154,7 +154,7 @@ Checked against master `9db8868f`. Code is truth. File names are under `Poly/Dom
 9. **Naming and registration.** Diagnostic level is `Information`, not `Info`. `DslCompiler.OpenCompileSession` adds `DbContextArtifactContributor` and `MinimalApiHostArtifactContributor` itself rather than the library doing it.
 10. **Analysis default.** `AnalysisOptions.Full` runs every pass even after the first error, which fits "report everything" but means a failed analysis can contain cascading errors.
 
-**What the open PRs change**
+**What PRs 82 and 83 changed**
 - **PR 82** (merged, #82) (`refactor/p3c-retire-prerun-rewrites`): deleted `BindThis`, `RewriteVoidFailClosedThrow`, `BindExportBody`. Simulation compiles the printed module body directly. It left two smaller helpers, `BindForSimulate` (binds action params and previous-stage slot, maps adapter and void-throw cases to a failure result) and `AsVoidResultBody`; the planned P3-D slice retires those. It also moved an unlinked-comparison guard into lowering and added `RuntimeEnumTypeProvider`. This closed difference 5 in part and moved toward "simulate = print".
 - **PR 83** (merged, #83) (`fix/pr80-postmerge`): fixed previous-stage local names, the unlinked quantifier guard, and restored `LoweringContext.SourceEntityName`. Bug fixes in Compile; no change to the pipeline shape.
 - Neither PR adds an artifact catalog, an error gate in Lower, or removes consumer re-entry.

@@ -1,4 +1,4 @@
-# Convergence plan v2: decisions only you can make
+# Convergence plan v2: decisions V1 to V11 (answered)
 
 ## Scot's answers, 2026-10-03
 

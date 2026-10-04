@@ -163,7 +163,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Validates required/range/length/pattern/unique constraints against the to-be-stored
+    /// Validates required/range/length/pattern/equality/unique constraints against the to-be-stored
     /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
     /// violation message, or null when the values are valid. Unique is checked only when
     /// <paramref name="store"/> is set — before any mutate, not after <c>TryAdd</c>.
@@ -203,6 +203,15 @@ public sealed partial record DomainEntityInstance {
                     case PatternConstraint pc:
                         if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
                             return $"'{prop.Name}' does not match the required pattern.";
+                        break;
+                    // Twin of the exported Create factory's equality check; slice C2b deletes it
+                    // when the simulator runs the compiled Create. Numbers compare by value.
+                    case EqualityConstraint eq:
+                        var equal = (v, eq.ExpectedValue) is (long or int or double or decimal, long or int or double or decimal)
+                            ? Convert.ToDecimal(v) == Convert.ToDecimal(eq.ExpectedValue)
+                            : Equals(v, eq.ExpectedValue);
+                        if (!equal)
+                            return $"'{prop.Name}' must equal {eq.ExpectedValue}.";
                         break;
                     case UniqueConstraint:
                         if (store is not null && v is not null) {

@@ -1,6 +1,6 @@
 # Poly pipeline convergence plan, v2
 
-Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
+Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`). In review, not merged: K1 (PR 90), C4a (PR 91). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
 Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11 answered 2026-10-03; V10 as a revised scope).
 
@@ -193,7 +193,7 @@ _Lane A · Size S · Review 1 · Depends on: A2a_
 **A3a. Lower registers its trees as artifacts**
 
 _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
-- Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map line 70 ("a tree per concept in the right place") is NOT met until A6.
+- Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map 2.5, Definition of done ("a tree per concept in the right place") is NOT met until A6.
 - Files: `Compile/DomainSession.cs` (Lower, Emit), `Lowering/DomainProgramProjection.cs` only if the split moves.
 - Done when: T0 golden identical for all sample domains; catalog text snapshot added; `git grep SyntaxModule` in product code is empty.
 - SHIP if golden is byte-identical and the grep is empty. NOT SHIP if any snapshot changed or the placeholder remains.
@@ -256,7 +256,7 @@ _Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
 **A6. Finer trees (deferred)**
 
 _Lane A · Size L · Review 2 · Depends on: A3a, H4_
-- Scope: One artifact per action, policy, subscription handler, entry/exit body. Scheduled only when a consumer needs it; closes the gap against stage map line 70 and lets H4 check at concept granularity.
+- Scope: One artifact per action, policy, subscription handler, entry/exit body. Scheduled only when a consumer needs it; closes the gap against the stage map 2.5 Definition of done and lets H4 check at concept granularity.
 - Files: Decided when scheduled.
 - Done when: H4 known-gaps entries of the kind 'inside entity tree only' reach zero; scheduled only when a consumer needs it and Scot approves the wave.
 - Hand-edit: Decided when scheduled.
@@ -887,13 +887,13 @@ _Lane B · Size M · Review 1 · **RUNS ALONE** · Depends on: R1, decision 20 (
 
 Why this order: tests and measurements come first so every later claim is checkable; the gate waits for the fixture because the gate breaks 110 tests without it; the live divergence (C4a) goes ahead of any refactor; artifacts exist before anything moves onto them; consumers move before the rename so we do not rename code we are about to delete; K3 follows C2 because it depends on it; the rename is last.
 
-**Wave 0: released by Scot on 2026-10-03 (everything here is test-only, docs-only; `ExportedCSharp.cs` is untouched by PRs 82 and 83)**
+**Wave 0: released by Scot on 2026-10-03 (everything here is test-only, docs-only or new code that nothing calls yet; `ExportedCSharp.cs` is untouched by PRs 82 and 83)**
 - Lane A: T0 (done, `bde1f7c5`), A1 (done, `8e5ef81b`), A2a (done, `08eda8eb`), A2b (done, `16403b60`), K1, H1, N3 (N1 when decision 16 is answered)
-- Lane B: T2
+- Lane B: T2 (done, `afa246c2`)
 
 **Wave 1: PRs 82 and 83 are merged (hold point HP1 reached); wave 1 still starts only on Scot's word**
 - Lane A: G1 (after T1), G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b
-- Lane B: C4a first (live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
+- Lane B: C4a first (in review as PR 91; live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
 
 **Wave 2: consumers move onto the catalog; Compile gaps close**
 - Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (V10 = revised scope), P1 (V8 = a)

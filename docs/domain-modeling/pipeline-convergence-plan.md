@@ -1,6 +1,6 @@
 # Poly pipeline convergence plan, v2
 
-Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`), K1 (`7fb4b2a2`). In review, not merged: H1 (PR 92), C4a (PR 91). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
+Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`), K1 (`7fb4b2a2`), C4a (`dac9a6a8`). In review, not merged: H1 (PR 92). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
 Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11 answered 2026-10-03; V10 as a revised scope).
 
@@ -893,7 +893,7 @@ Why this order: tests and measurements come first so every later claim is checka
 
 **Wave 1: PRs 82 and 83 are merged (hold point HP1 reached); wave 1 still starts only on Scot's word**
 - Lane A: G1 (after T1), G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b
-- Lane B: C4a first (in review as PR 91; live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
+- Lane B: C4a first (done, `dac9a6a8`; live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
 
 **Wave 2: consumers move onto the catalog; Compile gaps close**
 - Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (V10 = revised scope), P1 (V8 = a)

@@ -40,8 +40,8 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding the
-    /// trees it made: one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per
+    /// Empty before Lower. Each <see cref="Lower"/> or <see cref="Emit"/> replaces it with a new
+    /// catalog holding the trees it made (when calls overlap, the last to finish wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per
     /// entity (the entity type and its stage enum). It is not an emit/contributor file inventory.
     /// This is the live instance: anything registered on it by hand is dropped by the next Lower.
     /// </summary>
@@ -149,7 +149,9 @@ public sealed class DomainSession {
     /// Stage 3: one operation module (type definitions, action bodies,
     /// entity-level policy methods, subscription handlers, and OnEntry/OnExit
     /// bodies). Action- and stage-scoped policies are not carried here.
-    /// Simulate and print consume this result.
+    /// Simulate and print consume this result. Throws <see cref="FormatException"/> when a domain
+    /// or entity name cannot be part of an artifact id, and <see cref="InvalidOperationException"/>
+    /// when two lowered types would collide (see <c>RegisterTrees</c>).
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -160,7 +162,7 @@ public sealed class DomainSession {
     }
 
     // Emit uses the catalog returned here, not the ArtifactCatalog property, which another
-    // Lower on this session may replace at any time.
+    // Lower or Emit on this session may replace at any time.
     private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
         Domain domain, AnalysisResult analysis) {
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);

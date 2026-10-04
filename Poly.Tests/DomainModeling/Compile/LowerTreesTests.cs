@@ -68,7 +68,9 @@ public sealed class LowerTreesTests {
     public async Task Lower_DomainNameWithWhitespace_Throws() {
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
 
-        await Assert.That(() => session.Lower(domain with { Name = "My Domain" }, analysis)).Throws<FormatException>();
+        var ex = Assert.Throws<FormatException>(() => session.Lower(domain with { Name = "My Domain" }, analysis));
+
+        await Assert.That(ex.Message).Contains("My Domain").And.Contains("no whitespace");
     }
 
     [Test]
@@ -132,7 +134,7 @@ public sealed class LowerTreesTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
 
-        await Assert.That(ex.Message).Contains("PermitStage");
+        await Assert.That(ex.Message).Contains("PermitStage").And.Contains("belongs to the trees");
     }
 
     [Test]
@@ -151,11 +153,11 @@ public sealed class LowerTreesTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
 
-        await Assert.That(ex.Message).Contains("PermitStage");
+        await Assert.That(ex.Message).Contains("PermitStage").And.Contains("belongs to the trees");
     }
 
     [Test]
-    public async Task Lower_EntityNamedDomainResult_IsRefusedInsteadOfEmittingAnEmptyScaffolding() {
+    public async Task Lower_EntityNamedDomainResult_IsRefusedAsDuplicateType() {
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
             domain Clash
 
@@ -166,6 +168,6 @@ public sealed class LowerTreesTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
 
-        await Assert.That(ex.Message).Contains("DomainResult");
+        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("more than once");
     }
 }

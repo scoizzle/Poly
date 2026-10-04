@@ -28,6 +28,7 @@ public class UnifiedAddTests {
         var response = EvolveTool.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
 
         await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("must be non-empty");
         var data = (DomainOverviewData)QueryTool.GetDomainOverview(sessionId).Data!;
         await Assert.That(data.EntityNames).DoesNotContain(name);
     }
@@ -40,6 +41,7 @@ public class UnifiedAddTests {
         var response = SessionTool.CreateDomainSession(name);
 
         await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("must be non-empty");
         await Assert.That(response.SessionId).IsNull();
     }
 

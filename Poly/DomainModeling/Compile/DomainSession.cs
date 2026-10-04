@@ -40,11 +40,15 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding
-    /// only the privileged SyntaxModule placeholder; it is not an emit/contributor file inventory.
+    /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding the
+    /// trees it made: one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per
+    /// entity (the entity type and its stage enum). It is not an emit/contributor file inventory.
     /// This is the live instance: anything registered on it by hand is dropped by the next Lower.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
+
+    private const string ScaffoldingType = "scaffolding";
+    private const string EntityType = "entity";
 
     private Analyzer? _analyzer;
 
@@ -151,12 +155,38 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        ArtifactCatalog = new ArtifactCatalog();
-        ArtifactCatalog.DeclareType("SyntaxModule", mayPointAt: []);
-        ArtifactCatalog.Register(new Artifact(
-            new ArtifactDescriptor(ArtifactId.Create(["module"], "SyntaxModule"), "Lower"),
-            Payload: null));
+        ArtifactCatalog = RegisterTrees(domain, module);
         return module;
+    }
+
+    /// <summary>
+    /// Splits the module into one tree per entity (the entity type and its stage enum) and one
+    /// scaffolding tree holding everything else (domain enums, DomainResult, and so on).
+    /// Each tree's payload is a read-only copy of its type definitions.
+    /// </summary>
+    private static ArtifactCatalog RegisterTrees(Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
+        var catalog = new ArtifactCatalog();
+        catalog.DeclareType(ScaffoldingType, mayPointAt: []);
+        catalog.DeclareType(EntityType, mayPointAt: []);
+        var entities = domain.Types.OfType<Entity>().ToList();
+        foreach (var entity in entities) {
+            var trees = module
+                .Where(d => d.Name == entity.Name || d.Name == $"{entity.Name}Stage")
+                .ToArray();
+            if (trees.Length == 0)
+                throw new InvalidOperationException(
+                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
+            catalog.Register(new Artifact(
+                new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], EntityType), "Lower"),
+                Payload: trees.AsReadOnly()));
+        }
+        var scaffolding = module
+            .Where(d => !entities.Any(e => d.Name == e.Name || d.Name == $"{e.Name}Stage"))
+            .ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], ScaffoldingType), "Lower"),
+            Payload: scaffolding.AsReadOnly()));
+        return catalog;
     }
 
     /// <summary>
@@ -168,35 +198,22 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        // Lower puts the SyntaxModule placeholder into a new ArtifactCatalog.
-        var types = Lower(domain, analysis);
-        var interpAnalysis = TryAnalyzeForEmit(types);
+        // Lower fills a new ArtifactCatalog with the trees; the analysis below still covers the
+        // whole module, because the generator resolves types across entities from one analysis.
+        var module = Lower(domain, analysis);
+        var interpAnalysis = TryAnalyzeForEmit(module);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
-        var entities = domain.Types.OfType<Entity>().ToList();
-        foreach (var entity in entities) {
-            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
-                entity.Name,
-                $"{entity.Name}Stage"
-            };
-            var entityDefs = types
-                .Where(d => entityNames.Contains(d.Name))
-                .ToList();
-            if (entityDefs.Count == 0)
-                throw new InvalidOperationException(
-                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
-            files.Add(($"{entity.Name}.cs", generator.Generate(entityDefs)));
-        }
-
-        var scaffoldingDefs = types
-            .Where(d => !entities.Any(e =>
-                d.Name == e.Name || d.Name == $"{e.Name}Stage"))
-            .ToList();
-        if (scaffoldingDefs.Count > 0)
-            files.Add(("Poly.Types.cs", generator.Generate(scaffoldingDefs)));
+        foreach (var tree in ArtifactCatalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
+            files.Add(($"{tree.Descriptor.Id.Segments[^1]}.cs", generator.Generate(TypesOf(tree))));
+        var scaffolding = ArtifactCatalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
+        files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
         return files;
     }
+
+    private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>
+        (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;
 
     /// <summary>
     /// Runs interpretation analysis on lowered type definitions so the C# generator

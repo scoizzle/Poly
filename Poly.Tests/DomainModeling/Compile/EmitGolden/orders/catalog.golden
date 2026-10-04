@@ -1,1 +1,4 @@
-SyntaxModule|module|Lower
+scaffolding|Logistics|Lower
+entity|Logistics/Customer|Lower
+entity|Logistics/Order|Lower
+entity|Logistics/OrderItem|Lower

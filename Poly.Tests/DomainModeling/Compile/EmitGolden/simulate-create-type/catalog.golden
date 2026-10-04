@@ -1,1 +1,3 @@
-SyntaxModule|module|Lower
+scaffolding|SimulateCreateType|Lower
+entity|SimulateCreateType/Fine|Lower
+entity|SimulateCreateType/Patron|Lower

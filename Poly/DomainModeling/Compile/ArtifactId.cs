@@ -3,8 +3,8 @@ namespace Poly.DomainModeling.Compile;
 /// <summary>
 /// Identity of a compiled artifact: the written name path of the domain element it
 /// comes from plus an artifact type, formatted <c>Hotel/Reservation/Confirm#method</c>.
-/// Ids are derived on every compile from the names in the domain, so renaming an
-/// element gives a new id. The type is an open string: libraries may add their own.
+/// It holds only those two strings (no stage, body text or hash), so
+/// same-named stage actions share one id.
 /// </summary>
 public sealed record ArtifactId {
     private const char PathSeparator = '/';

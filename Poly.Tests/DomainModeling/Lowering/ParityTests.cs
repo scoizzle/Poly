@@ -1,6 +1,4 @@
-using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
 
@@ -20,11 +18,10 @@ public class ParityTests {
 
     const string ActionFailDsl = """
         domain Shop
-        Item: entity {
-          Ready: Boolean default(false)
-          CanPromote: policy { Ready is true }
-          Promote: action require CanPromote {
-            assign Ready to true
+        Basket: entity {
+          Items: Number range(0, 3) default(3)
+          AddItem: action {
+            assign Items to Items + 1
           }
         }
         """;
@@ -70,81 +67,65 @@ public class ParityTests {
         """;
 
     [Test]
-    public async Task Create_OnEntryRangeViolation_FailsWithSameMessage() {
-        var scenario = ParityScenario.FromDsl(CreateFailDsl, "ParityCreateFail");
-        var step = scenario.Create("Widget");
-        await step.AssertAgree();
-        await Assert.That(step.Simulate.Success).IsFalse();
-        await Assert.That(step.Simulate.FailureMessage).Contains("must be <= 10");
+    public async Task Create_WhenEntryEffectBreaksRange_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(CreateFailDsl, "ParityCreateFail")
+            .AssertAgree(side => side.Create("Widget"));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).Contains("must be <= 10");
     }
 
     [Test]
-    public async Task Promote_WhenGuardUnmet_FailsWithSameMessageAndLeavesProperties() {
-        var scenario = ParityScenario.FromDsl(ActionFailDsl, "ParityActionFail");
-        var created = scenario.Create("Item", ("Ready", false));
-        await created.AssertAgree();
-        var step = scenario.Invoke("Promote");
-        await step.AssertAgree();
-        await Assert.That(step.Simulate.Success).IsFalse();
-        await Assert.That(step.Simulate.FailureMessage).Contains("CanPromote");
-        await Assert.That((bool)step.Simulate.Properties["Ready"]!).IsFalse();
+    public async Task Invoke_WhenAssignBreaksRange_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(ActionFailDsl, "ParityActionFail")
+            .AssertAgree(side => {
+                side.Create("Basket");
+                side.Invoke("AddItem");
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].State["Items"]).IsEqualTo("3");
     }
 
     [Test]
-    public async Task Close_TransitionsStage_AgreesOnStageAndProperties() {
-        var scenario = ParityScenario.FromDsl(StageDsl, "ParityStage");
-        var created = scenario.Create("Ticket");
-        await created.AssertAgree();
-        await Assert.That(created.Simulate.Stage).IsEqualTo("Open");
-        var step = scenario.Invoke("Close");
-        await step.AssertAgree();
-        await Assert.That(step.Simulate.Success).IsTrue();
-        await Assert.That(step.Simulate.Stage).IsEqualTo("Closed");
-        await Assert.That(step.Simulate.Properties["Note"]).IsEqualTo("closed");
+    public async Task Invoke_WhenActionTransitions_AgreesOnStageAndProperties() {
+        var outcomes = await ParityScenario.FromDsl(StageDsl, "ParityStage")
+            .AssertAgree(side => {
+                side.Create("Ticket");
+                side.Invoke("Close");
+            });
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Open");
+        await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("Closed");
+        await Assert.That(outcomes[1].State["Note"]).IsEqualTo("closed");
     }
 
     [Test]
-    public async Task Patron_HasOverdueLoans_AgreesOnSimulateAndPrinted() {
-        var scenario = ParityScenario.FromDsl(PolicyDsl, "ParityPolicy");
-        var overdue = scenario.Create("Loan", ("Status", "Overdue"));
-        await overdue.AssertAgree();
-        var active = scenario.Create("Loan", ("Status", "Active"));
-        await active.AssertAgree();
-        var withOverdue = scenario.Create("Patron",
-            ("Name", "Ada"), ("Email", "ada-overdue@lib.test"), ("MaxItems", 5L),
-            ("loans", new[] { overdue.Entity!, active.Entity! }));
-        await withOverdue.AssertAgree();
-        var held = scenario.EvaluatePolicy("HasOverdueLoans");
-        await held.AssertAgree();
-        await Assert.That((bool)held.Simulate.Properties["HasOverdueLoans"]!).IsTrue();
+    public async Task EvaluatePolicy_HasOverdueLoans_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(PolicyDsl, "ParityPolicy")
+            .AssertAgree(side => {
+                var overdue = side.Create("Loan", ("Status", "Overdue"));
+                var active = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-overdue@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { overdue, active }));
+                side.EvaluatePolicy("HasOverdueLoans");
 
-        var returned = scenario.Create("Loan", ("Status", "Returned"));
-        await returned.AssertAgree();
-        var clearLoan = scenario.Create("Loan", ("Status", "Active"));
-        await clearLoan.AssertAgree();
-        var withoutOverdue = scenario.Create("Patron",
-            ("Name", "Ada"), ("Email", "ada-clear@lib.test"), ("MaxItems", 5L),
-            ("loans", new[] { returned.Entity!, clearLoan.Entity! }));
-        await withoutOverdue.AssertAgree();
-        var clear = scenario.EvaluatePolicy("HasOverdueLoans");
-        await clear.AssertAgree();
-        await Assert.That((bool)clear.Simulate.Properties["HasOverdueLoans"]!).IsFalse();
+                var returned = side.Create("Loan", ("Status", "Returned"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-clear@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { returned }));
+                side.EvaluatePolicy("HasOverdueLoans");
+            });
+        await Assert.That(outcomes[3].State["HasOverdueLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[6].State["HasOverdueLoans"]).IsEqualTo("False");
     }
 
     [Test]
-    public async Task Parent_CreateInChild_AgreesOnChildCount() {
-        var scenario = ParityScenario.FromDsl(LinkDsl, "ParityLink");
-        var created = scenario.Create("Parent", ("Name", "Pat"));
-        await created.AssertAgree();
-        await Assert.That(created.Simulate.Properties["kids"]).IsEqualTo(0);
-        var step = scenario.Invoke("AddKid");
-        await step.AssertAgree();
-        await Assert.That(step.Simulate.Success).IsTrue();
-        await Assert.That(step.Simulate.Properties["kids"]).IsEqualTo(1);
+    public async Task Invoke_CreateInAction_AgreesOnLinkedChildren() {
+        var outcomes = await ParityScenario.FromDsl(LinkDsl, "ParityLink")
+            .AssertAgree(side => {
+                side.Create("Parent", ("Name", "Pat"));
+                side.Invoke("AddKid");
+            });
+        await Assert.That(outcomes[0].State["kids"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["kids"]).IsEqualTo("1");
     }
-
-    // B1 owns these printed-C# compile failures (remove an entry when that domain compiles).
-    static readonly IReadOnlyDictionary<string, string> KnownGaps = new Dictionary<string, string>(StringComparer.Ordinal);
 
     [Test]
     [Arguments("docs/probes/fleet-eval/09-transport/warehouse.poly")]
@@ -159,30 +140,10 @@ public class ParityTests {
     [Arguments("docs/probes/dogfood/simulate-create-create-in.poly")]
     public async Task PrintedCSharpCompiles(string relativePath) {
         var poly = await File.ReadAllTextAsync(Path.Combine(FindRepoRoot(), relativePath));
-        Domain domain;
-        AnalysisResult analysis;
-        try {
-            (domain, analysis) = EvolvedDomain.FromDsl(poly);
-        }
-        catch (Exception ex) {
-            throw new InvalidOperationException($"Parse/analyze failed for '{relativePath}': {ex.Message}", ex);
-        }
+        var (domain, analysis) = EvolvedDomain.FromDsl(poly);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
-        string? error = null;
-        try {
-            ExportedCSharp.CompileAndLoad(cs, "Print_" + Path.GetFileNameWithoutExtension(relativePath));
-        }
-        catch (InvalidOperationException ex) {
-            error = ex.Message.Split('\n')[0];
-        }
-        if (KnownGaps.TryGetValue(relativePath, out var reason)) {
-            await Assert.That(error).IsNotNull()
-                .Because($"KnownGaps '{relativePath}' ({reason}) must still fail to compile until B1 fixes it");
-        }
-        else {
-            await Assert.That(error).IsNull()
-                .Because($"printed C# for '{relativePath}' must compile: {error}");
-        }
+        // CompileAndLoad throws with the compiler errors when the printed code does not compile.
+        await Assert.That(ExportedCSharp.CompileAndLoad(cs, "Print_" + Path.GetFileNameWithoutExtension(relativePath))).IsNotNull();
     }
 
     static string FindRepoRoot() {

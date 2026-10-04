@@ -14,14 +14,22 @@ public sealed class ArtifactCatalog {
     public IReadOnlyList<Artifact> Artifacts => _artifacts.AsReadOnly();
 
     /// <summary>
-    /// Declares an artifact type and the types its artifacts may point at. The producer that
-    /// defines a type calls this once, before registering artifacts of that type. Throws
-    /// <see cref="InvalidOperationException"/> when the type is already declared.
+    /// Declares an artifact type and the types its artifacts may point at. Call it once, before
+    /// registering artifacts of that type; which producer calls it is a convention, the catalog does
+    /// not check. Type names follow the same rule as in <see cref="ArtifactId"/>, and <paramref name="mayPointAt"/>
+    /// is copied. A type in <paramref name="mayPointAt"/> need not be declared (another producer may
+    /// declare it later); if it never is, a reference to it can only show up as dangling. Throws
+    /// <see cref="InvalidOperationException"/> when the type is already declared and
+    /// <see cref="FormatException"/> for a malformed type name.
     /// </summary>
     public void DeclareType(string type, IEnumerable<string> mayPointAt) {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentNullException.ThrowIfNull(mayPointAt);
-        if (!_allowedTargets.TryAdd(type, [.. mayPointAt]))
+        var allowed = mayPointAt.ToHashSet(StringComparer.Ordinal);
+        ArtifactId.RequireValid(type, "type");
+        foreach (var target in allowed)
+            ArtifactId.RequireValid(target, "type");
+        if (!_allowedTargets.TryAdd(type, allowed))
             throw new InvalidOperationException($"Artifact type '{type}' is already declared.");
     }
 
@@ -59,6 +67,8 @@ public sealed class ArtifactCatalog {
     /// <summary>
     /// Every reference whose target is not registered with the expected type: no artifact has the
     /// target's name path (dangling), or artifacts have it but none with the expected type (wrong type).
+    /// Paths are compared exactly, case included. Sorted ordinally by referrer id, then target id, so the
+    /// list does not depend on registration order; a reference listed twice is reported twice.
     /// </summary>
     public IReadOnlyList<ArtifactReferenceProblem> FindDanglingOrWrongType() {
         var problems = new List<ArtifactReferenceProblem>();
@@ -71,7 +81,11 @@ public sealed class ArtifactCatalog {
                     : ArtifactReferenceProblemKind.Dangling;
                 problems.Add(new ArtifactReferenceProblem(artifact.Descriptor.Id, target, kind));
             }
-        return problems.AsReadOnly();
+        return problems
+            .OrderBy(p => p.From.ToString(), StringComparer.Ordinal)
+            .ThenBy(p => p.Target.ToString(), StringComparer.Ordinal)
+            .ToArray()
+            .AsReadOnly();
     }
 }
 

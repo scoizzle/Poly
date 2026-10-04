@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 using Poly.DomainModeling.Compile;
 
@@ -208,18 +209,141 @@ public sealed class ArtifactCatalogTests {
     }
 
     [Test]
-    public async Task FindDanglingOrWrongType_ListsEveryProblem_InRegistrationOrder_AsAReadOnlyView() {
+    public async Task FindDanglingOrWrongType_ListsEveryProblem_SortedWhateverTheRegistrationOrder() {
+        static ArtifactCatalog Build(bool bFirst) {
+            var catalog = new ArtifactCatalog();
+            catalog.DeclareType("method", mayPointAt: ["type"]);
+            catalog.DeclareType("type", mayPointAt: []);
+            var a = Make("A", "method", pointsAt: ["Z#type", "Y#type"]);
+            var b = Make("B", "method", pointsAt: "X#type");
+            foreach (var artifact in bFirst ? new[] { b, a } : new[] { a, b })
+                catalog.Register(artifact);
+            return catalog;
+        }
+
+        var forward = Build(bFirst: false).FindDanglingOrWrongType();
+        var backward = Build(bFirst: true).FindDanglingOrWrongType();
+
+        const string expected = "A#method->Y#type A#method->Z#type B#method->X#type";
+        await Assert.That(Describe(forward)).IsEqualTo(expected);
+        await Assert.That(Describe(backward)).IsEqualTo(expected);
+        await Assert.That(() => ((IList<ArtifactReferenceProblem>)forward).Clear()).Throws<NotSupportedException>();
+    }
+
+    [Test]
+    public async Task FindDanglingOrWrongType_SameReferenceListedTwice_IsReportedTwice() {
         var catalog = new ArtifactCatalog();
         catalog.DeclareType("method", mayPointAt: ["type"]);
         catalog.DeclareType("type", mayPointAt: []);
-        catalog.Register(Make("A", "method", pointsAt: ["X#type", "Y#type"]));
-        catalog.Register(Make("B", "method", pointsAt: "Z#type"));
+        catalog.Register(Make("A", "method", pointsAt: ["X#type", "X#type"]));
+
+        await Assert.That(Describe(catalog.FindDanglingOrWrongType())).IsEqualTo("A#method->X#type A#method->X#type");
+    }
+
+    [Test]
+    public async Task FindDanglingOrWrongType_PathsAreComparedExactly_PrefixAndCaseDoNotMatch() {
+        var catalog = new ArtifactCatalog();
+        catalog.DeclareType("method", mayPointAt: ["type"]);
+        catalog.DeclareType("type", mayPointAt: []);
+        catalog.Register(Make("Hotel/Room", "type"));
+        catalog.Register(Make("A", "method", pointsAt: ["Hotel#type", "hotel/room#type"]));
 
         var problems = catalog.FindDanglingOrWrongType();
 
-        await Assert.That(string.Join(" ", problems.Select(p => p.Target))).IsEqualTo("X#type Y#type Z#type");
-        await Assert.That(() => ((IList<ArtifactReferenceProblem>)problems).Clear()).Throws<NotSupportedException>();
+        await Assert.That(Describe(problems)).IsEqualTo("A#method->Hotel#type A#method->hotel/room#type");
+        await Assert.That(problems.All(p => p.Kind == ArtifactReferenceProblemKind.Dangling)).IsTrue();
     }
+
+    [Test]
+    public async Task Register_KeepsItsOwnCopyOfTheReferences() {
+        var catalog = new ArtifactCatalog();
+        catalog.DeclareType("method", mayPointAt: ["type"]);
+        catalog.DeclareType("type", mayPointAt: []);
+        catalog.DeclareType("module", mayPointAt: []);
+        var fromList = new List<ArtifactId> { ArtifactId.Parse("Room#type") };
+        var fromArray = new[] { ArtifactId.Parse("Room#type") };
+        catalog.Register(new Artifact(new ArtifactDescriptor(ArtifactId.Parse("A#method"), "Test", fromList), null));
+        catalog.Register(new Artifact(new ArtifactDescriptor(ArtifactId.Parse("B#method"), "Test", fromArray), null));
+        catalog.Register(Make("Room", "type"));
+
+        fromList.Add(ArtifactId.Parse("Hotel#module")); // a type "method" may not point at
+        fromArray[0] = ArtifactId.Parse("Hotel#module");
+        var registered = catalog.Find(ArtifactId.Parse("A#method"))!.Descriptor.References;
+
+        await Assert.That(registered.Count).IsEqualTo(1);
+        await Assert.That(catalog.Find(ArtifactId.Parse("B#method"))!.Descriptor.References[0].ToString())
+            .IsEqualTo("Room#type");
+        await Assert.That(() => ((IList<ArtifactId>)registered).Add(ArtifactId.Parse("Hotel#module")))
+            .Throws<NotSupportedException>();
+        await Assert.That(catalog.FindDanglingOrWrongType()).IsEmpty();
+    }
+
+    [Test]
+    public async Task Descriptor_WithEqualReferences_IsEqualAndHashesAlike() {
+        ArtifactDescriptor Make(params string[] refs) =>
+            new(ArtifactId.Parse("A#method"), "Test", [.. refs.Select(ArtifactId.Parse)]);
+
+        await Assert.That(Make("X#type", "Y#type")).IsEqualTo(Make("X#type", "Y#type"));
+        await Assert.That(Make("X#type", "Y#type").GetHashCode()).IsEqualTo(Make("X#type", "Y#type").GetHashCode());
+        await Assert.That(Make("X#type", "Y#type")).IsNotEqualTo(Make("Y#type", "X#type"));
+        await Assert.That(Make("X#type")).IsNotEqualTo(Make());
+        await Assert.That(Make()).IsEqualTo(new ArtifactDescriptor(ArtifactId.Parse("A#method"), "Test"));
+    }
+
+    [Test]
+    public async Task Descriptor_NullReferencesOrNullElement_Throws() {
+        var id = ArtifactId.Parse("A#method");
+
+        await Assert.That(() => new ArtifactDescriptor(id, "Test", null!)).Throws<ArgumentNullException>();
+        await Assert.That(() => new ArtifactDescriptor(id, "Test", [null!])).Throws<ArgumentException>();
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments(" ")]
+    [Arguments("a#b")]
+    [Arguments("a/b")]
+    public async Task DeclareType_MalformedName_Throws(string type) {
+        await Assert.That(() => new ArtifactCatalog().DeclareType(type, mayPointAt: []))
+            .Throws<FormatException>();
+        await Assert.That(() => new ArtifactCatalog().DeclareType("method", mayPointAt: [type]))
+            .Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task DeclareType_NullInput_Throws() {
+        var catalog = new ArtifactCatalog();
+
+        await Assert.That(() => catalog.DeclareType(null!, mayPointAt: [])).Throws<ArgumentNullException>();
+        await Assert.That(() => catalog.DeclareType("method", mayPointAt: null!)).Throws<ArgumentNullException>();
+        await Assert.That(() => catalog.DeclareType("method", mayPointAt: [null!])).Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task DeclareType_CopiesMayPointAt_SoTheCallerCannotWidenItLater() {
+        var catalog = new ArtifactCatalog();
+        var allowed = new List<string> { "type" };
+        catalog.DeclareType("method", allowed);
+        catalog.DeclareType("module", mayPointAt: []);
+
+        allowed.Add("module");
+
+        await Assert.That(() => catalog.Register(Make("A", "method", pointsAt: "Hotel#module")))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task DeclareType_TargetTypeNeverDeclared_IsAccepted_AndItsReferencesAreDangling() {
+        var catalog = new ArtifactCatalog();
+        catalog.DeclareType("method", mayPointAt: ["ghost"]);
+
+        catalog.Register(Make("A", "method", pointsAt: "G#ghost"));
+
+        await Assert.That(Describe(catalog.FindDanglingOrWrongType())).IsEqualTo("A#method->G#ghost");
+    }
+
+    private static string Describe(IEnumerable<ArtifactReferenceProblem> problems) =>
+        string.Join(" ", problems.Select(p => $"{p.From}->{p.Target}"));
 
     [Test]
     public async Task PublicSurface_IsExactlyTheAllowList() {
@@ -245,5 +369,28 @@ public sealed class ArtifactCatalogTests {
         await Assert.That(type.GetInterfaces()).IsEmpty();
         await Assert.That(type.GetProperty(nameof(ArtifactCatalog.Artifacts))!.PropertyType)
             .IsEqualTo(typeof(IReadOnlyList<Artifact>));
+    }
+
+    [Test]
+    public async Task DescriptorAndProblemRecords_ExposeOnlyFixedValueProperties() {
+        // Only these properties, no public fields, and no setter other than init: nothing to mutate after construction.
+        var expected = new Dictionary<Type, string[]> {
+            [typeof(ArtifactDescriptor)] = ["Id:ArtifactId", "Producer:String", "References:IReadOnlyList`1"],
+            [typeof(ArtifactReferenceProblem)] = ["From:ArtifactId", "Kind:ArtifactReferenceProblemKind", "Target:ArtifactId"],
+        };
+        foreach (var (type, properties) in expected) {
+            var actual = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+                .Select(p => $"{p.Name}:{p.PropertyType.Name}")
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            await Assert.That(actual).IsEquivalentTo(properties);
+            await Assert.That(type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)).IsEmpty();
+            var plainSetters = type.GetProperties().Where(p => p.SetMethod is { IsPublic: true } set
+                && !set.ReturnParameter.GetRequiredCustomModifiers().Contains(typeof(IsExternalInit)));
+            await Assert.That(plainSetters).IsEmpty();
+        }
+        await Assert.That(typeof(ArtifactDescriptor).GetProperty(nameof(ArtifactDescriptor.References))!.PropertyType)
+            .IsEqualTo(typeof(IReadOnlyList<ArtifactId>));
+        await Assert.That(Enum.GetNames<ArtifactReferenceProblemKind>()).IsEquivalentTo(new[] { "Dangling", "WrongType" });
     }
 }

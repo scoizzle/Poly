@@ -11,7 +11,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// Report only: breaks each sample domain one way at a time and counts the Error
 /// diagnostics that one mistake produces. One edit is one root cause. An error that names
 /// the broken element is the direct report of it; an error that does not is counted as
-/// cascade. That is a name match on the message, not proof of cause.
+/// cascade. That is a name match on the message, not proof of cause. A type-change
+/// message often names the types ('Text' and 'Number') instead of the property, so for
+/// that kind the cascade count is an upper bound.
 /// Nothing here fails on the counts.
 /// Run it with: dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter "/*/*/CascadingErrorReportTests/*" --output Detailed
 /// </summary>
@@ -26,9 +28,12 @@ public sealed class CascadingErrorReportTests {
     private static readonly string[] SampleRoots = ["docs/probes", "demo/live"];
     private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
 
+    // Appended to a name to rename it, so the old name dangles.
+    private const string RenamedSuffix = "Gone";
+
     // Each break edits the DSL text in one place and returns the edited text and the name
     // it broke, or null when the domain has no element of that kind that something else
-    // refers to.
+    // refers to (see IsReferencedElsewhere).
     private sealed record Break(string Name, Func<string, (string Text, string Victim)?> Apply);
 
     private static readonly Break[] Breaks = [
@@ -45,10 +50,18 @@ public sealed class CascadingErrorReportTests {
 
     [Test]
     public async Task ChangeNumberToText_EditsTheTypeNotTheName() {
-        var broken = ChangeNumberToText("Phone: entity {\n  PhoneNumber: Number\n}\n");
-        await Assert.That(broken!.Value.Text).IsEqualTo("Phone: entity {\n  PhoneNumber: Text\n}\n");
+        var broken = ChangeNumberToText("Phone: entity {\n  PhoneNumber: Number\n  Big: policy { PhoneNumber > 5 }\n}\n");
+        await Assert.That(broken!.Value.Text).IsEqualTo("Phone: entity {\n  PhoneNumber: Text\n  Big: policy { PhoneNumber > 5 }\n}\n");
         await Assert.That(broken.Value.Victim).IsEqualTo("PhoneNumber");
     }
+
+    [Test]
+    public async Task ChangeNumberToText_SkipsPropertiesNothingRefersTo() =>
+        await Assert.That(ChangeNumberToText("A: entity {\n  Unused: Number\n}\n")).IsNull();
+
+    [Test]
+    public async Task IsReferencedElsewhere_IgnoresTypeWords() =>
+        await Assert.That(IsReferencedElsewhere("A: entity {\n  Number: Text\n  Floor: Number\n  Count: Number\n}", "Number")).IsFalse();
 
     [Test]
     public async Task IsReferencedElsewhere_IgnoresSecondDeclarationsStringsAndComments() {
@@ -74,7 +87,7 @@ public sealed class CascadingErrorReportTests {
             domains.Select(path => (string[])[path, .. results[path].Select(m => m.Cell)]));
 
         Console.WriteLine();
-        Console.WriteLine("cell: Error diagnostics for the break (of which name the broken element); parser: the parser stopped at the first bad reference (counted as 1 error); n/a: no element of that kind that something else refers to; load failed: any other exception");
+        Console.WriteLine("cell: Error diagnostics for the break (of which name the broken element); parser: the parser stopped at the first bad reference (counted as 1 error); n/a: no element of that kind that something else refers to (for the type change: no Number property that something else refers to); load failed: any other exception");
         Console.WriteLine();
         WriteTable(
             ["break", "applied", "parser stopped", "n/a", "load failed", "no Error", "most Errors", "total Errors",
@@ -133,7 +146,7 @@ public sealed class CascadingErrorReportTests {
 
     // A message names the broken element by its old name, or by the new name a rename gave it.
     private static bool Mentions(string message, string name) =>
-        Regex.IsMatch(message, $@"\b{Regex.Escape(name)}(?:Gone)?\b");
+        Regex.IsMatch(message, $@"\b{Regex.Escape(name)}(?:{RenamedSuffix})?\b");
 
     // Renames the first declaration that matches and that something else refers to, so the
     // other mentions of the name dangle.
@@ -141,20 +154,24 @@ public sealed class CascadingErrorReportTests {
         foreach (Match m in Regex.Matches(text, pattern, RegexOptions.Multiline)) {
             var name = m.Groups[1];
             if (IsReferencedElsewhere(text, name.Value))
-                return (text.Insert(name.Index + name.Length, "Gone"), name.Value);
+                return (text.Insert(name.Index + name.Length, RenamedSuffix), name.Value);
         }
         return null;
     }
 
+    // Changes the type word of the first Number property that something else refers to.
     private static (string Text, string Victim)? ChangeNumberToText(string text) {
-        var m = Regex.Match(text, @"^\s+(\w+): (Number)\b", RegexOptions.Multiline);
-        if (!m.Success)
-            return null;
-        var type = m.Groups[2];
-        return (text.Remove(type.Index, type.Length).Insert(type.Index, "Text"), m.Groups[1].Value);
+        foreach (Match m in Regex.Matches(text, @"^\s+(\w+): (Number)\b", RegexOptions.Multiline)) {
+            if (!IsReferencedElsewhere(text, m.Groups[1].Value))
+                continue;
+            var type = m.Groups[2];
+            return (text.Remove(type.Index, type.Length).Insert(type.Index, "Text"), m.Groups[1].Value);
+        }
+        return null;
     }
 
     // Deletes the first action declaration (header through its closing brace) that something else refers to.
+    // The brace scan does not skip string literals; no sample has a brace in a string inside an action.
     private static (string Text, string Victim)? DeleteAction(string text) {
         foreach (Match m in Regex.Matches(text, @"^\s+(\w+): action\b", RegexOptions.Multiline)) {
             var name = m.Groups[1].Value;
@@ -174,9 +191,13 @@ public sealed class CascadingErrorReportTests {
     }
 
     // True when the name is declared once and mentioned somewhere else in code. Strings and
-    // comments do not count, and a name declared more than once is skipped because a
-    // mention cannot be tied to one of the declarations.
+    // comments do not count. A name declared more than once is skipped because a mention
+    // cannot be tied to one of the declarations; any line that starts with "name:" counts as
+    // a declaration, including an entry in a create initializer. A type word (Text, Number,
+    // Boolean, Date) is skipped too: its mentions are uses of the type, not of the property.
     private static bool IsReferencedElsewhere(string text, string name) {
+        if (name is "Text" or "Number" or "Boolean" or "Date")
+            return false;
         var code = Regex.Replace(text, "\"(?:[^\"\\\\]|\\\\.)*\"|//[^\n]*", "");
         var escaped = Regex.Escape(name);
         var declarations = Regex.Matches(code, $@"^\s*{escaped}\s*:", RegexOptions.Multiline).Count;

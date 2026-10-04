@@ -1,6 +1,6 @@
-# Poly pipeline stage map (DRAFT)
+# Poly pipeline stage map
 
-Status: draft for Scot Murphy, 2026-10-02. Not a PR. Written from the design agreed in discussion today, then cross-checked against master `9db8868f` (2026-09-29). Rule: the hand-written code is the truth; this doc is ideation until the code matches it. PRs 82 (`d7c1da48`) and 83 (`c2265740`) merged into master `945a2164`; the doc's other line numbers and claims were taken on `9db8868f`.
+Status: working design for Scot Murphy, written 2026-10-02 from the design agreed in discussion, then cross-checked against master `9db8868f` (2026-09-29). Updated 2026-10-04 for the settled decisions and for the artifact catalog work now on master `16403b60`. Rule: the hand-written code is the truth; this doc is ideation until the code matches it. PRs 82 (`d7c1da48`) and 83 (`c2265740`) merged into master `945a2164`; the doc's other line numbers and claims were taken on `9db8868f`.
 
 ## 1. Overview
 
@@ -12,7 +12,7 @@ flowchart LR
     D --> L[Load<br/>session + libraries]
     L --> AN[Analyze<br/>passes -> AnalysisResult]
     AN -->|any Error| STOP[Stop: diagnostics are the output]
-    AN -->|no Error| C[Compile<br/>domain + analysis result -> artifacts]
+    AN -->|no Error| C[Compile<br/>domain + analysis result + libraries -> artifacts]
     C --> CAT[(Artifact suite + catalog<br/>stable ids, typed refs)]
     CAT --> AA[Analyze the artifacts<br/>check Compile's own output]
     AA -->|any Error| STOP2[Stop: implementation is provably wrong,<br/>consumers must not use the artifacts]
@@ -61,15 +61,16 @@ Roadmap context: phase 1 is sellable domain-modeling software, phase 2 is any so
   - Any Error means a real problem was found. Compile does not run. The diagnostics report is the output and points at the exact domain elements.
   - Analyze must catch every real problem. Compile trusts it and never re-checks; if Compile trips over something Analyze should have caught, that is an Analyze bug.
   - The analysis result is itself an artifact in the catalog so findings can point at the artifacts they affect.
+  - **Mutation rule (Scot, decision 11):** every mutation of state must enforce every specified invariant, including constraints on set, not just on create. Constraints propagate and are validated as early as possible. Only named actions may mutate their own entity's state; cross-entity property access is read-only. Simulation and printed code both follow this. Entry, exit and `when` blocks count as named actions, and the recommended style is to invoke an action from them rather than assign the entity's own state directly. Create, link and unlink are effects of relationship operations, and they are the only time an outside entity can influence another entity's state; the relationship owns those lifecycle effects, so they are the one named exception to "only named actions mutate their own entity". Analyze does not enforce all of this yet.
 
 ### 2.5 Compile (today still named "Lower")
-- **Input:** exactly two things: the domain model and the analysis result.
+- **Input:** three things: the domain model, the analysis result, and the libraries the session loaded for the domain (their type maps, meaning tables, expression forms and artifact producers). Compile reads nothing else.
 - **Output:** only artifacts. Nothing else is produced and nothing is re-derived or re-judged.
 - **Rules:** one compilation produces a suite of typed artifacts. Syntax trees (many small ones, each a component of a valid implementation) are one type among others: API specs, schemas, tests, docs, the analysis report. Dangling references are compile errors. Correct before optimal.
 - **Compile contract:** Compile transforms domain concepts (constraints, transitions, subscriptions, defaults, failures and so on) into valid, correct, interpretable ASTs, each placed in the right spot in the artifact graph. For example, a constraint's tree sits on its entity and a subscription's tree sits on its trigger. The interpreter never has to interpret a concept, only trees.
-  - **Definition of done:** every domain concept ends up as a tree in the right place. A concept with no tree is a Compile bug.
+  - **Definition of done:** every domain concept ends up as a tree in the right place. A concept with no tree is a Compile bug. This is the target and is not met yet: trees are per entity at best until finer trees are built.
   - **Suggested automatable check:** for a given domain, list its concepts and confirm each one has its tree attached where expected. Run it over the sample domains in CI.
-- **Rename:** "Lower" becomes "Compile" in a separate slice after PRs 82 and 83 merge, not mixed into them.
+- **Rename:** "Lower" becomes "Compile" in separate renaming slices (R1 and R2 in the convergence plan), not mixed into other work. PRs 82 and 83, which it was waiting for, have merged.
 
 ### 2.6 Analyze the artifacts
 - **Input:** the artifact suite and catalog that Compile produced, plus the domain model and analysis result it was compiled from (needed only to check that nothing was dropped).
@@ -85,11 +86,12 @@ Roadmap context: phase 1 is sellable domain-modeling software, phase 2 is any so
   - It guards against runtime black magic: a tree that is invalid or missing something shows up before anything runs.
   - It makes "correct before optimal" enforceable: an optimization step later has to pass the same checks.
   - Consumers trust it the way Compile trusts Analyze and never re-check the artifacts themselves.
-- **Open:** whether this is a second pass in the same diagnostics system or a separate verification step (see open item 11).
+- **Decided (Scot, decision 14):** artifact analysis has its own set of analysis passes, run through the same analysis system, and produces a result set separate from the domain analysis.
 
 ### 2.7 Consumers
 Anything that reads artifacts: the interpreter (in-process debugger), C# printers, test runner, spec exporters, reviewing agents. Adding a consumer never requires changing Compile.
 - **Rules:** consumers only use artifacts that passed 2.6. Consumers never reach back into the domain model or re-run Analyze. If a consumer needs something the artifacts do not carry, that is a missing artifact type, not a shortcut.
+- **Reader exceptions (decisions 5 and 6):** the Minimal API and DbContext generators are part of Compile, not consumers, so they read the domain the way Compile does. The MCP read-only tools keep reading the authored Domain.
 
 **Interpreter contract**
 - The interpreter does two things: it maps type definitions from the ASTs into instances backed by `Dictionary<string,object?>`, then it runs the trees.
@@ -101,10 +103,11 @@ Anything that reads artifacts: the interpreter (in-process debugger), C# printer
 
 ## 3. Artifact model and catalog
 - An **artifact** has a type, a stable id that survives recompilation, a producer (core or a library), and a payload.
+- **Ids (decision 1):** a written name path plus the artifact type, for example `Hotel/Reservation/Confirm#method` (the `ArtifactId` type in `Poly/DomainModeling/Compile/ArtifactId.cs`). The id names the method, not a stage body, so same-named stage actions are one artifact. Ids are derived on every compile from the written names, so renaming an element gives a new id. Artifact types are an open set: core defines core types and libraries add their own (decision 2).
 - Artifacts reference each other **by id only**. The compilation's **catalog** resolves ids and is the single place that answers "what depends on what". Artifacts stay simple, serializable and hand-editable.
 - References are **typed**: a test may reference a tree; the reverse is not allowed by accident. Examples: test -> tree it exercises; printed C# method -> tree it came from; analysis finding -> domain element and affected artifacts.
 - A dangling or wrongly typed reference fails the compile, and is also checked again when the artifacts are analyzed (2.6).
-- A compilation is reproducible: artifacts depend only on the domain model and analysis result.
+- A compilation is reproducible: artifacts depend only on the domain model, the analysis result and the session's libraries.
 
 ## 4. Diagnostics
 Four levels: **Hint, Info, Warning, Error**.
@@ -120,17 +123,17 @@ See 2.7. Each artifact type has a producer and one or more consumers; the pairin
 1. **Visibility levels** for snippets/functions (private vs shareable): parked.
 2. **Name** for raw AST snippets (function / helper / snippet).
 3. **Hint proposals pass:** an analysis pass that proposes alternative trees.
-4. **Compile rename:** code-level "Lower" -> "Compile" after PRs 82/83 (sizing in section 7).
-5. **Artifact identity scheme:** what makes an id stable across recompiles (domain element id plus artifact type is the obvious start).
+4. **Compile rename:** code-level "Lower" -> "Compile" in the renaming slices R1 and R2 (sizing in section 7).
+5. *(Resolved: ids are a written name path plus the artifact type, decision 1; see section 3. Number kept so other references stay stable.)*
 6. **Library-contributed passes:** the exact contract, and how they order relative to core passes.
 7. **Feedback loop:** how agent review findings flow back into authoring (phase 2).
 8. **Partial/debug compile of a broken model:** settled as "no" (Errors stop Compile); revisit only if debugging a broken model becomes a real need.
 9. *(Resolved: built-in operations are emitted as generic AST operations; see the interpreter contract in 2.7. Number kept so other references stay stable.)*
 10. *(Resolved: DEI replacement decided by Scot; see the interpreter contract in 2.7. Number kept so other references stay stable.)*
-11. **Artifact analysis shape:** decide later (Scot): is artifact analysis a second pass in the same diagnostics system (same levels) or a separate verification step with its own report?
+11. *(Resolved: decision 14, its own passes in the same analysis system with a separate result set; see 2.6. Number kept so other references stay stable.)*
 
 ## 7. Where the code differs today
-Checked against master `9db8868f`. Code is truth. File names are under `Poly/DomainModeling/` unless noted.
+Checked against master `9db8868f`, except difference 1, which was updated for master `16403b60`. Code is truth. File names are under `Poly/DomainModeling/` unless noted.
 
 **Note on `DomainEntityInstance` (DEI):** DEI is a known anti-pattern. Agents generated it and iterated on it; it was never a goal Scot specified. Its behavior is not design intent and it is not a consumer to migrate. Everything below that DEI does (re-analyzing and re-lowering, pre-run rewrites, holding `Domain`) is a violation to retire. Decided (Scot): nothing separate replaces it. The interpreter interprets the ASTs correctly and the ASTs contain everything that actually needs to be defined; anything DEI did beyond that is either a missing tree (a Compile bug to fix) or removed (see the interpreter contract in 2.7).
 
@@ -143,10 +146,10 @@ Checked against master `9db8868f`. Code is truth. File names are under `Poly/Dom
 - Stop on errors is enforced for evolution (`Evolution/DomainEvolution.cs`, rollback when `HasErrors`), `DslCompiler`, and MCP `apply_dsl`.
 
 **Differences (biggest first)**
-1. **No real artifact suite or catalog.** `ArtifactDescriptor(Kind, Name, Source)` (`Compile/ArtifactDescriptor.cs`) is three strings: no id, no payload, no typed references, no dangling check. `DomainSession.Lower` overwrites `ArtifactCatalog` with one sentinel entry `SyntaxModule`. `IArtifactContributor.Contribute` returns plain `(FileName, Source)` pairs. Today's outputs: the syntax module, one `.cs` per entity, `Poly.Types.cs`, `{Domain}DbContext.cs`, `Program.cs`, `demo.http`. No test, doc or analysis-report artifacts.
+1. **The artifact suite and catalog exist but nothing is registered through them yet.** `ArtifactId`, `Artifact` and `ArtifactCatalog` (`Compile/`) now give artifacts an id, a payload, declared types with allowed targets, a duplicate check and a dangling or wrong-type check. `DomainSession.Lower` still registers only one placeholder entry, `SyntaxModule`. `IArtifactContributor.Contribute` still returns plain `(FileName, Source)` pairs. Today's outputs: the syntax module, one `.cs` per entity, `Poly.Types.cs`, `{Domain}DbContext.cs`, `Program.cs`, `demo.http`. No test, doc or analysis-report artifacts.
 2. **Consumers reach back and re-run stages (DEI behavior: violation to retire).** `RuntimeAnalysisCache` (`Analysis/RuntimeAnalysisCache.cs`) keeps analysis, module and body tables keyed by `Domain`. `DomainEntityInstance` (`Runtime/DomainEntityInstance*.cs`) calls `GetOrAnalyze` and `GetOrLower` on hot paths, holds `Domain`, and re-lowers some ontology expressions itself (parameter bindings, peer evaluation in `.HostAbi.cs`, create initializers). MCP tools (`Poly.Mcp/Tools/DomainTools.cs`, `OracleTool.cs`, `RuntimeTool.cs`) read `Domain` and cached analysis directly. Minimal API, DbContext and HTTP file generators walk `Domain` plus analysis bags instead of artifacts.
 3. **Compile does not stop on Errors.** `DomainSession.Lower` and `GetOrLower` have no `HasErrors` check. The stop only exists upstream (evolution, `DslCompiler`, `apply_dsl`). MCP `export_domain_to_csharp` (`OracleTool.cs`) only checks that an analysis exists, and `DomainEntityInstance` ignores errors.
-4. **Compile does more than domain + analysis result.** It also reads the session tables (meaning, forms, type maps), walks `Domain` collections directly (`Lowering/DomainToCSharpExporter.cs`), has a re-scan fallback when analysis is null (`LoweringContext.cs`, `EffectLoweringPass.cs`), re-lowers action/stage-scoped policies (`CompletePolicyBodies`), and writes side tables on the cache. `DomainSession.Emit` re-analyzes the lowered syntax with the interpreter's analyzer, which is re-judging.
+4. **Compile does more than its three inputs (domain, analysis result, the session's libraries).** Reading the session tables (meaning, forms, type maps) is fine: they are the libraries. The rest is not: it walks `Domain` collections directly (`Lowering/DomainToCSharpExporter.cs`), has a re-scan fallback when analysis is null (`LoweringContext.cs`, `EffectLoweringPass.cs`), re-lowers action/stage-scoped policies (`CompletePolicyBodies`), and writes side tables on the cache. `DomainSession.Emit` re-analyzes the lowered syntax with the interpreter's analyzer, which is re-judging.
 5. **Pre-run rewrites before the interpreter (DEI behavior: violation to retire).** On master, `DomainEntityInstance.BindThis`, `RewriteVoidFailClosedThrow`, `BindExportBody` and `BindModuleMethodBody` rewrite the lowered trees before they run. That breaks "the tree you simulate is the tree you print" and the interpreter contract in 2.7.
 6. **One module, not an artifact suite of trees.** `DomainProgramProjection.ToSyntax` returns one list of type definitions. They are many type trees but not independently id-linked artifacts.
 7. **No snippet/function authoring.** The DSL has no function or snippet form; `"function"` is explicitly in the parser's unsupported keyword list (`Language/PolyDslParser.cs`) and the MCP DSL guide says so. The nearest things are library ident folds (e.g. `Now`), single-expression fragments (`Language/DslExpressionFragment.cs`) and C# `DomainExpression` factories.
@@ -164,6 +167,6 @@ Checked against master `9db8868f`. Code is truth. File names are under `Poly/Dom
 - About 27 product `.cs` files and roughly 225 occurrences across 20 identifiers, for example `LoweringContext`, `LoweredExpression`, `DomainExpressionLoweringPass`, `EffectLoweringPass`, `ExpressionLoweringRegistry`, `TemporalLowering`, `DomainSession.Lower`, `GetOrLower`. About 80 `.cs` files and 490 occurrences including tests.
 - Docs also say "Lower" (`AGENTS.md`, `docs/CORE.md`, plan files). They already describe "Session Compile = Load -> one analyze -> session.Lower -> artifact set", so the direction is half-documented already.
 
-**Suggested order after PRs 82/83** (for discussion, not decided): (a) make Lower refuse an analysis with Errors; (b) give `ArtifactDescriptor` an id, type and typed refs, and register every output through it; (c) move consumers off `Domain` and `RuntimeAnalysisCache` onto the catalog; (d) rename Lower to Compile mechanically; (e) add snippet/function authoring.
+**Order:** the recommended order of work is in the convergence plan (`pipeline-convergence-plan.md`, section 12).
 
-Method note: code reading was done by Grok Build (grok-4.6) on a throwaway clone under `/workspace/poly-ro`; key claims (severity enum, `Lower` body, `ArtifactDescriptor`, `"function"` keyword) were spot-checked directly. Line-level references are in `pipeline-stage-map.findings-raw.md` next to this file.
+Method note: code reading was done by Grok Build (grok-4.6) on a throwaway clone; key claims (severity enum, `Lower` body, `ArtifactDescriptor`, `"function"` keyword) were spot-checked directly. The line-level notes from that reading were not kept in the repo.

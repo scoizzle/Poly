@@ -27,7 +27,7 @@ public sealed record ArtifactId {
     /// <summary>
     /// Builds an id from a name path and a type. Throws <see cref="FormatException"/>
     /// when the path is empty or a name or the type is empty, contains whitespace,
-    /// <c>/</c> or <c>#</c>.
+    /// <c>/</c> or <c>#</c>. Any other character is accepted.
     /// </summary>
     public static ArtifactId Create(IEnumerable<string> path, string type) {
         ArgumentNullException.ThrowIfNull(path);

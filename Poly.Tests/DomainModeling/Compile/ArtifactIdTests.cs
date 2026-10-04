@@ -9,7 +9,7 @@ public sealed class ArtifactIdTests {
 
         await Assert.That(id.ToString()).IsEqualTo("Hotel/Reservation/Confirm#method");
         await Assert.That(id.Path).IsEqualTo("Hotel/Reservation/Confirm");
-        await Assert.That(id.Segments).IsEquivalentTo(new[] { "Hotel", "Reservation", "Confirm" });
+        await Assert.That(string.Join("/", id.Segments)).IsEqualTo("Hotel/Reservation/Confirm");
         await Assert.That(id.Type).IsEqualTo("method");
     }
 
@@ -18,6 +18,7 @@ public sealed class ArtifactIdTests {
     [Arguments("Hotel#module")]
     [Arguments("Hotel/Reservation#stage-enum")]
     [Arguments("Hotel/Reservation/Confirm#Method")]
+    [Arguments("Hôtel/Réservation/確認#méthode")]
     public async Task Parse_ThenToString_RoundTrips(string text) {
         await Assert.That(ArtifactId.Parse(text).ToString()).IsEqualTo(text);
     }
@@ -57,6 +58,12 @@ public sealed class ArtifactIdTests {
     [Arguments("Hotel/Confirm#method\n")]
     public async Task Parse_Malformed_Throws(string text) {
         await Assert.That(() => ArtifactId.Parse(text)).Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task NullInput_Throws() {
+        await Assert.That(() => ArtifactId.Parse(null!)).Throws<ArgumentNullException>();
+        await Assert.That(() => ArtifactId.Create(null!, "method")).Throws<ArgumentNullException>();
     }
 
     [Test]

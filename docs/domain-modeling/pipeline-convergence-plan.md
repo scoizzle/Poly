@@ -195,8 +195,8 @@ _Lane A · Size S · Review 1 · Depends on: A2a_
 _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
 - Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map 2.5, Definition of done ("a tree per concept in the right place") is NOT met until A6.
 - Files: `Compile/DomainSession.cs` (Lower, Emit), `Lowering/DomainProgramProjection.cs` only if the split moves.
-- Done when: T0 golden identical for all sample domains; catalog text snapshot added; `git grep SyntaxModule` in product code is empty.
-- SHIP if golden is byte-identical and the grep is empty. NOT SHIP if any snapshot changed or the placeholder remains.
+- Done when: T0 `*.cs.golden` identical for all sample domains; `catalog.golden` shows the new artifact list; `git grep SyntaxModule` in product code is empty.
+- SHIP if `*.cs.golden` is byte-identical (`catalog.golden` may change only to show the new artifact list) and the grep is empty; NOT SHIP if any other snapshot changed or the placeholder remains.
 - Hand-edit: Yes. Probe: no "legacy" or "fallback" branch added.
 
 **A3b. Each tree points back to its source element**

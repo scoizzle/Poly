@@ -1,0 +1,316 @@
+### ═══════════════════════════════════════════════════════════
+###  Crm REST API — Generated
+###
+###  Start the server:
+###    dotnet run --project path/to/project --urls "http://localhost:5201"
+###
+###  Then click "Send Request" above any request below.
+### ═══════════════════════════════════════════════════════════
+
+### ──────────── Sites ────────────
+
+### List all sites
+GET http://localhost:5201/api/sites
+
+### Get site by id
+GET http://localhost:5201/api/sites/1
+
+### Create a new site
+POST http://localhost:5201/api/sites
+Content-Type: application/json
+
+{
+    "City": "sample",
+    "Region": "sample"
+}
+
+### ──────────── Products ────────────
+
+### List all products
+GET http://localhost:5201/api/products
+
+### Get product by Sku
+GET http://localhost:5201/api/products/example-value
+
+### Create a new product
+POST http://localhost:5201/api/products
+Content-Type: application/json
+
+{
+    "ListPrice": 0,
+    "Name": "sample",
+    "Sku": "example-sku"
+}
+
+### ──────────── Leads ────────────
+
+### Action: Convert
+POST http://localhost:5201/api/leads/example-value/convert
+
+### Action: Disqualify
+POST http://localhost:5201/api/leads/example-value/disqualify
+
+### ──────────── Accounts ────────────
+
+### List accounts for lead
+GET http://localhost:5201/api/leads/example-value/account
+
+### Get account by id for lead
+GET http://localhost:5201/api/leads/example-value/account/1
+
+### Action: PlaceHq
+POST http://localhost:5201/api/leads/example-value/account/1/placeHq
+Content-Type: application/json
+
+{
+    "city": "sample",
+    "region": "sample"
+}
+
+### Action: AddContact
+POST http://localhost:5201/api/leads/example-value/account/1/addContact
+Content-Type: application/json
+
+{
+    "name": "sample",
+    "email": "sample"
+}
+
+### Action: ConvertLead
+POST http://localhost:5201/api/leads/example-value/account/1/convertLead
+Content-Type: application/json
+
+{
+    "leadId": "example-lead-id"
+}
+
+### Action: OpenDeal
+POST http://localhost:5201/api/leads/example-value/account/1/openDeal
+Content-Type: application/json
+
+{
+    "title": "sample",
+    "amount": 0
+}
+
+### Action: Archive
+POST http://localhost:5201/api/leads/example-value/account/1/archive
+
+### Action: OpenTicket
+POST http://localhost:5201/api/leads/example-value/account/1/openTicket
+Content-Type: application/json
+
+{
+    "subject": "sample"
+}
+
+### Action: Restore
+POST http://localhost:5201/api/leads/example-value/account/1/restore
+
+### ──────────── Contacts ────────────
+
+### List contacts for opportunity
+GET http://localhost:5201/api/opportunitys/1/contact
+
+### Get contact by id for opportunity
+GET http://localhost:5201/api/opportunitys/1/contact/example-value
+
+### Action: Retire
+POST http://localhost:5201/api/opportunitys/1/contact/example-value/retire
+
+### Action: Reactivate
+POST http://localhost:5201/api/opportunitys/1/contact/example-value/reactivate
+
+### ──────────── Opportunitys ────────────
+
+### List opportunitys for activity
+GET http://localhost:5201/api/activitys/1/opportunity
+
+### Get opportunity by id for activity
+GET http://localhost:5201/api/activitys/1/opportunity/1
+
+### Action: CompleteOpenWork
+POST http://localhost:5201/api/activitys/1/opportunity/1/completeOpenWork
+
+### Action: Propose
+POST http://localhost:5201/api/activitys/1/opportunity/1/propose
+
+### Action: Lose
+POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+
+### Action: Log
+POST http://localhost:5201/api/activitys/1/opportunity/1/log
+Content-Type: application/json
+
+{
+    "subject": "sample"
+}
+
+### Action: AddLine
+POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+Content-Type: application/json
+
+{
+    "skuId": "example-product-id",
+    "qty": 0
+}
+
+### Action: QuoteDeal
+POST http://localhost:5201/api/activitys/1/opportunity/1/quoteDeal
+
+### Action: Commit
+POST http://localhost:5201/api/activitys/1/opportunity/1/commit
+
+### Action: Lose
+POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+
+### Action: Log
+POST http://localhost:5201/api/activitys/1/opportunity/1/log
+Content-Type: application/json
+
+{
+    "subject": "sample"
+}
+
+### Action: AddLine
+POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+Content-Type: application/json
+
+{
+    "skuId": "example-product-id",
+    "qty": 0
+}
+
+### Action: Win
+POST http://localhost:5201/api/activitys/1/opportunity/1/win
+
+### Action: Capture
+POST http://localhost:5201/api/activitys/1/opportunity/1/capture
+Content-Type: application/json
+
+{
+    "request": 0
+}
+
+### Action: Lose
+POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+
+### Action: Log
+POST http://localhost:5201/api/activitys/1/opportunity/1/log
+Content-Type: application/json
+
+{
+    "subject": "sample"
+}
+
+### Action: AddLine
+POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+Content-Type: application/json
+
+{
+    "skuId": "example-product-id",
+    "qty": 0
+}
+
+### ──────────── Activitys ────────────
+
+### List activitys for opportunity
+GET http://localhost:5201/api/opportunitys/1/activities
+
+### Get activity by id for opportunity
+GET http://localhost:5201/api/opportunitys/1/activities/1
+
+### Action: Snooze
+POST http://localhost:5201/api/opportunitys/1/activities/1/snooze
+
+### Action: Complete
+POST http://localhost:5201/api/opportunitys/1/activities/1/complete
+
+### ──────────── Quotes ────────────
+
+### List quotes for quoteLine
+GET http://localhost:5201/api/quoteLines/1/quote
+
+### Get quote by id for quoteLine
+GET http://localhost:5201/api/quoteLines/1/quote/1
+
+### Action: AddLine
+POST http://localhost:5201/api/quoteLines/1/quote/1/addLine
+Content-Type: application/json
+
+{
+    "skuId": "example-product-id",
+    "qty": 0
+}
+
+### Action: Present
+POST http://localhost:5201/api/quoteLines/1/quote/1/present
+
+### Action: Accept
+POST http://localhost:5201/api/quoteLines/1/quote/1/accept
+
+### Action: Reject
+POST http://localhost:5201/api/quoteLines/1/quote/1/reject
+
+### ──────────── Campaigns ────────────
+
+### List all campaigns
+GET http://localhost:5201/api/campaigns
+
+### Get campaign by id
+GET http://localhost:5201/api/campaigns/1
+
+### Create a new campaign
+POST http://localhost:5201/api/campaigns
+Content-Type: application/json
+
+{
+    "Name": "sample"
+}
+
+### Action: Enroll
+POST http://localhost:5201/api/campaigns/1/enroll
+Content-Type: application/json
+
+{
+    "whoId": "example-contact-id"
+}
+
+### Action: End
+POST http://localhost:5201/api/campaigns/1/end
+
+### ──────────── CampaignMembers ────────────
+
+### List campaignMembers for campaign
+GET http://localhost:5201/api/campaigns/1/members
+
+### Get campaignMember by id for campaign
+GET http://localhost:5201/api/campaigns/1/members/1
+
+### ──────────── Tickets ────────────
+
+### List tickets for account
+GET http://localhost:5201/api/accounts/1/tickets
+
+### Get ticket by id for account
+GET http://localhost:5201/api/accounts/1/tickets/1
+
+### Action: Work
+POST http://localhost:5201/api/accounts/1/tickets/1/work
+
+### Action: Close
+POST http://localhost:5201/api/accounts/1/tickets/1/close
+
+### Action: Close
+POST http://localhost:5201/api/accounts/1/tickets/1/close
+
+### ──────────── Lines ────────────
+
+### List lines for opportunity
+GET http://localhost:5201/api/opportunitys/1/lines
+
+### Get line by id for opportunity
+GET http://localhost:5201/api/opportunitys/1/lines/1
+
+### ──────────── QuoteLines ────────────
+

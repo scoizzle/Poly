@@ -1,6 +1,6 @@
 # Poly pipeline convergence plan, v2
 
-Status: revision 2 of the plan in PR 84. The five reviews were read and folded in. Code slices are still HELD until Scot signs off PR 84 (docs only; nothing implemented). It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
+Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`). In review, not merged: K1 (PR 90), C4a (PR 91). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
 Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11 answered 2026-10-03; V10 as a revised scope).
 
@@ -150,7 +150,7 @@ _Lane A · Size S · Review 1 · Depends on: G1, T1_
 
 ## 5. D1 and D6: artifact suite and catalog
 
-**Wrong today.** An artifact is three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrites the catalog with one placeholder entry; contributors return `(fileName, text)` pairs; the compiled trees are one list split by entity name in `Emit`.
+**Wrong today.** An artifact was three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrites the catalog with one placeholder entry; contributors return `(fileName, text)` pairs; the compiled trees are one list split by entity name in `Emit`. Since A1, A2a and A2b (master `16403b60`) `ArtifactId`, `Artifact` and `ArtifactCatalog` exist, with declared types, typed references and a dangling check, but `Lower` still registers only the placeholder and the rest of this paragraph still holds.
 
 **Target.** An artifact has a type, a stable id, a producer, a payload and typed references. A catalog holds them and checks them. Every output (trees, printed C#, DbContext, Program.cs, demo.http, the analysis report) is registered through it.
 
@@ -176,7 +176,7 @@ _Lane A · Size S · Review 1 · Depends on: T0_
 
 _Lane A · Size S · Review 1 · Depends on: A1_
 - Scope: `Artifact` (descriptor plus payload) and a catalog class: register (duplicate id throws), look up by id, list, stable `ToText()`. The catalog is a value rebuilt whole by each compile; it has no public remove or replace (explicit rule, tested). `DomainSession.ArtifactCatalog` becomes this type. The old `SyntaxModule` placeholder stays for now and is removed in A3a.
-- Files: `Compile/ArtifactDescriptor.cs`, new catalog file, `Compile/DomainSession.cs`, `SliceCProducerLoopCatalogTests.cs` (the only test file that references the catalog; a reviewer counted 1, the old plan said 2).
+- Files: `Compile/ArtifactDescriptor.cs`, new `Compile/Artifact.cs` and `Compile/ArtifactCatalog.cs`, `Compile/DomainSession.cs`, new `ArtifactCatalogTests.cs`, and the two existing test files that read the catalog: `SliceCProducerLoopCatalogTests.cs` and `EmitGoldenTests.cs` (its catalog text line). Done as PR 88.
 - Done when: Catalog unit tests (duplicate, lookup, stable text); a surface test that the public API has no remove or replace; T0 golden unchanged.
 - SHIP if T0 golden is unchanged. NOT SHIP if any golden snapshot changed.
 - Hand-edit: Yes.
@@ -185,7 +185,7 @@ _Lane A · Size S · Review 1 · Depends on: A1_
 
 _Lane A · Size S · Review 1 · Depends on: A2a_
 - Scope: An artifact lists references as id plus expected type. Each artifact type declares which types it may point at; the producer that defines the type owns that declaration. Registering a type without one is refused, so a library-added type can be dangling-checked. `FindDanglingOrWrongType()`.
-- Files: `Compile/ArtifactDescriptor.cs`, catalog file.
+- Files: `Compile/ArtifactDescriptor.cs`, `Compile/ArtifactCatalog.cs` (the problem record and enum live there), `Compile/DomainSession.cs` (`Lower` declares the placeholder type), `Compile/ArtifactId.cs` (one name check made internal), `ArtifactCatalogTests.cs`, and one line in `SliceCProducerLoopCatalogTests.cs`. Done as PR 89.
 - Done when: Tests: dangling, wrong type, edge not allowed, undeclared type refused.
 - SHIP if each failure kind has its own test. NOT SHIP if an unknown type is accepted silently.
 - Hand-edit: Yes.
@@ -193,7 +193,7 @@ _Lane A · Size S · Review 1 · Depends on: A2a_
 **A3a. Lower registers its trees as artifacts**
 
 _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
-- Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map line 70 ("a tree per concept in the right place") is NOT met until A6.
+- Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map 2.5, Definition of done ("a tree per concept in the right place") is NOT met until A6.
 - Files: `Compile/DomainSession.cs` (Lower, Emit), `Lowering/DomainProgramProjection.cs` only if the split moves.
 - Done when: T0 golden identical for all sample domains; catalog text snapshot added; `git grep SyntaxModule` in product code is empty.
 - SHIP if golden is byte-identical and the grep is empty. NOT SHIP if any snapshot changed or the placeholder remains.
@@ -256,7 +256,7 @@ _Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
 **A6. Finer trees (deferred)**
 
 _Lane A · Size L · Review 2 · Depends on: A3a, H4_
-- Scope: One artifact per action, policy, subscription handler, entry/exit body. Scheduled only when a consumer needs it; closes the gap against stage map line 70 and lets H4 check at concept granularity.
+- Scope: One artifact per action, policy, subscription handler, entry/exit body. Scheduled only when a consumer needs it; closes the gap against the stage map 2.5 Definition of done and lets H4 check at concept granularity.
 - Files: Decided when scheduled.
 - Done when: H4 known-gaps entries of the kind 'inside entity tree only' reach zero; scheduled only when a consumer needs it and Scot approves the wave.
 - Hand-edit: Decided when scheduled.
@@ -887,13 +887,13 @@ _Lane B · Size M · Review 1 · **RUNS ALONE** · Depends on: R1, decision 20 (
 
 Why this order: tests and measurements come first so every later claim is checkable; the gate waits for the fixture because the gate breaks 110 tests without it; the live divergence (C4a) goes ahead of any refactor; artifacts exist before anything moves onto them; consumers move before the rename so we do not rename code we are about to delete; K3 follows C2 because it depends on it; the rename is last.
 
-**Wave 0: after you sign off PR 84 (everything here is test-only, docs-only; `ExportedCSharp.cs` is untouched by PRs 82 and 83)**
-- Lane A: T0, A1, A2a, A2b, K1, H1, N3 (N1 when decision 16 is answered)
-- Lane B: T2
+**Wave 0: released by Scot on 2026-10-03 (everything here is test-only, docs-only or new code that nothing calls yet; `ExportedCSharp.cs` is untouched by PRs 82 and 83)**
+- Lane A: T0 (done, `bde1f7c5`), A1 (done, `8e5ef81b`), A2a (done, `08eda8eb`), A2b (done, `16403b60`), K1, H1, N3 (N1 when decision 16 is answered)
+- Lane B: T2 (done, `afa246c2`)
 
 **Wave 1: PRs 82 and 83 are merged (hold point HP1 reached); wave 1 still starts only on Scot's word**
 - Lane A: G1 (after T1), G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b
-- Lane B: C4a first (live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
+- Lane B: C4a first (in review as PR 91; live divergence, ahead of everything), C0, T1 (freezes the 11 test files it edits), K0, B1, C1a, C1b, C1c (V7 = a)
 
 **Wave 2: consumers move onto the catalog; Compile gaps close**
 - Lane A: K4, M1 (V4 = a), H2, H3, H4, C9, Q2 (V10 = revised scope), P1 (V8 = a)
@@ -934,7 +934,7 @@ Hold points exist so the coordinating agent does not have to guess. Each release
 
 | Point | Event | Releases |
 |---|---|---|
-| HP0 | You sign off PR 84 (V1 to V11 are answered) | Wave 0: T0, A1, A2a, A2b, K1, H1, N3, T2. N1 also needs decision 16. |
+| HP0 | Reached 2026-10-03: you signed off PR 84 (V1 to V11 are answered) | Wave 0: T0, A1, A2a, A2b, K1, H1, N3, T2. N1 also needs decision 16. |
 | HP1 | reached (82 and 83 merged); still needs Scot's word to release | C4a, C0, T1, K0, B1, C1a (then C1b, C1c after V7), A3a and the rest of wave 1 |
 | HP2 | T1 and G1 merged, and A3a merged | C7-0, K4 (needs A3a); G2, G3 follow G1 |
 | HP3 | C2b merged | C4b, C4c (also needs E1), C6b |
@@ -1064,7 +1064,7 @@ Run against the real MCP harness and the built C# API; they check the product, n
 | 11 | Constraints on set | Every mutation of state must enforce every specified invariant, including constraints on set, not just on create. Constraints propagate and are validated as early as possible. Only named actions may mutate their own entity's state; cross-entity property access is read-only. Simulation and printed code both follow this. Create, link and unlink are effects of relationship operations, and they are the only time an outside entity can influence another entity's state. The relationship owns those lifecycle effects (think RAII). So they are the one named exception to "only named actions mutate their own entity". |
 | 12 | Transitions and enum values | Transition tables and enum checks are compiled as trees, so constraints are validated at runtime. Unknown stage names and enum values are also Analyze errors, with static propagation catching what it can early. |
 | 14 | Artifact analysis shape | Its own passes in the same analysis system, separate result set |
-| 15 | Start non-conflicting slices first | No preference. After you sign off, in the order Foreman picks. Until Scot signs off PR 84, A1, A2a, A2b, H1, N1 and N3 stay HELD. |
+| 15 | Start non-conflicting slices first | No preference. After you sign off, in the order Foreman picks. Scot signed off PR 84 on 2026-10-03, so wave 0 is released; N1 still waits for decision 16. |
 | 17 | `RuntimeEnumTypeProvider` | Accepted as interim; removed in the enum slice (E1) |
 
 Notes: v2 narrows the work on decision 8 to what is actually unprinted (K4). v2 rewrites C8 accordingly. v2 names the slices for decision 15: T0, A1, A2a, A2b, K1, H1, N3, T2 (and N1 after decision 16).

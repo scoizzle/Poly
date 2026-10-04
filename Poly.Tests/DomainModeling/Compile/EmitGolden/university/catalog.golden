@@ -1,1 +1,7 @@
-SyntaxModule|module|Lower
+scaffolding|University|Lower
+entity|University/Course|Lower
+entity|University/Enrollment|Lower
+entity|University/Instructor|Lower
+entity|University/Section|Lower
+entity|University/Student|Lower
+entity|University/WaitOffer|Lower

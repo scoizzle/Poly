@@ -56,7 +56,7 @@ public class SliceCProducerLoopCatalogTests {
         """;
 
     [Test]
-    public async Task SliceC_AfterLower_SessionHasNonEmptyArtifactCatalog_WithSyntaxModule() {
+    public async Task SliceC_AfterLower_SessionHasNonEmptyArtifactCatalog_WithTrees() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -67,7 +67,8 @@ public class SliceCProducerLoopCatalogTests {
         var module = session.Lower(domain, analysis);
         await Assert.That(module.Count).IsGreaterThan(0);
         await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsGreaterThan(0);
-        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
+        await Assert.That(session.ArtifactCatalog.ToText())
+            .IsEqualTo("scaffolding|Parking|Lower\nentity|Parking/Permit|Lower");
     }
 
     [Test]
@@ -86,9 +87,10 @@ public class SliceCProducerLoopCatalogTests {
         session.Lower(domain, analysis);
 
         await Assert.That(session.ArtifactCatalog).IsNotSameReferenceAs(first);
-        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
-        await Assert.That(first.ToText()).IsEqualTo("type|Extra|Test\nSyntaxModule|module|Lower");
-        await Assert.That(otherSession.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
+        const string libraryTrees = "scaffolding|Library|Lower\nentity|Library/Book|Lower";
+        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo(libraryTrees);
+        await Assert.That(first.ToText()).IsEqualTo("type|Extra|Test\n" + libraryTrees);
+        await Assert.That(otherSession.ArtifactCatalog.ToText()).IsEqualTo(libraryTrees);
     }
 
     [Test]
@@ -230,7 +232,7 @@ public class SliceCProducerLoopCatalogTests {
         throw new FileNotFoundException("Could not locate src/Poly.DslCompiler/DslCompiler.cs");
     }
 
-    private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
+    internal static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);

@@ -19,6 +19,33 @@ public class UnifiedAddTests {
     }
 
     [Test]
+    [Arguments("My Entity")]
+    [Arguments("A/B")]
+    [Arguments("A#B")]
+    public async Task Add_Entity_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+
+        var response = EvolveTool.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("must be non-empty");
+        var data = (DomainOverviewData)QueryTool.GetDomainOverview(sessionId).Data!;
+        await Assert.That(data.EntityNames).DoesNotContain(name);
+    }
+
+    [Test]
+    [Arguments("My Domain")]
+    [Arguments("A/B")]
+    [Arguments("A#B")]
+    public async Task CreateDomainSession_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+        var response = SessionTool.CreateDomainSession(name);
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Message).Contains("must be non-empty");
+        await Assert.That(response.SessionId).IsNull();
+    }
+
+    [Test]
     public async Task Add_Property_Succeeds() {
         var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
         EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");

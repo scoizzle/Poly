@@ -148,6 +148,11 @@ internal sealed class SessionTool {
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
     public static DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
+        if (!ArtifactId.IsValidPart(domainName))
+            return new DomainToolResponse(
+                Success: false,
+                Message: EvolveTool.InvalidNameMessage(domainName),
+                Affordances: ["create_domain_session"]);
         var (sessionId, state) = McpSessionStore.Create(domainName);
         return new DomainToolResponse(
             Success: true,
@@ -523,6 +528,12 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
             case "entity": {
                     var name = Field(root, "name");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!ArtifactId.IsValidPart(name))
+                        return new DomainToolResponse(
+                            Success: false,
+                            Message: InvalidNameMessage(name),
+                            SessionId: sessionId,
+                            Affordances: ["add", "get_domain_overview"]);
                     return Evolve(sessionId, builder => builder.AddEntity(name),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
                 }
@@ -757,6 +768,9 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
         }
         return null;
     }
+
+    internal static string InvalidNameMessage(string? name) =>
+        $"Name '{name}' must be non-empty with no whitespace, '/' or '#'.";
 
     private static DomainToolResponse MissingField(string sessionId, string kind, string field) =>
         new(Success: false,

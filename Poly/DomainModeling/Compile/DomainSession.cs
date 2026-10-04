@@ -40,10 +40,11 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Empty before Lower. Each <see cref="Lower"/> or <see cref="Emit"/> replaces it with a new
-    /// catalog holding the trees it made (when calls overlap, the last to finish wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per
-    /// entity (the entity type and its stage enum). It is not an emit/contributor file inventory.
-    /// This is the live instance: anything registered on it by hand is dropped by the next Lower.
+    /// Empty before the first Lower or Emit. Each <see cref="Lower"/> or <see cref="Emit"/> replaces
+    /// it with a new catalog holding the trees it made (when calls overlap, the last to finish
+    /// wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per entity
+    /// (the entity type and its stage enum). It is not an emit/contributor file inventory.
+    /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -197,9 +198,6 @@ public sealed class DomainSession {
             throw new InvalidOperationException($"The lowered module defines type '{twice.Key.Name}' more than once.");
         foreach (var entity in entities) {
             var trees = module.Where(t => Belongs(t, entity)).ToArray();
-            if (trees.Length == 0)
-                throw new InvalidOperationException(
-                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
             catalog.Register(new Artifact(
                 new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], EntityType), "Lower"),
                 Payload: trees.AsReadOnly()));

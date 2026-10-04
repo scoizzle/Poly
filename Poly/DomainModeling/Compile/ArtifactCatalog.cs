@@ -18,7 +18,9 @@ public sealed class ArtifactCatalog {
     /// registering artifacts of that type; which producer calls it is a convention, the catalog does
     /// not check. Type names follow the same rule as in <see cref="ArtifactId"/>, and <paramref name="mayPointAt"/>
     /// is copied. A type in <paramref name="mayPointAt"/> need not be declared (another producer may
-    /// declare it later); if it never is, a reference to it can only show up as dangling. Throws
+    /// declare it later); if it never is, a reference to it can never resolve (nothing can be registered
+    /// with an undeclared type), so the finder reports it as dangling, or as wrong type when the path
+    /// exists with another type. Throws
     /// <see cref="InvalidOperationException"/> when the type is already declared and
     /// <see cref="FormatException"/> for a malformed type name.
     /// </summary>

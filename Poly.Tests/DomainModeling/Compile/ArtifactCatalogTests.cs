@@ -275,11 +275,15 @@ public sealed class ArtifactCatalogTests {
             .IsEqualTo("Room#type");
         await Assert.That(() => ((IList<ArtifactId>)registered).Add(ArtifactId.Parse("Hotel#module")))
             .Throws<NotSupportedException>();
+        await Assert.That(() => ((IList<ArtifactId>)registered)[0] = ArtifactId.Parse("Hotel#module"))
+            .Throws<NotSupportedException>();
+        await Assert.That(() => ((IList<ArtifactId>)registered).Clear()).Throws<NotSupportedException>();
+        await Assert.That(registered[0].ToString()).IsEqualTo("Room#type");
         await Assert.That(catalog.FindDanglingOrWrongType()).IsEmpty();
     }
 
     [Test]
-    public async Task Descriptor_WithEqualReferences_IsEqualAndHashesAlike() {
+    public async Task Descriptor_EqualWhenIdProducerAndReferencesMatch_AndHashesAlike() {
         ArtifactDescriptor Make(params string[] refs) =>
             new(ArtifactId.Parse("A#method"), "Test", [.. refs.Select(ArtifactId.Parse)]);
 
@@ -287,6 +291,9 @@ public sealed class ArtifactCatalogTests {
         await Assert.That(Make("X#type", "Y#type").GetHashCode()).IsEqualTo(Make("X#type", "Y#type").GetHashCode());
         await Assert.That(Make("X#type", "Y#type")).IsNotEqualTo(Make("Y#type", "X#type"));
         await Assert.That(Make("X#type")).IsNotEqualTo(Make());
+        var same = new ArtifactDescriptor(ArtifactId.Parse("A#method"), "Test", [ArtifactId.Parse("X#type")]);
+        await Assert.That(same).IsNotEqualTo(new ArtifactDescriptor(ArtifactId.Parse("A#method"), "Other", [ArtifactId.Parse("X#type")]));
+        await Assert.That(same).IsNotEqualTo(new ArtifactDescriptor(ArtifactId.Parse("B#method"), "Test", [ArtifactId.Parse("X#type")]));
         await Assert.That(Make()).IsEqualTo(new ArtifactDescriptor(ArtifactId.Parse("A#method"), "Test"));
     }
 
@@ -333,13 +340,19 @@ public sealed class ArtifactCatalogTests {
     }
 
     [Test]
-    public async Task DeclareType_TargetTypeNeverDeclared_IsAccepted_AndItsReferencesAreDangling() {
+    public async Task DeclareType_TargetTypeNeverDeclared_IsAccepted_AndItsReferencesNeverResolve() {
         var catalog = new ArtifactCatalog();
         catalog.DeclareType("method", mayPointAt: ["ghost"]);
+        catalog.DeclareType("t", mayPointAt: []);
 
         catalog.Register(Make("A", "method", pointsAt: "G#ghost"));
+        await Assert.That(catalog.FindDanglingOrWrongType().Single().Kind).IsEqualTo(ArtifactReferenceProblemKind.Dangling);
 
-        await Assert.That(Describe(catalog.FindDanglingOrWrongType())).IsEqualTo("A#method->G#ghost");
+        // Once the path exists under another type, the same reference is a wrong type.
+        catalog.Register(Make("G", "t"));
+        var problem = catalog.FindDanglingOrWrongType().Single();
+        await Assert.That(Describe([problem])).IsEqualTo("A#method->G#ghost");
+        await Assert.That(problem.Kind).IsEqualTo(ArtifactReferenceProblemKind.WrongType);
     }
 
     private static string Describe(IEnumerable<ArtifactReferenceProblem> problems) =>

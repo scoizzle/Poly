@@ -48,8 +48,8 @@ public static class ExportedCSharp {
         return new AssemblyLoadContext(assemblyName, isCollectible: true).LoadFromStream(pe);
     }
 
-    /// <summary>Calls the widest static Create by named args and unwraps Value.</summary>
-    public static object CreateEntity(Type type, params (string Name, object? Value)[] named) {
+    /// <summary>Calls the widest public static Create by named args; returns the DomainResult.</summary>
+    public static object InvokeCreate(Type type, params (string Name, object? Value)[] named) {
         var create = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
@@ -70,7 +70,12 @@ public static class ExportedCSharp {
             else
                 callArgs[i] = null;
         }
-        var result = create.Invoke(null, callArgs)!;
+        return create.Invoke(null, callArgs)!;
+    }
+
+    /// <summary>Calls the widest static Create by named args and unwraps Value.</summary>
+    public static object CreateEntity(Type type, params (string Name, object? Value)[] named) {
+        var result = InvokeCreate(type, named);
         var ok = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
         if (!ok)
             throw new InvalidOperationException(

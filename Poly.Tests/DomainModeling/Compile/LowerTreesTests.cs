@@ -70,7 +70,95 @@ public sealed class LowerTreesTests {
 
         var files = session.Emit(domain, analysis);
 
-        await Assert.That(files.Select(f => f.FileName)).IsEquivalentTo(["Permit.cs", "Garage.cs", "Poly.Types.cs"]);
-        await Assert.That(files[^1].FileName).IsEqualTo("Poly.Types.cs");
+        await Assert.That(files.Select(f => f.FileName).SequenceEqual(["Permit.cs", "Garage.cs", "Poly.Types.cs"])).IsTrue();
+    }
+
+    [Test]
+    public async Task Emit_FromManyThreadsOnOneSession_EachCallGetsTheFilesOfItsOwnDomain() {
+        var (domainA, analysisA, session) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Alpha
+
+            Alpha: entity {
+              Name: Text required
+            }
+            """);
+        var (domainB, analysisB, _) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Beta
+
+            Beta: entity {
+              Name: Text required
+            }
+
+            Gamma: entity {
+              Name: Text required
+            }
+            """);
+
+        var wrong = 0;
+        Parallel.For(0, 8, new ParallelOptions { MaxDegreeOfParallelism = 8 }, worker => {
+            for (var i = 0; i < 150; i++) {
+                var useA = (worker + i) % 2 == 0;
+                var files = useA ? session.Emit(domainA, analysisA) : session.Emit(domainB, analysisB);
+                string[] expected = useA ? ["Alpha.cs", "Poly.Types.cs"] : ["Beta.cs", "Gamma.cs", "Poly.Types.cs"];
+                if (!files.Select(f => f.FileName).SequenceEqual(expected))
+                    Interlocked.Increment(ref wrong);
+            }
+        });
+
+        await Assert.That(wrong).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Lower_EntityNamedLikeAnotherEntitysStageEnum_IsRefused() {
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Clash
+
+            Permit: entity {
+              Plate: Text required
+              Open: stage { }
+            }
+
+            PermitStage: entity {
+              Name: Text required
+            }
+            """);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+
+        await Assert.That(ex.Message).Contains("PermitStage");
+    }
+
+    [Test]
+    public async Task Lower_EntityNamedLikeAnotherEntitysStageEnumName_IsRefusedEvenWithoutStages() {
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Clash
+
+            Permit: entity {
+              Plate: Text required
+            }
+
+            PermitStage: entity {
+              Name: Text required
+            }
+            """);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+
+        await Assert.That(ex.Message).Contains("PermitStage");
+    }
+
+    [Test]
+    public async Task Lower_EntityNamedDomainResult_IsRefusedInsteadOfEmittingAnEmptyScaffolding() {
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Clash
+
+            DomainResult: entity {
+              Name: Text required
+            }
+            """);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+
+        await Assert.That(ex.Message).Contains("DomainResult");
     }
 }

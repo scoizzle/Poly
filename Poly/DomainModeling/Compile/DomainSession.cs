@@ -154,25 +154,47 @@ public sealed class DomainSession {
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        ArtifactCatalog = RegisterTrees(domain, module);
+        var (module, catalog) = LowerToCatalog(domain, analysis);
+        ArtifactCatalog = catalog;
         return module;
+    }
+
+    // Emit uses the catalog returned here, not the ArtifactCatalog property, which another
+    // Lower on this session may replace at any time.
+    private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
+        Domain domain, AnalysisResult analysis) {
+        var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+        return (module, RegisterTrees(domain, module));
     }
 
     /// <summary>
     /// Splits the module into one tree per entity (the entity type and its stage enum) and one
     /// scaffolding tree holding everything else (domain enums, DomainResult, and so on).
-    /// Each tree's payload is a read-only copy of its type definitions.
+    /// Each tree's payload is a read-only copy of its type definitions. A type that two trees
+    /// would hold, or that the module defines twice (for example an entity named
+    /// <c>DomainResult</c>, or entities <c>X</c> and <c>XStage</c>), is refused: the printed C#
+    /// would not compile either.
     /// </summary>
     private static ArtifactCatalog RegisterTrees(Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
         var catalog = new ArtifactCatalog();
         catalog.DeclareType(ScaffoldingType, mayPointAt: []);
         catalog.DeclareType(EntityType, mayPointAt: []);
         var entities = domain.Types.OfType<Entity>().ToList();
+        static bool Belongs(TypeDefinitionNode type, Entity entity) =>
+            type.Name == entity.Name || type.Name == $"{entity.Name}Stage";
+        foreach (var type in module) {
+            var owners = entities.Where(e => Belongs(type, e)).Select(e => e.Name).ToList();
+            if (owners.Count > 1)
+                throw new InvalidOperationException(
+                    $"Type '{type.Name}' belongs to the trees of entities '{owners[0]}' and '{owners[1]}'.");
+        }
+        var twice = module
+            .GroupBy(t => (t.Name, Arity: t.GenericParameters?.Count ?? 0))
+            .FirstOrDefault(g => g.Count() > 1);
+        if (twice is not null)
+            throw new InvalidOperationException($"The lowered module defines type '{twice.Key.Name}' more than once.");
         foreach (var entity in entities) {
-            var trees = module
-                .Where(d => d.Name == entity.Name || d.Name == $"{entity.Name}Stage")
-                .ToArray();
+            var trees = module.Where(t => Belongs(t, entity)).ToArray();
             if (trees.Length == 0)
                 throw new InvalidOperationException(
                     $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
@@ -180,9 +202,7 @@ public sealed class DomainSession {
                 new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], EntityType), "Lower"),
                 Payload: trees.AsReadOnly()));
         }
-        var scaffolding = module
-            .Where(d => !entities.Any(e => d.Name == e.Name || d.Name == $"{e.Name}Stage"))
-            .ToArray();
+        var scaffolding = module.Where(t => !entities.Any(e => Belongs(t, e))).ToArray();
         catalog.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create([domain.Name], ScaffoldingType), "Lower"),
             Payload: scaffolding.AsReadOnly()));
@@ -198,16 +218,18 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        // Lower fills a new ArtifactCatalog with the trees; the analysis below still covers the
+        // The files come from this call's own catalog; the analysis below still covers the
         // whole module, because the generator resolves types across entities from one analysis.
-        var module = Lower(domain, analysis);
+        var (module, catalog) = LowerToCatalog(domain, analysis);
+        ArtifactCatalog = catalog;
         var interpAnalysis = TryAnalyzeForEmit(module);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
-        foreach (var tree in ArtifactCatalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
+        // Files come in registration order: entities in domain order, then the scaffolding.
+        foreach (var tree in catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
             files.Add(($"{tree.Descriptor.Id.Segments[^1]}.cs", generator.Generate(TypesOf(tree))));
-        var scaffolding = ArtifactCatalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
+        var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
         files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
         return files;
     }

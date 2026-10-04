@@ -1,0 +1,620 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public class QuoteLine
+{
+    private QuoteLine()
+    { }
+    private QuoteLine(long qty, long unitPrice, Product? product = null, Quote? quote = null)
+    {
+        this.Qty = qty;
+        this.UnitPrice = unitPrice;
+        this.Product = product;
+        this.Quote = quote;
+    }
+    public long Qty { get; private set; }
+    public long UnitPrice { get; private set; }
+    public Product? Product { get; private set; }
+    public Quote? Quote { get; private set; }
+    private DomainResult<Product> CreateProduct(long listPrice, string name, string sku)
+    {
+        var productResult = Product.Create(listPrice, name, sku);
+        if (!productResult.IsSuccess)
+        {
+            return DomainResult<Product>.Failure(productResult.ErrorMessage ?? "");
+        }
+        var product = productResult.Value;
+        this.Product = product;
+        return DomainResult<Product>.Success(product);
+    }
+    private DomainResult<Quote> CreateQuote(long amount, string title, Opportunity? opportunity)
+    {
+        var quoteResult = Quote.Create(amount, title, opportunity, new List<QuoteLine>());
+        if (!quoteResult.IsSuccess)
+        {
+            return DomainResult<Quote>.Failure(quoteResult.ErrorMessage ?? "");
+        }
+        var quote = quoteResult.Value;
+        this.Quote = quote;
+        return DomainResult<Quote>.Success(quote);
+    }
+    public static DomainResult<QuoteLine> Create(long qty, long unitPrice, Product? product = null, Quote? quote = null)
+    {
+        if (qty < 1L)
+        {
+            return DomainResult<QuoteLine>.Failure("'Qty' must be >= 1.");
+        }
+        if (qty > 10000L)
+        {
+            return DomainResult<QuoteLine>.Failure("'Qty' must be <= 10000.");
+        }
+        if (unitPrice < 0L)
+        {
+            return DomainResult<QuoteLine>.Failure("'UnitPrice' must be >= 0.");
+        }
+        if (unitPrice > 100000000L)
+        {
+            return DomainResult<QuoteLine>.Failure("'UnitPrice' must be <= 100000000.");
+        }
+        var created = new QuoteLine(qty, unitPrice, product, quote);
+        if (quote != null)
+        {
+            quote.AttachLines(created);
+        }
+        return DomainResult<QuoteLine>.Success(created);
+    }
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult<object> Create(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult ProbeCreate(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindProbeCreate(name, values);
+    }
+    private DomainResult<object> BindCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Site")
+        {
+            var typed = Site.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Region") ? (string?)values["Region"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Product")
+        {
+            var typed = Product.Create((values.ContainsKey("ListPrice") ? (long?)values["ListPrice"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Lead")
+        {
+            var typed = Lead.Create((values.ContainsKey("Company") ? (string?)values["Company"] ?? "" : ""), (values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Account")
+        {
+            var typed = Account.Create((values.ContainsKey("Industry") ? (Industry?)values["Industry"] ?? Industry.Technology : Industry.Technology), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (Account?)null, (values.ContainsKey("hq") ? (Site?)values["hq"] ?? null : null), new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), (values.ContainsKey("ClosedTickets") ? (long?)values["ClosedTickets"] ?? 0L : 0L), (values.ContainsKey("OpenPipeline") ? (long?)values["OpenPipeline"] ?? 0L : 0L), (values.ContainsKey("WonCount") ? (long?)values["WonCount"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Contact")
+        {
+            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Opportunity")
+        {
+            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null), (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Activity")
+        {
+            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Quote")
+        {
+            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), new List<QuoteLine>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Campaign")
+        {
+            var typed = Campaign.Create((values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<CampaignMember>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "CampaignMember")
+        {
+            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), (values.ContainsKey("campaign") ? (Campaign?)values["campaign"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Ticket")
+        {
+            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Line")
+        {
+            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "QuoteLine")
+        {
+            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("quote") ? (Quote?)values["quote"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown type '" + typeName + "'.");
+    }
+    private DomainResult<object> BindCreateIn(string relationshipName, Dictionary<string, object> values)
+    {
+        if (relationshipName == "product")
+        {
+            var typed = this.CreateProduct((values.ContainsKey("ListPrice") ? (long?)values["ListPrice"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "quote")
+        {
+            var typed = this.CreateQuote((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown relationship '" + relationshipName + "'.");
+    }
+    private DomainResult BindProbeCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Site")
+        {
+            var typed = Site.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Region") ? (string?)values["Region"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Product")
+        {
+            var typed = Product.Create((values.ContainsKey("ListPrice") ? (long?)values["ListPrice"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Lead")
+        {
+            var typed = Lead.Create((values.ContainsKey("Company") ? (string?)values["Company"] ?? "" : ""), (values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Account")
+        {
+            var typed = Account.Create((values.ContainsKey("Industry") ? (Industry?)values["Industry"] ?? Industry.Technology : Industry.Technology), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (Account?)null, (values.ContainsKey("hq") ? (Site?)values["hq"] ?? null : null), new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), (values.ContainsKey("ClosedTickets") ? (long?)values["ClosedTickets"] ?? 0L : 0L), (values.ContainsKey("OpenPipeline") ? (long?)values["OpenPipeline"] ?? 0L : 0L), (values.ContainsKey("WonCount") ? (long?)values["WonCount"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Contact")
+        {
+            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Opportunity")
+        {
+            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null), (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Activity")
+        {
+            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Quote")
+        {
+            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), new List<QuoteLine>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Campaign")
+        {
+            var typed = Campaign.Create((values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<CampaignMember>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "CampaignMember")
+        {
+            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), (values.ContainsKey("campaign") ? (Campaign?)values["campaign"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Ticket")
+        {
+            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Line")
+        {
+            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "QuoteLine")
+        {
+            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("quote") ? (Quote?)values["quote"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+}

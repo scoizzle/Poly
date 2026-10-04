@@ -1,0 +1,688 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public enum RoomStage
+{
+    InService = 0,
+    OutOfService = 1
+}
+
+public class Room
+{
+    private List<Reservation> _stays;
+    private Room()
+    {
+        this._stays = new List<Reservation>();
+    }
+    private Room(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    {
+        this.Dirty = dirty;
+        this.Floor = floor;
+        this.MaxOccupancy = maxOccupancy;
+        this.NightlyRate = nightlyRate;
+        this.Number = number;
+        this.Occupied = occupied;
+        this.Offline = offline;
+        this.Property = property;
+        this.RoomType = roomType;
+        this._stays = new List<Reservation>(stays ?? new List<Reservation>());
+        this.CurrentStage = RoomStage.InService;
+        this.InitializeSubscriptions();
+    }
+    public bool Dirty { get; private set; }
+    public long Floor { get; private set; }
+    public long MaxOccupancy { get; private set; }
+    public long NightlyRate { get; private set; }
+    public string Number { get; private set; } = default!;
+    public bool Occupied { get; private set; }
+    public bool Offline { get; private set; }
+    public Property? Property { get; private set; }
+    public RoomType? RoomType { get; private set; }
+    public IReadOnlyList<Reservation> Stays
+    {
+        get => this._stays;
+    }
+    public RoomStage CurrentStage { get; private set; }
+    private DomainResult<Property> CreateProperty(string city, string name)
+    {
+        var propertyResult = Property.Create(city, name, new List<Hall>(), new List<Room>());
+        if (!propertyResult.IsSuccess)
+        {
+            return DomainResult<Property>.Failure(propertyResult.ErrorMessage ?? "");
+        }
+        var property = propertyResult.Value;
+        this.Property = property;
+        return DomainResult<Property>.Success(property);
+    }
+    private DomainResult<RoomType> CreateRoomType(long maxOccupancy, string name, long nightlyRate)
+    {
+        var roomTypeResult = RoomType.Create(maxOccupancy, name, nightlyRate);
+        if (!roomTypeResult.IsSuccess)
+        {
+            return DomainResult<RoomType>.Failure(roomTypeResult.ErrorMessage ?? "");
+        }
+        var roomType = roomTypeResult.Value;
+        this.RoomType = roomType;
+        return DomainResult<RoomType>.Success(roomType);
+    }
+    private DomainResult<Reservation> CreateStays(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio, Guest? guest)
+    {
+        var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, guest, this);
+        if (!reservationResult.IsSuccess)
+        {
+            return DomainResult<Reservation>.Failure(reservationResult.ErrorMessage ?? "");
+        }
+        var reservation = reservationResult.Value;
+        return DomainResult<Reservation>.Success(reservation);
+    }
+    internal void AttachStays(Reservation child)
+    {
+        this._stays.Add(child);
+        child.RegisterRoomInHouseSubscriber(this);
+        child.RegisterRoomDepartedSubscriber(this);
+        child.RegisterRoomCancelledSubscriber(this);
+        child.RegisterRoomNoShowSubscriber(this);
+    }
+    public DomainResult TakeOutOfService()
+    {
+        if (this.CurrentStage != RoomStage.InService)
+        {
+            return DomainResult.Failure("'TakeOutOfService' requires stage 'InService' on entity 'Room'.");
+        }
+        if (!this.IsVacant())
+        {
+            return DomainResult.Failure("'TakeOutOfService' blocked by policy 'IsVacant'.");
+        }
+        this.Offline = true;
+        this.CurrentStage = RoomStage.OutOfService;
+        return DomainResult.Success();
+    }
+    public DomainResult Inspect()
+    {
+        if (this.CurrentStage != RoomStage.InService)
+        {
+            return DomainResult.Failure("'Inspect' requires stage 'InService' on entity 'Room'.");
+        }
+        this.Dirty = false;
+        return DomainResult.Success();
+    }
+    public DomainResult ReturnToService()
+    {
+        if (this.CurrentStage != RoomStage.OutOfService)
+        {
+            return DomainResult.Failure("'ReturnToService' requires stage 'OutOfService' on entity 'Room'.");
+        }
+        this.Offline = false;
+        this.CurrentStage = RoomStage.InService;
+        return DomainResult.Success();
+    }
+    public bool IsVacant() => !this.Occupied;
+    public bool IsReady() => !this.Occupied && !this.Dirty && !this.Offline;
+    public bool HasType() => this.RoomType != null;
+    internal void WhenEachReservationInHouse()
+    {
+        this.Occupied = true;
+    }
+    internal void WhenEachReservationDeparted()
+    {
+        this.Occupied = false;
+    }
+    internal void WhenEachReservationCancelled()
+    {
+        this.Occupied = false;
+    }
+    internal void WhenEachReservationNoShow()
+    {
+        this.Occupied = false;
+    }
+    internal void WhenEachReservationDeparted_2()
+    {
+        this.Dirty = true;
+    }
+    public static DomainResult<Room> Create(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    {
+        if (floor < 0L)
+        {
+            return DomainResult<Room>.Failure("'Floor' must be >= 0.");
+        }
+        if (floor > 50L)
+        {
+            return DomainResult<Room>.Failure("'Floor' must be <= 50.");
+        }
+        if (maxOccupancy < 1L)
+        {
+            return DomainResult<Room>.Failure("'MaxOccupancy' must be >= 1.");
+        }
+        if (maxOccupancy > 8L)
+        {
+            return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
+        }
+        if (nightlyRate < 0L)
+        {
+            return DomainResult<Room>.Failure("'NightlyRate' must be >= 0.");
+        }
+        if (nightlyRate > 10000L)
+        {
+            return DomainResult<Room>.Failure("'NightlyRate' must be <= 10000.");
+        }
+        if (string.IsNullOrEmpty(number))
+        {
+            return DomainResult<Room>.Failure("'Number' is required.");
+        }
+        if (number.Length < 1L)
+        {
+            return DomainResult<Room>.Failure("'Number' must be at least 1 characters.");
+        }
+        if (number.Length > 8L)
+        {
+            return DomainResult<Room>.Failure("'Number' must be at most 8 characters.");
+        }
+        var created = new Room(floor, maxOccupancy, nightlyRate, number, property, roomType, stays, dirty, occupied, offline);
+        if (property != null)
+        {
+            property.AttachRooms(created);
+        }
+        return DomainResult<Room>.Success(created);
+    }
+    private void InitializeSubscriptions()
+    {
+        foreach (var target in this.Stays)
+        {
+            target.RegisterRoomInHouseSubscriber(this);
+        }
+        foreach (var target in this.Stays)
+        {
+            target.RegisterRoomDepartedSubscriber(this);
+        }
+        foreach (var target in this.Stays)
+        {
+            target.RegisterRoomCancelledSubscriber(this);
+        }
+        foreach (var target in this.Stays)
+        {
+            target.RegisterRoomNoShowSubscriber(this);
+        }
+    }
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult<object> Create(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult ProbeCreate(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindProbeCreate(name, values);
+    }
+    private DomainResult<object> BindCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "RoomType")
+        {
+            var typed = RoomType.Create((values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Property")
+        {
+            var typed = Property.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<Hall>(), new List<Room>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Room")
+        {
+            var typed = Room.Create((values.ContainsKey("Floor") ? (long?)values["Floor"] ?? 0L : 0L), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Number") ? (string?)values["Number"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), (values.ContainsKey("roomType") ? (RoomType?)values["roomType"] ?? null : null), new List<Reservation>(), (values.ContainsKey("Dirty") ? (bool?)values["Dirty"] ?? false : false), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Hall")
+        {
+            var typed = Hall.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), new List<Section>(), (values.ContainsKey("BusySections") ? (long?)values["BusySections"] ?? 0L : 0L), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Section")
+        {
+            var typed = Section.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Guest")
+        {
+            var typed = Guest.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Phone") ? (string?)values["Phone"] ?? "" : ""), new List<EventHold>(), new List<Reservation>(), (values.ContainsKey("EventCount") ? (long?)values["EventCount"] ?? 0L : 0L), (values.ContainsKey("NightCount") ? (long?)values["NightCount"] ?? 0L : 0L), (values.ContainsKey("StayCount") ? (long?)values["StayCount"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Reservation")
+        {
+            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), this);
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Folio")
+        {
+            var typed = Folio.Create((values.ContainsKey("reservation") ? (Reservation?)values["reservation"] ?? null : null), (values.ContainsKey("Balance") ? (long?)values["Balance"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "EventHold")
+        {
+            var typed = EventHold.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("EndDate") ? (DateOnly?)values["EndDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Headcount") ? (long?)values["Headcount"] ?? 0L : 0L), (values.ContainsKey("StartDate") ? (DateOnly?)values["StartDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown type '" + typeName + "'.");
+    }
+    private DomainResult<object> BindCreateIn(string relationshipName, Dictionary<string, object> values)
+    {
+        if (relationshipName == "property")
+        {
+            var typed = this.CreateProperty((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "roomType")
+        {
+            var typed = this.CreateRoomType((values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "stays")
+        {
+            var typed = this.CreateStays((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown relationship '" + relationshipName + "'.");
+    }
+    private DomainResult BindProbeCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "RoomType")
+        {
+            var typed = RoomType.Create((values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Property")
+        {
+            var typed = Property.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<Hall>(), new List<Room>());
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Room")
+        {
+            var typed = Room.Create((values.ContainsKey("Floor") ? (long?)values["Floor"] ?? 0L : 0L), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Number") ? (string?)values["Number"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), (values.ContainsKey("roomType") ? (RoomType?)values["roomType"] ?? null : null), new List<Reservation>(), (values.ContainsKey("Dirty") ? (bool?)values["Dirty"] ?? false : false), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Hall")
+        {
+            var typed = Hall.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), new List<Section>(), (values.ContainsKey("BusySections") ? (long?)values["BusySections"] ?? 0L : 0L), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Section")
+        {
+            var typed = Section.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Guest")
+        {
+            var typed = Guest.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Phone") ? (string?)values["Phone"] ?? "" : ""), new List<EventHold>(), new List<Reservation>(), (values.ContainsKey("EventCount") ? (long?)values["EventCount"] ?? 0L : 0L), (values.ContainsKey("NightCount") ? (long?)values["NightCount"] ?? 0L : 0L), (values.ContainsKey("StayCount") ? (long?)values["StayCount"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Reservation")
+        {
+            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("room") ? (Room?)values["room"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Folio")
+        {
+            var typed = Folio.Create((values.ContainsKey("reservation") ? (Reservation?)values["reservation"] ?? null : null), (values.ContainsKey("Balance") ? (long?)values["Balance"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "EventHold")
+        {
+            var typed = EventHold.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("EndDate") ? (DateOnly?)values["EndDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Headcount") ? (long?)values["Headcount"] ?? 0L : 0L), (values.ContainsKey("StartDate") ? (DateOnly?)values["StartDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+}

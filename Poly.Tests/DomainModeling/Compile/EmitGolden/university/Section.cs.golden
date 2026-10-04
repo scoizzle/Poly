@@ -1,0 +1,680 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public enum SectionStage
+{
+    Open = 0,
+    Closed = 1
+}
+
+public class Section
+{
+    private List<Enrollment> _enrollments;
+    private List<WaitOffer> _waitlist;
+    private Section()
+    {
+        this._enrollments = new List<Enrollment>();
+        this._waitlist = new List<WaitOffer>();
+    }
+    private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
+    {
+        this.Cap = cap;
+        this.OfferedSeats = offeredSeats;
+        this.OfferingTerm = offeringTerm;
+        this.SeatsTaken = seatsTaken;
+        this.WaitCleared = waitCleared;
+        this.Course = course;
+        this.Instructor = instructor;
+        this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
+        this._waitlist = new List<WaitOffer>(waitlist ?? new List<WaitOffer>());
+        this.CurrentStage = SectionStage.Open;
+        this.InitializeSubscriptions();
+    }
+    public long Cap { get; private set; }
+    public long OfferedSeats { get; private set; }
+    public Term OfferingTerm { get; private set; }
+    public long SeatsTaken { get; private set; }
+    public long WaitCleared { get; private set; }
+    public Course? Course { get; private set; }
+    public Instructor? Instructor { get; private set; }
+    public IReadOnlyList<Enrollment> Enrollments
+    {
+        get => this._enrollments;
+    }
+    public IReadOnlyList<WaitOffer> Waitlist
+    {
+        get => this._waitlist;
+    }
+    public SectionStage CurrentStage { get; private set; }
+    private DomainResult<Course> CreateCourse(string code, string title)
+    {
+        var courseResult = Course.Create(code, title);
+        if (!courseResult.IsSuccess)
+        {
+            return DomainResult<Course>.Failure(courseResult.ErrorMessage ?? "");
+        }
+        var course = courseResult.Value;
+        this.Course = course;
+        return DomainResult<Course>.Success(course);
+    }
+    private DomainResult<Instructor> CreateInstructor(string email, string name)
+    {
+        var instructorResult = Instructor.Create(email, name);
+        if (!instructorResult.IsSuccess)
+        {
+            return DomainResult<Instructor>.Failure(instructorResult.ErrorMessage ?? "");
+        }
+        var instructor = instructorResult.Value;
+        this.Instructor = instructor;
+        return DomainResult<Instructor>.Success(instructor);
+    }
+    private DomainResult<Enrollment> CreateEnrollments(Student? student, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
+    {
+        var enrollmentResult = Enrollment.Create(this, student, dueDate, enrolledOn, grade);
+        if (!enrollmentResult.IsSuccess)
+        {
+            return DomainResult<Enrollment>.Failure(enrollmentResult.ErrorMessage ?? "");
+        }
+        var enrollment = enrollmentResult.Value;
+        return DomainResult<Enrollment>.Success(enrollment);
+    }
+    internal void AttachEnrollments(Enrollment child)
+    {
+        this._enrollments.Add(child);
+        child.RegisterSectionRegisteredSubscriber(this);
+        child.RegisterSectionDroppedSubscriber(this);
+    }
+    private DomainResult<WaitOffer> CreateWaitlist(Student? student)
+    {
+        var waitOfferResult = WaitOffer.Create(student, this);
+        if (!waitOfferResult.IsSuccess)
+        {
+            return DomainResult<WaitOffer>.Failure(waitOfferResult.ErrorMessage ?? "");
+        }
+        var waitOffer = waitOfferResult.Value;
+        return DomainResult<WaitOffer>.Success(waitOffer);
+    }
+    internal void AttachWaitlist(WaitOffer child)
+    {
+        this._waitlist.Add(child);
+        child.RegisterSectionOfferedSubscriber(this);
+        child.RegisterSectionCancelledSubscriber(this);
+    }
+    public DomainResult Close()
+    {
+        if (this.CurrentStage != SectionStage.Open)
+        {
+            return DomainResult.Failure("'Close' requires stage 'Open' on entity 'Section'.");
+        }
+        if (!this.HasInstructor())
+        {
+            return DomainResult.Failure("'Close' blocked by policy 'HasInstructor'.");
+        }
+        this.CurrentStage = SectionStage.Closed;
+        return DomainResult.Success();
+    }
+    public DomainResult<WaitOffer> Queue(Student who)
+    {
+        if (this.CurrentStage != SectionStage.Open)
+        {
+            return DomainResult<WaitOffer>.Failure("'Queue' requires stage 'Open' on entity 'Section'.");
+        }
+        var create0 = this.ProbeCreate("WaitOffer", "student", (object)who);
+        if (!create0.IsSuccess)
+        {
+            return DomainResult<WaitOffer>.Failure(create0.ErrorMessage ?? "");
+        }
+        var create1 = this.CreateIn("waitlist", "student", (object)who);
+        if (!create1.IsSuccess)
+        {
+            return DomainResult<WaitOffer>.Failure(create1.ErrorMessage ?? "");
+        }
+        var created2 = create1.Value;
+        return DomainResult<WaitOffer>.Success((WaitOffer)created2);
+    }
+    public DomainResult StaffLeave()
+    {
+        if (this.CurrentStage != SectionStage.Open)
+        {
+            return DomainResult.Failure("'StaffLeave' requires stage 'Open' on entity 'Section'.");
+        }
+        if (!this.HasInstructor())
+        {
+            return DomainResult.Failure("'StaffLeave' blocked by policy 'HasInstructor'.");
+        }
+        if (this.Instructor == null)
+        {
+            return DomainResult.Failure("'GoOnLeave' requires a linked 'instructor' on entity 'Section'.");
+        }
+        var invoke0 = this.Instructor.GoOnLeave();
+        if (!invoke0.IsSuccess)
+        {
+            return DomainResult.Failure(invoke0.ErrorMessage ?? "");
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult Reopen()
+    {
+        if (this.CurrentStage != SectionStage.Closed)
+        {
+            return DomainResult.Failure("'Reopen' requires stage 'Closed' on entity 'Section'.");
+        }
+        this.CurrentStage = SectionStage.Open;
+        return DomainResult.Success();
+    }
+    public bool AtCap() => this.SeatsTaken >= this.Cap;
+    public bool HasInstructor() => this.Instructor != null;
+    public bool HasWaiters() => this.Waitlist.Count > 0L;
+    internal void WhenEachEnrollmentRegistered()
+    {
+        this.SeatsTaken = this.SeatsTaken + 1L;
+    }
+    internal void WhenEachEnrollmentDropped()
+    {
+        this.SeatsTaken = this.SeatsTaken - 1L;
+    }
+    internal void WhenAnyWaitOfferOffered()
+    {
+        var linkedMatched = false;
+        foreach (var linkedTarget in this.Waitlist)
+        {
+            if (linkedTarget.CurrentStage == WaitOfferStage.Offered)
+            {
+                linkedMatched = true;
+            }
+        }
+        if (!linkedMatched)
+        {
+            return;
+        }
+        {
+            this.OfferedSeats = this.OfferedSeats + 1L;
+        }
+    }
+    internal void WhenAllWaitOfferCancelled(WaitOfferStage previousStage)
+    {
+        var linkedMatched = false;
+        foreach (var linkedTarget in this.Waitlist)
+        {
+            linkedMatched = true;
+            if (linkedTarget.CurrentStage != WaitOfferStage.Cancelled)
+            {
+                return;
+            }
+        }
+        if (!linkedMatched)
+        {
+            return;
+        }
+        if (previousStage == WaitOfferStage.Cancelled)
+        {
+            return;
+        }
+        {
+            this.WaitCleared = 1L;
+        }
+    }
+    public static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
+    {
+        if (cap < 1L)
+        {
+            return DomainResult<Section>.Failure("'Cap' must be >= 1.");
+        }
+        if (cap > 200L)
+        {
+            return DomainResult<Section>.Failure("'Cap' must be <= 200.");
+        }
+        var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, offeredSeats, seatsTaken, waitCleared);
+        return DomainResult<Section>.Success(created);
+    }
+    private void InitializeSubscriptions()
+    {
+        foreach (var target in this.Enrollments)
+        {
+            target.RegisterSectionRegisteredSubscriber(this);
+        }
+        foreach (var target in this.Enrollments)
+        {
+            target.RegisterSectionDroppedSubscriber(this);
+        }
+        foreach (var target in this.Waitlist)
+        {
+            target.RegisterSectionOfferedSubscriber(this);
+        }
+        foreach (var target in this.Waitlist)
+        {
+            target.RegisterSectionCancelledSubscriber(this);
+        }
+    }
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult<object> Create(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult ProbeCreate(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindProbeCreate(name, values);
+    }
+    private DomainResult<object> BindCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Instructor")
+        {
+            var typed = Instructor.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Course")
+        {
+            var typed = Course.Create((values.ContainsKey("Code") ? (string?)values["Code"] ?? "" : ""), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Student")
+        {
+            var typed = Student.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<Enrollment>(), (values.ContainsKey("Completions") ? (long?)values["Completions"] ?? 0L : 0L), (values.ContainsKey("Holds") ? (long?)values["Holds"] ?? 0L : 0L), (values.ContainsKey("LastGrade") ? (long?)values["LastGrade"] ?? 0L : 0L), (values.ContainsKey("MaxCredits") ? (long?)values["MaxCredits"] ?? 0L : 0L), (values.ContainsKey("OpenCredits") ? (long?)values["OpenCredits"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Section")
+        {
+            var typed = Section.Create((values.ContainsKey("Cap") ? (long?)values["Cap"] ?? 0L : 0L), (values.ContainsKey("OfferingTerm") ? (Term?)values["OfferingTerm"] ?? Term.Fall : Term.Fall), (values.ContainsKey("course") ? (Course?)values["course"] ?? null : null), (values.ContainsKey("instructor") ? (Instructor?)values["instructor"] ?? null : null), new List<Enrollment>(), new List<WaitOffer>(), (values.ContainsKey("OfferedSeats") ? (long?)values["OfferedSeats"] ?? 0L : 0L), (values.ContainsKey("SeatsTaken") ? (long?)values["SeatsTaken"] ?? 0L : 0L), (values.ContainsKey("WaitCleared") ? (long?)values["WaitCleared"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "WaitOffer")
+        {
+            var typed = WaitOffer.Create((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), this);
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Enrollment")
+        {
+            var typed = Enrollment.Create(this, (values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown type '" + typeName + "'.");
+    }
+    private DomainResult<object> BindCreateIn(string relationshipName, Dictionary<string, object> values)
+    {
+        if (relationshipName == "course")
+        {
+            var typed = this.CreateCourse((values.ContainsKey("Code") ? (string?)values["Code"] ?? "" : ""), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "instructor")
+        {
+            var typed = this.CreateInstructor((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "enrollments")
+        {
+            var typed = this.CreateEnrollments((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (relationshipName == "waitlist")
+        {
+            var typed = this.CreateWaitlist((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown relationship '" + relationshipName + "'.");
+    }
+    private DomainResult BindProbeCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Instructor")
+        {
+            var typed = Instructor.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Course")
+        {
+            var typed = Course.Create((values.ContainsKey("Code") ? (string?)values["Code"] ?? "" : ""), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Student")
+        {
+            var typed = Student.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<Enrollment>(), (values.ContainsKey("Completions") ? (long?)values["Completions"] ?? 0L : 0L), (values.ContainsKey("Holds") ? (long?)values["Holds"] ?? 0L : 0L), (values.ContainsKey("LastGrade") ? (long?)values["LastGrade"] ?? 0L : 0L), (values.ContainsKey("MaxCredits") ? (long?)values["MaxCredits"] ?? 0L : 0L), (values.ContainsKey("OpenCredits") ? (long?)values["OpenCredits"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Section")
+        {
+            var typed = Section.Create((values.ContainsKey("Cap") ? (long?)values["Cap"] ?? 0L : 0L), (values.ContainsKey("OfferingTerm") ? (Term?)values["OfferingTerm"] ?? Term.Fall : Term.Fall), (values.ContainsKey("course") ? (Course?)values["course"] ?? null : null), (values.ContainsKey("instructor") ? (Instructor?)values["instructor"] ?? null : null), new List<Enrollment>(), new List<WaitOffer>(), (values.ContainsKey("OfferedSeats") ? (long?)values["OfferedSeats"] ?? 0L : 0L), (values.ContainsKey("SeatsTaken") ? (long?)values["SeatsTaken"] ?? 0L : 0L), (values.ContainsKey("WaitCleared") ? (long?)values["WaitCleared"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "WaitOffer")
+        {
+            var typed = WaitOffer.Create((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Enrollment")
+        {
+            var typed = Enrollment.Create((values.ContainsKey("section") ? (Section?)values["section"] ?? null : null), (values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+}

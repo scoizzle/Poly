@@ -1,0 +1,55 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public enum Industry
+{
+    Technology = 0,
+    Healthcare = 1,
+    Finance = 2,
+    Other = 3
+}
+
+public record ChargeRequest
+{
+    public long Amount { get; set; }
+    public string Currency { get; set; } = default!;
+}
+
+public record DomainResult
+{
+    private DomainResult(bool isSuccess, string? errorMessage)
+    {
+        this.IsSuccess = isSuccess;
+        this.ErrorMessage = errorMessage;
+    }
+    public bool IsSuccess { get; }
+    public string? ErrorMessage { get; }
+    public static DomainResult Success() => new DomainResult(true, null);
+    public static DomainResult Failure(string message) => new DomainResult(false, message);
+}
+
+public record DomainResult<T>
+{
+    private DomainResult(bool isSuccess, T value, string? errorMessage)
+    {
+        this.IsSuccess = isSuccess;
+        this.Value = @value;
+        this.ErrorMessage = errorMessage;
+    }
+    public bool IsSuccess { get; }
+    public T Value { get; }
+    public string? ErrorMessage { get; }
+    public static DomainResult<T> Success(T value) => new DomainResult<T>(true, @value, null);
+    public static DomainResult<T> Failure(string message) => new DomainResult<T>(false, default!, message);
+}
+
+public class BillingAdapters
+{
+    private BillingAdapters()
+    { }
+    public static void Charge(ChargeRequest request)
+    {
+        throw new NotImplementedException("Contract endpoint 'Billing.Charge' has no implementation. The export emits a fail-closed adapter; register an in-process adapter to serve bound calls.");
+    }
+}

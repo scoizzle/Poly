@@ -7,6 +7,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 
+using Artifact = Poly.DomainModeling.Compile.Artifact;
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
 using DbContextArtifactContributor = Poly.DslCompiler.DbContextArtifactContributor;
@@ -61,13 +62,32 @@ public class SliceCProducerLoopCatalogTests {
             Permit: entity { Plate: Text required }
             """);
 
-        await Assert.That(session.ArtifactCatalog.Count).IsEqualTo(0);
+        await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsEqualTo(0);
 
         var module = session.Lower(domain, analysis);
         await Assert.That(module.Count).IsGreaterThan(0);
-        await Assert.That(session.ArtifactCatalog.Count).IsGreaterThan(0);
-        await Assert.That(session.ArtifactCatalog.Any(a =>
-            a.Kind == "SyntaxModule" && a.Name == "module" && a.Source == "Lower")).IsTrue();
+        await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsGreaterThan(0);
+        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
+    }
+
+    [Test]
+    public async Task SliceC_EachLower_BuildsANewCatalog_NotSharedAcrossSessions() {
+        var (domain, analysis, session) = Evolve(SampleDomain);
+        var (otherDomain, otherAnalysis, otherSession) = Evolve(SampleDomain);
+
+        session.Lower(domain, analysis);
+        otherSession.Lower(otherDomain, otherAnalysis);
+        await Assert.That(session.ArtifactCatalog).IsNotSameReferenceAs(otherSession.ArtifactCatalog);
+
+        var first = session.ArtifactCatalog;
+        first.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create(["Extra"], "type"), "Test"), Payload: null));
+        session.Lower(domain, analysis);
+
+        await Assert.That(session.ArtifactCatalog).IsNotSameReferenceAs(first);
+        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
+        await Assert.That(first.ToText()).IsEqualTo("type|Extra|Test\nSyntaxModule|module|Lower");
+        await Assert.That(otherSession.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
     }
 
     [Test]

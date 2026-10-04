@@ -1,0 +1,466 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+public class Warehouse
+{
+    private List<Truck> _trucks;
+    private Warehouse()
+    {
+        this._trucks = new List<Truck>();
+    }
+    private Warehouse(long capacity, string code, string name, string zip, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    {
+        this.Capacity = capacity;
+        this.Code = code;
+        this.Name = name;
+        this.SafetyStock = safetyStock;
+        this.Status = status;
+        this.Zip = zip;
+        this._trucks = new List<Truck>(trucks ?? new List<Truck>());
+    }
+    public long Capacity { get; private set; }
+    public string Code { get; private set; } = default!;
+    public string Name { get; private set; } = default!;
+    public long SafetyStock { get; private set; }
+    public TruckStatus Status { get; private set; }
+    public string Zip { get; private set; } = default!;
+    public IReadOnlyList<Truck> Trucks
+    {
+        get => this._trucks;
+    }
+    private DomainResult<Truck> CreateTrucks(long maxLoad, string vin, long currentLoad = 0L)
+    {
+        var truckResult = Truck.Create(maxLoad, vin, this, new List<Delivery>(), currentLoad);
+        if (!truckResult.IsSuccess)
+        {
+            return DomainResult<Truck>.Failure(truckResult.ErrorMessage ?? "");
+        }
+        var truck = truckResult.Value;
+        return DomainResult<Truck>.Success(truck);
+    }
+    internal void AttachTrucks(Truck child)
+    {
+        this._trucks.Add(child);
+    }
+    public DomainResult AdjustCapacity(long delta)
+    {
+        var assignValue0 = this.Capacity + delta;
+        if (assignValue0 < 1L)
+        {
+            return DomainResult.Failure("'Capacity' must be >= 1.");
+        }
+        if (assignValue0 > 10000L)
+        {
+            return DomainResult.Failure("'Capacity' must be <= 10000.");
+        }
+        this.Capacity = assignValue0;
+        return DomainResult.Success();
+    }
+    public DomainResult SetStatus(TruckStatus status)
+    {
+        this.Status = status;
+        return DomainResult.Success();
+    }
+    public DomainResult<Truck> RegisterTruck(string vin, long maxLoad)
+    {
+        var create0 = this.ProbeCreate("Truck", "Vin", vin, "MaxLoad", maxLoad);
+        if (!create0.IsSuccess)
+        {
+            return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");
+        }
+        var create1 = this.CreateIn("trucks", "Vin", vin, "MaxLoad", maxLoad);
+        if (!create1.IsSuccess)
+        {
+            return DomainResult<Truck>.Failure(create1.ErrorMessage ?? "");
+        }
+        var created2 = create1.Value;
+        return DomainResult<Truck>.Success((Truck)created2);
+    }
+    public bool IsOperational() => this.Capacity > 0L;
+    public bool HasCapacity() => this.Capacity > 0L;
+    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    {
+        if (capacity < 1L)
+        {
+            return DomainResult<Warehouse>.Failure("'Capacity' must be >= 1.");
+        }
+        if (capacity > 10000L)
+        {
+            return DomainResult<Warehouse>.Failure("'Capacity' must be <= 10000.");
+        }
+        if (string.IsNullOrEmpty(code))
+        {
+            return DomainResult<Warehouse>.Failure("'Code' is required.");
+        }
+        if (code.Length < 2L)
+        {
+            return DomainResult<Warehouse>.Failure("'Code' must be at least 2 characters.");
+        }
+        if (code.Length > 10L)
+        {
+            return DomainResult<Warehouse>.Failure("'Code' must be at most 10 characters.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^WH-[0-9]{3}$"))
+        {
+            return DomainResult<Warehouse>.Failure("'Code' does not match the required pattern.");
+        }
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Warehouse>.Failure("'Name' is required.");
+        }
+        if (name.Length < 3L)
+        {
+            return DomainResult<Warehouse>.Failure("'Name' must be at least 3 characters.");
+        }
+        if (name.Length > 50L)
+        {
+            return DomainResult<Warehouse>.Failure("'Name' must be at most 50 characters.");
+        }
+        if (safetyStock < 0L)
+        {
+            return DomainResult<Warehouse>.Failure("'SafetyStock' must be >= 0.");
+        }
+        if (safetyStock > 5000L)
+        {
+            return DomainResult<Warehouse>.Failure("'SafetyStock' must be <= 5000.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
+        {
+            return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
+        }
+        var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
+        return DomainResult<Warehouse>.Success(created);
+    }
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult<object> Create(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreate(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindCreateIn(name, values);
+    }
+    public DomainResult ProbeCreate(string name, object? __job = null)
+    {
+        var values = new Dictionary<string, object>();
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        return this.BindProbeCreate(name, values);
+    }
+    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
+    {
+        var values = new Dictionary<string, object>();
+        values[p0] = v0;
+        values[p1] = v1;
+        values[p2] = v2;
+        values[p3] = v3;
+        values[p4] = v4;
+        values[p5] = v5;
+        values[p6] = v6;
+        values[p7] = v7;
+        return this.BindProbeCreate(name, values);
+    }
+    private DomainResult<object> BindCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Warehouse")
+        {
+            var typed = Warehouse.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("Code") ? (string?)values["Code"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Zip") ? (string?)values["Zip"] ?? "" : ""), new List<Truck>(), (values.ContainsKey("SafetyStock") ? (long?)values["SafetyStock"] ?? 0L : 0L), (values.ContainsKey("Status") ? (TruckStatus?)values["Status"] ?? TruckStatus.Idle : TruckStatus.Idle));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Truck")
+        {
+            var typed = Truck.Create((values.ContainsKey("MaxLoad") ? (long?)values["MaxLoad"] ?? 0L : 0L), (values.ContainsKey("Vin") ? (string?)values["Vin"] ?? "" : ""), this, new List<Delivery>(), (values.ContainsKey("CurrentLoad") ? (long?)values["CurrentLoad"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        if (typeName == "Delivery")
+        {
+            var typed = Delivery.Create((values.ContainsKey("Notes") ? (string?)values["Notes"] ?? "" : ""), (values.ContainsKey("Reference") ? (string?)values["Reference"] ?? "" : ""), (values.ContainsKey("Weight") ? (long?)values["Weight"] ?? 0L : 0L), (values.ContainsKey("truck") ? (Truck?)values["truck"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown type '" + typeName + "'.");
+    }
+    private DomainResult<object> BindCreateIn(string relationshipName, Dictionary<string, object> values)
+    {
+        if (relationshipName == "trucks")
+        {
+            var typed = this.CreateTrucks((values.ContainsKey("MaxLoad") ? (long?)values["MaxLoad"] ?? 0L : 0L), (values.ContainsKey("Vin") ? (string?)values["Vin"] ?? "" : ""), (values.ContainsKey("CurrentLoad") ? (long?)values["CurrentLoad"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
+            }
+            else
+            {
+                return DomainResult<object>.Success(typed.Value);
+            }
+        }
+        return DomainResult<object>.Failure("Unknown relationship '" + relationshipName + "'.");
+    }
+    private DomainResult BindProbeCreate(string typeName, Dictionary<string, object> values)
+    {
+        if (typeName == "Warehouse")
+        {
+            var typed = Warehouse.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("Code") ? (string?)values["Code"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Zip") ? (string?)values["Zip"] ?? "" : ""), new List<Truck>(), (values.ContainsKey("SafetyStock") ? (long?)values["SafetyStock"] ?? 0L : 0L), (values.ContainsKey("Status") ? (TruckStatus?)values["Status"] ?? TruckStatus.Idle : TruckStatus.Idle));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Truck")
+        {
+            var typed = Truck.Create((values.ContainsKey("MaxLoad") ? (long?)values["MaxLoad"] ?? 0L : 0L), (values.ContainsKey("Vin") ? (string?)values["Vin"] ?? "" : ""), (values.ContainsKey("warehouse") ? (Warehouse?)values["warehouse"] ?? null : null), new List<Delivery>(), (values.ContainsKey("CurrentLoad") ? (long?)values["CurrentLoad"] ?? 0L : 0L));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        if (typeName == "Delivery")
+        {
+            var typed = Delivery.Create((values.ContainsKey("Notes") ? (string?)values["Notes"] ?? "" : ""), (values.ContainsKey("Reference") ? (string?)values["Reference"] ?? "" : ""), (values.ContainsKey("Weight") ? (long?)values["Weight"] ?? 0L : 0L), (values.ContainsKey("truck") ? (Truck?)values["truck"] ?? null : null));
+            if (!typed.IsSuccess)
+            {
+                return DomainResult.Failure(typed.ErrorMessage ?? "");
+            }
+            return DomainResult.Success();
+        }
+        return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+}

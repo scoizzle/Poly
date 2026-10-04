@@ -1,0 +1,195 @@
+#nullable enable
+
+using Microsoft.EntityFrameworkCore;
+
+namespace Poly.Generated;
+
+public class CrmDbContext : DbContext
+{
+    public CrmDbContext(DbContextOptions<CrmDbContext> options) : base(options) { }
+    public DbSet<Site> Sites
+    {
+        get => Set<Site>();
+    }
+    public DbSet<Product> Products
+    {
+        get => Set<Product>();
+    }
+    public DbSet<Lead> Leads
+    {
+        get => Set<Lead>();
+    }
+    public DbSet<Account> Accounts
+    {
+        get => Set<Account>();
+    }
+    public DbSet<Contact> Contacts
+    {
+        get => Set<Contact>();
+    }
+    public DbSet<Opportunity> Opportunitys
+    {
+        get => Set<Opportunity>();
+    }
+    public DbSet<Activity> Activitys
+    {
+        get => Set<Activity>();
+    }
+    public DbSet<Quote> Quotes
+    {
+        get => Set<Quote>();
+    }
+    public DbSet<Campaign> Campaigns
+    {
+        get => Set<Campaign>();
+    }
+    public DbSet<CampaignMember> CampaignMembers
+    {
+        get => Set<CampaignMember>();
+    }
+    public DbSet<Ticket> Tickets
+    {
+        get => Set<Ticket>();
+    }
+    public DbSet<Line> Lines
+    {
+        get => Set<Line>();
+    }
+    public DbSet<QuoteLine> QuoteLines
+    {
+        get => Set<QuoteLine>();
+    }
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Site>(b => {
+    b.ToTable("Sites");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.City).HasColumnName("city").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.Region).HasColumnName("region").HasColumnType("TEXT");
+}
+);
+        modelBuilder.Entity<Product>(b => {
+    b.ToTable("Products", t => {
+    t.HasCheckConstraint("CK_listPrice", "listPrice >= 0 AND listPrice <= 100000000");
+}
+);
+    b.HasKey(x => x.Sku);
+    b.Property(x => x.Sku).HasColumnName("sku").HasColumnType("TEXT").IsRequired().HasMaxLength(32);
+    b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.ListPrice).HasColumnName("listPrice").HasColumnType("INTEGER");
+}
+);
+        modelBuilder.Entity<Lead>(b => {
+    b.ToTable("Leads");
+    b.HasKey(x => x.Email);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.Company).HasColumnName("company").HasColumnType("TEXT").IsRequired();
+}
+);
+        modelBuilder.Entity<Account>(b => {
+    b.ToTable("Accounts");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("Industry");
+    b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
+    b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("INTEGER");
+    b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER");
+    b.Metadata.FindNavigation(nameof(Account.Contacts))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation(nameof(Account.Opportunities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation(nameof(Account.Tickets))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+}
+);
+        modelBuilder.Entity<Contact>(b => {
+    b.ToTable("Contacts");
+    b.HasKey(x => x.Email);
+    b.Property(x => x.Email).HasColumnName("email").HasColumnType("TEXT").IsRequired().HasMaxLength(256);
+    b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
+}
+);
+        modelBuilder.Entity<Opportunity>(b => {
+    b.ToTable("Opportunitys", t => {
+    t.HasCheckConstraint("CK_amount", "amount >= 0 AND amount <= 100000000");
+    t.HasCheckConstraint("CK_probability", "probability >= 0 AND probability <= 100");
+}
+);
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
+    b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
+    b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER");
+    b.Metadata.FindNavigation(nameof(Opportunity.Activities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation(nameof(Opportunity.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+    b.Metadata.FindNavigation(nameof(Opportunity.Quotes))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+}
+);
+        modelBuilder.Entity<Activity>(b => {
+    b.ToTable("Activitys");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.DueOn).HasColumnName("dueOn").HasColumnType("TEXT");
+}
+);
+        modelBuilder.Entity<Quote>(b => {
+    b.ToTable("Quotes", t => {
+    t.HasCheckConstraint("CK_amount", "amount >= 0 AND amount <= 100000000");
+}
+);
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
+    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
+    b.Metadata.FindNavigation(nameof(Quote.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+}
+);
+        modelBuilder.Entity<Campaign>(b => {
+    b.ToTable("Campaigns");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
+    b.Metadata.FindNavigation(nameof(Campaign.Members))!.SetPropertyAccessMode(PropertyAccessMode.Field);
+}
+);
+        modelBuilder.Entity<CampaignMember>(b => {
+    b.ToTable("CampaignMembers");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+}
+);
+        modelBuilder.Entity<Ticket>(b => {
+    b.ToTable("Tickets");
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
+}
+);
+        modelBuilder.Entity<Line>(b => {
+    b.ToTable("Lines", t => {
+    t.HasCheckConstraint("CK_qty", "qty >= 1 AND qty <= 10000");
+    t.HasCheckConstraint("CK_unitPrice", "unitPrice >= 0 AND unitPrice <= 100000000");
+}
+);
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
+    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("INTEGER");
+}
+);
+        modelBuilder.Entity<QuoteLine>(b => {
+    b.ToTable("QuoteLines", t => {
+    t.HasCheckConstraint("CK_qty", "qty >= 1 AND qty <= 10000");
+    t.HasCheckConstraint("CK_unitPrice", "unitPrice >= 0 AND unitPrice <= 100000000");
+}
+);
+    b.Property<int>("Id");
+    b.HasKey("Id");
+    b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
+    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("INTEGER");
+}
+);
+    }
+}

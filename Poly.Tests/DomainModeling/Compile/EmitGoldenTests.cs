@@ -108,16 +108,7 @@ public sealed class EmitGoldenTests {
                 .Select(d => d.Message));
             throw new InvalidOperationException($"AnalyzeSample failed: {errors}");
         }
-        var domain = outcome.Root;
-        session = session.WithDomain(domain);
-        var analysis = session.Analyze(domain);
-        if (analysis.HasErrors) {
-            var errors = string.Join("; ", analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => d.Message));
-            throw new InvalidOperationException($"AnalyzeSample analysis errors: {errors}");
-        }
-        return (session, domain, analysis);
+        return (session, outcome.Root, outcome.Analysis);
     }
 
     private static string CatalogText(DomainSession session) =>

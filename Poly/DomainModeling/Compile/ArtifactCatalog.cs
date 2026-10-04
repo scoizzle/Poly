@@ -9,7 +9,7 @@ public sealed class ArtifactCatalog {
     private readonly Dictionary<ArtifactId, Artifact> _byId = [];
 
     /// <summary>The artifacts in the order they were registered.</summary>
-    public IReadOnlyList<Artifact> Artifacts => _artifacts;
+    public IReadOnlyList<Artifact> Artifacts => _artifacts.AsReadOnly();
 
     /// <summary>Adds an artifact. Throws <see cref="InvalidOperationException"/> when its id is already registered.</summary>
     public void Register(Artifact artifact) {
@@ -24,8 +24,8 @@ public sealed class ArtifactCatalog {
     public Artifact? Find(ArtifactId id) => _byId.GetValueOrDefault(id);
 
     /// <summary>
-    /// One line per artifact, <c>Type|Path|Producer</c>, sorted by id so the text does not
-    /// depend on registration order. No trailing newline.
+    /// One line per artifact, <c>Type|Path|Producer</c>, sorted ordinally by id
+    /// (<c>Path#Type</c>) so the text does not depend on registration order. No trailing newline.
     /// </summary>
     public string ToText() => string.Join("\n", _artifacts
         .Select(a => a.Descriptor)

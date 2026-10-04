@@ -42,6 +42,7 @@ public sealed class DomainSession {
     /// <summary>
     /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding
     /// only the privileged SyntaxModule placeholder; it is not an emit/contributor file inventory.
+    /// This is the live instance: anything registered on it by hand is dropped by the next Lower.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -166,7 +167,7 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        // Lower always stamps the SyntaxModule sentinel into ArtifactCatalog (sole writer).
+        // Lower puts the SyntaxModule placeholder into a new ArtifactCatalog.
         var types = Lower(domain, analysis);
         var interpAnalysis = TryAnalyzeForEmit(types);
         var generator = interpAnalysis is not null

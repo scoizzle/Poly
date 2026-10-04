@@ -78,21 +78,58 @@ public sealed class ArtifactCatalogTests {
     }
 
     [Test]
-    public async Task PublicSurface_HasNoRemoveReplaceOrSetters() {
+    public async Task ToText_SortsOrdinallyByPathThenType_NotByTypeProducerOrCulture() {
+        var catalog = new ArtifactCatalog();
+        catalog.Register(Make("apple", "t", producer: "A"));
+        catalog.Register(Make("a_b", "t", producer: "B"));
+        catalog.Register(Make("a/b", "t", producer: "C"));
+        catalog.Register(Make("a", "z", producer: "D"));
+        catalog.Register(Make("a", "b", producer: "E"));
+        catalog.Register(Make("Zebra", "t", producer: "Z"));
+
+        // Uppercase sorts before lowercase, a path ties on its type, and "a#z" before "a/b#t" because '#' sorts below '/'.
+        await Assert.That(catalog.ToText()).IsEqualTo(
+            "t|Zebra|Z\nb|a|E\nz|a|D\nt|a/b|C\nt|a_b|B\nt|apple|A");
+    }
+
+    [Test]
+    public async Task Register_Null_Throws() {
+        await Assert.That(() => new ArtifactCatalog().Register(null!)).Throws<ArgumentNullException>();
+    }
+
+    [Test]
+    public async Task Artifacts_CannotBeEmptiedOrChangedThroughACast() {
+        var catalog = new ArtifactCatalog();
+        catalog.Register(Make("Hotel", "module"));
+
+        var list = (IList<Artifact>)catalog.Artifacts;
+
+        await Assert.That(() => list.Clear()).Throws<NotSupportedException>();
+        await Assert.That(() => list.RemoveAt(0)).Throws<NotSupportedException>();
+        await Assert.That(() => list[0] = Make("Other", "module")).Throws<NotSupportedException>();
+        await Assert.That(catalog.Artifacts.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task PublicSurface_IsExactlyTheAllowList() {
         var type = typeof(ArtifactCatalog);
-        var methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(m => !m.IsSpecialName)
-            .Select(m => m.Name)
+        var members = type
+            .GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+            .Select(m => $"{m.MemberType} {m.Name}")
             .Order(StringComparer.Ordinal)
-            .ToArray();
-        var setters = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.SetMethod is { IsPublic: true })
-            .Select(p => p.Name)
             .ToArray();
 
         // Adding is the only way to change a catalog; a changed domain gets a new catalog.
-        await Assert.That(methods).IsEquivalentTo(new[] { "Find", "Register", "ToText" });
-        await Assert.That(setters).IsEmpty();
+        // A new public member (a remove, a mutable collection, a static helper) must be added here on purpose.
+        await Assert.That(members).IsEquivalentTo(new[] {
+            "Constructor .ctor",
+            "Method Find",
+            "Method Register",
+            "Method ToText",
+            "Method get_Artifacts",
+            "Property Artifacts",
+        });
+        await Assert.That(type.GetInterfaces()).IsEmpty();
         await Assert.That(type.GetProperty(nameof(ArtifactCatalog.Artifacts))!.PropertyType)
             .IsEqualTo(typeof(IReadOnlyList<Artifact>));
     }

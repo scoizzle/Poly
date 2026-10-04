@@ -51,7 +51,7 @@ public sealed record ArtifactId {
 
     public override string ToString() => $"{Path}{TypeSeparator}{Type}";
 
-    private static void RequireValid(string? part, string what) {
+    internal static void RequireValid(string? part, string what) {
         if (string.IsNullOrEmpty(part)
             || part.Any(c => char.IsWhiteSpace(c) || c == PathSeparator || c == TypeSeparator))
             throw new FormatException(

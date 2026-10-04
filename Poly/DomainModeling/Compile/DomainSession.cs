@@ -152,6 +152,7 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(analysis);
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         ArtifactCatalog = new ArtifactCatalog();
+        ArtifactCatalog.DeclareType("SyntaxModule", mayPointAt: []);
         ArtifactCatalog.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create(["module"], "SyntaxModule"), "Lower"),
             Payload: null));

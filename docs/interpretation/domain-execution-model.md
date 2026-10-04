@@ -245,8 +245,6 @@ On the simulate path, `Rel exists` and to-one path-prefix lower to Notify-shaped
 | Singular cross-entity | `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard before deref | Same tree on runtime and emit. Does not wrap `IsSuccess` |
 | For-invoke | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Analysis rejects ManyToMany / OneToOne. VM walks `IList` (fail-loud non-IList). Per-item `if (!result.IsSuccess) return result`. Zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result |
 
-`GetOutboundRelatedInstances` is the body of those Store-read jobs — not invoke dispatch, and not an execute-time rewrite of the action/policy tree.
-
 ---
 
 ## 6. Lowering Pass Architecture

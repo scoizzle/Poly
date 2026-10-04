@@ -1036,7 +1036,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
         if (_domain is null || _analysis is null)
-            return null;
+            throw new InvalidOperationException(
+                "Cannot probe 'create in' without a domain and analysis; dropping the probe would skip the constraint check.");
 
         var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
         var relationship = resolvedTarget?.Relationship

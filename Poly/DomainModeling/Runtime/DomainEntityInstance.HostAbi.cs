@@ -423,17 +423,6 @@ public sealed partial record DomainEntityInstance {
                 $"(peer binding '{peerBinding}').")
         };
 
-
-    private static DomainExpression RejectPeerAssignTarget(DomainExpression target, string peerBinding) {
-        if (target is RelationshipNavigation rn
-            && string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal)) {
-            throw new InvalidOperationException(
-                $"Peer binder '{peerBinding}' cannot be an assign target in a subscription effect. " +
-                "Use peer fields only on the right-hand side.");
-        }
-        return target;
-    }
-
     /// <summary>
     /// VM-called Store jobs for lowered create / create-in (body and probes).
     /// Args: name (type or relationship) plus an initializer dictionary, or

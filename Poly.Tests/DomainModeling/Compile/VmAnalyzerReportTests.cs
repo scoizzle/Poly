@@ -7,9 +7,10 @@ namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
 /// Report only: runs the VM analyzer the way <see cref="DomainSession.Emit"/> does over
-/// every sample domain and prints what it finds. Emit ignores the result today, so the
-/// counts say how much would break if Emit started refusing VM errors.
-/// Nothing here fails on the counts.
+/// every sample domain and prints what it finds. Emit passes the analysis to the C#
+/// generator but ignores its diagnostics today, so the counts say how much would break
+/// if Emit started refusing VM errors. Nothing here fails on the counts.
+/// Run with <c>--output Detailed</c> to see the table.
 /// </summary>
 public sealed class VmAnalyzerReportTests {
     private static readonly ExtensionCatalog Catalog = ExtensionCatalog.Core
@@ -18,10 +19,11 @@ public sealed class VmAnalyzerReportTests {
 
     private static readonly string[] Seed = [.. ExtensionCatalog.ProductAuthoring, "sqlite"];
 
-    // The live probes and the demo. The archived probes are left out: most are old syntax or meant to be rejected.
+    // The live probes and the demo. The archive is left out: it is not maintained and
+    // 114 of its 256 files do not load or fail domain analysis.
     private static readonly string[] SampleRoots = ["docs/probes", "demo/live"];
 
-    // Invalid by design: the domain analyzer or the printed C# is meant to reject these.
+    // Invalid by design: the domain analyzer rejects these. The same list is in ParityTests.
     private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
 
     [Test]
@@ -62,11 +64,14 @@ public sealed class VmAnalyzerReportTests {
             var session = DomainSession.ForSource(poly, Seed, Catalog);
             var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), Seed);
             var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+            // Not Succeeded covers domain analysis Errors and a change that failed to apply.
             if (!outcome.Succeeded)
                 return new Row(name, "domain has Errors", 0, 0, 0);
 
+            // These two calls mirror the start of DomainSession.Emit.
             var types = session.Lower(outcome.Root, outcome.Analysis);
             var vm = DomainSession.TryAnalyzeForEmit(types);
+            // Null only means Lower produced no types; an analyzer exception lands in the catch below.
             if (vm is null)
                 return new Row(name, "TryAnalyzeForEmit null", types.Count, 0, 0);
 
@@ -75,6 +80,7 @@ public sealed class VmAnalyzerReportTests {
             return new Row(name, errors > 0 ? "VM Errors" : warnings > 0 ? "VM Warnings" : "VM clean", types.Count, errors, warnings);
         }
         catch (Exception ex) {
+            // A report keeps going: the failure shows in this domain's row.
             return new Row(name, $"load failed: {ex.GetType().Name}", 0, 0, 0);
         }
     }
@@ -82,8 +88,7 @@ public sealed class VmAnalyzerReportTests {
     private static string FindRepoRoot() {
         var dir = AppContext.BaseDirectory;
         while (dir is not null) {
-            if (File.Exists(Path.Combine(dir, "Poly.sln"))
-                || File.Exists(Path.Combine(dir, "docs/CORE.md")))
+            if (File.Exists(Path.Combine(dir, "docs/CORE.md")))
                 return dir;
             dir = Directory.GetParent(dir)?.FullName;
         }

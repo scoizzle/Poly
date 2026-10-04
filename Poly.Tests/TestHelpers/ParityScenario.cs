@@ -1,5 +1,6 @@
 using System.Reflection;
 
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -26,8 +27,12 @@ public sealed class ParityScenario {
         _assembly = assembly;
     }
 
-    public static ParityScenario FromDsl(string dsl, string assemblyName) {
-        var (domain, analysis) = EvolvedDomain.FromDsl(dsl);
+    public static ParityScenario FromDsl(string dsl, string assemblyName) =>
+        FromDomain(EvolvedDomain.FromDsl(dsl).Domain, assemblyName);
+
+    /// <summary>For domains built or edited through the API, which the DSL cannot always express.</summary>
+    public static ParityScenario FromDomain(Domain domain, string assemblyName) {
+        var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         return new(domain, ExportedCSharp.CompileAndLoad(cs, assemblyName));
     }

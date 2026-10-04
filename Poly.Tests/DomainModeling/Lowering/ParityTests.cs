@@ -1,4 +1,6 @@
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
 
@@ -167,6 +169,70 @@ public class ParityTests {
         await Assert.That(() => Agree(side => side.Invoke("Close"))).Throws<ArgumentException>();
     }
 
+    const string EqualityDsl = """
+        domain Shop
+        Order: entity {
+          Status: Text
+          Level: Number
+          Code: Text default("Active")
+        }
+        """;
+
+    const string EntryAssignedDsl = """
+        domain Shop
+        Job: entity {
+          Tag: Text
+          Mark: Text
+          Open: stage { entry { assign Mark to "x" } }
+        }
+        """;
+
+    // The DSL cannot author equals(...), so add the constraint to the parsed model.
+    static ParityScenario EqualityScenario(string dsl, string assemblyName, params (string Property, object Expected)[] equalities) {
+        var domain = EvolvedDomain.FromDsl(dsl).Domain;
+        var entity = domain.Types.OfType<Entity>().Single();
+        entity = entity with {
+            Properties = [.. entity.Properties.Select(p => p with {
+                Constraints = [.. p.Constraints, .. equalities.Where(e => e.Property == p.Name).Select(e => new EqualityConstraint(e.Expected))]
+            })]
+        };
+        return ParityScenario.FromDomain(domain with { Types = [entity] }, assemblyName);
+    }
+
+    // Status must be "Active"; Level must be 5 (an int, while the property holds a long).
+    static ParityScenario OrderScenario(string assemblyName) =>
+        EqualityScenario(EqualityDsl, assemblyName, ("Status", "Active"), ("Level", 5));
+
+    [Test]
+    public async Task Create_WhenEqualityHolds_Agrees() {
+        var outcomes = await OrderScenario("ParityEqualityHolds")
+            .AssertAgree(side => side.Create("Order", ("Status", "Active"), ("Level", 5L)));
+        await Assert.That(outcomes[0].Success).IsTrue();
+    }
+
+    const string CreateThrowsVersusFails = "create Order: exception type differs (simulate 'InvalidOperationException', printed '')";
+
+    // Create failure still differs in how it is reported (simulate throws, printed returns a failure): see
+    // KnownGap_CreateOutOfRange_*. Everything else, including the message, must agree.
+    [Test]
+    [Arguments("Closed", 5L, "'Status' must equal Active.")]
+    [Arguments("active", 5L, "'Status' must equal Active.")]
+    [Arguments("Active", 6L, "'Level' must equal 5.")]
+    public async Task Create_WhenEqualityViolated_FailsWithTheSameMessage(string status, long level, string message) {
+        var (simulate, printed) = OrderScenario("ParityEqualityViolated")
+            .Run(side => side.Create("Order", ("Status", status), ("Level", level)));
+        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed))).IsEqualTo(CreateThrowsVersusFails);
+        await Assert.That(simulate[0].Message).IsEqualTo(message);
+    }
+
+    [Test]
+    public async Task Create_WhenDefaultViolatesEquality_FailsWithTheSameMessage() {
+        var (simulate, printed) = EqualityScenario(EqualityDsl, "ParityEqualityDefault", ("Code", "Other"))
+            .Run(side => side.Create("Order", ("Status", "s"), ("Level", 1L)));
+        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed))).IsEqualTo(CreateThrowsVersusFails);
+        await Assert.That(simulate[0].Message).IsEqualTo("'Code' must equal Other.");
+    }
+
     // Known gaps: the sides differ today. Each row pins the exact differences so a fix turns it red;
     // then replace it with an AssertAgree row.
 
@@ -187,6 +253,17 @@ public class ParityTests {
             .Run(side => { side.Create("Task"); side.Invoke("Promote"); });
         await Assert.That(ParityScenario.Differences(simulate, printed))
             .IsEquivalentTo(["invoke Promote: failure message differs (simulate '', printed ''Promote' blocked by policy 'CanPromote'.')"]);
+    }
+
+    // Owner: C2b (the compiled Create skips properties the first stage's entry assigns). The simulator checks
+    // constraints before entry effects run, so equals() on such a property rejects a create the printed code accepts.
+    // required() on the same property fails the same way today.
+    [Test]
+    public async Task KnownGap_EqualityOnEntryAssignedProperty_SimulateRejectsCreate() {
+        var (simulate, printed) = EqualityScenario(EntryAssignedDsl, "ParityGapEntryAssigned", ("Mark", "x"))
+            .Run(side => side.Create("Job", ("Tag", "t")));
+        await Assert.That(printed[0].Success).IsTrue();
+        await Assert.That(simulate[0].Message).IsEqualTo("'Mark' must equal x.");
     }
 
     // Each Differences row differs from the baseline in exactly one field, so deleting that field's compare turns it red.

@@ -51,9 +51,16 @@ public sealed record ArtifactId {
 
     public override string ToString() => $"{Path}{TypeSeparator}{Type}";
 
+    /// <summary>
+    /// Whether <paramref name="part"/> can be a name or type in an id: non-empty, with no
+    /// whitespace, <c>/</c> or <c>#</c>. Callers that take names from outside can check this first.
+    /// </summary>
+    public static bool IsValidPart(string? part) =>
+        !string.IsNullOrEmpty(part)
+        && !part.Any(c => char.IsWhiteSpace(c) || c == PathSeparator || c == TypeSeparator);
+
     internal static void RequireValid(string? part, string what) {
-        if (string.IsNullOrEmpty(part)
-            || part.Any(c => char.IsWhiteSpace(c) || c == PathSeparator || c == TypeSeparator))
+        if (!IsValidPart(part))
             throw new FormatException(
                 $"Artifact id {what} '{part}' must be non-empty with no whitespace, '{PathSeparator}' or '{TypeSeparator}'.");
     }

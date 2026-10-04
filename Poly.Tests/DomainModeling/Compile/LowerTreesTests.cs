@@ -65,6 +65,13 @@ public sealed class LowerTreesTests {
     }
 
     [Test]
+    public async Task Lower_DomainNameWithWhitespace_Throws() {
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
+
+        await Assert.That(() => session.Lower(domain with { Name = "My Domain" }, analysis)).Throws<FormatException>();
+    }
+
+    [Test]
     public async Task Emit_WritesOneFilePerEntityTreeThenTheScaffolding() {
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
 

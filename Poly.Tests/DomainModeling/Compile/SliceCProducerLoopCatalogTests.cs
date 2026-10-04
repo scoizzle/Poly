@@ -61,13 +61,12 @@ public class SliceCProducerLoopCatalogTests {
             Permit: entity { Plate: Text required }
             """);
 
-        await Assert.That(session.ArtifactCatalog.Count).IsEqualTo(0);
+        await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsEqualTo(0);
 
         var module = session.Lower(domain, analysis);
         await Assert.That(module.Count).IsGreaterThan(0);
-        await Assert.That(session.ArtifactCatalog.Count).IsGreaterThan(0);
-        await Assert.That(session.ArtifactCatalog.Any(a =>
-            a.Kind == "SyntaxModule" && a.Name == "module" && a.Source == "Lower")).IsTrue();
+        await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsGreaterThan(0);
+        await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo("SyntaxModule|module|Lower");
     }
 
     [Test]

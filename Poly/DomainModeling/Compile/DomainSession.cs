@@ -40,11 +40,10 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Lower sentinel only — not an emit/contributor file inventory.
-    /// Empty before Lower; after Lower always contains the privileged SyntaxModule
-    /// descriptor stamped by <see cref="Lower"/> (sole writer via private set).
+    /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding
+    /// only the privileged SyntaxModule placeholder; it is not an emit/contributor file inventory.
     /// </summary>
-    public IReadOnlyList<ArtifactDescriptor> ArtifactCatalog { get; private set; } = [];
+    public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
     private Analyzer? _analyzer;
 
@@ -151,9 +150,10 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        ArtifactCatalog = [
-            new ArtifactDescriptor("SyntaxModule", "module", "Lower"),
-        ];
+        ArtifactCatalog = new ArtifactCatalog();
+        ArtifactCatalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create(["module"], "SyntaxModule"), "Lower"),
+            Payload: null));
         return module;
     }
 

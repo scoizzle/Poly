@@ -80,6 +80,7 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(session.ArtifactCatalog).IsNotSameReferenceAs(otherSession.ArtifactCatalog);
 
         var first = session.ArtifactCatalog;
+        first.DeclareType("type", mayPointAt: []);
         first.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create(["Extra"], "type"), "Test"), Payload: null));
         session.Lower(domain, analysis);

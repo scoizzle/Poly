@@ -111,8 +111,7 @@ public sealed class EmitGoldenTests {
         return (session, outcome.Root, outcome.Analysis);
     }
 
-    private static string CatalogText(DomainSession session) =>
-        string.Join("\n", session.ArtifactCatalog.Select(a => $"{a.Kind}|{a.Name}|{a.Source}"));
+    private static string CatalogText(DomainSession session) => session.ArtifactCatalog.ToText();
 
     // Set POLY_UPDATE_GOLDEN=1 to write snapshots instead of comparing.
     private static async Task AssertGoldens(string dir, Dictionary<string, string> produced) {

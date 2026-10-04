@@ -1,7 +1,7 @@
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// One Lower-sentinel entry in the session's ArtifactCatalog.
-/// Kind/Name/Source stay minimal — not an emit/contributor file inventory.
+/// Describes one compiled artifact: its id (name path plus type) and the
+/// producer that registered it, for example <c>Lower</c>.
 /// </summary>
-public sealed record ArtifactDescriptor(string Kind, string Name, string Source);
+public sealed record ArtifactDescriptor(ArtifactId Id, string Producer);

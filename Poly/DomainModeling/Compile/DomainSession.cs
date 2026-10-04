@@ -202,7 +202,7 @@ public sealed class DomainSession {
     /// Runs interpretation analysis on lowered type definitions so the C# generator
     /// can use type-aware features (variable type resolution, DCE).
     /// </summary>
-    private static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
+    internal static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
         if (allTypes.Count == 0)
             return null;
         var unit = new CompilationUnitNode([], null, allTypes, null);

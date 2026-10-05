@@ -1,7 +1,7 @@
 let meta = #{
     name: "plan-orchestrator",
     description: "Orchestrate a simple-agent-tasks suite README: one task (next) or loop until-done",
-    when_to_use: "When running a suite under docs/plans/simple-agent-tasks/ (e.g. spe-README.md, das-README.md). Pass suite= path. mode until-done chains tasks until complete/blocked/budget.",
+    when_to_use: "When the user names one suite README that docs/plans/simple-agent-tasks/PIPELINE-STATUS.md has not archived. Pass suite= path. mode until-done chains tasks until complete, blocked, or budget. Refuse archived suites.",
     phases: [
         #{ title: "Orient", detail: "read suite + parent plan; pick next unchecked task" },
         #{ title: "Implement", detail: "execute selected task under hard rules" },
@@ -103,20 +103,19 @@ let record_schema = #{
 };
 
 // --- args ---
-// suite: path to suite README (preferred) | short key "das" | "spe"
-//        also accepts args.suite_readme / args.path if the host passes @file that way
+// suite: path to a *-README.md that PIPELINE-STATUS has not archived
 // task: optional forced task id (only first iteration in until-done)
 // mode: "next" | "status-only" | "until-done"
 // skip_implement: bool
-// max_tasks: int (until-done only; default 16)
+// max_tasks: int (until-done only; default 8)
 // stop_on_verify_fail: bool (default false for full-send; set true to halt on fail)
 // min_budget_remaining: int agents to leave (default 8)
 
-let suite_key = "das";
+let suite_key = "";
 let mode = "next";
 let task_override = ();
 let skip_implement = false;
-let max_tasks = 16;
+let max_tasks = 8;
 let stop_on_verify_fail = false;
 let min_budget_remaining = 8;
 
@@ -144,12 +143,6 @@ if args != () {
 
     if freeform != () && type_of(freeform) == "string" {
         let ff = freeform;
-        if ff.contains("suite=spe") || ff.contains("suite:spe") || ff.contains("spe-README") || ff.contains("spe-readme") {
-            suite_key = "spe";
-        } else if ff.contains("suite=das") || ff.contains("suite:das") || ff.contains("das-README") {
-            suite_key = "das";
-        }
-        // Path form: suite=docs/plans/.../spe-README.md already covered by spe-README contains
         if ff.contains("until-done") {
             mode = "until-done";
         } else if ff.contains("status-only") {
@@ -157,91 +150,45 @@ if args != () {
         } else if ff.contains("mode=next") {
             mode = "next";
         }
-        // task=E1 or task=spe-e1
-        if ff.contains("task=E1") || ff.contains("task=e1") || ff.contains("task=spe-e1") { task_override = "E1"; }
-        else if ff.contains("task=L1") || ff.contains("task=l1") || ff.contains("task=spe-l1") { task_override = "L1"; }
-        else if ff.contains("task=O1") || ff.contains("task=o1") || ff.contains("task=spe-o1") { task_override = "O1"; }
     }
 }
 
 if max_tasks < 1 { max_tasks = 1; }
 if max_tasks > 32 { max_tasks = 32; }
 
-// Completed suites live under archive/domainmodeling-completed-2026-08/ (2026-08-05).
-// Default is historical DAS paths for path resolution only — do not treat as CURRENT.
-// Live pick: docs/plans/v2-to-v3/master-roadmap.md
-let suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-README.md";
-let parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md";
-let inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-simplification.md";
-let suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-gate.md";
-let suite_label = "DAS";
+// Admission lives in PIPELINE-STATUS.md. This script does not keep a suite-key table.
+let suite_readme = "";
+let parent_plan = "";
+let inventory = "";
+let suite_gate = "";
+let suite_label = "suite";
+let refused = false;
+let refuse_reason = "";
 
 if type_of(suite_key) == "string" {
-    let sk = suite_key;
-    sk.trim();
-    // Normalize bare keys and full paths
-    if sk == "spe" || sk.contains("spe-README") || sk.contains("spe-readme") {
-        suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-README.md";
-        parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-surface-extensions-plan.md";
-        inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-surface-extensions-plan.md";
-        suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/spe-gate.md";
-        suite_label = "SPE";
-    } else if sk == "das" || sk.contains("das-README") || sk.contains("das-readme") {
-        suite_readme = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-README.md";
-        parent_plan = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-future-state.md";
-        inventory = "docs/plans/archive/domainmodeling-completed-2026-08/domain-analysis-simplification.md";
-        suite_gate = "docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/das-gate.md";
-        suite_label = "DAS";
-    } else if sk == "dogfood" || sk.contains("dogfood-README") {
-        suite_readme = "docs/plans/v2-to-v3/simple-agent-tasks/dogfood-README.md";
-        parent_plan = "docs/plans/v2-to-v3/mcp-dogfood-protocol.md";
-        inventory = "docs/plans/v2-to-v3/mcp-dogfood-protocol.md";
-        suite_gate = "";
-        suite_label = "dogfood";
-    } else if sk == "amu" || sk.contains("amu-README") {
-        suite_readme = "docs/plans/simple-agent-tasks/amu-README.md";
-        parent_plan = "docs/plans/domainmodeling-cohesion-and-metadata-findings.md";
-        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
-        suite_gate = "docs/plans/simple-agent-tasks/amu-gate.md";
-        suite_label = "amu";
-    } else if sk == "p4" || sk.contains("p4-README") {
-        suite_readme = "docs/plans/simple-agent-tasks/p4-README.md";
-        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
-        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
-        suite_gate = "docs/plans/simple-agent-tasks/p4-gate.md";
-        suite_label = "p4";
-    } else if sk == "coh" || sk.contains("coh-README") {
-        suite_readme = "docs/plans/simple-agent-tasks/coh-README.md";
-        parent_plan = "docs/plans/domainmodeling-decomposition-proposal.md";
-        inventory = "docs/plans/simple-agent-tasks/SUITE-OF-SUITES.md";
-        suite_gate = "docs/plans/simple-agent-tasks/coh-gate.md";
-        suite_label = "coh";
-    } else if sk == "p3" || sk.contains("p3-README") {
-        suite_readme = "docs/plans/simple-agent-tasks/p3-README.md";
-        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
-        inventory = "docs/plans/simple-agent-tasks/p3-README.md";
-        suite_gate = "docs/plans/simple-agent-tasks/p3-gate.md";
-        suite_label = "p3";
-    } else if sk == "p2" || sk.contains("p2-README") {
-        suite_readme = "docs/plans/simple-agent-tasks/p2-README.md";
-        parent_plan = "docs/plans/domain-dsl-absorption-proposals.md";
-        inventory = "docs/plans/simple-agent-tasks/p2-README.md";
-        suite_gate = "docs/plans/simple-agent-tasks/p2-gate.md";
-        suite_label = "p2";
-    } else if sk != "" {
-        // Arbitrary suite README path: infer companion gate/plan from parent plan link later
-        suite_readme = sk;
-        suite_gate = "";
-        parent_plan = "";
-        inventory = "";
-        suite_label = "custom";
-    }
+    suite_key.trim();
+}
+
+if suite_key == "" {
+    refuse_reason = "Pass suite= as a *-README.md path. Admission is docs/plans/simple-agent-tasks/PIPELINE-STATUS.md.";
+    refused = true;
+} else if suite_key.contains("/archive/") {
+    refuse_reason = "Refusing archived suite: " + suite_key;
+    refused = true;
+} else if !suite_key.contains("/") || !suite_key.contains("-README") {
+    refuse_reason = "Pass a *-README.md path, not a short key: " + suite_key;
+    refused = true;
+} else {
+    suite_readme = suite_key;
 }
 
 let loop_until_done = mode == "until-done";
 let max_iterations = 1;
 if loop_until_done {
     max_iterations = max_tasks;
+}
+if refused {
+    max_iterations = 0;
 }
 
 let completed_ids = [];
@@ -251,6 +198,9 @@ let last_impl = ();
 let last_verify = ();
 let last_record = ();
 let stop_reason = "";
+if refused {
+    stop_reason = refuse_reason;
+}
 let suite_done = false;
 let iteration = 0;
 let force_task_used = false;
@@ -291,7 +241,7 @@ while iteration < max_iterations {
     let orient_prompt = "";
     orient_prompt += "You are the orient step of plan-orchestrator for Poly suite **" + suite_label + "**.\n";
     orient_prompt += "Use read_file/grep — do not answer from memory. Re-read current disk state every time.\n";
-    orient_prompt += "CRITICAL: Only pick tasks from THIS suite README. Do not report DAS complete if suite is SPE (or vice versa).\n\n";
+    orient_prompt += "CRITICAL: Only pick tasks from this suite README. Read docs/plans/simple-agent-tasks/PIPELINE-STATUS.md and stop if this suite is archived.\n\n";
     orient_prompt += "Read:\n";
     orient_prompt += "1) Suite README (authoritative pick order): " + suite_readme + "\n";
     if parent_plan != "" {
@@ -310,10 +260,8 @@ while iteration < max_iterations {
         orient_prompt += "Resolve that task file if it exists; else fall back to first unchecked.\n";
     } else {
         orient_prompt += "Pick the FIRST unchecked product task in the suite README pick order.\n";
-        orient_prompt += "Open markers: Status `[ ]` or `[~]` on task rows/files. Optional gates (*.G, spe-gate until streams done) skip unless no product tasks remain.\n";
-        orient_prompt += "For SPE: open heads are E1, L1, O1 in parallel — pick ONE head (prefer first open in table: 0 optional, then E1, L1, O1).\n";
-        orient_prompt += "Do NOT block on soft prereqs in full-send — if a product task is open, pick it.\n";
-        orient_prompt += "Do NOT open das-* tasks when suite is SPE. Do NOT open spe-* when suite is DAS.\n";
+        orient_prompt += "Open markers: Status `[ ]` or `[~]` on task rows. Skip the suite gate until no product tasks remain.\n";
+        orient_prompt += "Respect hard prereqs in the README. Do not open tasks from any other suite.\n";
     }
 
     orient_prompt += "\nIf ALL product tasks in THIS suite are [x], set suite_complete=true, task_id=\"\", task_file=\"\", wave=\"\", objective=\"\", prereqs_met=true, blocked_reason=\"\".\n";
@@ -429,7 +377,7 @@ while iteration < max_iterations {
     phase("Verify");
 
     let verify_prompt = "";
-    verify_prompt += "Adversarial verifier for DAS task " + o.task_id + " (" + o.task_file + ").\n";
+    verify_prompt += "Adversarial verifier for task " + o.task_id + " (" + o.task_file + ").\n";
     verify_prompt += "Read-only tools. Assume the code may be wrong.\n\n";
     verify_prompt += "Implementer success=" + im.success.to_string() + " summary: " + im.summary + "\n";
     verify_prompt += "Files (re-check with git status/diff yourself):\n";
@@ -465,7 +413,7 @@ while iteration < max_iterations {
     phase("Record");
 
     let record_prompt = "";
-    record_prompt += "Update DAS suite docs for task " + o.task_id + ".\n";
+    record_prompt += "Update suite docs for task " + o.task_id + ".\n";
     record_prompt += "Task file: " + o.task_file + "\n";
     record_prompt += "Suite README: " + suite_readme + "\n";
     record_prompt += "Suite gate: " + suite_gate + "\n\n";
@@ -481,7 +429,7 @@ while iteration < max_iterations {
     record_prompt += "3) Update suite README status table for this task: " + suite_readme + "\n";
     record_prompt += "4) Do NOT mark suite gate complete unless all product tasks are truly [x].\n";
     record_prompt += "5) next_task_id = first still-open product task after your edits (or empty if none).\n";
-    record_prompt += "6) Only edit THIS suite's task files (SPE vs DAS — do not cross-suite).\n";
+    record_prompt += "6) Only edit this suite's task files.\n";
     record_prompt += "Markdown only; no production code.\n";
 
     let rec = agent(record_prompt, #{
@@ -570,6 +518,8 @@ report += "\n";
 
 if suite_done {
     report += "Suite product tasks appear complete. Fill `" + suite_gate + "` evidence if not already done.\n";
+} else if refused {
+    report += "No suite was started.\n";
 } else if loop_until_done {
     report += "Re-run with `mode: until-done` to continue, or fix blockers then resume.\n";
     report += "Optional: raise `max_tasks` or `agent_budget` if budget/max_tasks stopped the run.\n";

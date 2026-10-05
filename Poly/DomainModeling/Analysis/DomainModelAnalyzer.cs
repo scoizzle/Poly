@@ -58,6 +58,18 @@ public static class DomainModelAnalyzer {
                 $"Domain analysis for '{domain.Name}' did not produce {nameof(DomainCatalogMetadata)}.");
     }
 
+    /// <summary>
+    /// Compile and simulate refuse an analysis with Errors (decision 7). Names the first
+    /// error, matching the VM's <see cref="InvalidOperationException"/> style.
+    /// </summary>
+    public static void ThrowIfHasErrors(AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        if (!analysis.HasErrors)
+            return;
+        var first = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        throw new InvalidOperationException(first?.Message ?? "Domain analysis reported errors.");
+    }
+
 }
 
 public static class DomainModelAnalysisBuilderExtensions {

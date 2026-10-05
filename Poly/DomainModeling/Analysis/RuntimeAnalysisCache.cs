@@ -11,9 +11,10 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Session + analysis + lowered module for a <see cref="Domain"/> instance.
-/// Authoring <see cref="DomainSession.Analyze"/> binds the session that loaded
-/// the domain's <c>uses</c> (vendor maps included). Fallback reopen uses the
-/// core catalog only when nothing has bound yet.
+/// <see cref="DomainSession.Analyze"/> binds its session before the pipeline, so
+/// passes see that compilation (vendor maps included). A domain nothing has bound
+/// resolves every extension id through <see cref="ExtensionCatalog.Core"/>; an id
+/// that catalog cannot load throws, the same as <see cref="DomainSession.ForExtensions"/>.
 /// <see cref="GetOrLower"/> caches the operation module
 /// (<see cref="DomainProgramProjection.ToSyntax"/>), including policy, subscription,
 /// and OnEntry/OnExit bodies so Domain-bound hot paths bind those trees instead of
@@ -96,6 +97,7 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(analysis);
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         Bind(domain, session, analysis);
         var holder = GetHolder(domain);
         if (holder.Module is not null)
@@ -192,13 +194,11 @@ internal static class RuntimeAnalysisCache {
     private static IEnumerable<string> EntryMethodNames(string stageName) {
         yield return $"OnEntry{stageName}";
         yield return $"{stageName}OnEntry";
-        yield return "OnEntry";
     }
 
     private static IEnumerable<string> ExitMethodNames(string stageName) {
         yield return $"OnExit{stageName}";
         yield return $"{stageName}OnExit";
-        yield return "OnExit";
     }
 
     /// <summary>
@@ -359,21 +359,23 @@ internal static class RuntimeAnalysisCache {
     }
 
     /// <summary>
-    /// Entity-level policies are collected during ToSyntax (one Lower). Action- and
-    /// stage-scoped policies are not module methods — lower them with the same
-    /// <see cref="DomainToCSharpExporter.LowerExpressionToMethodBody"/> the exporter uses.
+    /// Policy methods are emitted in ToSyntax, one per name. This cache only
+    /// fills a name that the module did not already define, for
+    /// <c>EvaluatePolicy</c>. A second definition of the same name is rejected
+    /// when the method is emitted.
     /// </summary>
     private static Dictionary<(string, string), Node> CompletePolicyBodies(
         Domain domain, AnalysisResult analysis,
         Dictionary<(string, string), Node> map) {
         foreach (var entity in domain.Types.OfType<Entity>()) {
             void Cache(Policy policy) {
-                if (map.ContainsKey((entity.Name, policy.Name)))
+                var key = (entity.Name, policy.Name);
+                if (map.ContainsKey(key))
                     return;
                 var lowered = DomainToCSharpExporter.LowerExpressionToMethodBody(
                     policy.Expression, entity, domain, analysis);
                 if (lowered is not null)
-                    map[(entity.Name, policy.Name)] = lowered;
+                    map[key] = lowered;
             }
 
             foreach (var action in entity.Actions)
@@ -484,8 +486,6 @@ internal static class RuntimeAnalysisCache {
     }
 
     private static Holder GetHolder(Domain domain) =>
-        Cache.GetValue(domain, static d => {
-            var ids = d.Extensions.Where(ExtensionCatalog.Core.Contains).ToList();
-            return new Holder { Session = DomainSession.ForExtensions(ids) };
-        });
+        Cache.GetValue(domain, static d =>
+            new Holder { Session = DomainSession.ForExtensions(d.Extensions) });
 }

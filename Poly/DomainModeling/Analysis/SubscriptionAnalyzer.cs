@@ -463,7 +463,11 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     return;
                 }
 
-                // Real subscriber relationship path-prefix — walk inner for bare props.
+                // Real subscriber relationship path-prefix. An assign target mutates the
+                // other entity; EffectAnalyzer reports that (DMEFF012) while walking these
+                // effects. A read walks inner properties.
+                if (isAssignTarget)
+                    return;
                 CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags, isAssignTarget);
                 return;
         }

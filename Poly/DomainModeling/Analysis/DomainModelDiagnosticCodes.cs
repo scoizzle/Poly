@@ -4,6 +4,11 @@ internal static class DomainModelDiagnosticCodes {
     public const string StructuralDuplicate = "DMSTR001";
     public const string StructuralCycle = "DMSTR002";
     public const string StructuralOwnership = "DMSTR003";
+    /// <summary>
+    /// A user-declared type reuses a name lowering emits at module scope
+    /// (<c>{Entity}Stage</c> for an entity that has stages, or <c>DomainResult</c>).
+    /// </summary>
+    public const string ReservedGeneratedName = "DMSTR004";
 
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
@@ -60,13 +65,18 @@ internal static class DomainModelDiagnosticCodes {
     /// property of the created entity (auto-wired back-reference nav excluded).
     public const string CreateMissingRequiredProperty = "DMEFF011";
 
+    /// M1: a mutation targets another entity's state. Only the owning entity's named
+    /// behavior (actions; entry, exit and when blocks per V4) may mutate it; change
+    /// another entity by invoking one of its actions.
+    public const string EffectCrossEntityMutation = "DMEFF012";
+
     /// <summary>
     /// An entity's automatic transition graph (entry + exit, including nested in <c>if</c>)
     /// has a cycle where every edge is unconditional — no real guard, or a guard Analyze
     /// can prove is always true. Guarded cycles are allowed; the runtime loop guard is the
     /// backstop when a guard never becomes false.
     /// </summary>
-    public const string UnconditionalAutomaticTransitionCycle = "DMEFF012";
+    public const string UnconditionalAutomaticTransitionCycle = "DMEFF013";
 
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 

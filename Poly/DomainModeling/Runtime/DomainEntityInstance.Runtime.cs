@@ -73,6 +73,29 @@ public sealed partial record DomainEntityInstance {
         return analyzer;
     }
 
+    /// <summary>
+    /// Instance method whose body is <c>DictionaryInstanceOps.Name(this, args)</c>.
+    /// The same <see cref="Parameter"/> nodes are the signature and the call
+    /// arguments, so each argument keeps its type.
+    /// </summary>
+    private static MethodDefinitionNode HostJob(
+        string name, Node returnType, IReadOnlyList<Parameter> parameters) {
+        var args = new Node[parameters.Count + 1];
+        args[0] = new ThisReference();
+        for (var i = 0; i < parameters.Count; i++)
+            args[i + 1] = parameters[i];
+        Node call = new Invoke(
+            new Member(new ClrTypeReference(typeof(DictionaryInstanceOps)), name),
+            args);
+        var isVoid = returnType is ClrTypeReference { RuntimeType: var runtime }
+            && runtime == typeof(void);
+        return new MethodDefinitionNode(
+            name,
+            returnType,
+            Parameters: parameters,
+            Body: new Block([isVoid ? call : new Return(call)]));
+    }
+
     private static TypeDefinitionNode BuildTypeDefNode(
         Entity entity,
         IEnumerable<Property>? extraProperties,
@@ -120,32 +143,28 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
+        var voidType = new ClrTypeReference(typeof(void));
+        var resultType = TypeReference.To<DomainResult>();
+        var str = TypeReference.To<string>();
+        var i64 = TypeReference.To<long>();
+        var boolean = TypeReference.To<bool>();
+        var obj = TypeReference.To<object>();
         var methods = new List<MethodDefinitionNode> {
-            new MethodDefinitionNode(
-                "Notify",
-                new TypeReference("void"),
-                Parameters: [new Parameter("stageName",
-                    new PrimitiveTypeReference(Prim.String))],
-                Body: new Block([])),
-            new MethodDefinitionNode(
-                "Notify",
-                new TypeReference("void"),
-                Parameters: [
-                    new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
-                    new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
-                ],
-                Body: new Block([])),
-            new MethodDefinitionNode(
-                "EnsureUnique",
-                TypeReference.To<DomainResult>(),
-                Parameters: [
-                    new Parameter("propertyName", TypeReference.To<string>()),
-                    new Parameter("value", TypeReference.To<object>())
-                ],
-                Body: new Block([]))
+            HostJob("Notify", voidType, [
+                new Parameter("stageName", new PrimitiveTypeReference(Prim.String))
+            ]),
+            HostJob("Notify", voidType, [
+                new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
+                new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
+            ]),
+            HostJob("EnsureUnique", resultType, [
+                new Parameter("propertyName", str),
+                new Parameter("value", obj)
+            ])
         };
-        // Empty bodies: analysis resolves Member(entity, action/policy) as ITypeMethod.
-        // VM does not inline them; InvokeNamed / generated C# owns the implementation.
+        // Actions and policies stay empty so InvokeNamed owns them.
+        // Store jobs are calls in the body: dictionary this invokes
+        // DictionaryInstanceOps, which reaches the directory.
         var methodNames = new HashSet<string>(StringComparer.Ordinal) {
             "Notify", "EnsureUnique",
             "ExistsRelated", "GetRelatedOne", "LinkRelated"
@@ -163,32 +182,17 @@ public sealed partial record DomainEntityInstance {
                     new PrimitiveTypeReference(Prim.String))],
                 Body: new Block([])));
         }
-        // Runtime factories for mixed if+create. Dictionary slot plus pair
-        // overloads so Invoke types as DomainResult (IsSuccess resolves).
-        // Generated C# may still call Stay.Create inside the factory that binds this job.
-        var str = TypeReference.To<string>();
-        var i64 = TypeReference.To<long>();
-        var boolean = TypeReference.To<bool>();
-        var obj = TypeReference.To<object>();
         Node[] valueTypes = [i64, str, boolean, obj];
         foreach (var vt in new Node[] { i64, str, boolean }) {
-            methods.Add(new MethodDefinitionNode(
-                "EnsureUnique",
-                TypeReference.To<DomainResult>(),
-                Parameters: [
-                    new Parameter("propertyName", str),
-                    new Parameter("value", vt)
-                ],
-                Body: new Block([])));
+            methods.Add(HostJob("EnsureUnique", resultType, [
+                new Parameter("propertyName", str),
+                new Parameter("value", vt)
+            ]));
         }
-        methods.Add(new MethodDefinitionNode(
-            "LinkRelated",
-            new TypeReference("void"),
-            Parameters: [
-                new Parameter("relationshipName", str),
-                new Parameter("target", obj)
-            ],
-            Body: new Block([])));
+        methods.Add(HostJob("LinkRelated", voidType, [
+            new Parameter("relationshipName", str),
+            new Parameter("target", obj)
+        ]));
         methods.Add(new MethodDefinitionNode(
             "ExistsRelated",
             boolean,
@@ -200,30 +204,18 @@ public sealed partial record DomainEntityInstance {
             Parameters: [new Parameter("relationshipName", str)],
             Body: new Block([])));
         foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
-            methods.Add(new MethodDefinitionNode(
-                factory,
-                TypeReference.To<DomainResult>(),
-                Parameters: [
-                    new Parameter("name", str),
-                    new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
-                ],
-                Body: new Block([])));
+            methods.Add(HostJob(factory, resultType, [
+                new Parameter("name", str),
+                new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
+            ]));
             methodNames.Add(factory);
-            methods.Add(new MethodDefinitionNode(
-                factory,
-                TypeReference.To<DomainResult>(),
-                Parameters: [new Parameter("name", str)],
-                Body: new Block([])));
-            for (var t = 0; t < valueTypes.Length; t++) {
-                methods.Add(new MethodDefinitionNode(
-                    factory,
-                    TypeReference.To<DomainResult>(),
-                    Parameters: [
-                        new Parameter("name", str),
-                        new Parameter("p0", str),
-                        new Parameter("v0", valueTypes[t])
-                    ],
-                    Body: new Block([])));
+            methods.Add(HostJob(factory, resultType, [new Parameter("name", str)]));
+            foreach (var vt in valueTypes) {
+                methods.Add(HostJob(factory, resultType, [
+                    new Parameter("name", str),
+                    new Parameter("p0", str),
+                    new Parameter("v0", vt)
+                ]));
             }
             for (var pairs = 2; pairs <= 16; pairs++) {
                 var ps = new List<Parameter> { new Parameter("name", str) };
@@ -231,11 +223,7 @@ public sealed partial record DomainEntityInstance {
                     ps.Add(new Parameter($"p{i}", str));
                     ps.Add(new Parameter($"v{i}", obj));
                 }
-                methods.Add(new MethodDefinitionNode(
-                    factory,
-                    TypeReference.To<DomainResult>(),
-                    Parameters: ps,
-                    Body: new Block([])));
+                methods.Add(HostJob(factory, resultType, ps));
             }
         }
         foreach (var action in EnumerateTypeDefActions(entity)) {

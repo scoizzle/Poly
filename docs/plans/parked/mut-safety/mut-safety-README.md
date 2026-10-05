@@ -43,7 +43,7 @@
 ### Kickoff
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: mut-safety. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: docs/plans/simple-agent-tasks/mut-safety-README.md. Mode: until-done."
 ```
 
 ---

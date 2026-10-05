@@ -159,6 +159,25 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
+    public async Task UniqueAssign_WithStore_Collision_IsFailureWithoutMutating() {
+        var entity = PermitWithRelabel();
+        var domain = ValidDomain.Create("Parking", [entity]);
+        var store = new DomainInstanceStore();
+        var existing = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain: domain);
+        var other = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
+        store.Add(existing);
+        store.Add(other);
+
+        var result = other.InvokeAction("Relabel",
+            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+    }
+
+    [Test]
     public async Task UniqueAssign_WithoutStore_SucceedsWhenNoPeers() {
         var entity = PermitWithRelabel();
         var domain = ValidDomain.Create("Parking", [entity]);

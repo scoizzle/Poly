@@ -71,6 +71,27 @@ public sealed partial record DomainEntityInstance {
         || message.Contains("does not exist on entity", StringComparison.Ordinal);
 
     /// <summary>
+    /// Loop-guard backstop for automatic stage chains (entry/exit transitions).
+    /// Each stage may be entered at most once per trigger; a second entry fails loud
+    /// instead of overflowing the stack. Cleared at the start of each trigger: outermost
+    /// action invoke, subscription, create, and outermost <see cref="TransitionStage"/>.
+    /// </summary>
+    public void NoteAutomaticStage(string stageName) {
+        ArgumentException.ThrowIfNullOrEmpty(stageName);
+        // Same-target confirm (already sitting on this stage) is not a new step.
+        if (string.Equals(CurrentStage, stageName, StringComparison.Ordinal))
+            return;
+        _automaticStageChain ??= new HashSet<string>(StringComparer.Ordinal);
+        if (!_automaticStageChain.Add(stageName))
+            throw new InvalidOperationException(
+                $"Automatic stage transition loop on entity '{Entity.Name}': " +
+                $"stage '{stageName}' was already entered in this chain.");
+    }
+
+    /// <summary>Clears the automatic-transition visit set for a new trigger.</summary>
+    public void ClearAutomaticStageChain() => _automaticStageChain = null;
+
+    /// <summary>
     /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.
     /// Action <see cref="StageTransitionEffect"/> lowers via <see cref="ExecuteEffectList"/>;
     /// this is not the shipped action path.
@@ -92,7 +113,11 @@ public sealed partial record DomainEntityInstance {
 
         if (_transitionDepth >= MaxTransitionDepth)
             throw new InvalidOperationException(
-                $"Stage transition re-entrancy exceeded max depth ({MaxTransitionDepth}) on entity '{Entity.Name}'.");
+                $"Automatic stage transition loop on entity '{Entity.Name}' exceeded max depth " +
+                $"({MaxTransitionDepth}) while entering '{targetStageName}'.");
+
+        if (_transitionDepth == 0)
+            ClearAutomaticStageChain();
 
         _transitionDepth++;
         try {
@@ -108,13 +133,26 @@ public sealed partial record DomainEntityInstance {
 
             if (previousStageName is not null) {
                 var prevStage = ResolveTransitionStage(analysis, previousStageName);
-                if (prevStage?.OnExitEffects is { Count: > 0 }) {
-                    RunTransitionEffectList(
-                        prevStage.OnExitEffects, notifyStore,
-                        exitStageName: previousStageName);
+                // A transition nested in this exit finds the exit already running: skip it
+                // rather than run the same exit again (that recursed without end).
+                if (prevStage?.OnExitEffects is { Count: > 0 }
+                    && _exitsRunning.Add(previousStageName)) {
+                    try {
+                        RunTransitionEffectList(
+                            prevStage.OnExitEffects, notifyStore,
+                            exitStageName: previousStageName);
+                    }
+                    finally {
+                        _exitsRunning.Remove(previousStageName);
+                    }
                 }
             }
 
+            // Exit may have nested-transitioned to the target already.
+            if (string.Equals(CurrentStage, targetStageName, StringComparison.Ordinal))
+                return;
+
+            NoteAutomaticStage(targetStageName);
             CurrentStage = targetStageName;
 
             try {
@@ -235,6 +273,8 @@ public sealed partial record DomainEntityInstance {
         string? targetStageName = null,
         string? previousStageName = null) {
         _isExecutingSubscription = true;
+        // A subscription is its own trigger for the automatic-transition loop guard.
+        ClearAutomaticStageChain();
 
         try {
             // Empty subscription (notify-only) — avoid GetOrLower side effects for fail-closed tests.

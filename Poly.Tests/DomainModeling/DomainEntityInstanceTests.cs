@@ -378,7 +378,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
-        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex!.Message).Contains("Automatic stage transition loop");
         await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
     }
 
@@ -400,7 +400,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity, domain: domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
-        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex!.Message).Contains("Automatic stage transition loop");
         await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
     }
 

@@ -70,6 +70,14 @@ internal static class DomainModelDiagnosticCodes {
     /// another entity by invoking one of its actions.
     public const string EffectCrossEntityMutation = "DMEFF012";
 
+    /// <summary>
+    /// An entity's automatic transition graph (entry + exit, including nested in <c>if</c>)
+    /// has a cycle where every edge is unconditional — no real guard, or a guard Analyze
+    /// can prove is always true. Guarded cycles are allowed; the runtime loop guard is the
+    /// backstop when a guard never becomes false.
+    /// </summary>
+    public const string UnconditionalAutomaticTransitionCycle = "DMEFF013";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     /// Non-root entity has no aggregate parent — potentially orphaned.

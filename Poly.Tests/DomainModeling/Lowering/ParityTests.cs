@@ -1,10 +1,10 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Runtime;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -300,7 +300,8 @@ public class ParityTests {
 
         var createEx = Assert.Throws<InvalidOperationException>(
             () => DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
-                ["Status"] = "s", ["Level"] = 1L
+                ["Status"] = "s",
+                ["Level"] = 1L
             }, domain));
         await Assert.That(createEx!.Message).IsEqualTo(first);
     }

@@ -6,8 +6,8 @@ using System.Text.Json.Serialization;
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Queries;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;

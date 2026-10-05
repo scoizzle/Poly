@@ -182,23 +182,23 @@ public sealed class LowerTreesTests {
     }
 
     [Test]
-    public async Task Lower_EntityNamedLikeAnotherEntitysStageEnum_IsRefused() {
-        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
-            domain Clash
+    public async Task Analyze_EntityNamedLikeAnotherEntitysStageEnum_IsRefused() {
+        // N4: Analyze rejects `{E}Stage` when E has stages before Lower can run.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            SliceCProducerLoopCatalogTests.Evolve("""
+                domain Clash
 
-            Permit: entity {
-              Plate: Text required
-              Open: stage { }
-            }
+                Permit: entity {
+                  Plate: Text required
+                  Open: stage { }
+                }
 
-            PermitStage: entity {
-              Name: Text required
-            }
-            """);
+                PermitStage: entity {
+                  Name: Text required
+                }
+                """));
 
-        var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
-
-        await Assert.That(ex.Message).Contains("PermitStage").And.Contains("belongs to the trees");
+        await Assert.That(ex.Message).Contains("PermitStage").And.Contains("stage enum");
     }
 
     [Test]
@@ -221,17 +221,17 @@ public sealed class LowerTreesTests {
     }
 
     [Test]
-    public async Task Lower_EntityNamedDomainResult_IsRefusedAsDuplicateType() {
-        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
-            domain Clash
+    public async Task Analyze_EntityNamedDomainResult_IsRefused() {
+        // N4: Analyze rejects DomainResult before Lower can run.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            SliceCProducerLoopCatalogTests.Evolve("""
+                domain Clash
 
-            DomainResult: entity {
-              Name: Text required
-            }
-            """);
+                DomainResult: entity {
+                  Name: Text required
+                }
+                """));
 
-        var ex = Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
-
-        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("more than once");
+        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("scaffolding");
     }
 }

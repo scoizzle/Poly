@@ -137,7 +137,7 @@ public class InvokeMemberInstanceTests {
     }
 
     [Test]
-    public async Task Execute_AstMethodBody_NoClrHost_FailsLoud() {
+    public async Task Execute_AstMethodBody_RunsOnDictionary() {
         var typeDef = new TypeDefinitionNode(
             "Widget",
             "Sample",
@@ -153,9 +153,7 @@ public class InvokeMemberInstanceTests {
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
         var program = Interpreter.Compile(invoke, analyzer);
-        await Assert.That(() => {
-            using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
-        }).Throws<InvalidOperationException>()
-            .WithMessageContaining("does not define method");
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
     }
 }

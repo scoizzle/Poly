@@ -65,6 +65,11 @@ internal static class DomainModelDiagnosticCodes {
     /// property of the created entity (auto-wired back-reference nav excluded).
     public const string CreateMissingRequiredProperty = "DMEFF011";
 
+    /// M1: a mutation targets another entity's state. Only the owning entity's named
+    /// behavior (actions; entry, exit and when blocks per V4) may mutate it; change
+    /// another entity by invoking one of its actions.
+    public const string EffectCrossEntityMutation = "DMEFF012";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     /// Non-root entity has no aggregate parent — potentially orphaned.

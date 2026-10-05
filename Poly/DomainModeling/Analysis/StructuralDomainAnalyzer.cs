@@ -117,8 +117,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportDuplicateNames(context, entity.Navigations, "entity", entity.Name);
 
         // Same-name actions across stages are supported (resolved by current stage) —
-        // do not reject. Only an action/policy name collision is ambiguous.
+        // do not reject. Policy names are one flat method namespace on the entity.
         ReportActionPolicyCollisions(context, entity);
+        ReportPolicyRedefinitions(context, entity);
     }
 
     private static void ReportActionPolicyCollisions(AnalysisContext context, Entity entity) {
@@ -126,12 +127,50 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             entity.Actions.Select(a => a.Name)
                 .Concat(entity.Stages.SelectMany(s => s.Actions.Select(a => a.Name))),
             StringComparer.Ordinal);
-        foreach (var policy in entity.Policies) {
+        foreach (var policy in entity.Policies.Concat(entity.Stages.SelectMany(s => s.Policies))) {
             if (!actionNames.Contains(policy.Name)) continue;
             context.ReportError(
                 policy,
                 $"Name collision: an action and a policy are both named '{policy.Name}' on entity '{entity.Name}'.",
                 DomainModelDiagnosticCodes.StructuralDuplicate);
+        }
+    }
+
+    /// <summary>
+    /// Policy methods are unqualified on the entity type. A second definition of
+    /// the same name is a redefinition. An action policy whose expression is the
+    /// entity or stage declaration is a use (<c>require</c>), not a definition.
+    /// </summary>
+    private static void ReportPolicyRedefinitions(AnalysisContext context, Entity entity) {
+        var defined = new Dictionary<string, Policy>(StringComparer.Ordinal);
+        void Define(Policy policy) {
+            if (!defined.TryAdd(policy.Name, policy)) {
+                context.ReportError(
+                    policy,
+                    $"Policy '{policy.Name}' is already defined on entity '{entity.Name}'.",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
+        }
+
+        foreach (var policy in entity.Policies)
+            Define(policy);
+        foreach (var stage in entity.Stages)
+            foreach (var policy in stage.Policies)
+                Define(policy);
+
+        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))) {
+            foreach (var policy in action.Policies) {
+                if (policy.Name.StartsWith("not_", StringComparison.Ordinal))
+                    continue;
+                if (!defined.TryGetValue(policy.Name, out var existing))
+                    continue;
+                if (ReferenceEquals(existing.Expression, policy.Expression))
+                    continue;
+                context.ReportError(
+                    policy,
+                    $"Policy '{policy.Name}' is already defined on entity '{entity.Name}'.",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
         }
     }
 

@@ -25,7 +25,7 @@ public class StageTransitionHostAbiTests {
     }
 
     [Test]
-    public async Task StageTransition_RuntimeContext_LowersToAssignmentAndInvokeNotify() {
+    public async Task StageTransition_RuntimeContext_LowersToAssignmentWithoutInstanceNotify() {
         var entity = CreatePersonEntity();
         var context = new LoweringContext(
             new Parameter("entity", new TypeReference(entity.Name)),
@@ -35,20 +35,21 @@ public class StageTransitionHostAbiTests {
         var lowered = pass.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active")));
 
         await Assert.That(lowered).IsNotNull();
-        await Assert.That(lowered).IsTypeOf<Block>();
+        // Bare transition (no entry/exit/subscribers) is a lone Assignment, not a Block.
         var nodes = Flatten(lowered!).ToList();
         await Assert.That(nodes.Any(n =>
             n is Assignment {
                 Destination: Member { MemberName: "CurrentStage" },
                 Value: Member { MemberName: "Active" }
             })).IsTrue();
+        // Instance Notify is simulator-only; lowering never emits it.
         await Assert.That(nodes.Any(n =>
             n is Invoke {
                 Delegate: Member { MemberName: "Notify" }
-            } inv && inv.Arguments is [Constant { Value: "Active" }])).IsTrue();
+            })).IsFalse();
         await Assert.That(nodes.Any(n => n is TryCatchFinally {
             FinallyBlock: Invoke { Delegate: Member { MemberName: "Notify" } }
-        })).IsTrue();
+        })).IsFalse();
     }
 
     [Test]
@@ -82,7 +83,7 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task InvokeAction_Transition_SetsStageWithoutEffectExecutor() {
         var entity = CreatePersonEntity();
-        var domain = DomainTestFactory.Create("People", [entity]);
+        var domain = ValidDomain.Create("People", [entity]);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
 
@@ -93,7 +94,7 @@ public class StageTransitionHostAbiTests {
     }
 
     [Test]
-    public async Task Export_Transition_EmitsNotifyCallAndCompilesShape() {
+    public async Task Export_Transition_SetsStageWithoutInstanceNotify() {
         var entity = CreatePersonEntity();
         var context = new LoweringContext(
             new ThisReference(),
@@ -104,7 +105,7 @@ public class StageTransitionHostAbiTests {
         var cs = new CSharpGenerator().Generate(lowered!);
 
         await Assert.That(cs).Contains("CurrentStage = PersonStage.Active");
-        await Assert.That(cs).Contains("this.Notify(\"Active\")");
+        await Assert.That(cs).DoesNotContain("this.Notify(");
         await Assert.That(cs).DoesNotContain("/*");
         await Assert.That(cs).DoesNotContain("throw");
     }

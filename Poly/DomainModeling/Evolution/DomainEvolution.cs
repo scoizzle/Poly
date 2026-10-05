@@ -42,6 +42,23 @@ public sealed class DomainEvolution {
 
         var (proposed, _, mutationErrors) = ApplyChanges(_current, changes, mutationIndex);
 
+        // The passed session is the link of this compile. A uses id it did not
+        // load is an unresolved import, not a successful analysis.
+        if (session is not null) {
+            foreach (var id in proposed.Extensions) {
+                var loaded = false;
+                foreach (var have in session.Extensions) {
+                    if (string.Equals(have, id, StringComparison.Ordinal)) {
+                        loaded = true;
+                        break;
+                    }
+                }
+                if (!loaded)
+                    throw new InvalidOperationException(
+                        $"Domain depends on extension '{id}' but the analysis session has not loaded it.");
+            }
+        }
+
         var analysis = ResolveSession(proposed, session).Analyze(proposed);
 
         var rejected = analysis.HasErrors || mutationErrors.Count > 0;

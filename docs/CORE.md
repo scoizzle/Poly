@@ -100,7 +100,7 @@ If you need a parallel facility, stop.
 | Semantic passes | `Poly/Interpretation/Analysis/` |
 | Entry | `Interpreter.Analyze` / `Interpreter.Compile` (Compile fail-closed on errors) |
 
-Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Domain authoring/MCP/compile analyze through `DomainSession.Analyze` (bound session); unbound fallback is core-catalog. Catalog first (`DomainCatalogPass`); later passes read it. Subscriptions: `SubscriptionDispatchPlanMetadata` on stage + entity — store and C# export consume the **same** plan. Quantifiers lower to `foreach` over collection nav (fail closed without store). Pass order: `Poly/Interpretation/Analysis/README.md`. Guide: `docs/interpretation/analysis-pass-guide.md`.
+Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Domain authoring/MCP/compile analyze through `DomainSession.Analyze`, which binds that session before the pipeline. An unbound domain resolves ids through `ExtensionCatalog.Core` and throws when that catalog cannot load one. Catalog first (`DomainCatalogPass`); later passes read it. Subscriptions: `SubscriptionDispatchPlanMetadata` on stage + entity — store and C# export consume the **same** plan. Quantifiers lower to `foreach` over collection nav (fail closed without store). Pass order: `Poly/Interpretation/Analysis/README.md`. Guide: `docs/interpretation/analysis-pass-guide.md`.
 
 ### 3.2 Node replacement
 

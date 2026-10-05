@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
@@ -66,6 +67,39 @@ public sealed class DomainExtensionTests {
         var result = new DomainEvolution(start).Apply([new AddDomainExtensionChange("temporal")]);
 
         await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    [Test]
+    public async Task AddDomainExtension_SessionHasNotLoadedId_Throws() {
+        var session = DomainSession.ForExtensions(["temporal"]);
+        var start = new Domain("T", []) { Extensions = ["temporal"] };
+        await Assert.That(() => new DomainEvolution(start).Apply(
+                [new AddDomainExtensionChange("storage")], session: session))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("storage");
+    }
+
+    [Test]
+    public async Task GetOrAnalyze_UnboundUnknownExtension_Throws() {
+        var domain = new Domain("T", []) { Extensions = ["sqlite"] };
+        await Assert.That(() => RuntimeAnalysisCache.GetOrAnalyze(domain))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("sqlite");
+    }
+
+    [Test]
+    public async Task Policy_SameNameOnEntityAndStage_IsRedefinition() {
+        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var result = new DomainEvolution(new Domain("T", [])).Evolve()
+            .AddEntity("Item")
+            .AddPolicyToEntity("Item", "Ready", DomainExpression.Literal(true))
+            .AddStage("Item", "Open")
+            .AddPolicyToStage("Item", "Open", "Ready", DomainExpression.Literal(false))
+            .Apply(session: session);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Message.Contains("already defined", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

@@ -72,6 +72,36 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
+    public async Task Lower_WhenAnalysisHasErrors_Throws() {
+        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var domain = new Domain("D", [
+            new Entity("Item", [], [], [], []),
+            new Entity("Item", [], [], [], []),
+        ]);
+        var analysis = session.Analyze(domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+        await Assert.That(() => session.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("Item");
+    }
+
+    [Test]
+    public async Task Lower_StagePolicy_IsMethodAndActionGuard() {
+        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductAuthoring);
+        var result = new DomainEvolution(DomainFactory.Create("D")).Evolve()
+            .AddEntity("Item")
+            .AddStage("Item", "Open")
+            .AddPolicyToStage("Item", "Open", "Ready", DomainExpression.Literal(true))
+            .AddActionToStage("Item", "Open", "Go")
+            .Apply(session: session);
+        await Assert.That(result.Succeeded).IsTrue();
+        var files = session.Emit(result.Root!, result.Analysis);
+        var source = string.Join('\n', files.Select(f => f.Source));
+        await Assert.That(source).Contains("bool Ready(");
+        await Assert.That(source).Contains("blocked by policy 'Ready'");
+    }
+
+    [Test]
     public async Task Open_ProductLanguage_ParsesNow() {
         var domain = DomainFactory.Create("D") with { Extensions = [.. ExtensionCatalog.ProductLanguage] };
         var session = DomainSession.Open(domain);

@@ -2,7 +2,7 @@
 
 > **Maintainer note:** This guide is the **single product-true reference** for the shipped DSL surface.
 > It must be updated whenever the parser, printer, or `apply_dsl` changes.
-> See the "DSL Guide Maintenance" section in `.github/copilot-instructions.md`.
+> Keep this file in sync with the parser, printer, and MCP authoring tools (`AGENTS.md` Ops).
 
 > This is the **product-true** DSL guide verified against the shipped `apply_dsl` parser.
 > Do **not** use constructs from experiment docs (`POLY-DSL-MINIMAL.md`, `DOMAIN-DSL-SPEC.md`) —

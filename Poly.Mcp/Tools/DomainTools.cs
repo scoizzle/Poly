@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -481,25 +482,11 @@ internal sealed class EvolveTool {
     /// Incremental structure edits only — bulk structure, effects, and subscriptions go
     /// through <c>apply_dsl</c>. Expression bodies are product DSL text, never JSON IR.
     /// </summary>
-    [McpServerTool(Name = "add"), Description(@"Creates one domain definition element. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding. payload is a JSON object of kind-specific fields:
-- entity: {""name"":""Order""}
-- property: {""entityName"":""Order"",""name"":""Total"",""typeName"":""Number""}
-- stage: {""entityName"":""Order"",""name"":""Active""}
-- action: {""entityName"":""Order"",""name"":""Submit""}
-- stage_action: {""entityName"":""Order"",""stageName"":""Draft"",""name"":""Submit""}
-- relationship: {""name"":""OrderLines"",""source"":""Order"",""target"":""Line"",""cardinality"":""OneToMany""} (cardinality: OneToOne, OneToMany, ManyToMany, ManyToOne; source/target may also be sourceEntityName/targetEntityName)
-- constraint: {""entityName"":""Order"",""propertyName"":""Total"",""type"":""Range"",""min"":0,""max"":100} (types: Required, Unique, Range, Length, Pattern; Pattern needs {""pattern"":""^[a-z]+$""})
-- policy: {""entityName"":""Order"",""name"":""Adult"",""expression"":""Age >= 18""} — expression is DSL text only, never JSON
-- value_type: {""name"":""Money""}
-- contract: {""name"":""Stripe"",""sourceKind"":""ExternalProvider"",""source"":""stripe"",""version"":""v1""}
-- contract_value_type: {""contractName"":""Stripe"",""name"":""ChargeRequest""}
-- contract_endpoint: {""contractName"":""Stripe"",""name"":""Charge"",""kind"":""Operation"",""direction"":""Inbound"",""payloadType"":""Number""}
-- contract_binding: {""name"":""ChargeOrder"",""contractName"":""Stripe"",""endpointName"":""Charge"",""actionName"":""Pay"",""parameter"":""amount""}
-Unknown kind, missing required field, or invalid cardinality fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
+    [McpServerTool(Name = "add"), Description("Creates one domain element. kind is case-sensitive. Payload shapes are in get_dsl_guide section 12. Unknown kind or a missing field fails closed. Bulk structure uses apply_dsl.")]
     public static DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy")] string kind,
-        [Description("JSON object of kind-specific fields (see tool description for per-kind payloads)")] string payload) {
+        [Description("JSON object of kind-specific fields. Shapes are in get_dsl_guide section 12.")] string payload) {
         if (!McpSessionStore.TryGet(sessionId, out _))
             return new DomainToolResponse(
                 Success: false,
@@ -770,20 +757,11 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
     /// Removes one domain definition element by identity, dispatched by
     /// <c>kind</c> + <c>payload</c>. Identity fields only — no expression bodies.
     /// </summary>
-    [McpServerTool(Name = "remove"), Description(@"Removes one domain definition element by identity. kind is case-sensitive: entity, property, stage, action, stage_action, relationship, policy. payload is a JSON object of identity fields:
-- entity: {""name"":""Order""}
-- property: {""entityName"":""Order"",""name"":""Total""}
-- stage: {""entityName"":""Order"",""name"":""Active""}
-- action: {""entityName"":""Order"",""name"":""Submit""}
-- stage_action: {""entityName"":""Order"",""stageName"":""Draft"",""name"":""Submit""}
-- relationship: {""name"":""OrderLines""} — optional ""source"": {""name"":""OrderLines"",""source"":""Order""} to disambiguate when the same name is declared on multiple source entities
-- policy: {""entityName"":""Order"",""name"":""Adult""} — optional scope: add ""stageName"" to remove a stage-scoped policy, ""actionName"" for an action-scoped policy (provide at most one)
-- constraint: not implemented in unified remove (core constraint removal is instance-identity-based, unusable from payload identity) — author via add(kind: constraint) or apply_dsl
-Unknown kind or missing required field fails closed.")]
+    [McpServerTool(Name = "remove"), Description("Removes one domain element by kind and identity payload. Shapes are in get_dsl_guide section 12. Constraint removal is not supported; use apply_dsl.")]
     public static DomainToolResponse Remove(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, policy")] string kind,
-        [Description("JSON object of identity fields (see tool description)")] string payload) {
+        [Description("JSON object of identity fields. Shapes are in get_dsl_guide section 12.")] string payload) {
         if (!McpSessionStore.TryGet(sessionId, out _))
             return new DomainToolResponse(
                 Success: false,
@@ -1234,21 +1212,7 @@ internal sealed class DslTool {
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
     /// session domain with the result. On failure, returns diagnostics with line/column info.
     /// </summary>
-    [McpServerTool(Name = "apply_dsl"), Description(@"Applies .poly DSL text to the session, replacing the current domain.
-
-Parses the text and, if analysis succeeds, replaces the session domain. Use this for bulk authoring; single-element edits use add / remove (kind + payload).
-
-Supported constructs: entities, properties with constraints (required, unique, range, length, pattern), lifecycle stages, actions with require gates, stage subscriptions (when RelName Stage1, Stage2 { effects }), policies, relationships (N1 navigation properties only: 'orders: many Order' on the source entity), and effects (transition to, assign, create, create in, entry/exit).
-
-Call get_dsl_guide before authoring. Do not invent constructs from experiment/lab docs — only the shipped surface is accepted. Unsupported constructs (actor, value, schedule, etc.) produce clear errors.
-
-This replaces the session domain and clears any instances created earlier. The session stays open; revision increments by 1.
-
-Action `when Stage` is stored but does not add a separate runtime gate — stage membership comes from declaring the action on a stage. Use create_instance + invoke_action to try the lifecycle.
-
-Stage subscriptions do not run from apply_dsl alone. Create and link instances, then invoke_action so a transition can notify subscribers.
-
-Incremental single-element edits go through add / remove.")]
+    [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared.")]
     public static DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
@@ -1383,18 +1347,25 @@ Incremental single-element edits go through add / remove.")]
     /// Call this before the first large `apply_dsl` to avoid inventing lab constructs.
     /// No session required.
     /// </summary>
-    [McpServerTool(Name = "get_dsl_guide"), Description("Returns the product-true Phase 1a/1b DSL syntax guide. Call this before the first large 'apply_dsl' to avoid inventing unsupported lab constructs. No session required.")]
-    public static DomainToolResponse GetDslGuide() {
-        // Load from embedded resource (packaged with MCP assembly)
+    [McpServerTool(Name = "get_dsl_guide"), Description("Returns the short DSL guide: principles, unsupported constructs, the golden workflow, and a section index. Pass section as a heading number or title, or \"all\" for the full guide. No session required.")]
+    public static DomainToolResponse GetDslGuide(
+        [Description("Omit for the short guide. A heading number or title returns that section. \"all\" returns the full guide.")] string? section = null) {
         var assembly = typeof(DslTool).Assembly;
-        // Try the product guide first (unqualified name), fall back to legacy agent-guide
         string guideText;
         try {
             var stream = assembly.GetManifestResourceStream("Poly.Mcp.Docs.poly-dsl-guide.md")
-                       ?? assembly.GetManifestResourceStream("Poly.Mcp.Docs.poly-dsl-agent-guide.md")
                        ?? throw new InvalidOperationException("Embedded resource 'poly-dsl-guide.md' not found.");
             using var reader = new StreamReader(stream);
             guideText = reader.ReadToEnd();
+            var selected = SelectGuide(guideText, section);
+            if (selected is null) {
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: "Unknown guide section '" + section + "'. " + GuideIndex(SplitGuide(guideText)),
+                    Affordances: ["get_dsl_guide"]);
+            }
+
+            guideText = selected;
         }
         catch (Exception ex) {
             return new DomainToolResponse(Success: false, Message: $"Could not load DSL guide: {ex.Message}", Affordances: ["apply_dsl"]);
@@ -1406,6 +1377,107 @@ Incremental single-element edits go through add / remove.")]
             Data: new { guide = guideText },
             Affordances: ["apply_dsl", "add", "create_instance", "evaluate_policy", "invoke_action"]
         );
+    }
+
+    private readonly record struct GuideSection(string Number, string Title, string Text);
+
+    private static string? SelectGuide(string guide, string? section) {
+        if (string.IsNullOrWhiteSpace(section))
+            return ShortGuide(guide);
+        if (section.Trim().Equals("all", StringComparison.OrdinalIgnoreCase))
+            return guide;
+
+        var want = section.Trim();
+        foreach (var part in SplitGuide(guide)) {
+            if (part.Number.Equals(want, StringComparison.OrdinalIgnoreCase)
+                || part.Title.Contains(want, StringComparison.OrdinalIgnoreCase))
+                return part.Text;
+        }
+
+        return null;
+    }
+
+    private static string ShortGuide(string guide) {
+        var sections = SplitGuide(guide);
+        var principles = sections.FirstOrDefault(s => s.Number == "0");
+        var denied = sections.FirstOrDefault(s => s.Number == "10");
+        if (string.IsNullOrEmpty(principles.Text) || string.IsNullOrEmpty(denied.Text))
+            throw new InvalidOperationException("DSL guide is missing section 0 or section 10.");
+
+        const string marker = "**Golden workflow:**";
+        var goldenAt = guide.IndexOf(marker, StringComparison.Ordinal);
+        if (goldenAt < 0)
+            throw new InvalidOperationException("DSL guide is missing the golden workflow.");
+        var goldenEnd = guide.IndexOf("\n\n", goldenAt, StringComparison.Ordinal);
+        var golden = goldenEnd < 0 ? guide[goldenAt..] : guide[goldenAt..goldenEnd];
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Poly DSL — short guide");
+        sb.AppendLine();
+        sb.AppendLine("Pass `section` as a number below, or `all`, to `get_dsl_guide` for the rest. Shapes for `add` and `remove` are section 12.");
+        sb.AppendLine();
+        sb.AppendLine(principles.Text);
+        sb.AppendLine();
+        sb.AppendLine(denied.Text);
+        sb.AppendLine();
+        sb.AppendLine(golden.TrimEnd());
+        sb.AppendLine();
+        sb.Append(GuideIndex(sections));
+        return sb.ToString();
+    }
+
+    private static string GuideIndex(List<GuideSection> sections) {
+        var sb = new StringBuilder();
+        sb.AppendLine("## Sections");
+        foreach (var part in sections)
+            sb.Append("- ").Append(part.Number).Append(". ").AppendLine(part.Title);
+        return sb.ToString().TrimEnd();
+    }
+
+    private static List<GuideSection> SplitGuide(string guide) {
+        var marks = new List<int>();
+        if (guide.StartsWith("## ", StringComparison.Ordinal))
+            marks.Add(0);
+        var search = 0;
+        while (true) {
+            var idx = guide.IndexOf("\n## ", search, StringComparison.Ordinal);
+            if (idx < 0)
+                break;
+            marks.Add(idx + 1);
+            search = idx + 4;
+        }
+
+        var sections = new List<GuideSection>(marks.Count);
+        for (var i = 0; i < marks.Count; i++) {
+            var from = marks[i];
+            var to = i + 1 < marks.Count ? marks[i + 1] : guide.Length;
+            var text = guide[from..to].TrimEnd();
+            var newline = text.IndexOf('\n');
+            var heading = newline < 0 ? text : text[..newline];
+            var number = "";
+            var title = heading;
+            if (heading.StartsWith("## ", StringComparison.Ordinal)) {
+                var rest = heading[3..];
+                var dot = rest.IndexOf('.');
+                if (dot > 0 && IsAllDigits(rest.AsSpan(0, dot))) {
+                    number = rest[..dot];
+                    title = rest[(dot + 1)..].Trim();
+                }
+            }
+            sections.Add(new GuideSection(number, title, text));
+        }
+
+        return sections;
+    }
+
+    private static bool IsAllDigits(ReadOnlySpan<char> text) {
+        if (text.Length == 0)
+            return false;
+        foreach (var c in text) {
+            if (!char.IsAsciiDigit(c))
+                return false;
+        }
+        return true;
     }
 
     // ── Private helpers ─────────────────────────────────────────

@@ -124,9 +124,14 @@ public sealed class DomainSession {
         return Open(domain);
     }
 
-    /// <summary>Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).</summary>
+    /// <summary>
+    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).
+    /// The session is bound before the pipeline so passes that ask the cache for maps
+    /// see this compilation, not a second session built from <see cref="ExtensionCatalog.Core"/>.
+    /// </summary>
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        RuntimeAnalysisCache.Bind(domain, this);
         var analysis = Analyzer.Analyze(domain);
         RuntimeAnalysisCache.Bind(domain, this, analysis);
         return analysis;
@@ -143,13 +148,19 @@ public sealed class DomainSession {
 
     /// <summary>
     /// Stage 3: one operation module (type definitions, action bodies,
-    /// entity-level policy methods, subscription handlers, and OnEntry/OnExit
-    /// bodies). Action- and stage-scoped policies are not carried here.
+    /// policy methods, subscription handlers, and OnEntry/OnExit bodies).
     /// Simulate and print consume this result.
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        if (analysis.HasErrors) {
+            var messages = string.Join("; ", analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Select(d => d.Message));
+            throw new InvalidOperationException(
+                $"Cannot lower '{domain.Name}' because analysis reported errors: {messages}");
+        }
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         ArtifactCatalog = new ArtifactCatalog();
         ArtifactCatalog.DeclareType("SyntaxModule", mayPointAt: []);

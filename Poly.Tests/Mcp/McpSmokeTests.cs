@@ -1246,6 +1246,17 @@ public class McpSmokeTests {
         await Assert.That(guideBody).IsNotNull();
         // Should mention apply_dsl / MCP
         await Assert.That(dataJson).Contains("apply_dsl");
+        await Assert.That(guideBody!.Contains("## 13.")).IsFalse();
+        await Assert.That(guideBody.Split('\n').Length).IsLessThan(240);
+
+        var section = DslTool.GetDslGuide("10");
+        await Assert.That(section.Success).IsTrue();
+        var sectionBody = section.Data!.GetType().GetProperty("guide")!.GetValue(section.Data) as string;
+        await Assert.That(sectionBody).Contains("actor");
+        await Assert.That(sectionBody!.Contains("Golden workflow")).IsFalse();
+
+        var unknown = DslTool.GetDslGuide("no-such-section");
+        await Assert.That(unknown.Success).IsFalse();
 
         // G′′.4: Anti-pattern guards — guide must not teach lab constructs
         await Assert.That(dataJson.Contains("require {")).IsFalse();
@@ -1283,7 +1294,7 @@ public class McpSmokeTests {
     public async Task GetDslGuide_GoldenExample_AppliesCleanly() {
         // G2.2 / G′.5 / G′′.2: The guide's golden example must parse and analyze clean.
         // Extract it from the guide text to keep in sync (extract between the ```poly fences).
-        var guide = DslTool.GetDslGuide();
+        var guide = DslTool.GetDslGuide("all");
         await Assert.That(guide.Success).IsTrue();
 
         // Extract the golden poly block from the raw guide body (not from serialized JSON)

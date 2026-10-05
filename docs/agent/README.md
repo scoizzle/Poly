@@ -1,46 +1,28 @@
-# Agent protocols (tool-agnostic)
+# Agent protocols
 
-These docs are **source of truth for agent workflows** in this repo. They are plain markdown: any AI tool, human, or CI step can open and follow them.
+Plain markdown. Any tool can follow them. Always-on policy is [`../../AGENTS.md`](../../AGENTS.md). Machinery is [`../CORE.md`](../CORE.md). Admission is [`../plans/simple-agent-tasks/PIPELINE-STATUS.md`](../plans/simple-agent-tasks/PIPELINE-STATUS.md).
 
-**Always-on first instructions:** [`../../AGENTS.md`](../../AGENTS.md) — start at **Core tenets**, then Frozen core / Agent target. Architecture depth: [`../CORE.md`](../CORE.md) §0 · [`../decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · Lower vision [`../plans/session-lower-plan-2026-09-21.md`](../plans/session-lower-plan-2026-09-21.md). Agents must respect the freeze; do not grow consumer dual-paths or twin trees.
-
-| Protocol | When to use |
+| Protocol | When |
 |---|---|
-| [`phenomenal-review.md`](./phenomenal-review.md) | **Adversarial** correctness / contract review of a diff (Bun-inspired split context, multi-pass option). Findings + follow-ups in docs. **Does not** fix code by default. |
-| Pre-ship gate | Before marking a slice Done: review → harden → re-review. See [`../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) and workspace `Agents.md` § Pre-ship. |
+| [`phenomenal-review.md`](./phenomenal-review.md) | Adversarial correctness review of a diff. Writes findings and follow-ups. Does not fix code unless asked. |
+| Pre-ship gate | Before marking a slice Done. [`../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). |
+| [`poly-discovery-loop.md`](./poly-discovery-loop.md) | A discovery round the user started (`scripts/discovery-round.sh`). Not a default work mode. |
+| Suite run | One README path that PIPELINE-STATUS has not archived. Copilot: [`.github/agents/plan-suite-until-done.agent.md`](../../.github/agents/plan-suite-until-done.agent.md). Grok: `.grok/workflows/plan-orchestrator.rhai`. |
 
-## Design rules for this folder
+`reviews/` is evidence. Open a review only when a task names it. Do not scan the folder for what to do next.
 
-1. **Portable** — no Grok/Cursor/Claude-only frontmatter or proprietary skill syntax. Optional tool wrappers elsewhere may *point here*; they must not be the only home for the bar.
-2. **One protocol per concern** — keep skills composable (review vs fix vs ship).
-3. **Follow-ups live in docs** — residual work is written into `docs/plans/` (or a protocol-specified path), not left only in chat.
-4. **Link from always-on docs** when a protocol must be discoverable — prefer a single line in `Agents.md` over duplicating the procedure.
+## Rules for this folder
 
-## Invoking from any agent
+1. Portable markdown. Tool wrappers point here. They are not a second copy of the procedure.
+2. One protocol per concern.
+3. Follow-ups go in `docs/`, not only chat.
+4. Link a protocol from `AGENTS.md` with one line. Do not paste the procedure into the always-on file.
 
-Paste or say:
+## Tool wrappers
 
-```text
-Read docs/agent/phenomenal-review.md and execute it against the current local changes.
-Assume the code is wrong until evidence says otherwise.
-Write findings and follow-up tasks into the docs as the protocol requires.
-```
+| Tool | Wrapper |
+|---|---|
+| Grok | [`.grok/skills/phenomenal-review/SKILL.md`](../../.grok/skills/phenomenal-review/SKILL.md) |
+| Copilot | [`.github/skills/phenomenal-review/SKILL.md`](../../.github/skills/phenomenal-review/SKILL.md) |
 
-Multi-pass (independent second context, diff-only — parent uses Pass B template §3.7.1):
-
-```text
-Read docs/agent/phenomenal-review.md and execute it against local changes, mode: multi.
-```
-
-Or substitute the target (branch, PR, path list) as the protocol allows.
-
-## Tool wrappers (optional)
-
-These only point at the portable protocol; they are not a second source of truth.
-
-| Tool | Location | How to run |
-|---|---|---|
-| **Grok Build** | [`.grok/skills/phenomenal-review/SKILL.md`](../../.grok/skills/phenomenal-review/SKILL.md) | `/phenomenal-review` or matching intent |
-| **GitHub Copilot** | [`.github/skills/phenomenal-review/SKILL.md`](../../.github/skills/phenomenal-review/SKILL.md) | Agent Skills load from `.github/skills/`; ask for a phenomenal/deep/contract review |
-
-Keep wrapper bodies thin. Change the bar only in `phenomenal-review.md`.
+Change the review bar only in `phenomenal-review.md`.

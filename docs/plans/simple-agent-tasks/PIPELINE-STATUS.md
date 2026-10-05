@@ -1,67 +1,31 @@
 # Pipeline status
 
-**Updated:** 2026-09-04
-**Authority:** this file is the **sole CURRENT/DONE truth** for agent suite admission.  
-Other indexes must **mirror** this file (or link here) — do not invent a second CURRENT line.
+**Updated:** 2026-10-02
+**Authority:** this file is the only CURRENT. Other indexes link here. They do not copy this pick.
 
----
-
-## Agent pick (one line)
+## Agent pick
 
 ```text
-DONE:    gpure (2026-08-07 + follow-ups 08-08); mcp-minify (2026-08-08 + follow-ups); grammar-revision (2026-08-09: v2 engine + DSL cutover + printer + review fixes); dead-dual cleanup (2026-08-09: Validation + Text.Matching deleted); domainmodeling vision-cleanup slices 1–3 (2026-08-17: one door, session.Analyze, Comment not emit-meaning); emit-session CompileMode seed-only (2026-08-24: HTTP host only via uses http / Load(HttpLibrary); bag-gated emit); host-ABI StageTransition (PR 21); host-ABI self-invoke (PR 22); host-ABI cross-entity invoke (PR 23); host-ABI for-invoke (PR 24); rewrite-to-master (PR 26); interpretation-language-engine (ile-gate 2026-08-31); create/create-in (simulate Interpreter + bound Store 2026-09-03)
+DONE:    docs/plans/archive/ (latest buckets: completed-2026-08-late, completed-2026-09)
 CURRENT: (none)
-ADMIT:   parallel (exclusive files)
-THEN:    lowering-module holism (same Lower trees for execute+print; no Effect-IR at execute); MCP mut-safety; Grammar wrap-up; V3 naming
-PARKED:  pack-2 IDomainPack; mut-safety; e2e-*; pack-host “packs extend Grammar tables”; session four-slot Meaning/Emit
+THEN:    platform-contract residuals F7–F8 (docs/agent/reviews/2026-10-01-platform-contract-followups.md); MCP mut-safety; grammar wrap-up; V3 naming
+PARKED:  docs/plans/parked/ (e2e, pack, p1, mut-safety, gcyc); pack-2 IDomainPack; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```
 
-```bash
-# Fleet dispatch (see pack-README.md). pack-1 is archived — assign a live parked task file.
-```
+If `CURRENT` is `(none)`, open only the file named on `THEN`. Parked and archived suites are not work.
 
----
+## Where suites live
 
-## Suites
+| Suite | Status | Path |
+|-------|--------|------|
+| gcyc, grammar wrap-up, mut-safety, p1, e2e, pack | Parked | [`../parked/`](../parked/README.md) |
+| create/create-in | Done 2026-09-03 | [`../archive/completed-2026-09/`](../archive/completed-2026-09/README.md) |
+| earlier suites | Archived | [`../archive/`](../archive/) |
 
-| Suite | Status | Notes |
-|-------|--------|-------|
-| **gpure** | ✅ **DONE** 2026-08-07 (+ follow-ups 2026-08-08) | Pure Grammar product path (Option A ladder + tables); S1–S5/N1–N4/P1 closed. |
-| **mcp-minify** | ✅ **DONE** 2026-08-08 (+ follow-ups same day) | Catalog 46→24; DSL-only expressions; unified `add`/`remove`; follow-ups closed. |
-| **grammar-revision** | ✅ **DONE** 2026-08-09 | v2 engine (`Grammar<TToken, TTokenKind>`, examine/consume, longest-match, stateless printer) + DSL cutover; review B1–B3/N1–N3/C1 closed. Archived: [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) |
-| **emit-session** | ✅ **DONE** 2026-08-24 (CompileMode honesty) | Libraries add `INodeAnalyzer`. Spell closed. Emit reads bags, not `CompileMode`. CompileMode.All/Db seed persistence only; HTTP host requires `uses http` (catalog id `http`) or `Load(HttpLibrary)`. Remaining lies: TemporalLibrary Meaning unused; RuntimeAnalysisCache core-catalog reopen. |
-| **host-ABI** | Strong slice **DONE** (PRs 21–24) | StageTransition, self-invoke, cross-entity, for-invoke same-tree. create/create-in Store bind ✅ 2026-09-03. |
-| **create/create-in** | ✅ **DONE** 2026-09-03 | Simulate = Interpreter + bound Store. Plan: [`../create-create-in-simulate.md`](../create-create-in-simulate.md) · suite: [`create-create-in-README.md`](./create-create-in-README.md) |
-| **interpretation-language-engine** | ✅ **DONE** 2026-08-31 | ile-0…ile-3 + ile-gate: no POC passthrough, `Compile` fail-closed, LanguageVmTests + LanguageSurfaceTests, CORE/README match. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md`](../archive/completed-2026-08-late/simple-agent-tasks/interpretation-language-engine-README.md). |
-| **rewrite-to-master** | ✅ **DONE** 2026-08-25 (PR 26) | Rewrite is `master`. Plan: [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md). New work from `master`; do not open work on the rewrite branch. |
-| **pack-host** | Parked (phase 1 shipped; **extension model superseded**) | TokenWriter + binders done. “Packs extend Grammar tables” is not the product contract — extension is analysis passes. pack-2 `IDomainPack` parked. |
-| **gcyc** | Parked (first admit shipped) | [`gcyc-README.md`](./gcyc-README.md) — remaining G4 unparse is THEN, not CURRENT |
-| **grammar wrap-up** | Parked | LeftAssoc live-fold — not a prereq of pack-1 TokenWriter |
-| **mut-safety** | Parked | Session lock + idempotent add + rollback DX |
-| **p1** temporal | Phase 3a after pack-2-gate | Patterns + binders on both primaries |
-| amu / p4 / coh / dogfood / GI / gpure / mcp-minify / ile / … | Archived | See [`../archive/`](../archive/) — latest bucket [`completed-2026-08-late`](../archive/completed-2026-08-late/README.md) |
+Parent plans stay under `docs/plans/`. They are not queues.
 
----
+## Open only when THEN names it
 
-## Related
-
-| Doc | Role |
-|-----|------|
-| [`../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md`](../archive/completed-2026-08-late/simple-agent-tasks/rewrite-to-master-2026-08-25.md) | Merge rewrite onto master — ✅ DONE PR 26 |
-| [`READY-TO-TASK.md`](./READY-TO-TASK.md) | Ready-suite index (mirrors this) |
-| [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) | Milestone index + Agent pick (mirrors this) |
-| [`../README.md`](../README.md) | Plans admission rules (points here for CURRENT) |
-| [`../archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md`](../archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md) | Validation / Text / second-evaluator kill list (executed) |
-| [`../archive/completed-2026-08-late/grammar-revision.md`](../archive/completed-2026-08-late/grammar-revision.md) | ✅ **DONE 2026-08-09** — v2 engine + DSL cutover + printer + review fixes closed |
-
-## Notes
-
-- **grammar wrap-up** (admit next): LeftAssoc live-fold + S1 span reconciliation — product fold path.
-- **grammar-revision** ✅ DONE 2026-08-09: v2 engine + DSL cutover + printer + review fixes (B1–B3, N1–N3, C1).
-- Span-vs-fold `not`-in-chain pinned: `SpanVsFold_NotInChain_TableRejectsFoldAccepts` until wrap-up reconciles.
-- **RuntimeAnalysisCache:** `DomainSession.Analyze` binds the authoring session; `GetOrAnalyze` reuses it (vendor maps visible). Unbound fallback is still core-catalog.
-- **host-ABI remaining lie:** none for unique/create simulate. Residual: C# factories may still call `Stay.Create` as the host bind of `Create`; unique indexes remain EF schema.
-- **pipeline transformation / Session Compile:** P1–P6 executed; Slices A–C (#74–#76) and P3-A/P3-B (#79–#80) shipped. Load → one analyze → `session.Lower` → artifact set on the session; Syntax module privileged for meaning + sim. Always-on: [`../../../AGENTS.md`](../../../AGENTS.md) **Agent target** · vision [`../session-lower-plan-2026-09-21.md`](../session-lower-plan-2026-09-21.md). **Not CURRENT.** Residual: action-/stage-scoped policy side-lower; nested StageTransition flush / Domain-null standalone; execute-time expression sites in [`../p3b-followups-2026-09-27.md`](../p3b-followups-2026-09-27.md). Do not grow DEI/MCP as product proof.
-- **rewrite-to-master:** ✅ DONE PR 26. Product trunk is `master`. Parallel streams may run with exclusive file ownership (MCP mut-safety; Grammar wrap-up; V3 naming).
-- **interpretation-language-engine:** ✅ DONE 2026-08-31 (ile-gate). **create/create-in:** ✅ DONE 2026-09-03. Dictionary-backed `This` is already Interpretation’s type-def path — do not invent Expando. CURRENT is `(none)`.
+- Contract residuals: [`../../agent/reviews/2026-10-01-platform-contract-followups.md`](../../agent/reviews/2026-10-01-platform-contract-followups.md).
+- Execute-time lower residuals (not CURRENT): [`../p3b-followups-2026-09-27.md`](../p3b-followups-2026-09-27.md).

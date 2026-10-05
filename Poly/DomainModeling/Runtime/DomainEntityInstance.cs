@@ -536,7 +536,8 @@ public sealed partial record DomainEntityInstance {
         // require-not cannot invert soft-false to fail-open. ExecuteEffectList
         // still binds the module Body for named actions even when Ontology
         // effects are empty (gated no-op). Unlinked to-one path-prefix is false
-        // via the lowered `rel != null && leaf` guard. Stage policies stay here.
+        // via the lowered `rel != null && leaf` guard. Stage policies are in that
+        // same tree. The Domain-null path has no module, so it still checks them here.
         var failures = new List<string>();
         if (Domain is not null) {
             var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -564,7 +565,7 @@ public sealed partial record DomainEntityInstance {
             stage = Entity.Stages.FirstOrDefault(
                 s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));
         }
-        if (stage is not null)
+        if (Domain is null && stage is not null)
             foreach (var guard in stage.Policies) {
                 if (action.Policies.Any(p => string.Equals(p.Name, $"not_{guard.Name}", StringComparison.Ordinal)))
                     continue;

@@ -1,4 +1,7 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Runtime;
 using Poly.DomainModeling.Ontology;
 using Poly.Tests.TestHelpers;
 
@@ -40,13 +43,12 @@ public class TextConcatParityTests {
         await Assert.That(outcomes[1].State["Total"]).IsEqualTo("4");
     }
 
-    // Text + Number is invalid: Analyze rejects it, so the DSL cannot author it (TextConcatAnalysisTests).
-    // A domain edited through the API skips Analyze and the sides still differ: the simulator refuses the
-    // action while the printed C# concatenates. The G1 gate makes this unreachable; the row pins today's behaviour.
+    // Text + Number is invalid: Analyze rejects it (TextConcatAnalysisTests). With G1, Export / FromDomain
+    // refuse an analysis with Errors, so neither simulate nor printed C# can run the mixed assign.
     [Test]
-    [Arguments("Status", "Count", "paid3")]
-    [Arguments("Count", "Status", "3paid")]
-    public async Task KnownGap_TextWithNumberOnApiBuiltDomain_SimulateRefusesAndPrintedConcatenates(string left, string right, string printedCode) {
+    [Arguments("Status", "Count")]
+    [Arguments("Count", "Status")]
+    public async Task TextWithNumberOnApiBuiltDomain_BothSidesRefuse(string left, string right) {
         var domain = EvolvedDomain.FromDsl(Dsl("Status + Suffix")).Domain;
         var entity = domain.Types.OfType<Entity>().Single();
         var action = entity.Actions.Single();
@@ -55,11 +57,17 @@ public class TextConcatParityTests {
         entity = entity with { Actions = [action with { Effects = [edited] }] };
         domain = domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] };
 
-        var (simulate, printed) = ParityScenario.FromDomain(domain, "ParityConcatMixed" + left).Run(CreateAndTag);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+        var first = analysis.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message;
 
-        await Assert.That(simulate[1].Success).IsFalse();
-        await Assert.That(simulate[1].Message).StartsWith("VM compile rejected: arithmetic operand is not numeric");
-        await Assert.That(printed[1].Success).IsTrue();
-        await Assert.That(printed[1].State["Code"]).IsEqualTo(printedCode);
+        var exportEx = Assert.Throws<InvalidOperationException>(
+            () => new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(exportEx!.Message).IsEqualTo(first);
+
+        var entityForCreate = domain.Types.OfType<Entity>().Single();
+        var createEx = Assert.Throws<InvalidOperationException>(
+            () => DomainEntityInstance.Create(entityForCreate, null, domain));
+        await Assert.That(createEx!.Message).IsEqualTo(first);
     }
 }

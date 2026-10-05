@@ -925,12 +925,16 @@ Unknown kind or missing required field fails closed.")]
     /// <summary>
     /// Builds a structural fingerprint of a domain for no-op detection.
     /// Two domains with the same fingerprint have the same types, relationships,
-    /// and entity structures (property/stage/action counts). This lets us detect
+    /// entity structures (property/stage/action counts), imported contracts (with their
+    /// value type and endpoint counts) and contract binding count. This lets us detect
     /// when an evolve operation had zero effective change (e.g. adding a property
     /// to a non-existent entity, which silently no-ops in the current evolution layer).
     /// </summary>
     internal static string GetFingerprint(Domain domain) {
-        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Count()}";
+        var contracts = string.Join(",", domain.ImportedContracts.OrderBy(c => c.Name)
+            .Select(c => $"{c.Name}({c.Types.Count}t,{c.Endpoints.Count}e)"));
+        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Count()}"
+            + $"|C:[{contracts}]|B:{domain.ContractBindings.Count}";
         var entityDetails = domain.Types
             .OfType<Entity>()
             .OrderBy(e => e.Name)

@@ -1,4 +1,8 @@
 scaffolding|Fleet|Lower
+source-domain|Fleet|Lower
 entity|Fleet/Delivery|Lower
+source-entity|Fleet/Delivery|Lower
 entity|Fleet/Truck|Lower
+source-entity|Fleet/Truck|Lower
 entity|Fleet/Warehouse|Lower
+source-entity|Fleet/Warehouse|Lower

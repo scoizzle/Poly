@@ -1,3 +1,6 @@
 scaffolding|SimulateCreateIn|Lower
+source-domain|SimulateCreateIn|Lower
 entity|SimulateCreateIn/Fine|Lower
+source-entity|SimulateCreateIn/Fine|Lower
 entity|SimulateCreateIn/Patron|Lower
+source-entity|SimulateCreateIn/Patron|Lower

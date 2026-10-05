@@ -11,12 +11,12 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
     readonly DomainInstanceStore _store = new();
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        var properties = values.Where(v => v.Value is not IEnumerable<object>)
+        var properties = values.Where(v => v.Value is not (IEnumerable<object> or DomainEntityInstance))
             .ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
         var instance = DomainEntityInstance.Create(model, properties, Domain);
         _store.Add(instance);
-        foreach (var (name, value) in values.Where(v => v.Value is IEnumerable<object>))
-            foreach (var target in (IEnumerable<object>)value!)
+        foreach (var (name, value) in values.Where(v => v.Value is IEnumerable<object> or DomainEntityInstance))
+            foreach (var target in value is DomainEntityInstance one ? [one] : (IEnumerable<object>)value!)
                 _store.Link(name, instance, (DomainEntityInstance)target);
         return (true, null, instance);
     }
@@ -31,6 +31,8 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
         return instance.EvaluatePolicy(instance.Entity.Policies.FirstOrDefault(p => p.Name == policy)
             ?? throw new ArgumentException($"Entity '{instance.Entity.Name}' has no policy '{policy}'."));
     }
+
+    protected override string TypeName(object entity) => ((DomainEntityInstance)entity).Entity.Name;
 
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var instance = (DomainEntityInstance)entity;
@@ -52,10 +54,16 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
 
+    protected override string TypeName(object entity) => entity.GetType().Name;
+
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var state = model.Properties.ToDictionary(p => p.Name, p => Read(entity, p.Name)?.ToString());
         foreach (var nav in model.Navigations)
-            state[nav.Name] = Read(entity, nav.Name) is System.Collections.ICollection c ? c.Count.ToString() : "0";
+            state[nav.Name] = Read(entity, nav.Name) switch {
+                System.Collections.ICollection c => c.Count.ToString(),
+                null => "0",
+                _ => "1", // a to-one navigation holding its target
+            };
         state["Stage"] = Read(entity, "CurrentStage")?.ToString();
         return state;
     }

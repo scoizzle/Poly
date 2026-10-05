@@ -1,0 +1,11 @@
+domain Entry
+
+// Probe: the first stage's entry block transitions on to the next stage.
+// Expect: the printed C# compiles and a new Z ends in B, as in simulate.
+Z: entity {
+  Tag: Text
+  A: stage {
+    entry { transition to B }
+  }
+  B: stage { }
+}

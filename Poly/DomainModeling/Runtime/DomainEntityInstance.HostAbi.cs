@@ -12,11 +12,11 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Real instance method invoked from the lowered StageTransition tree
-    /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
-    /// assignment. Store subscription fan-out only — does not re-run exit/entry
-    /// (those belong in the lowered tree). Skips when executing a subscription
-    /// (cascade is store-owned) or when no store is attached.
+    /// Store subscription fan-out after a stage assignment. Printed classes and
+    /// the shared StageTransition lowering do not call this (they use
+    /// <c>Notify{Stage}Subscribers</c> for watched stages). Kept for HostAbi
+    /// and direct callers. Skips when executing a subscription (cascade is
+    /// store-owned) or when no store is attached.
     /// </summary>
     public void Notify(string targetStageName) =>
         Notify(targetStageName, previousStageName: null);
@@ -422,87 +422,6 @@ public sealed partial record DomainEntityInstance {
                 $"MaterializePeerInSyntax: unhandled node type '{node.GetType().Name}' " +
                 $"(peer binding '{peerBinding}').")
         };
-
-
-    /// <summary>
-    /// Rewrites peer path-prefix roots (<c>name Prop</c> → <see cref="RelationshipNavigation"/>)
-    /// into literals evaluated against the transitioned peer bag.
-    /// </summary>
-    private static Effect BindPeerInEffect(Effect effect, string peerBinding, DomainEntityInstance peer) {
-        return effect switch {
-            AssignEffect a => a with {
-                // Peer path-prefix is value-side only (F4/F16 defense in depth).
-                Target = RejectPeerAssignTarget(a.Target, peerBinding),
-                Value = BindPeerInExpression(a.Value, peerBinding, peer)
-            },
-            ConditionalEffect c => c with {
-                Condition = BindPeerInExpression(c.Condition, peerBinding, peer),
-                ThenEffects = c.ThenEffects.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList(),
-                ElseEffects = c.ElseEffects?.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList()
-            },
-            CompositeEffect c => c with {
-                Effects = c.Effects.Select(e => BindPeerInEffect(e, peerBinding, peer)).ToList()
-            },
-            CreateEntityInstance cei => cei with {
-                Initializers = cei.Initializers
-                    .Select(i => i with { Expression = BindPeerInExpression(i.Expression, peerBinding, peer) })
-                    .ToList()
-            },
-            CreateEntityInRelationshipEffect cir => cir with {
-                Initializers = cir.Initializers
-                    .Select(i => i with { Expression = BindPeerInExpression(i.Expression, peerBinding, peer) })
-                    .ToList()
-            },
-            InvokeActionEffect iae => iae with {
-                ParameterBindings = iae.ParameterBindings
-                    .Select(b => b with { Expression = BindPeerInExpression(b.Expression, peerBinding, peer) })
-                    .ToList()
-            },
-            _ => effect
-        };
-    }
-
-    private static DomainExpression RejectPeerAssignTarget(DomainExpression target, string peerBinding) {
-        if (target is RelationshipNavigation rn
-            && string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal)) {
-            throw new InvalidOperationException(
-                $"Peer binder '{peerBinding}' cannot be an assign target in a subscription effect. " +
-                "Use peer fields only on the right-hand side.");
-        }
-        return target;
-    }
-
-    private static DomainExpression BindPeerInExpression(
-        DomainExpression expr, string peerBinding, DomainEntityInstance peer) =>
-        new PeerBindingRewrite(peerBinding, peer).Route(expr);
-
-    /// <summary>
-    /// Rewrites peer path-prefix roots (<c>name Prop</c>) into literals evaluated
-    /// against the transitioned peer bag (coh-d1 — leaf override on the shared
-    /// <see cref="DomainExpressionRewriteBase"/>; composites recurse in the base).
-    /// </summary>
-    private sealed class PeerBindingRewrite(string peerBinding, DomainEntityInstance peer)
-        : DomainExpressionRewriteBase {
-        protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) {
-            if (string.Equals(e.RelationshipName, peerBinding, StringComparison.Ordinal))
-                return DomainExpression.Literal(EvaluateExprOnPeer(e.TargetProperty, peer));
-            return base.RelationshipNavigation(e);
-        }
-    }
-
-    /// <summary>
-    /// Lowers and executes <paramref name="expr"/> against the peer instance bag.
-    /// </summary>
-    private static object? EvaluateExprOnPeer(DomainExpression expr, DomainEntityInstance peer) {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity"), Domain: peer.Domain, SourceEntityName: peer.Entity.Name));
-        var lowered = pass.Lower(expr,
-            new Parameter("entity", new TypeReference(peer.Entity.Name)));
-        var compiled = Interpreter.Compile(lowered, peer._typeDefAnalyzer);
-        using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { peer }));
-        return exec.Result.GetValue<object>();
-    }
 
     /// <summary>
     /// VM-called Store jobs for lowered create / create-in (body and probes).

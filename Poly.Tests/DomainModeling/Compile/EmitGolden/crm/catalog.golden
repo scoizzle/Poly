@@ -1,1 +1,14 @@
-SyntaxModule|module|Lower
+scaffolding|Crm|Lower
+entity|Crm/Account|Lower
+entity|Crm/Activity|Lower
+entity|Crm/Campaign|Lower
+entity|Crm/CampaignMember|Lower
+entity|Crm/Contact|Lower
+entity|Crm/Lead|Lower
+entity|Crm/Line|Lower
+entity|Crm/Opportunity|Lower
+entity|Crm/Product|Lower
+entity|Crm/Quote|Lower
+entity|Crm/QuoteLine|Lower
+entity|Crm/Site|Lower
+entity|Crm/Ticket|Lower

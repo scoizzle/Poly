@@ -1,1 +1,5 @@
-SyntaxModule|module|Lower
+scaffolding|Library|Lower
+entity|Library/Book|Lower
+entity|Library/Fine|Lower
+entity|Library/Loan|Lower
+entity|Library/Patron|Lower

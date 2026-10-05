@@ -38,7 +38,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
-    private readonly bool _emitInstanceNotify;
     private readonly LocalNames _names;
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
@@ -63,7 +62,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _postTransitionNotifyStages = context.PostTransitionNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
-        _emitInstanceNotify = context.EmitInstanceNotify;
         IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
         if (context.ActionParameterNames is { Count: > 0 }) {
             var merged = parameters is null
@@ -504,10 +502,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
     /// source-stage exit effects (when known), CurrentStage assignment, target-stage
-    /// entry effects (in try), then <c>Notify{Target}Subscribers(previousStageN)</c>
+    /// entry effects, then <c>Notify{Target}Subscribers(previousStageN)</c>
     /// when the target is a watched stage (see
-    /// <see cref="LoweringContext.PostTransitionNotifyStages"/>), and finally
-    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> when instance notify is on.
+    /// <see cref="LoweringContext.PostTransitionNotifyStages"/>).
+    /// Does not emit instance <c>Notify</c> — that method exists only on the
+    /// simulator heap object; printed classes do not have one.
     /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
     /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
     /// outer pre-stage. Not a host-ABI node.
@@ -598,17 +597,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             1 => tryNodes[0],
             _ => new Block(tryNodes)
         };
-        if (_emitInstanceNotify) {
-            nodes.Add(new TryCatchFinally(
-                tryBody,
-                CatchClauses: null,
-                FinallyBlock: new Invoke(
-                    new Member(Subject, "Notify"),
-                    new Constant(t.TargetStage.StageName))));
-        }
-        else if (tryNodes.Count > 0) {
+        if (tryNodes.Count > 0)
             nodes.Add(tryBody);
-        }
 
         _sourceStageName = t.TargetStage.StageName;
 
@@ -1036,7 +1026,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
         if (_domain is null || _analysis is null)
-            return null;
+            throw new InvalidOperationException(
+                "Cannot probe 'create in' without a domain and analysis; dropping the probe would skip the constraint check.");
 
         var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
         var relationship = resolvedTarget?.Relationship

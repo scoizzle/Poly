@@ -439,11 +439,11 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Evaluate entity-level guard policies.</item>
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
-    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. Unique assign is <c>EnsureUnique</c> then Assignment. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. Unique assign is <c>EnsureUnique</c> then Assignment. StageTransition assigns CurrentStage and, when the target is watched, calls <c>Notify{Stage}Subscribers</c>.</item>
     ///       <item><b>Create / create-in</b> → instance factories via InvokeNamed (guarded-probe + body for mixed if+create; not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
-    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
+    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage; store fan-out goes through <c>Notify{Stage}Subscribers</c> when the target is a watched stage (instance <c>Notify(string)</c> is not emitted).</item>
     /// </list>
     ///
     /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,
@@ -653,37 +653,6 @@ public sealed partial record DomainEntityInstance {
         }
 
         return ActionInvocationResult.InvalidArguments(actionName, message);
-    }
-
-    /// <summary>
-    /// Evaluates a list of <see cref="PropertyBinding"/> expressions against the
-    /// current instance's property bag and returns the results as a dictionary.
-    /// Each binding's expression is lowered, compiled, and executed via the VM.
-    /// Returns null when <paramref name="bindings"/> is empty.
-    /// </summary>
-    private IReadOnlyDictionary<string, object?>? EvaluateParameterBindings(
-        IReadOnlyList<PropertyBinding> bindings) {
-        if (bindings is null || bindings.Count == 0) return null;
-
-        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
-        var subjectParam = new Parameter("entity", new TypeReference(Entity.Name));
-
-        foreach (var binding in bindings) {
-            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
-                result[binding.PropertyName] = fromParam;
-                continue;
-            }
-            var loweringPass = new DomainExpressionLoweringPass(new LoweringContext(
-                new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name));
-            var lowered = loweringPass.Lower(binding.Expression, subjectParam);
-            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            result[binding.PropertyName] = BoxPathPrefixLeaf(
-                binding.Expression, exec.Result.GetValue<object>());
-        }
-
-        return result.Count > 0 ? result : null;
     }
 
     private static void ThrowIfEffectListFailed(DomainResult? failed, string context) {

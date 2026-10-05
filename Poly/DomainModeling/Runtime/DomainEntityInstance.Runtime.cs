@@ -415,65 +415,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Outbound links only: this instance as relationship source → targets
-    /// (<see cref="DomainInstanceStore.GetLinkedTargets"/>). Reverse-side
-    /// navigate is rejected (matches DMEFF007). Self-relationships do not
-    /// include inverse links where this instance is the target.
-    /// </summary>
-    private IReadOnlyList<DomainEntityInstance> GetOutboundRelatedInstances(string relationshipName) {
-        if (Domain is null)
-            throw new InvalidOperationException(
-                $"Cannot resolve relationship '{relationshipName}' without a domain.");
-
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-        // ResolveSourceRelationshipOrThrow also reports the precise cause when the
-        // relationship exists on a different source entity (reverse-side invoke).
-        var relationship = ResolveSourceRelationshipOrThrow(relationshipName,
-            $"Relationship '{relationshipName}' not found in domain '{Domain.Name}'.");
-
-        if (relationship.Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.OneToMany))
-            throw new InvalidOperationException(
-                $"Cross-entity invoke on '{relationshipName}' ({relationship.Cardinality}) is not supported yet. " +
-                "Use OneToOne or OneToMany from the source.");
-
-        if (Store is null)
-            throw new InvalidOperationException(
-                "Cannot resolve relationship target without a DomainInstanceStore. " +
-                "Call store.Add(instance) first.");
-
-        return Store.GetLinkedTargets(relationshipName, this)
-            .Where(t => string.Equals(t.Entity.Name, relationship.Target.TypeName, StringComparison.Ordinal))
-            .ToList();
-    }
-
-    // ── Relationship presence Store read ──────────────────────────────────────
-
-    /// <summary>
-    /// When <paramref name="target"/> is a bare relationship name on this entity as source,
-    /// evaluates store-linked presence (count &gt; 0). Returns false from <c>out present</c>
-    /// with return false when the target is not an outbound relationship (caller uses bag path).
-    /// </summary>
-    private bool TryEvaluateRelationshipPresence(DomainExpression target, out bool present) {
-        present = false;
-        if (target is not PropertyAccess pa)
-            return false;
-        if (Domain is null)
-            return false;
-
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        if (!analysis.TryGetRelationship(Domain, Entity.Name, pa.Name, out var relationship) || relationship is null)
-            return false;
-        if (!string.Equals(relationship.Source.TypeName, Entity.Name, StringComparison.Ordinal))
-            return false;
-
-        // Outbound relationship: require store; empty links are false (not throw).
-        var targets = GetOutboundRelatedInstances(pa.Name);
-        present = targets.Count > 0;
-        return true;
-    }
-
-    /// <summary>
     /// VM bools are long 0/1 on the stack. Boxing them as Int64 made
     /// <c>require not</c> of a path-prefix comparison compile as Not(Int64).
     /// </summary>

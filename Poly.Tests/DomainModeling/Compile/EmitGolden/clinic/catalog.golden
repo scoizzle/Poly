@@ -1,1 +1,5 @@
-SyntaxModule|module|Lower
+scaffolding|Clinic|Lower
+entity|Clinic/Doctor|Lower
+entity|Clinic/Patient|Lower
+entity|Clinic/Schedule|Lower
+entity|Clinic/Visit|Lower

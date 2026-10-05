@@ -1,6 +1,6 @@
 # Pipeline status
 
-**Updated:** 2026-10-02
+**Updated:** 2026-10-05
 **Authority:** this file is the only CURRENT. Other indexes link here. They do not copy this pick.
 
 ## Agent pick
@@ -8,7 +8,7 @@
 ```text
 DONE:    docs/plans/archive/ (latest buckets: completed-2026-08-late, completed-2026-09)
 CURRENT: (none)
-THEN:    platform-contract residuals F7–F8 (docs/agent/reviews/2026-10-01-platform-contract-followups.md); MCP mut-safety; grammar wrap-up; V3 naming
+THEN:    platform-contract residual F8 (docs/agent/reviews/2026-10-01-platform-contract-followups.md); MCP mut-safety; grammar wrap-up; V3 naming
 PARKED:  docs/plans/parked/ (e2e, pack, p1, mut-safety, gcyc); pack-2 IDomainPack; session four-slot Meaning/Emit
 PULL:    E5; EF codegen; naming cleanup
 ```

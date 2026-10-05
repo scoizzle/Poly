@@ -40,11 +40,16 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Empty before Lower. Each <see cref="Lower"/> replaces it with a new catalog holding
-    /// only the privileged SyntaxModule placeholder; it is not an emit/contributor file inventory.
-    /// This is the live instance: anything registered on it by hand is dropped by the next Lower.
+    /// Empty before the first Lower or Emit. Each <see cref="Lower"/> or <see cref="Emit"/> replaces
+    /// it with a new catalog holding the trees it made (when calls overlap, the last to finish
+    /// wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per entity
+    /// (the entity type and its stage enum). It is not an emit/contributor file inventory.
+    /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
+
+    private const string ScaffoldingType = "scaffolding";
+    private const string EntityType = "entity";
 
     private Analyzer? _analyzer;
 
@@ -149,11 +154,23 @@ public sealed class DomainSession {
     /// <summary>
     /// Stage 3: one operation module (type definitions, action bodies,
     /// policy methods, subscription handlers, and OnEntry/OnExit bodies).
-    /// Simulate and print consume this result.
+    /// Simulate and print consume this result. Throws <see cref="InvalidOperationException"/>
+    /// when analysis reported errors. Throws <see cref="FormatException"/> when a domain
+    /// or entity name cannot be part of an artifact id, and <see cref="InvalidOperationException"/>
+    /// when two lowered types would collide (see <c>RegisterTrees</c>).
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        var (module, catalog) = LowerToCatalog(domain, analysis);
+        ArtifactCatalog = catalog;
+        return module;
+    }
+
+    // Emit uses the catalog returned here, not the ArtifactCatalog property, which another
+    // Lower or Emit on this session may replace at any time.
+    private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
+        Domain domain, AnalysisResult analysis) {
         if (analysis.HasErrors) {
             var messages = string.Join("; ", analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -161,13 +178,48 @@ public sealed class DomainSession {
             throw new InvalidOperationException(
                 $"Cannot lower '{domain.Name}' because analysis reported errors: {messages}");
         }
+
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        ArtifactCatalog = new ArtifactCatalog();
-        ArtifactCatalog.DeclareType("SyntaxModule", mayPointAt: []);
-        ArtifactCatalog.Register(new Artifact(
-            new ArtifactDescriptor(ArtifactId.Create(["module"], "SyntaxModule"), "Lower"),
-            Payload: null));
-        return module;
+        return (module, RegisterTrees(domain, module));
+    }
+
+    /// <summary>
+    /// Splits the module into one tree per entity (the entity type and its stage enum) and one
+    /// scaffolding tree holding everything else (domain enums, DomainResult, and so on).
+    /// Each tree's payload is a read-only copy of its type definitions. A type that two trees
+    /// would hold, or that the module defines twice (for example an entity named
+    /// <c>DomainResult</c>, or entities <c>X</c> and <c>XStage</c>), is refused: the printed C#
+    /// would not compile either.
+    /// </summary>
+    private static ArtifactCatalog RegisterTrees(Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
+        var catalog = new ArtifactCatalog();
+        catalog.DeclareType(ScaffoldingType, mayPointAt: []);
+        catalog.DeclareType(EntityType, mayPointAt: []);
+        var entities = domain.Types.OfType<Entity>().ToList();
+        static bool Belongs(TypeDefinitionNode type, Entity entity) =>
+            type.Name == entity.Name || type.Name == $"{entity.Name}Stage";
+        foreach (var type in module) {
+            var owners = entities.Where(e => Belongs(type, e)).Select(e => e.Name).ToList();
+            if (owners.Count > 1)
+                throw new InvalidOperationException(
+                    $"Type '{type.Name}' belongs to the trees of entities '{owners[0]}' and '{owners[1]}'.");
+        }
+        var twice = module
+            .GroupBy(t => (t.Name, Arity: t.GenericParameters?.Count ?? 0))
+            .FirstOrDefault(g => g.Count() > 1);
+        if (twice is not null)
+            throw new InvalidOperationException($"The lowered module defines type '{twice.Key.Name}' more than once.");
+        foreach (var entity in entities) {
+            var trees = module.Where(t => Belongs(t, entity)).ToArray();
+            catalog.Register(new Artifact(
+                new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], EntityType), "Lower"),
+                Payload: trees.AsReadOnly()));
+        }
+        var scaffolding = module.Where(t => !entities.Any(e => Belongs(t, e))).ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], ScaffoldingType), "Lower"),
+            Payload: scaffolding.AsReadOnly()));
+        return catalog;
     }
 
     /// <summary>
@@ -179,35 +231,24 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
-        // Lower puts the SyntaxModule placeholder into a new ArtifactCatalog.
-        var types = Lower(domain, analysis);
-        var interpAnalysis = TryAnalyzeForEmit(types);
+        // The files come from this call's own catalog; the analysis below still covers the
+        // whole module, because the generator resolves types across entities from one analysis.
+        var (module, catalog) = LowerToCatalog(domain, analysis);
+        ArtifactCatalog = catalog;
+        var interpAnalysis = TryAnalyzeForEmit(module);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
-        var entities = domain.Types.OfType<Entity>().ToList();
-        foreach (var entity in entities) {
-            var entityNames = new HashSet<string>(StringComparer.Ordinal) {
-                entity.Name,
-                $"{entity.Name}Stage"
-            };
-            var entityDefs = types
-                .Where(d => entityNames.Contains(d.Name))
-                .ToList();
-            if (entityDefs.Count == 0)
-                throw new InvalidOperationException(
-                    $"DomainProgramProjection produced no type definitions for entity '{entity.Name}'.");
-            files.Add(($"{entity.Name}.cs", generator.Generate(entityDefs)));
-        }
-
-        var scaffoldingDefs = types
-            .Where(d => !entities.Any(e =>
-                d.Name == e.Name || d.Name == $"{e.Name}Stage"))
-            .ToList();
-        if (scaffoldingDefs.Count > 0)
-            files.Add(("Poly.Types.cs", generator.Generate(scaffoldingDefs)));
+        // Files come in registration order: entities in domain order, then the scaffolding.
+        foreach (var tree in catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
+            files.Add(($"{tree.Descriptor.Id.Segments[^1]}.cs", generator.Generate(TypesOf(tree))));
+        var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
+        files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
         return files;
     }
+
+    private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>
+        (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;
 
     /// <summary>
     /// Runs interpretation analysis on lowered type definitions so the C# generator

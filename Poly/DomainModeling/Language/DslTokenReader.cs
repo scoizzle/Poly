@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Poly.Grammar;
 
 namespace Poly.DomainModeling.Language;
@@ -57,7 +59,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         if (char.IsDigit(ch))
             return ScanNumber();
 
-        if (char.IsLetter(ch) || ch == '_') {
+        if (IsWordStart(ch)) {
             var word = ScanWord();
             return Make(WordToKind(word), word);
         }
@@ -137,10 +139,38 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
 
     private string ScanWord() {
         var start = _pos;
-        while (_pos < _text.Length && (char.IsLetterOrDigit(PeekChar()) || PeekChar() == '_'))
+        while (_pos < _text.Length && IsWordPart(PeekChar()))
             AdvanceChar();
         return _text[start.._pos];
     }
+
+    private static bool IsWordStart(char ch) => char.IsLetter(ch) || ch == '_';
+
+    private static bool IsWordPart(char ch) => char.IsLetterOrDigit(ch) || ch == '_';
+
+    /// <summary>
+    /// Whether <paramref name="text"/> is exactly one name the parser accepts for an entity,
+    /// stage, action, policy and so on: a letter or <c>_</c>, then letters, digits or <c>_</c>,
+    /// and not a keyword (<c>stage</c>, <c>length</c>, <c>Text</c>, ...). Uses the scanner's own
+    /// character rules and keyword map, so the DSL and callers that build the same names by
+    /// hand cannot disagree.
+    /// </summary>
+    public static bool IsIdentifier(string? text) => IsWord(text) && WordToKind(text) == DslTokenKind.Identifier;
+
+    /// <summary>
+    /// Whether the parser accepts <paramref name="name"/> for a property of type
+    /// <paramref name="typeName"/>: any <see cref="IsIdentifier"/> name, or a primitive type keyword
+    /// (<c>Text</c>, <c>Number</c>, <c>Boolean</c>) when the type is a primitive by
+    /// <see cref="DslGrammar.IsPrimitiveType"/>, the test the parser uses
+    /// (<c>Number: Text</c> and <c>Text: Date</c> parse, <c>Text: Money</c> does not).
+    /// </summary>
+    public static bool IsPropertyName(string? name, string typeName, Func<string, bool> isKnownPrimitiveName) =>
+        IsIdentifier(name)
+        || (IsWord(name) && DslGrammar.IsPrimitiveTypeKind(WordToKind(name))
+            && IsWord(typeName) && DslGrammar.IsPrimitiveType(WordToKind(typeName), typeName, isKnownPrimitiveName));
+
+    private static bool IsWord([NotNullWhen(true)] string? text) =>
+        !string.IsNullOrEmpty(text) && IsWordStart(text[0]) && text.All(IsWordPart);
 
     private char PeekChar(int ahead = 0) => _pos + ahead < _text.Length ? _text[_pos + ahead] : '\0';
 

@@ -22,13 +22,13 @@ public class UnifiedAddTests {
     [Arguments("My Entity")]
     [Arguments("A/B")]
     [Arguments("A#B")]
-    public async Task Add_Entity_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+    public async Task Add_Entity_WithNameTheDslRefuses_Fails(string name) {
         var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
 
         var response = EvolveTool.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("must be non-empty");
+        await Assert.That(response.Message).Contains("is not a valid name");
         var data = (DomainOverviewData)QueryTool.GetDomainOverview(sessionId).Data!;
         await Assert.That(data.EntityNames).DoesNotContain(name);
     }
@@ -37,11 +37,11 @@ public class UnifiedAddTests {
     [Arguments("My Domain")]
     [Arguments("A/B")]
     [Arguments("A#B")]
-    public async Task CreateDomainSession_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+    public async Task CreateDomainSession_WithNameTheDslRefuses_Fails(string name) {
         var response = SessionTool.CreateDomainSession(name);
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("must be non-empty");
+        await Assert.That(response.Message).Contains("is not a valid name");
         await Assert.That(response.SessionId).IsNull();
     }
 

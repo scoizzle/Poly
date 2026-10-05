@@ -17,8 +17,11 @@ public static partial class DirectVmAbiEmitter {
         // Handle Invoke(Member(instance, "Method"), args) — resolve the method
         // and call it directly via CLR reflection, bypassing full lambda handling.
         if (invoke.Delegate is Member member) {
-            var resolved = ctx.Analysis?.GetResolvedMember(member)
-                ?? ctx.Analysis?.GetResolvedMember(invoke);
+            // The invoke carries the overload match. The member node keeps the
+            // first same-named member, which is the wrong MethodInfo when the
+            // callee is overloaded.
+            var resolved = ctx.Analysis?.GetResolvedMember(invoke)
+                ?? ctx.Analysis?.GetResolvedMember(member);
             var method = resolved as ITypeMethod;
             if (method is not null) {
                 var methodInfo = (method as ClrMethod)?.MethodInfo;
@@ -102,6 +105,20 @@ public static partial class DirectVmAbiEmitter {
                     fullBody.Add(Assign(ctx.RingVar(slot),
                         ConvertClrToRing(Convert(callExpr, typeof(object)), resultType, ctx)));
                     return Block(fullBody);
+                }
+
+                if (method is AstMethodDefinition astMethod && HasExecutableBody(astMethod.DefinitionNode.Body)) {
+                    var table = TryCompileAstCallable(
+                        astMethod.DefinitionNode,
+                        astMethod.DefinitionNode.Body!,
+                        astMethod.DefinitionNode.Parameters ?? [],
+                        astMethod.DeclaringTypeDefinition,
+                        ctx,
+                        instanceSlot: !astMethod.IsStatic);
+                    // A body the VM cannot analyze (sibling types, host stubs) stays
+                    // on the CLR / InvokeNamed path.
+                    if (table is not null)
+                        return EmitAstInvoke(invoke, member, astMethod, table, ctx);
                 }
             }
 
@@ -472,7 +489,8 @@ public static partial class DirectVmAbiEmitter {
         Action<VmState>[] functionTable,
         CompilationMode mode,
         AnalysisResult analysis,
-        HashSet<object> capturedBindings) {
+        HashSet<object> capturedBindings,
+        bool instanceSlot = false) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
@@ -480,6 +498,10 @@ public static partial class DirectVmAbiEmitter {
         fnCtx.Analysis = analysis;
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
+        // Instance calls pass the receiver handle at frame slot 0. User
+        // parameters start at slot 1 and are matched by name.
+        if (instanceSlot)
+            fnCtx.ParamSlotOffset = -1;
         var bodyExprs = new List<Expression>();
 
         bodyExprs.Add(Label(fnCtx.EntryLabel));
@@ -489,6 +511,10 @@ public static partial class DirectVmAbiEmitter {
             Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         bodyExprs.Add(Assign(fnCtx.FramePosLocal,
             Property(fnCtx.State, nameof(VmState.FramePos))));
+        if (instanceSlot) {
+            bodyExprs.Add(Assign(fnCtx.InstanceHandle,
+                ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal)));
+        }
 
         if (mode != CompilationMode.NoDebug) {
             fnCtx.DebugHookProp = Property(fnCtx.State, nameof(VmState.DebugHook));
@@ -528,6 +554,235 @@ public static partial class DirectVmAbiEmitter {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(fnCtx.Locals, bodyExprs), fnCtx.State);
         return delegateExpr.Compile();
+    }
+
+    private static readonly object AstCallableGate = new();
+    private static readonly ConditionalWeakTable<Node, Action<VmState>[]> AstCallables = new();
+
+    private static readonly MethodInfo InvokeAstFunctionInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeAstFunction),
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    /// <summary>
+    /// Call a compiled AST constructor or method. <paramref name="args"/>[0] is
+    /// the receiver handle when the member is an instance member. Return writes
+    /// <c>slots[FramePos]</c> and jumps to this function's exit, not the program exit.
+    /// </summary>
+    private static long InvokeAstFunction(VmState state, Action<VmState> function, long[] args) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        var stack = state.Stack;
+        int callSp = stack.StackPointer;
+        int header = 2;
+        int n = Math.Max(1, args.Length);
+        int need = callSp + header + n;
+        if (need > stack.RawSlots.Length)
+            throw new InvalidOperationException("VM: value stack overflow.");
+        stack.SetStackPointer(need);
+        var slots = stack.RawSlots;
+        slots[callSp] = state.FramePos;
+        slots[callSp + 1] = callSp;
+        for (int i = 0; i < args.Length; i++)
+            slots[callSp + header + i] = args[i];
+
+        int savedFp = state.FramePos;
+        int savedClosure = state.ClosureHandle;
+        state.FramePos = callSp + header;
+        try {
+            function(state);
+            return slots[callSp + header];
+        }
+        finally {
+            state.FramePos = savedFp;
+            state.ClosureHandle = savedClosure;
+            stack.SetStackPointer(callSp);
+        }
+    }
+
+    private static bool HasExecutableBody(Node? body) =>
+        body is not null && body is not Block { Nodes.Count: 0 };
+
+    private static Expression EmitAstInvoke(
+        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, AbiCtx ctx) {
+        var definition = method.DefinitionNode;
+        bool isStatic = method.IsStatic;
+        int depth = ctx.RingDepth;
+        var seq = new List<Expression>();
+        Expression? receiver = null;
+        if (!isStatic) {
+            if (IsTypeNameReceiver(member.Value))
+                throw new InvalidOperationException(
+                    $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
+            seq.Add(CompileNode(member.Value, ctx));
+            int instanceSlot = ctx.RingDepth - 1;
+            seq.Add(FoldResultToSlot(ref instanceSlot, depth, ctx));
+            ctx.RingDepth = instanceSlot + 1;
+            receiver = ctx.RingVar(instanceSlot);
+        }
+
+        var parameters = definition.Parameters ?? [];
+        if (invoke.Arguments.Length > parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: method '{method.Name}' has {parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
+
+        int[] argSlots = new int[invoke.Arguments.Length];
+        for (int i = 0; i < invoke.Arguments.Length; i++) {
+            int before = ctx.RingDepth;
+            seq.Add(CompileNode(invoke.Arguments[i], ctx));
+            int got = ctx.RingDepth - 1;
+            seq.Add(FoldResultToSlot(ref got, before, ctx));
+            argSlots[i] = got;
+            ctx.RingDepth = got + 1;
+        }
+
+        var inits = new List<Expression>(parameters.Count + 1);
+        if (receiver is not null)
+            inits.Add(receiver);
+        for (int i = 0; i < parameters.Count; i++) {
+            if (i >= invoke.Arguments.Length) {
+                inits.Add(ParameterDefaultLong(parameters[i], ctx));
+                continue;
+            }
+            // A stack scalar passed to a reference parameter is a heap handle
+            // inside the callee. Object slots otherwise read the raw bits as a handle.
+            var arg = invoke.Arguments[i];
+            inits.Add(ArgumentIsStackScalar(arg, ctx) && !ParameterIsValueType(parameters[i])
+                ? Convert(
+                    Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(argSlots[i]), typeof(object))),
+                    typeof(long))
+                : ctx.RingVar(argSlots[i]));
+        }
+
+        int result = ctx.AllocSlot();
+        ctx.RingDepth = result + 1;
+        var call = Call(
+            null, InvokeAstFunctionInfo, ctx.State,
+            ArrayIndex(Constant(table), Constant(0)),
+            NewArrayInit(typeof(long), inits));
+        var returnClr = method.MemberTypeDefinition.GetRuntimeType();
+        bool isVoid = returnClr == typeof(void)
+            || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
+        if (isVoid) {
+            seq.Add(call);
+            seq.Add(Assign(ctx.RingVar(result), Constant(0L)));
+        }
+        else {
+            seq.Add(Assign(ctx.RingVar(result), call));
+        }
+        return Block(seq);
+    }
+
+    private static Action<VmState>[]? TryCompileAstCallable(
+        Node key,
+        Node body,
+        IReadOnlyList<Parameter> parameters,
+        ITypeDefinition declaring,
+        AbiCtx caller,
+        bool instanceSlot) {
+        Action<VmState>[] slot;
+        lock (AstCallableGate) {
+            if (AstCallables.TryGetValue(key, out slot!))
+                return slot;
+            slot = new Action<VmState>[1];
+            AstCallables.Add(key, slot);
+        }
+
+        try {
+            var lambdas = new List<Lambda>();
+            CollectLambdas(body, lambdas);
+            if (lambdas.Count > 0)
+                throw new InvalidOperationException(
+                    "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
+            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis);
+            if (analysis.HasErrors) {
+                var text = string.Join("; ", analysis.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Take(8)
+                    .Select(d => d.Message));
+                throw new InvalidOperationException(
+                    "VM compile rejected: AST member body analysis reported errors: " + text);
+            }
+            slot[0] = CompileFunctionBody(
+                body,
+                parameters,
+                [],
+                [],
+                caller.Mode,
+                analysis,
+                new HashSet<object>(ReferenceEqualityComparer.Instance),
+                instanceSlot);
+            return slot;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) {
+            lock (AstCallableGate) {
+                AstCallables.Remove(key);
+            }
+            // Store jobs are the AST. A body that does not compile must not
+            // fall through to a CLR method of the same name.
+            if (key is MethodDefinitionNode host && IsDictionaryHostJob(host.Name))
+                throw new InvalidOperationException(
+                    $"VM compile rejected: AST host job '{host.Name}' could not be compiled. {ex.Message}",
+                    ex);
+            return null;
+        }
+    }
+
+    private static bool IsDictionaryHostJob(string name) =>
+        name is "EnsureUnique" or "Notify" or "LinkRelated"
+            or "Create" or "CreateIn" or "ProbeCreate";
+
+    private static bool ArgumentIsStackScalar(Node arg, AbiCtx ctx) {
+        var kind = ctx.Analysis?.GetValueRepresentation(arg);
+        if (kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+            return true;
+        if (kind is ValueRepresentationKind.HeapRef)
+            return false;
+        return arg is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
+            or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
+            || arg is Constant { Value: long or int or bool or byte or short or sbyte or char or uint or ulong or ushort };
+    }
+
+    private static bool ParameterIsValueType(Parameter parameter) {
+        if (parameter.TypeReference is PrimitiveTypeReference prim)
+            return prim.PrimitiveId.GetClrType() is { IsValueType: true };
+        if (parameter.TypeReference is ClrTypeReference clr)
+            return clr.RuntimeType.IsValueType;
+        return false;
+    }
+
+    private static AnalysisResult AnalysisForAstBody(
+        Node body, ITypeDefinition declaring, AnalysisResult? caller) {
+        if (caller is not null && AstBodyMembersResolved(body, caller))
+            return caller;
+        if (declaring is not AstTypeDefinition astType)
+            throw new InvalidOperationException(
+                "VM compile rejected: AST member body is not on an AST type.");
+        // Copy the provider. Analyzer reuses a TypeDefinitionProviderCollection
+        // and the type-definition pass pushes a registry onto it.
+        var provider = astType.ResolutionProvider;
+        if (provider is TypeDefinitionProviderCollection collection)
+            provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
+        return Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
+    }
+
+    private static bool AstBodyMembersResolved(Node node, AnalysisResult analysis) {
+        if (node is Member member && analysis.GetResolvedMember(member) is null)
+            return false;
+        foreach (var child in node.Children) {
+            if (child is not null && !AstBodyMembersResolved(child, analysis))
+                return false;
+        }
+        return true;
+    }
+
+    private static Expression ParameterDefaultLong(Parameter parameter, AbiCtx ctx) {
+        if (parameter.DefaultValue is not Constant constant)
+            return Constant(0L);
+        if (TryValueToLong(constant.Value, out long scalar))
+            return Constant(scalar);
+        return Convert(
+            Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(constant.Value), typeof(object))),
+            typeof(long));
     }
 
     // ── Helpers ────────────────────────────────────

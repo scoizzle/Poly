@@ -5,14 +5,15 @@
 
 ## Action- and stage-scoped policies
 
-`session.Lower` / the operation module carries entity-level policy methods, subscription handlers, and OnEntry/OnExit bodies. Action- and stage-scoped policies are still side-lowered in `RuntimeAnalysisCache.CompletePolicyBodies` and are not module methods.
+Closed 2026-10-01. `session.Lower` emits one bool method per policy name (entity, stage, and action-local definitions). A second definition of that name is a structural error. `CompletePolicyBodies` fills only a name the module did not emit. Domain-bound invoke does not re-check stage policies.
 
 ## Execute-time `DomainExpressionLoweringPass` sites
 
-These still lower a `DomainExpression` at execute time rather than binding a module body:
+Grep of `new DomainExpressionLoweringPass` under `Poly/DomainModeling/Runtime` on 2026-10-05. #94 deleted the uncalled helpers `EvaluateParameterBindings`, `BindPeerInEffect`, and `EvaluateExprOnPeer`.
 
-| File:line | Site |
-|-----------|------|
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:659` | `PrevalidateCreateInitializers` |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:721` | `CreateChildInstance` initializer eval |
-| (removed by P3-A #79) | Quantifier predicates no longer re-lower at execute (`EvaluateBodyOnTarget` / Store quantifier jobs gone) |
+| File:line | Site | Caller |
+|-----------|------|--------|
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:566` | `PrevalidateCreateInitializers` | `ValuesAsLiteralBindings` at `:537` |
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:629` | `CreateChildInstance` initializer eval | live; callers pass literal bindings |
+
+Quantifier predicates no longer re-lower at execute (P3-A #79: `EvaluateBodyOnTarget` / Store quantifier jobs gone). The two sites above still lower literal bindings. That residual is recorded here and is not CURRENT.

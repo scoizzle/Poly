@@ -129,9 +129,14 @@ public sealed class DomainSession {
         return Open(domain);
     }
 
-    /// <summary>Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).</summary>
+    /// <summary>
+    /// Analyzes <paramref name="domain"/> with this session's pipeline (type maps included).
+    /// The session is bound before the pipeline so passes that ask the cache for maps
+    /// see this compilation, not a second session built from <see cref="ExtensionCatalog.Core"/>.
+    /// </summary>
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        RuntimeAnalysisCache.Bind(domain, this);
         var analysis = Analyzer.Analyze(domain);
         RuntimeAnalysisCache.Bind(domain, this, analysis);
         return analysis;
@@ -148,9 +153,9 @@ public sealed class DomainSession {
 
     /// <summary>
     /// Stage 3: one operation module (type definitions, action bodies,
-    /// entity-level policy methods, subscription handlers, and OnEntry/OnExit
-    /// bodies). Action- and stage-scoped policies are not carried here.
-    /// Simulate and print consume this result. Throws <see cref="FormatException"/> when a domain
+    /// policy methods, subscription handlers, and OnEntry/OnExit bodies).
+    /// Simulate and print consume this result. Throws <see cref="InvalidOperationException"/>
+    /// when analysis reported errors. Throws <see cref="FormatException"/> when a domain
     /// or entity name cannot be part of an artifact id, and <see cref="InvalidOperationException"/>
     /// when two lowered types would collide (see <c>RegisterTrees</c>).
     /// </summary>
@@ -166,6 +171,14 @@ public sealed class DomainSession {
     // Lower or Emit on this session may replace at any time.
     private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
         Domain domain, AnalysisResult analysis) {
+        if (analysis.HasErrors) {
+            var messages = string.Join("; ", analysis.Diagnostics
+                .Where(d => d.Severity == DiagnosticSeverity.Error)
+                .Select(d => d.Message));
+            throw new InvalidOperationException(
+                $"Cannot lower '{domain.Name}' because analysis reported errors: {messages}");
+        }
+
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         return (module, RegisterTrees(domain, module));
     }

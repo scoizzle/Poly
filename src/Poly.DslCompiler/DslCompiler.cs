@@ -135,6 +135,9 @@ public sealed class DslCompiler {
         var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
         var domainName = nameChange?.Name ?? "PolyDomain";
         var emptyDomain = new Domain(domainName, []);
+        // OpenCompileSession links sqlite/sqlserver in place of generic persistence.
+        // The domain must name that unit, or analysis rejects an id the session did not load.
+        changes = RecordLinkedVendor(changes, session);
         EvolutionResult outcome;
         try {
             outcome = new DomainEvolution(emptyDomain).Apply(changes, session: session);
@@ -176,6 +179,44 @@ public sealed class DslCompiler {
         .With(new SqliteLibrary())
         .With(new SqlServerLibrary())
         .With(new HttpLibrary());
+
+    /// <summary>
+    /// Source <c>uses persistence</c> plus a vendor pack links the vendor, not both.
+    /// Rewrite the recorded id to the library <paramref name="session"/> loaded.
+    /// </summary>
+    private static List<DomainChange> RecordLinkedVendor(List<DomainChange> changes, DomainSession session) {
+        string? vendor = null;
+        var loadedPersistence = false;
+        foreach (var id in session.Extensions) {
+            if (id is "sqlite" or "sqlserver")
+                vendor = id;
+            else if (id == "persistence")
+                loadedPersistence = true;
+        }
+        if (vendor is null || loadedPersistence)
+            return changes;
+
+        var hasVendor = false;
+        foreach (var change in changes) {
+            if (change is AddDomainExtensionChange add
+                && string.Equals(add.ExtensionId, vendor, StringComparison.Ordinal))
+                hasVendor = true;
+        }
+
+        var rewritten = new List<DomainChange>(changes.Count);
+        foreach (var change in changes) {
+            if (change is AddDomainExtensionChange add
+                && string.Equals(add.ExtensionId, "persistence", StringComparison.Ordinal)) {
+                if (!hasVendor) {
+                    rewritten.Add(new AddDomainExtensionChange(vendor));
+                    hasVendor = true;
+                }
+                continue;
+            }
+            rewritten.Add(change);
+        }
+        return rewritten;
+    }
 
     private static IReadOnlyList<string> SeedFor(DbmsPack dbms, CompileMode mode) {
         if (mode is CompileMode.Entities)

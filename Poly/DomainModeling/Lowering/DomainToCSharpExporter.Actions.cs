@@ -82,7 +82,7 @@ public sealed partial class DomainToCSharpExporter {
             postTransitionNotifyStages, loweringSourceStage, domain, analysis, isVoid, names);
         effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
-            guardSourceStage, stageEnumTypeName, isVoid, analysis);
+            guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage);
     }
 
     private static void AddStageDispatchedActionMethod(Entity entity,
@@ -168,6 +168,54 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
+    /// Stage policies hold for every action that runs in that stage. A stage-scoped
+    /// body checks that stage. An entity-level body checks each stage only while
+    /// <c>CurrentStage</c> is that stage. <c>require not Name</c> suppresses the gate.
+    /// </summary>
+    private static void EmitStagePolicyGuards(
+        Action action, Entity entity, string? policyStageName, string? stageEnumTypeName,
+        List<Node> nodes, Func<string, Node> failureReturn) {
+        void EmitOne(Policy policy) {
+            if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
+                return;
+            nodes.Add(new IfStatement(
+                new Syntactic.Not(new Invoke(new Member(new ThisReference(), policy.Name))),
+                new Block([failureReturn(
+                    $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
+        }
+
+        if (policyStageName is not null) {
+            var stage = entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, policyStageName, StringComparison.Ordinal));
+            if (stage is null)
+                return;
+            foreach (var policy in stage.Policies)
+                EmitOne(policy);
+            return;
+        }
+
+        if (stageEnumTypeName is null)
+            return;
+        foreach (var stage in entity.Stages) {
+            if (stage.Policies.Count == 0)
+                continue;
+            var checks = new List<Node>();
+            var outer = nodes;
+            nodes = checks;
+            foreach (var policy in stage.Policies)
+                EmitOne(policy);
+            nodes = outer;
+            if (checks.Count == 0)
+                continue;
+            nodes.Add(new IfStatement(
+                new Equal(
+                    new Member(new ThisReference(), "CurrentStage"),
+                    new Member(new NamedTypeReference(stageEnumTypeName), stage.Name)),
+                new Block(checks)));
+        }
+    }
+
+    /// <summary>
     /// Builds a method body with require gate guard clauses prepended before the effects.
     /// Always references entity-level policy methods (<c>bool PolicyName()</c>), not synthetic
     /// action-scoped policy copies. For <c>require not PolicyName</c> (which the parser encodes
@@ -189,7 +237,7 @@ public sealed partial class DomainToCSharpExporter {
     private static Block BuildActionBodyWithGuards(
         Action action, Entity entity, Node? effectsBody,
         Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
-        bool isVoid = true, INodeMetadataProvider? analysis = null) {
+        bool isVoid = true, INodeMetadataProvider? analysis = null, string? policyStageName = null) {
 
         // Build the DomainResult type reference for failure/success returns
         Node actionResultType;
@@ -256,6 +304,8 @@ public sealed partial class DomainToCSharpExporter {
                         $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
             }
         }
+
+        EmitStagePolicyGuards(action, entity, policyStageName, stageEnumTypeName, nodes, FailureReturn);
 
         // Append the effects body
         if (effectsBody is Block block) {
@@ -449,7 +499,6 @@ public sealed partial class DomainToCSharpExporter {
             Domain: domain,
             EnumPropertyNames: enumProps,
             ActionResultType: actionResultType,
-            EmitInstanceNotify: false,
             Names: names);
         var effectPass = new EffectLoweringPass(entity, context);
         return effectPass.LowerActionBody(action.Effects);

@@ -19,29 +19,12 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Park before open** | Finish or park the live suite before admitting the next. |
 | **Proposals ≠ queues** | Research / design locks stay parked until a suite is solidified and admitted. |
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
-| **DONE same PR** | Suite gate Done → update PIPELINE-STATUS + READY-TO-TASK + master-roadmap Agent pick together. |
+| **DONE same change** | Suite gate Done → update [`PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) only. |
 
-**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `(none)`**. Trunk is `master`. Do not restate a second queue here.  
-**Ready suites index:** [`simple-agent-tasks/READY-TO-TASK.md`](simple-agent-tasks/READY-TO-TASK.md)  
-**Milestones:** [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (mirrors Agent pick)  
-**Pre-ship (always-on):** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `(none)`**. While it says `(none)`, do not open sibling task files. Finished suites are under [`archive/`](archive/). Parked suites are under [`parked/`](parked/README.md). Milestone history: [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (link only; it does not copy the pick).  
+**Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
----
-
-## Live agent suites (solidified)
-
-| Suite | README | Plan | Status |
-|-------|--------|------|--------|
-| **create/create-in** | [`create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md) | [`create-create-in-simulate.md`](create-create-in-simulate.md) | ✅ **DONE** 2026-09-03 — simulate = Interpreter + bound Store. |
-| **mut-safety** | [`mut-safety-README.md`](simple-agent-tasks/mut-safety-README.md) | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Parked — `THEN` in PIPELINE-STATUS, not admit-next |
-| **p1** temporal | [`p1-README.md`](simple-agent-tasks/p1-README.md) | [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) | Parked until admitted |
-| **gcyc** | [`gcyc-README.md`](simple-agent-tasks/gcyc-README.md) | [`grammar-cycle-2026-08-14.md`](grammar-cycle-2026-08-14.md) | Parked — remaining G4 unparse |
-| **e2e** | [`e2e-README.md`](simple-agent-tasks/e2e-README.md) | [`domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md) | Parked — admit one wave |
-| **pack-2 / 3** | [`pack-README.md`](simple-agent-tasks/pack-README.md) | [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) | Parked — phase 1 shipped; extension model superseded |
-
-Queue (`THEN` / `PARKED` / `PULL`) lives only in [`PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
-
-**CURRENT:** see [`PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
+The tables below are references, not queues.
 
 ---
 

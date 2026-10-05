@@ -593,7 +593,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -649,7 +649,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -765,7 +765,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -802,7 +802,7 @@ public class DomainToCSharpExporterTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])

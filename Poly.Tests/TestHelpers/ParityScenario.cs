@@ -87,13 +87,21 @@ public abstract class ParitySide(Domain domain) {
 
     protected object Current => _current ?? throw new ArgumentException("Create an entity before invoking or evaluating on it.");
 
-    /// <summary>Creates an entity. A value that is a list of earlier <see cref="Create"/> results links those entities.</summary>
+    /// <summary>Creates an entity. A value that is an earlier <see cref="Create"/> result, or a list of them, links those entities.</summary>
     public object? Create(string type, params (string Name, object? Value)[] values) {
         var model = Domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == type)
             ?? throw new ArgumentException($"No entity '{type}' in the domain.");
         var created = Record($"create {type}", () => CreateCore(model, values), model);
         if (created is not null) (_current, _model) = (created, model);
         return created;
+    }
+
+    /// <summary>Makes an earlier <see cref="Create"/> result the current entity and records its state.</summary>
+    public void Use(object? entity) {
+        if (entity is null) throw new ArgumentException("Cannot use an entity whose create failed.");
+        var type = TypeName(entity);
+        (_current, _model) = (entity, Domain.Types.OfType<Entity>().Single(e => e.Name == type));
+        Record($"use {type}", () => (true, null, null));
     }
 
     public void Invoke(string action) => Record($"invoke {action}", () => InvokeCore(action));
@@ -106,6 +114,7 @@ public abstract class ParitySide(Domain domain) {
     protected abstract StepResult InvokeCore(string action);
     protected abstract object? EvaluateCore(string policy);
     protected abstract Dictionary<string, string?> StateOf(object entity, Entity model);
+    protected abstract string TypeName(object entity);
 
     object? Record(string step, Func<StepResult> act, Entity? created = null, string? answerName = null) {
         try {

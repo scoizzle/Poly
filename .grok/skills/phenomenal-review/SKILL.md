@@ -1,49 +1,19 @@
 ---
 name: phenomenal-review
 description: >
-  Adversarial correctness/contract review of a diff using docs/agent/phenomenal-review.md
-  (split-context stance; optional mode: multi for a second independent pass). Writes
-  findings and follow-up tasks into docs. Use when the user asks for a phenomenal
-  review, deep review, adversarial review, contract review, correctness review of
-  local/branch/PR changes, or runs /phenomenal-review. Not the pre-ship fix loop
-  and not a maintainability/code-judo pass.
+  Adversarial correctness review of a diff. Use when the user asks for a
+  phenomenal, deep, adversarial, contract, or correctness review, or
+  /phenomenal-review. Not the pre-ship fix loop and not a style audit.
 metadata:
-  short-description: "Adversarial correctness review → docs follow-ups"
+  short-description: Adversarial correctness review into docs
 ---
 
-# Phenomenal review (Grok wrapper)
+# Phenomenal review
 
-This skill is a **thin adapter**. The full protocol is tool-agnostic:
+Read and execute [`docs/agent/phenomenal-review.md`](../../../docs/agent/phenomenal-review.md). Do not substitute a shorter checklist.
 
-**[`docs/agent/phenomenal-review.md`](../../../docs/agent/phenomenal-review.md)**
+Default target is uncommitted local changes. Use a branch, PR, or path list when the user names one. Mode is `standard` unless the user asks for multi. If this session wrote the change, use multi and the protocol's Pass B template.
 
-## Instructions
+Reviewer only. Do not edit production or tests unless the user asks to harden afterward.
 
-1. **Read** `docs/agent/phenomenal-review.md` in full (do not improvise a lighter bar).
-2. **Execute** that protocol against the user’s target:
-   - Default: uncommitted local changes (staged + unstaged + untracked sources).
-   - Or: branch, PR, or path list if the user named one.
-   - Mode: `standard` (default) or `multi` if the user asks for multi/2×/adversarial pair.
-3. **Adversarial stance** — assume the code is wrong; you are reviewer, not implementer. Prefer diff-first. If this session also implemented the change, prefer `mode: multi` (fresh subagent using the **Pass B template** in §3.7.1 of the protocol).
-4. Enforce **sibling-path**, **reachability→severity**, and **primary evidence** rules from the protocol (do not chain-trust prior review quotes or approximate counts).
-5. **Review only** — do not modify production or test code unless the user explicitly asks to harden afterward.
-6. **Deliverables** (both required by the protocol):
-   - Structured review note under `docs/` (suite-local or `docs/agent/reviews/`).
-   - Checkable follow-up tasks under `docs/` (not chat-only), including process fixes when bug classes recur.
-7. Report verdict, issue counts, file paths, and top issues in the conversation.
-
-## Do not confuse with
-
-| Skill / process | Difference |
-|---|---|
-| Bundled `/review` | Orchestrator + scratch review files / PR pending comments; still apply **this bar** if used for correctness, and land follow-ups in **docs** |
-| `code-review` | Maintainability / code judo / file size |
-| Pre-ship gate | Review → **fix** → re-review before Done (`Agents.md`, `pr1-uncommitted-review-gate.md`) |
-
-## One-liner (if protocol path is forgotten)
-
-```text
-Read docs/agent/phenomenal-review.md and execute it against local changes.
-Assume the code is wrong until evidence says otherwise.
-Write findings and follow-up tasks into the docs as the protocol requires.
-```
+Write the protocol's two docs: a review note under `docs/`, and checkable follow-ups under `docs/`. Then report verdict, counts, paths, and the top issues.

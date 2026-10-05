@@ -2,7 +2,7 @@
 
 > **Maintainer note:** This guide is the **single product-true reference** for the shipped DSL surface.
 > It must be updated whenever the parser, printer, or `apply_dsl` changes.
-> See the "DSL Guide Maintenance" section in `.github/copilot-instructions.md`.
+> Keep this file in sync with the parser, printer, and MCP authoring tools (`AGENTS.md` Ops).
 
 > This is the **product-true** DSL guide verified against the shipped `apply_dsl` parser.
 > Do **not** use constructs from experiment docs (`POLY-DSL-MINIMAL.md`, `DOMAIN-DSL-SPEC.md`) —
@@ -1082,7 +1082,14 @@ Author a closed set as an **enum**, not a property constraint.
 
 **Incremental** (unified tools): Use `add(kind, payload)` to create one element
 (entity, property, stage, action, stage_action, relationship, constraint, policy) and
-`remove(kind, payload)` to delete one by identity.
+`remove(kind, payload)` to delete one by identity. `remove` does not delete a constraint.
+
+`add` also accepts `value_type` `{name}`, `contract` `{name, source, version}` (optional
+`sourceKind`), `contract_value_type` `{contractName, name}`, `contract_endpoint`
+`{contractName, name, payloadType}` (optional `kind`, `direction`), and `contract_binding`
+`{name, contractName, endpointName, actionName}` (optional `parameter`). A new name is a
+letter or `_`, then letters, digits, or `_`, and not a DSL keyword. A property may also
+be named `Text`, `Number`, or `Boolean` when its type is a primitive.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
 `create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.

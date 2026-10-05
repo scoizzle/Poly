@@ -100,7 +100,6 @@ public sealed record LoweringContext(
     Func<string, bool>? IsCollectionNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
     Node? ActionResultType = null,
-    bool EmitInstanceNotify = true,
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,
     LocalNames? Names = null,

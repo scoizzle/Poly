@@ -21,6 +21,7 @@ public static class DomainProgramProjection {
     public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
         Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(analysis);
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         return ToSyntax(domain, (INodeMetadataProvider)analysis);
     }
 

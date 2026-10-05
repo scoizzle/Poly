@@ -161,7 +161,7 @@ public class StoreBindUniqueTests {
     [Test]
     public async Task UniqueAssign_WithStore_Collision_IsFailureWithoutMutating() {
         var entity = PermitWithRelabel();
-        var domain = DomainTestFactory.Create("Parking", [entity]);
+        var domain = ValidDomain.Create("Parking", [entity]);
         var store = new DomainInstanceStore();
         var existing = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain: domain);

@@ -1,7 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling;
@@ -1235,14 +1235,17 @@ public class DomainEntityInstanceTests {
     public async Task ExecuteSubscriptionEffects_Exception_ClearsSubscriptionFlag_AllowsRetry() {
         // If a subscription effect throws, _isExecutingSubscription must clear so a later
         // transition can fire subscriptions again (F8 — retired event.* bag oracle).
+        // The throw is a unique collision. An unknown property is an analysis error, and
+        // Create refuses that domain before the subscription runs.
         var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
-        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+        var trackerToken = new Property("Token", new DomainTypeReference("Text"), [new UniqueConstraint()]);
+        var tracker = new Entity("Tracker", [trackerStatus, trackerToken], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
                     new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
                         new AssignEffect(
-                            DomainExpression.Property("NonexistentProp"),
-                            DomainExpression.Literal("will fail"))
+                            DomainExpression.Property("Token"),
+                            DomainExpression.Literal("TAKEN"))
                     ])
                 ]
             }
@@ -1266,10 +1269,13 @@ public class DomainEntityInstanceTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var store = new DomainInstanceStore();
+        var held = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "HELD", ["Token"] = "TAKEN" }, domain: domain);
+        store.Add(held);
         var orderInstance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Code"] = "ABC-123" }, domain: domain);
         var trackerInstance = DomainEntityInstance.Create(tracker,
-            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
+            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED", ["Token"] = "FREE" }, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
         store.Link("Tracks", trackerInstance, orderInstance);
@@ -1286,7 +1292,7 @@ public class DomainEntityInstanceTests {
 
         // Flag cleared: a second linked subscriber still receives the next notify (and throws).
         var freshTracker = DomainEntityInstance.Create(tracker,
-            new Dictionary<string, object?> { ["Status"] = "FRESH" }, domain: domain);
+            new Dictionary<string, object?> { ["Status"] = "FRESH", ["Token"] = "OTHER" }, domain: domain);
         store.Add(freshTracker);
 
         var order2 = DomainEntityInstance.Create(order,

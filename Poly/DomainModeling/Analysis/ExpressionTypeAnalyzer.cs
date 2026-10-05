@@ -471,6 +471,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (right.Category is TypeCategory.Enum && cmp.Left is Literal { Value: string s2 })
             CheckEnumMember(context, cmp.Left, right.TypeName!, s2, enumTypes);
 
+        // C4e (c): if (Level is Nope) — bare identifier on the other side of an enum
+        // comparison must be a member of that enum (string literals already checked).
+        if (left.Category is TypeCategory.Enum && cmp.Right is PropertyAccess { Name: var rightName }
+            && ResolvePropertyType(rightName, props, parameters) is null)
+            CheckEnumMember(context, cmp.Right, left.TypeName!, rightName, enumTypes);
+        if (right.Category is TypeCategory.Enum && cmp.Left is PropertyAccess { Name: var leftName }
+            && ResolvePropertyType(leftName, props, parameters) is null)
+            CheckEnumMember(context, cmp.Left, right.TypeName!, leftName, enumTypes);
+
         if (!Compatible(context, left, right))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
@@ -550,9 +559,13 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                             $"default(Guid) is not compatible with property type '{propTypeName}' (use a Uuid/Guid or Text property)");
                     return;
                 }
-                if (targetCategory is not TypeCategory.Enum)
-                    Report(context, expr,
-                        $"default({pa.Name}) on property '{propTypeName}' is not an enum member of that property's type");
+                if (targetCategory is TypeCategory.Enum) {
+                    // C4e (b): Level: Sev default(Nope) — bare identifier must be a member of the enum.
+                    CheckEnumMember(context, expr, propTypeName, pa.Name, enumTypes);
+                    return;
+                }
+                Report(context, expr,
+                    $"default({pa.Name}) on property '{propTypeName}' is not an enum member of that property's type");
                 return;
             default:
                 return;

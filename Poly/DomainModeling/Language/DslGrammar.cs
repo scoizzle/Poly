@@ -13,6 +13,15 @@ public static class DslGrammar {
     public static bool IsPrimitiveTypeKind(DslTokenKind kind) => kind is
         DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType;
 
+    /// <summary>
+    /// True when a word of <paramref name="kind"/> and <paramref name="text"/> names a primitive type:
+    /// a primitive keyword (<c>Text</c>, <c>Number</c>, <c>Boolean</c>), or an identifier
+    /// <paramref name="isKnownPrimitiveName"/> knows, such as <c>Date</c>. A property named after a
+    /// primitive keyword (<c>Number: Text</c>) must have such a type.
+    /// </summary>
+    public static bool IsPrimitiveType(DslTokenKind kind, string text, Func<string, bool> isKnownPrimitiveName) =>
+        IsPrimitiveTypeKind(kind) || (kind == DslTokenKind.Identifier && isKnownPrimitiveName(text));
+
     /// <summary>True when <paramref name="kind"/> is a comparison operator (product <c>ParseComparison</c> set).</summary>
     public static bool IsCompareOpKind(DslTokenKind kind) => kind is
         DslTokenKind.Is or DslTokenKind.Eq or DslTokenKind.Neq

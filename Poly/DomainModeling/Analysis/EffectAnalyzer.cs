@@ -49,6 +49,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
                 ValidateCallChainPostconditions(context, action, entity);
             }
+            // C4e (a): when Tracks B { transition to Nope } — subscription effects skipped this pass.
+            foreach (var sub in entity.Subscriptions)
+                ValidateEffects(context, sub.Effects, null, entity, domain, lookup, currentStage: null);
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup, stage.Name);
                 ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup, stage.Name);
@@ -59,6 +62,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     ValidateActionReturnProducer(context, action, entity, domain, lookup);
                     ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
                 }
+                foreach (var sub in stage.Subscriptions)
+                    ValidateEffects(context, sub.Effects, null, entity, domain, lookup, stage.Name);
             }
         });
     }

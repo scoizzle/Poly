@@ -150,7 +150,7 @@ _Lane A · Size S · Review 1 · Depends on: G1, T1_
 
 ## 5. D1 and D6: artifact suite and catalog
 
-**Wrong today.** An artifact was three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrote the catalog with one placeholder entry; the compiled trees were one list split by entity name in `Emit`; contributors return `(fileName, text)` pairs. Since A1, A2a and A2b (master `16403b60`) `ArtifactId`, `Artifact` and `ArtifactCatalog` exist, with declared types, typed references and a dangling check, and since A3a `Lower` registers one scaffolding tree and one tree per entity (`RegisterTrees`) and `Emit` only reads them (the placeholder is gone). Only the last claim still holds: contributors return plain pairs.
+**Wrong today.** An artifact was three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrote the catalog with one placeholder entry; the compiled trees were one list split by entity name in `Emit`; contributors return `(fileName, text)` pairs. Since A1, A2a and A2b (master `16403b60`) `ArtifactId`, `Artifact` and `ArtifactCatalog` exist, with declared types, typed references and a dangling check, and since A3a `Lower` registers one scaffolding tree and one tree per entity (`RegisterTrees`) and `Emit` only reads them (the placeholder is gone). Each tree points at a `source-domain` or `source-entity` artifact (A3b). Only the last claim still holds: contributors return plain pairs.
 
 **Target.** An artifact has a type, a stable id, a producer, a payload and typed references. A catalog holds them and checks them. Every output (trees, printed C#, DbContext, Program.cs, demo.http, the analysis report) is registered through it.
 

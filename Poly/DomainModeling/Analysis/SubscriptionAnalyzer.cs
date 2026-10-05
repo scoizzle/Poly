@@ -335,6 +335,11 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.SubscriptionEffectBinding);
             }
 
+            if (flags.CrossEntityAssignRel is { Length: > 0 }) {
+                EffectAnalyzer.ReportCrossEntityMutation(
+                    context, subscription, subscriberEntity, flags.CrossEntityAssignRel);
+            }
+
             if (flags.NestedPeerPath) {
                 context.ReportError(
                     subscription,
@@ -375,6 +380,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         public bool UsesLegacyEvent;
         public string? UnboundPeerRoot;
         public bool PeerAsAssignTarget;
+        public string? CrossEntityAssignRel;
         public bool NestedPeerPath;
     }
 
@@ -463,7 +469,12 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     return;
                 }
 
-                // Real subscriber relationship path-prefix — walk inner for bare props.
+                // Real subscriber relationship path-prefix. As an assign target it mutates
+                // another entity (M1); as a value it is a read — walk inner for bare props.
+                if (isAssignTarget) {
+                    flags.CrossEntityAssignRel ??= rn.RelationshipName;
+                    return;
+                }
                 CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags, isAssignTarget);
                 return;
         }

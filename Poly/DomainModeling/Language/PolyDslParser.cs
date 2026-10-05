@@ -275,21 +275,20 @@ public sealed class PolyDslParser : DslCursor {
                         }
 
                     case "primitive-name": {
-                            // Primitive keyword used as property name (e.g. "Number: Text")
+                            // Primitive keyword used as property name (e.g. "Number: Text"): the type
+                            // must be a primitive too (DslTokenReader.IsPropertyName gives MCP the same rule).
                             var name = Current.Text;
                             Advance(); // consume type keyword (e.g. 'Number')
                             Expect(TokenKind.Colon);
+                            if (!DslGrammar.IsPrimitiveType(Current.Kind, Current.Text, IsKnownPrimitiveName))
+                                throw Error($"Expected type after '{name}:', got '{Current.Text}'");
                             if (IsPrimitiveType(Current.Kind)) {
                                 ParseProperty(name, Current.Kind, changes);
                             }
-                            else if (Current.Kind == TokenKind.Identifier
-                                     && IsKnownPrimitiveName(Current.Text)) {
+                            else {
                                 var typeName = Current.Text;
                                 Advance();
                                 ParseNamedTypeProperty(name, typeName, changes);
-                            }
-                            else {
-                                throw Error($"Expected type after '{name}:', got '{Current.Text}'");
                             }
                             continue;
                         }

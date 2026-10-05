@@ -505,15 +505,12 @@ public sealed partial class DomainToCSharpExporter {
                             [peerBinding] = new Parameter(peerBinding)
                         };
                     }
-                    // No instance Notify: printed classes do not have one (it is a simulator method,
-                    // and the simulator skips it while a subscription runs).
                     var context = new LoweringContext(
                         new ThisReference(),
                         Parameters: peerParams,
                         Analysis: metadata,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        EmitInstanceNotify: false);
+                        EnumPropertyNames: esm.EnumPropertyNames);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -666,13 +663,11 @@ public sealed partial class DomainToCSharpExporter {
                 // CheckedOutAt to now }" on Loan.Active) are initialized during
                 // construction, not just during explicit stage transitions.
                 if (firstStage.OnEntryEffects.Count > 0) {
-                    // No instance Notify: printed classes do not have one.
                     var entryCtx = new LoweringContext(
                         new ThisReference(),
                         Analysis: metadata,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        EmitInstanceNotify: false);
+                        EnumPropertyNames: esm.EnumPropertyNames);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
                     foreach (var entryEffect in firstStage.OnEntryEffects) {
                         var lowered = entryPass.Route(entryEffect);

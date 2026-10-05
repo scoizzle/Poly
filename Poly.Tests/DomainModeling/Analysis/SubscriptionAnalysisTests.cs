@@ -44,7 +44,7 @@ public class SubscriptionAnalysisTests {
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
         var customer = MakeEntity("Customer");
-        var domain = DomainTestFactory.Create("Test", [entity, customer], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, customer], [rel]);
 
         var result = new DomainEvolution(domain).Apply([
             new RemoveStageSubscriptionChange("Order", "Pending",
@@ -61,7 +61,7 @@ public class SubscriptionAnalysisTests {
     public async Task RemoveStageSubscription_WhenNoMatch_FailsLoud() {
         var stage = MakeStage("Pending");
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
 
         // Remove a subscription that doesn't exist — should fail-loud per fail-loud convention
         var result = new DomainEvolution(domain).Apply([
@@ -82,7 +82,7 @@ public class SubscriptionAnalysisTests {
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
         // No relationship at all
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -102,7 +102,7 @@ public class SubscriptionAnalysisTests {
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -122,7 +122,7 @@ public class SubscriptionAnalysisTests {
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -142,7 +142,7 @@ public class SubscriptionAnalysisTests {
         var sub = new StageSubscription("Notifies", ["Active", "NonExistent"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -187,7 +187,7 @@ public class SubscriptionAnalysisTests {
         var target = MakeEntity("Customer", targetStage);
         var stage = MakeStage("Pending");
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         // Add a subscription via evolution
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
@@ -235,7 +235,7 @@ public class SubscriptionAnalysisTests {
         };
         var entityB = new Entity("EntityB", [], [activateB], [], [stageB]);
 
-        var domain = DomainTestFactory.Create("Test", [entityA, entityB], [relAB, relBA]);
+        var domain = ValidDomain.Create("Test", [entityA, entityB], [relAB, relBA]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -255,7 +255,7 @@ public class SubscriptionAnalysisTests {
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var detail = DomainQueries.GetEntity(domain, "Order");
 
@@ -282,7 +282,7 @@ public class SubscriptionAnalysisTests {
         var sub2 = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
         var stage = MakeStage("Pending", sub1, sub2);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -305,7 +305,7 @@ public class SubscriptionAnalysisTests {
         var sub = new StageSubscription("Paired", ["Active"], StageSubscriptionQuantifier.Any, []);
         var stage = MakeStage("Pending", sub);
         var entity = MakeEntity("Order", stage);
-        var domain = DomainTestFactory.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -422,7 +422,7 @@ public class SubscriptionAnalysisTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         // Verify analysis is clean
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -475,7 +475,7 @@ public class SubscriptionAnalysisTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order, domain: domain);

@@ -258,7 +258,7 @@ public class ConstraintAssignLoweringTests {
     [Test]
     public async Task UniqueAssign_InvokeAction_StillWorks() {
         var entity = PermitWithRelabel();
-        var domain = DomainTestFactory.Create("Parking", [entity]);
+        var domain = ValidDomain.Create("Parking", [entity]);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
 

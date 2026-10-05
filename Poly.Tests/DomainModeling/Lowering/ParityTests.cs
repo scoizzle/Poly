@@ -247,7 +247,7 @@ public class ParityTests {
                 Constraints = [.. p.Constraints, .. equalities.Where(e => e.Property == p.Name).Select(e => new EqualityConstraint(e.Expected))]
             })]
         };
-        return ParityScenario.FromDomain(domain with { Types = [entity] }, assemblyName);
+        return ParityScenario.FromDomain(domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] }, assemblyName);
     }
 
     // Status must be "Active"; Level must be 5 (an int, while the property holds a long).

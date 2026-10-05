@@ -148,7 +148,7 @@ internal sealed class SessionTool {
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
     public static DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
-        if (!ArtifactId.IsValidPart(domainName))
+        if (!DslTokenReader.IsIdentifier(domainName))
             return new DomainToolResponse(
                 Success: false,
                 Message: EvolveTool.InvalidNameMessage(domainName),
@@ -500,12 +500,12 @@ internal sealed class EvolveTool {
 - contract_value_type: {""contractName"":""Stripe"",""name"":""ChargeRequest""}
 - contract_endpoint: {""contractName"":""Stripe"",""name"":""Charge"",""kind"":""Operation"",""direction"":""Inbound"",""payloadType"":""Number""}
 - contract_binding: {""name"":""ChargeOrder"",""contractName"":""Stripe"",""endpointName"":""Charge"",""actionName"":""Pay"",""parameter"":""amount""}
-Unknown kind, missing required field, or invalid cardinality fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
+Unknown kind, missing required field, invalid cardinality, or a new name the DSL would not accept (a letter or '_' then letters, digits or '_', not a DSL keyword; a property may also be named Text, Number or Boolean when its type is a primitive) fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
     public static DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
-        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy")] string kind,
+        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding")] string kind,
         [Description("JSON object of kind-specific fields (see tool description for per-kind payloads)")] string payload) {
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -528,12 +528,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
             case "entity": {
                     var name = Field(root, "name");
                     if (name is null) return MissingField(sessionId, kind, "name");
-                    if (!ArtifactId.IsValidPart(name))
-                        return new DomainToolResponse(
-                            Success: false,
-                            Message: InvalidNameMessage(name),
-                            SessionId: sessionId,
-                            Affordances: ["add", "get_domain_overview"]);
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddEntity(name),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
                 }
@@ -544,6 +539,8 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
                     if (typeName is null) return MissingField(sessionId, kind, "typeName");
+                    var primitives = state.Domain.Types.OfType<PrimitiveType>().Select(t => t.Name).ToHashSet();
+                    if (!DslTokenReader.IsPropertyName(name, typeName, primitives.Contains)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder =>
                             builder.AddPropertyToEntity(entityName, new Property(name, new DomainTypeReference(typeName), [])),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
@@ -553,6 +550,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var name = Field(root, "name");
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddStage(entityName, name),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
                 }
@@ -561,6 +559,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var name = Field(root, "name");
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddAction(entityName, name),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
                 }
@@ -571,6 +570,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (stageName is null) return MissingField(sessionId, kind, "stageName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddActionToStage(entityName, stageName, name),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
                 }
@@ -579,6 +579,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var source = Field(root, "source", "sourceEntityName");
                     var target = Field(root, "target", "targetEntityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     if (source is null) return MissingField(sessionId, kind, "source");
                     if (target is null) return MissingField(sessionId, kind, "target");
                     var cardText = Field(root, "cardinality");
@@ -605,12 +606,14 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var expression = Field(root, "expression");
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     if (expression is null) return MissingField(sessionId, kind, "expression");
                     return AddPolicyCore(sessionId, entityName, name, expression);
                 }
             case "value_type": {
                     var name = Field(root, "name");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddValueType(name),
                         successAffordances: ["add", "apply_dsl", "get_domain_overview"]);
                 }
@@ -619,6 +622,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var source = Field(root, "source", "sourceIdentifier");
                     var version = Field(root, "version");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     if (source is null) return MissingField(sessionId, kind, "source");
                     if (version is null) return MissingField(sessionId, kind, "version");
                     var sourceKindText = Field(root, "sourceKind") ?? "ExternalProvider";
@@ -634,6 +638,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var name = Field(root, "name");
                     if (contractName is null) return MissingField(sessionId, kind, "contractName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder => builder.AddContractValueType(
                             contractName, new Poly.DomainModeling.Ontology.ValueType(name, [], [])),
                         successAffordances: ["add", "apply_dsl"]);
@@ -644,6 +649,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var payloadType = Field(root, "payloadType");
                     if (contractName is null) return MissingField(sessionId, kind, "contractName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     if (payloadType is null) return MissingField(sessionId, kind, "payloadType");
                     var kindText = Field(root, "kind") ?? "Operation";
                     var dirText = Field(root, "direction") ?? "Inbound";
@@ -666,6 +672,7 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
                     var actionName = Field(root, "actionName");
                     var parameter = Field(root, "parameter", "localParameterName");
                     if (name is null) return MissingField(sessionId, kind, "name");
+                    if (!DslTokenReader.IsIdentifier(name)) return InvalidName(sessionId, name);
                     if (contractName is null) return MissingField(sessionId, kind, "contractName");
                     if (endpointName is null) return MissingField(sessionId, kind, "endpointName");
                     if (actionName is null) return MissingField(sessionId, kind, "actionName");
@@ -770,7 +777,14 @@ Unknown kind, missing required field, or invalid cardinality fails closed. For b
     }
 
     internal static string InvalidNameMessage(string? name) =>
-        $"Name '{name}' must be non-empty with no whitespace, '/' or '#'.";
+        $"Name '{name}' is not a valid name: use a letter or '_' followed by letters, digits or '_', and not a DSL keyword "
+        + "(a property may also be named Text, Number or Boolean when its type is a primitive). This is the rule apply_dsl uses.";
+
+    private static DomainToolResponse InvalidName(string sessionId, string name) =>
+        new(Success: false,
+            Message: InvalidNameMessage(name),
+            SessionId: sessionId,
+            Affordances: ["add", "get_domain_overview"]);
 
     private static DomainToolResponse MissingField(string sessionId, string kind, string field) =>
         new(Success: false,
@@ -923,14 +937,18 @@ Unknown kind or missing required field fails closed.")]
     // ── Shared helpers ──────────────────────────────────────────
 
     /// <summary>
-    /// Builds a structural fingerprint of a domain for no-op detection.
-    /// Two domains with the same fingerprint have the same types, relationships,
-    /// and entity structures (property/stage/action counts). This lets us detect
-    /// when an evolve operation had zero effective change (e.g. adding a property
-    /// to a non-existent entity, which silently no-ops in the current evolution layer).
+    /// Builds a structural fingerprint for no-op detection: type and navigation counts,
+    /// each entity's name with its property/constraint/stage/action/policy counts,
+    /// each imported contract's name with its value-type and endpoint counts, and the
+    /// contract binding count. An evolve that leaves it unchanged is reported as
+    /// "No changes applied". No add or remove path is known to reach that today;
+    /// missing targets are refused by evolution.
     /// </summary>
     internal static string GetFingerprint(Domain domain) {
-        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Count()}";
+        var contracts = string.Join(",", domain.ImportedContracts.OrderBy(c => c.Name)
+            .Select(c => $"{c.Name}({c.Types.Count}t,{c.Endpoints.Count}e)"));
+        var typeCounts = $"T:{domain.Types.Count}|R:{domain.Types.OfType<Entity>().SelectMany(e => e.Navigations).Count()}"
+            + $"|C:[{contracts}]|B:{domain.ContractBindings.Count}";
         var entityDetails = domain.Types
             .OfType<Entity>()
             .OrderBy(e => e.Name)

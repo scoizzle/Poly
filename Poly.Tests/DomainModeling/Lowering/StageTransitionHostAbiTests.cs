@@ -82,7 +82,7 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task InvokeAction_Transition_SetsStageWithoutEffectExecutor() {
         var entity = CreatePersonEntity();
-        var domain = DomainTestFactory.Create("People", [entity]);
+        var domain = ValidDomain.Create("People", [entity]);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
 

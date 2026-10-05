@@ -13,9 +13,7 @@ public class DomainEntityInstanceTests {
         IReadOnlyDictionary<string, object?>? values = null,
         string domainName = "T",
         IReadOnlyList<string>? extensions = null) {
-        var domain = DomainTestFactory.Create(domainName, [entity]);
-        if (extensions is { Count: > 0 })
-            domain = domain with { Extensions = extensions };
+        var domain = ValidDomain.Create(domainName, [entity], extensions: extensions);
         return DomainEntityInstance.Create(
             entity,
             values ?? new Dictionary<string, object?>(),
@@ -142,7 +140,7 @@ public class DomainEntityInstanceTests {
         var instance = CreateWithDomain(entity, new Dictionary<string, object?> {
             ["Start"] = new DateOnly(2024, 1, 1),
             ["End"] = new DateOnly(2026, 1, 1)
-        });
+        }, extensions: [ExtensionCatalog.TemporalId]);
 
         await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsCurrent"))).IsTrue();
         await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "IsAfter"))).IsTrue();
@@ -154,7 +152,7 @@ public class DomainEntityInstanceTests {
         var entity = CreateDateComparisonEntity();
         var instance = CreateWithDomain(entity, new Dictionary<string, object?> {
             ["Name"] = "zebra"
-        });
+        }, extensions: [ExtensionCatalog.TemporalId]);
 
         await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "NamePastB"))).IsTrue();
     }
@@ -217,10 +215,7 @@ public class DomainEntityInstanceTests {
             Actions: [stamp],
             Policies: [],
             Stages: []);
-        var domain = DomainFactory.Create("T") with {
-            Types = [entity],
-            Extensions = [ExtensionCatalog.TemporalId],
-        };
+        var domain = ValidDomain.Create("T", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Stamp");
@@ -306,7 +301,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order",
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [entityAction], Policies: [], Stages: [draft, active]);
-        var domain = DomainTestFactory.Create("OrderDomain", [order], []);
+        var domain = ValidDomain.Create("OrderDomain", [order], []);
 
         var instance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?>(), domain);
@@ -330,7 +325,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order",
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [entityAction], Policies: [], Stages: [draft, active]);
-        var domain = DomainTestFactory.Create("OrderDomain", [order], []);
+        var domain = ValidDomain.Create("OrderDomain", [order], []);
 
         var instance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?>(), domain);
@@ -347,7 +342,7 @@ public class DomainEntityInstanceTests {
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [], Policies: [],
             Stages: [new Stage("Draft", [], [], [], [])]);
-        var domain = DomainTestFactory.Create("OrderDomain", [order], []);
+        var domain = ValidDomain.Create("OrderDomain", [order], []);
         var instance = DomainEntityInstance.Create(order, domain: domain);
 
         var result = instance.InvokeAction("DoesNotExist");
@@ -407,7 +402,7 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Loop",
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [], Policies: [], Stages: stages);
-        var domain = DomainTestFactory.Create("LoopDomain", [entity], []);
+        var domain = ValidDomain.Create("LoopDomain", [entity], []);
         var instance = DomainEntityInstance.Create(entity, domain: domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
@@ -421,7 +416,7 @@ public class DomainEntityInstanceTests {
             [new Property("Name", new DomainTypeReference("Text"), [])],
             Actions: [], Policies: [],
             Stages: [new Stage("Draft", [], [], [], [])]);
-        var domain = DomainTestFactory.Create("Orders", [order], []);
+        var domain = ValidDomain.Create("Orders", [order], []);
 
         var analysis = DomainModelAnalyzer.AnalyzeRequiringCatalog(domain);
 
@@ -457,7 +452,7 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Order",
             [new Property("Name", new DomainTypeReference("Nope"), [])],
             [], [], []);
-        var domain = DomainTestFactory.Create("EmptyStructural", [entity], []);
+        var domain = ValidDomain.Create("EmptyStructural", [entity], []);
         var analysis = new AnalyzerBuilder()
             .AddAnalyzer(new DomainCatalogPass())
             .Build()
@@ -723,7 +718,7 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
         var item = new Entity("Item", [itemName], [], [], []);
-        var domain = DomainTestFactory.Create("Test", [person, item], []);
+        var domain = ValidDomain.Create("Test", [person, item], []);
 
         var instance = DomainEntityInstance.Create(person, domain: domain);
         instance.InvokeAction("CreateItem");
@@ -782,7 +777,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Orchestrator"), new DomainTypeReference("Service"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [orchestrator, service], [rel]);
+        var domain = ValidDomain.Create("Test", [orchestrator, service], [rel]);
 
         var store = new DomainInstanceStore();
         var svc = DomainEntityInstance.Create(service,
@@ -826,7 +821,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Link",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
 
         var store = new DomainInstanceStore();
         var tgt = DomainEntityInstance.Create(target,
@@ -862,7 +857,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
 
         var store = new DomainInstanceStore();
         var tgt1 = DomainEntityInstance.Create(target,
@@ -902,7 +897,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
 
         var store = new DomainInstanceStore();
         var tgt1 = DomainEntityInstance.Create(target,
@@ -945,7 +940,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         store.Add(src);
@@ -981,7 +976,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
 
         var store = new DomainInstanceStore();
         var good = DomainEntityInstance.Create(target,
@@ -1033,7 +1028,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
 
         var store = new DomainInstanceStore();
         var tgt = DomainEntityInstance.Create(target,
@@ -1058,9 +1053,7 @@ public class DomainEntityInstanceTests {
             new AssignEffect(DomainExpression.Property("DueDate"), DomainExpression.Property("Now"))
         ], []);
         var entity = new Entity("Item", [dueDate], [action], [], []);
-        var domain = DomainTestFactory.Create("Test", [entity]) with {
-            Extensions = [ExtensionCatalog.TemporalId]
-        };
+        var domain = ValidDomain.Create("Test", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Touch");
@@ -1132,7 +1125,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -1182,7 +1175,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Code"] = "X" }, domain: domain);
@@ -1229,7 +1222,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Tracker"),
             new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("SubDomain", [order, tracker], [tracks]);
+        var domain = ValidDomain.Create("SubDomain", [order, tracker], [tracks]);
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Code"] = "X" }, domain);
@@ -1276,7 +1269,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order,
@@ -1344,7 +1337,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -1378,7 +1371,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
@@ -1413,7 +1406,7 @@ public class DomainEntityInstanceTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1442,7 +1435,7 @@ public class DomainEntityInstanceTests {
         var order = new Entity("Order", [], [], [], [
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [entity, order], [
+        var domain = ValidDomain.Create("Test", [entity, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1486,7 +1479,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("EntityLevelNotify", [tracker, order], [
+        var domain = ValidDomain.Create("EntityLevelNotify", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1543,7 +1536,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("DispatchOrder", [tracker, order], [
+        var domain = ValidDomain.Create("DispatchOrder", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1592,7 +1585,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("StageLocalSibling", [tracker, order], [
+        var domain = ValidDomain.Create("StageLocalSibling", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1639,7 +1632,7 @@ public class DomainEntityInstanceTests {
         ], [], [], [
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [entity, order], [
+        var domain = ValidDomain.Create("Test", [entity, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1691,7 +1684,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("EntityLevelPeer", [tracker, order], [
+        var domain = ValidDomain.Create("EntityLevelPeer", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1740,7 +1733,7 @@ public class DomainEntityInstanceTests {
         ], [], [], [
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [entity, order], [
+        var domain = ValidDomain.Create("Test", [entity, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1781,7 +1774,7 @@ public class DomainEntityInstanceTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1820,7 +1813,7 @@ public class DomainEntityInstanceTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToOne, [])
@@ -1864,7 +1857,7 @@ public class DomainEntityInstanceTests {
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
         ]);
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [
+        var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToMany, [])
@@ -1905,7 +1898,7 @@ public class DomainEntityInstanceTests {
             ], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Status"] = "Initial", ["EntryTarget"] = "" },
             domain: domain);
@@ -1936,7 +1929,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["ExitNote"] = "" },
             domain: domain);
@@ -1967,7 +1960,7 @@ public class DomainEntityInstanceTests {
             new Stage("StageA", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Count"] = 0L },
             domain: domain);
@@ -2003,7 +1996,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [parent, child], []);
+        var domain = ValidDomain.Create("Test", [parent, child], []);
         var store = new DomainInstanceStore();
         var parentInstance = DomainEntityInstance.Create(parent,
             new Dictionary<string, object?> { ["ParentName"] = "Parent" },
@@ -2043,7 +2036,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("hasChild",
             new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [parent, child], [rel]);
+        var domain = ValidDomain.Create("Test", [parent, child], [rel]);
         var store = new DomainInstanceStore();
         var parentInstance = DomainEntityInstance.Create(parent,
             new Dictionary<string, object?> { ["ParentName"] = "Parent" },
@@ -2069,7 +2062,7 @@ public class DomainEntityInstanceTests {
             new Stage("Active", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [parent, child], []);
+        var domain = ValidDomain.Create("Test", [parent, child], []);
         var store = new DomainInstanceStore();
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
         store.Add(parentInstance);
@@ -2210,7 +2203,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
 
-        var domain = DomainTestFactory.Create("Test", [customer, order], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, order], [rel]);
 
         var store = new DomainInstanceStore();
         var custInstance = DomainEntityInstance.Create(customer,
@@ -2242,7 +2235,10 @@ public class DomainEntityInstanceTests {
             ], [])
         ], [], []);
 
-        var domain = DomainTestFactory.Create("Test", [parent, child], []);
+        var rel = new Relationship("someRel",
+            new DomainTypeReference("Parent"), new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = ValidDomain.Create("Test", [parent, child], [rel]);
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
 
         // No store → should not crash
@@ -2281,7 +2277,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("A"), new DomainTypeReference("B"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [a, b], [rel]);
+        var domain = ValidDomain.Create("Test", [a, b], [rel]);
 
         var store = new DomainInstanceStore();
         var bInstance = DomainEntityInstance.Create(b, domain: domain);
@@ -2324,7 +2320,7 @@ public class DomainEntityInstanceTests {
             new Stage("Child", [childAction], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Count"] = 0L },
             domain: domain);
@@ -2395,7 +2391,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("B"), new DomainTypeReference("A"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [a, b], [rel]);
+        var domain = ValidDomain.Create("Test", [a, b], [rel]);
         var store = new DomainInstanceStore();
         var aInstance = DomainEntityInstance.Create(a, domain: domain);
         var bInstance = DomainEntityInstance.Create(b, domain: domain);
@@ -2470,7 +2466,7 @@ public class DomainEntityInstanceTests {
                 RelationshipCardinality.OneToOne, []));
         }
 
-        var domain = DomainTestFactory.Create("Test", allEntities, relationships);
+        var domain = ValidDomain.Create("Test", allEntities, relationships);
         var store = new DomainInstanceStore();
 
         var instances = new List<DomainEntityInstance>();
@@ -2543,7 +2539,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Grandparent"), new DomainTypeReference("Child"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [gp, parent, child], [rel]);
+        var domain = ValidDomain.Create("Test", [gp, parent, child], [rel]);
 
         var store = new DomainInstanceStore();
         var gpInstance = DomainEntityInstance.Create(gp, domain: domain);
@@ -2595,7 +2591,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
         var store = new DomainInstanceStore();
 
         var order1 = DomainEntityInstance.Create(order, domain: domain);
@@ -2655,7 +2651,7 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
 
-        var domain = DomainTestFactory.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
         var store = new DomainInstanceStore();
         var orderInstance = DomainEntityInstance.Create(order, domain: domain);
         var trackerInstance = DomainEntityInstance.Create(tracker,
@@ -2688,7 +2684,7 @@ public class DomainEntityInstanceTests {
             ], [])
         ], [], []);
 
-        var domain = DomainTestFactory.Create("Test", [parent, child], []);
+        var domain = ValidDomain.Create("Test", [parent, child], []);
         var store = new DomainInstanceStore();
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
         store.Add(parentInstance);
@@ -2717,7 +2713,7 @@ public class DomainEntityInstanceTests {
             new Stage("Draft", [], [], [], [])
         ]);
 
-        var domain = DomainTestFactory.Create("Test", [customerEntity, orderEntity], [
+        var domain = ValidDomain.Create("Test", [customerEntity, orderEntity], [
             new Relationship("orders",
                 new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
                 RelationshipCardinality.OneToMany, [])
@@ -2753,7 +2749,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [maker, customer, order], [rel]);
+        var domain = ValidDomain.Create("Test", [maker, customer, order], [rel]);
         var store = new DomainInstanceStore();
         var makerInstance = DomainEntityInstance.Create(maker, domain: domain);
         store.Add(makerInstance);
@@ -2781,7 +2777,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [customer, order, invoice], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, order, invoice], [rel]);
         var store = new DomainInstanceStore();
         var custInstance = DomainEntityInstance.Create(customer, domain: domain);
         store.Add(custInstance);
@@ -2809,7 +2805,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("rel",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [maker, customer, order], [rel]);
+        var domain = ValidDomain.Create("Test", [maker, customer, order], [rel]);
         var store = new DomainInstanceStore();
         var makerInstance = DomainEntityInstance.Create(maker, domain: domain);
         store.Add(makerInstance);
@@ -2841,7 +2837,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
@@ -2864,7 +2860,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
@@ -2887,7 +2883,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = true }, domain: domain);
@@ -2910,7 +2906,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Active"] = true }, domain: domain);
@@ -2933,7 +2929,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         store.Add(src);
@@ -2953,7 +2949,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
@@ -2976,7 +2972,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
@@ -2997,7 +2993,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, domain: domain);
@@ -3022,7 +3018,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 5L }, domain: domain);
@@ -3049,7 +3045,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var src = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Threshold"] = 5L }, domain: domain);
         var t1 = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["Value"] = 1L }, domain: domain);
@@ -3113,7 +3109,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var src = DomainEntityInstance.Create(source, domain: domain);
         await Assert.That(() => src.InvokeAction("RunAll")).Throws<InvalidOperationException>()
             .WithMessageContaining("without a DomainInstanceStore");
@@ -3126,7 +3122,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("team",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var src = DomainEntityInstance.Create(source, domain: domain);
         IDictionary<string, object?> bag = src;
         await Assert.That(bag.ContainsKey("Team")).IsTrue();
@@ -3145,7 +3141,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var src = DomainEntityInstance.Create(source, domain: domain);
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Source").Policies.First(p => p.Name == policyName);
         return (src, policy);
@@ -3161,7 +3157,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("reports",
             new DomainTypeReference("Employee"), new DomainTypeReference("Employee"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Org", [employee], [rel]);
+        var domain = ValidDomain.Create("Org", [employee], [rel]);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Employee");
         var store = new DomainInstanceStore();
         var mgr = DomainEntityInstance.Create(entity,
@@ -3193,7 +3189,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
         var profile = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["City"] = "Metropolis" }, domain: domain);
@@ -3220,7 +3216,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(source, new Dictionary<string, object?> { ["Name"] = "Bob" }, domain: domain);
         var profile = DomainEntityInstance.Create(target, new Dictionary<string, object?> { ["City"] = "Gotham" }, domain: domain);
@@ -3247,7 +3243,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var cust = DomainEntityInstance.Create(source,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
         var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Customer").Policies.First(p => p.Name == "IsUrban");
@@ -3272,7 +3268,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(source,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
@@ -3295,7 +3291,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [customer, profile], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, profile], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(customer,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
@@ -3322,7 +3318,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [customer, profile], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, profile], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(customer,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
@@ -3345,7 +3341,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [customer, profile], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, profile], [rel]);
         var cust = DomainEntityInstance.Create(customer,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
 
@@ -3378,7 +3374,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("advisor",
             new DomainTypeReference("Customer"), new DomainTypeReference("Advisor"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [customer, advisor], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, advisor], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(customer,
             new Dictionary<string, object?> { ["Name"] = "Sam" }, domain: domain);
@@ -3402,7 +3398,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("profile",
             new DomainTypeReference("Customer"), new DomainTypeReference("Profile"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [customer, profile], [rel]);
+        var domain = ValidDomain.Create("Test", [customer, profile], [rel]);
         var store = new DomainInstanceStore();
         var cust = DomainEntityInstance.Create(customer,
             new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
@@ -3425,7 +3421,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Order"), new DomainTypeReference("Item"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [order, item], [rel]);
+        var domain = ValidDomain.Create("Test", [order, item], [rel]);
         var store = new DomainInstanceStore();
         var orderInst = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain);
@@ -3463,7 +3459,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("lines",
             new DomainTypeReference("Order"), new DomainTypeReference("OrderLine"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [order, line], [rel]);
+        var domain = ValidDomain.Create("Test", [order, line], [rel]);
         var store = new DomainInstanceStore();
         var orderInst = DomainEntityInstance.Create(order,
             new Dictionary<string, object?>(), domain: domain);
@@ -3551,7 +3547,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("items",
             new DomainTypeReference("Order"), new DomainTypeReference("Item"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [order, item], [rel]);
+        var domain = ValidDomain.Create("Test", [order, item], [rel]);
         var store = new DomainInstanceStore();
         var orderInst = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain);
@@ -3588,7 +3584,7 @@ public class DomainEntityInstanceTests {
         var done = new Stage("Done", [], [], [], []);
         var entity = new Entity("Item",
             [new Property("Trace", new DomainTypeReference("Text"), [])], [], [], [draft, active, done]);
-        var domain = new Domain("Test", [entity]);
+        var domain = ValidDomain.Create("Test", [entity]);
         var store = new DomainInstanceStore();
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         store.Add(instance);
@@ -3622,7 +3618,7 @@ public class DomainEntityInstanceTests {
         var rel = new Relationship("service",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToOne, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var sourceInst = DomainEntityInstance.Create(source, domain: domain);
         var targetInst = DomainEntityInstance.Create(target, domain: domain);
@@ -3713,7 +3709,7 @@ public class DomainEntityInstanceTests {
             ],
             Policies: []);
         var warehouse = new Entity("Warehouse", [], [maybe], [], []);
-        var domain = DomainTestFactory.Create("Test", [warehouse, bin], [rel]);
+        var domain = ValidDomain.Create("Test", [warehouse, bin], [rel]);
         var store = new DomainInstanceStore();
         var wh = DomainEntityInstance.Create(warehouse, domain: domain);
         store.Add(wh);
@@ -3873,7 +3869,7 @@ public class DomainEntityInstanceTests {
         var pending = new Stage("Pending", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var paid = new Stage("Paid", Actions: [ship], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order", [], [], [], [pending, paid]);
-        var domain = DomainTestFactory.Create("Test", [entity], []);
+        var domain = ValidDomain.Create("Test", [entity], []);
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
 
@@ -3901,7 +3897,7 @@ public class DomainEntityInstanceTests {
             ])],
             Policies: []);
         var warehouse = new Entity("Warehouse", [], [make], [], []);
-        var domain = DomainTestFactory.Create("Test", [warehouse, bin], [rel]);
+        var domain = ValidDomain.Create("Test", [warehouse, bin], [rel]);
         var store = new DomainInstanceStore();
         var wh = DomainEntityInstance.Create(warehouse, domain: domain);
         store.Add(wh);

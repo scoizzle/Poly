@@ -169,6 +169,57 @@ public class ParityTests {
         await Assert.That(() => Agree(side => side.Invoke("Close"))).Throws<ArgumentException>();
     }
 
+    const string TrackingDsl = """
+        domain Watch
+        Paper: entity {
+          Title: Text
+          A: stage {
+            Advance: action { transition to B }
+          }
+          B: stage { }
+        }
+        Tr: entity {
+          Tracks: Paper
+          P: stage {
+            when Tracks B {
+              transition to Q
+            }
+          }
+          Q: stage { }
+        }
+        """;
+
+    // A stage-scoped subscription whose handler transitions the subscriber.
+    [Test]
+    public async Task Invoke_WhenTrackedPeerTransitions_SubscriberTransitionsToo() {
+        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTracking")
+            .AssertAgree(side => {
+                var paper = side.Create("Paper", ("Title", "p"));
+                var tr = side.Create("Tr", ("Tracks", paper));
+                side.Use(paper);
+                side.Invoke("Advance");
+                side.Use(tr);
+            });
+        await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("P");
+        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Q");
+    }
+
+    [Test]
+    public async Task Invoke_WhenTwoSubscribersTrackOnePeer_BothTransition() {
+        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTrackingTwo")
+            .AssertAgree(side => {
+                var paper = side.Create("Paper", ("Title", "p"));
+                var first = side.Create("Tr", ("Tracks", paper));
+                var second = side.Create("Tr", ("Tracks", paper));
+                side.Use(paper);
+                side.Invoke("Advance");
+                side.Use(first);
+                side.Use(second);
+            });
+        await Assert.That(outcomes[5].State["Stage"]).IsEqualTo("Q");
+        await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("Q");
+    }
+
     const string EqualityDsl = """
         domain Shop
         Order: entity {
@@ -196,7 +247,7 @@ public class ParityTests {
                 Constraints = [.. p.Constraints, .. equalities.Where(e => e.Property == p.Name).Select(e => new EqualityConstraint(e.Expected))]
             })]
         };
-        return ParityScenario.FromDomain(domain with { Types = [entity] }, assemblyName);
+        return ParityScenario.FromDomain(domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] }, assemblyName);
     }
 
     // Status must be "Active"; Level must be 5 (an int, while the property holds a long).
@@ -264,6 +315,43 @@ public class ParityTests {
             .Run(side => side.Create("Job", ("Tag", "t")));
         await Assert.That(printed[0].Success).IsTrue();
         await Assert.That(simulate[0].Message).IsEqualTo("'Mark' must equal x.");
+    }
+
+    // Owner: none named in the plan; closest is C2b (the compiled Create). The simulator's first-stage entry skips
+    // transition effects (ApplyInitialStageEntryEffects), so the instance stays in the first stage; the printed
+    // constructor performs the transition. Both sides compile and run: this is a behaviour gap, not a compile failure.
+    [Test]
+    public async Task KnownGap_FirstStageEntryTransition_SimulateStaysInFirstStage() {
+        var dsl = await File.ReadAllTextAsync(Path.Combine(FindRepoRoot(), "docs/probes/dogfood/entry-transition-in-first-stage.poly"));
+        var (simulate, printed) = ParityScenario.FromDsl(dsl, "ParityGapEntryTransition")
+            .Run(side => side.Create("Z", ("Tag", "t")));
+        await Assert.That(ParityScenario.Differences(simulate, printed))
+            .IsEquivalentTo(["create Z: 'Stage' differs (simulate 'A', printed 'B')"]);
+    }
+
+    // Owner: C5b (multi-hop leaves the store). A subscriber's handler transition notifies its own subscribers in
+    // simulate (the store recurses); the printed handler does not, so W stays in P in printed code.
+    [Test]
+    public async Task KnownGap_SubscriberTransitionCascade_PrintedStopsAfterOneHop() {
+        const string cascade = """
+
+            W: entity {
+              Tracks: Tr
+              P: stage { when Tracks Q { transition to R } }
+              R: stage { }
+            }
+            """;
+        var (simulate, printed) = ParityScenario.FromDsl(TrackingDsl + cascade, "ParityGapCascade")
+            .Run(side => {
+                var paper = side.Create("Paper", ("Title", "p"));
+                var tr = side.Create("Tr", ("Tracks", paper));
+                var w = side.Create("W", ("Tracks", tr));
+                side.Use(paper);
+                side.Invoke("Advance");
+                side.Use(w);
+            });
+        await Assert.That(ParityScenario.Differences(simulate, printed))
+            .IsEquivalentTo(["use W: 'Stage' differs (simulate 'R', printed 'P')"]);
     }
 
     // Each Differences row differs from the baseline in exactly one field, so deleting that field's compare turns it red.

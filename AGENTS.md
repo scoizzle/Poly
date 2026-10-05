@@ -48,7 +48,7 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 
 - **TFM:** `net10.0`, nullable on.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
-- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate. Do not weaken audit in-repo.
+- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate. Do not weaken audit in-repo.
 - **MCP after code changes:** `scripts/restart-poly-mcp.sh`
 - Incomplete while the build fails, unless the user blocks that. Tests ship with features. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
 - Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No `#region`.

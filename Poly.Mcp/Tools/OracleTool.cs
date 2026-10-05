@@ -7,6 +7,7 @@ using ModelContextProtocol.Server;
 
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Queries;
 using Poly.Interpretation.CSharp;
 using Poly.Mcp.Sessions;
@@ -405,9 +406,10 @@ internal sealed class OracleTool {
                 .ToList();
             var policy = new Policy("_sim", expr);
             var entity = new Entity("Subject", props, [], [policy], []); // Policies = [policy] so EvaluatePolicy cache hits
-            var domain = new Domain("Subject", [entity]) {
-                Extensions = [.. ExtensionCatalog.ProductAuthoring],
-            };
+            // G1: Create refuses domains that Analyze as Errors. Seed the same primitives
+            // a parsed domain starts with (G3 will Analyze first and return diagnostics).
+            var boot = DomainFactory.Create("Subject");
+            var domain = boot with { Types = [.. boot.Types, entity] };
             var instance = DomainEntityInstance.Create(entity, subjectValues, domain);
             var result = instance.EvaluatePolicy(policy);
 

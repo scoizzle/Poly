@@ -1,7 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling;
@@ -171,10 +171,7 @@ public class DomainEntityInstanceTests {
             Actions: [],
             Policies: [],
             Stages: []);
-        var domain = DomainFactory.Create("T") with {
-            Types = [entity],
-            Extensions = [ExtensionCatalog.TemporalId],
-        };
+        var domain = ValidDomain.Create("T", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         await Assert.That(instance.GetProperty<object>("Start")).IsTypeOf<DateOnly>();
@@ -194,10 +191,7 @@ public class DomainEntityInstanceTests {
             Actions: [],
             Policies: [],
             Stages: []);
-        var domain = DomainFactory.Create("T") with {
-            Types = [entity],
-            Extensions = [ExtensionCatalog.TemporalId],
-        };
+        var domain = ValidDomain.Create("T", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         await Assert.That(instance.GetProperty<object>("RecordedOn")).IsTypeOf<DateOnly>();
@@ -384,7 +378,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
-        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex!.Message).Contains("Automatic stage transition loop");
         await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
     }
 
@@ -406,7 +400,7 @@ public class DomainEntityInstanceTests {
         var instance = DomainEntityInstance.Create(entity, domain: domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("S1"));
-        await Assert.That(ex!.Message).Contains("re-entrancy");
+        await Assert.That(ex!.Message).Contains("Automatic stage transition loop");
         await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxTransitionDepth.ToString());
     }
 
@@ -1241,14 +1235,17 @@ public class DomainEntityInstanceTests {
     public async Task ExecuteSubscriptionEffects_Exception_ClearsSubscriptionFlag_AllowsRetry() {
         // If a subscription effect throws, _isExecutingSubscription must clear so a later
         // transition can fire subscriptions again (F8 — retired event.* bag oracle).
+        // The throw is a unique collision. An unknown property is an analysis error, and
+        // Create refuses that domain before the subscription runs.
         var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
-        var tracker = new Entity("Tracker", [trackerStatus], [], [], [
+        var trackerToken = new Property("Token", new DomainTypeReference("Text"), [new UniqueConstraint()]);
+        var tracker = new Entity("Tracker", [trackerStatus, trackerToken], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
                     new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
                         new AssignEffect(
-                            DomainExpression.Property("NonexistentProp"),
-                            DomainExpression.Literal("will fail"))
+                            DomainExpression.Property("Token"),
+                            DomainExpression.Literal("TAKEN"))
                     ])
                 ]
             }
@@ -1272,10 +1269,13 @@ public class DomainEntityInstanceTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
 
         var store = new DomainInstanceStore();
+        var held = DomainEntityInstance.Create(tracker,
+            new Dictionary<string, object?> { ["Status"] = "HELD", ["Token"] = "TAKEN" }, domain: domain);
+        store.Add(held);
         var orderInstance = DomainEntityInstance.Create(order,
             new Dictionary<string, object?> { ["Code"] = "ABC-123" }, domain: domain);
         var trackerInstance = DomainEntityInstance.Create(tracker,
-            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED" }, domain: domain);
+            new Dictionary<string, object?> { ["Status"] = "UNTOUCHED", ["Token"] = "FREE" }, domain: domain);
         store.Add(orderInstance);
         store.Add(trackerInstance);
         store.Link("Tracks", trackerInstance, orderInstance);
@@ -1292,7 +1292,7 @@ public class DomainEntityInstanceTests {
 
         // Flag cleared: a second linked subscriber still receives the next notify (and throws).
         var freshTracker = DomainEntityInstance.Create(tracker,
-            new Dictionary<string, object?> { ["Status"] = "FRESH" }, domain: domain);
+            new Dictionary<string, object?> { ["Status"] = "FRESH", ["Token"] = "OTHER" }, domain: domain);
         store.Add(freshTracker);
 
         var order2 = DomainEntityInstance.Create(order,
@@ -2392,30 +2392,11 @@ public class DomainEntityInstanceTests {
             RelationshipCardinality.OneToOne, []);
 
         var domain = ValidDomain.Create("Test", [a, b], [rel]);
-        var store = new DomainInstanceStore();
-        var aInstance = DomainEntityInstance.Create(a, domain: domain);
-        var bInstance = DomainEntityInstance.Create(b, domain: domain);
-        store.Add(aInstance);
-        store.Add(bInstance);
-        store.Link("rel", bInstance, aInstance);
-
-        // Trigger transition — OnEntry throws, but notify should still fire in finally.
-        // TransitionStage sets CurrentStage then runs OnEntry in try; Notify is finally.
-        var threw = false;
-        try {
-            aInstance.TransitionStage("Active");
-        }
-        catch {
-            // Expected — OnEntry effect throws
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
-
-        // Stage is still set even though OnEntry threw
-        await Assert.That(aInstance.CurrentStage).IsEqualTo("Active");
-
-        // B was notified despite the OnEntry exception
-        await Assert.That(bInstance.GetProperty<string>("BStatus")).IsEqualTo("Notified");
+        // G1: assign to a missing property is an analysis Error — Create refuses the domain.
+        // (Notify-still-fires under a clean domain stays covered elsewhere.)
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(a, domain: domain));
+        await Assert.That(ex!.Message).Contains("Nonexistent");
     }
 
     [Test]
@@ -2685,19 +2666,10 @@ public class DomainEntityInstanceTests {
         ], [], []);
 
         var domain = ValidDomain.Create("Test", [parent, child], []);
-        var store = new DomainInstanceStore();
-        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
-        store.Add(parentInstance);
-
-        var threw = false;
-        try {
-            parentInstance.InvokeAction("Spawn");
-        }
-        catch (InvalidOperationException ex) {
-            await Assert.That(ex.Message.Contains("nonexistentRel")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+        // G1: analysis Errors refuse Create (unknown relationship on Spawn).
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(parent, domain: domain));
+        await Assert.That(ex!.Message).Contains("nonexistentRel");
     }
 
     [Test]
@@ -2750,19 +2722,10 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [maker, customer, order], [rel]);
-        var store = new DomainInstanceStore();
-        var makerInstance = DomainEntityInstance.Create(maker, domain: domain);
-        store.Add(makerInstance);
-
-        var threw = false;
-        try {
-            makerInstance.InvokeAction("Spawn");
-        }
-        catch (InvalidOperationException ex) {
-            await Assert.That(ex.Message.Contains("not the source")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+        // G1: Maker is not the source of rel — analysis refuses before Create.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(maker, domain: domain));
+        await Assert.That(ex!.Message).Contains("rel");
     }
 
     [Test]
@@ -2778,19 +2741,10 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [customer, order, invoice], [rel]);
-        var store = new DomainInstanceStore();
-        var custInstance = DomainEntityInstance.Create(customer, domain: domain);
-        store.Add(custInstance);
-
-        var threw = false;
-        try {
-            custInstance.InvokeAction("Spawn");
-        }
-        catch (InvalidOperationException ex) {
-            await Assert.That(ex.Message.Contains("targets")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+        // G1: Invoice vs Order target mismatch is an analysis Error — Create refuses.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(customer, domain: domain));
+        await Assert.That(ex!.Message).Contains("targets");
     }
 
     [Test]
@@ -2806,19 +2760,10 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [maker, customer, order], [rel]);
-        var store = new DomainInstanceStore();
-        var makerInstance = DomainEntityInstance.Create(maker, domain: domain);
-        store.Add(makerInstance);
-
-        var threw = false;
-        try {
-            makerInstance.InvokeAction("Spawn");
-        }
-        catch (InvalidOperationException ex) {
-            await Assert.That(ex.Message.Contains("not the source")).IsTrue();
-            threw = true;
-        }
-        await Assert.That(threw).IsTrue();
+        // G1: CreateIn on the wrong source is an analysis Error — Create refuses.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(maker, domain: domain));
+        await Assert.That(ex!.Message).Contains("rel");
     }
 
     // ═════════════════════════════════════════════════════════════
@@ -3158,17 +3103,12 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Employee"), new DomainTypeReference("Employee"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Org", [employee], [rel]);
+        // G1: self-relationship quantifiers are an analysis Error — Create refuses.
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Employee");
-        var store = new DomainInstanceStore();
-        var mgr = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Flag"] = true }, domain);
-        var emp = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Flag"] = true }, domain);
-        store.Add(mgr); store.Add(emp);
-        store.Link("reports", mgr, emp);
-        var policy = entity.Policies.First(p => p.Name == "HasReports");
-        await Assert.That(mgr.EvaluatePolicy(policy)).IsTrue();
-        await Assert.That(emp.EvaluatePolicy(policy)).IsFalse();
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(entity,
+                new Dictionary<string, object?> { ["Flag"] = true }, domain));
+        await Assert.That(ex!.Message).Contains("self-relationship");
     }
 
     // ── owned-3: to-one RelationshipNavigation in policy evaluation ──
@@ -3548,23 +3488,12 @@ public class DomainEntityInstanceTests {
             new DomainTypeReference("Order"), new DomainTypeReference("Item"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [order, item], [rel]);
-        var store = new DomainInstanceStore();
-        var orderInst = DomainEntityInstance.Create(order,
-            new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain);
-        var a = DomainEntityInstance.Create(item,
-            new Dictionary<string, object?> { ["Sku"] = "X" }, domain: domain);
-        var b = DomainEntityInstance.Create(item,
-            new Dictionary<string, object?> { ["Sku"] = "Y" }, domain: domain);
-        store.Add(orderInst);
-        store.Add(a);
-        store.Add(b);
-        store.Link("items", orderInst, a);
-        store.Link("items", orderInst, b);
-
-        var policy = order.Policies.First(p => p.Name == "HasSkuX");
-        var ex = Assert.Throws<InvalidOperationException>(() => orderInst.EvaluatePolicy(policy));
-        await Assert.That(ex!.Message).Contains("exactly one linked target");
-        await Assert.That(ex.Message).Contains("quantifiers");
+        // G1: bare path-prefix on a many-relationship is an analysis Error — Create refuses.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            DomainEntityInstance.Create(order,
+                new Dictionary<string, object?> { ["Name"] = "O1" }, domain: domain));
+        await Assert.That(ex!.Message).Contains("OneToMany");
+        await Assert.That(ex.Message).Contains("quantifier");
     }
 
     // ── Product-surface audit: entry/exit + cross-entity invoke args ──
@@ -3792,17 +3721,14 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task EvaluatePolicy_WrongTypedProgrammaticExpression_FailsLoudAtVmCompile() {
-        // Interpretation-layer type check: a programmatically-constructed wrong-typed
-        // policy (bypassing the DSL authoring analyzer) must fail loud at VM compile —
-        // the interpretation analyzer is the backstop that used to be missing.
+        // Domain analysis catches the wrong-typed policy; G1 refuses Create before VM compile.
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var bad = new Policy("Bad",
             DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal(5)));
         var entity = new Entity("T", [name], [], [bad], []);
 
-        var instance = CreateWithDomain(entity,
-            new Dictionary<string, object?> { ["Name"] = "x" });
-        var ex = Assert.Throws<InvalidOperationException>(() => instance.EvaluatePolicy(bad));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            CreateWithDomain(entity, new Dictionary<string, object?> { ["Name"] = "x" }));
         await Assert.That(ex!.Message).Contains("comparison between incompatible types");
     }
 

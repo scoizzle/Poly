@@ -1,6 +1,8 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Tests.TestHelpers;
 
@@ -278,10 +280,30 @@ public class ParityTests {
 
     [Test]
     public async Task Create_WhenDefaultViolatesEquality_FailsWithTheSameMessage() {
-        var (simulate, printed) = EqualityScenario(EqualityDsl, "ParityEqualityDefault", ("Code", "Other"))
-            .Run(side => side.Create("Order", ("Status", "s"), ("Level", 1L)));
-        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed))).IsEqualTo(CreateThrowsVersusFails);
-        await Assert.That(simulate[0].Message).IsEqualTo("'Code' must equal Other.");
+        // G1: a default that violates == is an analysis Error; Export and Create both refuse it.
+        var domain = EvolvedDomain.FromDsl(EqualityDsl).Domain;
+        var entity = domain.Types.OfType<Entity>().Single();
+        entity = entity with {
+            Properties = [.. entity.Properties.Select(p => p.Name == "Code"
+                ? p with { Constraints = [.. p.Constraints, new EqualityConstraint("Other")] }
+                : p)]
+        };
+        domain = domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] };
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.HasErrors).IsTrue();
+        var first = analysis.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message;
+        await Assert.That(first).Contains("Code");
+
+        var exportEx = Assert.Throws<InvalidOperationException>(
+            () => new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(exportEx!.Message).IsEqualTo(first);
+
+        var createEx = Assert.Throws<InvalidOperationException>(
+            () => DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
+                ["Status"] = "s",
+                ["Level"] = 1L
+            }, domain));
+        await Assert.That(createEx!.Message).IsEqualTo(first);
     }
 
     // Known gaps: the sides differ today. Each row pins the exact differences so a fix turns it red;

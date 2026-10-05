@@ -41,15 +41,22 @@ public sealed class DomainSession {
 
     /// <summary>
     /// Empty before the first Lower or Emit. Each <see cref="Lower"/> or <see cref="Emit"/> replaces
-    /// it with a new catalog holding the trees it made (when calls overlap, the last to finish
-    /// wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per entity
-    /// (the entity type and its stage enum). It is not an emit/contributor file inventory.
+    /// it with a new catalog holding the trees it made and the domain elements they came from
+    /// (when calls overlap, the last to finish wins): one <c>scaffolding</c> tree for the domain
+    /// pointing at a <c>source-domain</c> artifact, one <c>entity</c> tree per entity
+    /// (the entity type and its stage enum) pointing at a <c>source-entity</c> artifact,
+    /// and one <c>analysis-report</c> for the domain's findings.
+    /// It is not an emit/contributor file inventory.
     /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
     private const string ScaffoldingType = "scaffolding";
     private const string EntityType = "entity";
+    private const string AnalysisReportType = "analysis-report";
+    private const string SourceDomainType = "source-domain";
+    private const string SourceEntityType = "source-entity";
+    private const string LowerProducer = "Lower";
 
     private Analyzer? _analyzer;
 
@@ -155,13 +162,15 @@ public sealed class DomainSession {
     /// Stage 3: one operation module (type definitions, action bodies,
     /// policy methods, subscription handlers, and OnEntry/OnExit bodies).
     /// Simulate and print consume this result. Throws <see cref="InvalidOperationException"/>
-    /// when analysis reported errors. Throws <see cref="FormatException"/> when a domain
-    /// or entity name cannot be part of an artifact id, and <see cref="InvalidOperationException"/>
-    /// when two lowered types would collide (see <c>RegisterTrees</c>).
+    /// naming the first analysis error before the catalog is replaced. Throws
+    /// <see cref="FormatException"/> when a domain or entity name cannot be part of an
+    /// artifact id, and <see cref="InvalidOperationException"/> when two lowered types
+    /// would collide (see <c>RegisterTrees</c>).
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         return module;
@@ -180,21 +189,43 @@ public sealed class DomainSession {
         }
 
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        return (module, RegisterTrees(domain, module));
+        var catalog = new ArtifactCatalog();
+        RegisterSourceElements(catalog, domain);
+        RegisterTrees(catalog, domain, module);
+        RegisterAnalysisReport(catalog, domain, analysis);
+        return (module, catalog);
+    }
+
+    /// <summary>
+    /// Registers the domain as a <c>source-domain</c> artifact and each entity as a
+    /// <c>source-entity</c> artifact. Tree artifacts point at these so a debugger step
+    /// can be traced back to the authored element.
+    /// </summary>
+    internal static void RegisterSourceElements(ArtifactCatalog catalog, Domain domain) {
+        catalog.DeclareType(SourceDomainType, mayPointAt: []);
+        catalog.DeclareType(SourceEntityType, mayPointAt: []);
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], SourceDomainType), LowerProducer),
+            Payload: domain));
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            catalog.Register(new Artifact(
+                new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], SourceEntityType), LowerProducer),
+                Payload: entity));
+        }
     }
 
     /// <summary>
     /// Splits the module into one tree per entity (the entity type and its stage enum) and one
     /// scaffolding tree holding everything else (domain enums, DomainResult, and so on).
-    /// Each tree's payload is a read-only copy of its type definitions. A type that two trees
-    /// would hold, or that the module defines twice (for example an entity named
-    /// <c>DomainResult</c>, or entities <c>X</c> and <c>XStage</c>), is refused: the printed C#
-    /// would not compile either.
+    /// Each tree's payload is a read-only copy of its type definitions. Each entity tree points
+    /// at the matching <c>source-entity</c> artifact and the scaffolding tree at <c>source-domain</c>.
+    /// A type that two trees would hold, or that the module defines twice (for example an entity
+    /// named <c>DomainResult</c>, or entities <c>X</c> and <c>XStage</c>), is refused: the printed
+    /// C# would not compile either.
     /// </summary>
-    private static ArtifactCatalog RegisterTrees(Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
-        var catalog = new ArtifactCatalog();
-        catalog.DeclareType(ScaffoldingType, mayPointAt: []);
-        catalog.DeclareType(EntityType, mayPointAt: []);
+    internal static void RegisterTrees(ArtifactCatalog catalog, Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
+        catalog.DeclareType(ScaffoldingType, mayPointAt: [SourceDomainType]);
+        catalog.DeclareType(EntityType, mayPointAt: [SourceEntityType]);
         var entities = domain.Types.OfType<Entity>().ToList();
         static bool Belongs(TypeDefinitionNode type, Entity entity) =>
             type.Name == entity.Name || type.Name == $"{entity.Name}Stage";
@@ -212,14 +243,19 @@ public sealed class DomainSession {
         foreach (var entity in entities) {
             var trees = module.Where(t => Belongs(t, entity)).ToArray();
             catalog.Register(new Artifact(
-                new ArtifactDescriptor(ArtifactId.Create([domain.Name, entity.Name], EntityType), "Lower"),
+                new ArtifactDescriptor(
+                    ArtifactId.Create([domain.Name, entity.Name], EntityType),
+                    LowerProducer,
+                    [ArtifactId.Create([domain.Name, entity.Name], SourceEntityType)]),
                 Payload: trees.AsReadOnly()));
         }
         var scaffolding = module.Where(t => !entities.Any(e => Belongs(t, e))).ToArray();
         catalog.Register(new Artifact(
-            new ArtifactDescriptor(ArtifactId.Create([domain.Name], ScaffoldingType), "Lower"),
+            new ArtifactDescriptor(
+                ArtifactId.Create([domain.Name], ScaffoldingType),
+                LowerProducer,
+                [ArtifactId.Create([domain.Name], SourceDomainType)]),
             Payload: scaffolding.AsReadOnly()));
-        return catalog;
     }
 
     /// <summary>
@@ -245,6 +281,25 @@ public sealed class DomainSession {
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
         files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
         return files;
+    }
+
+    /// <summary>
+    /// One <c>analysis-report</c> per domain. Each finding carries the id path of the
+    /// domain element the diagnostic was reported on. Always registered (empty when
+    /// analysis produced no diagnostics) so Lower and Emit catalogs share the type.
+    /// </summary>
+    private static void RegisterAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult analysis) {
+        catalog.DeclareType(AnalysisReportType, mayPointAt: []);
+        var findings = analysis.Diagnostics
+            .Select(d => new AnalysisFinding(
+                d.Code,
+                d.Severity,
+                d.Message,
+                DomainElementPath.Resolve(domain, d.Node)))
+            .ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], AnalysisReportType), "Analyze"),
+            Payload: new AnalysisReport(findings)));
     }
 
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>

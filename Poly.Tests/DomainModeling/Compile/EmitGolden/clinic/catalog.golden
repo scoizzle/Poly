@@ -1,5 +1,11 @@
+analysis-report|Clinic|Analyze
 scaffolding|Clinic|Lower
+source-domain|Clinic|Lower
 entity|Clinic/Doctor|Lower
+source-entity|Clinic/Doctor|Lower
 entity|Clinic/Patient|Lower
+source-entity|Clinic/Patient|Lower
 entity|Clinic/Schedule|Lower
+source-entity|Clinic/Schedule|Lower
 entity|Clinic/Visit|Lower
+source-entity|Clinic/Visit|Lower

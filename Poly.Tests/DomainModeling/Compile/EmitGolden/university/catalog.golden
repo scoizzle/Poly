@@ -1,7 +1,15 @@
+analysis-report|University|Analyze
 scaffolding|University|Lower
+source-domain|University|Lower
 entity|University/Course|Lower
+source-entity|University/Course|Lower
 entity|University/Enrollment|Lower
+source-entity|University/Enrollment|Lower
 entity|University/Instructor|Lower
+source-entity|University/Instructor|Lower
 entity|University/Section|Lower
+source-entity|University/Section|Lower
 entity|University/Student|Lower
+source-entity|University/Student|Lower
 entity|University/WaitOffer|Lower
+source-entity|University/WaitOffer|Lower

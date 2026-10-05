@@ -92,7 +92,7 @@ public class ForEachInvokeHostAbiTests {
         var rel = new Relationship("Items",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var tgt1 = DomainEntityInstance.Create(target,
             new Dictionary<string, object?> { ["Status"] = "a" }, domain: domain);
@@ -116,7 +116,7 @@ public class ForEachInvokeHostAbiTests {
         var rel = new Relationship("Peers",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.ManyToMany, []);
-        var domain = DomainTestFactory.Create("Test", [source, target], [rel]);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
         var store = new DomainInstanceStore();
         var tgt = DomainEntityInstance.Create(target, domain: domain);
         var src = DomainEntityInstance.Create(source, domain: domain);

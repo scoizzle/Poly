@@ -1,0 +1,20 @@
+domain Watch
+
+// Probe: a subscriber stage whose `when` handler transitions the subscriber.
+// Expect: the printed C# compiles and behaves like simulate.
+Paper: entity {
+  Title: Text
+  A: stage {
+    Advance: action { transition to B }
+  }
+  B: stage { }
+}
+Tr: entity {
+  Tracks: Paper
+  P: stage {
+    when Tracks B {
+      transition to Q
+    }
+  }
+  Q: stage { }
+}

@@ -4,7 +4,7 @@ using Artifact = Poly.DomainModeling.Compile.Artifact;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
-/// <summary>What <see cref="DomainSession.Lower"/> registers: one scaffolding tree and one tree per entity.</summary>
+/// <summary>What <see cref="DomainSession.Lower"/> registers: trees plus the analysis report.</summary>
 public sealed class LowerTreesTests {
     private const string Parking = """
         domain Parking
@@ -30,7 +30,7 @@ public sealed class LowerTreesTests {
 
         var catalog = session.ArtifactCatalog;
         await Assert.That(catalog.ToText()).IsEqualTo(
-            "scaffolding|Parking|Lower\nentity|Parking/Garage|Lower\nentity|Parking/Permit|Lower");
+            "analysis-report|Parking|Analyze\nscaffolding|Parking|Lower\nentity|Parking/Garage|Lower\nentity|Parking/Permit|Lower");
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking", "Permit"], "entity"))!))
             .IsEquivalentTo(["Permit", "PermitStage"]);
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking", "Garage"], "entity"))!))
@@ -46,7 +46,9 @@ public sealed class LowerTreesTests {
 
         var module = session.Lower(domain, analysis);
 
-        var inTrees = session.ArtifactCatalog.Artifacts.SelectMany(TypeNames).Order(StringComparer.Ordinal);
+        var inTrees = session.ArtifactCatalog.Artifacts
+            .Where(a => a.Descriptor.Id.Type is "entity" or "scaffolding")
+            .SelectMany(TypeNames).Order(StringComparer.Ordinal);
         await Assert.That(inTrees.SequenceEqual(module.Select(t => t.Name).Order(StringComparer.Ordinal))).IsTrue();
     }
 

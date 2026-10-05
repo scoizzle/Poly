@@ -42,14 +42,16 @@ public sealed class DomainSession {
     /// <summary>
     /// Empty before the first Lower or Emit. Each <see cref="Lower"/> or <see cref="Emit"/> replaces
     /// it with a new catalog holding the trees it made (when calls overlap, the last to finish
-    /// wins): one <c>scaffolding</c> tree for the domain and one <c>entity</c> tree per entity
-    /// (the entity type and its stage enum). It is not an emit/contributor file inventory.
+    /// wins): one <c>scaffolding</c> tree for the domain, one <c>entity</c> tree per entity
+    /// (the entity type and its stage enum), and one <c>analysis-report</c> for the domain's
+    /// findings. It is not an emit/contributor file inventory.
     /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
     private const string ScaffoldingType = "scaffolding";
     private const string EntityType = "entity";
+    private const string AnalysisReportType = "analysis-report";
 
     private Analyzer? _analyzer;
 
@@ -167,7 +169,9 @@ public sealed class DomainSession {
     private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
         Domain domain, AnalysisResult analysis) {
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
-        return (module, RegisterTrees(domain, module));
+        var catalog = RegisterTrees(domain, module);
+        RegisterAnalysisReport(catalog, domain, analysis);
+        return (module, catalog);
     }
 
     /// <summary>
@@ -232,6 +236,25 @@ public sealed class DomainSession {
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
         files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
         return files;
+    }
+
+    /// <summary>
+    /// One <c>analysis-report</c> per domain. Each finding carries the id path of the
+    /// domain element the diagnostic was reported on. Always registered (empty when
+    /// analysis produced no diagnostics) so Lower and Emit catalogs share the type.
+    /// </summary>
+    private static void RegisterAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult analysis) {
+        catalog.DeclareType(AnalysisReportType, mayPointAt: []);
+        var findings = analysis.Diagnostics
+            .Select(d => new AnalysisFinding(
+                d.Code,
+                d.Severity,
+                d.Message,
+                DomainElementPath.Resolve(domain, d.Node)))
+            .ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], AnalysisReportType), "Analyze"),
+            Payload: new AnalysisReport(findings)));
     }
 
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>

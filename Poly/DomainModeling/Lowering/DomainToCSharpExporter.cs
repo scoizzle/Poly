@@ -375,8 +375,13 @@ public sealed partial class DomainToCSharpExporter {
         AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
-        // A policy that cannot be lowered fails the whole export (no per-policy stub).
-        foreach (var policy in entity.Policies) {
+        // One unqualified method per policy name. Entity, stage, and action-local
+        // definitions share that namespace. require-copies and not_ uses do not
+        // emit a second method. A redefinition throws (Sema reports it first).
+        void AddPolicyMethod(Policy policy) {
+            if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    $"Policy '{policy.Name}' is already defined on entity '{entity.Name}'.");
             var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             if (body is not null)
                 policyBodies?.Add((entity.Name, policy.Name), body);
@@ -386,6 +391,21 @@ public sealed partial class DomainToCSharpExporter {
                 Body: body,
                 AccessModifier: AccessModifier.Public
             ));
+        }
+
+        foreach (var policy in entity.Policies)
+            AddPolicyMethod(policy);
+        foreach (var stage in entity.Stages)
+            foreach (var policy in stage.Policies)
+                AddPolicyMethod(policy);
+        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))) {
+            foreach (var policy in action.Policies) {
+                if (policy.Name.StartsWith("not_", StringComparison.Ordinal))
+                    continue;
+                if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
+                    continue;
+                AddPolicyMethod(policy);
+            }
         }
 
         // ── Target entity: subscription registry ──────────────────

@@ -63,7 +63,7 @@ policy { ExpiryDate < Now }  with fixed clock → true/false
 ### Kickoff
 
 ```bash
-copilot --agent plan-suite-until-done -p "Suite: p1. Mode: until-done."
+copilot --agent plan-suite-until-done -p "Suite: docs/plans/simple-agent-tasks/p1-README.md. Mode: until-done."
 ```
 
 ---

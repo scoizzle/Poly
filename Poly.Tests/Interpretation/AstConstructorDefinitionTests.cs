@@ -75,7 +75,7 @@ public class AstConstructorDefinitionTests {
     }
 
     [Test]
-    public async Task Compile_NewOfAstDefinedType_FailsLoud() {
+    public async Task Compile_NewOfAstDefinedType_AllocatesDictionary() {
         var typeNode = new TypeDefinitionNode(
             "Widget",
             "Sample",
@@ -84,8 +84,10 @@ public class AstConstructorDefinitionTests {
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
         var newNode = new New(new TypeReference("Sample.Widget"));
-        await Assert.That(() => Interpreter.Compile(newNode, tda))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("no matching constructor");
+        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, tda));
+        var bag = exec.GetValue<Dictionary<string, object?>>();
+        await Assert.That(bag).IsNotNull();
+        await Assert.That(bag!.Count).IsEqualTo(0);
+        await Assert.That(bag.Comparer).IsEqualTo(StringComparer.Ordinal);
     }
 }

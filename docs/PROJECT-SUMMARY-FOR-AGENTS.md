@@ -1,127 +1,13 @@
-# Poly Platform — Project Summary for Agents
+# Poly — where to read
 
-**Date:** 2026-08-31  
-**Purpose:** Quick onboarding for any agent new to the Poly codebase.
+This is an index. It is not a second architecture or a status snapshot.
 
----
+1. [`AGENTS.md`](../AGENTS.md) — always-on contract, tenets, build, test, placement.
+2. [`CORE.md`](CORE.md) — machinery map. Open it before changing platform code.
+3. [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) — the only CURRENT. Archived suites are not queues.
+4. [`../Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) — the only product DSL guide. `get_dsl_guide` returns it.
+5. [`agent/README.md`](agent/README.md) — review, suite, and discovery protocols.
 
-## What Poly Is
+Open a file under `agent/reviews/` only when a task names it. Open contract residuals: [`agent/reviews/2026-10-01-platform-contract-followups.md`](agent/reviews/2026-10-01-platform-contract-followups.md).
 
-A **domain modeling platform** that turns a declarative DSL into analyzable domain models, runtime instances, and production-ready C# infrastructure code (EF Core DbContext, Minimal API, .http file).
-
-```poly
-domain Library
-Book: entity { Title: Text required; ISBN: Text unique }
-Patron: entity {
-  loans: many Loan
-  GoodStanding: policy { Status is "Active" }
-  Active: stage {
-    CheckOut: action (book: Book) -> Loan
-      require GoodStanding
-    { create in loans { book: book } }
-  }
-}
-Loan: entity { book: Book; borrower: Patron; Active: stage { Return: action { } } }
-```
-
-## Key Architectural Principles
-
-From [`AGENTS.md`](../AGENTS.md) — always read before non-trivial changes:
-
-1. **Domain model is the key artifact** — tools serve domain expression, not fashion
-2. **Placement rules** — module boundaries are strict one-way deps (Syntax → Interpretation, DomainModeling → Syntax, etc.)
-3. **Go well to go fast** — smallest fix that passes a failing test; production gets simpler, tests get more specific
-4. **Seam when multiplicity is known** — libraries / producers / `uses` doors get a real seam now; no speculative frameworks for imagined futures (DEI as public path is the cautionary tale)
-
-## Module Map
-
-| Module | Concern | Key files |
-|--------|---------|-----------|
-| `Poly/Syntax/` | AST nodes, analysis framework, analysis pipeline | `Nodes/*.cs`, `Analysis/Analyzer.cs`, `Analysis/AnalyzerBuilder.cs`, `Analysis/INodeAnalyzer.cs` |
-| `Poly/DomainModeling/` | Domain model records, DSL parsing, analysis passes, evolution, runtime | `Entity.cs`, `Domain.cs`, `Parsing/PolyDslParser.cs`, `Analysis/*.cs`, `Evolution/DomainEvolution.cs`, `DomainEntityInstance.cs`, `DomainInstanceStore.cs` |
-| `Poly/Interpretation/` | Expression lowering, C# export, VM execution | `CSharp/`, `LinqExpressions/`, `Vm/` |
-| `Poly/Introspection/` | CLR type system bridge | `TypeMember.cs`, `ClrTypeDefinitionRegistry.cs` |
-| `Poly.Mcp/` | MCP server tools for agents | `Tools/RuntimeTool.cs`, `Tools/DomainTools.cs`, `Tools/OracleTool.cs`, `Sessions/McpSessionStore.cs` |
-| `src/Poly.DslCompiler/` | CLI compiler (poly → C#) | `DslCompiler.cs`, `MinimalApiGenerator.cs`, `DbContextGenerator.cs` |
-| `src/Poly.Packs.Sqlite/` | Sqlite pack (type maps, conventions) | `SqliteDefaults.cs` |
-
-**CURRENT work:** [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) only. Do not invent a second CURRENT.
-
-## Pipeline Flow
-
-```
-.poly DSL → PolyDslParser → DomainEvolution (apply changes, gate by analysis)
-  → DomainSession.Analyze (metadata: topology, aggregate, behavior, storage, ...)
-  → lower per operation → Interpreter.Compile → VM
-  → DslCompiler.Compile (emits _all.cs, DbContext.cs, Program.cs, demo.http) when emitting
-```
-
-MCP path:
-```
-apply_dsl → create_instance → link_instances → invoke_action → evaluate_policy(instanceId)
-```
-
-Bag-mode `evaluate_policy(age|properties=)` is **removed**. Named-policy evaluate requires a store instance (`instanceId`).
-
-## What's Shipped (1637 tests passing)
-
-### Domain Modeling
-- DSL parsing (entities, enums, properties with constraints, navigation properties, stages, actions, policies, effects, `create in`, subscriptions)
-- Evolution with analysis rollback gating
-- 18-pass domain analysis pipeline (structural, semantic, effect, capability, ownership, storage, etc.)
-- `export_dsl` round-trip fidelity
-
-### Runtime
-- `DomainEntityInstance` with property bag, stages, actions, policy evaluation
-- `DomainInstanceStore` with link/unlink, subscription fan-out on stage transitions
-- Q3′ quantifiers (`any`, `all`, `none`, `count`) with store-linked resolution
-- To-one path-prefix nav resolution (`profile City is "Metropolis"`)
-
-### Codegen (DslCompiler)
-- Entity type definitions with `Create()` factories, `DomainResult<T>`
-- EF Core DbContext with full column mapping, navigation field access, table names
-- Minimal API (CRUD + action endpoints with DTOs, error handling, seed data)
-- `.http` REST Client test file
-- Modes: Entities-only, Db (entities + DbContext), All (everything)
-- DBMS packs: Generic, Sqlite
-
-### MCP Tools
-- Session management, DSL apply/export, evolve micro-tools
-- Oracle tools: `oracle_expression` (fragment probe), `describe_domain_element`
-- Runtime tools: `create_instance`, `link_instances`, `unlink_instances`, `invoke_action`, `get_instance`, `list_instances`, `evaluate_policy` (`instanceId` required)
-- `get_domain_analysis` with structured facts (root entities, action summary, storage boolean, aggregates, subscription plans)
-
-## Current State (end of dogfood Wave 1)
-
-All three scenarios resolved:
-
-| Scenario | Status | Fix shipped |
-|----------|--------|-------------|
-| S1: Library checkout lifecycle | ✅ PASS | `require not` negation (entity-level guard skip) |
-| S2: Reassign via link/unlink | ✅ PASS | `unlink_instances` tool, create-in store reg, `get_instance` nav links |
-| S3: Owned nested profile | ✅ PASS | Guide honesty, JSON `"relationship"` key, to-one RelationshipNavigation runtime resolution |
-
-## 2-Day Alpha Gap
-
-Per discussion 2026-07-26, Poly is ~2 days from an end-to-end demo alpha. The gaps:
-
-1. **Codegen emits `UseInMemoryDatabase` instead of `UseSqlite`** when Sqlite pack selected — one flag in `MinimalApiGenerator`
-2. **No single "build the demo" script** — compile the library domain, generate output, start the API
-3. **No published tool** — must clone and run from source
-4. **No walkthrough README** — outsider needs to know the CLI incantation
-
-## Key Recent Files Changed (last 48h)
-
-- `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` — to-one RelationshipNavigation resolution, `require not` guard skip
-- `Poly/DomainModeling/Lowering/DomainExpressionJsonParser.cs` — **deleted 2026-08-08** (mcp-minify: zero JSON expression IR; policies are DSL text via `DslExpressionFragment.ParseExpressionFragment`; unified `add`/`remove` + `apply_dsl` only)
-- `Poly.Mcp/Tools/RuntimeTool.cs` — `unlink_instances`, create-in InstanceMap registration, `get_instance` nav links
-- `Poly.Mcp/Docs/poly-dsl-guide.md` — owned access promoted to shipped
-- `docs/plans/simple-agent-tasks/dogfood-fix-README.md` — micro-task queue for fixes
-- `docs/plans/simple-agent-tasks/dogfood-owned-README.md` — owned access build slice
-
-## Always Read Before Changes
-
-- `AGENTS.md` — placement rules, principles, coding style
-- `docs/CORE.md` — module boundaries, pipeline maps, anti-reinvention rules
-- `docs/plans/simple-agent-tasks/PIPELINE-STATUS.md` — sole CURRENT/DONE for suite admission
-- `.github/copilot-instructions.md` — DSL guide maintenance rule
+Poly.MCP is the harness. `DomainEntityInstance` is scratch bind, not product proof.

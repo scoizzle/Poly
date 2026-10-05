@@ -46,6 +46,8 @@ public static partial class DirectVmAbiEmitter {
     // Cached reflection lookups
     private static readonly MethodInfo HeapUnsafeGet = Ref<Heap>.Method(h => h.UnsafeGet(0));
     private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(default!));
+    private static readonly ConstructorInfo AstDictionaryCtor =
+        typeof(Dictionary<string, object?>).GetConstructor([typeof(IEqualityComparer<string>)])!;
     private static readonly MethodInfo ObjectEquals = Ref.Method(
         (Expression<Func<object?, object?, bool>>)((a, b) => object.Equals(a, b)));
 
@@ -297,11 +299,15 @@ public static partial class DirectVmAbiEmitter {
                 targetType = clrDef.RuntimeType;
         }
         ConstructorInfo? ctor = null;
+        ITypeMember? resolved = null;
         if (ctx.Analysis is not null) {
-            var resolved = ctx.Analysis.GetResolvedMember(n);
+            resolved = ctx.Analysis.GetResolvedMember(n);
             if (resolved is ClrConstructor clrCtor)
                 ctor = clrCtor.ConstructorInfo;
         }
+        if (resolved is AstConstructorDefinition astCtor)
+            return EmitAstNew(n, astCtor, ctx);
+
         if (ctor is not null) {
             int d = ctx.RingDepth;
             var argExprs = new List<Expression>();
@@ -344,6 +350,59 @@ public static partial class DirectVmAbiEmitter {
         var typeName = targetType?.Name ?? n.Type.ToString();
         throw new InvalidOperationException(
             $"VM compile rejected: no matching constructor for {typeName} with {n.Arguments.Length} argument(s).");
+    }
+
+    /// <summary>
+    /// AST <c>new</c> allocates <see cref="Dictionary{TKey,TValue}"/> and, when the
+    /// constructor body is non-empty, runs that body as its own VM function.
+    /// Frame slot 0 is the new handle (<c>this</c>); parameters follow it.
+    /// The <c>new</c> result is the dictionary handle. A constructor
+    /// <c>return</c> stays inside that function and is not the result.
+    /// </summary>
+    private static Expression EmitAstNew(New n, AstConstructorDefinition astCtor, AbiCtx ctx) {
+        var definition = astCtor.Definition;
+        var parameters = definition.Parameters ?? [];
+        if (n.Arguments.Length > parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: constructor has {parameters.Count} parameter(s) but new has {n.Arguments.Length} argument(s).");
+
+        var seq = new List<Expression>();
+        int[] argSlots = new int[n.Arguments.Length];
+        for (int i = 0; i < n.Arguments.Length; i++) {
+            int before = ctx.RingDepth;
+            seq.Add(CompileNode(n.Arguments[i], ctx));
+            int got = ctx.RingDepth - 1;
+            seq.Add(FoldResultToSlot(ref got, before, ctx));
+            argSlots[i] = got;
+            ctx.RingDepth = got + 1;
+        }
+
+        int slot = ctx.AllocSlot();
+        ctx.RingDepth = slot + 1;
+        var dict = New(AstDictionaryCtor, Constant(StringComparer.Ordinal));
+        var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(dict, typeof(object)));
+        seq.Add(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+
+        if (!HasExecutableBody(definition.Body))
+            return Block(seq);
+
+        var table = TryCompileAstCallable(
+            definition, definition.Body!, parameters, astCtor.DeclaringTypeDefinition, ctx, instanceSlot: true)
+            ?? throw new InvalidOperationException(
+                "VM compile rejected: AST constructor body could not be compiled.");
+        var inits = new List<Expression>(parameters.Count + 1) { ctx.RingVar(slot) };
+        for (int i = 0; i < parameters.Count; i++) {
+            inits.Add(i < n.Arguments.Length
+                ? ctx.RingVar(argSlots[i])
+                : ParameterDefaultLong(parameters[i], ctx));
+        }
+
+        var ignored = Variable(typeof(long), "_astCtor");
+        seq.Add(Assign(ignored, Call(
+            null, InvokeAstFunctionInfo, ctx.State,
+            ArrayIndex(Constant(table), Constant(0)),
+            NewArrayInit(typeof(long), inits))));
+        return Block([ignored], seq);
     }
 
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {

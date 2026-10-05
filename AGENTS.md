@@ -68,7 +68,7 @@ Load → one analyze (dirty → **STOP**) → `session.Lower` → artifact set o
 
 - **TFM:** `net10.0`, nullable on.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
-- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test` (MTP). Local audit path needs `-p:NuGetAudit=false` (NU1903); do not weaken audit in-repo.
+- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test` (MTP).
 - **MCP after code changes:** `scripts/restart-poly-mcp.sh`
 - Work incomplete while build fails (unless user blocks). Add tests with features. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
 - **Diffs:** minimal; match fluent naming. No drive-by comments; no `#region`.

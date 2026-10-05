@@ -1,6 +1,11 @@
 analysis-report|Library|Analyze
 scaffolding|Library|Lower
+source-domain|Library|Lower
 entity|Library/Book|Lower
+source-entity|Library/Book|Lower
 entity|Library/Fine|Lower
+source-entity|Library/Fine|Lower
 entity|Library/Loan|Lower
+source-entity|Library/Loan|Lower
 entity|Library/Patron|Lower
+source-entity|Library/Patron|Lower

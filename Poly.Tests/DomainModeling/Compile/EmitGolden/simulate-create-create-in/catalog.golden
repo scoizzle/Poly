@@ -1,4 +1,7 @@
 analysis-report|SimulateCreateCreateIn|Analyze
 scaffolding|SimulateCreateCreateIn|Lower
+source-domain|SimulateCreateCreateIn|Lower
 entity|SimulateCreateCreateIn/Fine|Lower
+source-entity|SimulateCreateCreateIn/Fine|Lower
 entity|SimulateCreateCreateIn/Patron|Lower
+source-entity|SimulateCreateCreateIn/Patron|Lower

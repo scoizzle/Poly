@@ -97,6 +97,12 @@ public sealed class EmitGoldenTests {
         return (files, CatalogText(session));
     }
 
+    internal static (DomainSession Session, Domain Domain, AnalysisResult Analysis)
+        AnalyzeSampleFile(string relativePath) {
+        var poly = File.ReadAllText(Path.Combine(FindRepoRoot(), relativePath));
+        return AnalyzeSample(poly);
+    }
+
     private static (DomainSession Session, Domain Domain, AnalysisResult Analysis)
         AnalyzeSample(string poly) {
         var session = DomainSession.ForSource(poly, Seed, Catalog);

@@ -52,6 +52,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup, stage.Name);
                 ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup, stage.Name);
+                ValidateNoExitTransition(context, entity, stage);
                 foreach (var action in stage.Actions) {
                     ValidateEffects(context, action.Effects, action, entity, domain, lookup, stage.Name);
                     ValidateUnsatisfiedRequirements(context, action, entity, lookup);
@@ -61,6 +62,22 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// DMEFF012: exit runs while CurrentStage is still the exiting stage, so a transition in
+    /// it would run the same exit again. Lowering inlined that exit into itself until the
+    /// stack overflowed (F292).
+    /// </summary>
+    private static void ValidateNoExitTransition(AnalysisContext context, Entity entity, Stage stage) {
+        if (!EffectHelpers.FlattenEffects(stage.OnExitEffects).Any(e => e is StageTransitionEffect))
+            return;
+        context.ReportError(
+            stage,
+            $"Stage '{entity.Name}.{stage.Name}' has a transition in its exit block. Exit runs while " +
+            "the entity is still in that stage, so the transition would exit it again. Move the " +
+            "transition into the action or the next stage's entry.",
+            DomainModelDiagnosticCodes.ExitBlockTransition);
     }
 
     /// <summary>

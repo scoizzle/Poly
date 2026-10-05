@@ -60,6 +60,12 @@ internal static class DomainModelDiagnosticCodes {
     /// property of the created entity (auto-wired back-reference nav excluded).
     public const string CreateMissingRequiredProperty = "DMEFF011";
 
+    /// <summary>
+    /// A stage's exit block contains a <c>transition</c> (also inside an <c>if</c>). Exit runs
+    /// while the entity is still in that stage, so the transition would exit it again, without end.
+    /// </summary>
+    public const string ExitBlockTransition = "DMEFF012";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     /// Non-root entity has no aggregate parent — potentially orphaned.

@@ -699,14 +699,22 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), f.Name),
                     new New(f.FieldType)));
             }
-            ctors = [new ConstructorDefinitionNode(
-                Parameters: null,
-                Body: new Block(paramlessBody),
-                AccessModifier: AccessModifier.Private
-            )];
 
             // Full constructor — only the static Create factory can construct
             // instances with data. EntityFramework uses the parameterless ctor.
+            // With no Create parameters both would be `private T()` (CS0111), so
+            // the full constructor, field initialisers first, is the only one.
+            if (ctorParams.Count > 0) {
+                ctors = [new ConstructorDefinitionNode(
+                    Parameters: null,
+                    Body: new Block(paramlessBody),
+                    AccessModifier: AccessModifier.Private
+                )];
+            }
+            else {
+                bodyNodes.InsertRange(0, paramlessBody);
+                ctors = [];
+            }
             ctors = [.. ctors, new ConstructorDefinitionNode(
                 Parameters: ctorParams,
                 Body: bodyNodes.Count > 0 ? new Block(bodyNodes) : null,

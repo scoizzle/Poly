@@ -368,7 +368,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckComparison(context, cmp, props, parameters, enumTypes);
                 return; // operands already checked
             case Add add:
-                CheckArithmetic(context, add.Left, add.Right, props, parameters, enumTypes);
+                CheckArithmetic(context, add.Left, add.Right, props, parameters, enumTypes, allowTextConcat: true);
                 return;
             case Subtract sub:
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
@@ -407,16 +407,19 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void CheckArithmetic(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
+        Dictionary<string, EnumType> enumTypes,
+        bool allowTextConcat = false) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
-        // numeric + numeric, date + number (AddDays lowering), or date + duration
+        // numeric + numeric, text + text (concatenation; `+` only), date + number (AddDays
+        // lowering), or date + duration
         // (a parsed `N days` offset with a temporal left operand); Unknown operands
         // (path-prefix reads, peer binders) are out of this scope — skip. A duration
         // without a temporal left operand (Number + days, days + date) is an unresolved
         // temporal specialization — reject, never a silent numeric constant.
         if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
             && !(IsNumeric(leftType.Category) && IsNumeric(rightType.Category))
+            && !(allowTextConcat && leftType.Category is TypeCategory.Text && rightType.Category is TypeCategory.Text)
             && !(IsDate(leftType.Category) && IsNumeric(rightType.Category))
             && !(IsDate(leftType.Category) && rightType.Category is TypeCategory.Duration))
             Report(context, left,
@@ -606,6 +609,12 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             context.SetMetadata(expr, new CatalogTypedExpressionMetadata(inferredName));
             return new(CategoryOf(context, inferredName, enumTypes), inferredName);
         }
+
+        // Text + Text is concatenation and yields Text; every other arithmetic result stays Unknown here.
+        if (expr is Add add
+            && InferType(context, add.Left, props, parameters, enumTypes).Category is TypeCategory.Text
+            && InferType(context, add.Right, props, parameters, enumTypes).Category is TypeCategory.Text)
+            return new(TypeCategory.Text);
 
         return expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt

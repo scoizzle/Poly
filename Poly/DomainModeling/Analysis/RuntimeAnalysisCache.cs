@@ -323,7 +323,8 @@ internal static class RuntimeAnalysisCache {
             new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            EnumPropertyNames: esm?.EnumPropertyNames);
+            EnumPropertyNames: esm?.EnumPropertyNames,
+            EmitInstanceNotify: false);
         var pass = new EffectLoweringPass(entity, ctx);
         var body = pass.LowerActionBody(effects) ?? new Block([]);
         return new MethodDefinitionNode(

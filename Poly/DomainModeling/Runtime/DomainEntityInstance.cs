@@ -439,11 +439,11 @@ public sealed partial record DomainEntityInstance {
     ///   <item>Evaluate entity-level guard policies.</item>
     ///   <item>Execute each effect in declaration order:
     ///     <list type="bullet">
-    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. Unique assign is <c>EnsureUnique</c> then Assignment. StageTransition is Assignment of CurrentStage + Invoke Notify on This.</item>
+    ///       <item><b>VM-compiled</b> (<see cref="AssignEffect"/>, <see cref="CompositeEffect"/>, <see cref="ConditionalEffect"/>, <see cref="StageTransitionEffect"/>) → lowered to Syntax AST → compiled via <see cref="Interpreter.Compile"/> → executed via VM. Unique assign is <c>EnsureUnique</c> then Assignment. StageTransition assigns CurrentStage and, when the target is watched, calls <c>Notify{Stage}Subscribers</c>.</item>
     ///       <item><b>Create / create-in</b> → instance factories via InvokeNamed (guarded-probe + body for mixed if+create; not EffectExecutor). Self-invoke and singular cross-entity invoke lower to <c>Invoke(Member(…))</c>.</item>
     ///     </list>
     ///   </item>
-    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage then <c>Invoke(Member(This, "Notify"))</c> (store fan-out in finally).</item>
+    ///   <item>On <see cref="StageTransitionEffect"/>: lowered tree sets stage; store fan-out goes through <c>Notify{Stage}Subscribers</c> when the target is a watched stage (instance <c>Notify(string)</c> is not emitted).</item>
     /// </list>
     ///
     /// <para><b>VM-executable effects</b> (<see cref="AssignEffect"/>,

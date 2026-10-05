@@ -38,7 +38,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
-    private readonly bool _emitInstanceNotify;
     /// <summary>Entity has entry/exit transitions: emit the shared loop-guard Note.</summary>
     private readonly bool _emitAutomaticStageGuard;
     private readonly LocalNames _names;
@@ -69,7 +68,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _postTransitionNotifyStages = context.PostTransitionNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
-        _emitInstanceNotify = context.EmitInstanceNotify;
         _emitAutomaticStageGuard = EffectHelpers.HasAutomaticTransitions(entity);
         IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
         if (context.ActionParameterNames is { Count: > 0 }) {
@@ -537,9 +535,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// source-stage exit effects (when known; once — no self-re-entry), CurrentStage
     /// assignment, target-stage entry effects (once), then
     /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
-    /// stage (see <see cref="LoweringContext.PostTransitionNotifyStages"/>), and
-    /// instance <c>Notify</c> when that flag is on. Emits <c>NoteAutomaticStage</c>
-    /// before the assign so simulate and printed C# share a loop-guard backstop.
+    /// stage (see <see cref="LoweringContext.PostTransitionNotifyStages"/>).
+    /// Does not emit instance <c>Notify</c> — that method exists only on the
+    /// simulator heap object; printed classes do not have one. Emits
+    /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#
+    /// share a loop-guard backstop.
     /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
     /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
     /// outer pre-stage. Not a host-ABI node.
@@ -637,17 +637,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             1 => tryNodes[0],
             _ => new Block(tryNodes)
         };
-        if (_emitInstanceNotify) {
-            nodes.Add(new TryCatchFinally(
-                tryBody,
-                CatchClauses: null,
-                FinallyBlock: new Invoke(
-                    new Member(Subject, "Notify"),
-                    new Constant(t.TargetStage.StageName))));
-        }
-        else if (tryNodes.Count > 0) {
+        if (tryNodes.Count > 0)
             nodes.Add(tryBody);
-        }
 
         _sourceStageName = t.TargetStage.StageName;
 

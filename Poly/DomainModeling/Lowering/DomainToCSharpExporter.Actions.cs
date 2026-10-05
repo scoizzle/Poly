@@ -453,7 +453,6 @@ public sealed partial class DomainToCSharpExporter {
             Domain: domain,
             EnumPropertyNames: enumProps,
             ActionResultType: actionResultType,
-            EmitInstanceNotify: false,
             Names: names);
         var effectPass = new EffectLoweringPass(entity, context);
         return effectPass.LowerActionBody(action.Effects);

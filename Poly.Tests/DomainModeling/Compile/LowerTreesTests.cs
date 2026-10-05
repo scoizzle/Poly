@@ -7,7 +7,7 @@ namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
 /// What <see cref="DomainSession.Lower"/> registers: one scaffolding tree and one tree per entity,
-/// each pointing at a source-domain or source-entity artifact.
+/// each pointing at a source-domain or source-entity artifact, plus one analysis report.
 /// </summary>
 public sealed class LowerTreesTests {
     private const string Parking = """
@@ -39,6 +39,7 @@ public sealed class LowerTreesTests {
 
         var catalog = session.ArtifactCatalog;
         await Assert.That(catalog.ToText()).IsEqualTo(
+            "analysis-report|Parking|Analyze\n" +
             "scaffolding|Parking|Lower\nsource-domain|Parking|Lower\n" +
             "entity|Parking/Garage|Lower\nsource-entity|Parking/Garage|Lower\n" +
             "entity|Parking/Permit|Lower\nsource-entity|Parking/Permit|Lower");

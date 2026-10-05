@@ -319,6 +319,8 @@ internal static class RuntimeAnalysisCache {
         EntityStructureMetadata? esm,
         string methodName,
         IReadOnlyList<Effect> effects) {
+        // Emit prints these bodies as well as the simulator running them, and printed classes
+        // have no instance Notify.
         var ctx = new LoweringContext(
             new ThisReference(),
             Analysis: analysis,

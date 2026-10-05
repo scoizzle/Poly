@@ -1,6 +1,6 @@
 # Poly pipeline convergence plan, v2
 
-Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`), K1 (`7fb4b2a2`), H1 (`47220d4f`), C4a (`dac9a6a8`), N3 (`6dbab628`). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
+Status: revision 2 of the plan, merged to master with PR 84. Scot signed off on 2026-10-03 and wave 0 was released; later waves still start only on Scot's word. Done so far: T0 (`bde1f7c5`), A1 (`8e5ef81b`), A2a (`08eda8eb`), A2b (`16403b60`), T2 (`afa246c2`), K1 (`7fb4b2a2`), H1 (`47220d4f`), C4a (`dac9a6a8`), N3 (`6dbab628`), C0 (`ab0772cd`). The five reviews were read and folded in. It answers the same question as v1: for each place the code differs from the agreed pipeline (stage map section 7), how do we bring the code in line in small steps you could review and edit by hand?
 
 Base: builds on the PR 84 plan with decisions 1 to 20 and the 2026-10-02 rulings. Companion file: `docs/domain-modeling/pipeline-convergence-plan.decisions.md` (V1 to V11 answered 2026-10-03; V10 as a revised scope).
 
@@ -60,7 +60,7 @@ Everything below says "simulate equals print" and "every mutation enforces every
 **T0. Golden emit baseline and reproducibility**
 
 _Lane A · Size S · Review 1 · Depends on: none_
-- Scope: Check in text snapshots of everything compile produces for every sample domain: `Emit` files, the catalog text (placeholder shape for now), and the DslCompiler outputs (DbContext, Program.cs, demo.http) for the CRM sample. A test compiles twice in separate sessions and twice on one session and asserts equal text (a reviewer's probe: Emit is already byte-identical, so this pins what is true today).
+- Scope: Check in text snapshots of everything compile produces for every sample domain: `Emit` files, the catalog text, and the DslCompiler outputs (DbContext, Program.cs, demo.http) for the CRM sample. A test compiles twice in separate sessions and twice on one session and asserts equal text (a reviewer's probe: Emit is already byte-identical, so this pins what is true today).
 - Files: New `Poly.Tests/DomainModeling/Compile/EmitGoldenTests.cs` plus a snapshot folder. No product file.
 - Done when: Snapshots generated from unchanged master are committed; the reproducibility test is green.
 - SHIP if `EmitGolden*` tests pass on master and the diff has no product file. NOT SHIP if any snapshot was edited by hand to make a test pass.
@@ -150,7 +150,7 @@ _Lane A · Size S · Review 1 · Depends on: G1, T1_
 
 ## 5. D1 and D6: artifact suite and catalog
 
-**Wrong today.** An artifact was three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrites the catalog with one placeholder entry; contributors return `(fileName, text)` pairs; the compiled trees are one list split by entity name in `Emit`. Since A1, A2a and A2b (master `16403b60`) `ArtifactId`, `Artifact` and `ArtifactCatalog` exist, with declared types, typed references and a dangling check, but `Lower` still registers only the placeholder and the rest of this paragraph still holds.
+**Wrong today.** An artifact was three strings (`ArtifactDescriptor(Kind, Name, Source)`); `Lower` overwrote the catalog with one placeholder entry; the compiled trees were one list split by entity name in `Emit`; contributors return `(fileName, text)` pairs. Since A1, A2a and A2b (master `16403b60`) `ArtifactId`, `Artifact` and `ArtifactCatalog` exist, with declared types, typed references and a dangling check, and since A3a `Lower` registers one scaffolding tree and one tree per entity (`RegisterTrees`) and `Emit` only reads them (the placeholder is gone). Only the last claim still holds: contributors return plain pairs.
 
 **Target.** An artifact has a type, a stable id, a producer, a payload and typed references. A catalog holds them and checks them. Every output (trees, printed C#, DbContext, Program.cs, demo.http, the analysis report) is registered through it.
 
@@ -195,8 +195,8 @@ _Lane A · Size S · Review 1 · Depends on: A2a_
 _Lane A · Size M · Review 2 · Depends on: A2b, T0, PRs 82 and 83 merged_
 - Scope: Lower registers one scaffolding tree (today's `Poly.Types.cs` content) and one tree per entity with its stage enum, each with an id. `Emit` reads them from the catalog. Remove the `SyntaxModule` placeholder. Artifact analysis (H2) runs over the catalog's whole module, not per artifact, because `Emit` resolves cross-entity types from one analysis (`TryAnalyzeForEmit`, `DomainSession.cs:203-208`). Granularity per decision 3: one tree per entity. Stage map 2.5, Definition of done ("a tree per concept in the right place") is NOT met until A6.
 - Files: `Compile/DomainSession.cs` (Lower, Emit), `Lowering/DomainProgramProjection.cs` only if the split moves.
-- Done when: T0 golden identical for all sample domains; catalog text snapshot added; `git grep SyntaxModule` in product code is empty.
-- SHIP if golden is byte-identical and the grep is empty. NOT SHIP if any snapshot changed or the placeholder remains.
+- Done when: T0 `*.cs.golden` identical for all sample domains; `catalog.golden` shows the new artifact list; `git grep SyntaxModule` in product code is empty.
+- SHIP if `*.cs.golden` is byte-identical (`catalog.golden` may change only to show the new artifact list) and the grep is empty; NOT SHIP if any other snapshot changed or the placeholder remains.
 - Hand-edit: Yes. Probe: no "legacy" or "fallback" branch added.
 
 **A3b. Each tree points back to its source element**

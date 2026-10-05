@@ -1,1 +1,10 @@
-SyntaxModule|module|Lower
+scaffolding|Hotel|Lower
+entity|Hotel/EventHold|Lower
+entity|Hotel/Folio|Lower
+entity|Hotel/Guest|Lower
+entity|Hotel/Hall|Lower
+entity|Hotel/Property|Lower
+entity|Hotel/Reservation|Lower
+entity|Hotel/Room|Lower
+entity|Hotel/RoomType|Lower
+entity|Hotel/Section|Lower

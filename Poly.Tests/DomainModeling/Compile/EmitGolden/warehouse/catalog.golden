@@ -1,1 +1,4 @@
-SyntaxModule|module|Lower
+scaffolding|Fleet|Lower
+entity|Fleet/Delivery|Lower
+entity|Fleet/Truck|Lower
+entity|Fleet/Warehouse|Lower

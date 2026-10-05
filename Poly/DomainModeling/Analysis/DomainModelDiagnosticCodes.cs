@@ -61,10 +61,12 @@ internal static class DomainModelDiagnosticCodes {
     public const string CreateMissingRequiredProperty = "DMEFF011";
 
     /// <summary>
-    /// A stage's exit block contains a <c>transition</c> (also inside an <c>if</c>). Exit runs
-    /// while the entity is still in that stage, so the transition would exit it again, without end.
+    /// An entity's automatic transition graph (entry + exit, including nested in <c>if</c>)
+    /// has a cycle where every edge is unconditional — no real guard, or a guard Analyze
+    /// can prove is always true. Guarded cycles are allowed; the runtime loop guard is the
+    /// backstop when a guard never becomes false.
     /// </summary>
-    public const string ExitBlockTransition = "DMEFF012";
+    public const string UnconditionalAutomaticTransitionCycle = "DMEFF012";
 
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 

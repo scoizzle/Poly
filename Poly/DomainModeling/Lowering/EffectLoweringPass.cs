@@ -39,7 +39,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly LoweringContext _context;
     private readonly bool _emitInstanceNotify;
+    /// <summary>Entity has entry/exit transitions: emit the shared loop-guard Note.</summary>
+    private readonly bool _emitAutomaticStageGuard;
     private readonly LocalNames _names;
+    /// <summary>Stages whose exit is already being inlined — nested transitions must not re-enter.</summary>
+    private readonly HashSet<string> _exitsInlining = new(StringComparer.Ordinal);
+    /// <summary>Stages whose entry is already being inlined — nested transitions must not re-enter.</summary>
+    private readonly HashSet<string> _entriesInlining = new(StringComparer.Ordinal);
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
     public INodeMetadataProvider? Analysis => _analysis;
@@ -64,6 +70,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
         _emitInstanceNotify = context.EmitInstanceNotify;
+        _emitAutomaticStageGuard = EffectHelpers.HasAutomaticTransitions(entity);
         IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
         if (context.ActionParameterNames is { Count: > 0 }) {
             var merged = parameters is null
@@ -462,6 +469,30 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private Node? RouteWithRuntimeCreate(Effect effect) =>
         Route(effect);
 
+    /// <summary>Inline a stage's exit at most once per lowering (no self-re-entry).</summary>
+    private void InlineExitOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+        if (!_exitsInlining.Add(stage.Name))
+            return;
+        try {
+            AppendInlinedStageEffects(stage.OnExitEffects, probeSink, bodySink);
+        }
+        finally {
+            _exitsInlining.Remove(stage.Name);
+        }
+    }
+
+    /// <summary>Inline a stage's entry at most once per lowering (no self-re-entry).</summary>
+    private void InlineEntryOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+        if (!_entriesInlining.Add(stage.Name))
+            return;
+        try {
+            AppendInlinedStageEffects(stage.OnEntryEffects, probeSink, bodySink);
+        }
+        finally {
+            _entriesInlining.Remove(stage.Name);
+        }
+    }
+
     /// <summary>
     /// Mixed if+create in OnEntry/OnExit uses the same guarded-probe walk as
     /// <see cref="LowerActionBodyCore"/>. Probes go to <paramref name="probeSink"/>
@@ -503,11 +534,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
-    /// source-stage exit effects (when known), CurrentStage assignment, target-stage
-    /// entry effects (in try), then <c>Notify{Target}Subscribers(previousStageN)</c>
-    /// when the target is a watched stage (see
-    /// <see cref="LoweringContext.PostTransitionNotifyStages"/>), and finally
-    /// <c>Invoke(Member(Subject, "Notify"), stageName)</c> when instance notify is on.
+    /// source-stage exit effects (when known; once — no self-re-entry), CurrentStage
+    /// assignment, target-stage entry effects (once), then
+    /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
+    /// stage (see <see cref="LoweringContext.PostTransitionNotifyStages"/>), and
+    /// instance <c>Notify</c> when that flag is on. Emits <c>NoteAutomaticStage</c>
+    /// before the assign so simulate and printed C# share a loop-guard backstop.
     /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
     /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
     /// outer pre-stage. Not a host-ABI node.
@@ -544,7 +576,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
             if (sourceStage is not null)
-                AppendInlinedStageEffects(sourceStage.OnExitEffects, nodes, nodes);
+                InlineExitOnce(sourceStage, nodes, nodes);
         }
         else {
             // Entity-level transition: source stage is CurrentStage at run time.
@@ -553,7 +585,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 if (stage.OnExitEffects.Count == 0)
                     continue;
                 var exitNodes = new List<Node>();
-                AppendInlinedStageEffects(stage.OnExitEffects, exitNodes, exitNodes);
+                InlineExitOnce(stage, exitNodes, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
                 Node stageMatch = new Member(
@@ -577,8 +609,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
         var entryProbes = new List<Node>();
         if (targetStage is not null)
-            AppendInlinedStageEffects(targetStage.OnEntryEffects, entryProbes, tryNodes);
+            InlineEntryOnce(targetStage, entryProbes, tryNodes);
         nodes.AddRange(entryProbes);
+
+        // Loop-guard backstop shared with printed C#: each stage once per trigger.
+        if (Subject is ThisReference && _emitAutomaticStageGuard) {
+            nodes.Add(new Invoke(
+                new Member(Subject, "NoteAutomaticStage"),
+                new Constant(t.TargetStage.StageName)));
+        }
 
         Node stageValue = new Member(
             new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),

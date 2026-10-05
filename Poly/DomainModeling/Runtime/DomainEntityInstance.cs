@@ -21,6 +21,8 @@ public sealed partial record DomainEntityInstance {
     private bool _isExecutingSubscription;
     private int _invokeDepth;
     private int _transitionDepth;
+    private HashSet<string>? _automaticStageChain;
+    private readonly HashSet<string> _exitsRunning = new(StringComparer.Ordinal);
     private TypeDefinitionNodeAnalyzer? _bindingTypeProvider;
     /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
     public const int MaxInvokeDepth = 16;
@@ -255,6 +257,7 @@ public sealed partial record DomainEntityInstance {
             .ToList();
         if (entryEffects.Count == 0)
             return;
+        instance.ClearAutomaticStageChain();
         ThrowIfEffectListFailed(
             instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
                 entryStageName: firstStage.Name),
@@ -465,6 +468,9 @@ public sealed partial record DomainEntityInstance {
         if (_invokeDepth >= MaxInvokeDepth)
             return ActionInvocationResult.InvokeDepthExceeded(actionName, MaxInvokeDepth);
 
+        // Outermost action trigger: reset the automatic-transition loop guard.
+        if (_invokeDepth == 0)
+            ClearAutomaticStageChain();
         var injectedKeys = new List<string>();
         _invokeDepth++;
         try {

@@ -519,6 +519,11 @@ public sealed partial class DomainToCSharpExporter {
                     handlerBody = effectPass.TryLowerVmNode(composite)
                         ?? throw new InvalidOperationException(
                             "Subscription effects could not be lowered to a Syntax AST node.");
+                    // A subscription is its own trigger for the automatic-transition loop guard.
+                    if (EffectHelpers.HasAutomaticTransitions(entity))
+                        handlerBody = new Block([
+                            new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")),
+                            handlerBody]);
                 }
                 else {
                     handlerBody = new Block([]);
@@ -814,6 +819,7 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         AddStoreBindMethods(entity, domain, metadata, methods);
+        AddAutomaticTransitionLoopGuard(entity, fields, methods);
 
         typeDefs.Add(new TypeDefinitionNode(
             entity.Name,

@@ -36,8 +36,12 @@ public class DomainInstanceStoreFailClosedTests {
             RelationshipCardinality.OneToMany,
             []);
 
-        return DomainTestFactory.Create("FailClosedTest", [order, tracker], [relationship]);
+        return ValidDomain.Create("FailClosedTest", [order, tracker], [relationship]);
     }
+
+    static Entity OrderOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
+    static Entity TrackerOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
+
 
     [Test]
     public async Task NotifyTransition_Throws_WhenRelationshipContractMetadataMissing() {
@@ -46,9 +50,9 @@ public class DomainInstanceStoreFailClosedTests {
         var store = new DomainInstanceStore();
 
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
         var tracker = DomainEntityInstance.Create(
-            (Entity)domain.Types[1], new Dictionary<string, object?>(), domain);
+            TrackerOf(domain), new Dictionary<string, object?>(), domain);
 
         store.Add(order);
         store.Add(tracker);
@@ -69,16 +73,16 @@ public class DomainInstanceStoreFailClosedTests {
         var store = new DomainInstanceStore();
 
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
         var tracker = DomainEntityInstance.Create(
-            (Entity)domain.Types[1], new Dictionary<string, object?>(), domain);
+            TrackerOf(domain), new Dictionary<string, object?>(), domain);
 
         store.Add(order);
         store.Add(tracker);
         store.Link("Tracks", tracker, order);
 
         RuntimeAnalysisCache.GetOrAnalyze(domain)
-            .RebindWithoutMetadata<EntityStructureMetadata>(domain, (Entity)domain.Types[1]);
+            .RebindWithoutMetadata<EntityStructureMetadata>(domain, TrackerOf(domain));
 
         await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
     }
@@ -87,7 +91,7 @@ public class DomainInstanceStoreFailClosedTests {
     public async Task TransitionStage_Throws_WhenDomainCatalogMissing() {
         var domain = BuildDomainWithSubscriptions();
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
 
         RuntimeAnalysisCache.GetOrAnalyze(domain)
             .RebindWithoutMetadata<DomainCatalogMetadata>(domain, domain);
@@ -104,9 +108,9 @@ public class DomainInstanceStoreFailClosedTests {
         var store = new DomainInstanceStore();
 
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
         var tracker = DomainEntityInstance.Create(
-            (Entity)domain.Types[1], new Dictionary<string, object?>(), domain);
+            TrackerOf(domain), new Dictionary<string, object?>(), domain);
 
         store.Add(order);
         store.Add(tracker);
@@ -126,7 +130,7 @@ public class DomainInstanceStoreFailClosedTests {
     [Test]
     public async Task TransitionStage_DomainBound_ResolvesStage_FromCatalog_WhenEntityStructureMissing() {
         var domain = BuildDomainWithSubscriptions();
-        var orderEntity = (Entity)domain.Types[0];
+        var orderEntity = OrderOf(domain);
         var order = DomainEntityInstance.Create(orderEntity, new Dictionary<string, object?>(), domain);
 
         RuntimeAnalysisCache.GetOrAnalyze(domain)
@@ -142,9 +146,9 @@ public class DomainInstanceStoreFailClosedTests {
         var store = new DomainInstanceStore();
 
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
         var tracker = DomainEntityInstance.Create(
-            (Entity)domain.Types[1], new Dictionary<string, object?>(), domain);
+            TrackerOf(domain), new Dictionary<string, object?>(), domain);
 
         store.Add(order);
         store.Add(tracker);
@@ -160,8 +164,8 @@ public class DomainInstanceStoreFailClosedTests {
         var store = new DomainInstanceStore();
 
         var order = DomainEntityInstance.Create(
-            (Entity)domain.Types[0], new Dictionary<string, object?>(), domain);
-        var trackerEntity = (Entity)domain.Types[1];
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
+        var trackerEntity = TrackerOf(domain);
         var tracker = DomainEntityInstance.Create(trackerEntity, new Dictionary<string, object?>(), domain);
 
         store.Add(order);
@@ -185,7 +189,7 @@ public class DomainInstanceStoreFailClosedTests {
 
         // Act
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        var tracker = (Entity)domain.Types[1];
+        var tracker = TrackerOf(domain);
         var pending = tracker.Stages[0];
 
         // Catalog owns action maps; stage plans + contracts remain separate.

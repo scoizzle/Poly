@@ -101,7 +101,8 @@ public class McpContractAddTests {
     [Test]
     public async Task Add_ContractValueType_ThatClashes_FailsAndLeavesTheRevision() {
         var (sessionId, _) = SessionWithContract();
-        EvolveTool.Add(sessionId, "contract_value_type", """{"contractName":"Stripe","name":"ChargeRequest"}""");
+        var setup = EvolveTool.Add(sessionId, "contract_value_type", """{"contractName":"Stripe","name":"ChargeRequest"}""");
+        await Assert.That(setup.Success).IsTrue();
         var before = Revision(sessionId);
 
         var response = EvolveTool.Add(sessionId, "contract_value_type", """{"contractName":"Stripe","name":"ChargeRequest"}""");

@@ -34,9 +34,7 @@ public class ClockLoweringTests {
     [Test]
     public async Task Assign_DateToNowIr_StoresDateOnly() {
         var (entity, _) = DateAssignAction(new Now());
-        var domain = DomainTestFactory.Create("Clocks", [entity]) with {
-            Extensions = [ExtensionCatalog.TemporalId]
-        };
+        var domain = ValidDomain.Create("Clocks", [entity], extensions: [ExtensionCatalog.TemporalId]);
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Touch");
         await Assert.That(result.Succeeded).IsTrue();
@@ -70,9 +68,7 @@ public class ClockLoweringTests {
         var rel = new Relationship("permits",
             new DomainTypeReference("Lot"), new DomainTypeReference("Permit"),
             RelationshipCardinality.OneToMany, []);
-        var domain = DomainTestFactory.Create("Parking", [permit, lot], [rel]) with {
-            Extensions = [ExtensionCatalog.TemporalId]
-        };
+        var domain = ValidDomain.Create("Parking", [permit, lot], [rel], extensions: [ExtensionCatalog.TemporalId]);
         var store = new DomainInstanceStore();
         var instance = DomainEntityInstance.Create(lot, domain: domain);
         store.Add(instance);
@@ -97,7 +93,7 @@ public class ClockLoweringTests {
             .First(a => a.Destination is Member { MemberName: "ExternalId" });
         await Assert.That(assign.Value is Constant).IsFalse();
 
-        var domain = DomainTestFactory.Create("Ids", [entity]);
+        var domain = ValidDomain.Create("Ids", [entity]);
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();

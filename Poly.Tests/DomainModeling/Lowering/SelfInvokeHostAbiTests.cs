@@ -54,7 +54,7 @@ public class SelfInvokeHostAbiTests {
     [Test]
     public async Task SelfInvoke_Runtime_UpdatesBagViaVmPath() {
         var entity = CreateCartEntity();
-        var domain = DomainTestFactory.Create("Shop", [entity]);
+        var domain = ValidDomain.Create("Shop", [entity]);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Status"] = "open" }, domain: domain);
 
@@ -82,7 +82,7 @@ public class SelfInvokeHostAbiTests {
             Actions: [],
             Policies: [],
             Stages: [draft]);
-        var domain = DomainTestFactory.Create("Loops", [entity]);
+        var domain = ValidDomain.Create("Loops", [entity]);
         var instance = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Status"] = "x" }, domain: domain);
 

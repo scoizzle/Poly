@@ -22,7 +22,7 @@ public class UnifiedAddTests {
     [Arguments("My Entity")]
     [Arguments("A/B")]
     [Arguments("A#B")]
-    public async Task Add_Entity_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+    public async Task Add_Entity_WithNameTheDslRefuses_Fails(string name) {
         var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
 
         var response = EvolveTool.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
@@ -37,7 +37,7 @@ public class UnifiedAddTests {
     [Arguments("My Domain")]
     [Arguments("A/B")]
     [Arguments("A#B")]
-    public async Task CreateDomainSession_WithNameTheArtifactIdRuleRejects_Fails(string name) {
+    public async Task CreateDomainSession_WithNameTheDslRefuses_Fails(string name) {
         var response = SessionTool.CreateDomainSession(name);
 
         await Assert.That(response.Success).IsFalse();

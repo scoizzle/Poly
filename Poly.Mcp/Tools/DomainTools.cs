@@ -500,12 +500,12 @@ internal sealed class EvolveTool {
 - contract_value_type: {""contractName"":""Stripe"",""name"":""ChargeRequest""}
 - contract_endpoint: {""contractName"":""Stripe"",""name"":""Charge"",""kind"":""Operation"",""direction"":""Inbound"",""payloadType"":""Number""}
 - contract_binding: {""name"":""ChargeOrder"",""contractName"":""Stripe"",""endpointName"":""Charge"",""actionName"":""Pay"",""parameter"":""amount""}
-Unknown kind, missing required field, invalid cardinality, or a new name the DSL would not accept (a letter or '_' then letters, digits or '_', not a DSL keyword) fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
+Unknown kind, missing required field, invalid cardinality, or a new name the DSL would not accept (a letter or '_' then letters, digits or '_', not a DSL keyword; a property may also be named Text, Number or Boolean when its type is a primitive) fails closed. For bulk structure, effects, or subscriptions use apply_dsl.")]
     public static DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
-        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy")] string kind,
+        [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding")] string kind,
         [Description("JSON object of kind-specific fields (see tool description for per-kind payloads)")] string payload) {
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!McpSessionStore.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -538,8 +538,9 @@ Unknown kind, missing required field, invalid cardinality, or a new name the DSL
                     var typeName = Field(root, "typeName");
                     if (entityName is null) return MissingField(sessionId, kind, "entityName");
                     if (name is null) return MissingField(sessionId, kind, "name");
-                    if (!DslTokenReader.IsPropertyName(name)) return InvalidName(sessionId, name);
                     if (typeName is null) return MissingField(sessionId, kind, "typeName");
+                    var primitives = state.Domain.Types.OfType<PrimitiveType>().Select(t => t.Name).ToHashSet();
+                    if (!DslTokenReader.IsPropertyName(name, typeName, primitives.Contains)) return InvalidName(sessionId, name);
                     return Evolve(sessionId, builder =>
                             builder.AddPropertyToEntity(entityName, new Property(name, new DomainTypeReference(typeName), [])),
                         successAffordances: ["add", "apply_dsl", "get_entity_detail"]);
@@ -776,7 +777,8 @@ Unknown kind, missing required field, invalid cardinality, or a new name the DSL
     }
 
     internal static string InvalidNameMessage(string? name) =>
-        $"Name '{name}' is not a valid name: use a letter or '_' followed by letters, digits or '_', and not a DSL keyword (the rule apply_dsl uses).";
+        $"Name '{name}' is not a valid name: use a letter or '_' followed by letters, digits or '_', and not a DSL keyword "
+        + "(a property may also be named Text, Number or Boolean when its type is a primitive). This is the rule apply_dsl uses.";
 
     private static DomainToolResponse InvalidName(string sessionId, string name) =>
         new(Success: false,

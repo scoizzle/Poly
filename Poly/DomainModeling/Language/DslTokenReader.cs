@@ -158,11 +158,16 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     public static bool IsIdentifier(string? text) => IsWord(text) && WordToKind(text) == DslTokenKind.Identifier;
 
     /// <summary>
-    /// <see cref="IsIdentifier"/>, plus the primitive type keywords (<c>Text</c>, <c>Number</c>,
-    /// <c>Boolean</c>): the parser also accepts those as a property name (<c>Number: Text</c>).
+    /// Whether the parser accepts <paramref name="name"/> for a property of type
+    /// <paramref name="typeName"/>: any <see cref="IsIdentifier"/> name, or a primitive type keyword
+    /// (<c>Text</c>, <c>Number</c>, <c>Boolean</c>) when the type is a primitive by
+    /// <see cref="DslGrammar.IsPrimitiveType"/>, the test the parser uses
+    /// (<c>Number: Text</c> and <c>Text: Date</c> parse, <c>Text: Money</c> does not).
     /// </summary>
-    public static bool IsPropertyName(string? text) =>
-        IsWord(text) && (WordToKind(text) is DslTokenKind.Identifier || DslGrammar.IsPrimitiveTypeKind(WordToKind(text)));
+    public static bool IsPropertyName(string? name, string typeName, Func<string, bool> isKnownPrimitiveName) =>
+        IsIdentifier(name)
+        || (IsWord(name) && DslGrammar.IsPrimitiveTypeKind(WordToKind(name))
+            && IsWord(typeName) && DslGrammar.IsPrimitiveType(WordToKind(typeName), typeName, isKnownPrimitiveName));
 
     private static bool IsWord([NotNullWhen(true)] string? text) =>
         !string.IsNullOrEmpty(text) && IsWordStart(text[0]) && text.All(IsWordPart);

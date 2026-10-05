@@ -68,7 +68,8 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(module.Count).IsGreaterThan(0);
         await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsGreaterThan(0);
         await Assert.That(session.ArtifactCatalog.ToText())
-            .IsEqualTo("scaffolding|Parking|Lower\nsource-domain|Parking|Lower\n" +
+            .IsEqualTo("analysis-report|Parking|Analyze\n" +
+                       "scaffolding|Parking|Lower\nsource-domain|Parking|Lower\n" +
                        "entity|Parking/Permit|Lower\nsource-entity|Parking/Permit|Lower");
     }
 
@@ -89,6 +90,7 @@ public class SliceCProducerLoopCatalogTests {
 
         await Assert.That(session.ArtifactCatalog).IsNotSameReferenceAs(first);
         const string libraryTrees =
+            "analysis-report|Library|Analyze\n" +
             "scaffolding|Library|Lower\nsource-domain|Library|Lower\n" +
             "entity|Library/Book|Lower\nsource-entity|Library/Book|Lower";
         await Assert.That(session.ArtifactCatalog.ToText()).IsEqualTo(libraryTrees);

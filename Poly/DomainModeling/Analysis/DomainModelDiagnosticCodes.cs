@@ -4,6 +4,11 @@ internal static class DomainModelDiagnosticCodes {
     public const string StructuralDuplicate = "DMSTR001";
     public const string StructuralCycle = "DMSTR002";
     public const string StructuralOwnership = "DMSTR003";
+    /// <summary>
+    /// A user-declared type reuses a name lowering emits at module scope
+    /// (<c>{Entity}Stage</c> for an entity that has stages, or <c>DomainResult</c>).
+    /// </summary>
+    public const string ReservedGeneratedName = "DMSTR004";
 
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";

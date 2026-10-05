@@ -124,6 +124,11 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         _members = new(() => [.. Constructors, .. Properties, .. Methods, .. Fields]);
     }
 
+    internal TypeDefinitionNode Syntax => _node;
+
+    /// <summary>Provider this type was resolved against, including sibling AST types.</summary>
+    internal ITypeDefinitionProvider ResolutionProvider => _provider;
+
     public string Name => _node.Name;
     public string? Namespace => _node.Namespace;
     public string FullName => _node.FullName;
@@ -274,6 +279,8 @@ internal sealed class AstConstructorDefinition : ITypeConstructor {
         _declaringType = declaringType;
         _parameters = new(() => _declaringType.MapParameters(_node.Parameters));
     }
+
+    internal ConstructorDefinitionNode Definition => _node;
 
     public string Name => _declaringType.Name;
     public ITypeDefinition MemberTypeDefinition => _declaringType;

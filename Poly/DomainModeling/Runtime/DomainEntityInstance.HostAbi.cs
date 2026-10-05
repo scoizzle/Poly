@@ -12,11 +12,11 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Real instance method invoked from the lowered StageTransition tree
-    /// (<c>Invoke(Member(This, "Notify"), stageName)</c>) after a stage
-    /// assignment. Store subscription fan-out only — does not re-run exit/entry
-    /// (those belong in the lowered tree). Skips when executing a subscription
-    /// (cascade is store-owned) or when no store is attached.
+    /// Store subscription fan-out after a stage assignment. Printed classes and
+    /// the shared StageTransition lowering do not call this (they use
+    /// <c>Notify{Stage}Subscribers</c> for watched stages). Kept for HostAbi
+    /// and direct callers. Skips when executing a subscription (cascade is
+    /// store-owned) or when no store is attached.
     /// </summary>
     public void Notify(string targetStageName) =>
         Notify(targetStageName, previousStageName: null);

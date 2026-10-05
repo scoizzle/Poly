@@ -1042,8 +1042,27 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
+    internal static void ReportCrossEntityMutation(
+        AnalysisContext context, Node node, Entity owner, string relationshipName) {
+        context.ReportError(
+            node,
+            $"Assign targets state reached through relationship '{relationshipName}', which belongs to another entity. " +
+            $"Only '{owner.Name}' and its own actions, entry, exit and when blocks may assign its state; " +
+            $"cross-entity access is read-only. Invoke an action on the other entity instead " +
+            $"(e.g. 'invoke {relationshipName}.SomeAction').",
+            DomainModelDiagnosticCodes.EffectCrossEntityMutation);
+    }
+
     private static void ValidateAssign(
         AnalysisContext context, AssignEffect ae, Action? action, Entity entity) {
+        // M1: only the owning entity's named behavior mutates its state. Entry, exit and
+        // when blocks count as named behavior (V4 = a). Any other entity changes through
+        // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
+        if (ae.Target is RelationshipNavigation nav) {
+            ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
+            return;
+        }
+
         if (ae.Target is not PropertyAccess propAccess) return;
 
         var targetProp = entity.Properties

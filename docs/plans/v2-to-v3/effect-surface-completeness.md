@@ -12,7 +12,7 @@
 - [`dsl-query-surface.md`](dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · archived [`qe-README.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)
 - [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
 - [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0  
-- Product DSL: [`Poly.Mcp/Docs/poly-dsl-agent-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-agent-guide.md)  
+- Product DSL: [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
 
 **Principle:** Usefulness = **executable × authorable × honest**. Prefer finishing the path for effects that already run over inventing many new effect kinds. No domain VM opcodes for host I/O (email/HTTP) — host adapters later.
 
@@ -444,7 +444,7 @@ Plan direction is **right** (authorability of effects that already run). Initial
 
 ### Verdict
 
-**Accepted as shipped planning + honesty.** No further code blockers on that commit. **Product E0 is still incomplete:** `poly-dsl-agent-guide.md` still lists only transition/assign/create/create-in and Do-NOT `invoke` — it does **not** yet document library-only runtime effects (delete self, link bag targets, self-invoke, TransitionRelationship dead IR). That gap is the next slice.
+**Accepted as shipped planning + honesty.** No further code blockers on that commit. **Product E0 was still incomplete at this writing:** the removed `poly-dsl-agent-guide.md` twin listed only transition/assign/create/create-in and Do-NOT `invoke`, and did not document library-only runtime effects (delete self, link bag targets, self-invoke, TransitionRelationship dead IR). The product guide is now `Poly.Mcp/Docs/poly-dsl-guide.md` only. This note is historical, not a work queue.
 
 ### Solid (committed)
 

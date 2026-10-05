@@ -1,66 +1,9 @@
 # GitHub Copilot Instructions for Poly
 
-**AGENTS.md is the single source of truth.**
+[`AGENTS.md`](../../AGENTS.md) is the only always-on policy: tenets, Frozen core, Agent target, placement, build, test, and DSL. [`docs/CORE.md`](../../docs/CORE.md) is the machinery map. Open it before changing platform code.
 
-All architectural guidelines, module boundaries, placement rules, coding style, test conventions, and key decisions for this repository are defined in the root [AGENTS.md](../../AGENTS.md) file.
+Suite admission is [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](../../docs/plans/simple-agent-tasks/PIPELINE-STATUS.md). Do not start a suite that file marks archived.
 
-## Instructions for Copilot
+DSL changes update [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md) in the same change. `get_dsl_guide` returns that file.
 
-- You **MUST** treat `AGENTS.md` as the authoritative document.
-- You **MUST** respect **Frozen core** in `AGENTS.md` / `docs/CORE.md` §0. Current hosts (scratch store, C# print, HTTP) are not the architecture.
-- Before making any non-trivial changes (especially anything related to domain modeling, analysis, interpretation, lowering, or new features), you should read or re-read the relevant sections of `AGENTS.md`.
-- The contents of this file (`copilot-instructions.md`) are secondary. They exist only to reinforce that `AGENTS.md` takes precedence.
-- When in doubt about architecture, file placement, or conventions, defer to `AGENTS.md`.
-
-## Key Sections in AGENTS.md
-
-Pay particular attention to:
-- **Frozen core** (AST / Node / Analysis — current hosts are not the architecture)
-- Module boundaries (one-way dependencies)
-- Placement Rules table
-- Contract Interface Generation rules
-- Key Architectural Decisions section (including the V2 → V3 immutable core decision)
-- Coding Style guidelines
-
-## DSL Guide Maintenance
-
-**`Poly.Mcp/Docs/poly-dsl-guide.md` must be updated whenever the DSL surface changes.**
-
-This includes:
-- Adding or removing a parser keyword or syntax construct
-- Adding or removing a Phase 1a/1b effect type
-- Changing constraint syntax (`range`, `length`, `pattern`, etc.)
-- Changing relationship declaration syntax (N1 nav properties)
-- Adding or removing lifecycle stage syntax (`entry`/`exit`, `when` subscriptions)
-- Adding, removing, or renaming an MCP tool that authors DSL
-
-Before merging any change that affects what `apply_dsl` accepts or what `export_dsl` emits,
-verify the guide at `Poly.Mcp/Docs/poly-dsl-guide.md` is still accurate.
-The smoke test `GetDslGuide_ReturnsProductSurface` will catch drift, but the
-maintainer must update the guide content proactively.
-
-This ensures consistent behavior across all AI tools the maintainer uses (Copilot, OpenCode, Grok, etc.).
-
-## Deep / phenomenal review
-
-For an **adversarial correctness and contract** review of a diff (findings only; follow-ups in docs), follow:
-
-**[`docs/agent/phenomenal-review.md`](../../docs/agent/phenomenal-review.md)**
-
-Assume the code is wrong until evidence says otherwise. Prefer split-context multi-pass when this session also wrote the change.  
-Project skill wrapper: [`.github/skills/phenomenal-review/SKILL.md`](../skills/phenomenal-review/SKILL.md).  
-This is **not** the pre-ship fix loop below.
-
-## Pre-Ship Review Gate
-
-Before marking any task or slice as complete, you **must** execute the
-**[uncommitted-change review gate](../../AGENTS.md#pre-ship-review-gate)** defined in AGENTS.md.
-
-The process:
-1. Run `git diff --stat HEAD` then `git diff HEAD` to audit dirty files.
-2. Categorize findings by severity: 🔴 Structure, 🟠 Contract, 🟡 Edge case, ⚪ Hygiene.
-3. For every 🔴/🟠 finding, verify **three-layer defense**: parse-time rejects, analyze-time catches, runtime fails loud.
-4. **Fail-closed:** Empty sets, missing matches, invalid configs — fail loud, no vacuous success.
-5. Apply the smallest fix, re-review, and only ship when the tree is clean and all 🔴🟠 are resolved.
-
-Full task definition: [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+Adversarial review: [`docs/agent/phenomenal-review.md`](../../docs/agent/phenomenal-review.md). Pre-ship fix gate: [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).

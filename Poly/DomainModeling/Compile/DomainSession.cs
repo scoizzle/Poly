@@ -150,13 +150,15 @@ public sealed class DomainSession {
     /// Stage 3: one operation module (type definitions, action bodies,
     /// entity-level policy methods, subscription handlers, and OnEntry/OnExit
     /// bodies). Action- and stage-scoped policies are not carried here.
-    /// Simulate and print consume this result. Throws <see cref="FormatException"/> when a domain
-    /// or entity name cannot be part of an artifact id, and <see cref="InvalidOperationException"/>
-    /// when two lowered types would collide (see <c>RegisterTrees</c>).
+    /// Simulate and print consume this result. Throws <see cref="InvalidOperationException"/> when
+    /// <paramref name="analysis"/> has Errors (first error named; catalog stays empty), when two
+    /// lowered types would collide (see <c>RegisterTrees</c>), and <see cref="FormatException"/> when a
+    /// domain or entity name cannot be part of an artifact id.
     /// </summary>
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         return module;

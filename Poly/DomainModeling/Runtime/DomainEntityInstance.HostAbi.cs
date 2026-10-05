@@ -266,10 +266,13 @@ public sealed partial record DomainEntityInstance {
             var cached = body;
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            cached = BindForSimulate(
-                cached, previousStageName: previousStageName, bindPreviousStage: true);
+            cached = BindForSimulate(cached);
+            // C1a: previousStage is a real SetArgs slot after this (when the handler declares it).
+            var rootParameters = ContainsPreviousStageParameter(cached)
+                ? (IReadOnlyList<Parameter>)[new Parameter("previousStage")]
+                : [];
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached),
+                ExecuteCachedSubscriptionTree(cached, rootParameters, previousStageName),
                 "subscription");
         }
         finally {
@@ -277,14 +280,35 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    private DomainResult? ExecuteCachedSubscriptionTree(Node tree) {
+    private DomainResult? ExecuteCachedSubscriptionTree(
+        Node tree,
+        IReadOnlyList<Parameter> rootParameters,
+        string? previousStageName) {
         var compiled = CompileBody(
-            AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer));
-        using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { this }));
+            AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
+        var setArgs = new object?[1 + rootParameters.Count];
+        setArgs[0] = this;
+        for (var i = 0; i < rootParameters.Count; i++) {
+            if (!string.Equals(rootParameters[i].Name, "previousStage", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Unexpected subscription parameter '{rootParameters[i].Name}' on '{Entity.Name}'.");
+            setArgs[i + 1] = previousStageName;
+        }
+        using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
+    }
+
+    private static bool ContainsPreviousStageParameter(Node node) {
+        if (node is Parameter p
+            && string.Equals(p.Name, "previousStage", StringComparison.Ordinal))
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && ContainsPreviousStageParameter(child))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

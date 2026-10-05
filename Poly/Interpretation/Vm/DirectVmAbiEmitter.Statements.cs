@@ -425,6 +425,8 @@ public static partial class DirectVmAbiEmitter {
             return ctx.RingVar(ringSlot);
         if (!ctx.TryGetParameterSlot(p, out int paramIdx))
             paramIdx = ctx.DeclareParameter(p);
+        // Pre-C1a root programs: param 0 aliases SetArgs(this) via InstanceHandle.
+        // C1a roots set IsCompiledFunctionBody and declare real params at slots 1+.
         if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
             && !ctx.IsCompiledFunctionBody)
             return ctx.InstanceHandle;
@@ -432,8 +434,9 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>
-    /// Domain programs bind the instance via <c>SetArgs({ this })</c> at slot 0.
-    /// After SetArgs, ThisReference is that handle. Unset slot 0 is ABI null 0.
+    /// Domain programs bind the instance via <c>SetArgs(this, …)</c> at slot 0.
+    /// After SetArgs, ThisReference is that handle. Declared parameters follow at
+    /// slot 1+. Unset slot 0 is ABI null 0.
     /// </summary>
     private static Expression EmitThis(AbiCtx ctx) {
         int slot = ctx.AllocSlot();

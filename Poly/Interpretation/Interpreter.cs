@@ -90,6 +90,21 @@ public static class Interpreter {
     }
 
     /// <summary>
+    /// Compile a root module body whose declared parameters sit after <c>this</c>
+    /// (SetArgs slot 0). <paramref name="rootParameters"/> are pre-declared in order
+    /// at slots 1+ so they match <c>SetArgs(this, …)</c>.
+    /// </summary>
+    public static VmProgram Compile(
+        Node node,
+        AnalysisResult analysis,
+        IReadOnlyList<Parameter> rootParameters,
+        CompilationMode mode = CompilationMode.Normal) {
+        ArgumentNullException.ThrowIfNull(rootParameters);
+        FailLoudOnAnalysisErrors(analysis);
+        return DirectVmAbiEmitter.Emit(node, analysis, mode, rootParameters);
+    }
+
+    /// <summary>
     /// Analyze, compile, and execute <paramref name="node"/>, returning the
     /// top-of-stack value.
     /// </summary>

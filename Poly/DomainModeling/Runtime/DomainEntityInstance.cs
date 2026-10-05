@@ -417,6 +417,39 @@ public sealed partial record DomainEntityInstance {
         };
     }
 
+    /// <summary>
+    /// SetArgs must match bag Member reads for action parameters: Text null
+    /// becomes <c>""</c> (<see cref="Convert.ToString(object?)"/> via
+    /// DictionaryBackedValue.CoerceRead), and Boolean 0/1 become bool.
+    /// </summary>
+    private static object? CoerceActionArgForSetArgs(Parameter parameter, object? value) {
+        if (value is null && IsTextLikeParameter(parameter))
+            return "";
+        var typeName = ParameterTypeName(parameter);
+        return CoerceBooleanBagValue(typeName, value);
+    }
+
+    private static bool IsTextLikeParameter(Parameter parameter) =>
+        parameter.TypeReference switch {
+            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => true,
+            PrimitiveTypeReference { PrimitiveId: Prim.String } => true,
+            NamedTypeReference { TypeName: "Text" or "String" or "string" } => true,
+            TypeReference { TypeName: "Text" or "String" or "string" } => true,
+            _ => false
+        };
+
+    private static string? ParameterTypeName(Parameter parameter) =>
+        parameter.TypeReference switch {
+            ClrTypeReference { RuntimeType: var rt } when rt == typeof(string) => "Text",
+            ClrTypeReference { RuntimeType: var rt } when rt == typeof(bool) => "Boolean",
+            PrimitiveTypeReference { PrimitiveId: Prim.String } => "Text",
+            PrimitiveTypeReference { PrimitiveId: Prim.Boolean } => "Boolean",
+            NamedTypeReference n => n.TypeName,
+            TypeReference t => t.TypeName,
+            _ => null
+        };
+
+
     private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {
         bool b => b,
         long l => l != 0L,
@@ -588,7 +621,7 @@ public sealed partial record DomainEntityInstance {
             var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
             var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
-                actionName: action.Name, actionParameters: action.Parameters);
+                actionName: action.Name, actionParameters: action.Parameters, actionArgs: args);
             if (failed is { IsSuccess: false }) {
                 // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
                 // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
@@ -675,7 +708,8 @@ public sealed partial record DomainEntityInstance {
         string? entryStageName = null,
         string? exitStageName = null,
         IReadOnlyList<Property>? actionParameters = null,
-        int? entryExitSegmentIndex = null) {
+        int? entryExitSegmentIndex = null,
+        IReadOnlyDictionary<string, object?>? actionArgs = null) {
         // Named actions always bind the module Body (require Failure + Success),
         // even when Ontology effects are empty — gated no-ops still run guards
         // (Final Boss F9: empty-effects must not skip module require).
@@ -684,6 +718,7 @@ public sealed partial record DomainEntityInstance {
             return null;
 
         Node? tree;
+        IReadOnlyList<Parameter> rootParameters = [];
         if (actionName is not null) {
             // Named action: bind module or throw. Never fall back to Effect IR lower.
             if (Domain is null)
@@ -695,7 +730,7 @@ public sealed partial record DomainEntityInstance {
                 || method?.Body is null)
                 throw new InvalidOperationException(
                     $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
-            tree = BindModuleMethodBody(method);
+            (tree, rootParameters) = BindModuleMethodBody(method);
         }
         else if (Domain is not null) {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -729,12 +764,12 @@ public sealed partial record DomainEntityInstance {
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
                     && exit?.Body is not null) {
-                    tree = BindModuleMethodBody(exit);
+                    (tree, rootParameters) = BindModuleMethodBody(exit);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryMethod(Domain, Entity.Name, entryStageName, out var entry)
                     && entry?.Body is not null) {
-                    tree = BindModuleMethodBody(entry);
+                    (tree, rootParameters) = BindModuleMethodBody(entry);
                 }
                 else {
                     var kind = exitStageName is not null ? $"OnExit '{exitStageName}'" : $"OnEntry '{entryStageName}'";
@@ -761,9 +796,18 @@ public sealed partial record DomainEntityInstance {
         if (actionName is null)
             tree = AsVoidResultBody(tree);
         var compiled = CompileBody(
-            tree, ModuleAwareTypeProvider(typeProvider, actionParameters));
-        using var exec = Interpreter.Execute(compiled,
-            s => s.SetArgs(new object?[] { this }));
+            tree, ModuleAwareTypeProvider(typeProvider, actionParameters), rootParameters);
+        var setArgs = new object?[1 + rootParameters.Count];
+        setArgs[0] = this;
+        for (var i = 0; i < rootParameters.Count; i++) {
+            var name = rootParameters[i].Name;
+            if (actionArgs is not null && actionArgs.TryGetValue(name, out var arg))
+                setArgs[i + 1] = CoerceActionArgForSetArgs(rootParameters[i], arg);
+            else
+                throw new InvalidOperationException(
+                    $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
+        }
+        using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
@@ -837,7 +881,10 @@ public sealed partial record DomainEntityInstance {
     /// Root-program analysis does not type <c>this</c>; annotate it as this
     /// entity so member access resolves, then emit the same nodes.
     /// </summary>
-    private VmProgram CompileBody(Node tree, ITypeDefinitionProvider types) {
+    private VmProgram CompileBody(
+        Node tree,
+        ITypeDefinitionProvider types,
+        IReadOnlyList<Parameter>? rootParameters = null) {
         types = RuntimeEnumTypeProvider.Wrap(types, Domain);
         var entityType = types.GetTypeDefinition(Entity.Name)
             ?? throw new InvalidOperationException(
@@ -846,7 +893,9 @@ public sealed partial record DomainEntityInstance {
             tree,
             typeDefinitions: types,
             setup: ctx => AnnotateThisReferences(ctx, tree, entityType));
-        return Interpreter.Compile(tree, analysis);
+        return rootParameters is { Count: > 0 }
+            ? Interpreter.Compile(tree, analysis, rootParameters)
+            : Interpreter.Compile(tree, analysis);
     }
 
     private static void AnnotateThisReferences(
@@ -859,35 +908,82 @@ public sealed partial record DomainEntityInstance {
         }
     }
 
-    private Node BindModuleMethodBody(MethodDefinitionNode method) {
+    private (Node Tree, IReadOnlyList<Parameter> RootParameters) BindModuleMethodBody(
+        MethodDefinitionNode method) {
         var body = method.Body
             ?? throw new InvalidOperationException(
                 $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
-        Dictionary<string, Parameter>? paramMap = null;
-        // Action arguments are injected into the instance bag for the call.
-        // The VM runs the method body as a root program (slot 0 is This), so
-        // parameter reads become member reads of that bag.
-        if (method.Parameters is { Count: > 0 } methodParams) {
-            paramMap = new Dictionary<string, Parameter>(StringComparer.Ordinal);
-            foreach (var p in methodParams)
-                paramMap[p.Name] = p;
+        // C1a: action parameters are real VM slots after SetArgs(this, …).
+        // Body Parameter nodes are name-only; swap in the method's typed Parameters
+        // so analysis resolves them. Still Parameter nodes — not Member(this, name).
+        var rootParameters = method.Parameters ?? [];
+        if (rootParameters.Count > 0) {
+            var typed = rootParameters.ToDictionary(p => p.Name, StringComparer.Ordinal);
+            body = SubstituteTypedParameters(body, typed);
         }
-        return BindForSimulate(body, paramMap);
+        return (BindForSimulate(body), rootParameters);
+    }
+
+    private static Node SubstituteTypedParameters(
+        Node node, IReadOnlyDictionary<string, Parameter> typed) {
+        Node Recurse(Node n) => SubstituteTypedParameters(n, typed);
+        return node switch {
+            Parameter p when typed.TryGetValue(p.Name, out var replacement) => replacement,
+            Block b => new Block(b.Nodes.Select(Recurse), b.Variables.Select(Recurse)),
+            IfStatement i => new IfStatement(
+                Recurse(i.Condition), Recurse(i.ThenBranch),
+                i.ElseBranch is null ? null : Recurse(i.ElseBranch)),
+            Return r => r.Value is null ? r : new Return(Recurse(r.Value)),
+            Assignment a => new Assignment(Recurse(a.Destination), Recurse(a.Value)),
+            Invoke inv => new Invoke(
+                Recurse(inv.Delegate), [.. inv.Arguments.Select(Recurse)]) {
+                TypeArguments = inv.TypeArguments
+            },
+            Member m => new Member(Recurse(m.Value), m.MemberName),
+            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(Recurse(n.Value)),
+            Equal e => new Equal(Recurse(e.LeftHandValue), Recurse(e.RightHandValue)),
+            NotEqual ne => new NotEqual(Recurse(ne.LeftHandValue), Recurse(ne.RightHandValue)),
+            LessThan lt => new LessThan(Recurse(lt.LeftHandValue), Recurse(lt.RightHandValue)),
+            LessThanOrEqual le => new LessThanOrEqual(Recurse(le.LeftHandValue), Recurse(le.RightHandValue)),
+            GreaterThan gt => new GreaterThan(Recurse(gt.LeftHandValue), Recurse(gt.RightHandValue)),
+            GreaterThanOrEqual ge => new GreaterThanOrEqual(Recurse(ge.LeftHandValue), Recurse(ge.RightHandValue)),
+            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(Recurse(add.LeftHandValue), Recurse(add.RightHandValue)),
+            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(Recurse(sub.LeftHandValue), Recurse(sub.RightHandValue)),
+            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(Recurse(mul.LeftHandValue), Recurse(mul.RightHandValue)),
+            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(Recurse(div.LeftHandValue), Recurse(div.RightHandValue)),
+            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(Recurse(and.LeftHandValue), Recurse(and.RightHandValue)),
+            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(Recurse(or.LeftHandValue), Recurse(or.RightHandValue)),
+            Coalesce c => new Coalesce(Recurse(c.LeftHandValue), Recurse(c.RightHandValue)),
+            TypeCast tc => new TypeCast(Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
+            New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
+            ThrowStatement ts => new ThrowStatement(Recurse(ts.Exception)),
+            TryCatchFinally tf => new TryCatchFinally(
+                Recurse(tf.TryBlock),
+                tf.CatchClauses?.Select(cc => cc with {
+                    ExceptionType = cc.ExceptionType is null ? null : Recurse(cc.ExceptionType),
+                    Body = Recurse(cc.Body)
+                }).ToList(),
+                tf.FinallyBlock is null ? null : Recurse(tf.FinallyBlock)),
+            ForEachLoop f => new ForEachLoop(
+                f.LoopVariable, Recurse(f.Collection), Recurse(f.Body), f.Label),
+            ContinueStatement or BreakStatement => node,
+            LabelDeclaration ld => new LabelDeclaration(ld.Name, Recurse(ld.Statement)),
+            Conditional cond => new Conditional(
+                Recurse(cond.Condition), Recurse(cond.IfTrue), Recurse(cond.IfFalse)),
+            UnaryMinus um => new UnaryMinus(Recurse(um.Operand)),
+            NullForgiving nf => new NullForgiving(Recurse(nf.Operand)),
+            ThisReference or Parameter or Variable or Constant
+                or TypeReference or NamedTypeReference or PrimitiveTypeReference
+                or ClrTypeReference => node,
+            _ => node
+        };
     }
 
     /// <summary>
     /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
-    /// stays. The first arm works around the VM's root-program slot layout; the
-    /// other two are result-shape choices where simulate reports as
+    /// stays. Result-shape choices where simulate reports as
     /// <c>DomainResult.Failure</c> what the printed C# throws:
     /// <list type="bullet">
-    /// <item>
-    /// Action parameters and subscription <c>previousStage</c> — the VM runs the
-    /// body as a root program with SetArgs slot 0 = This. Extra <see cref="Parameter"/>
-    /// nodes also claim slot 0, so they cannot be extra SetArgs slots. Action args
-    /// are injected into the instance bag and read as members; <c>previousStage</c>
-    /// is the string the store passed in.
-    /// </item>
     /// <item>
     /// Unbound contract adapters — printed <c>{Contract}Adapters.{Endpoint}(…)</c>
     /// throws <c>NotImplementedException</c>; simulate returns
@@ -899,21 +995,12 @@ public sealed partial record DomainEntityInstance {
     /// Catching at Execute would also swallow host fail-loud throws.
     /// </item>
     /// </list>
+    /// Action parameters and <c>previousStage</c> are real SetArgs slots (C1a);
+    /// this bind no longer rewrites them.
     /// </summary>
-    private Node BindForSimulate(
-        Node node,
-        IReadOnlyDictionary<string, Parameter>? actionParameters = null,
-        string? previousStageName = null,
-        bool bindPreviousStage = false) {
-        Node Recurse(Node n) =>
-            BindForSimulate(n, actionParameters, previousStageName, bindPreviousStage);
+    private Node BindForSimulate(Node node) {
+        Node Recurse(Node n) => BindForSimulate(n);
         return node switch {
-            Parameter p when bindPreviousStage
-                && string.Equals(p.Name, "previousStage", StringComparison.Ordinal) =>
-                new Constant(previousStageName),
-            Parameter p when actionParameters is not null
-                && actionParameters.ContainsKey(p.Name) =>
-                new Member(new ThisReference(), p.Name),
             Block b => new Block(
                 b.Nodes.Select(Recurse),
                 b.Variables.Select(Recurse)),

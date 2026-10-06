@@ -412,10 +412,14 @@ internal sealed class OracleTool {
                 .ToList();
             var policy = new Policy("_sim", expr);
             var entity = new Entity("Subject", props, [], [policy], []); // Policies = [policy] so EvaluatePolicy cache hits
-            // G1: Create refuses domains that Analyze as Errors. Seed the same primitives
-            // a parsed domain starts with (G3 will Analyze first and return diagnostics).
+            // Seed the primitives a parsed domain starts with, so the property types resolve.
             var boot = DomainFactory.Create("Subject");
             var domain = boot with { Types = [.. boot.Types, entity] };
+            // Create refuses a domain with analysis errors; report them as diagnostics instead.
+            // Create reads this same cached analysis.
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+            if (analysis.HasErrors)
+                return new DomainToolResponse(Success: false, Message: "Expression has analysis errors.", Diagnostics: ErrorMessages(analysis), Affordances: []);
             var instance = DomainEntityInstance.Create(entity, subjectValues, domain);
             var result = instance.EvaluatePolicy(policy);
 

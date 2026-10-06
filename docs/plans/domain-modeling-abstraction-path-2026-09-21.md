@@ -84,7 +84,7 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 
 ## Locks (repeat so agents do not “find” work)
 
-- **Not CURRENT.** PIPELINE-STATUS stays `(none)`.
+- **Not CURRENT.** This file does not change PIPELINE-STATUS.
 - **Item 5 PARKED.** Occupancy / `BusySections` — not a candidate.
 - **PR 73 PARKED.** Do not touch. Do not unpark.
 - **Product sim = Interpreter on the `session.Lower` tree.** DEI / Effect-IR are not sim. This file does not delete DEI.

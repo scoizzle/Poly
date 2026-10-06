@@ -12,7 +12,7 @@
 1. **One micro-task at a time.** Do not open Bar B or RestApiSurface to “finish” Group 6.
 2. Read **Required Reading** only — skip the full suite design unless G6.0.
 3. **Bar A renorms stay legal** for production IR (see task-list renorm table). Do not “fix” IR to match anonymous objects this round.
-4. Pre-ship gate: [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
+4. Pre-ship gate: [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
 5. Prefer **smallest vertical**: DbContext first, then MinimalApi, then compiler smoke.
 
 ---
@@ -26,7 +26,7 @@ THEN:    Post-suite; optional MaxLength Constant 50 (G7′′.1)
 PULL:    Bar B; RestApiSurfacePass; StorageAccessPass; G6.h1
 ```
 
-**Review:** parent [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md) **§ Review G7′′**
+**Review:** parent [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md) **§ Review G7′′**
 
 ---
 

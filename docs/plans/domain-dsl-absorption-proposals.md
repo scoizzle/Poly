@@ -180,9 +180,9 @@ Parse remains pack-agnostic for open forms:
 | ID | Spec idea | Recommend | Style | Priority |
 |----|-----------|-----------|-------|----------|
 | **P1** | Dates / time arithmetic & compare | **Research only** — [`p1-temporal-research.md`](p1-temporal-research.md); no implement suite yet | D (pack) + C lower + B policies | Parked concept |
-| **P2** | Multi-hop path-prefix | **Absorb** — suite: [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) (after p3) | B then C for assign RHS if needed | **THEN** after P3 |
+| **P2** | Multi-hop path-prefix | **Absorb** — suite: [`simple-agent-tasks/p2-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) (after p3) | B then C for assign RHS if needed | **THEN** after P3 |
 | **P3** | Action return types honesty | **Harden existing** — not CURRENT (no live `p3-README.md`; authority [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)) | A+C + analysis | Parked |
-| **P4** | `when any/all Rel Stage` | **Absorb** — suite ready: [`simple-agent-tasks/p4-README.md`](simple-agent-tasks/p4-README.md) | A + existing store dispatch | P1 |
+| **P4** | `when any/all Rel Stage` | **Absorb** — suite ready: [`simple-agent-tasks/p4-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p4-README.md) | A + existing store dispatch | P1 |
 | **P5** | Comment round-trip | **Absorb (thin)** | A only | P2 cheap |
 | **P6** | Actor + `actor` in policies | **Defer** until host identity | E + thin A | P2+ |
 | **P7** | `policy external` | **Defer** until resolver consumer | E + A | P2+ |

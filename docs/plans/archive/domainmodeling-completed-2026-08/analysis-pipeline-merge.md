@@ -4,7 +4,7 @@
 **Status:** ✅ **Complete** — registration of topo/agg/beh/crossref + diagnostics. Design reference only.  
 **Successor:** [`domain-analysis-unification.md`](domain-analysis-unification.md) · [`dau-*`](simple-agent-tasks/dau-README.md) (finish ownership, unify walks, storage/transport in Analysis).  
 **Micro-tasks:** [`simple-agent-tasks/apm-README.md`](simple-agent-tasks/apm-README.md) (closed)  
-**Related:** [`docs/domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · archived infra suite [`archive/infrastructure-pass/README.md`](archive/infrastructure-pass/README.md) · [`docs/CORE.md`](../CORE.md)
+**Related:** [`docs/domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md) · archived infra suite [`archive/infrastructure-pass/README.md`](../infrastructure-pass/README.md) · [`docs/CORE.md`](../../../CORE.md)
 
 ---
 
@@ -490,7 +490,7 @@ PULL:    Transport keep/drop; optional heuristic-root test
 |----|-----|---------|-----|
 | **C′.0** | **Ops** | Entire APM product + tests + plans **uncommitted**. README/header claim “Complete” while dirty. | Commit product + `PipelineMergeMetadataTests` + plan/README/roadmap updates. Gate “Done” only after clean tree. |
 | **C′.1** | Med (fragility) | **B′.4 still open.** `OwnershipAggregatePass.Dependencies` = topology only (not `EntityStructureAnalyzer.Id`). `BehaviorPass.Dependencies` = `OwnershipAggregatePass` only (not Semantic/Capability). Order is registration-order luck. Behavior’s Aggregate dep is artificial (BehaviorAnalyzer never reads aggregate). | Declare: Aggregate → `[EffectTopologyPass.Id, EntityStructureAnalyzer.Id]`; Behavior → `[SemanticDomainAnalyzer.Id, CapabilityAnalyzer.Id]` (drop Aggregate). |
-| **C′.2** | Hygiene | Inventory still says topology/aggregate/behavior are **codegen-only**. | Update [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) §5 after or with commit. |
+| **C′.2** | Hygiene | Inventory still says topology/aggregate/behavior are **codegen-only**. | Update [`domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md) §5 after or with commit. |
 | **C′.3** | Low | Pass ctors still take unused `AnalysisResult?` for domain registration path (`null`). Still used by `InfrastructurePipelineTests` frozen-result path. | Keep until those tests migrate to context-only; then drop optional. |
 | **C′.4** | Low (noise) | **DMDEP001** fires on normal bidirectional relationship pairs (e.g. `Patron.loans` + `Loan.borrower`), not only “bad” cycles. Negative fixture is single isolated entity — weak. | Pull: refine cycle story (exclude pure inverse pairs?) or document expected warning; stronger negative = one-way only. |
 | **C′.5** | Low | Stage-level DMBEH001 path has no dedicated golden (entity-level covered). | Optional fixture if stage noise appears in dogfood. |

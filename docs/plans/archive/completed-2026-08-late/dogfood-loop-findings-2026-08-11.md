@@ -9,7 +9,7 @@ uncommitted-change review can ship with 🟡 items tracked.
 First orchestrated discovery run: 3 parallel agents (`general` subagents) on disjoint
 slices (A: cross-entity/quantifiers, B: dates/defaults, C: constraints/create/enums),
 probes in `probes/discovery-*/`, findings in `probes/findings/discovery-*.md`.
-Protocol: [`docs/agent/poly-discovery-loop.md`](../../docs/agent/poly-discovery-loop.md).
+Protocol: [`docs/agent/poly-discovery-loop.md`](../../../agent/poly-discovery-loop.md).
 Harness: `scripts/new-probe.sh`, `scripts/run-probe.sh` (parse → export → Roslyn
 compile-check).
 

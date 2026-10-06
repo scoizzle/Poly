@@ -208,5 +208,5 @@ A newcomer adding `uses Foo` reads: Domain, Session, Catalog pass, `IDomainLibra
 ## Related
 
 - [`domainmodeling-cleanup-inventory-2026-08-15.md`](domainmodeling-cleanup-inventory-2026-08-15.md)
-- [`../decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md)
-- [`../CORE.md`](../CORE.md) § Domain catalog / effective surface
+- [`../decisions/2026-08-14-domain-libraries.md`](../../../decisions/2026-08-14-domain-libraries.md)
+- [`../CORE.md`](../../../CORE.md) § Domain catalog / effective surface

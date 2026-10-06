@@ -1,7 +1,7 @@
 # Dogfood Wave 1 Synthesis
 
 **Date:** 2026-07-25  
-**Protocol:** [`mcp-dogfood-protocol.md`](../../mcp-dogfood-protocol.md) §6  
+**Protocol:** [`mcp-dogfood-protocol.md`](../../../../completed-2026-08-mid/v2-to-v3/mcp-dogfood-protocol.md) §6  
 **Scenarios:** S1 (library checkout), S2 (reassign/link), S3 (owned profile)  
 **Prior rounds:** July 18 reports (R gap shipped as Runtime MCP)  
 **Fix pass shipped this wave:** G1 (simulate_policy fail-closed), G3 (StoragePass rollback noise), HOST (runtime tools enabled)

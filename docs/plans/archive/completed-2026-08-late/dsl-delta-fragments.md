@@ -4,7 +4,7 @@
 **Status:** Draft — design lock **for external review**. Not admitted as a suite until §9 decisions are locked.
 **Review target:** written to be crowdsourced to an independent agent for adversarial review (see §11).
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; **no payload JSON for structure**.
-**Related:** [`mcp-catalog-minify.md`](mcp-catalog-minify.md) (parent plan — "Center DSL for bulk structure and all expression text") · mcp-minify suite + follow-ups 2026-08-08 · [`poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md) (AGENTS.md mandates guide sync) · `Poly.DslCompiler` host
+**Related:** [`mcp-catalog-minify.md`](mcp-catalog-minify.md) (parent plan — "Center DSL for bulk structure and all expression text") · mcp-minify suite + follow-ups 2026-08-08 · [`poly-dsl-guide.md`](../../../../Poly.Mcp/Docs/poly-dsl-guide.md) (AGENTS.md mandates guide sync) · `Poly.DslCompiler` host
 
 ---
 

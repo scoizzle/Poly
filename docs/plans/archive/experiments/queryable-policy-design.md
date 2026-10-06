@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-22  
 **Status:** Design — future feature, not yet in migration ladder  
-**Related:** [`docs/plans/archive/infrastructure-pass/infrastructure-concern-analyzer-suite.md`](../plans/archive/infrastructure-pass/infrastructure-concern-analyzer-suite.md) §13 (archived)
+**Related:** [`docs/plans/archive/infrastructure-pass/infrastructure-concern-analyzer-suite.md`](../infrastructure-pass/infrastructure-concern-analyzer-suite.md) §13 (archived)
 
 ---
 

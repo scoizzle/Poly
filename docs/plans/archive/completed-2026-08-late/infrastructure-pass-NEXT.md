@@ -1,7 +1,7 @@
 # Infrastructure Pass — Status (complete)
 
 > **Suite complete under current bar.** Historical ladder + reviews:  
-> [`archive/infrastructure-pass/README.md`](archive/infrastructure-pass/README.md)
+> [`archive/infrastructure-pass/README.md`](../infrastructure-pass/README.md)
 
 ---
 

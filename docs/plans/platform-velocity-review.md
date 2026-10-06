@@ -49,7 +49,7 @@ If we keep adding features (packs, RestApi emit, Q4, E5 tools) **without finishi
 | | |
 |--|--|
 | **Symptom** | `DomainAuthoringContext` (type maps, conventions, `PassRegistry`) used for parse/print and DslCompiler; `DomainModelAnalyzer.Analyze(domain)` and `DomainEvolution` take no context. MCP has `CreateWithSqlPack()` but does not pass maps into analysis. |
-| **Blocks** | Pack plugins ([`domain-plugin-extension-platform.md`](domain-plugin-extension-platform.md)); dialect-specific validation during authoring; PassRegistry enrichers on product path |
+| **Blocks** | Pack plugins ([`domain-plugin-extension-platform.md`](archive/completed-2026-08-late/domain-plugin-extension-platform.md)); dialect-specific validation during authoring; PassRegistry enrichers on product path |
 | **Cost if ignored** | Packs stay “codegen-only toys”; evolve accepts models that cannot store under the session’s pack |
 | **Mitigation** | DAU **D3.1**, **D3.4** |
 

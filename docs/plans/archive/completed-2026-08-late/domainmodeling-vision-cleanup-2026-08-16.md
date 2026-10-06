@@ -5,8 +5,8 @@
 **Date:** 2026-08-16 (executed 2026-08-17)  
 **Status:** **Slices 1–3 landed 2026-08-17** (2205 tests green). Admit nothing else from this file. Next suite is chosen separately.  
 **Supersedes:** [`domainmodeling-vision-cleanup-2026-08-15.md`](domainmodeling-vision-cleanup-2026-08-15.md) (five-wave story; review found its ACs self-contradictory).  
-**Lock:** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · `docs/CORE.md` · AGENTS platform facts.  
-**Review that forced this rewrite:** [`docs/agent/reviews/2026-08-15-vision-cleanup-plan-review.md`](../agent/reviews/2026-08-15-vision-cleanup-plan-review.md).
+**Lock:** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`2026-08-14-domain-libraries.md`](../../../decisions/2026-08-14-domain-libraries.md) · `docs/CORE.md` · AGENTS platform facts.  
+**Review that forced this rewrite:** [`docs/agent/reviews/2026-08-15-vision-cleanup-plan-review.md`](../../../agent/reviews/2026-08-15-vision-cleanup-plan-review.md).
 
 The spine does not change: `.poly → Domain → session load → analyze → lower → export/VM`.  
 No Grammar rewrite. No VM completeness. No new IR, coordinator, MEF, or 12-method plugin.

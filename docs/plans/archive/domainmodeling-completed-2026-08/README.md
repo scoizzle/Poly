@@ -10,7 +10,7 @@
 |------|------|
 | Agent pick (CURRENT) | [`../../v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) |
 | Plans admission | [`../../README.md`](../../README.md) |
-| Workstream map | [`../../domainmodeling-workstream-map.md`](../../domainmodeling-workstream-map.md) |
+| Workstream map | [`../../domainmodeling-workstream-map.md`](../completed-2026-08-late/domainmodeling-workstream-map.md) |
 | Mechanisms | [`../../../CORE.md`](../../../CORE.md) |
 | Product DSL | `Poly.Mcp/Docs/poly-dsl-guide.md` |
 

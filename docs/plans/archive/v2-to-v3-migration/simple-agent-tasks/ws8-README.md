@@ -1,8 +1,8 @@
 # WS8 Micro-Task Suite — Analysis Unification & Lowering
 
 **Parent workstream:** [`../workstreams/ws8-analysis-unification-and-lowering.md`](../workstreams/ws8-analysis-unification-and-lowering.md)  
-**Slice ownership:** Phase B maps to **Slice 2–3** in [`../vertical-slice-finish-plan.md`](../vertical-slice-finish-plan.md).  
-**Simple agents:** prefer the ordered **`vs-*` suite** — [`vs-README.md`](vs-README.md) (starts at Slice 0 honesty).  
+**Slice ownership:** Phase B maps to **Slice 2–3** in [`../vertical-slice-finish-plan.md`](../../domainmodeling-completed-2026-08/v2-to-v3/vertical-slice-finish-plan.md).  
+**Simple agents:** prefer the ordered **`vs-*` suite** — [`vs-README.md`](../../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/vs-README.md) (starts at Slice 0 honesty).  
 **Last Updated:** 2026-07-13  
 **Status:** ✅ Phase B complete — all spike/invariant/MCP tasks Done  
 **Context:** M1–M4 cutover complete. `DomainEntityInstance` now provides the runtime instance layer; MCP `evaluate_policy` uses it directly.

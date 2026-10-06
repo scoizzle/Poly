@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-12  
 **Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
-**Revised:** 2026-08-07 — **growth posture superseded** by [`../mcp-catalog-minify.md`](../mcp-catalog-minify.md) (DSL-first; drop micro-tools + JSON expr). Do not expand granular evolve tools without explicit admit.  
+**Revised:** 2026-08-07 — **growth posture superseded** by [`../mcp-catalog-minify.md`](../../completed-2026-08-late/mcp-catalog-minify.md) (DSL-first; drop micro-tools + JSON expr). Do not expand granular evolve tools without explicit admit.  
 **Status:** Historical expansion complete; **default direction = minify**, not expand.  
 
 **Shipped tools (approx.):** ~35+ in `Poly.Mcp/Tools/` (session, query, evolve, policy, constraint, DSL, oracle, suggestions, guide, runtime)  
@@ -10,8 +10,8 @@
 **Related:**  
 - [`mcp-phase3-oracle-surface.md`](mcp-phase3-oracle-surface.md) — §6e **SA′′**  
 
-- Dogfood: [report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
-- [archived Phase 2 plan](../archive/domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md) — spawn-and-wire (complete) 
+- Dogfood: [report 1](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) · [report 2](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md)  
+- [archived Phase 2 plan](../../domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md) — spawn-and-wire (complete) 
 - ADR stage-transition-as-observable  
 
 ---
@@ -45,8 +45,8 @@
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
-| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](effect-surface-completeness.md) |
-| **P1** | **DSL query surface (Q\*)** | Subject-first related **reads**: path-prefix, `Rel exists`, `where`; later `any/all/count where`; **no** cross-entity assign writes | [archived qe](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) · [qe-README](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md) |
+| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) |
+| **P1** | **DSL query surface (Q\*)** | Subject-first related **reads**: path-prefix, `Rel exists`, `where`; later `any/all/count where`; **no** cross-entity assign writes | [archived qe](../../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) · [qe-README](../../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md) |
 | **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — only after E\* dogfood; prefer DSL first |
 | **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
 | **P3** | Constraint remove | `remove_constraint` | Unexercised |
@@ -55,7 +55,7 @@
 
 ### Pick order (agents)
 
-**Dogfood-2:** [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
+**Dogfood-2:** [DOGFOOD-REPORT-2-20260718](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) · phase3 **§6e SA′′**
 
 ```text
 1–9.  V0…RT + SA + E1 delete-self (`121cd92`)  ← done
@@ -570,6 +570,6 @@ Three companion plans were created from agent-driven domain modeling feedback. T
 
 | Plan | Focus | Overlaps with this doc |
 |------|-------|----------------------|
-| [`mcp-mutation-safety.md`](../../mcp-mutation-safety.md) | Parallel call safety, idempotency, rollback diagnostics, stage ordering | `diff_state` tool (covered here); concurrency model (new) |
-| [`mcp-batch-snapshot-efficiency.md`](../../mcp-batch-snapshot-efficiency.md) | Bulk/plural endpoints (`add_properties`, `add_stages`, `add_actions_to_stages`), `get_domain_snapshot` | DSL batch-apply path (this doc); plural endpoints are a complementary approach |
-| [`mcp-domain-inspection-completeness.md`](../../mcp-domain-inspection-completeness.md) | `get_relationships`, `add_constraint`/`get_constraints`, constraint analysis integration | Relationship and constraint tools are new; not covered here |
+| [`mcp-mutation-safety.md`](../../../mcp-mutation-safety.md) | Parallel call safety, idempotency, rollback diagnostics, stage ordering | `diff_state` tool (covered here); concurrency model (new) |
+| [`mcp-batch-snapshot-efficiency.md`](../../completed-2026-08-late/mcp-batch-snapshot-efficiency.md) | Bulk/plural endpoints (`add_properties`, `add_stages`, `add_actions_to_stages`), `get_domain_snapshot` | DSL batch-apply path (this doc); plural endpoints are a complementary approach |
+| [`mcp-domain-inspection-completeness.md`](../../../mcp-domain-inspection-completeness.md) | `get_relationships`, `add_constraint`/`get_constraints`, constraint analysis integration | Relationship and constraint tools are new; not covered here |

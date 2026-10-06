@@ -4,8 +4,8 @@
 **Status:** Active — **Wave 2** (S4–S6) admitted CURRENT  
 **Purpose:** Drive **direct domain modeling** product direction from structured MCP agent sessions -- not free-form thrash, not codegen.  
 **Queue:** [`simple-agent-tasks/dogfood-README.md`](simple-agent-tasks/dogfood-README.md)  
-**Report folder:** [`agent-summaries/dogfood/`](agent-summaries/dogfood/)  
-**Product guide:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-guide.md) (or embedded `get_dsl_guide`)
+**Report folder:** [`agent-summaries/dogfood/`](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/)  
+**Product guide:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../../Poly.Mcp/Docs/poly-dsl-guide.md) (or embedded `get_dsl_guide`)
 
 ---
 
@@ -13,8 +13,8 @@
 
 Two dogfood rounds completed 2026-07-18:
 
-- [**Report 1**](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) -- Found **R** gap (runtime missing from MCP). Product response: shipped `create_instance`, `invoke_action`, `get_instance`, `list_instances`, `link_instances`. Score 18/20.
-- [**Report 2**](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) -- Post-RT audit found **API honesty** issues (`AddActionToStage` creates empty copies, entity-level policies gate all actions). Score 15/20.
+- [**Report 1**](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) -- Found **R** gap (runtime missing from MCP). Product response: shipped `create_instance`, `invoke_action`, `get_instance`, `list_instances`, `link_instances`. Score 18/20.
+- [**Report 2**](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) -- Post-RT audit found **API honesty** issues (`AddActionToStage` creates empty copies, entity-level policies gate all actions). Score 15/20.
 
 **Wave 1** (S1-S3 in queue) tests concepts that were *pull* during earlier rounds: lifecycle, link/unlink, owned/nested data. Uses the unified taxonomy in section 4. Prior round findings files (C1-C9 under `agent-summaries/dogfood/`) use an older taxonomy -- see section 4.1 for mapping.
 

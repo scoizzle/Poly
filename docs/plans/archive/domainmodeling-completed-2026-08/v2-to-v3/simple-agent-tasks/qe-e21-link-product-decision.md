@@ -1,7 +1,7 @@
 # Micro-Task: E2.1 — Link product path decision
 
 **Suite:** [`qe-README.md`](qe-README.md) **#E2.1**  
-**Parent:** [`../effect-surface-completeness.md`](../effect-surface-completeness.md) §5 E2.1  
+**Parent:** [`../effect-surface-completeness.md`](../../../../v2-to-v3/effect-surface-completeness.md) §5 E2.1  
 **Difficulty:** Small Model Friendly  
 **Estimated Context:** ~6k tokens  
 **Status:** `[ ]` Not Started  

@@ -166,7 +166,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | Facet | Semantic statement | Live | Demon |
 |-------|-------------------|------|------:|
 | **`.poly` + apply_dsl** | *Canonical bulk authoring medium for the product.* | Yes | 1 (intended center) |
-| **MCP add / remove** | *Incremental structure via kind+JSON payload; expressions as DSL strings.* | Yes | 3 — payload schema is the last shape-typed JSON surface (B1 `pattern`/`regex` class); **retirement designed in [`plans/dsl-delta-fragments.md`](plans/dsl-delta-fragments.md)** |
+| **MCP add / remove** | *Incremental structure via kind+JSON payload; expressions as DSL strings.* | Yes | 3 — payload schema is the last shape-typed JSON surface (B1 `pattern`/`regex` class); **retirement designed in [`plans/dsl-delta-fragments.md`](plans/archive/completed-2026-08-late/dsl-delta-fragments.md)** |
 | **MCP session** | *Stateful workspace: domain revision + optional instances.* | Yes | 1 |
 | **Fluent builders** | *C# API builds the same graph.* | Tests / demos | **3** |
 | **Direct DomainEvolution in tests** | *Tests apply DomainChange lists without DSL.* | Tests | 2 |
@@ -252,7 +252,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | **D4** | **Expr span tables vs Option A ladder** | “What is the expression language?” | **grammar wrap-up** (LeftAssoc live-fold) or reword pure claims forever. |
 | **D5** | **Domain-walk printer vs Grammar printer** | “How do we print?” | Defer table print *or* commit; don’t claim pure print. |
 | **D6** | **Effect: VM-lowered vs direct-exec** | “How does an effect run?” | Document matrix; long-term one strategy where possible. |
-| **D7** | **Four authoring surfaces** | “How do I create a domain?” | **DSL-canonical**; others must round-trip. **Consolidation path designed:** [`plans/dsl-delta-fragments.md`](plans/dsl-delta-fragments.md) (fragment submissions + `remove` keyword retire MCP `add`/`remove` → back to a single authoring language) |
+| **D7** | **Four authoring surfaces** | “How do I create a domain?” | **DSL-canonical**; others must round-trip. **Consolidation path designed:** [`plans/dsl-delta-fragments.md`](plans/archive/completed-2026-08-late/dsl-delta-fragments.md) (fragment submissions + `remove` keyword retire MCP `add`/`remove` → back to a single authoring language) |
 
 ### Tier A — dead or dormant weight (delete candidates)
 
@@ -349,7 +349,7 @@ Use this as a kill/keep board:
 3. **Simplification order (suggested):**  
    - Status monopath (done)
    - Delete Validation + Text.Matching (dead-dual) — ✅ **done 2026-08-09**
-   - **grammar-revision tier A (D17)** — **before** wrap-up: the LeftAssoc fold (D4) touches the same engine files the migration rewrites; revision-first avoids folding twice (see [`plans/grammar-revision.md`](plans/grammar-revision.md) §Status P1)  
+   - **grammar-revision tier A (D17)** — **before** wrap-up: the LeftAssoc fold (D4) touches the same engine files the migration rewrites; revision-first avoids folding twice (see [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) §Status P1)  
    - Grammar wrap-up (D4) on the revised stack  
    - Instance/effect split only when invoke path hurts  
 
@@ -362,10 +362,10 @@ Use this as a kill/keep board:
 | Doc | Role |
 |-----|------|
 | [`CORE.md`](CORE.md) | Machinery you must not reinvent |
-| [`plans/dead-dual-inventory-2026-08-08.md`](plans/dead-dual-inventory-2026-08-08.md) | Validation/Text kill evidence |
-| [`plans/grammar-revision.md`](plans/grammar-revision.md) | Token/exception re-vision lock (D17) |
-| [`plans/dsl-delta-fragments.md`](plans/dsl-delta-fragments.md) | Fragment authoring design (D7 consolidation — MCP `add`/`remove` retirement) |
-| [`plans/grammar-pure-end-state.md`](plans/grammar-pure-end-state.md) | Pure Grammar product direction |
+| [`plans/dead-dual-inventory-2026-08-08.md`](plans/archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md) | Validation/Text kill evidence |
+| [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) | Token/exception re-vision lock (D17) |
+| [`plans/dsl-delta-fragments.md`](plans/archive/completed-2026-08-late/dsl-delta-fragments.md) | Fragment authoring design (D7 consolidation — MCP `add`/`remove` retirement) |
+| [`plans/grammar-pure-end-state.md`](plans/archive/completed-2026-08-late/grammar-pure-end-state.md) | Pure Grammar product direction |
 | [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) | CURRENT admit |
 | [`Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) | Product DSL surface |
 | [`agent/reviews/2026-08-08-long-term-growth-review.md`](agent/reviews/2026-08-08-long-term-growth-review.md) | Full-project growth review (demons → roadmap) |

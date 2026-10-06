@@ -41,7 +41,7 @@ Capture how to model dates / `Now` / duration arithmetic **before** solidifying 
 
 | Order | Suite |
 |-------|--------|
-| 1 | [`simple-agent-tasks/p3-README.md`](simple-agent-tasks/p3-README.md) — return types |
-| 2 | [`simple-agent-tasks/p2-README.md`](simple-agent-tasks/p2-README.md) — multi-hop |
+| 1 | [`simple-agent-tasks/p3-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p3-README.md) — return types |
+| 2 | [`simple-agent-tasks/p2-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) — multi-hop |
 | 3 | [`grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) — GI-1..GI-8 (user direction: before P1) |
 | later | P1 after this research + explicit admit |

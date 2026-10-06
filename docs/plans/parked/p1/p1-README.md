@@ -1,10 +1,10 @@
 # P1 temporal pack — Agent Queue (`p1-*`)
 
-**Parent lock:** [`../p1-temporal-design-lock.md`](../p1-temporal-design-lock.md)  
-**Research:** [`../p1-temporal-research.md`](../p1-temporal-research.md)  
+**Parent lock:** [`../p1-temporal-design-lock.md`](../../p1-temporal-design-lock.md)  
+**Research:** [`../p1-temporal-research.md`](../../p1-temporal-research.md)  
 **Prereq:** Grammar GI + **E1** (`ExpressionFormRegistry`) **done**  
 **Gate:** [`p1-gate.md`](./p1-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`  
 
 **Status:** **DONE — 2026-08-13 (p1-gate).** Phase 3a complete. All tasks 0–7 `[x]`; gate `[x]`. Full suite 2147/2147 green. Design-lock negatives covered by tests (incl. the Number-property date-operand gap fixed at the gate); guide documents temporal as shipped for authoring/analysis/round-trip with runtime clock eval explicitly NOT shipped (fixed `TimeProvider` seam is a recorded follow-up). P9 schedule NOT started.
@@ -57,7 +57,7 @@ policy { ExpiryDate < Now }  with fixed clock → true/false
 | **4** | [`p1-4-analysis-fail-closed.md`](./p1-4-analysis-fail-closed.md) | M | `[x]` |
 | **5** | [`p1-5-goldens.md`](./p1-5-goldens.md) | M | `[x]` |
 | **6** | [`p1-6-guide.md`](./p1-6-guide.md) | S | `[x]` |
-| **7** | [`pack-3a-print-roundtrip.md`](./pack-3a-print-roundtrip.md) | M | `[x]` |
+| **7** | [`pack-3a-print-roundtrip.md`](../pack/pack-3a-print-roundtrip.md) | M | `[x]` |
 | **G** | [`p1-gate.md`](./p1-gate.md) | S | `[x]` |
 
 ### Kickoff

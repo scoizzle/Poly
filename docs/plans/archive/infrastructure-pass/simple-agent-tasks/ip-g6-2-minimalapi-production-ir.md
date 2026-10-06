@@ -1,7 +1,7 @@
 # Micro-Task: G6.2 — MinimalApi production path uses IR
 
 **Suite:** [`ip-README.md`](ip-README.md) **#G6.2**  
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
+**Parent:** [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)  
 **Difficulty:** Medium  
 **Estimated Context:** ~14k tokens  
 **Status:** `[ ]` Not Started  

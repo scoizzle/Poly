@@ -817,6 +817,30 @@ public class PolyDslRoundTripTests {
         await Assert.That(second.ContractBindings[0].LocalParameterName).IsEqualTo("request");
     }
 
+    // A contract source or version prints bare only when the parser reads it back as one
+    // identifier; keywords, digit-first and punctuated values print as string literals.
+    [Test]
+    [Arguments("default", "1")]
+    [Arguments("stripe", "1")]
+    [Arguments("entity", "2026")]
+    [Arguments("Text", "1v")]
+    [Arguments("stripe-eu", "1.0")]
+    [Arguments("stripe", "v1")]
+    public async Task Print_ContractSourceAndVersion_ReparsesToSameValues(string source, string version) {
+        var first = Apply($$"""
+            domain Test
+            Stripe: contract external "{{source}}" "{{version}}" {}
+            """);
+
+        var printed = new DomainDslPrinter().Print(first);
+        var second = Apply(printed);
+
+        var contract = second.ImportedContracts.Single();
+        await Assert.That(contract.SourceIdentifier).IsEqualTo(source);
+        await Assert.That(contract.Version).IsEqualTo(version);
+        await Assert.That(new DomainDslPrinter().Print(second)).IsEqualTo(printed);
+    }
+
     [Test]
     public async Task Parse_CreateEntityEffect_RoundTrips() {
         var poly = """

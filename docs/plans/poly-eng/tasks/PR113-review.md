@@ -28,3 +28,4 @@ Razor's table is posted (PR comment on #113 or a review file linked here); 100x'
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | Foreman | — | `f398616e` | Review assigned to Razor | — |
+| 2026-10-06 | 100x | hand | `be223ba0` | Fix PR 117 filed, every row fixed: [PR113-fixes.md](PR113-fixes.md) | B1–B3, S1–S14, N1–N4 |

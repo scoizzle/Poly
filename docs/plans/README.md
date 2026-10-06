@@ -5,6 +5,7 @@ Execution-oriented planning — roadmaps, phase breakdowns, task trackers.
 **Not plans:** platform mechanisms → **[`docs/CORE.md`](../CORE.md)**.  
 Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/README.md`**.  
 **Semantic map / complexity demons** → **[`docs/complexity-semantic-map.md`](../complexity-semantic-map.md)** (facet inventory + duals).  
+**Poly eng lanes** → **[`poly-eng/`](poly-eng/README.md)** (lane board, one task file per slice; every bot updates its task file with each change).  
 **Live probe fixtures** → **[`docs/probes/`](../probes/)**. Historical probes → [`archive/probes-2026-08/`](archive/probes-2026-08/README.md).
 
 ---
@@ -21,7 +22,7 @@ Architectural rationale → **`docs/decisions/`**. Module maps → **`Poly/*/REA
 | **Pull ≠ CURRENT** | Available when admitted, not parallel debt. |
 | **DONE same change** | Suite gate Done → update [`PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) only. |
 
-**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — **CURRENT: `(none)`**. While it says `(none)`, do not open sibling task files. Finished suites are under [`archive/`](archive/). Parked suites are under [`parked/`](parked/README.md). Milestone history: [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (link only; it does not copy the pick).  
+**CURRENT truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) — read the pick there; do not copy it here. While it says `(none)`, do not open sibling task files. Finished suites are under [`archive/`](archive/). Parked suites are under [`parked/`](parked/README.md). Milestone history: [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md) (link only; it does not copy the pick).  
 **Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 The tables below are references, not queues.
@@ -98,4 +99,4 @@ MCP guiding principles: [v2-to-v3/spikes/mcp-guiding-principles.md](v2-to-v3/spi
 | `docs/decisions/2026-06-08-vm-as-canonical-semantics.md` | VM sole engine |
 | `docs/decisions/2026-06-08-domain-lowering-boundary.md` | Domain → generic AST only |
 
-**CURRENT** is `(none)` (see PIPELINE-STATUS). Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).
+**CURRENT:** see PIPELINE-STATUS. Historical IR/VM plans: [`archive/interpretation/`](archive/interpretation/README.md).

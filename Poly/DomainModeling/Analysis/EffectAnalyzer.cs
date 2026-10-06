@@ -1215,13 +1215,31 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.EffectCrossEntityMutation);
     }
 
+    private static bool IsOwnStateTarget(DomainExpression target) => target switch {
+        PropertyAccess => true,
+        OwnedAccess owned => IsOwnStateTarget(owned.Inner),
+        _ => false,
+    };
+
     private static void ValidateAssign(
         AnalysisContext context, AssignEffect ae, Action? action, Entity entity) {
-        // M1: only the owning entity's named behavior mutates its state. Entry, exit and
-        // when blocks count as named behavior (V4 = a). Any other entity changes through
+        // Only the owning entity's named behavior mutates its state. Entry, exit and
+        // when blocks count as named behavior. Any other entity changes through
         // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
-        if (ae.Target is RelationshipNavigation nav) {
+        // A relationship hop anywhere in the target reaches another entity's state, even
+        // below an owned value (API-built models can nest it there; the parser cannot).
+        if (EnumerateRelationshipNavigations(ae.Target).FirstOrDefault() is { } nav) {
             ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
+            return;
+        }
+
+        // A writable target is a property of this entity, or a field inside one of its
+        // owned values. Owned fields are not resolved here.
+        if (!IsOwnStateTarget(ae.Target)) {
+            context.ReportError(
+                ae,
+                $"Assign target is a {ae.Target.GetType().Name}, not a property of entity '{entity.Name}'.",
+                DomainModelDiagnosticCodes.EffectBinding);
             return;
         }
 

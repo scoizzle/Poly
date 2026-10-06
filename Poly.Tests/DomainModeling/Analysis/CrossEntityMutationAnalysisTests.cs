@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -69,7 +70,7 @@ public class CrossEntityMutationAnalysisTests {
         new RelationshipNavigation("customer", DomainExpression.Property("Balance")),
         DomainExpression.Literal(0L));
 
-    // The same write, reached through an owned value: the relationship hop sits below the top of the target.
+    // The same write with the relationship hop below an owned value, not at the top of the target.
     private static readonly AssignEffect OwnedCrossEntityAssign = new(
         DomainExpression.Owned("Shipping",
             new RelationshipNavigation("customer", DomainExpression.Property("Balance"))),
@@ -92,6 +93,12 @@ public class CrossEntityMutationAnalysisTests {
         DomainModelAnalyzer.Analyze(domain).Diagnostics.Where(d =>
             d.Code == DomainModelDiagnosticCodes.EffectCrossEntityMutation &&
             d.Severity == DiagnosticSeverity.Error);
+
+    private static IEnumerable<Diagnostic> NotAPropertyErrors(Domain domain) =>
+        DomainModelAnalyzer.Analyze(domain).Diagnostics.Where(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectBinding &&
+            d.Severity == DiagnosticSeverity.Error &&
+            d.Message.Contains("is not a property of entity 'Invoice'"));
 
     // ── positive: own-entity mutation (V4 = a), create-in, cross-entity invoke ──
 
@@ -144,14 +151,14 @@ public class CrossEntityMutationAnalysisTests {
         await Assert.That(CrossEntityErrors(domain).Count()).IsEqualTo(1);
     }
 
-    // ── a relationship hop anywhere in the target, not only at its top ──
+    // ── any other target shape is an Error: the parser writes only a bare property ──
 
     [Test]
     public async Task OwnedCrossEntityAssign_InAction_IsError() {
-        var errors = CrossEntityErrors(WithTouchEffects(Parse(Dsl), OwnedCrossEntityAssign)).ToList();
+        var domain = WithTouchEffects(Parse(Dsl), OwnedCrossEntityAssign);
 
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("customer");
+        await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(1);
+        await Assert.That(CrossEntityErrors(domain).Count()).IsEqualTo(0);
     }
 
     [Test]
@@ -161,7 +168,7 @@ public class CrossEntityMutationAnalysisTests {
             OnExitEffects = [OwnedCrossEntityAssign],
         });
 
-        await Assert.That(CrossEntityErrors(domain).Count()).IsEqualTo(2);
+        await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(2);
     }
 
     [Test]
@@ -170,30 +177,72 @@ public class CrossEntityMutationAnalysisTests {
             Subscriptions = s.Subscriptions.Select(sub => sub with { Effects = [OwnedCrossEntityAssign] }).ToList()
         });
 
-        await Assert.That(CrossEntityErrors(domain).Count()).IsEqualTo(1);
+        await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(1);
     }
 
+    // An owned value field prints as `assign Shipping City to ...`, which does not parse back.
     [Test]
-    public async Task OwnStateOwnedAssign_InAction_HasNoErrors() {
-        var ownAssign = new AssignEffect(
+    public async Task OwnedFieldAssign_InAction_IsError() {
+        var ownedField = new AssignEffect(
             DomainExpression.Owned("Shipping", DomainExpression.Property("City")),
             DomainExpression.Literal("Oslo"));
 
-        var analysis = DomainModelAnalyzer.Analyze(WithTouchEffects(Parse(Dsl), ownAssign));
+        await Assert.That(NotAPropertyErrors(WithTouchEffects(Parse(Dsl), ownedField)).Count()).IsEqualTo(1);
+    }
 
-        await Assert.That(analysis.HasErrors).IsFalse();
+    // An owned access named after a relationship has no RelationshipNavigation node, yet would
+    // write the linked Customer. Analyze rejects it, so simulate refuses the domain.
+    [Test]
+    public async Task OwnedAccessOverRelationship_InAction_IsError_AndSimulateRefusesDomain() {
+        var ownedOverRelationship = new AssignEffect(
+            DomainExpression.Owned("customer", DomainExpression.Property("Balance")),
+            DomainExpression.Literal(99L));
+        var domain = WithTouchEffects(Parse(Dsl), ownedOverRelationship);
+        var invoice = domain.Types.OfType<Entity>().Single(e => e.Name == "Invoice");
+
+        await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(1);
+        await Assert.That(() => DomainEntityInstance.Create(invoice, domain: domain))
+            .Throws<InvalidOperationException>();
+    }
+
+    // A relationship read inside a computed target is not a cross-entity write; it gets the shape error.
+    [Test]
+    public async Task ComputedTargetReadingRelationship_IsNotAPropertyError_NotCrossEntity() {
+        var computed = new AssignEffect(
+            DomainExpression.Add(
+                DomainExpression.Property("Note"),
+                new RelationshipNavigation("customer", DomainExpression.Property("Balance"))),
+            DomainExpression.Literal("x"));
+        var domain = WithTouchEffects(Parse(Dsl), computed);
+
+        await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(1);
+        await Assert.That(CrossEntityErrors(domain).Count()).IsEqualTo(0);
     }
 
     [Test]
-    public async Task AssignToNonPropertyTarget_IsError() {
-        var paramAssign = new AssignEffect(
+    public async Task ParameterTarget_InAction_IsError() {
+        var parameterTarget = new AssignEffect(
             DomainExpression.Parameter("note"), DomainExpression.Literal("x"));
 
-        var analysis = DomainModelAnalyzer.Analyze(WithTouchEffects(Parse(Dsl), paramAssign));
+        await Assert.That(NotAPropertyErrors(WithTouchEffects(Parse(Dsl), parameterTarget)).Count()).IsEqualTo(1);
+    }
 
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectBinding &&
-            d.Severity == DiagnosticSeverity.Error &&
-            d.Message.Contains("ParameterAccess"))).IsTrue();
+    // A when handler's peer binder (`line`) as an assign target is reported once, by the effect check.
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task PeerPathTarget_InWhenHandler_IsReportedOnce(bool belowOwnedValue) {
+        DomainExpression target = new RelationshipNavigation("line", DomainExpression.Property("Sku"));
+        if (belowOwnedValue)
+            target = DomainExpression.Owned("Shipping", target);
+        var domain = WithInvoiceOpenStage(Parse(Dsl), s => s with {
+            Subscriptions = s.Subscriptions
+                .Select(sub => sub with { Effects = [new AssignEffect(target, DomainExpression.Literal("x"))] }).ToList()
+        });
+
+        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+        await Assert.That(errors.Count).IsEqualTo(1);
     }
 }

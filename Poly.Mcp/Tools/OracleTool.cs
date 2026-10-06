@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 
 using ModelContextProtocol.Server;
 
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology.Bootstrap;
@@ -34,6 +35,9 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: $"Invalid expression: {ex.Message}", Data: new { parseError = ex.Message }, Affordances: []);
         }
     }
+
+    private static List<string> ErrorMessages(AnalysisResult analysis) =>
+        [.. analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message)];
 
     private static DescribeExpressionData DescribeExpression(DomainExpression expr) {
         var structured = DescribeStructured(expr, 0);
@@ -119,6 +123,8 @@ internal sealed class OracleTool {
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis"]);
 
         try {
             var files = state.Modeling.Emit(state.Domain, state.LatestAnalysis);

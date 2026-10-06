@@ -1,6 +1,6 @@
-# Poly board (source of truth)
+# Poly board (lane status; the plan pick lives in PIPELINE-STATUS)
 
-Updated: 2026-10-06 ~06:30 CDT. Master 11287134. Top slice: PR 113 post-merge review (Razor, OpenCode) → 100x fixes as one PR → FB. Only open PR: 110 C1a (CI red, BLOCKED; rebases after the 113 fixes land).
+Updated: 2026-10-06 06:27 CDT. Master 11287134. Top slice: PR 113 post-merge review (Razor, OpenCode) → 100x fixes as one PR → FB. Open code PRs at time of writing: 110 C1a (CI red, BLOCKED; rebases after the 113 fixes land), 115 F380 (FB review). F304 assigned to 100x (Lane B).
 
 Lives in the repo at `docs/plans/poly-eng/board.md` (moved from the box folder 2026-10-06; see [README](README.md)). Task files: [`tasks/`](tasks/).
 
@@ -10,7 +10,7 @@ Repo: https://github.com/scoizzle/Poly.git
 
 - **Anti-stall:** tip unmoved ~45–60 min → re-fire once; second empty → hard-block + Chieftan. Board/git tip only.
 - **Mill split:** Implement = Grok Build; Reviews = OpenCode `deepseek-v4.1-flash` or MiMo (`mimo-v2.5` / `mimo-v2.6-flash`) only — no Grok on review lanes. Dual pass = other lab.
-- **Hand-editability gate (Scot 2026-09-27):** every code review (Razor + Final Boss) answers "could Scot change this by hand, opening the files cold, without an agent?" A no is a finding at suggestion or higher (never a nit) and blocks ship until fixed or Scot waives. Checklist in poly-eng-lanes item 11. Implementer TASKs: smallest readable change.
+- **Hand-editability gate (Scot 2026-09-27):** every code review (Razor + Final Boss) answers "could Scot change this by hand, opening the files cold, without an agent?" A no is a finding at suggestion or higher (never a nit) and blocks ship until fixed or Scot waives. Checklist: the hand-edit gate bullet in [convergence plan §0](../../domain-modeling/pipeline-convergence-plan.md#0-how-to-read-this). Implementer TASKs: smallest readable change.
 - **Named F# fix-up** (after Final Boss ship / Scot HOLD): implementer → Final Boss only (skip Razor).
 
 ## Poly core principles (Scot 2026-09-27; govern every lane, review, doc)
@@ -30,14 +30,16 @@ session.Lower plan **Accepted**. Not PIPELINE-STATUS CURRENT.
 Campaign: Session Compile. One slice at a time.
 A `20e35a4c`; B `1f94b94d`.
 
-## Open lanes (eng WIP: 2, one PR per lane; implementer 100x for both; reviewer Final Boss only)
+## Open lanes (eng WIP: 2, one PR per lane; implementer 100x for both; reviewers per row)
 
-Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md) on master. Wave 1 order (Lane B): C0, T1, K0, B1, C1a (= P3-D), then G1 after T1. Lane A after N3: A3a, C4e, N4 (N1 waits decision 16). Next risks: T1 (11 test files, 12 of 110 failures unexplained), A3a (goldens byte-identical), B1 (cause unknown). Land C0 and K0 before C1a. H2/K6 need resizing (H1: 13 of 14 sample domains have VM errors) - propose split in wave 2 planning.
+Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md) on master. Wave 1 (historical; T1, C0, K0, B1, G1, A3a, C4e, N4 are merged): order (Lane B): C0, T1, K0, B1, C1a (= P3-D), then G1 after T1. Lane A after N3: A3a, C4e, N4 (N1 waits decision 16). Next risks: T1 (11 test files, 12 of 110 failures unexplained), A3a (goldens byte-identical), B1 (cause unknown). Land C0 and K0 before C1a. H2/K6 need resizing (H1: 13 of 14 sample domains have VM errors) - propose split in wave 2 planning.
 
 | Slice / PR | Tip | Lane / owner | Status / next |
 |-----------|-----|-------------|---------------|
 | **PR 113 review** (post-merge) misc: shrink agent surface, fail closed on dirty lower | merged `f398616e` (diff `2e70e477..f398616e`, 184 files) | top / Razor (OpenCode) then 100x | Scot merged unreviewed 2026-10-05. Razor post-merge review, findings in one table. Then 100x lands all fixes as one PR → Final Boss → merge. Everyone adopts 113 as baseline (short get_dsl_guide + section 12; PIPELINE-STATUS.md only CURRENT; Lower/Emit throw on analysis errors). Task [tasks/PR113-review.md](tasks/PR113-review.md). |
 | **PR 110** C1a root program parameters https://github.com/scoizzle/Poly/pull/110 | `d7b6b9a1` | B / 100x | CI red, BLOCKED. Rebases onto master after the 113 fixes land, then Razor → FB. Task [tasks/C1a.md](tasks/C1a.md). |
+| **PR 115** F380 (M1b) assign target reaching another entity anywhere in the target https://github.com/scoizzle/Poly/pull/115 | `0fc64633` | A / 100x (hand) | In review: Final Boss Review 1 on OpenCode. Task [tasks/F380.md](tasks/F380.md). |
+| **F304** printer quotes contract source/version (NeedsQuotes twin) | not filed | B / 100x | Assigned 2026-10-06. Review 1 (Final Boss, OpenCode). Task [tasks/F304.md](tasks/F304.md). |
 
 Merged this wave: T0 bde1f7c5, A1 8e5ef81b, A2a 08eda8eb, A2b 16403b60, T2 afa246c2 (Scot), K1 7fb4b2a2 (PR 90), H1 47220d4f (PR 92), C4a dac9a6a8 (PR 91, Scot hand-merge). Plan status line fixes: H1 fixed by PR 93; C4a fixed in the C0 PR.
 Open nits to fold into a later docs slice: F180-F183 (K1), F210-F212 (H1; F212 K6 text says TryAnalyzeForEmit returns null on failure but code returns null only for empty module), F170-F175 (C4a; F174 add equality-on-assign note to C4c card). C8d done-when must include MapModuleRequireFailure mapping.
@@ -55,13 +57,12 @@ Open nits to fold into a later docs slice: F180-F183 (K1), F210-F212 (H1; F212 K
 
 - 2026-10-04: N3 PR 93 6dbab628; PR 85-92 and PR 91 (see Open lanes list); master dac9a6a8.
 
+- **PR 81** docs: lean AGENTS/CORE + Session Compile alignment — `9db8868f` (2026-09-28 20:48 CDT, master CI green)
 - **PR 77** DslTokenWriter.IsWord reshape — `640025f7` (Scot, 2026-09-27)
 - **PR 75** Slice B — `1f94b94d`
 - **PR 74** Slice A — `20e35a4c`
 
 ## Parked (no work)
-
-- PR 81 (docs: lean AGENTS/CORE + Session Compile alignment) MERGED 2026-09-28 20:48 CDT → master `9db8868f` (master CI green).
 
 - Pre-existing (base too, Warden 19:45): subscription handler containing a transition prints `this.Notify(...)` → does not compile.
 - F25 (PR 79 Razor #5, pre-existing on master): PolicyConstraintAnalyzer.cs:311-336 never checks a quantifier nested inside another quantifier body (e.g. `any parts where (any widgets where Qty exists)` gets 0 diagnostics; simulate and export both fail loudly). Logged 18:58.

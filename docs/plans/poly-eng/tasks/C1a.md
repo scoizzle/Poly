@@ -15,3 +15,9 @@ Parity rows for an action with parameters and for `when all` previousStage (fire
 
 ## SHIP / NOT SHIP
 SHIP if `when all` row passes and BindForSimulate no longer rewrites params. NOT SHIP if parameter 0 can still alias `this`.
+
+## Log
+
+| Date | Who | Mill | SHA | Verdict / event | Findings |
+|------|-----|------|-----|-----------------|----------|
+| 2026-10-06 | Foreman | — | `d7b6b9a1` | Open, CI red, BLOCKED; rebase after PR 113 fixes | — |

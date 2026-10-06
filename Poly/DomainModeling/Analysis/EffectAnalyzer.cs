@@ -1006,7 +1006,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static IEnumerable<RelationshipNavigation> EnumerateRelationshipNavigations(DomainExpression expr) {
+    internal static IEnumerable<RelationshipNavigation> EnumerateRelationshipNavigations(DomainExpression expr) {
         if (expr is RelationshipNavigation rn)
             yield return rn;
         foreach (var child in expr.Children.OfType<DomainExpression>())
@@ -1217,15 +1217,25 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     private static void ValidateAssign(
         AnalysisContext context, AssignEffect ae, Action? action, Entity entity) {
-        // M1: only the owning entity's named behavior mutates its state. Entry, exit and
-        // when blocks count as named behavior (V4 = a). Any other entity changes through
+        // Only the owning entity's named behavior mutates its state. Entry, exit and
+        // when blocks count as named behavior. Any other entity changes through
         // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
         if (ae.Target is RelationshipNavigation nav) {
             ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
             return;
         }
 
-        if (ae.Target is not PropertyAccess propAccess) return;
+        // The parser writes only a bare property here. Any other shape comes from a model
+        // built through the API (an owned field, a parameter, a computed value) and cannot be
+        // printed back as the same DSL, so it is an error rather than skipped.
+        if (ae.Target is not PropertyAccess propAccess) {
+            context.ReportError(
+                ae,
+                $"Assign target is not a property of entity '{entity.Name}'. " +
+                "An assign writes one of the entity's own properties by name: 'assign <Property> to <value>'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
 
         var targetProp = entity.Properties
             .FirstOrDefault(p => string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));

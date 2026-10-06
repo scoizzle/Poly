@@ -305,7 +305,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
 
         foreach (var effect in subscription.Effects) {
             var flags = new SubBindingFlags();
-            CollectPropertyAccesses(effect, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+            CollectPropertyAccesses(effect, peerBinding, subscriberRelNames, flags);
 
             if (flags.UsesLegacyEvent) {
                 context.ReportError(
@@ -324,14 +324,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 context.ReportError(
                     subscription,
                     $"Subscription effect path-prefix root '{flags.UnboundPeerRoot}' is invalid. {binderHint}",
-                    DomainModelDiagnosticCodes.SubscriptionEffectBinding);
-            }
-
-            if (flags.PeerAsAssignTarget) {
-                context.ReportError(
-                    subscription,
-                    "Peer binder path-prefix cannot be an assign target. " +
-                    "Use peer fields only on the right-hand side (values, conditions, initializers).",
                     DomainModelDiagnosticCodes.SubscriptionEffectBinding);
             }
 
@@ -374,7 +366,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         public HashSet<string> PeerRefs { get; } = new(StringComparer.Ordinal);
         public bool UsesLegacyEvent;
         public string? UnboundPeerRoot;
-        public bool PeerAsAssignTarget;
         public bool NestedPeerPath;
     }
 
@@ -382,38 +373,40 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         Effect effect,
         string? peerBinding,
         HashSet<string> subscriberRelNames,
-        SubBindingFlags flags,
-        bool isAssignTarget) {
+        SubBindingFlags flags) {
         switch (effect) {
             case AssignEffect ae:
-                CollectFromExpression(ae.Target, peerBinding, subscriberRelNames, flags, isAssignTarget: true);
-                CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                // EffectAnalyzer reports every assign target other than a bare property
+                // (a peer or relationship path, an owned field), so only a bare one is read here.
+                if (ae.Target is PropertyAccess)
+                    CollectFromExpression(ae.Target, peerBinding, subscriberRelNames, flags);
+                CollectFromExpression(ae.Value, peerBinding, subscriberRelNames, flags);
                 break;
             case StageTransitionEffect:
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers)
-                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags);
                 break;
             case CreateEntityInRelationshipEffect cir:
                 foreach (var init in cir.Initializers)
-                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                    CollectFromExpression(init.Expression, peerBinding, subscriberRelNames, flags);
                 break;
             case InvokeActionEffect iae:
                 foreach (var binding in iae.ParameterBindings)
-                    CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                    CollectFromExpression(binding.Expression, peerBinding, subscriberRelNames, flags);
                 break;
             case ConditionalEffect ce:
-                CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                CollectFromExpression(ce.Condition, peerBinding, subscriberRelNames, flags);
                 foreach (var e in ce.ThenEffects)
-                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
                 if (ce.ElseEffects is not null)
                     foreach (var e in ce.ElseEffects)
-                        CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                        CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
                 break;
             case CompositeEffect ce:
                 foreach (var e in ce.Effects)
-                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags, isAssignTarget: false);
+                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
                 break;
         }
     }
@@ -422,8 +415,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         DomainExpression expr,
         string? peerBinding,
         HashSet<string> subscriberRelNames,
-        SubBindingFlags flags,
-        bool isAssignTarget) {
+        SubBindingFlags flags) {
         switch (expr) {
             case PropertyAccess pa:
                 if (pa.Name.StartsWith(SubscriptionEventAccess.Prefix, StringComparison.Ordinal)
@@ -442,8 +434,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
 
                 if (peerBinding is { Length: > 0 }
                     && string.Equals(rn.RelationshipName, peerBinding, StringComparison.Ordinal)) {
-                    if (isAssignTarget)
-                        flags.PeerAsAssignTarget = true;
                     if (rn.TargetProperty is RelationshipNavigation)
                         flags.NestedPeerPath = true;
                     else if (rn.TargetProperty is PropertyAccess peerPa)
@@ -451,7 +441,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     else {
                         // Comparisons under peer root still need leaf props; nested rel is rejected above.
                         CollectPeerScalars(rn.TargetProperty, flags);
-                        if (HasNestedRelationship(rn.TargetProperty))
+                        if (EffectAnalyzer.EnumerateRelationshipNavigations(rn.TargetProperty).Any())
                             flags.NestedPeerPath = true;
                     }
                     return;
@@ -463,17 +453,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                     return;
                 }
 
-                // Real subscriber relationship path-prefix. An assign target mutates the
-                // other entity; EffectAnalyzer reports that (DMEFF012) while walking these
-                // effects. A read walks inner properties.
-                if (isAssignTarget)
-                    return;
-                CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags, isAssignTarget);
+                // Real subscriber relationship path-prefix (a read): walk its inner properties.
+                CollectFromExpression(rn.TargetProperty, peerBinding, subscriberRelNames, flags);
                 return;
         }
 
         foreach (var child in expr.Children.OfType<DomainExpression>())
-            CollectFromExpression(child, peerBinding, subscriberRelNames, flags, isAssignTarget);
+            CollectFromExpression(child, peerBinding, subscriberRelNames, flags);
     }
 
     private static void CollectPeerScalars(DomainExpression expr, SubBindingFlags flags) {
@@ -487,10 +473,6 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 break;
         }
     }
-
-    private static bool HasNestedRelationship(DomainExpression expr) =>
-        expr is RelationshipNavigation
-        || expr.Children.OfType<DomainExpression>().Any(HasNestedRelationship);
 
     private static bool SemanticKeyMatch(StageSubscription a, StageSubscription b) {
         if (!string.Equals(a.RelationshipName, b.RelationshipName, StringComparison.Ordinal))

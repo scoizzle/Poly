@@ -1819,10 +1819,11 @@ public class DomainEntityInstanceTests {
                 RelationshipCardinality.OneToOne, [])
         ]);
 
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SubscriptionEffectBinding
-            && d.Message.Contains("assign target", StringComparison.Ordinal))).IsTrue();
+        // The effect check owns assign targets: one cross-entity error, no second subscription error.
+        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectCrossEntityMutation);
     }
 
     [Test]

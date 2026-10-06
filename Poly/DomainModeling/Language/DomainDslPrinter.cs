@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
@@ -761,9 +763,9 @@ public sealed class DomainDslPrinter {
         if (literal.Value is null) return "null";
         if (literal.Value is bool b) return b ? "true" : "false";
         if (literal.Value is string s) return $"\"{EscapeStringLiteral(s)}\"";
-        if (literal.Value is long l) return l.ToString();
-        if (literal.Value is double d) return d.ToString("0.#");
-        return literal.Value.ToString() ?? "null";
+        if (literal.Value is long l) return l.ToString(CultureInfo.InvariantCulture);
+        if (literal.Value is double d) return d.ToString("0.#", CultureInfo.InvariantCulture);
+        return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
     }
 
     /// <summary>Escapes <c>\</c> and <c>"</c> for double-quoted DSL string literals.</summary>
@@ -792,7 +794,7 @@ public sealed class DomainDslPrinter {
     private static string PrintConstraint(Constraint constraint) => constraint switch {
         RequiredConstraint => "required",
         UniqueConstraint => "unique",
-        RangeConstraint r => $"range({r.Minimum?.ToString() ?? ""}, {r.Maximum?.ToString() ?? ""})",
+        RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
         LengthConstraint l => l.MinLength == l.MaxLength
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
@@ -813,6 +815,6 @@ public sealed class DomainDslPrinter {
         true => "true",
         false => "false",
         string s => $"\"{EscapeStringLiteral(s)}\"",
-        _ => value.ToString() ?? "null",
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "null",
     };
 }

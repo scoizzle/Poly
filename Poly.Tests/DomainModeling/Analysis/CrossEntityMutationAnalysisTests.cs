@@ -8,10 +8,11 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// M1: only the owning entity's named behavior mutates its state. Actions, and entry,
-/// exit and when blocks (V4 = a), may assign their own entity's state. A mutation that
-/// targets another entity is an Analyze Error (DMEFF012); create-in and cross-entity
-/// <c>invoke Rel.Action</c> remain the way to change another entity. The parser only
-/// writes a bare property as an assign target, so other target shapes are planted
+/// exit and when blocks (V4 = a), may assign their own entity's state. An assign whose
+/// target starts with a relationship (or a when handler's peer binder) is an Analyze Error
+/// (DMEFF012); any other target that is not a bare property is DMEFF001. Create-in and
+/// cross-entity <c>invoke Rel.Action</c> remain the way to change another entity. The parser
+/// only writes a bare property as an assign target, so other target shapes are planted
 /// through the model API.
 /// </summary>
 public class CrossEntityMutationAnalysisTests {
@@ -227,6 +228,15 @@ public class CrossEntityMutationAnalysisTests {
         await Assert.That(NotAPropertyErrors(WithTouchEffects(Parse(Dsl), parameterTarget)).Count()).IsEqualTo(1);
     }
 
+    private static List<Diagnostic> ErrorsWithWhenTarget(DomainExpression target) {
+        var domain = WithInvoiceOpenStage(Parse(Dsl), s => s with {
+            Subscriptions = s.Subscriptions
+                .Select(sub => sub with { Effects = [new AssignEffect(target, DomainExpression.Literal("x"))] }).ToList()
+        });
+        return DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+    }
+
     // A when handler's peer binder (`line`) as an assign target is reported once, by the effect check.
     [Test]
     [Arguments(false)]
@@ -235,14 +245,28 @@ public class CrossEntityMutationAnalysisTests {
         DomainExpression target = new RelationshipNavigation("line", DomainExpression.Property("Sku"));
         if (belowOwnedValue)
             target = DomainExpression.Owned("Shipping", target);
-        var domain = WithInvoiceOpenStage(Parse(Dsl), s => s with {
-            Subscriptions = s.Subscriptions
-                .Select(sub => sub with { Effects = [new AssignEffect(target, DomainExpression.Literal("x"))] }).ToList()
-        });
 
-        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(ErrorsWithWhenTarget(target).Count).IsEqualTo(1);
+    }
+
+    // A second hop under the peer (`line customer Balance`) is still one error: the subscription
+    // check reads only bare-property targets, so it adds no nested-peer-path error of its own.
+    [Test]
+    public async Task NestedPeerPathTarget_InWhenHandler_IsReportedOnce() {
+        var target = new RelationshipNavigation("line",
+            new RelationshipNavigation("customer", DomainExpression.Property("Balance")));
+
+        await Assert.That(ErrorsWithWhenTarget(target).Count).IsEqualTo(1);
+    }
+
+    // The peer binder is not a relationship of Invoice and cannot be invoked, so the error says what it is.
+    [Test]
+    public async Task PeerPathTarget_InWhenHandler_NamesThePeerBinder() {
+        var errors = ErrorsWithWhenTarget(new RelationshipNavigation("line", DomainExpression.Property("Sku")));
 
         await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectCrossEntityMutation);
+        await Assert.That(errors[0].Message).Contains("peer binder 'line'");
+        await Assert.That(errors[0].Message).DoesNotContain("invoke");
     }
 }

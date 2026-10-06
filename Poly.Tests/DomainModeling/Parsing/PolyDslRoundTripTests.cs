@@ -818,23 +818,31 @@ public class PolyDslRoundTripTests {
     }
 
     // A contract source or version prints bare only when the parser reads it back as one
-    // identifier; keywords, digit-first and punctuated values print as string literals.
+    // identifier (letters include non-ASCII ones); keywords, digit-first and punctuated values
+    // print as escaped string literals. sourceBare / versionBare: true when that value must print bare.
     [Test]
-    [Arguments("default", "1")]
-    [Arguments("stripe", "1")]
-    [Arguments("entity", "2026")]
-    [Arguments("Text", "1v")]
-    [Arguments("stripe-eu", "1.0")]
-    [Arguments("stripe", "v1")]
-    public async Task Print_ContractSourceAndVersion_ReparsesToSameValues(string source, string version) {
+    [Arguments("default", false, "1", false)]
+    [Arguments("stripe", true, "1", false)]
+    [Arguments("entity", false, "2026", false)]
+    [Arguments("Text", false, "1v", false)]
+    [Arguments("stripe-eu", false, "1.0", false)]
+    [Arguments("stripe", true, "v1", true)]
+    [Arguments("x\"y", false, "a\\", false)]
+    [Arguments("Straße", true, "é", true)]
+    [Arguments("Zürich 1", false, "v\\\"é", false)]
+    public async Task Print_ContractSourceAndVersion_ReparsesToSameValues(
+        string source, bool sourceBare, string version, bool versionBare) {
+        static string Quoted(string value) => $"\"{DomainDslPrinter.EscapeStringLiteral(value)}\"";
         var first = Apply($$"""
             domain Test
-            Stripe: contract external "{{source}}" "{{version}}" {}
+            Stripe: contract external {{Quoted(source)}} {{Quoted(version)}} {}
             """);
 
         var printed = new DomainDslPrinter().Print(first);
         var second = Apply(printed);
 
+        var header = $"Stripe: contract external {(sourceBare ? source : Quoted(source))} {(versionBare ? version : Quoted(version))} {{";
+        await Assert.That(printed.Split('\n').Select(line => line.TrimEnd('\r'))).Contains(header);
         var contract = second.ImportedContracts.Single();
         await Assert.That(contract.SourceIdentifier).IsEqualTo(source);
         await Assert.That(contract.Version).IsEqualTo(version);

@@ -136,7 +136,8 @@ public sealed class DslCompiler {
         var domainName = nameChange?.Name ?? "PolyDomain";
         var emptyDomain = new Domain(domainName, []);
         // OpenCompileSession links sqlite/sqlserver in place of generic persistence.
-        // The domain must name that unit, or analysis rejects an id the session did not load.
+        // The domain must name that unit, or DomainEvolution.Apply throws on an id the
+        // session did not load.
         changes = RecordLinkedVendor(changes, session);
         EvolutionResult outcome;
         try {

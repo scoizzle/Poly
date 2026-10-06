@@ -72,6 +72,19 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
+    public async Task Bind_NewSessionWithoutAnalysis_DropsTheOldAnalysis() {
+        var domain = new Domain("D", [new Entity("Item", [], [], [], [])]);
+        var first = DomainSession.ForExtensions([]);
+        var old = first.Analyze(domain);
+        await Assert.That(RuntimeAnalysisCache.GetOrAnalyze(domain)).IsSameReferenceAs(old);
+
+        var second = DomainSession.ForExtensions([]);
+        RuntimeAnalysisCache.Bind(domain, second);
+
+        await Assert.That(RuntimeAnalysisCache.GetOrAnalyze(domain)).IsNotSameReferenceAs(old);
+    }
+
+    [Test]
     public async Task Lower_WhenAnalysisHasErrors_Throws() {
         var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
         var domain = new Domain("D", [

@@ -64,8 +64,11 @@ internal static class RuntimeAnalysisCache {
             var sessionChanged = !ReferenceEquals(holder.Session, session);
             var analysisChanged = analysis is not null && !ReferenceEquals(holder.Analysis, analysis);
             holder.Session = session;
+            // A new session without an analysis must not keep the old session's analysis.
             if (analysis is not null)
                 holder.Analysis = analysis;
+            else if (sessionChanged)
+                holder.Analysis = null;
             if (sessionChanged || analysisChanged) {
                 holder.Module = null;
                 holder.SubscriptionBodies = null;
@@ -151,12 +154,7 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentException.ThrowIfNullOrEmpty(entityName);
         ArgumentException.ThrowIfNullOrEmpty(stageName);
-        foreach (var name in EntryMethodNames(stageName)) {
-            if (TryGetModuleMethod(domain, entityName, name, out method) && method is not null)
-                return true;
-        }
-        method = null;
-        return false;
+        return TryGetModuleMethod(domain, entityName, $"OnEntry{stageName}", out method) && method is not null;
     }
 
     internal static bool TryGetExitMethod(
@@ -164,12 +162,7 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentException.ThrowIfNullOrEmpty(entityName);
         ArgumentException.ThrowIfNullOrEmpty(stageName);
-        foreach (var name in ExitMethodNames(stageName)) {
-            if (TryGetModuleMethod(domain, entityName, name, out method) && method is not null)
-                return true;
-        }
-        method = null;
-        return false;
+        return TryGetModuleMethod(domain, entityName, $"OnExit{stageName}", out method) && method is not null;
     }
 
     /// <summary>
@@ -189,16 +182,6 @@ internal static class RuntimeAnalysisCache {
             || byStage.Count == 0)
             return false;
         return byStage.TryGetValue(targetStageName, out body) && body is not null;
-    }
-
-    private static IEnumerable<string> EntryMethodNames(string stageName) {
-        yield return $"OnEntry{stageName}";
-        yield return $"{stageName}OnEntry";
-    }
-
-    private static IEnumerable<string> ExitMethodNames(string stageName) {
-        yield return $"OnExit{stageName}";
-        yield return $"{stageName}OnExit";
     }
 
     /// <summary>

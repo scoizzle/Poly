@@ -1,6 +1,8 @@
 using System.Text.Json;
 
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -857,49 +859,43 @@ public class SurfaceExtensionDogfoodTests {
     }
 
     [Test]
-    public async Task ExportDomainToCSharp_WithPeerAnalysisError_FailsClosed() {
-        var (sessionId, _) = McpSessionStore.Create("PeerExportWithBindingError");
-        // Force a domain that applies but has subscription binding errors if possible.
-        // If apply rejects, export of empty/prior state is N/A — skip via assert on apply.
-        var bad = """
-            domain PeerExportBad
-            Tracker: entity {
-              Status: Text
-              Tracks: Order
-              Pending: stage {
-                when Tracks Active {
-                  assign Status to order Code
-                }
-              }
-            }
-            Order: entity {
-              Code: Text
-              Draft: stage {}
-              Active: stage {}
-            }
-            """;
-        var apply = DslTool.ApplyDsl(sessionId, bad);
-        if (!apply.Success) {
-            // Prefer evolve rejected at tool boundary
-            await Assert.That(apply.Success).IsFalse();
-            return;
-        }
-
-        McpSessionStore.TryGet(sessionId, out var state);
-        var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
-        await Assert.That(analysis.HasErrors).IsTrue();
+    public async Task ExportDomainToCSharp_ErrorAnalysis_ReturnsDiagnostics() {
+        var (sessionId, _) = McpSessionStore.Create("ExportErrorAnalysis");
+        var broken = ValidDomain.Create("Broken",
+            [new Entity("Order", [new Property("Name", new DomainTypeReference("Nope"), [])], [], [], [])]);
+        var analysis = DomainModelAnalyzer.Analyze(broken);
+        var errors = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.Message)
+            .ToList();
+        await Assert.That(errors).IsNotEmpty();
+        // DomainEvolution rolls back an analysis with Errors, so build a successful
+        // result by hand to put one in the session.
+        McpSessionStore.Evolve(sessionId, (_, _) =>
+            EvolutionResult.Success(broken, analysis, new EvolutionTrace([], false, TimeSpan.Zero, errors.Count, 0)));
 
         var export = OracleTool.ExportDomainToCSharp(sessionId);
-        // Export may use LatestAnalysis and throw or fail — must not silently emit peer handlers.
-        if (export.Success) {
-            var csharp = ExtractCSharp(export) ?? "";
-            // Must not invent a clean peer param for an unbound body
-            await Assert.That(
-                csharp.Contains("WhenEachOrderActive") && csharp.Contains("Order order")).IsFalse();
-        }
-        else {
-            await Assert.That(export.Success).IsFalse();
-        }
+
+        await Assert.That(export.Success).IsFalse();
+        await Assert.That(export.Data).IsNull();
+        await Assert.That(export.Diagnostics).IsEquivalentTo(errors);
+    }
+
+    [Test]
+    public async Task ExportDomainToCSharp_AfterRejectedEdit_ExportsTheKeptDomain() {
+        var (sessionId, _) = McpSessionStore.Create("ExportAfterRejectedEdit");
+        await Assert.That(EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""").Success).IsTrue();
+        await Assert.That(EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Label","typeName":"Text"}""").Success).IsTrue();
+
+        var rejected = EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Broken","typeName":"Nope"}""");
+        await Assert.That(rejected.Success).IsFalse();
+
+        var export = OracleTool.ExportDomainToCSharp(sessionId);
+
+        await Assert.That(export.Success).IsTrue();
+        var csharp = ExtractCSharp(export)!;
+        await Assert.That(csharp).Contains("Label");
+        await Assert.That(csharp).DoesNotContain("Broken");
     }
 
     // ── Helpers ────────────────────────────────────────────────

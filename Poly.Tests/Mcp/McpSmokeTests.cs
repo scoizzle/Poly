@@ -1266,7 +1266,7 @@ public class McpSmokeTests {
         var shapes = DslTool.GetDslGuide("12");
         var shapesBody = shapes.Data!.GetType().GetProperty("guide")!.GetValue(shapes.Data) as string;
         await Assert.That(shapesBody).StartsWith("## 12.");
-        foreach (var field in new[] { "entityName", "typeName", "cardinality", "stageName", "actionName", "propertyName", "expression" })
+        foreach (var field in new[] { "entityName", "typeName", "cardinality", "stageName", "actionName", "propertyName", "expression", "parameter" })
             await Assert.That(shapesBody).Contains($"\"{field}\"");
 
         // G′′.4: Anti-pattern guards — guide must not teach lab constructs

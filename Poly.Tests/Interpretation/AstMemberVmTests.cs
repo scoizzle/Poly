@@ -244,7 +244,7 @@ public class AstMemberVmTests {
         var shop = new Parameter("shop", new TypeReference("Sample.Shop"));
 
         await Assert.That(() => Interpreter.Compile(new Invoke(new Member(shop, "Run")), tda))
-            .Throws<InvalidOperationException>().WithMessageContaining("AST host job 'Run'");
+            .Throws<InvalidOperationException>().WithMessageContaining("AST method 'Run' forwards to a CLR static method");
     }
 
     public static class HostJobProbe {

@@ -1107,8 +1107,9 @@ JSON object. An unknown kind, a missing field, or an unknown enum value fails cl
 - `contract_endpoint`: `{"contractName":"Stripe","name":"Charge","payloadType":"Number"}`.
   Optional `kind` (`Operation`, the default, or `Event`) and `direction` (`Inbound`, the
   default, or `Outbound`).
-- `contract_binding`: `{"name":"ChargeOrder","contractName":"Stripe","endpointName":"Charge","actionName":"Pay"}`.
-  Optional `parameter`.
+- `contract_binding`: `{"name":"ChargeOrder","contractName":"Stripe","endpointName":"Charge","actionName":"Pay","parameter":"amount"}`.
+  `parameter` names the action's parameter that the binding fills. It may also be spelled
+  `localParameterName`.
 
 `remove` payloads (identity fields only):
 

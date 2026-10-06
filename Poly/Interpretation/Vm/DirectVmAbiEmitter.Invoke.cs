@@ -737,11 +737,11 @@ public static partial class DirectVmAbiEmitter {
             pending.RemoveRange(start, pending.Count - start);
             if (ex is not (InvalidOperationException or NotSupportedException))
                 throw;
-            // A body that only forwards to a CLR static method is a host job.
-            // It must not fall through to a CLR method of the same name.
+            // A body that only forwards to a CLR static method (host jobs are built
+            // this way) must not fall through to a CLR method of the same name.
             if (key is MethodDefinitionNode forwarder && ForwardsToClrStatic(body))
                 throw new InvalidOperationException(
-                    $"VM compile rejected: AST host job '{forwarder.Name}' could not be compiled. {ex.Message}",
+                    $"VM compile rejected: AST method '{forwarder.Name}' forwards to a CLR static method and could not be compiled. {ex.Message}",
                     ex);
             return null;
         }

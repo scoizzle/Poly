@@ -26,3 +26,5 @@ Every row fixed or explicitly waived; red-before tests where behavior changes; g
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | 100x | hand | `be223ba0` | PR 117 filed: all Razor rows fixed, none waived | — |
+| 2026-10-06 | Final Boss | OpenCode | `61791a5c` | NOT SHIP #1 (bugs 0, gate NO) | F460–F463: [comment](https://github.com/scoizzle/Poly/pull/117#issuecomment-6016398940) |
+| 2026-10-06 | 100x | hand | child of `61791a5c` | Fix pass: F460 fixed (§12 `parameter` required, in the example and the smoke test); F461 folded in (message says CLR forwarder, not host job); F462–F463 left as is | — |

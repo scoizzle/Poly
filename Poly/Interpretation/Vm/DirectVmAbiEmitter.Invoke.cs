@@ -556,8 +556,15 @@ public static partial class DirectVmAbiEmitter {
         return delegateExpr.Compile();
     }
 
+    // Compiled AST constructors and methods, per definition node and compilation
+    // mode. A slot is published here only after its body compiled.
     private static readonly object AstCallableGate = new();
-    private static readonly ConditionalWeakTable<Node, Action<VmState>[]> AstCallables = new();
+    private static readonly ConditionalWeakTable<Node, Dictionary<CompilationMode, Action<VmState>[]>> AstCallables = new();
+
+    // Slots this thread is compiling, outermost first. A recursive call finds its own
+    // slot here; everything compiled under an outermost call is published together
+    // when that call succeeds.
+    [ThreadStatic] private static List<(Node Key, CompilationMode Mode, Action<VmState>[] Slot)>? _astPending;
 
     private static readonly MethodInfo InvokeAstFunctionInfo =
         typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeAstFunction),
@@ -602,6 +609,38 @@ public static partial class DirectVmAbiEmitter {
     private static bool HasExecutableBody(Node? body) =>
         body is not null && body is not Block { Nodes.Count: 0 };
 
+    /// <summary>
+    /// Compiles the arguments of an AST constructor or method call (appended to
+    /// <paramref name="seq"/>) and returns one callee frame value per parameter.
+    /// A missing argument takes the parameter default. A stack scalar passed to a
+    /// reference parameter is heap-allocated, because the callee reads that slot
+    /// as a heap handle.
+    /// </summary>
+    private static List<Expression> EmitAstArguments(
+        IReadOnlyList<Node> arguments, IReadOnlyList<Parameter> parameters,
+        string callee, List<Expression> seq, AbiCtx ctx) {
+        if (arguments.Count > parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: {callee} has {parameters.Count} parameter(s) but the call has {arguments.Count} argument(s).");
+
+        var values = new List<Expression>(parameters.Count);
+        for (int i = 0; i < arguments.Count; i++) {
+            int before = ctx.RingDepth;
+            seq.Add(CompileNode(arguments[i], ctx));
+            int got = ctx.RingDepth - 1;
+            seq.Add(FoldResultToSlot(ref got, before, ctx));
+            ctx.RingDepth = got + 1;
+            values.Add(ArgumentIsStackScalar(arguments[i], ctx) && !ParameterIsValueType(parameters[i])
+                ? Convert(
+                    Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
+                    typeof(long))
+                : ctx.RingVar(got));
+        }
+        for (int i = arguments.Count; i < parameters.Count; i++)
+            values.Add(ParameterDefaultLong(parameters[i], ctx));
+        return values;
+    }
+
     private static Expression EmitAstInvoke(
         Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, AbiCtx ctx) {
         var definition = method.DefinitionNode;
@@ -621,37 +660,11 @@ public static partial class DirectVmAbiEmitter {
         }
 
         var parameters = definition.Parameters ?? [];
-        if (invoke.Arguments.Length > parameters.Count)
-            throw new InvalidOperationException(
-                $"VM compile rejected: method '{method.Name}' has {parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
-
-        int[] argSlots = new int[invoke.Arguments.Length];
-        for (int i = 0; i < invoke.Arguments.Length; i++) {
-            int before = ctx.RingDepth;
-            seq.Add(CompileNode(invoke.Arguments[i], ctx));
-            int got = ctx.RingDepth - 1;
-            seq.Add(FoldResultToSlot(ref got, before, ctx));
-            argSlots[i] = got;
-            ctx.RingDepth = got + 1;
-        }
-
+        var args = EmitAstArguments(invoke.Arguments, parameters, $"method '{method.Name}'", seq, ctx);
         var inits = new List<Expression>(parameters.Count + 1);
         if (receiver is not null)
             inits.Add(receiver);
-        for (int i = 0; i < parameters.Count; i++) {
-            if (i >= invoke.Arguments.Length) {
-                inits.Add(ParameterDefaultLong(parameters[i], ctx));
-                continue;
-            }
-            // A stack scalar passed to a reference parameter is a heap handle
-            // inside the callee. Object slots otherwise read the raw bits as a handle.
-            var arg = invoke.Arguments[i];
-            inits.Add(ArgumentIsStackScalar(arg, ctx) && !ParameterIsValueType(parameters[i])
-                ? Convert(
-                    Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(argSlots[i]), typeof(object))),
-                    typeof(long))
-                : ctx.RingVar(argSlots[i]));
-        }
+        inits.AddRange(args);
 
         int result = ctx.AllocSlot();
         ctx.RingDepth = result + 1;
@@ -679,14 +692,20 @@ public static partial class DirectVmAbiEmitter {
         ITypeDefinition declaring,
         AbiCtx caller,
         bool instanceSlot) {
-        Action<VmState>[] slot;
+        var mode = caller.Mode;
         lock (AstCallableGate) {
-            if (AstCallables.TryGetValue(key, out slot!))
-                return slot;
-            slot = new Action<VmState>[1];
-            AstCallables.Add(key, slot);
+            if (AstCallables.TryGetValue(key, out var byMode) && byMode.TryGetValue(mode, out var done))
+                return done;
+        }
+        var pending = _astPending ??= [];
+        foreach (var entry in pending) {
+            if (ReferenceEquals(entry.Key, key) && entry.Mode == mode)
+                return entry.Slot;
         }
 
+        var start = pending.Count;
+        var slot = new Action<VmState>[1];
+        pending.Add((key, mode, slot));
         try {
             var lambdas = new List<Lambda>();
             CollectLambdas(body, lambdas);
@@ -707,39 +726,63 @@ public static partial class DirectVmAbiEmitter {
                 parameters,
                 [],
                 [],
-                caller.Mode,
+                mode,
                 analysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
                 instanceSlot);
-            return slot;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) {
-            lock (AstCallableGate) {
-                AstCallables.Remove(key);
-            }
-            // Store jobs are the AST. A body that does not compile must not
-            // fall through to a CLR method of the same name.
-            if (key is MethodDefinitionNode host && IsDictionaryHostJob(host.Name))
+        catch (Exception ex) {
+            // Drop this slot and everything compiled under it: those bodies may
+            // call this slot, which stays empty.
+            pending.RemoveRange(start, pending.Count - start);
+            if (ex is not (InvalidOperationException or NotSupportedException))
+                throw;
+            // A body that only forwards to a CLR static method is a host job.
+            // It must not fall through to a CLR method of the same name.
+            if (key is MethodDefinitionNode forwarder && ForwardsToClrStatic(body))
                 throw new InvalidOperationException(
-                    $"VM compile rejected: AST host job '{host.Name}' could not be compiled. {ex.Message}",
+                    $"VM compile rejected: AST host job '{forwarder.Name}' could not be compiled. {ex.Message}",
                     ex);
             return null;
         }
+
+        if (start == 0) {
+            lock (AstCallableGate) {
+                foreach (var (k, m, s) in pending)
+                    AstCallables.GetOrCreateValue(k)[m] = s;
+            }
+            pending.Clear();
+        }
+        return slot;
     }
 
-    private static bool IsDictionaryHostJob(string name) =>
-        name is "EnsureUnique" or "Notify" or "LinkRelated"
-            or "Create" or "CreateIn" or "ProbeCreate";
+    /// <summary>
+    /// True when <paramref name="body"/> is one call (or return of a call) on a CLR
+    /// type's static member, as in <c>{ return Ops.Job(this, a); }</c>.
+    /// </summary>
+    private static bool ForwardsToClrStatic(Node body) {
+        var statement = body is Block { Nodes.Count: 1 } block ? block.Nodes[0] : body;
+        if (statement is Return { Value: { } value })
+            statement = value;
+        return statement is Invoke { Delegate: Member { Value: ClrTypeReference } };
+    }
 
+    /// <summary>
+    /// Whether a call argument sits in its slot as a raw scalar (not a heap handle).
+    /// The value representation decides; without one, the argument's resolved type
+    /// does (a CLR value type is a scalar, anything else a handle).
+    /// </summary>
     private static bool ArgumentIsStackScalar(Node arg, AbiCtx ctx) {
-        var kind = ctx.Analysis?.GetValueRepresentation(arg);
-        if (kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
-            return true;
-        if (kind is ValueRepresentationKind.HeapRef)
-            return false;
-        return arg is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
-            or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
-            || arg is Constant { Value: long or int or bool or byte or short or sbyte or char or uint or ulong or ushort };
+        switch (ctx.Analysis?.GetValueRepresentation(arg)) {
+            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool:
+                return true;
+            case ValueRepresentationKind.HeapRef:
+                return false;
+        }
+        var type = ctx.Analysis?.GetResolvedType(arg)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: cannot tell whether argument '{arg}' is a scalar or a reference.");
+        return type.GetRuntimeType() is { IsValueType: true };
     }
 
     private static bool ParameterIsValueType(Parameter parameter) {

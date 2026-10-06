@@ -348,20 +348,8 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitAstNew(New n, AstConstructorDefinition astCtor, AbiCtx ctx) {
         var definition = astCtor.Definition;
         var parameters = definition.Parameters ?? [];
-        if (n.Arguments.Length > parameters.Count)
-            throw new InvalidOperationException(
-                $"VM compile rejected: constructor has {parameters.Count} parameter(s) but new has {n.Arguments.Length} argument(s).");
-
         var seq = new List<Expression>();
-        int[] argSlots = new int[n.Arguments.Length];
-        for (int i = 0; i < n.Arguments.Length; i++) {
-            int before = ctx.RingDepth;
-            seq.Add(CompileNode(n.Arguments[i], ctx));
-            int got = ctx.RingDepth - 1;
-            seq.Add(FoldResultToSlot(ref got, before, ctx));
-            argSlots[i] = got;
-            ctx.RingDepth = got + 1;
-        }
+        var args = EmitAstArguments(n.Arguments, parameters, "constructor", seq, ctx);
 
         int slot = ctx.AllocSlot();
         ctx.RingDepth = slot + 1;
@@ -377,11 +365,7 @@ public static partial class DirectVmAbiEmitter {
             ?? throw new InvalidOperationException(
                 "VM compile rejected: AST constructor body could not be compiled.");
         var inits = new List<Expression>(parameters.Count + 1) { ctx.RingVar(slot) };
-        for (int i = 0; i < parameters.Count; i++) {
-            inits.Add(i < n.Arguments.Length
-                ? ctx.RingVar(argSlots[i])
-                : ParameterDefaultLong(parameters[i], ctx));
-        }
+        inits.AddRange(args);
 
         var ignored = Variable(typeof(long), "_astCtor");
         seq.Add(Assign(ignored, Call(

@@ -361,8 +361,9 @@ internal static class RuntimeAnalysisCache {
     /// <summary>
     /// Policy methods are emitted in ToSyntax, one per name. This cache only
     /// fills a name that the module did not already define, for
-    /// <c>EvaluatePolicy</c>. A second definition of the same name is rejected
-    /// when the method is emitted.
+    /// <c>EvaluatePolicy</c>. A second definition of the same name (entity,
+    /// stage or action-local) is an analysis error and ToSyntax throws on it,
+    /// so the first body cached for a name is the only one.
     /// </summary>
     private static Dictionary<(string, string), Node> CompletePolicyBodies(
         Domain domain, AnalysisResult analysis,

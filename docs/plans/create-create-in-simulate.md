@@ -1,7 +1,7 @@
 # Simulate the lowered program (create/create-in remaining)
 
 **Date:** 2026-09-03  
-**Status:** DONE — simulate = Interpreter + bound Store. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) (`CURRENT: (none)`).  
+**Status:** DONE — simulate = Interpreter + bound Store. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).  
 **Suite README:** [`simple-agent-tasks/create-create-in-README.md`](simple-agent-tasks/create-create-in-README.md)  
 **Language lock:** [`decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
 **Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)

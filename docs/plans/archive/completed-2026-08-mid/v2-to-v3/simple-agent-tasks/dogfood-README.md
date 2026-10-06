@@ -1,9 +1,9 @@
 # MCP Dogfood Queue (`dogfood-*`)
 
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
-**Reports:** [`../agent-summaries/dogfood/`](../agent-summaries/dogfood/)  
+**Reports:** [`../agent-summaries/dogfood/`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/)  
 **Fix pass (from findings):** [`dogfood-fix-README.md`](dogfood-fix-README.md)  
-**Guide:** MCP `get_dsl_guide` / [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
+**Guide:** MCP `get_dsl_guide` / [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
 **Orientation:** [`../../domainmodeling-cohesion-and-metadata-findings.md`](../../domainmodeling-cohesion-and-metadata-findings.md) § trust / dogfood  
 
 **Admitted:** 2026-08-06 — **Wave 2** is CURRENT (master-roadmap Agent pick).
@@ -58,10 +58,10 @@ PARK:    Codegen / DAU / grammar / invent scenarios outside S4–S6
 
 | ID | File | Status |
 |----|------|--------|
-| **S1** | [`dogfood-S1-library-checkout.md`](dogfood-S1-library-checkout.md) | `[x]` [S1](../agent-summaries/dogfood/DOGFOOD-S1-20260725.md) · [mut](../agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md) · [R](../agent-summaries/dogfood/DOGFOOD-S1-RERUN-20260725.md) · [R2](../agent-summaries/dogfood/DOGFOOD-S1-RERUN2-20260725.md) |
-| **S2** | [`dogfood-S2-reassign-link.md`](dogfood-S2-reassign-link.md) | `[x]` [S2](../agent-summaries/dogfood/DOGFOOD-S2-20260725.md) · [R](../agent-summaries/dogfood/DOGFOOD-S2-RERUN-20260725.md) |
-| **S3** | [`dogfood-S3-owned-profile.md`](dogfood-S3-owned-profile.md) | `[~]` ([report](../agent-summaries/dogfood/DOGFOOD-S3-20260725.md)) |
-| **Synthesis** | [`DOGFOOD-SYNTHESIS-20260725.md`](../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md) | `[x]` — link S-tier later closed |
+| **S1** | [`dogfood-S1-library-checkout.md`](dogfood-S1-library-checkout.md) | `[x]` [S1](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-20260725.md) · [mut](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md) · [R](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-RERUN-20260725.md) · [R2](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-RERUN2-20260725.md) |
+| **S2** | [`dogfood-S2-reassign-link.md`](dogfood-S2-reassign-link.md) | `[x]` [S2](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S2-20260725.md) · [R](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S2-RERUN-20260725.md) |
+| **S3** | [`dogfood-S3-owned-profile.md`](dogfood-S3-owned-profile.md) | `[~]` ([report](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S3-20260725.md)) |
+| **Synthesis** | [`DOGFOOD-SYNTHESIS-20260725.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md) | `[x]` — link S-tier later closed |
 
 ### Wave 1 findings → fix tasks (summary)
 

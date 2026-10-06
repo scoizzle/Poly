@@ -1,12 +1,12 @@
 # create/create-in — Agent Queue (`create-create-in-*`)
 
-**Parent:** [`../create-create-in-simulate.md`](../create-create-in-simulate.md)  
-**Language:** [`../../decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
+**Parent:** [`../create-create-in-simulate.md`](../../create-create-in-simulate.md)  
+**Language:** [`../../decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../../../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
 **Gate:** [`create-create-in-gate.md`](./create-create-in-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`
 
-**Status:** DONE. Authority: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md). Simulate = lowered program + bound Store.
+**Status:** DONE. Authority: [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). Simulate = lowered program + bound Store.
 
 Do not invent a second CURRENT. Do not admit mut-safety or dict-sqlite beside this.
 

@@ -2,7 +2,7 @@
 
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
-**Status:** `[x]` PASS -- see [re-run](../agent-summaries/dogfood/DOGFOOD-S2-RERUN-20260725.md)  
+**Status:** `[x]` PASS -- see [re-run](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S2-RERUN-20260725.md)  
 **Difficulty:** Medium–Hard  
 **Prereq:** Prefer S1 done once (baseline works); can run standalone if agent is strong  
 **Est. session time:** 45–75 min  

@@ -1258,6 +1258,17 @@ public class McpSmokeTests {
         var unknown = DslTool.GetDslGuide("no-such-section");
         await Assert.That(unknown.Success).IsFalse();
 
+        // A number names a heading number only: there is no section 1, and "1" must not
+        // match the "N1" in section 4's title.
+        await Assert.That(DslTool.GetDslGuide("1").Success).IsFalse();
+
+        // add/remove point here for their payloads, so section 12 must carry them.
+        var shapes = DslTool.GetDslGuide("12");
+        var shapesBody = shapes.Data!.GetType().GetProperty("guide")!.GetValue(shapes.Data) as string;
+        await Assert.That(shapesBody).StartsWith("## 12.");
+        foreach (var field in new[] { "entityName", "typeName", "cardinality", "stageName", "actionName", "propertyName", "expression", "parameter" })
+            await Assert.That(shapesBody).Contains($"\"{field}\"");
+
         // G′′.4: Anti-pattern guards — guide must not teach lab constructs
         await Assert.That(dataJson.Contains("require {")).IsFalse();
         await Assert.That(dataJson.Contains("require{")).IsFalse();

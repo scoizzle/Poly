@@ -5,9 +5,9 @@
 **Type:** Structural decomposition (behavior-preserving)  
 **Execution queue (not CURRENT):** [`simple-agent-tasks/coh-README.md`](simple-agent-tasks/coh-README.md) — Runtime/ + dispatch + evolution helpers (no multi-assembly)  
 **Related:**
-- [`poly-ast-analysis-module-split.md`](poly-ast-analysis-module-split.md) (established pattern)
-- [`../CORE.md`](../CORE.md) — platform ownership table
-- [`../AGENTS.md`](../../AGENTS.md) — placement rules
+- [`poly-ast-analysis-module-split.md`](../completed-2026-08-late/poly-ast-analysis-module-split.md) (established pattern)
+- [`../CORE.md`](../../../CORE.md) — platform ownership table
+- [`../AGENTS.md`](../../../../AGENTS.md) — placement rules
 - [`domainmodeling-cohesion-and-metadata-findings.md`](domainmodeling-cohesion-and-metadata-findings.md)
 
 ---

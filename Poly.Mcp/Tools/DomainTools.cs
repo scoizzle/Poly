@@ -1419,14 +1419,16 @@ internal sealed class DslTool {
         if (section.Trim().Equals("all", StringComparison.OrdinalIgnoreCase))
             return guide;
 
+        // A number names a heading number only. A title tries an exact match before a
+        // substring, so a short word does not land on a longer heading that contains it.
         var want = section.Trim();
-        foreach (var part in SplitGuide(guide)) {
-            if (part.Number.Equals(want, StringComparison.OrdinalIgnoreCase)
-                || part.Title.Contains(want, StringComparison.OrdinalIgnoreCase))
-                return part.Text;
-        }
-
-        return null;
+        var sections = SplitGuide(guide);
+        if (IsAllDigits(want))
+            return sections.FirstOrDefault(s => s.Number == want).Text;
+        var exact = sections.FirstOrDefault(s => s.Title.Equals(want, StringComparison.OrdinalIgnoreCase));
+        if (exact.Text is not null)
+            return exact.Text;
+        return sections.FirstOrDefault(s => s.Title.Contains(want, StringComparison.OrdinalIgnoreCase)).Text;
     }
 
     private static string ShortGuide(string guide) {

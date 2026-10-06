@@ -3,11 +3,11 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
 **Status:** **All slices shipped.** Phase 3 thin + RT + RT′ + SA + SA′ honesty **committed**. Suite **1359**.  
-**Current pick:** Effect surface — [`effect-surface-completeness.md`](effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
+**Current pick:** Effect surface — [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
 
 
-**Predecessor:** Phase 2 spawn-and-wire ([archived](../archive/domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0) 
-**Dogfood:** [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT)  
+**Predecessor:** Phase 2 spawn-and-wire ([archived](../../domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0) 
+**Dogfood:** [Report 1](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [Report 2](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT)  
 **Goal:** Close the **neurosymbolic feedback loop** for agents: propose → **see** pipeline → **simulate** → correct → commit → **exercise** instances.  
 **Principle:** Thin MCP adapters; no new domain IR; deterministic oracles only; honest tool descriptions.
 
@@ -42,14 +42,14 @@ Agent proposes expression / element name
 | **S0** | Simulate ad-hoc policy | `simulate_policy` | ✅ Done |
 | **A0–A2** | Actionable suggestions | `get_domain_suggestions` (A-lite) | ✅ Done |
 | **G** | Product-true DSL guide | `get_dsl_guide` + embedded guide | ✅ Done (`6b0fd63`) |
-| **Dogfood** | Rank next pain | [Report 1](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** → RT |
+| **Dogfood** | Rank next pain | [Report 1](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) | ✅ Done — **R #1** → RT |
 | **RT** | Runtime MCP thin vertical | instance store + create/call/inspect | ✅ **Shipped** + dogfood-2 validated E2E |
-| **Dogfood-2** | Post-RT re-rank | [Report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | ✅ Done — R closed; new **SA** + **RT′** |
+| **Dogfood-2** | Post-RT re-rank | [Report 2](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) | ✅ Done — R closed; new **SA** + **RT′** |
 | **RT′** | Honesty / safety residuals | analysis→suggestions, IsDeleted, policy text | ✅ Core in `a74af5d`; RT′.8 closed in SA′ honesty |
 | **SA** | Stage-action Option B + fallthrough | Copy-on-stage-add + goldens | ✅ MVP in `a74af5d` |
 | **SA′ honesty** | hintCount field, tool Description, README target, order golden | ✅ **Committed** (suite 1359) |
 | **SA′.1 / .8** | Snapshot/stale-copy; Option A | Documented only | **Pull** with pain |
-| **Effect surface (E\*)** | Authorable effects that already run | [`effect-surface-completeness.md`](effect-surface-completeness.md) | **CURRENT** (E0→E1) |
+| **Effect surface (E\*)** | Authorable effects that already run | [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) | **CURRENT** (E0→E1) |
 | **V1 / S1** | Deep visibility / debug | … | Pull |
 | **Pull** | Full effect-micro, `remove_constraint`, Capture | — | Only if needed |
 
@@ -358,7 +358,7 @@ Also: `InternalsVisibleTo` **Poly.Mcp** so MCP can read internal `DomainModelDia
 
 ## 6c. Slice RT — Runtime MCP thin vertical (**SHIPPED** + dogfood-2 validated)
 
-**Sources:** [DOGFOOD-REPORT-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [DOGFOOD-REPORT-2-20260718](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT).  
+**Sources:** [DOGFOOD-REPORT-20260718](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-20260718.md) (R→RT) · [DOGFOOD-REPORT-2-20260718](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) (post-RT).  
 **Human review (report 1):** Merge C9 into one epic; ship RT.  
 **Human review (report 2):** RT E2E **accepted**; do **not** jump to full effect-micro catalog; fix **stage-action semantics (SA)** + **cheap RT′** residuals. Reconcile C1-F1 (Status assign) before claiming zero batch pain forever.
 
@@ -430,7 +430,7 @@ apply_dsl / micro-tools  →  model in session
 
 ## 6e. Slice SA — Stage-action semantics (**NEXT EPIC** after or with RT′ cheap)
 
-**Source:** [DOGFOOD-REPORT-2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) findings on `AddActionToStage` + effect adders.  
+**Source:** [DOGFOOD-REPORT-2](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md) findings on `AddActionToStage` + effect adders.  
 **Human review:** This is **not** “ship effect micro-tools.” It is a **DomainModeling evolution / CallAction resolution** footgun: silent success with no effects.
 
 ### Problem (verified in code)
@@ -654,7 +654,7 @@ Optional single chain smoke: lower → describe same JSON both succeed.
 6. **G0–G2** — product-true DSL guide  
 7. **Dogfood-1** — R ranked #1 → RT  
 8. **RT.0–RT.2** — session store + create/call/inspect + spawn-and-wire  
-9. **Dogfood-2** — post-RT re-rank ([report 2](agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md))  
+9. **Dogfood-2** — post-RT re-rank ([report 2](../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-REPORT-2-20260718.md))  
 10. **RT′** — honesty/safety bundle (discoverability, IsDeleted, policy/stage text)  
 11. **SA** — stage-action semantics + goldens (§6e)  
 
@@ -701,5 +701,5 @@ LATER:   SA stale snapshot / Option A; full effect-micro / V1 / L* — pull only
 - `hintCount` is separate from `infoCount` in `AnalysisData`.  
 - Entity-level policies gate all actions — documented on `add_policy`.  
 - Subscriptions fire on relationship **target** stage entry — in README.  
-- **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](effect-surface-completeness.md).  
+- **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md).  
 - Do **not** open Option A / full effect-micro / host I/O / containers without named pain.

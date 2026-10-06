@@ -1,14 +1,14 @@
 # MCP catalog minify + drop JSON expression tools
 
 **Date:** 2026-08-07  
-**Status:** **DONE** 2026-08-08 — not CURRENT. Suite M0–M6 executed; follow-ups closed. CURRENT: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
+**Status:** **DONE** 2026-08-08 — not CURRENT. Suite M0–M6 executed; follow-ups closed. CURRENT: [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
 **Agent suite:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) (trivial-agent micro-tasks 0→G)  
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; fewer non-overlapping tools  
 **Related:**  
-- Trust: [`customer-trust-proof-map.md`](customer-trust-proof-map.md) · ADR [`2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
-- Grammar (archived): [`archive/completed-2026-08-mid/grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) (E1 done; **GI-8 cancelled**)  
-- Expansion history (archived): [`archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md`](archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)  
-- Mutation safety: [`mcp-mutation-safety.md`](mcp-mutation-safety.md) (easier with fewer writers)
+- Trust: [`customer-trust-proof-map.md`](../../customer-trust-proof-map.md) · ADR [`2026-07-11-platform-trust-bar-and-dogfood.md`](../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
+- Grammar (archived): [`archive/completed-2026-08-mid/grammar-integration.md`](../completed-2026-08-mid/grammar-integration.md) (E1 done; **GI-8 cancelled**)  
+- Expansion history (archived): [`archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md`](../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)  
+- Mutation safety: [`mcp-mutation-safety.md`](../../mcp-mutation-safety.md) (easier with fewer writers)
 
 ---
 

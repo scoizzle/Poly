@@ -1,6 +1,6 @@
 # Infrastructure Pass Suite — Executable Task List
 
-> **ARCHIVED.** Live status: [`../../infrastructure-pass-NEXT.md`](../../infrastructure-pass-NEXT.md) · this folder [`README.md`](README.md)  
+> **ARCHIVED.** Live status: [`../../infrastructure-pass-NEXT.md`](../completed-2026-08-late/infrastructure-pass-NEXT.md) · this folder [`README.md`](README.md)  
 > Micro-tasks: [`simple-agent-tasks/ip-README.md`](simple-agent-tasks/ip-README.md)
 
 **Date:** 2026-07-23  
@@ -96,7 +96,7 @@ Group 6 committed production IR; G6.5 makes `Generate()` IR-only (uncommitted cl
 
 ## Task Group 7: Structural IR + G6.5 ✅ PRODUCT BAR MET — COMMIT PENDING
 
-**Review:** [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) **§ Review G7′′**
+**Review:** [`infrastructure-pass-NEXT.md`](../completed-2026-08-late/infrastructure-pass-NEXT.md) **§ Review G7′′**
 
 | Unit | Status |
 |------|--------|

@@ -1,9 +1,9 @@
 # Experiment: Domain + DSL + Lowering Extension Platform
 
 **Date:** 2026-07-18  
-**Status:** **Superseded for execution framing** by [`docs/plans/dsl-plugin-pipeline-experiment.md`](../plans/dsl-plugin-pipeline-experiment.md) (2026-07-21 **rev 3**: P0 locked; multi-DBMS + DomainModeling seams + pack libraries). Keep this file as research memory (facets, threats, questions).  
+**Status:** **Superseded for execution framing** by [`docs/plans/dsl-plugin-pipeline-experiment.md`](../completed-2026-08-late/dsl-plugin-pipeline-experiment.md) (2026-07-21 **rev 3**: P0 locked; multi-DBMS + DomainModeling seams + pack libraries). Keep this file as research memory (facets, threats, questions).  
 **Home:** `docs/experiments/` (speculative design memory).  
-**Pointer from plans:** [`docs/plans/domain-plugin-extension-platform.md`](../plans/domain-plugin-extension-platform.md)  
+**Pointer from plans:** [`docs/plans/domain-plugin-extension-platform.md`](../completed-2026-08-late/domain-plugin-extension-platform.md)  
 
 ---
 

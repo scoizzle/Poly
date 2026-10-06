@@ -2,9 +2,9 @@
 
 **Parent:** [`../domainmodeling-decomposition-proposal.md`](../domainmodeling-decomposition-proposal.md)  
 **Orientation:** [`../domainmodeling-cohesion-and-metadata-findings.md`](../domainmodeling-cohesion-and-metadata-findings.md) §4  
-**Gaps:** [`../domain-modeling-abstraction-gaps.md`](../domain-modeling-abstraction-gaps.md) (dispatch residual)  
+**Gaps:** [`../domain-modeling-abstraction-gaps.md`](../../completed-2026-08-late/domain-modeling-abstraction-gaps.md) (dispatch residual)  
 **Gate:** [`coh-gate.md`](./coh-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
 **Status:** `[x]` — DONE 2026-08-06 (gate G1–G6 passed, 1855/1855 green, pre-ship review clean). Structural only: **no behavior change** except safer dispatch exhaustiveness. Admit on idle green tree or after dog food; **do not** parallel with amu on same files without ownership check.
 

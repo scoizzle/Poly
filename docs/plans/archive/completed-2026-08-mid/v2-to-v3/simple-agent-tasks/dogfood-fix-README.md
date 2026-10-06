@@ -1,9 +1,9 @@
 # Dogfood Fix Pass Queue (`dogfood-fix-*`)
 
 **Source findings:**  
-- [`../agent-summaries/dogfood/DOGFOOD-S1-20260725.md`](../agent-summaries/dogfood/DOGFOOD-S1-20260725.md)  
-- [`../agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md`](../agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md)  
-- Wave 2: [`DOGFOOD-S4-20260806.md`](../agent-summaries/dogfood/DOGFOOD-S4-20260806.md) · [`DOGFOOD-S5-20260806.md`](../agent-summaries/dogfood/DOGFOOD-S5-20260806.md) · [`DOGFOOD-S6-20260806.md`](../agent-summaries/dogfood/DOGFOOD-S6-20260806.md)
+- [`../agent-summaries/dogfood/DOGFOOD-S1-20260725.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-20260725.md)  
+- [`../agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S1-MUTATION-FINDINGS-20260725.md)  
+- Wave 2: [`DOGFOOD-S4-20260806.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S4-20260806.md) · [`DOGFOOD-S5-20260806.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S5-20260806.md) · [`DOGFOOD-S6-20260806.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S6-20260806.md)
 
 **Discovery queue:** [`dogfood-README.md`](dogfood-README.md)
 

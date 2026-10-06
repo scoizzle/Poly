@@ -10,7 +10,7 @@ Create and create-in invoke a bound Store, Notify-shaped, the same way unique as
 
 ## Required reading
 
-1. Parent locks L1–L10 — [`../create-create-in-simulate.md`](../create-create-in-simulate.md)
+1. Parent locks L1–L10 — [`../create-create-in-simulate.md`](../../create-create-in-simulate.md)
 2. Unique pattern — `Poly.Tests/DomainModeling/Lowering/StoreBindUniqueTests.cs`, `EffectLoweringPass.Assign`, `DomainInstanceStore.EnsureUnique`, `DomainEntityInstance.EnsureUnique`
 3. Storage bag — `StorageMappingMetadata` / `StorageModel` (navs, FKs). Facts fallback when the bag is absent.
 4. Do **not** read pack-host, mut-safety, or dict-sqlite plans.

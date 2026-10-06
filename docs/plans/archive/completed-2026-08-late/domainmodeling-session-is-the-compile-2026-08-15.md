@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-15  
 **Status:** **Superseded 2026-08-20** by `emit-session` — extension is `INodeAnalyzer` on the session analyzer, not four session slots (Meaning / Forms / Artifacts / Grammar.Extend). Not CURRENT. Not another hook on `DomainHostBuilder`.  
-**Related:** [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md), [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](domainmodeling-metadata-artifact-catalog-2026-08-15.md)
+**Related:** [`2026-08-14-domain-libraries.md`](../../../decisions/2026-08-14-domain-libraries.md), [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](domainmodeling-metadata-artifact-catalog-2026-08-15.md)
 
 ---
 

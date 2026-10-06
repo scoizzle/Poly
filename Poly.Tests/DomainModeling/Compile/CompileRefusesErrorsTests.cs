@@ -35,6 +35,16 @@ public class CompileRefusesErrorsTests {
     }
 
     [Test]
+    public async Task Emit_OnErrorAnalysis_ThrowsFirstErrorAndCatalogStaysEmpty() {
+        var (domain, analysis, first) = DomainWithUnknownType();
+        var session = DomainSession.Open(domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => session.Emit(domain, analysis));
+        await Assert.That(ex!.Message).IsEqualTo(first);
+        await Assert.That(session.ArtifactCatalog.Artifacts).IsEmpty();
+    }
+
+    [Test]
     public async Task ToSyntax_OnErrorAnalysis_Throws() {
         var (domain, analysis, first) = DomainWithUnknownType();
 

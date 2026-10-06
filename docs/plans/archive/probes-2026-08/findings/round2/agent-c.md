@@ -1,6 +1,6 @@
 # Discovery-c findings — round 2 (SUBSCRIPTIONS + ENTRY/EXIT + STAGE SCOPING + REQUIRE GATES)
 
-Agent: `agent-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../docs/agent/poly-discovery-loop.md).
+Agent: `agent-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../../agent/poly-discovery-loop.md).
 Round: 2 (findings to `probes/findings/round2/agent-c.md`).
 Slice: `when Rel Stage [as name]` subscriptions (entity-level vs stage-scoped, peer binder,
 quantifier-free Each), entry/exit effects (ctor, transitions, nested `if`), stage-scoped action

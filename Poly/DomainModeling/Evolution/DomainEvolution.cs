@@ -46,14 +46,7 @@ public sealed class DomainEvolution {
         // load is an unresolved import, not a successful analysis.
         if (session is not null) {
             foreach (var id in proposed.Extensions) {
-                var loaded = false;
-                foreach (var have in session.Extensions) {
-                    if (string.Equals(have, id, StringComparison.Ordinal)) {
-                        loaded = true;
-                        break;
-                    }
-                }
-                if (!loaded)
+                if (!session.Extensions.Contains(id, StringComparer.Ordinal))
                     throw new InvalidOperationException(
                         $"Domain depends on extension '{id}' but the analysis session has not loaded it.");
             }

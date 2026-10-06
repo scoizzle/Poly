@@ -5,8 +5,9 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Compatibility door for tests. Product analyze is <see cref="DomainSession.Analyze"/>,
-/// which binds the authoring session. This forwards to the cache (bound session
-/// if Analyze already ran; otherwise a core-catalog fallback).
+/// which binds the authoring session. This analyzes with the session bound to the
+/// domain, or, when none is bound, a session loaded from the core catalog for the
+/// domain's <c>uses</c> ids (an id the core catalog does not know throws).
 /// </summary>
 public static class DomainModelAnalyzer {
     /// <summary>

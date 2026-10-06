@@ -1051,7 +1051,7 @@ PULL:    Q4 aggregates; date ops; JSON quantifiers; unlink_instances
 
 ## 16. Cross-plan note — E6 gap closure (2026-07-19)
 
-Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q2 row) along with invoke/conditional/params/inheritance/equals/enum/owned on the effect track. See [`effect-surface-completeness.md`](effect-surface-completeness.md) §13 for code-review verdict and residual **E6.1–E6.13**.
+Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q2 row) along with invoke/conditional/params/inheritance/equals/enum/owned on the effect track. See [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) §13 for code-review verdict and residual **E6.1–E6.13**.
 
 | Query residual | Status after E6 |
 |----------------|-----------------|
@@ -1158,7 +1158,7 @@ Effect-surface review **E6** closed arithmetic authoring (this plan’s former Q
 | ID | Sev | Finding | Fix |
 |----|-----|---------|-----|
 | **Q3.L.1** | **High (contract)** | **Zero MCP tests** for `link_instances`. Ship without golden is Description-only. R2 e2e still library Link. | MCP smoke: create ×2 → `LinkInstances` → `evaluate_policy(instanceId=)` true/false. Prefer refactor R2 to use the public tool. |
-| **Q3.L.2** | **High (product decision)** | Effect plan **E2.1 = (a) create-in only**; Link/Unlink **library/test-only**. Public MCP `link_instances` **reopens E2** without updating [`effect-surface-completeness.md`](effect-surface-completeness.md) decision log. | Record E2.1′: MCP session link for *existing* instances is product-legal **or** drop tool and document create-in only. Same PR as tool ship. |
+| **Q3.L.2** | **High (product decision)** | Effect plan **E2.1 = (a) create-in only**; Link/Unlink **library/test-only**. Public MCP `link_instances` **reopens E2** without updating [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) decision log. | Record E2.1′: MCP session link for *existing* instances is product-legal **or** drop tool and document create-in only. Same PR as tool ship. |
 | **Q3.L.3** | **High (honesty)** | Guides **contradict themselves**: related-eval path markets `link_instances`; §9 still says link/unlink are **library API only** and product graph write is **`create in Rel` only**. | Rewrite §9 (both guides): MCP `link_instances` for existing instances; DSL still no `link` keyword; create-in remains spawn-and-wire. |
 | **Q3.L.4** | **Med (fail-closed)** | `DomainInstanceStore.Link` does **not** validate relationship exists or entity ends match. MCP accepts typos / reversed ends → silent empty quantifiers. | At MCP boundary: resolve relationship on domain; check source/target entity names against relationship Source/Target; fail loud. Optional store-level later. |
 | **Q3.L.5** | **Med (plan honesty)** | Plans mark Complete / Gate `[x]` / “batch commit-ready” while tool uncommitted, untested, E2.1 stale, guide dual-claim open. | Status open until L.1–L.3 green; Gate `[ ]` until re-review. |

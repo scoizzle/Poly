@@ -6,7 +6,7 @@ pipeline) via `@poly-local` MCP, then compiled the generated C#.
 **Evidence baseline:** `TinyCompiler` domain (6 entities, 8 relationships, 3 enums,
 5 primitives) authored in product DSL, exported via `export_domain_to_csharp`, compiled
 with `dotnet build` in a throwaway console project.
-**Maps used:** [`docs/CORE.md`](../../CORE.md), [`docs/plans/grammar-revision.md`](../../plans/grammar-revision.md),
+**Maps used:** [`docs/CORE.md`](../../CORE.md), [`docs/plans/grammar-revision.md`](../../plans/archive/completed-2026-08-late/grammar-revision.md),
 [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-guide.md).
 
 **Verdict:** The runtime product (domain model, analysis, policies, subscriptions,

@@ -170,24 +170,17 @@ public sealed class DomainSession {
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         return module;
     }
 
-    // Emit uses the catalog returned here, not the ArtifactCatalog property, which another
-    // Lower or Emit on this session may replace at any time.
+    // Lower and Emit both refuse here, before any catalog exists. Emit uses the catalog
+    // returned here, not the ArtifactCatalog property, which another Lower or Emit on
+    // this session may replace at any time.
     private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
         Domain domain, AnalysisResult analysis) {
-        if (analysis.HasErrors) {
-            var messages = string.Join("; ", analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => d.Message));
-            throw new InvalidOperationException(
-                $"Cannot lower '{domain.Name}' because analysis reported errors: {messages}");
-        }
-
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         var catalog = new ArtifactCatalog();
         RegisterSourceElements(catalog, domain);

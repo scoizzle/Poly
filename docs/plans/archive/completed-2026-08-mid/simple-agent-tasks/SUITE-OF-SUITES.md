@@ -3,7 +3,7 @@
 **Date:** 2026-08-06  
 **Audience:** GitHub **Copilot CLI** (primary), Grok plan-orchestrator (secondary)  
 **Status:** Historical pipeline **complete** 2026-08-06 (dogfood → amu → p4 → coh). Later: p3 · p2 · GI/E1 landed.  
-**Next ready suites:** [`READY-TO-TASK.md`](./READY-TO-TASK.md) — mcp-minify · mut-safety · p1  
+**Next ready suites:** [`READY-TO-TASK.md`](../../../simple-agent-tasks/READY-TO-TASK.md) — mcp-minify · mut-safety · p1  
 
 **CURRENT today:** see master-roadmap (likely none until admit).
 
@@ -28,8 +28,8 @@
 
 | Invoke | Agent file | Job |
 |--------|------------|-----|
-| Full pipeline | [`.github/agents/domainmodeling-backlog.agent.md`](../../../.github/agents/domainmodeling-backlog.agent.md) | Run stages 1→4 until all Done |
-| One suite only | [`.github/agents/plan-suite-until-done.agent.md`](../../../.github/agents/plan-suite-until-done.agent.md) | Loop one README until complete |
+| Full pipeline | [`.github/agents/domainmodeling-backlog.agent.md`](../../../../../.github/agents/domainmodeling-backlog.agent.md) | Run stages 1→4 until all Done |
+| One suite only | [`.github/agents/plan-suite-until-done.agent.md`](../../../../../.github/agents/plan-suite-until-done.agent.md) | Loop one README until complete |
 
 ### Full backlog (recommended)
 
@@ -69,7 +69,7 @@ copilot --agent plan-suite-until-done -p "Suite: p4. Mode: until-done."
 3. **Verify** — Build: `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`  
    Tests: `dotnet run --project Poly.Tests/Poly.Tests.csproj` (filter if task names tests).  
 4. **Record** — Mark task `[x]`; progress notes; update suite README status lines.  
-5. **Pre-ship** — On gate / last task: [`pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).  
+5. **Pre-ship** — On gate / last task: [`pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).  
 6. **Loop** until suite complete or hard blocker (write blocker to suite README + stop stage).
 
 ### Dogfood special rules
@@ -91,7 +91,7 @@ When a stage completes:
 | p4 gate | `coh` |
 | coh gate | `(none)` — pipeline complete |
 
-File: [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) Agent pick block.
+File: [`../v2-to-v3/master-roadmap.md`](../../../v2-to-v3/master-roadmap.md) Agent pick block.
 
 ---
 

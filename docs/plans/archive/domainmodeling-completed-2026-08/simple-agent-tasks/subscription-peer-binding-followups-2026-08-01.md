@@ -1,6 +1,6 @@
 # Subscription peer binding follow-ups — 2026-08-01
 
-**Source review:** [`../../agent/reviews/2026-08-01-subscription-peer-binding.md`](../../agent/reviews/2026-08-01-subscription-peer-binding.md)  
+**Source review:** [`../../agent/reviews/2026-08-01-subscription-peer-binding.md`](../../../../agent/reviews/2026-08-01-subscription-peer-binding.md)  
 **Status:** `[x]` Closed 2026-08-01 (full-send) — **residuals:** [`subscription-peer-binding-followups-2026-08-02.md`](./subscription-peer-binding-followups-2026-08-02.md) (r2)
 
 ## Tasks

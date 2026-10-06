@@ -1,6 +1,6 @@
 # Follow-ups — PR 39 MCP export and policy guards — 2026-08-30
 
-Review: [`2026-08-30-pr39-mcp-export-and-policy-guards.md`](./2026-08-30-pr39-mcp-export-and-policy-guards.md)
+Review: `2026-08-30-pr39-mcp-export-and-policy-guards.md`
 
 Owning stream: DomainModeling export/runtime create paths, MCP policy evaluate, named entity policies as predicates.
 

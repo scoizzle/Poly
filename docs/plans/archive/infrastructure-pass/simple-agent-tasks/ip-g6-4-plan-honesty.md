@@ -1,7 +1,7 @@
 # Micro-Task: G6.4 — Plan/docs honesty after production IR
 
 **Suite:** [`ip-README.md`](ip-README.md) **#G6.4**  
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
+**Parent:** [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)  
 **Difficulty:** Small  
 **Estimated Context:** ~6k tokens  
 **Status:** `[ ]` Not Started  
@@ -13,7 +13,7 @@ Update plans so **production IR** is claimed only for what shipped: DbContext + 
 
 ## Required Reading
 
-- [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)
+- [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)
 - [`../infrastructure-pass-task-list.md`](../infrastructure-pass-task-list.md)
 - [`../infrastructure-concern-analyzer-suite.md`](../infrastructure-concern-analyzer-suite.md)
 - [`../README.md`](../README.md) infrastructure row

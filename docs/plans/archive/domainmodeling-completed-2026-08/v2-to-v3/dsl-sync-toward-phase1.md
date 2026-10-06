@@ -15,11 +15,11 @@
 | [`domain-modeling-dsl-tour-feedback.md`](../../experiments/domain-modeling-dsl-tour-feedback.md) | Direction that this plan executes |
 | [`dsl-sync-inventory.md`](dsl-sync-inventory.md) | Slice 0 bill of materials |
 | [`vertical-slice-finish-plan.md`](vertical-slice-finish-plan.md) | One open product slice at a time |
-| [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) | MCP + DSL are **complementary** (do not gut micro-tools) |
-| [`../CORE.md`](../../CORE.md) | Platform mechanisms (no reinvention) |
-| [`../../AGENTS.md`](../../AGENTS.md) | Principles, placement, build/test |
+| [`mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) | MCP + DSL are **complementary** (do not gut micro-tools) |
+| [`../CORE.md`](../../../../CORE.md) | Platform mechanisms (no reinvention) |
+| [`../../AGENTS.md`](../../../../../AGENTS.md) | Principles, placement, build/test |
 | [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) | Break work into pickable micro-tasks before coding |
-| ADR [`2026-07-17-stage-transition-as-observable.md`](../../decisions/2026-07-17-stage-transition-as-observable.md) | Stage transition is authorable observable |
+| ADR [`2026-07-17-stage-transition-as-observable.md`](../../../../decisions/2026-07-17-stage-transition-as-observable.md) | Stage transition is authorable observable |
 
 **How to use this doc:** Treat §3 slices as the authority for order and exit criteria. Estimates are **rough order-of-magnitude**, not a commitment to a two-week calendar. Prefer promoting concrete steps into `simple-agent-tasks/` when work starts.
 
@@ -91,7 +91,7 @@ Remaining runtime fidelity (entry/exit, stage gates, instance links) is **BR res
 1. **Fix the IR first** — do not build a Phase 1 DSL parser against event-centric authoring.
 2. **One open product slice at a time** — per `vertical-slice-finish-plan.md`. This plan is a roadmap of slices, not parallel workstreams.
 3. **Runtime does not wait on the parser** — builders + evolution already author models. Close the execution loop on API/builders; DSL serializes the same IR.
-4. **MCP dual path** — DSL/`apply_dsl` for batch; micro-tools for discovery and repair ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md)). Do **not** remove micro-tools as a success criterion.
+4. **MCP dual path** — DSL/`apply_dsl` for batch; micro-tools for discovery and repair ([`mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)). Do **not** remove micro-tools as a success criterion.
 5. **Keep analyzers healthy while migrating** — do not orphan tests; rewrite or delete with the IR change.
 6. **No new IR types without a runtime or analysis consumer** — stage subscription needs analysis + (later) runtime fan-out.
 7. **Phase 1 freeze means freeze** — split into **1a (thin)** and **1b (wider)**; reject PRs that pull Phase 2+ constructs into the parser.
@@ -927,7 +927,7 @@ Principles: minimal diffs; TUnit names `Method_Condition_ExpectedResult`; no new
 
 **Pre-MR workaround:** `export_dsl` → hand-edit → `apply_dsl` (full replace). Still valid for large rewrites.
 
-**IR already exists** — these are thin MCP adapters over existing evolution APIs. Do **not** invent new `DomainChange` types unless a change is missing (verify before coding). Placement: `Poly.Mcp/Tools/DomainTools.cs` (`EvolveTool`), smokes in `Poly.Tests/Mcp/McpSmokeTests.cs`. Related: [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) (dual path: keep micro-tools; do not gut them).
+**IR already exists** — these are thin MCP adapters over existing evolution APIs. Do **not** invent new `DomainChange` types unless a change is missing (verify before coding). Placement: `Poly.Mcp/Tools/DomainTools.cs` (`EvolveTool`), smokes in `Poly.Tests/Mcp/McpSmokeTests.cs`. Related: [`mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) (dual path: keep micro-tools; do not gut them).
 
 | Tool | Gap | Existing evolution seam (verify names at impl time) |
 |------|-----|------------------------------------------------------|
@@ -979,7 +979,7 @@ Mirror the most-used `add_*` surface so wrong adds are recoverable incrementally
 #### MR.4 — Polish (optional)
 
 - [ ] **MR.4.1** Update success affordances on `add_*` tools to mention sibling `remove_*` where helpful
-- [ ] **MR.4.2** Cross-link this slice from [`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) status table (removal row)
+- [ ] **MR.4.2** Cross-link this slice from [`mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) status table (removal row)
 - [ ] **MR.4.3** (optional) `remove_action_from_stage` if MR.2.4 honesty requires it
 - [ ] **MR.4.4** (optional) `remove_stage_subscription` micro-tool — pairs with B-prep.2.2 `add_stage_subscription`; only if agents author subscriptions via micro-tools
 

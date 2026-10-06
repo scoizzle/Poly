@@ -1,6 +1,6 @@
 # DomainModeling quality follow-ups — 2026-08-01
 
-**Source review:** [`../../agent/reviews/2026-08-01-domainmodeling-quality-delta.md`](../../agent/reviews/2026-08-01-domainmodeling-quality-delta.md)  
+**Source review:** [`../../agent/reviews/2026-08-01-domainmodeling-quality-delta.md`](../../../../agent/reviews/2026-08-01-domainmodeling-quality-delta.md)  
 **Parent context:** DAS suite complete; this is a post-DAS hardening delta  
 **Status:** `[x]` Closed 2026-08-01  
 

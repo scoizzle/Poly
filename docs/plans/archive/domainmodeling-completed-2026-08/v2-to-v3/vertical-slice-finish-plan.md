@@ -8,13 +8,13 @@
 
 | Doc | Role |
 |-----|------|
-| [`master-roadmap.md`](master-roadmap.md) | Milestones (M2 **Done**) |
-| [`../archive/v2-to-v3-migration/designs/v3-completion-plan.md`](../archive/v2-to-v3-migration/designs/v3-completion-plan.md) | Archived WP inventory — **do not execute** |
-| [`2026-07-11-review-fix-plan.md`](../2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
-| [`../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
-| [`spikes/first-v3-consumer.md`](spikes/first-v3-consumer.md) | MCP + direct API quality bar |
+| [`master-roadmap.md`](../../../v2-to-v3/master-roadmap.md) | Milestones (M2 **Done**) |
+| [`../archive/v2-to-v3-migration/designs/v3-completion-plan.md`](../../v2-to-v3-migration/designs/v3-completion-plan.md) | Archived WP inventory — **do not execute** |
+| [`2026-07-11-review-fix-plan.md`](../../completed-2026-08-mid/2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
+| [`../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
+| [`spikes/first-v3-consumer.md`](../../completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md) | MCP + direct API quality bar |
 | **[`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md)** | **Simple-agent pick queue** (one micro-task at a time) |
-| [Archived migration](../archive/v2-to-v3-migration/README.md) | WS8/WP/ws micro-tasks — **do not execute** |
+| [Archived migration](../../v2-to-v3-migration/README.md) | WS8/WP/ws micro-tasks — **do not execute** |
 
 ---
 
@@ -263,7 +263,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | DSL export/import | Deferred (first-v3-consumer) |
 | Fail-closed all VM POC nodes | Review WP-E — pull when a slice hits them |
 | **Flaky `VmDebugger_StepOver_TraversesStatements`** | [`simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md`](simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md) — CaptureResult re-reads dirty ArrayPool slots |
-| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
+| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../../../post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
 
 ---
 
@@ -275,7 +275,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | 1 | **pm2-1** multi-property evaluate sample bag | Post-M2 agent leverage |
 | 2 | **pm2-2** add_policy → evaluate_policy affordance | Tiny UX |
 | 3 | Optional **0.1d** remove-zero-match | Anytime |
-| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../post-v2-delete-naming-cleanup.md) |
+| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../../../post-v2-delete-naming-cleanup.md) |
 | 5 | **Slice 4** first effect | Named product scenario only |
 
 **Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.
@@ -294,7 +294,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | polish-dbg / 0.2a | ✅ **Done** | Suite 1175 green |
 | pm2-1 | ✅ **Done** | Multi-property evaluate via `McpSubjectBag` (8 props) + JSON `properties` arg |
 | pm2-2 | ⬜ | add_policy → evaluate_policy affordance |
-| **MCP gaps** | 📋 **[Plan: `mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md)** | ~14 new tools across 4 phases (actions, effects, remove, policy depth) |
+| **MCP gaps** | 📋 **[Plan: `mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)** | ~14 new tools across 4 phases (actions, effects, remove, policy depth) |
 | 4 First effect | ⬜ Deferred | Named scenario |
 | 5 Relationship | ⬜ Pull | |
 | Naming cleanup | ⬜ | post-v2-delete-naming-cleanup |

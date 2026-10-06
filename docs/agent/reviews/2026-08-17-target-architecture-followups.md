@@ -1,7 +1,7 @@
 # Target architecture doc — follow-ups — 2026-08-17
 
 Source review: [`2026-08-17-target-architecture-review.md`](2026-08-17-target-architecture-review.md).  
-Doc: [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../plans/domainmodeling-target-architecture-2026-08-16.md).
+Doc: [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../plans/archive/completed-2026-08-late/domainmodeling-target-architecture-2026-08-16.md).
 
 Do not implement folder moves from the target doc. Do not flip `PIPELINE-STATUS.md`. Edits belong in the target doc (dated) or a 2026-08-17 revision.
 

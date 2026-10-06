@@ -3,7 +3,7 @@
 **Queue:** [`dogfood-README.md`](dogfood-README.md)  
 **Protocol:** [`../mcp-dogfood-protocol.md`](../mcp-dogfood-protocol.md)  
 **Wave:** 2 (shipped SPE / peer surface)  
-**Status:** `[x]` PASS — [report](../agent-summaries/dogfood/DOGFOOD-S4-20260806.md)  
+**Status:** `[x]` PASS — [report](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S4-20260806.md)  
 **Difficulty:** Medium  
 **Prereq:** Wave 1 green enough; runtime tools enabled  
 **Est. session time:** 45–75 min  

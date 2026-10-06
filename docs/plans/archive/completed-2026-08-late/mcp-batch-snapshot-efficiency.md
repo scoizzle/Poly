@@ -150,6 +150,6 @@ Update the `domain-modeling.agent.md` to prefer batch endpoints for multi-elemen
 
 | Plan | Relationship |
 |------|-------------|
-| [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Batch operations are more likely to hit concurrency races if they're not atomic; safety fixes are prerequisite |
-| [`mcp-domain-inspection-completeness.md`](mcp-domain-inspection-completeness.md) | `get_domain_snapshot` reduces the need for N+1 `get_entity_detail` calls during inspection |
-| [`mcp-tool-surface-expansion.md`](v2-to-v3/mcp-tool-surface-expansion.md) | DSL batch-apply path is a complementary approach; plural endpoints are the simpler, lower-risk first step |
+| [`mcp-mutation-safety.md`](../../mcp-mutation-safety.md) | Batch operations are more likely to hit concurrency races if they're not atomic; safety fixes are prerequisite |
+| [`mcp-domain-inspection-completeness.md`](../../mcp-domain-inspection-completeness.md) | `get_domain_snapshot` reduces the need for N+1 `get_entity_detail` calls during inspection |
+| [`mcp-tool-surface-expansion.md`](../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) | DSL batch-apply path is a complementary approach; plural endpoints are the simpler, lower-risk first step |

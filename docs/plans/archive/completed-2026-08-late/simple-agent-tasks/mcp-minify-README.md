@@ -2,12 +2,12 @@
 
 **Parent plan:** [`../mcp-catalog-minify.md`](../mcp-catalog-minify.md) (authority for locks)  
 **Gate:** [`mcp-minify-gate.md`](./mcp-minify-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
-**Platform:** [`../../CORE.md`](../../CORE.md) · [`../../../AGENTS.md`](../../../AGENTS.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Platform:** [`../../CORE.md`](../../../../CORE.md) · [`../../../AGENTS.md`](../../../../../AGENTS.md)  
 
 **Status:** ✅ **DONE 2026-08-08** — tasks 0–7 + gate all `[x]`; tool catalog **46 → 24**; zero `DomainExpressionJsonParser`; unified `add`/`remove` + `apply_dsl` only; suite **1927/1927 green**; pr1 reviewed (no 🔴🟠).
 
-**Follow-ups:** [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) — **ALL CLOSED 2026-08-08**. Do not re-admit. CURRENT: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md).
+**Follow-ups:** [`mcp-minify-followups-2026-08-08.md`](./mcp-minify-followups-2026-08-08.md) — **ALL CLOSED 2026-08-08**. Do not re-admit. CURRENT: [`PIPELINE-STATUS.md`](../../../simple-agent-tasks/PIPELINE-STATUS.md).
 ---
 
 ## Objective

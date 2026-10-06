@@ -1,9 +1,9 @@
 # pack-1 — DSL Grammar (TokenWriter + binder + printer)
 
-**Parent:** [`../pack-host-2026-08-13.md`](../pack-host-2026-08-13.md) phase 1  
-**Fleet:** [`pack-README.md`](./pack-README.md)  
+**Parent:** [`../pack-host-2026-08-13.md`](../../../pack-host-2026-08-13.md) phase 1  
+**Fleet:** [`pack-README.md`](../../../parked/pack/pack-README.md)  
 **Gate:** [`pack-1-gate.md`](./pack-1-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 **Status:** `[x]` Done 2026-08-13 — gate passed (pr1 clean, build + suite green)
 

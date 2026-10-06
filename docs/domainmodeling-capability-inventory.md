@@ -207,7 +207,7 @@ Fail-closed: missing storage (db/all); missing behavior/aggregate (all) → `Inv
 
 `Generate()` on DbContext/MinimalApi is a thin IR wrapper (no dual StringBuilder body).
 
-Infra suite (Groups 1–7 under bar): **complete** — [`plans/infrastructure-pass-NEXT.md`](plans/infrastructure-pass-NEXT.md) · archive [`plans/archive/infrastructure-pass/`](plans/archive/infrastructure-pass/README.md).
+Infra suite (Groups 1–7 under bar): **complete** — [`plans/infrastructure-pass-NEXT.md`](plans/archive/completed-2026-08-late/infrastructure-pass-NEXT.md) · archive [`plans/archive/infrastructure-pass/`](plans/archive/infrastructure-pass/README.md).
 
 ---
 
@@ -274,8 +274,8 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 ## 12. Suggested reading order
 
 1. This inventory (what ships)  
-2. [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (product pick / CURRENT)  
-3. [`plans/domainmodeling-workstream-map.md`](plans/domainmodeling-workstream-map.md) (done vs parked)  
-4. [`plans/infrastructure-pass-NEXT.md`](plans/infrastructure-pass-NEXT.md) (codegen pull)  
+2. [`plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (product path; the pick is in [`PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md))  
+3. [`plans/domainmodeling-workstream-map.md`](plans/archive/completed-2026-08-late/domainmodeling-workstream-map.md) (done vs parked)  
+4. [`plans/infrastructure-pass-NEXT.md`](plans/archive/completed-2026-08-late/infrastructure-pass-NEXT.md) (codegen pull)  
 5. [`CORE.md`](CORE.md) before changing pipeline seams  
 6. Archived suite history: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md)

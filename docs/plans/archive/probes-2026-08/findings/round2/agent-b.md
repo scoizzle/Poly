@@ -1,6 +1,6 @@
 # Round-2 discovery findings — CONSTRAINTS + CREATE PATHS — RUNTIME PARITY
 
-Agent: `discovery-agent-b`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../docs/agent/poly-discovery-loop.md).
+Agent: `discovery-agent-b`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../../agent/poly-discovery-loop.md).
 Slice: required/unique/range/length/pattern constraints; `create Type` vs `create in Rel`;
 `create_instance` vs effect-created children; action-param / enum-member initializer values;
 `-> EntityType` return contract.

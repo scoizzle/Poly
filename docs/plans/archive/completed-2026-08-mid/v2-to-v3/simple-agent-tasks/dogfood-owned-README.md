@@ -1,6 +1,6 @@
 # Owned/Nested Access Build Slice (`dogfood-owned-*`)
 
-**Parent synthesis:** [`../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md`](../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md)  
+**Parent synthesis:** [`../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md)  
 **Source finding:** S3-B1 — OwnedAccess expression path IR-only, guide says "Pull"  
 **Discovery queue:** [`dogfood-README.md`](dogfood-README.md)
 

@@ -11,9 +11,9 @@ Closed 2026-10-01. `session.Lower` emits one bool method per policy name (entity
 
 Grep of `new DomainExpressionLoweringPass` under `Poly/DomainModeling/Runtime` on 2026-10-05. #94 deleted the uncalled helpers `EvaluateParameterBindings`, `BindPeerInEffect`, and `EvaluateExprOnPeer`.
 
-| File:line | Site | Caller |
-|-----------|------|--------|
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:566` | `PrevalidateCreateInitializers` | `ValuesAsLiteralBindings` at `:537` |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:629` | `CreateChildInstance` initializer eval | live; callers pass literal bindings |
+| File | Site | Caller |
+|------|------|--------|
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs` | `PrevalidateCreateInitializers` | `ProbeCreate`, with bindings from `ValuesAsLiteralBindings` |
+| `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs` | `CreateChildInstance` initializer eval | `Create`, and `CreateIn` through `ExecuteCreateInRelationship`, pass literal bindings |
 
 Quantifier predicates no longer re-lower at execute (P3-A #79: `EvaluateBodyOnTarget` / Store quantifier jobs gone). The two sites above still lower literal bindings. That residual is recorded here and is not CURRENT.

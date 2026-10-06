@@ -134,6 +134,19 @@ public class OracleToolTests {
     }
 
     [Test]
+    public async Task OracleExpression_AnalysisError_ReturnsDiagnostics() {
+        // Parses, and every property is in the bag, but Text plus Number does not analyze.
+        var response = OracleTool.OracleExpression(
+            "Name + 1 == \"x1\"",
+            @"{""Name"":""x""}");
+
+        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Data).IsNull();
+        await Assert.That(response.Diagnostics).IsNotNull();
+        await Assert.That(response.Diagnostics!.Any(d => d.Contains("not numeric"))).IsTrue();
+    }
+
+    [Test]
     public async Task OracleExpression_EmptyProperties_Fails() {
         var response = OracleTool.OracleExpression(
             "Age >= 18",
@@ -162,7 +175,7 @@ public class OracleToolTests {
             @"{""City"":""Metropolis""}");
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("Oracle failed");
+        await Assert.That(response.Diagnostics!.Any(d => d.Contains("'profile'"))).IsTrue();
     }
 
     [Test]

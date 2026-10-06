@@ -1,6 +1,6 @@
 # Poly board (lane status; the plan pick lives in PIPELINE-STATUS)
 
-Updated: 2026-10-06 06:27 CDT. Master 11287134. Top slice: PR 113 post-merge review (Razor, OpenCode) → 100x fixes as one PR → FB. Open code PRs at time of writing: 110 C1a (CI red, BLOCKED; rebases after the 113 fixes land), 115 F380 (FB review). F304 assigned to 100x (Lane B).
+Updated: 2026-10-06 06:27 CDT. Master 11287134. Top slice: PR 113 post-merge review (Razor, OpenCode) → 100x fixes as one PR → FB. Open code PRs at time of writing: 110 C1a (CI red, BLOCKED; rebases after the 113 fixes land), 115 F380 (FB review). 116 F304 (FB review).
 
 Lives in the repo at `docs/plans/poly-eng/board.md` (moved from the box folder 2026-10-06; see [README](README.md)). Task files: [`tasks/`](tasks/).
 
@@ -39,7 +39,7 @@ Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../domain-modelin
 | **PR 113 review** (post-merge) misc: shrink agent surface, fail closed on dirty lower | merged `f398616e` (diff `2e70e477..f398616e`, 184 files) | top / Razor (OpenCode) then 100x | Scot merged unreviewed 2026-10-05. Razor post-merge review, findings in one table. Then 100x lands all fixes as one PR → Final Boss → merge. Everyone adopts 113 as baseline (short get_dsl_guide + section 12; PIPELINE-STATUS.md only CURRENT; Lower/Emit throw on analysis errors). Task [tasks/PR113-review.md](tasks/PR113-review.md). |
 | **PR 110** C1a root program parameters https://github.com/scoizzle/Poly/pull/110 | `d7b6b9a1` | B / 100x | CI red, BLOCKED. Rebases onto master after the 113 fixes land, then Razor → FB. Task [tasks/C1a.md](tasks/C1a.md). |
 | **PR 115** F380 (M1b) assign target reaching another entity anywhere in the target https://github.com/scoizzle/Poly/pull/115 | `0fc64633` | A / 100x (hand) | In review: Final Boss Review 1 on OpenCode. Task [tasks/F380.md](tasks/F380.md). |
-| **F304** printer quotes contract source/version (NeedsQuotes twin) | not filed | B / 100x | Assigned 2026-10-06. Review 1 (Final Boss, OpenCode). Task [tasks/F304.md](tasks/F304.md). |
+| **F304** printer quotes contract source/version (quoting follows the parser's identifier rule) | PR 116 @ab2902d7 | B / 100x | Filed 2026-10-06. Review 1 (Final Boss, OpenCode). Task [tasks/F304.md](tasks/F304.md). |
 
 Merged this wave: T0 bde1f7c5, A1 8e5ef81b, A2a 08eda8eb, A2b 16403b60, T2 afa246c2 (Scot), K1 7fb4b2a2 (PR 90), H1 47220d4f (PR 92), C4a dac9a6a8 (PR 91, Scot hand-merge). Plan status line fixes: H1 fixed by PR 93; C4a fixed in the C0 PR.
 Open nits to fold into a later docs slice: F180-F183 (K1), F210-F212 (H1; F212 K6 text says TryAnalyzeForEmit returns null on failure but code returns null only for empty module), F170-F175 (C4a; F174 add equality-on-assign note to C4c card). C8d done-when must include MapModuleRequireFailure mapping.

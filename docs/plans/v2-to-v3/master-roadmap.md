@@ -53,7 +53,7 @@ MCP / direct API as thin consumers
 
 Admission is only [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md). This file does not copy that pick.
 
-**Focus:** `CURRENT` is `(none)`. Do not invent a second CURRENT. Do not admit a parked suite from this roadmap.
+**Focus:** `CURRENT` is whatever PIPELINE-STATUS says. Do not invent a second CURRENT. Do not admit a parked suite from this roadmap.
 ---
 
 ## Archived material

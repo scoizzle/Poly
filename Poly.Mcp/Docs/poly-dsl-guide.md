@@ -1080,16 +1080,49 @@ Author a closed set as an **enum**, not a property constraint.
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
 **Replaces** the entire session domain — not merged incrementally.
 
-**Incremental** (unified tools): Use `add(kind, payload)` to create one element
-(entity, property, stage, action, stage_action, relationship, constraint, policy) and
-`remove(kind, payload)` to delete one by identity. `remove` does not delete a constraint.
+**Incremental** (unified tools): `add(kind, payload)` creates one element and
+`remove(kind, payload)` deletes one by identity. `kind` is case-sensitive. `payload` is a
+JSON object. An unknown kind, a missing field, or an unknown enum value fails closed.
 
-`add` also accepts `value_type` `{name}`, `contract` `{name, source, version}` (optional
-`sourceKind`), `contract_value_type` `{contractName, name}`, `contract_endpoint`
-`{contractName, name, payloadType}` (optional `kind`, `direction`), and `contract_binding`
-`{name, contractName, endpointName, actionName}` (optional `parameter`). A new name is a
-letter or `_`, then letters, digits, or `_`, and not a DSL keyword. A property may also
-be named `Text`, `Number`, or `Boolean` when its type is a primitive.
+`add` payloads:
+
+- `entity`: `{"name":"Order"}`
+- `property`: `{"entityName":"Order","name":"Total","typeName":"Number"}`
+- `stage`: `{"entityName":"Order","name":"Active"}`
+- `action`: `{"entityName":"Order","name":"Submit"}`
+- `stage_action`: `{"entityName":"Order","stageName":"Draft","name":"Submit"}`
+- `relationship`: `{"name":"OrderLines","source":"Order","target":"Line","cardinality":"OneToMany"}`.
+  `cardinality` is `OneToOne`, `OneToMany` (the default), `ManyToMany` or `ManyToOne`.
+  `source` and `target` may also be spelled `sourceEntityName` and `targetEntityName`.
+  Optional `"sourceOwnsTarget": true`.
+- `constraint`: `{"entityName":"Order","propertyName":"Total","type":"Range","min":0,"max":100}`.
+  `type` is `Required`, `Unique`, `Range` (`min`, `max`), `Length` (`min`, `max`) or
+  `Pattern` (`{"pattern":"^[a-z]+$"}`).
+- `policy`: `{"entityName":"Order","name":"Adult","expression":"Age >= 18"}`. `expression`
+  is DSL text, never JSON.
+- `value_type`: `{"name":"Money"}`
+- `contract`: `{"name":"Stripe","source":"stripe","version":"v1"}`. Optional `sourceKind`:
+  `ExternalProvider` (the default) or `InternalDomain`.
+- `contract_value_type`: `{"contractName":"Stripe","name":"ChargeRequest"}`
+- `contract_endpoint`: `{"contractName":"Stripe","name":"Charge","payloadType":"Number"}`.
+  Optional `kind` (`Operation`, the default, or `Event`) and `direction` (`Inbound`, the
+  default, or `Outbound`).
+- `contract_binding`: `{"name":"ChargeOrder","contractName":"Stripe","endpointName":"Charge","actionName":"Pay"}`.
+  Optional `parameter`.
+
+`remove` payloads (identity fields only):
+
+- `entity`: `{"name":"Order"}`
+- `property`, `stage`, `action`: `{"entityName":"Order","name":"Total"}`
+- `stage_action`: `{"entityName":"Order","stageName":"Draft","name":"Submit"}`
+- `relationship`: `{"name":"OrderLines"}`. Add `"source":"Order"` when the same name is
+  declared on more than one source entity.
+- `policy`: `{"entityName":"Order","name":"Adult"}`. Add `"stageName"` to remove a stage
+  policy or `"actionName"` to remove an action policy (at most one of the two).
+- `constraint`: not supported. Use `apply_dsl`.
+
+A new name is a letter or `_`, then letters, digits, or `_`, and not a DSL keyword. A
+property may also be named `Text`, `Number`, or `Boolean` when its type is a primitive.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
 `create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.

@@ -28,3 +28,4 @@ Razor's table is posted (PR comment on #113 or a review file linked here); 100x'
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | Foreman | — | `f398616e` | Review assigned to Razor | — |
+| 2026-10-06 | Razor | OpenCode deepseek-v4.1-flash | `f398616e` | FIXES NEEDED (NOT SHIP), gate NO | [review](https://github.com/scoizzle/Poly/blob/ae6ff807/docs/agent/reviews/2026-10-06-pr113-f398616e-razor.md) |

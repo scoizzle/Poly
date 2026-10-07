@@ -77,6 +77,21 @@ public sealed class ReservedGeneratedNameTests {
     }
 
     [Test]
+    public async Task DomainFailureExceptionEntity_IsAnalyzeError() {
+        var analysis = Analyze("""
+            domain Clash
+            DomainFailureException: entity {
+              Name: Text required
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("DomainFailureException")
+            .And.Contains("scaffolding");
+    }
+
+    [Test]
     public async Task DomainResultEnum_IsAnalyzeError() {
         var analysis = Analyze("""
             domain Clash

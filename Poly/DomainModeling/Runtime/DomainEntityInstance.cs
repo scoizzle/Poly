@@ -260,10 +260,8 @@ public sealed partial record DomainEntityInstance {
         if (entryEffects.Count == 0)
             return;
         instance.ClearAutomaticStageChain();
-        ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
-                entryStageName: firstStage.Name),
-            "first-stage OnEntry");
+        instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
+            entryStageName: firstStage.Name);
     }
 
     /// <summary>
@@ -697,19 +695,14 @@ public sealed partial record DomainEntityInstance {
         return ActionInvocationResult.InvalidArguments(actionName, message);
     }
 
-    private static void ThrowIfEffectListFailed(DomainResult? failed, string context) {
-        if (failed is { IsSuccess: false })
-            throw new InvalidOperationException(
-                failed.ErrorMessage ?? $"{context} failed.");
-    }
-
     /// <summary>
     /// One operation AST through <see cref="Interpreter"/>. Named actions always
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never
     /// <c>LowerActionBody</c> (Ontology residual: dual-path execute is a bug).
     /// Domain-bound OnEntry/OnExit batches bind the GetOrLower export-shaped
     /// body, module method, or mixed-list segment and throw on miss.
-    /// Execute never lowers; Domain-null fail-closed.
+    /// Execute never lowers; Domain-null fail-closed. Returns a named action's
+    /// Failure; a void body has no result and throws <see cref="DomainFailureException"/>.
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
@@ -740,7 +733,7 @@ public sealed partial record DomainEntityInstance {
                 || method?.Body is null)
                 throw new InvalidOperationException(
                     $"Module method '{actionName}' is missing on type '{Entity.Name}'.");
-            (tree, rootParameters) = BindModuleMethodBody(method);
+            (tree, rootParameters) = BindModuleMethodBody(method, voidBody: false);
         }
         else if (Domain is not null) {
             var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
@@ -756,30 +749,30 @@ public sealed partial record DomainEntityInstance {
                     throw new InvalidOperationException(
                         $"Entry/exit segment body {kind} '{stageName}'[{segmentIndex}] is missing on entity '{Entity.Name}'.");
                 }
-                tree = BindForSimulate(segmentBody);
+                tree = BindForSimulate(segmentBody, voidBody: true);
             }
             else if (hasStageName) {
                 if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, exitStageName, "exit", out var exitBody)
                     && exitBody is not null) {
-                    tree = BindForSimulate(exitBody);
+                    tree = BindForSimulate(exitBody, voidBody: true);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryExitBody(
                         Domain, Entity.Name, entryStageName, "entry", out var entryBody)
                     && entryBody is not null) {
-                    tree = BindForSimulate(entryBody);
+                    tree = BindForSimulate(entryBody, voidBody: true);
                 }
                 else if (exitStageName is not null
                     && RuntimeAnalysisCache.TryGetExitMethod(Domain, Entity.Name, exitStageName, out var exit)
                     && exit?.Body is not null) {
-                    (tree, rootParameters) = BindModuleMethodBody(exit);
+                    (tree, rootParameters) = BindModuleMethodBody(exit, voidBody: true);
                 }
                 else if (entryStageName is not null
                     && RuntimeAnalysisCache.TryGetEntryMethod(Domain, Entity.Name, entryStageName, out var entry)
                     && entry?.Body is not null) {
-                    (tree, rootParameters) = BindModuleMethodBody(entry);
+                    (tree, rootParameters) = BindModuleMethodBody(entry, voidBody: true);
                 }
                 else {
                     var kind = exitStageName is not null ? $"OnExit '{exitStageName}'" : $"OnEntry '{entryStageName}'";
@@ -800,11 +793,6 @@ public sealed partial record DomainEntityInstance {
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
-        // Void entry/exit/segment bodies fall through on success; give the VM
-        // root the DomainResult shape void action bodies already carry so an
-        // injected fail-closed return is visible after execution.
-        if (actionName is null)
-            tree = AsVoidResultBody(tree);
         var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(typeProvider, actionParameters), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
@@ -818,28 +806,9 @@ public sealed partial record DomainEntityInstance {
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
         }
         using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
-        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+        if (actionName is not null && exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;
         return null;
-    }
-
-    /// <summary>
-    /// Void export bodies throw on failure and fall through on success. Simulate
-    /// binds the throw to <c>return DomainResult.Failure</c>, but the VM types a
-    /// block's root from its last statement unless a top-level return dominates —
-    /// a trailing assignment would surface a scalar and hide the failure. A
-    /// trailing success return (the same tail void action bodies carry) makes the
-    /// root a DomainResult.
-    /// </summary>
-    private static Node AsVoidResultBody(Node tree) {
-        var success = new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Success")));
-        if (tree is Block block) {
-            if (block.Nodes.Count > 0 && block.Nodes[^1] is ThrowStatement or Return)
-                return block;
-            return new Block([.. block.Nodes, success], block.Variables);
-        }
-        return new Block([tree, success]);
     }
 
     private ITypeDefinitionProvider ModuleAwareTypeProvider(
@@ -855,8 +824,8 @@ public sealed partial record DomainEntityInstance {
         var ctx = new AnalysisContext(wrapped);
         TypeDefinitionNode? moduleEntity = null;
         foreach (var td in module) {
-            // CLR DomainResult wins via DomainResultTypeProvider.
-            if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal))
+            // CLR DomainResult and DomainFailureException win via DomainResultTypeProvider.
+            if (td.Name is "DomainResult" or nameof(DomainFailureException))
                 continue;
             if (string.Equals(td.Name, Entity.Name, StringComparison.Ordinal)) {
                 moduleEntity = td;
@@ -919,7 +888,7 @@ public sealed partial record DomainEntityInstance {
     }
 
     private (Node Tree, IReadOnlyList<Parameter> RootParameters) BindModuleMethodBody(
-        MethodDefinitionNode method) {
+        MethodDefinitionNode method, bool voidBody) {
         var body = method.Body
             ?? throw new InvalidOperationException(
                 $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
@@ -931,7 +900,7 @@ public sealed partial record DomainEntityInstance {
             var typed = rootParameters.ToDictionary(p => p.Name, StringComparer.Ordinal);
             body = SubstituteTypedParameters(body, typed);
         }
-        return (BindForSimulate(body), rootParameters);
+        return (BindForSimulate(body, voidBody), rootParameters);
     }
 
     private static Node SubstituteTypedParameters(
@@ -991,25 +960,13 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
-    /// stays. Result-shape choices where simulate reports as
-    /// <c>DomainResult.Failure</c> what the printed C# throws:
-    /// <list type="bullet">
-    /// <item>
-    /// Unbound contract adapters — printed <c>{Contract}Adapters.{Endpoint}(…)</c>
-    /// throws <c>NotImplementedException</c>; simulate returns
-    /// <c>DomainResult.Failure</c> instead.
-    /// </item>
-    /// <item>
-    /// Void fail-closed <c>throw new InvalidOperationException(msg)</c> — OnEntry /
-    /// ctor trees throw; simulate returns <c>DomainResult.Failure(msg)</c> instead.
-    /// Catching at Execute would also swallow host fail-loud throws.
-    /// </item>
-    /// </list>
-    /// Action parameters and <c>previousStage</c> are real SetArgs slots (C1a);
-    /// this bind no longer rewrites them.
+    /// stays. One arm is left: an unbound contract adapter — printed
+    /// <c>{Contract}Adapters.{Endpoint}(…)</c> throws <c>NotImplementedException</c>;
+    /// simulate returns <c>DomainResult.Failure</c> from an action body and throws
+    /// <see cref="DomainFailureException"/> from a void body, which has no result.
     /// </summary>
-    private Node BindForSimulate(Node node) {
-        Node Recurse(Node n) => BindForSimulate(n);
+    private Node BindForSimulate(Node node, bool voidBody) {
+        Node Recurse(Node n) => BindForSimulate(n, voidBody);
         return node switch {
             Block b => new Block(
                 b.Nodes.Select(Recurse),
@@ -1022,10 +979,9 @@ public sealed partial record DomainEntityInstance {
             Assignment a => new Assignment(Recurse(a.Destination), Recurse(a.Value)),
             Invoke { Delegate: Member { Value: TypeReference or NamedTypeReference, MemberName: { } endpoint } } inv
                 when AdapterTypeName(inv) is { } adapter
-                => new Return(new Invoke(
-                    new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                    new Constant(
-                        $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate."))),
+                => UnboundAdapterFailure(
+                    $"Contract endpoint '{ContractNameFromAdapter(adapter)}.{endpoint}' has no in-process adapter on simulate.",
+                    voidBody),
             Invoke inv => new Invoke(
                 Recurse(inv.Delegate),
                 [.. inv.Arguments.Select(Recurse)]) {
@@ -1049,14 +1005,6 @@ public sealed partial record DomainEntityInstance {
             TypeCast tc => new TypeCast(
                 Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
             New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
-            ThrowStatement {
-                Exception: New {
-                    Type: NamedTypeReference { TypeName: "InvalidOperationException" },
-                    Arguments: var args
-                }
-            } => new Return(new Invoke(
-                new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                args.Length > 0 ? Recurse(args[0]) : new Constant(""))),
             ThrowStatement ts => new ThrowStatement(Recurse(ts.Exception)),
             TryCatchFinally t => new TryCatchFinally(
                 Recurse(t.TryBlock),
@@ -1080,6 +1028,12 @@ public sealed partial record DomainEntityInstance {
                 $"Cannot bind simulate body on {node.GetType().Name}.")
         };
     }
+
+    private static Node UnboundAdapterFailure(string message, bool voidBody) => voidBody
+        ? new ThrowStatement(new New(
+            new NamedTypeReference(nameof(DomainFailureException)), new Constant(message)))
+        : new Return(new Invoke(
+            new Member(new NamedTypeReference("DomainResult"), "Failure"), new Constant(message)));
 
     private static string? AdapterTypeName(Invoke inv) =>
         inv.Delegate is Member { Value: Node type } && TypeNameOf(type) is { } name

@@ -86,7 +86,7 @@ public class Patron
         var create0 = this.Create("Fine", "Amount", loan.Amount, "Reason", "Overdue");
         if (!create0.IsSuccess)
         {
-            throw new InvalidOperationException(create0.ErrorMessage ?? "");
+            throw new DomainFailureException(create0.ErrorMessage ?? "");
         }
         var created1 = create0.Value;
     }

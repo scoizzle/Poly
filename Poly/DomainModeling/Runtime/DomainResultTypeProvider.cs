@@ -5,16 +5,19 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.DomainModeling.Runtime;
 
 /// <summary>
-/// Resolves the short name <c>DomainResult</c> to the runtime
-/// <see cref="DomainResult"/> CLR type so
+/// Resolves the short names <c>DomainResult</c> and <c>DomainFailureException</c>
+/// to the runtime CLR types so
 /// <c>Invoke(Member(TypeReference("DomainResult"), "Failure"), …)</c>
-/// is a real static call. Entity type defs stay on
+/// is a real static call and a printed <c>throw new DomainFailureException(…)</c>
+/// throws the type the host sees. Entity type defs stay on
 /// <see cref="TypeDefinitionNodeAnalyzer"/>.
 /// </summary>
 internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : ITypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(string name) {
         if (string.Equals(name, "DomainResult", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DomainResult));
+        if (string.Equals(name, nameof(DomainFailureException), StringComparison.Ordinal))
+            return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DomainFailureException));
         return inner.GetTypeDefinition(name);
     }
 

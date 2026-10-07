@@ -713,6 +713,25 @@ public sealed partial class DomainToCSharpExporter {
         );
     }
 
+    internal const string DomainFailureExceptionName = "DomainFailureException";
+
+    /// <summary>
+    /// <c>public class DomainFailureException : InvalidOperationException</c>: what a
+    /// constructor or stage entry/exit throws when a domain rule fails, because it
+    /// cannot return a <c>DomainResult</c>. The simulator maps the name to
+    /// <see cref="Runtime.DomainFailureException"/>.
+    /// </summary>
+    internal static TypeDefinitionNode BuildDomainFailureExceptionTypeDef() =>
+        new(
+            DomainFailureExceptionName,
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [new Parameter("message", new PrimitiveTypeReference(PrimType.String))],
+                    Body: new Block([]),
+                    BaseCall: [new Parameter("message")])
+            ],
+            BaseType: new NamedTypeReference("System.InvalidOperationException"));
+
     internal static TypeDefinitionNode BuildValueTypeTypeDef(
         ValueType valueType, Domain domain, INodeMetadataProvider metadata) {
         var props = new List<PropertyDefinitionNode>();

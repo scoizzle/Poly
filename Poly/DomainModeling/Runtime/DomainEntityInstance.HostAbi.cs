@@ -197,12 +197,10 @@ public sealed partial record DomainEntityInstance {
         string? exitStageName = null) {
         // No nested stage transitions: bind the whole batch via module OnEntry/OnExit.
         if (effects.All(e => e is not StageTransitionEffect)) {
-            ThrowIfEffectListFailed(
-                ExecuteEffectList(
-                    effects, _typeDefAnalyzer,
-                    entryStageName: entryStageName,
-                    exitStageName: exitStageName),
-                "stage entry/exit");
+            ExecuteEffectList(
+                effects, _typeDefAnalyzer,
+                entryStageName: entryStageName,
+                exitStageName: exitStageName);
             return;
         }
 
@@ -211,13 +209,11 @@ public sealed partial record DomainEntityInstance {
         void Flush() {
             if (batch.Count == 0) return;
             // Partial flush after nested transition — bind cached segment from GetOrLower.
-            ThrowIfEffectListFailed(
-                ExecuteEffectList(
-                    batch, _typeDefAnalyzer,
-                    entryStageName: entryStageName,
-                    exitStageName: exitStageName,
-                    entryExitSegmentIndex: segmentIndex),
-                "stage entry/exit");
+            ExecuteEffectList(
+                batch, _typeDefAnalyzer,
+                entryStageName: entryStageName,
+                exitStageName: exitStageName,
+                entryExitSegmentIndex: segmentIndex);
             segmentIndex++;
             batch.Clear();
         }
@@ -306,26 +302,24 @@ public sealed partial record DomainEntityInstance {
             var cached = body;
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            cached = BindForSimulate(cached);
+            cached = BindForSimulate(cached, voidBody: true);
             // C1a: previousStage is a real SetArgs slot after this (when the handler declares it).
             var rootParameters = ContainsPreviousStageParameter(cached)
                 ? (IReadOnlyList<Parameter>)[new Parameter("previousStage")]
                 : [];
-            ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, rootParameters, previousStageName),
-                "subscription");
+            ExecuteCachedSubscriptionTree(cached, rootParameters, previousStageName);
         }
         finally {
             _isExecutingSubscription = false;
         }
     }
 
-    private DomainResult? ExecuteCachedSubscriptionTree(
+    private void ExecuteCachedSubscriptionTree(
         Node tree,
         IReadOnlyList<Parameter> rootParameters,
         string? previousStageName) {
         var compiled = CompileBody(
-            AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
+            tree, ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
         setArgs[0] = this;
         for (var i = 0; i < rootParameters.Count; i++) {
@@ -335,9 +329,6 @@ public sealed partial record DomainEntityInstance {
             setArgs[i + 1] = previousStageName;
         }
         using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
-        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-            return failed;
-        return null;
     }
 
     private static bool ContainsPreviousStageParameter(Node node) {

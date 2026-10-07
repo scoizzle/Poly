@@ -117,6 +117,7 @@ public static class DomainProgramProjection {
         // ── Build DomainResult infrastructure types ─────────────
         result.Add(DomainToCSharpExporter.BuildDomainResultTypeDef());
         result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
+        result.Add(DomainToCSharpExporter.BuildDomainFailureExceptionTypeDef());
 
         // ── Emit fail-closed adapters for bound contracts (pack-3c-3) ──
         // A bind is a call in export: each contract with at least one bound endpoint gets

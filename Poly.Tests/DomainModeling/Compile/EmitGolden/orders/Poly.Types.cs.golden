@@ -38,3 +38,9 @@ public record DomainResult<T>
     public static DomainResult<T> Success(T value) => new DomainResult<T>(true, @value, null);
     public static DomainResult<T> Failure(string message) => new DomainResult<T>(false, default!, message);
 }
+
+public class DomainFailureException : System.InvalidOperationException
+{
+    public DomainFailureException(string message) : base(message)
+    { }
+}

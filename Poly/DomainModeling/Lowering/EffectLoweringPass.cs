@@ -333,7 +333,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
         var hasRequired = prop.Constraints.OfType<RequiredConstraint>().Any();
 
-        Node Fail(string msg) => AssignConstraintFailure(msg);
+        Node Fail(string msg) => ReturnCallerFailure(new Constant(msg));
 
         foreach (var _ in prop.Constraints.OfType<RequiredConstraint>()) {
             if (isText) {
@@ -422,20 +422,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 new Block([Fail(
                     $"'{prop.Name}' does not match the required pattern.")])));
         }
-    }
-
-    /// <summary>
-    /// Failure for assign guards: <c>return DomainResult.Failure</c> when the
-    /// caller has a result type; <c>throw</c> in void export contexts (ctor /
-    /// stage entry) — same split as create-in fail-closed.
-    /// </summary>
-    private Node AssignConstraintFailure(string message) {
-        if (_context.ActionResultType is null) {
-            return new ThrowStatement(new New(
-                new NamedTypeReference("InvalidOperationException"),
-                new Constant(message)));
-        }
-        return ReturnCallerFailure(new Constant(message));
     }
 
     private static Constant? ConvertAssignConstraintConstant(object? value) {
@@ -706,17 +692,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Rewrap nested Failure as the caller action's <c>DomainResult</c> /
     /// <c>DomainResult&lt;T&gt;</c> — same shape as create-in. Returning the callee
     /// result object is CS0029 when the caller is a different DomainResult arity.
-    /// Runtime omits <see cref="LoweringContext.ActionResultType"/> and falls back
-    /// to untyped <c>DomainResult.Failure</c>, which <c>ExecuteEffect</c> already
-    /// fail-fasts on.
+    /// A void caller (ctor, stage entry/exit, subscription handler) has no result,
+    /// so it throws <c>DomainFailureException</c> instead.
     /// </summary>
-    private Node CallerResultType =>
-        _context.ActionResultType ?? new TypeReference("DomainResult");
+    private Node ReturnCallerFailure(Node errorMessage) =>
+        _context.ActionResultType is { } resultType
+            ? new Return(new Invoke(new Member(resultType, "Failure"), errorMessage))
+            : new ThrowStatement(new New(
+                new NamedTypeReference(DomainToCSharpExporter.DomainFailureExceptionName), errorMessage));
 
-    private Return ReturnCallerFailure(Node errorMessage) =>
-        new(new Invoke(new Member(CallerResultType, "Failure"), errorMessage));
-
-    private Return ReturnCallerFailureFrom(Node resultVar) =>
+    private Node ReturnCallerFailureFrom(Node resultVar) =>
         ReturnCallerFailure(
             new Syntactic.Coalesce(
                 new Member(resultVar, "ErrorMessage"),
@@ -1130,20 +1115,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         var resultVar = _names.Next("create");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
-        Node failClosed = _context.ActionResultType is null
-            ? new ThrowStatement(new New(
-                new NamedTypeReference("InvalidOperationException"),
-                new Syntactic.Coalesce(
-                    new Member(resultVar, "ErrorMessage"),
-                    new Constant(""))))
-            : new Return(
-                new Invoke(
-                    new Member(resultType, "Failure"),
-                    new Syntactic.Coalesce(
-                        new Member(resultVar, "ErrorMessage"),
-                        new Constant(""))));
+        var failClosed = ReturnCallerFailureFrom(resultVar);
         var nodes = new List<Node> {
             new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
             new IfStatement(

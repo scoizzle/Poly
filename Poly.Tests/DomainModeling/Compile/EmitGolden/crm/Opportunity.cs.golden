@@ -40,11 +40,11 @@ public class Opportunity
             var assignValue0 = 10L;
             if (assignValue0 < 0L)
             {
-                throw new InvalidOperationException("'Probability' must be >= 0.");
+                throw new DomainFailureException("'Probability' must be >= 0.");
             }
             if (assignValue0 > 100L)
             {
-                throw new InvalidOperationException("'Probability' must be <= 100.");
+                throw new DomainFailureException("'Probability' must be <= 100.");
             }
             this.Probability = assignValue0;
         }
@@ -1138,11 +1138,11 @@ public class Opportunity
         var assignValue0 = 10L;
         if (assignValue0 < 0L)
         {
-            throw new InvalidOperationException("'Probability' must be >= 0.");
+            throw new DomainFailureException("'Probability' must be >= 0.");
         }
         if (assignValue0 > 100L)
         {
-            throw new InvalidOperationException("'Probability' must be <= 100.");
+            throw new DomainFailureException("'Probability' must be <= 100.");
         }
         this.Probability = assignValue0;
     }
@@ -1151,11 +1151,11 @@ public class Opportunity
         var assignValue0 = 40L;
         if (assignValue0 < 0L)
         {
-            throw new InvalidOperationException("'Probability' must be >= 0.");
+            throw new DomainFailureException("'Probability' must be >= 0.");
         }
         if (assignValue0 > 100L)
         {
-            throw new InvalidOperationException("'Probability' must be <= 100.");
+            throw new DomainFailureException("'Probability' must be <= 100.");
         }
         this.Probability = assignValue0;
     }
@@ -1164,11 +1164,11 @@ public class Opportunity
         var assignValue0 = 80L;
         if (assignValue0 < 0L)
         {
-            throw new InvalidOperationException("'Probability' must be >= 0.");
+            throw new DomainFailureException("'Probability' must be >= 0.");
         }
         if (assignValue0 > 100L)
         {
-            throw new InvalidOperationException("'Probability' must be <= 100.");
+            throw new DomainFailureException("'Probability' must be <= 100.");
         }
         this.Probability = assignValue0;
     }
@@ -1177,11 +1177,11 @@ public class Opportunity
         var assignValue0 = 100L;
         if (assignValue0 < 0L)
         {
-            throw new InvalidOperationException("'Probability' must be >= 0.");
+            throw new DomainFailureException("'Probability' must be >= 0.");
         }
         if (assignValue0 > 100L)
         {
-            throw new InvalidOperationException("'Probability' must be <= 100.");
+            throw new DomainFailureException("'Probability' must be <= 100.");
         }
         this.Probability = assignValue0;
     }
@@ -1190,11 +1190,11 @@ public class Opportunity
         var assignValue0 = 0L;
         if (assignValue0 < 0L)
         {
-            throw new InvalidOperationException("'Probability' must be >= 0.");
+            throw new DomainFailureException("'Probability' must be >= 0.");
         }
         if (assignValue0 > 100L)
         {
-            throw new InvalidOperationException("'Probability' must be <= 100.");
+            throw new DomainFailureException("'Probability' must be <= 100.");
         }
         this.Probability = assignValue0;
     }

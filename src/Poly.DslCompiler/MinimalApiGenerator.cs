@@ -1149,12 +1149,17 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         var dbContextName = $"{domain.Name}DbContext";
         var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms);
         var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
+        var programUnit = apiGen.GenerateCompilationUnit(dbContextName);
+        var programTree = GeneratedTree.Create(
+            domain, "Program.cs", programUnit, nameof(MinimalApiHostArtifactContributor));
         return [
+            programTree,
             ContributedFile.Create(
                 domain,
                 "Program.cs",
-                new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName)),
-                nameof(MinimalApiHostArtifactContributor)),
+                new CSharpGenerator().Generate(programUnit),
+                nameof(MinimalApiHostArtifactContributor),
+                [programTree.Descriptor.Id]),
             ContributedFile.Create(domain, "demo.http", httpGen.Generate(), nameof(MinimalApiHostArtifactContributor)),
         ];
     }

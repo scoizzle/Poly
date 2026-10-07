@@ -119,8 +119,9 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(TextFile(result, ContributedFile.FileName(db))).IsEqualTo(ContributedFile.Text(db));
         await Assert.That(TextFile(result, "Program.cs"))
             .IsEqualTo(ContributedFile.Text(Contributed(catalog, "Program.cs")));
-        await Assert.That(catalog.Artifacts.Any(a =>
-            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == "Item.cs")).IsFalse();
+        var item = Contributed(catalog, "Item.cs");
+        await Assert.That(item.Descriptor.Producer).IsEqualTo("Emit");
+        await Assert.That(item.Descriptor.References.Single().ToString()).IsEqualTo("Catalog/Item#entity");
     }
 
     [Test]
@@ -192,7 +193,8 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
         _ = session.Lower(domain, analysis);
         var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
-        await Assert.That(files.Select(ContributedFile.FileName).ToList()).IsEquivalentTo(["Program.cs", "demo.http"]);
+        await Assert.That(TextFiles(files).Select(ContributedFile.FileName).ToList())
+            .IsEquivalentTo(["Program.cs", "demo.http"]);
     }
 
     [Test]
@@ -221,6 +223,9 @@ public class SliceCProducerLoopCatalogTests {
             return [ContributedFile.Create(domain, "track.txt", domain.Name, nameof(TrackingContributor))];
         }
     }
+
+    private static IEnumerable<Artifact> TextFiles(IReadOnlyList<Artifact> artifacts) =>
+        artifacts.Where(a => a.Descriptor.Id.Type == ContributedFile.Type);
 
     private static Artifact Contributed(ArtifactCatalog catalog, string fileName) =>
         catalog.Artifacts.Single(a =>

@@ -3,7 +3,11 @@ scaffolding|Fleet|Lower
 source-domain|Fleet|Lower
 entity|Fleet/Delivery|Lower
 source-entity|Fleet/Delivery|Lower
+file|Fleet/Delivery.cs|Emit
+file|Fleet/Poly.Types.cs|Emit
 entity|Fleet/Truck|Lower
 source-entity|Fleet/Truck|Lower
+file|Fleet/Truck.cs|Emit
 entity|Fleet/Warehouse|Lower
 source-entity|Fleet/Warehouse|Lower
+file|Fleet/Warehouse.cs|Emit

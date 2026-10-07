@@ -73,6 +73,40 @@ public sealed class EmitGoldenTests {
         await AssertGoldens(Path.Combine(GoldenRoot(), "crm-dslcompiler"), produced);
     }
 
+    // Regenerate: dotnet run --project src/Poly.DslCompiler -- --mode all --dbms sqlite demo/Poly.RestApi/library.poly demo/Poly.RestApi
+    [Test]
+    public async Task LibraryDemo_DslCompilerOutput_MatchesCheckedInDemo() {
+        var demoDir = Path.Combine(FindRepoRoot(), "demo", "Poly.RestApi");
+        var poly = await File.ReadAllTextAsync(Path.Combine(demoDir, "library.poly"));
+        var result = new Compiler().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue().Because(string.Join("; ", result.Errors ?? []));
+
+        var checkedInSources = Directory.GetFiles(demoDir, "*.cs")
+            .Select(p => Path.GetFileName(p)!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var producedSources = result.Files!
+            .Select(f => f.FileName)
+            .Where(name => name.EndsWith(".cs", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        await Assert.That(checkedInSources).IsEquivalentTo(producedSources);
+        foreach (var (fileName, source) in result.Files!) {
+            var checkedIn = Normalize(await File.ReadAllTextAsync(Path.Combine(demoDir, fileName)));
+            await Assert.That(Normalize(source)).IsEqualTo(checkedIn).Because(fileName);
+        }
+    }
+
+    [Test]
+    public async Task LibraryDemo_Source_IsExporterTestsLibraryDomainWithHostDoors() {
+        var poly = await File.ReadAllTextAsync(
+            Path.Combine(FindRepoRoot(), "demo", "Poly.RestApi", "library.poly"));
+        var withoutHostDoors = string.Join('\n', Normalize(poly).Split('\n')
+            .Where(line => line is not ("uses sqlite" or "uses http")));
+        await Assert.That(withoutHostDoors.TrimEnd())
+            .IsEqualTo(Normalize(Lowering.DomainToCSharpExporterTests.LibraryCheckoutDsl));
+    }
+
     [Test]
     [MethodDataSource(nameof(SampleDomains))]
     public async Task Emit_IsReproducible(string relativePath) {

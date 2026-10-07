@@ -17,7 +17,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// Survives formatting changes and C# idiom refactoring.
 /// </summary>
 public class DomainToCSharpExporterTests {
-    private const string LibraryCheckoutDsl = """
+    internal const string LibraryCheckoutDsl = """
         domain Library
         uses temporal
 

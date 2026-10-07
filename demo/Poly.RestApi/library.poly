@@ -1,0 +1,133 @@
+domain Library
+uses temporal
+uses sqlite
+uses http
+
+Genre: enum { Fiction, NonFiction, Reference }
+PatronStatus: enum { Active, Suspended, Closed }
+FineStatus: enum { Unpaid, Resolved }
+PremiumTier: enum { Silver, Gold, Platinum }
+
+Book: entity {
+  Title: Text required
+  Author: Text required
+  ISBN: Text unique length(10, 17)
+  Pages: Number range(1, 10000)
+  Genre: Genre
+}
+
+Patron: entity {
+  Name: Text required
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  MemberSince: Date default(Today)
+  Status: PatronStatus default(Active)
+  MaxItems: Number range(0, 20) required
+  CurrentBorrowCount: Number
+  OutstandingFines: Number
+  loans: many Loan
+  fines: many Fine
+  GoodStanding: policy { Status is "Active" }
+  AtLimit: policy { CurrentBorrowCount >= MaxItems }
+  HasFines: policy { OutstandingFines > 0 }
+  HasOverdueLoans: policy { any loans where Status is "Overdue" }
+  AccountInGoodStanding: policy { Status is "Active" and OutstandingFines == 0 }
+  Active: stage {
+    CheckOut: action (book: Book) -> Loan
+      require GoodStanding
+      require not AtLimit
+      require not HasFines
+    {
+      assign CurrentBorrowCount to CurrentBorrowCount + 1
+      // CreateIn initializers set scalar properties only — to-one navs
+      // (like Loan.book) cannot be bound here (analyzer rejects; runtime
+      // would throw). The Loan/Book link is left for a future link effect.
+      create in loans { }
+    }
+    Suspend: action {
+      assign Status to "Suspended"
+      assign CurrentBorrowCount to 0
+      transition to Suspended
+    }
+    CloseAccount: action { transition to Closed }
+  }
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue item" }
+    assign OutstandingFines to OutstandingFines + 5
+  }
+  when loans Returned {
+    assign CurrentBorrowCount to CurrentBorrowCount - 1
+  }
+  when fines Resolved {
+    assign OutstandingFines to OutstandingFines - 5
+  }
+  Suspended: stage {
+    entry { assign MaxItems to 0 }
+    exit  { assign MaxItems to 5 }
+    Reinstate: action require not HasOverdueLoans {
+      assign Status to "Active"
+      transition to Active
+    }
+  }
+  Closed: stage { }
+}
+
+Loan: entity {
+  Status: Text
+  CheckedOutAt: DateTime
+  DueDate: DateTime
+  ReturnedAt: DateTime
+  TimesRenewed: Number
+  book: Book
+  borrower: Patron
+  Active: stage {
+    entry { assign CheckedOutAt to Now }
+    Renew: action {
+      assign DueDate to DueDate + 14
+      assign TimesRenewed to TimesRenewed + 1
+    }
+    Return: action {
+      assign ReturnedAt to Now
+      transition to Returned
+    }
+  }
+  Overdue: stage {
+    entry { assign CheckedOutAt to Now }
+  }
+  Returned: stage { }
+}
+
+Fine: entity {
+  Amount: Number required
+  Reason: Text
+  DateIssued: DateTime default(Now)
+  Paid: Boolean
+  patron: Patron
+  Unpaid: stage {
+    Pay: action {
+      if (Amount <= 0) {
+        assign Paid to true
+      }
+      else { assign Paid to true }
+      transition to Resolved
+    }
+    Waive: action {
+      assign Amount to 0
+      assign Paid to true
+      transition to Resolved
+    }
+  }
+  Resolved: stage {
+    entry { assign Paid to true }
+  }
+}
+
+PremiumPatron: entity {
+  Name: Text required
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  RewardPoints: Number
+  Tier: PremiumTier default(Silver)
+  PriorityAccess: Boolean
+  IsLoyal: policy { RewardPoints >= 100 }
+  HasPriority: policy { PriorityAccess is true }
+  UnlimitedItems: policy { Tier is "Platinum" or PriorityAccess is true }
+}

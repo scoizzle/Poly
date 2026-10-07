@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Ontology;
 
+using Artifact = Poly.DomainModeling.Compile.Artifact;
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
 
@@ -36,10 +37,9 @@ public class DslCompilerArtifactContributorTests {
     private sealed class HelloContributor : IArtifactContributor {
         public bool Called { get; private set; }
 
-        public IReadOnlyList<(string FileName, string Source)> Contribute(
-            Domain domain, AnalysisResult analysis) {
+        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
             Called = true;
-            return [("hello.txt", $"hello from {domain.Name}")];
+            return [ContributedFile.Create(domain, "hello.txt", $"hello from {domain.Name}", nameof(HelloContributor))];
         }
     }
 
@@ -58,6 +58,7 @@ public class DslCompilerArtifactContributorTests {
 
         var hello = result.Files!.Single(f => f.FileName == "hello.txt");
         await Assert.That(hello.Source).IsEqualTo("hello from Library");
+        await AssertHelloCameFromContributor(result, hello.Source);
         await Assert.That(contributor.Called).IsTrue();
     }
 
@@ -72,6 +73,7 @@ public class DslCompilerArtifactContributorTests {
         await Assert.That(result.Success).IsTrue();
         var hello = result.Files!.Single(f => f.FileName == "hello.txt");
         await Assert.That(hello.Source).IsEqualTo("hello from Library");
+        await AssertHelloCameFromContributor(result, hello.Source);
         await Assert.That(contributor.Called).IsTrue();
     }
 
@@ -85,6 +87,13 @@ public class DslCompilerArtifactContributorTests {
         await Assert.That(result.Success).IsFalse();
         await Assert.That(result.Files).IsNull();
         await Assert.That(contributor.Called).IsFalse();
+    }
+
+    private static async Task AssertHelloCameFromContributor(Compiler.CompileResult result, string source) {
+        var artifact = result.Catalog!.Artifacts.Single(a =>
+            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == "hello.txt");
+        await Assert.That(artifact.Descriptor.Producer).IsEqualTo(nameof(HelloContributor));
+        await Assert.That(source).IsEqualTo(ContributedFile.Text(artifact));
     }
 
     private sealed class HelloLibrary(HelloContributor contributor) : IDomainLibrary {

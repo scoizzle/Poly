@@ -46,8 +46,9 @@ public sealed class DomainSession {
     /// pointing at a <c>source-domain</c> artifact, one <c>entity</c> tree per entity
     /// (the entity type and its stage enum) pointing at a <c>source-entity</c> artifact,
     /// and one <c>analysis-report</c> for the domain's findings.
-    /// It is not an emit/contributor file inventory.
-    /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
+    /// Lower and Emit declare the <c>file</c> type and leave it empty. The compiler then
+    /// registers contributed text files here and writes those files from this catalog.
+    /// The next Lower or Emit drops anything registered after that, including those files.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -186,6 +187,7 @@ public sealed class DomainSession {
         RegisterSourceElements(catalog, domain);
         RegisterTrees(catalog, domain, module);
         RegisterAnalysisReport(catalog, domain, analysis);
+        catalog.DeclareType(ContributedFile.Type, mayPointAt: []);
         return (module, catalog);
     }
 

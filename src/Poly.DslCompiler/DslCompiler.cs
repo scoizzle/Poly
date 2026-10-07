@@ -175,12 +175,13 @@ public sealed class DslCompiler {
             var catalog = session.ArtifactCatalog;
             foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
                 foreach (var artifact in contributor.Contribute(domain, outcome.Analysis))
-                    catalog.Register(ContributedFileFrom(contributor, artifact));
+                    catalog.Register(StampContributor(contributor, artifact));
             }
+            var written = files.Select(f => f.FileName).ToHashSet(StringComparer.Ordinal);
             foreach (var artifact in catalog.Artifacts) {
-                if (artifact.Descriptor.Id.Type != ContributedFile.Type)
+                if (!TryTextFile(artifact, out var fileName, out var text) || !written.Add(fileName))
                     continue;
-                files.Add((ContributedFile.FileName(artifact), ContributedFile.Text(artifact)));
+                files.Add((fileName, text));
             }
             return new CompileResult(Success: true, Files: files, Errors: null, Catalog: catalog);
         }
@@ -325,16 +326,36 @@ public sealed class DslCompiler {
 
     /// <summary>
     /// The catalog producer is the contributor that was registered, not a name it chose.
-    /// A return that is not a contributed text file fails closed.
+    /// A return that is not a printed file, an http file, or a host tree fails closed.
     /// </summary>
-    private static Artifact ContributedFileFrom(IArtifactContributor contributor, Artifact artifact) {
+    private static Artifact StampContributor(IArtifactContributor contributor, Artifact artifact) {
         ArgumentNullException.ThrowIfNull(contributor);
         ArgumentNullException.ThrowIfNull(artifact);
-        if (artifact.Descriptor.Id.Type != ContributedFile.Type || artifact.Payload is not string)
+        var type = artifact.Descriptor.Id.Type;
+        var payloadOk = type == HostTree.Type
+            ? artifact.Payload is CompilationUnitNode
+            : artifact.Payload is string && type is ContributedFile.Type or HttpFile.Type;
+        if (!payloadOk)
             throw new InvalidOperationException(
-                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a contributed text file.");
+                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a printed file, an http file, or a host tree.");
         return new Artifact(
             new ArtifactDescriptor(artifact.Descriptor.Id, contributor.GetType().Name, artifact.Descriptor.References),
             artifact.Payload);
+    }
+
+    private static bool TryTextFile(Artifact artifact, out string fileName, out string text) {
+        if (artifact.Descriptor.Id.Type == ContributedFile.Type) {
+            fileName = ContributedFile.FileName(artifact);
+            text = ContributedFile.Text(artifact);
+            return true;
+        }
+        if (artifact.Descriptor.Id.Type == HttpFile.Type) {
+            fileName = HttpFile.FileName(artifact);
+            text = HttpFile.Text(artifact);
+            return true;
+        }
+        fileName = "";
+        text = "";
+        return false;
     }
 }

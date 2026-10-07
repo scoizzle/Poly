@@ -113,14 +113,23 @@ public class SliceCProducerLoopCatalogTests {
         var db = catalog.Artifacts.Single(a =>
             a.Descriptor.Id.Type == ContributedFile.Type
             && ContributedFile.FileName(a).EndsWith("DbContext.cs", StringComparison.Ordinal));
+        var program = Contributed(catalog, "Program.cs");
+        await Assert.That(http.Descriptor.Id.Type).IsEqualTo(HttpFile.Type);
         await Assert.That(http.Descriptor.Producer).IsEqualTo(nameof(MinimalApiHostArtifactContributor));
+        await Assert.That(http.Descriptor.References.Count).IsEqualTo(0);
         await Assert.That(db.Descriptor.Producer).IsEqualTo(nameof(DbContextArtifactContributor));
-        await Assert.That(TextFile(result, "demo.http")).IsEqualTo(ContributedFile.Text(http));
+        await Assert.That(db.Descriptor.References.Single().Type).IsEqualTo(HostTree.Type);
+        await Assert.That(catalog.Find(db.Descriptor.References[0])).IsNotNull();
+        await Assert.That(program.Descriptor.References.Single().Type).IsEqualTo(HostTree.Type);
+        await Assert.That(catalog.Find(program.Descriptor.References[0])!.Payload).IsTypeOf<CompilationUnitNode>();
+        await Assert.That(TextFile(result, "demo.http")).IsEqualTo(HttpFile.Text(http));
         await Assert.That(TextFile(result, ContributedFile.FileName(db))).IsEqualTo(ContributedFile.Text(db));
-        await Assert.That(TextFile(result, "Program.cs"))
-            .IsEqualTo(ContributedFile.Text(Contributed(catalog, "Program.cs")));
-        await Assert.That(catalog.Artifacts.Any(a =>
-            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == "Item.cs")).IsFalse();
+        await Assert.That(TextFile(result, "Program.cs")).IsEqualTo(ContributedFile.Text(program));
+        var item = catalog.Artifacts.Single(a =>
+            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == "Item.cs");
+        await Assert.That(item.Descriptor.Producer).IsEqualTo("Emit");
+        await Assert.That(item.Descriptor.References.Single().Type).IsEqualTo("entity");
+        await Assert.That(catalog.FindDanglingOrWrongType()).IsEmpty();
     }
 
     [Test]
@@ -192,7 +201,7 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
         _ = session.Lower(domain, analysis);
         var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
-        await Assert.That(files.Select(ContributedFile.FileName).ToList()).IsEquivalentTo(["Program.cs", "demo.http"]);
+        await Assert.That(TextNames(files)).IsEquivalentTo(["Program.cs", "demo.http"]);
     }
 
     [Test]
@@ -224,7 +233,14 @@ public class SliceCProducerLoopCatalogTests {
 
     private static Artifact Contributed(ArtifactCatalog catalog, string fileName) =>
         catalog.Artifacts.Single(a =>
-            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == fileName);
+            a.Descriptor.Id.Segments[^1] == fileName
+            && a.Descriptor.Id.Type is ContributedFile.Type or HttpFile.Type);
+
+    private static List<string> TextNames(IReadOnlyList<Artifact> artifacts) =>
+        artifacts
+            .Where(a => a.Descriptor.Id.Type is ContributedFile.Type or HttpFile.Type)
+            .Select(a => a.Descriptor.Id.Segments[^1])
+            .ToList();
 
     private static string TextFile(Compiler.CompileResult result, string fileName) =>
         result.Files!.Single(f => f.FileName == fileName).Source;

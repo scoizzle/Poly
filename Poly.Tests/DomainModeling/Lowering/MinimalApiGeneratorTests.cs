@@ -356,8 +356,10 @@ public class MinimalApiGeneratorTests {
 
         var contributor = new MinimalApiHostArtifactContributor();
         var files = contributor.Contribute(filled, analysis);
-        var program = ContributedFile.Text(files.Single(f => ContributedFile.FileName(f) == "Program.cs"));
-        var http = ContributedFile.Text(files.Single(f => ContributedFile.FileName(f) == "demo.http"));
+        var program = ContributedFile.Text(files.Single(f =>
+            f.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(f) == "Program.cs"));
+        var http = HttpFile.Text(files.Single(f =>
+            f.Descriptor.Id.Type == HttpFile.Type && HttpFile.FileName(f) == "demo.http"));
 
         // Root routes exist.
         await Assert.That(program.Contains("/api/invoices")).IsTrue();

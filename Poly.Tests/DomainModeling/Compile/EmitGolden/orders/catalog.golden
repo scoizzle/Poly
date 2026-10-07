@@ -3,7 +3,11 @@ scaffolding|Logistics|Lower
 source-domain|Logistics|Lower
 entity|Logistics/Customer|Lower
 source-entity|Logistics/Customer|Lower
+file|Logistics/Customer.cs|Emit
 entity|Logistics/Order|Lower
 source-entity|Logistics/Order|Lower
+file|Logistics/Order.cs|Emit
 entity|Logistics/OrderItem|Lower
 source-entity|Logistics/OrderItem|Lower
+file|Logistics/OrderItem.cs|Emit
+file|Logistics/Poly.Types.cs|Emit

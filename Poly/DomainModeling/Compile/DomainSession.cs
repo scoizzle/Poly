@@ -46,9 +46,11 @@ public sealed class DomainSession {
     /// pointing at a <c>source-domain</c> artifact, one <c>entity</c> tree per entity
     /// (the entity type and its stage enum) pointing at a <c>source-entity</c> artifact,
     /// and one <c>analysis-report</c> for the domain's findings.
-    /// Lower and Emit declare the <c>file</c> type and leave it empty. The compiler then
-    /// registers contributed text files here and writes those files from this catalog.
-    /// The next Lower or Emit drops anything registered after that, including those files.
+    /// Lower and Emit declare <c>file</c>, <c>host-tree</c>, and <c>http-file</c>.
+    /// Emit registers one <c>file</c> per printed C# file, each pointing at the tree it
+    /// came from. The compiler then registers contributor artifacts (host trees, their
+    /// printed files, and <c>demo.http</c>) and writes the text files from this catalog.
+    /// The next Lower or Emit drops anything registered after that.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -58,6 +60,7 @@ public sealed class DomainSession {
     private const string SourceDomainType = "source-domain";
     private const string SourceEntityType = "source-entity";
     private const string LowerProducer = "Lower";
+    private const string EmitProducer = "Emit";
 
     private Analyzer? _analyzer;
 
@@ -187,7 +190,9 @@ public sealed class DomainSession {
         RegisterSourceElements(catalog, domain);
         RegisterTrees(catalog, domain, module);
         RegisterAnalysisReport(catalog, domain, analysis);
-        catalog.DeclareType(ContributedFile.Type, mayPointAt: []);
+        catalog.DeclareType(HostTree.Type, mayPointAt: []);
+        catalog.DeclareType(ContributedFile.Type, mayPointAt: [EntityType, ScaffoldingType, HostTree.Type]);
+        catalog.DeclareType(HttpFile.Type, mayPointAt: []);
         return (module, catalog);
     }
 
@@ -271,10 +276,19 @@ public sealed class DomainSession {
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
         // Files come in registration order: entities in domain order, then the scaffolding.
-        foreach (var tree in catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
-            files.Add(($"{tree.Descriptor.Id.Segments[^1]}.cs", generator.Generate(TypesOf(tree))));
+        // Each printed file is a catalog artifact pointing at the tree it was printed from.
+        var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
+        foreach (var tree in entityTrees) {
+            var name = $"{tree.Descriptor.Id.Segments[^1]}.cs";
+            var source = generator.Generate(TypesOf(tree));
+            catalog.Register(ContributedFile.Create(domain, name, source, EmitProducer, tree.Descriptor.Id));
+            files.Add((name, source));
+        }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
-        files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
+        var scaffoldingSource = generator.Generate(TypesOf(scaffolding));
+        catalog.Register(ContributedFile.Create(
+            domain, "Poly.Types.cs", scaffoldingSource, EmitProducer, scaffolding.Descriptor.Id));
+        files.Add(("Poly.Types.cs", scaffoldingSource));
         return files;
     }
 

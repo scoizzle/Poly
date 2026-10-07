@@ -22,8 +22,13 @@ public sealed class DbContextArtifactContributor : IArtifactContributor {
                 "Infrastructure pipeline did not produce storage mapping metadata.");
 
         var dbContextName = $"{domain.Name}DbContext";
-        var source = new CSharpGenerator().Generate(
-            new DbContextGenerator(domain, storageModel).GenerateCompilationUnit());
-        return [ContributedFile.Create(domain, $"{dbContextName}.cs", source, nameof(DbContextArtifactContributor))];
+        var unit = new DbContextGenerator(domain, storageModel).GenerateCompilationUnit();
+        var source = new CSharpGenerator().Generate(unit);
+        var tree = HostTree.Create(domain, dbContextName, unit, nameof(DbContextArtifactContributor));
+        return [
+            tree,
+            ContributedFile.Create(
+                domain, $"{dbContextName}.cs", source, nameof(DbContextArtifactContributor), tree.Descriptor.Id),
+        ];
     }
 }

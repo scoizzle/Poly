@@ -174,7 +174,7 @@ public sealed class DslCompiler {
             var files = session.Emit(domain, outcome.Analysis).ToList();
             var catalog = session.ArtifactCatalog;
             foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
-                foreach (var artifact in contributor.Contribute(domain, outcome.Analysis))
+                foreach (var artifact in contributor.Contribute(domain, outcome.Analysis, catalog))
                     catalog.Register(StampContributor(contributor, artifact));
             }
             var written = files.Select(f => f.FileName).ToHashSet(StringComparer.Ordinal);

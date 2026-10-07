@@ -166,7 +166,7 @@ public class SliceCProducerLoopCatalogTests {
     [Test]
     public async Task SliceC_DbContextContributor_NoPersistBag_NoOps() {
         var (domain, analysis, _) = Evolve(SampleDomain);
-        var files = new DbContextArtifactContributor().Contribute(domain, analysis);
+        var files = new DbContextArtifactContributor().Contribute(domain, analysis, new ArtifactCatalog());
         await Assert.That(files.Count).IsEqualTo(0);
     }
 
@@ -176,7 +176,7 @@ public class SliceCProducerLoopCatalogTests {
         // HttpSurfaceMetadata nor StorageMappingMetadata.
         var (domain, analysis, session) = Evolve(SampleDomain);
         _ = session.Lower(domain, analysis);
-        var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
+        var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis, session.ArtifactCatalog);
         await Assert.That(files.Count).IsEqualTo(0);
     }
 
@@ -200,7 +200,7 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(analysis.GetMetadata<HttpSurfaceMetadata>(domain)).IsNull();
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
         _ = session.Lower(domain, analysis);
-        var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
+        var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis, session.ArtifactCatalog);
         await Assert.That(TextNames(files)).IsEquivalentTo(["Program.cs", "demo.http"]);
     }
 
@@ -225,7 +225,8 @@ public class SliceCProducerLoopCatalogTests {
     private sealed class TrackingContributor : IArtifactContributor {
         public bool Called { get; private set; }
 
-        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
+        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
+            ArgumentNullException.ThrowIfNull(catalog);
             Called = true;
             return [ContributedFile.Create(domain, "track.txt", domain.Name, nameof(TrackingContributor))];
         }

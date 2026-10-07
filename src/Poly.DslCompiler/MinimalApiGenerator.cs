@@ -1122,9 +1122,10 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         _dbmsOverride = dbms;
     }
 
-    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
+    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(catalog);
 
         var http = analysis.GetMetadata<HttpSurfaceMetadata>(domain);
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
@@ -1142,9 +1143,7 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
 
         var behavior = BehaviorMetadata.From(domain, analysis);
         var dbms = _dbmsOverride ?? ResolveDbms(domain);
-        var module = RuntimeAnalysisCache.GetOrLower(
-            domain, RuntimeAnalysisCache.Session(domain), analysis);
-        RequireHttpActionsInModule(domain, analysis, module);
+        RequireHttpActionsInModule(domain, analysis, ModuleTrees(catalog));
 
         var dbContextName = $"{domain.Name}DbContext";
         var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms);
@@ -1172,6 +1171,13 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         }
         return DbmsPack.Generic;
     }
+
+    /// <summary>Entity and scaffolding trees already registered by Lower or Emit.</summary>
+    private static IReadOnlyList<TypeDefinitionNode> ModuleTrees(ArtifactCatalog catalog) =>
+        catalog.Artifacts
+            .Where(a => a.Descriptor.Id.Type is "entity" or "scaffolding")
+            .SelectMany(a => (IReadOnlyList<TypeDefinitionNode>)a.Payload!)
+            .ToArray();
 
     /// <summary>
     /// HTTP names catalog actions; those operations must already exist on the

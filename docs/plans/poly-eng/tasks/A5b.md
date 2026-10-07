@@ -15,4 +15,4 @@ SHIP if a file pointing at `entity` when that path is only a `host-tree` is `Wro
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-07 | implementer | Grok | (this commit) | implemented | EmitGolden 21 passed; SliceC 9; MinimalApi 33; LowerTrees 20; EmitFileReference 3. catalog.golden only. |
+| 2026-10-07 | implementer | Grok | `20cad674` | implemented | EmitGolden 21 passed; SliceC 9; MinimalApi 33; LowerTrees 20; EmitFileReference 3. catalog.golden only. |

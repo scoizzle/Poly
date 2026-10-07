@@ -10,7 +10,8 @@ namespace Poly.DslCompiler;
 /// is loaded — not invented mid-compile from bags.
 /// </summary>
 public sealed class DbContextArtifactContributor : IArtifactContributor {
-    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
+    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
 

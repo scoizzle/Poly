@@ -151,6 +151,15 @@ public static partial class DirectVmAbiEmitter {
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         ctx.EnterActivation(rootArgCount, 0);
         var rootExpr = CompileStatement(root, ctx);
+        // Calls push their frame at the stack pointer, so a root with SetArgs
+        // parameters raises it past this, the parameters and the frame locals.
+        // A return sets it to FP + 1; otherwise it drops back at exit.
+        var entrySp = Variable(typeof(int), "_rootEntrySp");
+        var frameTop = Add(ctx.FramePosLocal, Constant(Math.Max(ctx.FrameSlotHighWater, 2)));
+        if (rootParameters is not null) {
+            body.Add(Assign(entrySp, ctx.SlotsStackPointer));
+            body.Add(Assign(ctx.SlotsStackPointer, frameTop));
+        }
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {
@@ -161,9 +170,13 @@ public static partial class DirectVmAbiEmitter {
         }
         ctx.LeaveActivation();
         body.Add(Label(ctx.ExitLabel));
+        if (rootParameters is not null) {
+            body.Add(IfThen(Equal(ctx.SlotsStackPointer, frameTop),
+                Assign(ctx.SlotsStackPointer, entrySp)));
+        }
 
         var rootMeta = analysis.GetMetadata<ValueRepresentationMetadata>(root);
-        var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
+        var delegateExpr = Lambda<Action<VmState>>(Block([.. ctx.Locals, entrySp], body), ctx.State);
         var del = delegateExpr.Compile();
         int registerScratchSize = ctx.MaxRingDepth;
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);

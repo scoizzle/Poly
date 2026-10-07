@@ -1,6 +1,6 @@
 # TASK C1a — Interpreter: root program with declared parameters after `this`
 
-Status: open PR #110 @ `d7b6b9a1`, CI red, BLOCKED. Rebases onto master after the PR 113 fixes land, then Razor → Final Boss.
+Status: PR #110 (`d7b6b9a1`) carried forward on `cursor/c1a-root-program-params-4ad1`: master merged, CI-red cause fixed. Razor → Final Boss next.
 
 Branch from master `dd7d4204` (or later). Lane B. Review 2. Not V11. Plan ~line 374.
 
@@ -21,3 +21,4 @@ SHIP if `when all` row passes and BindForSimulate no longer rewrites params. NOT
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | Foreman | — | `d7b6b9a1` | Open, CI red, BLOCKED; rebase after PR 113 fixes | — |
+| 2026-10-07 | implementer | Cursor agent | (this push) | Merged master `bfe66beb`; reproduced the 13 CI failures. Cause: PR 113's compiled AST calls (`InvokeAstFunction`) push the callee frame at the stack pointer, which a root program leaves at 0, so the call overwrote `this` and the C1a parameter slots. Fix: a root with SetArgs parameters raises the stack pointer past its frame on entry and drops it back at exit unless a return wrote a result. | full suite 3414/3414 (13 failed before the fix) |

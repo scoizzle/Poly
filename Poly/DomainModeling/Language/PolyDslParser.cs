@@ -1402,12 +1402,19 @@ public sealed class PolyDslParser : DslCursor {
                 Advance();
                 return new UniqueConstraint();
 
-            case TokenKind.Equals:
+            case TokenKind.Default:
                 Advance();
                 Expect(TokenKind.LParen);
                 var dvExpr = ParseExpression();
                 Expect(TokenKind.RParen);
                 return new DefaultValueConstraint(dvExpr);
+
+            case TokenKind.Equals:
+                Advance();
+                Expect(TokenKind.LParen);
+                var expected = ParseEqualityValue();
+                Expect(TokenKind.RParen);
+                return new EqualityConstraint(expected);
 
             case TokenKind.Enum:
                 throw Error("Inline enum(...) constraints are no longer supported. " +
@@ -1481,6 +1488,29 @@ public sealed class PolyDslParser : DslCursor {
         return negative ? -value : value;
     }
 
+    private object ParseEqualityValue() {
+        switch (Current.Kind) {
+            case TokenKind.StringLiteral:
+                return Expect(TokenKind.StringLiteral).Text;
+            case TokenKind.True:
+                Advance();
+                return true;
+            case TokenKind.False:
+                Advance();
+                return false;
+            case TokenKind.Number or TokenKind.Minus:
+                var negative = Current.Kind == TokenKind.Minus;
+                if (negative) Advance();
+                var text = Expect(TokenKind.Number).Text;
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var l))
+                    return negative ? -l : l;
+                var d = double.Parse(text, CultureInfo.InvariantCulture);
+                return negative ? -d : d;
+            default:
+                throw Error($"equals(...) takes a string, number, or true/false literal, got '{Current.Text}'.");
+        }
+    }
+
     private string ParseTypeName() {
         if (IsPrimitiveType(Current.Kind)) {
             var typeName = Current.Kind switch {
@@ -1516,7 +1546,7 @@ public sealed class PolyDslParser : DslCursor {
     private static bool IsConstraint(TokenKind kind) => kind switch {
         TokenKind.Required or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
-            or TokenKind.Equals or TokenKind.Enum => true,
+            or TokenKind.Default or TokenKind.Equals or TokenKind.Enum => true,
         _ => false,
     };
 

@@ -88,6 +88,7 @@ public static class DslGrammar {
         DslTokenKind.Pattern => "pattern",
         DslTokenKind.Enum => "enum",
         DslTokenKind.Equals => "equals",
+        DslTokenKind.Default => "default",
         DslTokenKind.Relationship => "relationship",
         DslTokenKind.From => "from",
         DslTokenKind.One => "one",

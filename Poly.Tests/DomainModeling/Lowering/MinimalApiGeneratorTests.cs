@@ -240,22 +240,13 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("""
             domain T
             Item: entity {
-              Status: Text
+              Status: Text equals("Active")
               SetStatus: action (value: Text) {
                 assign Status to value
               }
             }
             """);
-        // The DSL does not author equals(...) value-set constraints, so inject the
-        // model-level EqualityConstraint directly — the transport must still propagate it.
-        var item = d.Types.OfType<Entity>().First();
-        item = item with {
-            Properties = item.Properties.Select(p => p.Name == "Status"
-                ? new Property("Status", p.Type, [new EqualityConstraint("Active")])
-                : p).ToList()
-        };
-        var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
-        var rendered = Render(d with { Types = types });
+        var rendered = Render(d);
 
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string value { get; init; }");

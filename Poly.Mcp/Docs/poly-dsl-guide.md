@@ -287,6 +287,7 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
+| Equals | `equals(literal)` | `Kind: Text equals("Retail")` |
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:
@@ -1026,6 +1027,7 @@ SetName: action (newName: Text) {
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: Text default("Active")` |
+| Equals | `equals(literal)` | `Kind: Text equals("Retail")` — the value must equal the literal: a string, a number, or `true`/`false` |
 | Enum-typed property | `Prop: EnumType` | `Color: Color` (see §2 — top-level enum type; inline `enum(...)` constraints are not supported) |
 
 ### Annotations (portable metadata, not constraints)
@@ -1062,8 +1064,8 @@ action's own effects — a parameter that flows into a constrained property inhe
 property's constraints, merged by intersection across all such targets. This covers
 `assign Prop to param` on the action's entity and `create`/`create in` initializer
 bindings (`Prop: param`) on related entities. Conflicting targets (e.g. different
-patterns) merge to nothing and emit no attribute. A pinned literal in the model
-(`EqualityConstraint`, evolution-only — not DSL) still projects as `[AllowedValues]`.
+patterns) merge to nothing and emit no attribute. A pinned literal (`equals(literal)`)
+projects as `[AllowedValues]`.
 Author a closed set as an **enum**, not a property constraint.
 
 **Soundness rules for implicit derivation:**

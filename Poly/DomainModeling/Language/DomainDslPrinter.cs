@@ -800,7 +800,7 @@ public sealed class DomainDslPrinter {
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
         DefaultValueConstraint dv => $"default({PrintDomainExpression(dv.Expression)})",
-        EqualityConstraint => "",
+        EqualityConstraint eq => $"equals({PrintLiteralValue(eq.ExpectedValue)})",
         _ => $"?{constraint.GetType().Name}",
     };
 

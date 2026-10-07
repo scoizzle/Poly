@@ -1388,26 +1388,66 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
-    public async Task Print_EqualityConstraint_IsOmitted() {
+    public async Task ParseThenPrint_EqualityConstraint_KeepsEquals() {
+        var first = Apply("""
+            domain Test
+            Item: entity {
+              Status: Text required equals("Active")
+              Level: Number equals(-5)
+              Rate: Number equals(0.25)
+              Open: Boolean equals(true)
+            }
+            """);
+        var properties = first.Types.OfType<Entity>().Single().Properties;
+        object Expected(string name) => properties.Single(p => p.Name == name).Constraints.OfType<EqualityConstraint>().Single().ExpectedValue;
+        await Assert.That(properties.Single(p => p.Name == "Status").Constraints.OfType<RequiredConstraint>().Count()).IsEqualTo(1);
+        await Assert.That(Expected("Status")).IsEqualTo("Active");
+        await Assert.That(Expected("Level")).IsEqualTo(-5L);
+        await Assert.That(Expected("Rate")).IsEqualTo(0.25);
+        await Assert.That(Expected("Open") is true).IsTrue();
+
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed).Contains("Status: Text required equals(\"Active\")");
+        await Assert.That(printed).Contains("Level: Number equals(-5)");
+        await Assert.That(printed).Contains("Rate: Number equals(0.25)");
+        await Assert.That(printed).Contains("Open: Boolean equals(true)");
+        await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Print_ApiBuiltEqualityConstraint_ParsesToEqualConstraint() {
         var domain = Apply("""
             domain Test
-            Item: entity { Status: Text }
+            Item: entity {
+              Status: Text
+              Level: Number
+            }
             """);
         var item = domain.Types.OfType<Entity>().Single();
         var pinned = item with {
             Properties = [
-                item.Properties[0] with {
-                    Constraints = [new EqualityConstraint("Active")]
-                }
+                item.Properties[0] with { Constraints = [new EqualityConstraint("Say \"hi\"")] },
+                item.Properties[1] with { Constraints = [new EqualityConstraint(5L)] },
             ]
         };
-        var withEq = new Domain(domain.Name, [pinned]);
-        var printed = new DomainDslPrinter().Print(withEq);
-        await Assert.That(printed.Contains("equals")).IsFalse();
-        await Assert.That(printed.Contains("/*")).IsFalse();
-        var second = Apply(printed);
-        await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single()
-            .Constraints.OfType<EqualityConstraint>().Any()).IsFalse();
+        var printed = new DomainDslPrinter().Print(new Domain(domain.Name, [pinned]));
+        var second = Apply(printed).Types.OfType<Entity>().Single();
+        object Expected(int index) => second.Properties[index].Constraints.OfType<EqualityConstraint>().Single().ExpectedValue;
+        await Assert.That(Expected(0)).IsEqualTo("Say \"hi\"");
+        await Assert.That(Expected(1)).IsEqualTo(5L);
+    }
+
+    [Test]
+    [Arguments("equals(Active)")]
+    [Arguments("equals(null)")]
+    [Arguments("equals()")]
+    public async Task Parse_EqualsWithoutLiteral_Throws(string constraint) {
+        var poly = $$"""
+            domain Test
+            Item: entity { Status: Text {{constraint}} }
+            """;
+        var ex = Assert.Throws<FormatException>(() => new PolyDslParser(poly).Parse());
+        await Assert.That(ex!.Message).Contains("equals(...) takes a string, number, or true/false literal");
     }
 
     private static Domain Apply(string poly) {

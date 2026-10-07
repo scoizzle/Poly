@@ -235,26 +235,21 @@ public class ParityTests {
         domain Shop
         Job: entity {
           Tag: Text
-          Mark: Text
+          Mark: Text equals("x")
           Open: stage { entry { assign Mark to "x" } }
         }
         """;
 
-    // The DSL cannot author equals(...), so add the constraint to the parsed model.
-    static ParityScenario EqualityScenario(string dsl, string assemblyName, params (string Property, object Expected)[] equalities) {
-        var domain = EvolvedDomain.FromDsl(dsl).Domain;
-        var entity = domain.Types.OfType<Entity>().Single();
-        entity = entity with {
-            Properties = [.. entity.Properties.Select(p => p with {
-                Constraints = [.. p.Constraints, .. equalities.Where(e => e.Property == p.Name).Select(e => new EqualityConstraint(e.Expected))]
-            })]
-        };
-        return ParityScenario.FromDomain(domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] }, assemblyName);
-    }
+    const string PinnedOrderDsl = """
+        domain Shop
+        Order: entity {
+          Status: Text equals("Active")
+          Level: Number equals(5)
+        }
+        """;
 
-    // Status must be "Active"; Level must be 5 (an int, while the property holds a long).
     static ParityScenario OrderScenario(string assemblyName) =>
-        EqualityScenario(EqualityDsl, assemblyName, ("Status", "Active"), ("Level", 5));
+        ParityScenario.FromDsl(PinnedOrderDsl, assemblyName);
 
     [Test]
     public async Task Create_WhenEqualityHolds_Agrees() {
@@ -333,7 +328,7 @@ public class ParityTests {
     // required() on the same property fails the same way today.
     [Test]
     public async Task KnownGap_EqualityOnEntryAssignedProperty_SimulateRejectsCreate() {
-        var (simulate, printed) = EqualityScenario(EntryAssignedDsl, "ParityGapEntryAssigned", ("Mark", "x"))
+        var (simulate, printed) = ParityScenario.FromDsl(EntryAssignedDsl, "ParityGapEntryAssigned")
             .Run(side => side.Create("Job", ("Tag", "t")));
         await Assert.That(printed[0].Success).IsTrue();
         await Assert.That(simulate[0].Message).IsEqualTo("'Mark' must equal x.");

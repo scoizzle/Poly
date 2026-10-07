@@ -7,7 +7,7 @@
 **Lens:** AGENTS.md §1–§7 + `docs/CORE.md`  
 **Not this plan:** Multi-host completeness, JIT, effect framework completion, Syntax→Ast module split.
 
-**Trust doctrine:** This plan is **trust stack layer 1** (ground truth: fail-loud, fail-closed, VM honesty) so **we as first customer** can build the real product surface through domain + modules without multiplying lies. Market platform trust is **T2**. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
+**Trust doctrine:** This plan is **trust stack layer 1** (ground truth: fail-loud, fail-closed, VM honesty) so **we as first customer** can build the real product surface through domain + modules without multiplying lies. Market platform trust is **T2**. Policy: [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md).
 
 ---
 
@@ -267,5 +267,5 @@ Update this table as packages close. Link PRs / commits in Notes.
 - Effect framework completeness.
 - MCP `evaluate_policy` end-to-end (wait for subjects + A/D).
 - `Poly.Ast` / `Poly.Analysis` split.
-- **T2/T3 dogfood** (Poly product domain + derived interaction modules) — [trust ADR](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md); start only after this plan’s P0/P1 honesty items.
+- **T2/T3 dogfood** (Poly product domain + derived interaction modules) — [trust ADR](../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md); start only after this plan’s P0/P1 honesty items.
 - Performance / JIT work.

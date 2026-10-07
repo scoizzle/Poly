@@ -1,6 +1,6 @@
 # Discovery-c findings — round 3 (ADVERSARIAL: CONTROL-FLOW + COMPOSITION PATHOLOGIES)
 
-Agent: `agent-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../docs/agent/poly-discovery-loop.md).
+Agent: `agent-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../../agent/poly-discovery-loop.md).
 Round: 3 (findings to `probes/findings/round3/agent-c.md`).
 Slice: control-flow + composition pathologies — same-stage transitions, transitions inside
 entry/exit, chained transitions, recursive/mutual invoke, deep conditionals, empty `if`

@@ -39,7 +39,7 @@ DslCompiler:
 | **HttpFile IR** | Only if agents need IR for `.http` |
 | **G7′′.1** | Optional: MaxLength Constant `50` structural assert |
 
-Active one-line pointer for agents: [`../../infrastructure-pass-NEXT.md`](../../infrastructure-pass-NEXT.md).
+Active one-line pointer for agents: [`../../infrastructure-pass-NEXT.md`](../completed-2026-08-late/infrastructure-pass-NEXT.md).
 
 ## Files in this archive
 

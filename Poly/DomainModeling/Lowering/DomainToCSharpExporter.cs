@@ -376,12 +376,15 @@ public sealed partial class DomainToCSharpExporter {
 
         // ── Policies as bool methods ──────────────────────────────
         // One unqualified method per policy name. Entity, stage, and action-local
-        // definitions share that namespace. require-copies and not_ uses do not
-        // emit a second method. A redefinition throws (Sema reports it first).
+        // definitions share that namespace with the action methods. A require copy
+        // (same expression instance as the definition) and a not_ use do not emit a
+        // second method. Any other name clash throws (analysis reports it first).
+        var definedPolicies = new Dictionary<string, Policy>(StringComparer.Ordinal);
         void AddPolicyMethod(Policy policy) {
             if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
                 throw new InvalidOperationException(
                     $"Policy '{policy.Name}' is already defined on entity '{entity.Name}'.");
+            definedPolicies.Add(policy.Name, policy);
             var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
             if (body is not null)
                 policyBodies?.Add((entity.Name, policy.Name), body);
@@ -402,7 +405,8 @@ public sealed partial class DomainToCSharpExporter {
             foreach (var policy in action.Policies) {
                 if (policy.Name.StartsWith("not_", StringComparison.Ordinal))
                     continue;
-                if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
+                if (definedPolicies.TryGetValue(policy.Name, out var existing)
+                    && ReferenceEquals(existing.Expression, policy.Expression))
                     continue;
                 AddPolicyMethod(policy);
             }

@@ -5,7 +5,7 @@
 **Resume when:** Current platform work is stable (see [Preconditions](#preconditions)).  
 **Type:** Structural refactor / namespace migration (behavior-preserving).  
 **Related:**
-- [`docs/CORE.md`](../CORE.md) — current ownership map (still says `Syntax` until this lands)
+- [`docs/CORE.md`](../../../CORE.md) — current ownership map (still says `Syntax` until this lands)
 - Conversation consensus: Syntax is **two domains** (interpretable AST + analysis substrate); nodes must **not** move under Interpretation
 - Domain boundary: `DomainModeling` → AST only for pure lowering; Interpretation remains semantics + VM
 
@@ -175,7 +175,7 @@ Execute in order. Each phase should leave **build + tests green**.
 
 ### Phase 5 — CORE / AGENTS / decisions
 
-- [ ] Update [`docs/CORE.md`](../CORE.md): pipeline diagram, §2 table, §3.1–3.2 paths, stop-inventing table, doc map.  
+- [ ] Update [`docs/CORE.md`](../../../CORE.md): pipeline diagram, §2 table, §3.1–3.2 paths, stop-inventing table, doc map.  
 - [ ] Update `AGENTS.md` placement rules and any `Syntax/` paths.  
 - [ ] Module READMEs under Ast, Analysis, Interpretation, DomainModeling, Introspection.  
 - [ ] Add or update ADR: **Ast + Analysis module split** (status Accepted when done).  

@@ -3,7 +3,7 @@
 **Date:** 2026-07-17  
 **Status:** Accepted  
 **Deciders:** Architecture team  
-**References:** [`dsl-sync-toward-phase1.md`](../plans/v2-to-v3/dsl-sync-toward-phase1.md), [`domain-modeling-dsl-tour-feedback.md`](../experiments/domain-modeling-dsl-tour-feedback.md)
+**References:** [`dsl-sync-toward-phase1.md`](../plans/archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-sync-toward-phase1.md), [`domain-modeling-dsl-tour-feedback.md`](../plans/archive/experiments/domain-modeling-dsl-tour-feedback.md)
 
 ---
 

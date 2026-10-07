@@ -1,7 +1,7 @@
 # Fix G-S6-1 — Bag-path relationship-named `Rel exists` fails open
 
 **Queue:** [`dogfood-fix-README.md`](dogfood-fix-README.md)  
-**Source:** [`DOGFOOD-S6-20260806.md`](../agent-summaries/dogfood/DOGFOOD-S6-20260806.md) finding G-S6-1  
+**Source:** [`DOGFOOD-S6-20260806.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S6-20260806.md) finding G-S6-1  
 **Status:** `[x]` — DONE 2026-08-06 (fix + regression test + S6 re-run green)  
 **Diff:** S–M  
 **Failure mode:** fail-open (violates fail-closed + guide drift)

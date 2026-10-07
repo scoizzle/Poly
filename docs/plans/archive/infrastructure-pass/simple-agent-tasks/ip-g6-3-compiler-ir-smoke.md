@@ -1,7 +1,7 @@
 # Micro-Task: G6.3 — DslCompiler IR smoke (Db + All)
 
 **Suite:** [`ip-README.md`](ip-README.md) **#G6.3**  
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
+**Parent:** [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)  
 **Difficulty:** Small  
 **Estimated Context:** ~10k tokens  
 **Status:** `[x]` Done — `DslCompiler_AllMode_EmitsDbContextAndProgramViaIr`  

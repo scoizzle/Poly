@@ -1,7 +1,7 @@
 # Micro-Task: G6.0 — Production IR inventory
 
 **Suite:** [`ip-README.md`](ip-README.md) **#G6.0**  
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
+**Parent:** [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)  
 **Difficulty:** Small  
 **Estimated Context:** ~8k tokens  
 **Status:** `[ ]` Not Started  

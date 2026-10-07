@@ -1,9 +1,9 @@
 # Vision cleanup plan — follow-ups — 2026-08-15
 
 Source review: [`2026-08-15-vision-cleanup-plan-review.md`](2026-08-15-vision-cleanup-plan-review.md).  
-Plan: [`docs/plans/domainmodeling-vision-cleanup-2026-08-15.md`](../../plans/domainmodeling-vision-cleanup-2026-08-15.md).
+Plan: [`docs/plans/domainmodeling-vision-cleanup-2026-08-15.md`](../../plans/archive/completed-2026-08-late/domainmodeling-vision-cleanup-2026-08-15.md).
 
-Superseding plan: [`docs/plans/domainmodeling-vision-cleanup-2026-08-16.md`](../../plans/domainmodeling-vision-cleanup-2026-08-16.md). Do not flip `PIPELINE-STATUS.md` CURRENT from this file.
+Superseding plan: [`docs/plans/domainmodeling-vision-cleanup-2026-08-16.md`](../../plans/archive/completed-2026-08-late/domainmodeling-vision-cleanup-2026-08-16.md). Do not flip `PIPELINE-STATUS.md` CURRENT from this file.
 
 ## Disposition (F1–F13 / P1)
 

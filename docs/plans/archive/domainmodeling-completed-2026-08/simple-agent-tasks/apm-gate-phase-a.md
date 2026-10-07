@@ -13,7 +13,7 @@ Run the uncommitted-change review gate and only mark Phase A complete when struc
 
 ## Required Reading
 
-- [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+- [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 - Parent §9 risks  
 - `AGENTS.md` pre-ship gate  
 

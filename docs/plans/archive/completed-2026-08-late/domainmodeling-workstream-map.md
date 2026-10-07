@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-31 (orientation only — not CURRENT)  
 **Purpose:** Name every live / parked / dead stream so “middle of many things” becomes one admitted CURRENT.  
-**Sources of truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) is the sole CURRENT. This map is orientation inventory, not an Agent pick.  
-**Completed suites archive:** [`archive/domainmodeling-completed-2026-08/`](archive/domainmodeling-completed-2026-08/README.md)  
+**Sources of truth:** [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md) is the sole CURRENT. This map is orientation inventory, not an Agent pick.  
+**Completed suites archive:** [`archive/domainmodeling-completed-2026-08/`](../domainmodeling-completed-2026-08/README.md)  
 **Rule:** **One primary implementation workstream at a time.** Proposals ≠ queues.
 
 ---
@@ -13,7 +13,7 @@
 | Lens | State |
 |------|--------|
 | Product vertical (M1–M4, spawn-and-wire, Q1′/Q3′, link, SPE, DAS catalog monopath) | **Done** |
-| CURRENT (agent pick) | **`create/create-in`** — see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). interpretation-language-engine DONE 2026-08-31. dogfood-wave-2 is archived. |
+| CURRENT (agent pick) | **`create/create-in`** — see [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). interpretation-language-engine DONE 2026-08-31. dogfood-wave-2 is archived. |
 | Feeling of “in the middle” | Many **parked / residual / structural** docs still look active; code is past most of them |
 
 If work feels multi-stream, the fix is **admission**, not more parallel suites.
@@ -22,7 +22,7 @@ If work feels multi-stream, the fix is **admission**, not more parallel suites.
 
 ## 1. Completed workstreams (archived)
 
-All suite trees + parent plans: [`archive/domainmodeling-completed-2026-08/`](archive/domainmodeling-completed-2026-08/README.md).
+All suite trees + parent plans: [`archive/domainmodeling-completed-2026-08/`](../domainmodeling-completed-2026-08/README.md).
 
 | Stream | Suite | What it was |
 |--------|-------|-------------|
@@ -39,7 +39,7 @@ All suite trees + parent plans: [`archive/domainmodeling-completed-2026-08/`](ar
 | **Infra under bar** | infrastructure-pass | IR DbContext/Program |
 | **Quality / peer followups** | closed deltas | Catalog oracles; peer binding |
 
-Reference capability: [`docs/domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md).
+Reference capability: [`docs/domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md).
 
 ---
 
@@ -113,7 +113,7 @@ Finished suites lived next to live indexes. **Mitigation:** archived under `arch
 
 ## 6. Candidate next CURRENT (disabled)
 
-**Do not admit from this table.** Sole CURRENT is [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). Historical candidates only (2026-08-04 ranking):
+**Do not admit from this table.** Sole CURRENT is [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). Historical candidates only (2026-08-04 ranking):
 
 | # | Admit as CURRENT | Size | Why |
 |---|------------------|------|-----|
@@ -156,4 +156,4 @@ Not required for product progress.
 CURRENT: create/create-in
 ```
 
-This block must match [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. Do not admit work from this map.
+This block must match [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). dogfood-wave-2 is archived. Do not admit work from this map.

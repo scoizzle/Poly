@@ -13,7 +13,7 @@
 - [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md) — VM as ground truth
 - [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md) — domain → generic ops only
 - [`docs/decisions/2026-core-engineering-principles.md`](2026-core-engineering-principles.md) — principles ADR
-- [`docs/plans/2026-07-11-review-fix-plan.md`](../plans/2026-07-11-review-fix-plan.md) — current hardening (trust **layer 1**)
+- [`docs/plans/2026-07-11-review-fix-plan.md`](../plans/archive/completed-2026-08-mid/2026-07-11-review-fix-plan.md) — current hardening (trust **layer 1**)
 
 ---
 
@@ -173,7 +173,7 @@ Dogfood sits on top of ground truth. Higher layers do not substitute for lower o
                   fail-loud evolution, fail-closed unshipped ops
 ```
 
-**Layer 1 is non-negotiable.** Dogfood on a lying spine multiplies confidence in a lie. Current execution for layer 1: [`docs/plans/2026-07-11-review-fix-plan.md`](../plans/2026-07-11-review-fix-plan.md).
+**Layer 1 is non-negotiable.** Dogfood on a lying spine multiplies confidence in a lie. Current execution for layer 1: [`docs/plans/2026-07-11-review-fix-plan.md`](../plans/archive/completed-2026-08-mid/2026-07-11-review-fix-plan.md).
 
 ### 4. Staged gates (T1 / T2 / T3)
 
@@ -257,7 +257,7 @@ T3 is **maturity**, not a prerequisite to every sale after T2.
 
 ### Immediate
 
-- Execution priority: **trust layer 1** ([review fix plan](../plans/2026-07-11-review-fix-plan.md)) before large self-hosting or plugin-framework work.
+- Execution priority: **trust layer 1** ([review fix plan](../plans/archive/completed-2026-08-mid/2026-07-11-review-fix-plan.md)) before large self-hosting or plugin-framework work.
 - Product/marketing language: do not claim platform-level customer trust before **T2**.
 - Design partners may proceed at **T1** with explicit scope.
 - When prioritizing features: prefer work that unblocks **us as customer** of the domain + module path over host-only polish that never joins that path.

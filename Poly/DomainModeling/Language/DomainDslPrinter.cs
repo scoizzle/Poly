@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
@@ -143,9 +145,9 @@ public sealed class DomainDslPrinter {
         _sb.Append(": contract ");
         _sb.Append(kind);
         _sb.Append(' ');
-        _sb.Append(NeedsQuotes(contract.SourceIdentifier) ? $"\"{EscapeStringLiteral(contract.SourceIdentifier)}\"" : contract.SourceIdentifier);
+        _sb.Append(IdentifierOrStringLiteral(contract.SourceIdentifier));
         _sb.Append(' ');
-        _sb.Append(NeedsQuotes(contract.Version) ? $"\"{EscapeStringLiteral(contract.Version)}\"" : contract.Version);
+        _sb.Append(IdentifierOrStringLiteral(contract.Version));
         _sb.AppendLine(" {");
         foreach (var vt in contract.Types) {
             _sb.Append("  ");
@@ -194,8 +196,10 @@ public sealed class DomainDslPrinter {
         _sb.AppendLine();
     }
 
-    private static bool NeedsQuotes(string value) =>
-        value.Length == 0 || value.Any(c => !char.IsLetterOrDigit(c) && c != '_');
+    // The parser reads a bare identifier or a string literal here; anything the scanner would
+    // not read back as one identifier (a keyword, a digit-first or punctuated value) is quoted.
+    private static string IdentifierOrStringLiteral(string value) =>
+        DslTokenReader.IsIdentifier(value) ? value : $"\"{EscapeStringLiteral(value)}\"";
 
     private void PrintEntity(Entity entity) {
         _sb.Append(entity.Name);
@@ -759,9 +763,9 @@ public sealed class DomainDslPrinter {
         if (literal.Value is null) return "null";
         if (literal.Value is bool b) return b ? "true" : "false";
         if (literal.Value is string s) return $"\"{EscapeStringLiteral(s)}\"";
-        if (literal.Value is long l) return l.ToString();
-        if (literal.Value is double d) return d.ToString("0.#");
-        return literal.Value.ToString() ?? "null";
+        if (literal.Value is long l) return l.ToString(CultureInfo.InvariantCulture);
+        if (literal.Value is double d) return d.ToString("0.#", CultureInfo.InvariantCulture);
+        return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
     }
 
     /// <summary>Escapes <c>\</c> and <c>"</c> for double-quoted DSL string literals.</summary>
@@ -790,7 +794,7 @@ public sealed class DomainDslPrinter {
     private static string PrintConstraint(Constraint constraint) => constraint switch {
         RequiredConstraint => "required",
         UniqueConstraint => "unique",
-        RangeConstraint r => $"range({r.Minimum?.ToString() ?? ""}, {r.Maximum?.ToString() ?? ""})",
+        RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
         LengthConstraint l => l.MinLength == l.MaxLength
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
@@ -811,6 +815,6 @@ public sealed class DomainDslPrinter {
         true => "true",
         false => "false",
         string s => $"\"{EscapeStringLiteral(s)}\"",
-        _ => value.ToString() ?? "null",
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "null",
     };
 }

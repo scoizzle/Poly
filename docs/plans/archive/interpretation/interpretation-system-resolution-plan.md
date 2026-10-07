@@ -6,7 +6,7 @@
 
 **Created:** 2026-07-05  
 **Updated:** 2026-07-06 (post `f242529` EH landing + analysis refactors)  
-**Source:** [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md) (Rev 1.15)  
+**Source:** [`docs/interpretation-system-architecture-review.md`](interpretation-system-architecture-review.md) (Rev 1.15)  
 **Companion:** [`interpretation-system-issues.md`](interpretation-system-issues.md) (INT-/ANA- tracker)  
 **Baseline:** 1429/1429 tests green; P0 analysis sprint complete; **Phase 1 in progress** (Strategy B try/catch + basic finally MVP; f242529); **P2 harness complete**; P3 hardening partial (ring save landed).
 
@@ -786,10 +786,10 @@ flowchart TD
 
 ## Related links
 
-- [Architecture review](../interpretation-system-architecture-review.md)
+- [Architecture review](interpretation-system-architecture-review.md)
 - [Issue tracker](interpretation-system-issues.md)
-- [Analysis README](../../Poly/Interpretation/Analysis/README.md)
-- [VM README](../../Poly/Interpretation/Vm/README.md)
+- [Analysis README](../../../../Poly/Interpretation/Analysis/README.md)
+- [VM README](../../../../Poly/Interpretation/Vm/README.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # Round-3 discovery findings — agent-b — TYPE ABUSE + CROSS-TYPE OPERATIONS
 
-Agent: `agent-b`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../docs/agent/poly-discovery-loop.md).
+Agent: `agent-b`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../../agent/poly-discovery-loop.md).
 Slice: cross-type assigns, incompatible comparisons (Date<Number, Status==5, Text==Boolean),
 string↔number concat, arithmetic on enums, date arithmetic everywhere, `default(now|today|guid)`
 on every property type, enum-member defaults on non-enums, non-member enum string values, null

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Interpretation.CSharp;
@@ -1274,30 +1276,30 @@ public sealed class CSharpGenerator {
             sb.Append(b ? "true" : "false");
         }
         else if (constant.Value is float f) {
-            sb.Append(f.ToString("G"));
+            sb.Append(f.ToString("G", CultureInfo.InvariantCulture));
             sb.Append('f');
         }
         else if (constant.Value is double d) {
-            sb.Append(d.ToString("G"));
+            sb.Append(d.ToString("G", CultureInfo.InvariantCulture));
         }
         else if (constant.Value is decimal m) {
-            sb.Append(m.ToString("G"));
+            sb.Append(m.ToString("G", CultureInfo.InvariantCulture));
             sb.Append('m');
         }
         else if (constant.Value is long l) {
-            sb.Append(l.ToString());
+            sb.Append(l.ToString(CultureInfo.InvariantCulture));
             sb.Append('L');
         }
         else if (constant.Value is uint ui) {
-            sb.Append(ui.ToString());
+            sb.Append(ui.ToString(CultureInfo.InvariantCulture));
             sb.Append("u");
         }
         else if (constant.Value is ulong ul) {
-            sb.Append(ul.ToString());
+            sb.Append(ul.ToString(CultureInfo.InvariantCulture));
             sb.Append("UL");
         }
         else {
-            sb.Append(constant.Value.ToString());
+            sb.Append(Convert.ToString(constant.Value, CultureInfo.InvariantCulture));
         }
     }
 

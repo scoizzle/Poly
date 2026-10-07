@@ -3,7 +3,7 @@
 **Date:** 2026-08-07  
 **Status:** **Direction lock + agent suite ready**  
 **Agent suite:** [`simple-agent-tasks/gpure-README.md`](simple-agent-tasks/gpure-README.md) (`gpure-0`…`gpure-8` + gate)  
-**Supersedes (as end-state policy):** hybrid-as-forever wording in archived [`archive/completed-2026-08-mid/grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) §5.2 item 3  
+**Supersedes (as end-state policy):** hybrid-as-forever wording in archived [`archive/completed-2026-08-mid/grammar-integration.md`](../completed-2026-08-mid/grammar-integration.md) §5.2 item 3  
 **Related:** E1 open forms live; temporal pack may use bridge; mcp-minify retires JSON dual media  
 
 ---
@@ -68,7 +68,7 @@ Do **not** grow `PolyDslParser` method trees as the long-term answer. Prefer eng
 
 | Artifact | Role under pure direction |
 |----------|---------------------------|
-| `ExpressionFormRegistry` | **Bridge**: migrate to grammar patterns + print binders in [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) wave 1; do not grow RD forms for p1 |
+| `ExpressionFormRegistry` | **Bridge**: migrate to grammar patterns + print binders in [`pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md) wave 1; do not grow RD forms for p1 |
 | `DslExpressionParser` | **Bridge**: shrink as rules move into tables; delete when empty |
 | `DateOperation` IR | Unchanged — pure Grammar does not mean new temporal IR |
 | p1 suite | May land on bridge; pure expr is **not** a hard prereq for first temporal goldens, but **new** expr sugar should not dig more RD |
@@ -92,7 +92,7 @@ gpure-8  CORE/docs
 gpure-gate
 ```
 
-**Suite status:** **gpure DONE 2026-08-07** (see [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)).  
+**Suite status:** **gpure DONE 2026-08-07** (see [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md)).  
 Successor (not CURRENT): drive live fold from `LeftAssoc` span tables when a consumer needs it.
 ---
 

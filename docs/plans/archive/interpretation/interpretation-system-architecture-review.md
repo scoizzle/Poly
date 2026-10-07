@@ -4,10 +4,10 @@
 **Status:** Living review — **partially historical** (pre-direct-ABI sections remain; pipeline truth is `Poly/Interpretation/README.md` + decisions)  
 **Scope:** `Poly/Interpretation/`, `Poly/Syntax/`, and backends that consume the interpretation pipeline.  
 **Companion artifacts:**
-- [`docs/plans/archive/interpretation/`](plans/archive/interpretation/README.md) — **archived** INT/ANA trackers and µop-era plans (do not execute)
-- [`docs/decisions/`](decisions/) (ADRs)
-- [`Poly/Interpretation/README.md`](../Poly/Interpretation/README.md) (module map — **current pipeline**)
-- [`docs/plans/v2-to-v3/master-roadmap.md`](plans/v2-to-v3/master-roadmap.md) (active product plans)
+- [`docs/plans/archive/interpretation/`](README.md) — **archived** INT/ANA trackers and µop-era plans (do not execute)
+- [`docs/decisions/`](../../../decisions/) (ADRs)
+- [`Poly/Interpretation/README.md`](../../../../Poly/Interpretation/README.md) (module map — **current pipeline**)
+- [`docs/plans/v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) (active product plans)
 
 ---
 
@@ -144,9 +144,9 @@ The Interpretation system is Poly's **canonical execution semantics** for AST pr
 3. **Compiles** primitives to a LINQ Expression delegate (`ProgramCompiler`).
 4. **Executes** via the stack VM (`VmState`, `Vm.Execute` path through `Interpreter`).
 
-Per [2026-06-08-vm-as-canonical-semantics.md](decisions/2026-06-08-vm-as-canonical-semantics.md), the VM is the **single source of truth** for behavior. `LinqExpressionGenerator` remains a secondary reference backend; the tree-walking interpreter is removed.
+Per [2026-06-08-vm-as-canonical-semantics.md](../../../decisions/2026-06-08-vm-as-canonical-semantics.md), the VM is the **single source of truth** for behavior. `LinqExpressionGenerator` remains a secondary reference backend; the tree-walking interpreter is removed.
 
-Per [2026-07-04-primitives-as-canonical-ir.md](decisions/2026-07-04-primitives-as-canonical-ir.md), **primitives are the canonical IR** — there is no separate `Poly/Ir/` module.
+Per [2026-07-04-primitives-as-canonical-ir.md](../../../decisions/2026-07-04-primitives-as-canonical-ir.md), **primitives are the canonical IR** — there is no separate `Poly/Ir/` module.
 
 ---
 
@@ -334,13 +334,13 @@ This three-way branch pattern (runtime-check / static-resolved / fail-closed) is
 | `VmState` | Stack, heap, registers, PC, closures, trace, debug interrupt. |
 | `VmProgram` | Delegate + `MaxActiveLocalsDepth` + optional `Functions[]` + `RootValueKind` + `CallSites`. |
 | `CallSiteCompiler` | **Separate** path: compiles `MethodInfo` → `CallSiteDelegate` (stack manipulation). |
-| `Heap` | Append + free-list; no tracing GC ([ADR](decisions/2026-06-08-heap-reclamation.md)). |
+| `Heap` | Append + free-list; no tracing GC ([ADR](../../../decisions/2026-06-08-heap-reclamation.md)). |
 
 **Call model:**
 
 - Top-level and lambda bodies: separate compiled `Action<VmState>` delegates in `VmProgram.Functions`.
 - `Call` / `AllocClosure` dispatch to function table.
-- `Return` in lambda body ends that delegate (jumps to `ExitLabel`) — not a full in-delegate frame return ([INT-005](plans/archive/interpretation/interpretation-system-issues.md)).
+- `Return` in lambda body ends that delegate (jumps to `ExitLabel`) — not a full in-delegate frame return ([INT-005](interpretation-system-issues.md)).
 
 **Ring allocation — the key design:**
 
@@ -367,7 +367,7 @@ This means the VM's `Stack` pointer is only meaningful at function-entry and fun
 
 | Backend | Consumes | Status |
 |---------|----------|--------|
-| `LinqExpressionGenerator` | AST directly (with analysis metadata for DCE + node replacements) | **First complete execution engine** — mature independent implementation covering ~40+ node types. Produces opaque LINQ delegates: no suspend/resume, no runtime state inspection. Superseded by VM for runtime introspection, but remains the most complete correctness reference. Cross-validated against VM for arithmetic/logic/property-access only (K-024). Has DCE, type-promotion, and `GetNodeReplacement` features the VM lacks (K-025). **[VM must achieve parity](plans/archive/interpretation/interpretation-system-issues.md) before it can claim canonical status (C-016).** |
+| `LinqExpressionGenerator` | AST directly (with analysis metadata for DCE + node replacements) | **First complete execution engine** — mature independent implementation covering ~40+ node types. Produces opaque LINQ delegates: no suspend/resume, no runtime state inspection. Superseded by VM for runtime introspection, but remains the most complete correctness reference. Cross-validated against VM for arithmetic/logic/property-access only (K-024). Has DCE, type-promotion, and `GetNodeReplacement` features the VM lacks (K-025). **[VM must achieve parity](interpretation-system-issues.md) before it can claim canonical status (C-016).** |
 | `CSharpGenerator` | AST + optional `TypeDefinitionNode[]` | **Sole production backend for domain type definitions** (1,089 lines). Stateless recursive-descent pretty-printer used via `Poly.Mcp/DomainTools.cs:1383` (`GenerateCSharpFromRoots`). Handles 20 statement types, ~40 expression types explicitly — 11 types fall through to `ToString()` (coincidentally valid for bitwise ops, incorrect for PopCount/StridedSet/SuspendNode). Optional DCE via `AnalysisResult` but production path uses none. No `CSharp/README.md` (K-052). Contains dead code `WriteTestTopLevelStatement` (K-053). Contract interface rules independently encoded from VM. See §4.15 for full analysis. |
 | `MermaidAstGenerator` | AST | Visualization only. |
 
@@ -396,7 +396,7 @@ Pass-internal:  CallSiteCatalogState, ExceptionRegionState, ExpansionPassState (
 | `PushConstant` / `LoadHeapConstant` | Partial | Object identity not portable |
 | `TypeCheck.TargetType` | No | `System.Type` in primitive (see K-016) |
 
-**Contradiction:** ADR [bytecode-serialization](decisions/2026-06-08-bytecode-serialization.md) assumes portable call-site tuples + `CallSiteCompiler` at load time, while the hot path still embeds `MethodBase` in `CallExternal` and uses `ProgramCompiler.EmitCallExternalDirect` — `CallSiteCompiler` is parallel infrastructure, not the main compile path (and is in fact **never called** — C-013).
+**Contradiction:** ADR [bytecode-serialization](../../../decisions/2026-06-08-bytecode-serialization.md) assumes portable call-site tuples + `CallSiteCompiler` at load time, while the hot path still embeds `MethodBase` in `CallExternal` and uses `ProgramCompiler.EmitCallExternalDirect` — `CallSiteCompiler` is parallel infrastructure, not the main compile path (and is in fact **never called** — C-013).
 
 **Redundant embedding:** `CallExternal` carries both `MethodBase` and `SiteIndex`. The catalog index path works (`EmitCallExternalDirect` resolves `target = callSites[siteIndex.Value].Target`), but dropping `MethodBase` requires all emission paths to guarantee `SiteIndex`. Currently every `ToPrimitives` caller embeds `MethodBase` unconditionally.
 
@@ -422,7 +422,7 @@ CLR-level faults (divide-by-zero, null reference) inside opcode handlers still b
 
 > **Note (2026-07-05):** The v2→v3 domain modeling refactoring is in active transition. The dual-path architecture described below is an **intentional incremental migration**, not a design defect. Entries C-019, K-029, K-030, and K-031 document the transitional state; their resolution depends on the refactoring outcome, not on an immediate fix.
 
-Per [domain-lowering-boundary](decisions/2026-06-08-domain-lowering-boundary.md): domain concepts lower to **generic** VM opcodes — no domain-specific instructions.
+Per [domain-lowering-boundary](../../../decisions/2026-06-08-domain-lowering-boundary.md): domain concepts lower to **generic** VM opcodes — no domain-specific instructions.
 
 **Two separate analysis universes:** Domain model analysis (`DomainModelAnalyzer`, 17 V3 passes) and expression AST analysis (`Interpreter._analyzer`, 13 passes) use the same `AnalysisContext`/`AnalysisResult` infrastructure but are completely separate — an expected consequence of the incremental v2→v3 migration. Domain analysis runs on `Domain` graphs (entities, actions, policies, events, stages, relationships); expression analysis runs on `Syntax.Node` trees. No pass is shared between them.
 
@@ -496,7 +496,7 @@ This is a **comprehensive code generation pipeline** that produces semantically 
 
 #### 4.4.2 V3 lowering design plan — implementation gap
 
-The [`docs/plans/v2-to-v3/v3-domain-lowering-pass-design.md`](../plans/v2-to-v3/v3-domain-lowering-pass-design.md) describes a full V3-domain lowering architecture with **14 files**:
+The [`docs/plans/v2-to-v3/v3-domain-lowering-pass-design.md`](../v2-to-v3-migration/designs/v3-domain-lowering-pass-design.md) describes a full V3-domain lowering architecture with **14 files**:
 
 | Planned file | V3 namespace | Status |
 |-------------|-------------|--------|
@@ -2413,7 +2413,7 @@ Issues that are **internally consistent** but create **design risk, duplication,
 | **K-001** | Value ABI | Stack slots are untyped `long`; heap handles and scalars share representation | Every consumer needs analysis or convention; bugs like INT-002 recur at API boundaries |
 | **K-002** | Lowering | `ToPrimitives` on nodes reads analysis metadata ad hoc | No single "lowering contract" document; easy to emit IR inconsistent with analysis (EH, catalog) |
 | **K-003** | IR maturity | `InputSlots`/`ResultSlot` unused in expansion | ADR SSA path incomplete; ring simulation remains sole dataflow model |
-| **K-004** | Closures | One delegate per lambda body; `Return` ends program | Works today; blocks single-module multi-function bytecode ([INT-005](plans/archive/interpretation/interpretation-system-issues.md)) |
+| **K-004** | Closures | One delegate per lambda body; `Return` ends program | Works today; blocks single-module multi-function bytecode ([INT-005](interpretation-system-issues.md)) |
 | **K-005** | Incremental | Expression pipeline supports incremental infra but `Interpreter` doesn't use it | Domain model gets incremental analysis; expression re-analysis is untested in production entry point |
 | **K-006** | EH | Three-layer placeholder (analysis → markers → VM) without VM consumer; `EmitThrowOp` dead code. The flat µop array model makes this more than a wiring gap — catch/finally bodies execute unconditionally after try body (see §4.6). | Risk of analysis/IR drift until INT-018; `EmitThrowOp` is implemented but orphaned — may drift from the real throw path when wired. Tests verify expansion shape only, not execution. Two fundamentally different implementation strategies exist (nesting vs runtime dispatch) with no decision (K-027). |
 | **K-007** | TypeIs | Static scalar `is` uses compile-time type match (`StaticTypeIsMatch`); heap-ref `is` uses runtime `TypeCheck` primitive | Static path is correct by construction (representation determines lowering — analysis is source of truth). `Unknown` path fails closed (0L). The `TypeCheck` path is end-to-end untested through VM compile+execute — see K-015. The `System.Type` embedding blocks portable serialization — see K-016. |
@@ -2540,12 +2540,12 @@ Issues that are **internally consistent** but create **design risk, duplication,
 
 | Document | Relationship |
 |----------|--------------|
-| [interpretation-system-issues.md](plans/archive/interpretation/interpretation-system-issues.md) | **Archived** tracker (INT-*, ANA-*) — do not execute |
-| [vm-gap-analysis.md](decisions/vm-gap-analysis.md) | 2026-06 gap inventory — partially stale |
-| [2026-07-04-primitives-as-canonical-ir.md](decisions/2026-07-04-primitives-as-canonical-ir.md) | IR authority |
-| [2026-06-08-vm-as-canonical-semantics.md](decisions/2026-06-08-vm-as-canonical-semantics.md) | VM authority |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Broader Poly architecture (includes VM notes) |
-| [Poly/Interpretation/Analysis/README.md](../Poly/Interpretation/Analysis/README.md) | Pass registry (most current) |
+| [interpretation-system-issues.md](interpretation-system-issues.md) | **Archived** tracker (INT-*, ANA-*) — do not execute |
+| [vm-gap-analysis.md](../../../decisions/vm-gap-analysis.md) | 2026-06 gap inventory — partially stale |
+| [2026-07-04-primitives-as-canonical-ir.md](../../../decisions/2026-07-04-primitives-as-canonical-ir.md) | IR authority |
+| [2026-06-08-vm-as-canonical-semantics.md](../../../decisions/2026-06-08-vm-as-canonical-semantics.md) | VM authority |
+| [ARCHITECTURE.md](../../../ARCHITECTURE.md) | Broader Poly architecture (includes VM notes) |
+| [Poly/Interpretation/Analysis/README.md](../../../../Poly/Interpretation/Analysis/README.md) | Pass registry (most current) |
 
 ---
 

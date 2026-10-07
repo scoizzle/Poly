@@ -1,11 +1,11 @@
 # Pack host — Fleet queue (`pack-*`)
 
-**Parent:** [`../pack-host-2026-08-13.md`](../pack-host-2026-08-13.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Parent:** [`../pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md` (core-only until 3a)  
 **Sequence:** DSL Grammar → pack surface → built-in packs  
 
-**Status:** Parked — not CURRENT. Phase 1 shipped; extension model superseded. Authority: [`PIPELINE-STATUS.md`](./PIPELINE-STATUS.md).
+**Status:** Parked — not CURRENT. Phase 1 shipped; extension model superseded. Authority: [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
 
 ---
 
@@ -34,7 +34,7 @@ opencode run --dir . --auto --title pack-2-1 -- \
    Do only that task. Claim it, implement, verify, mark [x]."
 ```
 
-pack-1 (TokenWriter + binders) is archived under [`../archive/completed-2026-08-late/simple-agent-tasks/`](../archive/completed-2026-08-late/simple-agent-tasks/pack-1-README.md).
+pack-1 (TokenWriter + binders) is archived under [`../archive/completed-2026-08-late/simple-agent-tasks/`](../../archive/completed-2026-08-late/simple-agent-tasks/pack-1-README.md).
 
 Start only tasks in the **current wave** whose prereqs are `[x]`.
 
@@ -70,15 +70,15 @@ Phase 3 — Built-in packs (after phase 2 gate; one sub-slice at a time)
 
 | Agent | Assign |
 |-------|--------|
-| A | [`pack-1-1-token-writer.md`](./pack-1-1-token-writer.md) |
-| B | [`pack-1-2-print-binder.md`](./pack-1-2-print-binder.md) |
-| C | [`pack-1-3-dsl-printer.md`](./pack-1-3-dsl-printer.md) after A+B |
-| D | [`pack-1-4-e1-patterns.md`](./pack-1-4-e1-patterns.md) after C |
+| A | [`pack-1-1-token-writer.md`](../../archive/completed-2026-08-late/simple-agent-tasks/pack-1-1-token-writer.md) |
+| B | [`pack-1-2-print-binder.md`](../../archive/completed-2026-08-late/simple-agent-tasks/pack-1-2-print-binder.md) |
+| C | [`pack-1-3-dsl-printer.md`](../../archive/completed-2026-08-late/simple-agent-tasks/pack-1-3-dsl-printer.md) after A+B |
+| D | [`pack-1-4-e1-patterns.md`](../../archive/completed-2026-08-late/simple-agent-tasks/pack-1-4-e1-patterns.md) after C |
 | E | [`pack-2-1-idomainpack.md`](./pack-2-1-idomainpack.md) after phase-1 gate |
 | F/G/H | 2-2 / 2-3 / 2-4 after E |
 | I | 2-5 after F |
 | J | 2-6 after E |
-| K | [`p1-README.md`](./p1-README.md) after phase-2 gate |
+| K | [`p1-README.md`](../p1/p1-README.md) after phase-2 gate |
 | L | [`pack-3b-README.md`](./pack-3b-README.md) after 3a |
 | M | [`pack-3c-README.md`](./pack-3c-README.md) after 3b |
 

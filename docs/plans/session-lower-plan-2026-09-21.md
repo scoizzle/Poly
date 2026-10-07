@@ -117,7 +117,7 @@ Does **not** die: Ontology facts, `.poly`, session/libraries, evolution, fact-pu
 
 ## Locks
 
-- **Not CURRENT.** PIPELINE-STATUS stays `(none)`.
+- **Not CURRENT.** This file does not change PIPELINE-STATUS.
 - **Item 5 PARKED.** **PR 73 PARKED.**
 - **No implement / no delete** from this file.
 - **No slice greenlight** until Scot accepts this plan, then still per-slice greenlight.

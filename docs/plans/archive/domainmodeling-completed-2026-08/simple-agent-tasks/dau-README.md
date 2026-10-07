@@ -1,8 +1,8 @@
 # Domain Analysis Unification — Agent Queue (`dau-*`)
 
 **Parent:** [`../domain-analysis-unification.md`](../domain-analysis-unification.md)  
-**Velocity map:** [`../platform-velocity-review.md`](../platform-velocity-review.md)  
-**Gate:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Velocity map:** [`../platform-velocity-review.md`](../../../platform-velocity-review.md)  
+**Gate:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 **Reviews:**  
 - §13–§15: earlier false Completes.  

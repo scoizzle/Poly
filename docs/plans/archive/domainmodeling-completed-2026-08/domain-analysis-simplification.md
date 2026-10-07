@@ -3,7 +3,7 @@
 **Date:** 2026-07-30  
 **Status:** Open — present-state inventory + tactical cutovers (not executed)  
 **Future target (read first for direction):** [`domain-analysis-future-state.md`](./domain-analysis-future-state.md)  
-**Related:** [`domain-analysis-unification.md`](./domain-analysis-unification.md) · [`docs/CORE.md`](../CORE.md) · DACR suite (`simple-agent-tasks/dacr-*`)  
+**Related:** [`domain-analysis-unification.md`](./domain-analysis-unification.md) · [`docs/CORE.md`](../../../CORE.md) · DACR suite (`simple-agent-tasks/dacr-*`)  
 
 ## 1. Problem statement
 

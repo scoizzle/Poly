@@ -40,7 +40,7 @@ Concepts that stay IR/evolution-only are named as such in the DSL guide and capa
 | L4 | **`DateOperation` authoring is p1**, not this plan. Generic `DueDate + 14` already lowers to CLR `AddDays` without building the node. When p1 lands, print must emit the pack form, not `Default()`. Date **parameter** arithmetic (`d + 30` where `d: Date`) is this plan (L3 + existing AddDays lowering), not p1. |
 | L5 | Store-aware Q3′ (`any`/`all`/`none`/`count`) is the **supported eval surface today**. Export that throws is only acceptable if those policies are **not** prepended as action guards that make generated actions un-runnable. |
 | L6 | `unique` as “storage metadata only” is an honesty claim, not a destination. This plan makes uniqueness real (store + Create + EF index) or the guide stays explicit until that slice ships. |
-| L7 | `ValueType` and contract IR are **kept product roadmap** ([complexity pass](domainmodeling-complexity-pass-2026-08-10.md) #3/#6). Missing piece is authoring → analyze → export → runtime, not deletion. |
+| L7 | `ValueType` and contract IR are **kept product roadmap** ([complexity pass](archive/completed-2026-08-late/domainmodeling-complexity-pass-2026-08-10.md) #3/#6). Missing piece is authoring → analyze → export → runtime, not deletion. |
 | L8 | Fail-closed. Empty uniqueness, missing matches, unknown invoke args, and invalid configs fail loud. Tests first; smallest production change; guide + CORE updated in the same change when the shipped surface moves. |
 | L9 | Generation slices are **not done** while `scripts/run-probe.sh` compiles entities-only. Full-solution compile (entities + `Program.cs` + `DbContext`, 0 warnings) is the acceptance gate for slices 3–4 and entity-export. Fleet-eval P0-0 is that gate; do not invent a second probe runner. |
 | L10 | Every shipped construct that `export_dsl` prints must parse again (`apply_dsl`). Printer comments and comma-vs-whitespace drift are bugs, not documentation. |
@@ -410,22 +410,22 @@ Also: if Q3′ still must not reach the shared VM compiler, keep the throw there
 
 ## Implementation tasking (fleet)
 
-Solidified 2026-08-13. **Handoff:** [`simple-agent-tasks/e2e-README.md`](simple-agent-tasks/e2e-README.md) — wave DAG, hot-file owners, one agent per slice.
+Solidified 2026-08-13. **Handoff:** [`simple-agent-tasks/e2e-README.md`](parked/e2e/e2e-README.md) — wave DAG, hot-file owners, one agent per slice.
 
 | Slice README | Tasks |
 |--------------|--------|
-| [`e2e-0-README.md`](simple-agent-tasks/e2e-0-README.md) | 0-1…0-5 + gate |
-| [`e2e-p-README.md`](simple-agent-tasks/e2e-p-README.md) | p-1…p-4 + gate |
-| [`e2e-g0-README.md`](simple-agent-tasks/e2e-g0-README.md) | g0-1…g0-3 + gate |
-| [`e2e-r-README.md`](simple-agent-tasks/e2e-r-README.md) | r-0…r-9 + gate |
-| [`e2e-1-README.md`](simple-agent-tasks/e2e-1-README.md) | 1-1…1-3 + gate |
-| [`e2e-s-README.md`](simple-agent-tasks/e2e-s-README.md) | s-1…s-4 + gate |
-| [`e2e-4-README.md`](simple-agent-tasks/e2e-4-README.md) | 4-1…4-8 + gate |
-| [`e2e-2-README.md`](simple-agent-tasks/e2e-2-README.md) | 2-0…2-2 + gate |
-| [`e2e-x-README.md`](simple-agent-tasks/e2e-x-README.md) | x-1…x-11 + gate |
-| [`e2e-3-README.md`](simple-agent-tasks/e2e-3-README.md) | 3-1…3-5 + gate |
-| [`e2e-5-README.md`](simple-agent-tasks/e2e-5-README.md) | 5-0…5-3 + gate |
-| [`e2e-6-README.md`](simple-agent-tasks/e2e-6-README.md) | 6-0…6-2 + gate |
+| [`e2e-0-README.md`](parked/e2e/e2e-0-README.md) | 0-1…0-5 + gate |
+| [`e2e-p-README.md`](parked/e2e/e2e-p-README.md) | p-1…p-4 + gate |
+| [`e2e-g0-README.md`](parked/e2e/e2e-g0-README.md) | g0-1…g0-3 + gate |
+| [`e2e-r-README.md`](parked/e2e/e2e-r-README.md) | r-0…r-9 + gate |
+| [`e2e-1-README.md`](parked/e2e/e2e-1-README.md) | 1-1…1-3 + gate |
+| [`e2e-s-README.md`](parked/e2e/e2e-s-README.md) | s-1…s-4 + gate |
+| [`e2e-4-README.md`](parked/e2e/e2e-4-README.md) | 4-1…4-8 + gate |
+| [`e2e-2-README.md`](parked/e2e/e2e-2-README.md) | 2-0…2-2 + gate |
+| [`e2e-x-README.md`](parked/e2e/e2e-x-README.md) | x-1…x-11 + gate |
+| [`e2e-3-README.md`](parked/e2e/e2e-3-README.md) | 3-1…3-5 + gate |
+| [`e2e-5-README.md`](parked/e2e/e2e-5-README.md) | 5-0…5-3 + gate |
+| [`e2e-6-README.md`](parked/e2e/e2e-6-README.md) | 6-0…6-2 + gate |
 
 ## Suggested admit shapes (when unparking)
 

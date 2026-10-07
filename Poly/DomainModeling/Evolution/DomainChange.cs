@@ -671,7 +671,8 @@ public sealed record SetDomainNameChange(
 
 /// <summary>
 /// Adds one extension id to the domain (additive). Duplicate id fails closed.
-/// An id the analysis session has not loaded fails closed in <see cref="DomainEvolution.Apply"/>.
+/// When a session is passed to <see cref="DomainEvolution.Apply"/>, an id that session
+/// has not loaded throws there.
 /// </summary>
 public sealed record AddDomainExtensionChange(
     string ExtensionId

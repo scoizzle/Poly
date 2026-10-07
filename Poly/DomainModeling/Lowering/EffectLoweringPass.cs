@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
@@ -357,7 +359,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     nodes.Add(new IfStatement(
                         new LessThan(valueRef, minVal),
                         new Block([Fail(
-                            $"'{prop.Name}' must be >= {FormatAssignConstraintValue(r.Minimum)}.")])));
+                            $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
                 }
             }
             if (r.Maximum is not null) {
@@ -366,7 +368,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                     nodes.Add(new IfStatement(
                         new GreaterThan(valueRef, maxVal),
                         new Block([Fail(
-                            $"'{prop.Name}' must be <= {FormatAssignConstraintValue(r.Maximum)}.")])));
+                            $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
                 }
             }
         }
@@ -449,10 +451,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Constant(value.ToString());
     }
 
-    private static string FormatAssignConstraintValue(object? value) => value switch {
+    /// <summary>Formats a constraint bound for a validation message. Invariant, so the message
+    /// text is the same whatever the culture that simulates or emits it.</summary>
+    internal static string FormatConstraintValue(object? value) => value switch {
         null => "?",
-        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
-        _ => value.ToString() ?? "?"
+        double d => d == Math.Floor(d) ? d.ToString("F0", CultureInfo.InvariantCulture) : d.ToString("G", CultureInfo.InvariantCulture),
+        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "?"
     };
 
     private bool IsAssignableNullableDomainType(string typeName) {

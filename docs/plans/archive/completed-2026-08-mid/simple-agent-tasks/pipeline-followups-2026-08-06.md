@@ -1,6 +1,6 @@
 # Pipeline follow-ups — 2026-08-06 (phenomenal review)
 
-**Review:** [`../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md`](../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md)  
+**Review:** [`../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md`](../../../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md)  
 **Scope:** Uncommitted amu / p4 / coh / dogfood work claimed complete in PIPELINE-STATUS  
 **Status:** all items closed 2026-08-06 (F1–F7, P1) — see notes below
 

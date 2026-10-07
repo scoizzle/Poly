@@ -51,7 +51,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             }
             // C4e (a): when Tracks B { transition to Nope } — subscription effects skipped this pass.
             foreach (var sub in entity.Subscriptions)
-                ValidateEffects(context, sub.Effects, null, entity, domain, lookup, currentStage: null);
+                ValidateEffects(context, sub.Effects, null, entity, domain, lookup, currentStage: null, sub.PeerBinding);
             foreach (var stage in entity.Stages) {
                 ValidateEffects(context, stage.OnEntryEffects, null, entity, domain, lookup, stage.Name);
                 ValidateEffects(context, stage.OnExitEffects, null, entity, domain, lookup, stage.Name);
@@ -63,7 +63,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
                 }
                 foreach (var sub in stage.Subscriptions)
-                    ValidateEffects(context, sub.Effects, null, entity, domain, lookup, stage.Name);
+                    ValidateEffects(context, sub.Effects, null, entity, domain, lookup, stage.Name, sub.PeerBinding);
             }
             ValidateUnconditionalAutomaticTransitionCycles(context, entity);
         });
@@ -453,10 +453,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup,
-        string? currentStage) {
+        string? currentStage,
+        string? peerBinding = null) {
         // ── Per-effect validation ─────────────────────────────
         foreach (var effect in effects) {
-            ValidateEffect(context, effect, action, entity, domain, lookup, currentStage);
+            ValidateEffect(context, effect, action, entity, domain, lookup, currentStage, peerBinding);
         }
     }
 
@@ -467,8 +468,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup,
-        string? currentStage) =>
-        new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage).Route(effect);
+        string? currentStage,
+        string? peerBinding) =>
+        new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage, peerBinding).Route(effect);
 
     /// <summary>
     /// Per-effect validation routed through <see cref="EffectDispatch{TResult}"/>
@@ -483,7 +485,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Entity entity,
         Domain domain,
         DomainTypeLookupMetadata lookup,
-        string? currentStage)
+        string? currentStage,
+        string? peerBinding)
         : EffectDispatch<object?> {
         protected override object? Default() => null;
 
@@ -513,20 +516,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? Assign(AssignEffect e) {
-            ValidateAssign(context, e, action, entity);
+            ValidateAssign(context, e, action, entity, peerBinding);
             return null;
         }
 
         protected override object? Conditional(ConditionalEffect e) {
-            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup, currentStage);
+            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup, currentStage, peerBinding);
             if (e.ElseEffects is not null) {
-                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup, currentStage);
+                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup, currentStage, peerBinding);
             }
             return null;
         }
 
         protected override object? Composite(CompositeEffect e) {
-            ValidateEffects(context, e.Effects, action, entity, domain, lookup, currentStage);
+            ValidateEffects(context, e.Effects, action, entity, domain, lookup, currentStage, peerBinding);
             return null;
         }
     }
@@ -1006,7 +1009,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static IEnumerable<RelationshipNavigation> EnumerateRelationshipNavigations(DomainExpression expr) {
+    internal static IEnumerable<RelationshipNavigation> EnumerateRelationshipNavigations(DomainExpression expr) {
         if (expr is RelationshipNavigation rn)
             yield return rn;
         foreach (var child in expr.Children.OfType<DomainExpression>())
@@ -1215,17 +1218,39 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.EffectCrossEntityMutation);
     }
 
+    private static void ReportPeerBinderMutation(AnalysisContext context, Node node, string peerBinding) =>
+        context.ReportError(
+            node,
+            $"Assign target starts with peer binder '{peerBinding}', the other entity in this when handler. " +
+            "Peer fields are read-only here: use them only on the right-hand side (values, conditions, initializers). " +
+            "Change the peer in its own actions or when blocks.",
+            DomainModelDiagnosticCodes.EffectCrossEntityMutation);
+
     private static void ValidateAssign(
-        AnalysisContext context, AssignEffect ae, Action? action, Entity entity) {
-        // M1: only the owning entity's named behavior mutates its state. Entry, exit and
-        // when blocks count as named behavior (V4 = a). Any other entity changes through
+        AnalysisContext context, AssignEffect ae, Action? action, Entity entity, string? peerBinding) {
+        // Only the owning entity's named behavior mutates its state. Entry, exit and
+        // when blocks count as named behavior. Any other entity changes through
         // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
+        // In a when handler the path can instead start with the peer binder, which cannot be invoked.
         if (ae.Target is RelationshipNavigation nav) {
-            ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
+            if (string.Equals(nav.RelationshipName, peerBinding, StringComparison.Ordinal))
+                ReportPeerBinderMutation(context, ae, nav.RelationshipName);
+            else
+                ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
             return;
         }
 
-        if (ae.Target is not PropertyAccess propAccess) return;
+        // The parser writes only a bare property here. Any other shape comes from a model
+        // built through the API (an owned field, a parameter, a computed value) and cannot be
+        // printed back as the same DSL, so it is an error rather than skipped.
+        if (ae.Target is not PropertyAccess propAccess) {
+            context.ReportError(
+                ae,
+                $"Assign target is not a property of entity '{entity.Name}'. " +
+                "An assign writes one of the entity's own properties by name: 'assign <Property> to <value>'.",
+                DomainModelDiagnosticCodes.EffectBinding);
+            return;
+        }
 
         var targetProp = entity.Properties
             .FirstOrDefault(p => string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));

@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.Tests.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
@@ -413,6 +414,64 @@ public class ParityTests {
     public async Task Differences_WhenStateMemberIsMissingOnOneSide_Reports() {
         var withoutState = Step() with { State = new Dictionary<string, string?>() };
         await AssertDifference(Step(), withoutState, "invoke Close: 'Stage' differs (simulate 'Open', printed '(absent)')");
+    }
+
+    const string QuantifierDsl = """
+        domain Shop
+        Part: entity {
+          Qty: Number
+        }
+        Order: entity {
+          parts: many Part
+          HasAny: policy { any parts where Qty > 0 }
+          HasAll: policy { all parts where Qty > 0 }
+          HasNone: policy { none parts where Qty > 0 }
+          OnePositive: policy { count parts where Qty > 0 is 1 }
+          Tally: Number default(0)
+          CountPositive: action { assign Tally to count parts where Qty > 0 }
+        }
+        """;
+
+    [Test]
+    public async Task Quantifiers_AnyAllNoneAndFilteredCount_Agree() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityQuantifiers")
+            .AssertAgree(side => {
+                var hot = side.Create("Part", ("Qty", 2L));
+                var cold = side.Create("Part", ("Qty", 0L));
+                side.Create("Order", ("parts", new[] { hot, cold }));
+                side.EvaluatePolicy("HasAny");
+                side.EvaluatePolicy("HasAll");
+                side.EvaluatePolicy("HasNone");
+                side.EvaluatePolicy("OnePositive");
+                side.Invoke("CountPositive");
+            });
+        await Assert.That(outcomes[3].State["HasAny"]).IsEqualTo("True");
+        await Assert.That(outcomes[4].State["HasAll"]).IsEqualTo("False");
+        await Assert.That(outcomes[5].State["HasNone"]).IsEqualTo("False");
+        await Assert.That(outcomes[6].State["OnePositive"]).IsEqualTo("True");
+        await Assert.That(outcomes[7].State["Tally"]).IsEqualTo("1");
+    }
+
+    public static IEnumerable<string> SampleDomains() => EmitGoldenTests.SampleDomains();
+
+    [Test]
+    [MethodDataSource(nameof(SampleDomains))]
+    public async Task LoweredTree_HoldsNoConstantOfAnAuthoringExpression(string relativePath) {
+        var (session, domain, analysis) = EmitGoldenTests.AnalyzeSampleFile(relativePath);
+        var module = session.Lower(domain, analysis);
+        var hits = new List<string>();
+        foreach (var type in module)
+            Walk(type, hits);
+        await Assert.That(hits).IsEmpty();
+    }
+
+    static void Walk(Node? node, List<string> hits) {
+        if (node is null)
+            return;
+        if (node is Constant { Value: DomainExpression expr })
+            hits.Add(expr.GetType().Name);
+        foreach (var child in node.Children)
+            Walk(child, hits);
     }
 
     // Probes that are not expected to print compilable C#.

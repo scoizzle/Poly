@@ -58,6 +58,7 @@ public enum DslTokenKind {
     Pattern,
     Enum,
     Equals,
+    Equality,
     Relationship,
     From,
     One,

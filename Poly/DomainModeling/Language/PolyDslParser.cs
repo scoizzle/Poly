@@ -1463,12 +1463,38 @@ public sealed class PolyDslParser : DslCursor {
                 Expect(TokenKind.RParen);
                 return new PatternConstraint(pattern);
 
+            case TokenKind.Equality:
+                Advance();
+                Expect(TokenKind.LParen);
+                object expected = ParseEqualityValue();
+                Expect(TokenKind.RParen);
+                return new EqualityConstraint(expected);
+
             default:
                 return null;
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────
+
+    /// <summary>A literal or identifier inside <c>equals(...)</c>.</summary>
+    private object ParseEqualityValue() {
+        if (Current.Kind is TokenKind.Number or TokenKind.Minus)
+            return ParseNumberBound();
+        if (Current.Kind == TokenKind.StringLiteral) {
+            var text = Current.Text;
+            Advance();
+            return text;
+        }
+        if (Current.Kind == TokenKind.True) { Advance(); return true; }
+        if (Current.Kind == TokenKind.False) { Advance(); return false; }
+        if (Current.Kind == TokenKind.Identifier) {
+            var name = Current.Text;
+            Advance();
+            return name;
+        }
+        throw Error($"Expected a value in equals(...), got '{Current.Text}'.");
+    }
 
     /// <summary>Parses a signed numeric bound for `range(min, max)` — e.g. `-500` or `0.01`.</summary>
     private double ParseNumberBound() {
@@ -1516,7 +1542,7 @@ public sealed class PolyDslParser : DslCursor {
     private static bool IsConstraint(TokenKind kind) => kind switch {
         TokenKind.Required or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
-            or TokenKind.Equals or TokenKind.Enum => true,
+            or TokenKind.Equals or TokenKind.Equality or TokenKind.Enum => true,
         _ => false,
     };
 

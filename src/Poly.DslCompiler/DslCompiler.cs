@@ -49,12 +49,14 @@ public sealed class DslCompiler {
     private readonly List<IArtifactContributor> _extraArtifacts = [];
 
     /// <summary>
-    /// Result of a compilation attempt.
+    /// Result of a compilation attempt. On success, <see cref="Catalog"/> is the catalog
+    /// the files were written from, including contributed text files. Null when compile failed.
     /// </summary>
     public sealed record CompileResult(
         bool Success,
         IReadOnlyList<(string FileName, string Source)>? Files,
-        IReadOnlyList<string>? Errors
+        IReadOnlyList<string>? Errors,
+        ArtifactCatalog? Catalog = null
     );
 
     /// <summary>
@@ -170,10 +172,17 @@ public sealed class DslCompiler {
         var domain = outcome.Root;
         try {
             var files = session.Emit(domain, outcome.Analysis).ToList();
-            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts))
-                foreach (var file in contributor.Contribute(domain, outcome.Analysis))
-                    files.Add(file);
-            return new CompileResult(Success: true, Files: files, Errors: null);
+            var catalog = session.ArtifactCatalog;
+            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
+                foreach (var artifact in contributor.Contribute(domain, outcome.Analysis))
+                    catalog.Register(ContributedFileFrom(contributor, artifact));
+            }
+            foreach (var artifact in catalog.Artifacts) {
+                if (artifact.Descriptor.Id.Type != ContributedFile.Type)
+                    continue;
+                files.Add((ContributedFile.FileName(artifact), ContributedFile.Text(artifact)));
+            }
+            return new CompileResult(Success: true, Files: files, Errors: null, Catalog: catalog);
         }
         catch (Exception ex) {
             return Fail($"Code generation failed: {ex.Message}");
@@ -313,4 +322,19 @@ public sealed class DslCompiler {
 
     private static CompileResult Fail(string message) =>
         new(Success: false, Files: null, Errors: [message]);
+
+    /// <summary>
+    /// The catalog producer is the contributor that was registered, not a name it chose.
+    /// A return that is not a contributed text file fails closed.
+    /// </summary>
+    private static Artifact ContributedFileFrom(IArtifactContributor contributor, Artifact artifact) {
+        ArgumentNullException.ThrowIfNull(contributor);
+        ArgumentNullException.ThrowIfNull(artifact);
+        if (artifact.Descriptor.Id.Type != ContributedFile.Type || artifact.Payload is not string)
+            throw new InvalidOperationException(
+                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a contributed text file.");
+        return new Artifact(
+            new ArtifactDescriptor(artifact.Descriptor.Id, contributor.GetType().Name, artifact.Descriptor.References),
+            artifact.Payload);
+    }
 }

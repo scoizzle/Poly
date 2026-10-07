@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -101,22 +99,6 @@ public class SliceCProducerLoopCatalogTests {
 
     [Test]
     public async Task SliceC_HttpAndPersistence_HostFilesComeFromProducerLoop() {
-        var dslCompilerPath = FindDslCompilerSource();
-        var compilerSource = await File.ReadAllTextAsync(dslCompilerPath);
-        // Load-time registration is required; mid-compile bag invent is forbidden.
-        await Assert.That(compilerSource.Contains(
-            "builder.AddArtifactContributor(new MinimalApiHostArtifactContributor",
-            StringComparison.Ordinal)).IsTrue();
-        await Assert.That(compilerSource.Contains(
-            "builder.AddArtifactContributor(new DbContextArtifactContributor",
-            StringComparison.Ordinal)).IsTrue();
-        await Assert.That(Regex.IsMatch(
-            compilerSource,
-            @"GetMetadata<HttpSurfaceMetadata>[\s\S]{0,400}new MinimalApiHostArtifactContributor")).IsFalse();
-        await Assert.That(Regex.IsMatch(
-            compilerSource,
-            @"GetMetadata<PersistenceSurfaceMetadata>[\s\S]{0,400}new DbContextGenerator")).IsFalse();
-
         var result = new Compiler().Compile(HttpHostDomain, CompileMode.Entities, DbmsPack.Sqlite);
         await Assert.That(result.Success).IsTrue().Because(
             result.Errors is null ? "" : string.Join("; ", result.Errors));
@@ -125,6 +107,20 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(names.Contains("demo.http")).IsTrue();
         await Assert.That(names.Any(n => n.EndsWith("DbContext.cs", StringComparison.Ordinal))).IsTrue();
         await Assert.That(names.Contains("Item.cs")).IsTrue();
+
+        var catalog = result.Catalog!;
+        var http = Contributed(catalog, "demo.http");
+        var db = catalog.Artifacts.Single(a =>
+            a.Descriptor.Id.Type == ContributedFile.Type
+            && ContributedFile.FileName(a).EndsWith("DbContext.cs", StringComparison.Ordinal));
+        await Assert.That(http.Descriptor.Producer).IsEqualTo(nameof(MinimalApiHostArtifactContributor));
+        await Assert.That(db.Descriptor.Producer).IsEqualTo(nameof(DbContextArtifactContributor));
+        await Assert.That(TextFile(result, "demo.http")).IsEqualTo(ContributedFile.Text(http));
+        await Assert.That(TextFile(result, ContributedFile.FileName(db))).IsEqualTo(ContributedFile.Text(db));
+        await Assert.That(TextFile(result, "Program.cs"))
+            .IsEqualTo(ContributedFile.Text(Contributed(catalog, "Program.cs")));
+        await Assert.That(catalog.Artifacts.Any(a =>
+            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == "Item.cs")).IsFalse();
     }
 
     [Test]
@@ -196,7 +192,7 @@ public class SliceCProducerLoopCatalogTests {
         await Assert.That(analysis.GetMetadata<StorageMappingMetadata>(domain)).IsNotNull();
         _ = session.Lower(domain, analysis);
         var files = new MinimalApiHostArtifactContributor().Contribute(domain, analysis);
-        await Assert.That(files.Select(f => f.FileName).ToList()).IsEquivalentTo(["Program.cs", "demo.http"]);
+        await Assert.That(files.Select(ContributedFile.FileName).ToList()).IsEquivalentTo(["Program.cs", "demo.http"]);
     }
 
     [Test]
@@ -220,23 +216,18 @@ public class SliceCProducerLoopCatalogTests {
     private sealed class TrackingContributor : IArtifactContributor {
         public bool Called { get; private set; }
 
-        public IReadOnlyList<(string FileName, string Source)> Contribute(
-            Domain domain, AnalysisResult analysis) {
+        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
             Called = true;
-            return [("track.txt", domain.Name)];
+            return [ContributedFile.Create(domain, "track.txt", domain.Name, nameof(TrackingContributor))];
         }
     }
 
-    private static string FindDslCompilerSource() {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null) {
-            var candidate = Path.Combine(dir.FullName, "src", "Poly.DslCompiler", "DslCompiler.cs");
-            if (File.Exists(candidate))
-                return candidate;
-            dir = dir.Parent;
-        }
-        throw new FileNotFoundException("Could not locate src/Poly.DslCompiler/DslCompiler.cs");
-    }
+    private static Artifact Contributed(ArtifactCatalog catalog, string fileName) =>
+        catalog.Artifacts.Single(a =>
+            a.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(a) == fileName);
+
+    private static string TextFile(Compiler.CompileResult result, string fileName) =>
+        result.Files!.Single(f => f.FileName == fileName).Source;
 
     internal static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);

@@ -1122,7 +1122,7 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         _dbmsOverride = dbms;
     }
 
-    public IReadOnlyList<(string FileName, string Source)> Contribute(Domain domain, AnalysisResult analysis) {
+    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
 
@@ -1150,8 +1150,12 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms);
         var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
         return [
-            ("Program.cs", new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName))),
-            ("demo.http", httpGen.Generate()),
+            ContributedFile.Create(
+                domain,
+                "Program.cs",
+                new CSharpGenerator().Generate(apiGen.GenerateCompilationUnit(dbContextName)),
+                nameof(MinimalApiHostArtifactContributor)),
+            ContributedFile.Create(domain, "demo.http", httpGen.Generate(), nameof(MinimalApiHostArtifactContributor)),
         ];
     }
 

@@ -3,9 +3,14 @@ scaffolding|Clinic|Lower
 source-domain|Clinic|Lower
 entity|Clinic/Doctor|Lower
 source-entity|Clinic/Doctor|Lower
+file|Clinic/Doctor.cs|Emit
 entity|Clinic/Patient|Lower
 source-entity|Clinic/Patient|Lower
+file|Clinic/Patient.cs|Emit
+file|Clinic/Poly.Types.cs|Emit
 entity|Clinic/Schedule|Lower
 source-entity|Clinic/Schedule|Lower
+file|Clinic/Schedule.cs|Emit
 entity|Clinic/Visit|Lower
 source-entity|Clinic/Visit|Lower
+file|Clinic/Visit.cs|Emit

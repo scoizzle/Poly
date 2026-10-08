@@ -3,5 +3,8 @@ scaffolding|SimulateCreateType|Lower
 source-domain|SimulateCreateType|Lower
 entity|SimulateCreateType/Fine|Lower
 source-entity|SimulateCreateType/Fine|Lower
+file|SimulateCreateType/Fine.cs|Emit
 entity|SimulateCreateType/Patron|Lower
 source-entity|SimulateCreateType/Patron|Lower
+file|SimulateCreateType/Patron.cs|Emit
+file|SimulateCreateType/Poly.Types.cs|Emit

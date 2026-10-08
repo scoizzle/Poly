@@ -175,12 +175,17 @@ public sealed class DslCompiler {
             var catalog = session.ArtifactCatalog;
             foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
                 foreach (var artifact in contributor.Contribute(domain, outcome.Analysis))
-                    catalog.Register(ContributedFileFrom(contributor, artifact));
+                    catalog.Register(FromContributor(contributor, artifact));
             }
+            // Emit already returned its files. Appending the catalog copies would duplicate them.
+            var seen = new HashSet<string>(files.Select(f => f.FileName), StringComparer.Ordinal);
             foreach (var artifact in catalog.Artifacts) {
                 if (artifact.Descriptor.Id.Type != ContributedFile.Type)
                     continue;
-                files.Add((ContributedFile.FileName(artifact), ContributedFile.Text(artifact)));
+                var name = ContributedFile.FileName(artifact);
+                if (!seen.Add(name))
+                    continue;
+                files.Add((name, ContributedFile.Text(artifact)));
             }
             return new CompileResult(Success: true, Files: files, Errors: null, Catalog: catalog);
         }
@@ -325,14 +330,17 @@ public sealed class DslCompiler {
 
     /// <summary>
     /// The catalog producer is the contributor that was registered, not a name it chose.
-    /// A return that is not a contributed text file fails closed.
+    /// A return that is not a contributed text file or a generator tree fails closed.
     /// </summary>
-    private static Artifact ContributedFileFrom(IArtifactContributor contributor, Artifact artifact) {
+    private static Artifact FromContributor(IArtifactContributor contributor, Artifact artifact) {
         ArgumentNullException.ThrowIfNull(contributor);
         ArgumentNullException.ThrowIfNull(artifact);
-        if (artifact.Descriptor.Id.Type != ContributedFile.Type || artifact.Payload is not string)
+        var type = artifact.Descriptor.Id.Type;
+        var file = type == ContributedFile.Type && artifact.Payload is string;
+        var tree = type == GeneratedTree.Type && artifact.Payload is CompilationUnitNode;
+        if (!file && !tree)
             throw new InvalidOperationException(
-                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a contributed text file.");
+                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a contributed text file or tree.");
         return new Artifact(
             new ArtifactDescriptor(artifact.Descriptor.Id, contributor.GetType().Name, artifact.Descriptor.References),
             artifact.Payload);

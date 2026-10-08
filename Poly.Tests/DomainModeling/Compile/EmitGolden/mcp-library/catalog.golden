@@ -3,9 +3,14 @@ scaffolding|Library|Lower
 source-domain|Library|Lower
 entity|Library/Book|Lower
 source-entity|Library/Book|Lower
+file|Library/Book.cs|Emit
 entity|Library/Fine|Lower
 source-entity|Library/Fine|Lower
+file|Library/Fine.cs|Emit
 entity|Library/Loan|Lower
 source-entity|Library/Loan|Lower
+file|Library/Loan.cs|Emit
 entity|Library/Patron|Lower
 source-entity|Library/Patron|Lower
+file|Library/Patron.cs|Emit
+file|Library/Poly.Types.cs|Emit

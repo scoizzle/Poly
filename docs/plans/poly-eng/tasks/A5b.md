@@ -1,6 +1,6 @@
 # TASK A5b — Emit files and generator trees registered with references
 
-Status: open. PR 123. Branch `slice/a5b-emit-file-trees` from master `bfe66beb`. Implementation `ddc61616`. Not merged.
+Status: merged. PR 123 squash-merged `7943b5cc` 2026-10-08. Branch `slice/a5b-emit-file-trees` from master `bfe66beb`. Implementation `ddc61616`.
 
 Lane A. Review 2. Not on the V11 standing-merge list (decisions file: Scot hand-merges A5b). Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../../domain-modeling/pipeline-convergence-plan.md) **A5b**. Depends on A5a (merged `bfe66beb`). Does not touch PR 110 (C1a).
 
@@ -29,3 +29,4 @@ Hand-edit: yes. The print sites still call `CSharpGenerator` on the same tree th
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-07 | implementer | Grok | `ddc61616` | PR 123 filed | filtered tests 150 passed, 0 failed. Printed `*.cs.golden` and `demo.http.golden` unchanged. `catalog.golden` lists Emit file rows. https://github.com/scoizzle/Poly/pull/123 |
+| 2026-10-08 | Scot | — | `7943b5cc` | merged | PR 123 squash-merged to master. C9 dependency unblocked. |

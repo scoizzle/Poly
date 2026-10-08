@@ -1,11 +1,11 @@
 # Pack host — Fleet queue (`pack-*`)
 
-**Parent:** [`../pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Parent:** [`../pack-host-2026-08-13.md`](pack-host-2026-08-13.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md` (core-only until 3a)  
 **Sequence:** DSL Grammar → pack surface → built-in packs  
 
-**Status:** Parked — not CURRENT. Phase 1 shipped; extension model superseded. Authority: [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
+**Status:** Parked — not CURRENT. Phase 1 shipped; extension model superseded. Authority: [`board.md`](../../poly-eng/board.md).
 
 ---
 

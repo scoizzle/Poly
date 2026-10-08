@@ -7,7 +7,7 @@
 **Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../../../Poly.Tests/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
 **Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
 **Platform:** [`docs/CORE.md`](../../../CORE.md) — Grammar owns pattern-table engine; DomainModeling owns domain DSL until this plan lands  
-**Related:** temporal research [`p1-temporal-research.md`](../../p1-temporal-research.md) · absorption [`domain-dsl-absorption-proposals.md`](../../domain-dsl-absorption-proposals.md) · decomposition [`domainmodeling-decomposition-proposal.md`](domainmodeling-decomposition-proposal.md)
+**Related:** temporal research [`p1-temporal-research.md`](../../parked/p1/p1-temporal-research.md) · absorption [`domain-dsl-absorption-proposals.md`](../../parked/domain-dsl-absorption-proposals.md) · decomposition [`domainmodeling-decomposition-proposal.md`](domainmodeling-decomposition-proposal.md)
 
 ---
 

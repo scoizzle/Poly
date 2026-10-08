@@ -7,7 +7,7 @@
 - [`docs/plans/archive/interpretation/`](README.md) — **archived** INT/ANA trackers and µop-era plans (do not execute)
 - [`docs/decisions/`](../../../decisions/) (ADRs)
 - [`Poly/Interpretation/README.md`](../../../../Poly/Interpretation/README.md) (module map — **current pipeline**)
-- [`docs/plans/v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) (active product plans)
+- [`docs/plans/v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) (active product plans)
 
 ---
 

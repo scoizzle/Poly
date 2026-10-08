@@ -79,7 +79,7 @@ Oracle strength: large TUnit surface including new P4 goldens and analysis tests
 
 ### Issue 10 -- Severity: nit
 
-- **File:** Dogfood reports untracked under `docs/plans/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S*-20260806.*`
+- **File:** Dogfood reports untracked under `docs/plans/archive/v2-to-v3/agent-summaries/dogfood/DOGFOOD-S*-20260806.*`
 - **Description:** Pipeline claims dogfood done; reports exist untracked — fine if intentional; ensure fix G-S6-1 is reflected in dogfood-fix-README status.
 - **Suggestion:** Commit reports with code or ignore policy explicit.
 - **Status:** open

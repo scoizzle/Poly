@@ -3,7 +3,7 @@
 **Future state (acceptance target):** [`../domain-analysis-future-state.md`](../domain-analysis-future-state.md)  
 **Present inventory / cutovers:** [`../domain-analysis-simplification.md`](../domain-analysis-simplification.md)  
 **CORE:** [`../../CORE.md`](../../../../CORE.md)  
-**Gate process:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Gate process:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Suite gate:** [`./das-gate.md`](./das-gate.md)  
 **Related:** DACR residual fallbacks (`dacr-*`); DAU product complete (`dau-*`)
 

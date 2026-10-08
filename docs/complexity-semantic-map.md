@@ -3,7 +3,7 @@
 **Date:** 2026-08-08  
 **Purpose:** Tour every major facet of the platform as a **semantic statement** (what it *is*, not which pattern it uses), then locate where **complexity demons** concentrate.  
 **Audience:** Humans and agents prioritizing simplification vs feature work.  
-**Authority for CURRENT work:** [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md)  
+**Authority for CURRENT work:** [`plans/poly-eng/board.md`](plans/poly-eng/board.md)  
 **Authority for machinery:** [`CORE.md`](CORE.md)  
 
 This is a **map**, not a suite. Update when a facet is deleted, merged, or materially changes meaning.
@@ -366,7 +366,7 @@ Use this as a kill/keep board:
 | [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) | Token/exception re-vision lock (D17) |
 | [`plans/dsl-delta-fragments.md`](plans/archive/completed-2026-08-late/dsl-delta-fragments.md) | Fragment authoring design (D7 consolidation — MCP `add`/`remove` retirement) |
 | [`plans/grammar-pure-end-state.md`](plans/archive/completed-2026-08-late/grammar-pure-end-state.md) | Pure Grammar product direction |
-| [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) | CURRENT admit |
+| [`plans/poly-eng/board.md`](plans/poly-eng/board.md) | CURRENT admit |
 | [`Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) | Product DSL surface |
 | [`agent/reviews/2026-08-08-long-term-growth-review.md`](agent/reviews/2026-08-08-long-term-growth-review.md) | Full-project growth review (demons → roadmap) |
 

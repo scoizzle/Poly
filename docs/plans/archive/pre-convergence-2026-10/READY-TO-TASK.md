@@ -1,0 +1,7 @@
+# Ready to task
+
+Admission is [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md) only.
+
+Open the file `CURRENT` names; if it is `(none)`, the `THEN` line names the only file to open. Parked READMEs under [`../parked/`](../../parked/README.md) and archived suites under [`../archive/`](../) are not queues.
+
+A new suite is a `*-README.md` plus tasks, admitted by editing `PIPELINE-STATUS.md` in the same change. There is no suite-key table.

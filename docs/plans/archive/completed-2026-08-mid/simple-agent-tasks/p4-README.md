@@ -1,10 +1,10 @@
 # Subscription quantifiers authoring — Agent Queue (`p4-*`)
 
-**Parent:** [`../domain-dsl-absorption-proposals.md`](../../../domain-dsl-absorption-proposals.md) § P4  
+**Parent:** [`../domain-dsl-absorption-proposals.md`](../../../parked/domain-dsl-absorption-proposals.md) § P4  
 **Orientation:** [`../domainmodeling-cohesion-and-metadata-findings.md`](../domainmodeling-cohesion-and-metadata-findings.md)  
 **Product guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`  
 **Gate:** [`p4-gate.md`](./p4-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
 **Status:** **DONE** — 2026-08-06 (p4-0 … p4-4 + gate; see [`p4-gate.md`](./p4-gate.md)).
 

@@ -10,7 +10,7 @@ Prove CURRENT create/create-in is done: simulate = Interpreter + bound Store + d
 
 ## Exact steps
 
-1. Run the [uncommitted-change review gate](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). All 🔴🟠 resolved.
+1. Run the [uncommitted-change review gate](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). All 🔴🟠 resolved.
 2. Grep fail-closed:
    - `ExecuteStructured` — gone
    - `CreateByType` / `CreateInNav` / `ProbeCreateByType` — not shipped meaning

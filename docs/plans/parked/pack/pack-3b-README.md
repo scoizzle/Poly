@@ -1,6 +1,6 @@
 # pack-3b — InternalDomain producer
 
-**Parent:** [`../pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md) phase 3b · [`../contract-subdomain-2026-08-13.md`](../../archive/completed-2026-08-late/contract-subdomain-2026-08-13.md)  
+**Parent:** [`../pack-host-2026-08-13.md`](pack-host-2026-08-13.md) phase 3b · [`../contract-subdomain-2026-08-13.md`](../../archive/completed-2026-08-late/contract-subdomain-2026-08-13.md)  
 **Fleet:** [`pack-README.md`](./pack-README.md)  
 **Gate:** [`pack-3b-gate.md`](./pack-3b-gate.md)  
 **Prereq:** p1-gate `[x]` (phase 3a)

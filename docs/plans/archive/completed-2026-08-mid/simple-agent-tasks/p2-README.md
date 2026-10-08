@@ -1,9 +1,9 @@
 # Multi-hop path-prefix — Agent Queue (`p2-*`)
 
-**Parent:** [`../domain-dsl-absorption-proposals.md`](../../../domain-dsl-absorption-proposals.md) § P2  
+**Parent:** [`../domain-dsl-absorption-proposals.md`](../../../parked/domain-dsl-absorption-proposals.md) § P2  
 **Orientation:** findings + product guide  
 **Gate:** [`p2-gate.md`](./p2-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 
 **Status:** **DONE** 2026-08-06 — multi-hop to-one path-prefix parse + preprocess + analysis + goldens + guide.
 

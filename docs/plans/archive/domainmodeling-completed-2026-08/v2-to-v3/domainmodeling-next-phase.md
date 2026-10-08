@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (final — P2′′′′′′ shipped; suite **1323**)  
 **Status:** Phase 2 product vertical **complete** (main `12f2926`; residual ready to commit)  
-**Current pick:** Phase 2 + RT + SA + E1 + Q1′/Q3′ **complete** — historical plan. Day-to-day: [`master-roadmap.md`](../../../v2-to-v3/master-roadmap.md) · dogfood · effect pull.  
+**Current pick:** Phase 2 + RT + SA + E1 + Q1′/Q3′ **complete** — historical plan. Day-to-day: [`master-roadmap.md`](../../v2-to-v3/master-roadmap.md) · dogfood · effect pull.  
 
 **Predecessor:** Phase 1a product-complete ([`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md)); BR.4.4 (`8f46f05`); MR/MR′; N2 dropped  
 **Related:** [`dsl-phase1a-grammar.md`](dsl-phase1a-grammar.md), [`mcp-tool-surface-expansion.md`](../../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) (§0 MCP remaining), [`docs/CORE.md`](../../../../CORE.md), AGENTS.md principles  
@@ -63,7 +63,7 @@ Phase 3 MCP               Oracle / visibility backlog          [see mcp-tool-sur
 
 **Phase 2 main shipped (`12f2926`).** Full residual (flat stages + runtime + MCP honesty) is **green — only open action is commit**.
 
-Phase 3 + Runtime MCP + SA MVP **shipped**. Effect IR is richer than product DSL/MCP authoring — track: [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md). MCP residuals: [`mcp-phase3-oracle-surface.md`](../../completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md).
+Phase 3 + Runtime MCP + SA MVP **shipped**. Effect IR is richer than product DSL/MCP authoring — track: [`effect-surface-completeness.md`](../../v2-to-v3/effect-surface-completeness.md). MCP residuals: [`mcp-phase3-oracle-surface.md`](../../completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md).
 
 ---
 
@@ -73,7 +73,7 @@ Phase 3 + Runtime MCP + SA MVP **shipped**. Effect IR is richer than product DSL
 
 - [x] This document is the Phase 2 living plan.
 - [x] Point [`dsl-sync-toward-phase1.md`](dsl-sync-toward-phase1.md) pick order at Phase 2 / P2.1.
-- [x] [`master-roadmap.md`](../../../v2-to-v3/master-roadmap.md) “What next” points at Phase 2 (dup heading residual → P2′′′.5).
+- [x] [`master-roadmap.md`](../../v2-to-v3/master-roadmap.md) “What next” points at Phase 2 (dup heading residual → P2′′′.5).
 
 **Exit:** Agents pick **commit residual** (breaking: Stage.Parent), then dogfood.
 

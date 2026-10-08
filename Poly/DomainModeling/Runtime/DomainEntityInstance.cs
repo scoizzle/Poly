@@ -946,66 +946,10 @@ public sealed partial record DomainEntityInstance {
         // Body Parameter nodes are name-only; swap in the method's typed Parameters
         // so analysis resolves them. Still Parameter nodes — not Member(this, name).
         var rootParameters = method.Parameters ?? [];
-        if (rootParameters.Count > 0) {
-            var typed = rootParameters.ToDictionary(p => p.Name, StringComparer.Ordinal);
-            body = SubstituteTypedParameters(body, typed);
-        }
-        return (BindForSimulate(body), rootParameters);
-    }
-
-    private static Node SubstituteTypedParameters(
-        Node node, IReadOnlyDictionary<string, Parameter> typed) {
-        Node Recurse(Node n) => SubstituteTypedParameters(n, typed);
-        return node switch {
-            Parameter p when typed.TryGetValue(p.Name, out var replacement) => replacement,
-            Block b => new Block(b.Nodes.Select(Recurse), b.Variables.Select(Recurse)),
-            IfStatement i => new IfStatement(
-                Recurse(i.Condition), Recurse(i.ThenBranch),
-                i.ElseBranch is null ? null : Recurse(i.ElseBranch)),
-            Return r => r.Value is null ? r : new Return(Recurse(r.Value)),
-            Assignment a => new Assignment(Recurse(a.Destination), Recurse(a.Value)),
-            Invoke inv => new Invoke(
-                Recurse(inv.Delegate), [.. inv.Arguments.Select(Recurse)]) {
-                TypeArguments = inv.TypeArguments
-            },
-            Member m => new Member(Recurse(m.Value), m.MemberName),
-            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(Recurse(n.Value)),
-            Equal e => new Equal(Recurse(e.LeftHandValue), Recurse(e.RightHandValue)),
-            NotEqual ne => new NotEqual(Recurse(ne.LeftHandValue), Recurse(ne.RightHandValue)),
-            LessThan lt => new LessThan(Recurse(lt.LeftHandValue), Recurse(lt.RightHandValue)),
-            LessThanOrEqual le => new LessThanOrEqual(Recurse(le.LeftHandValue), Recurse(le.RightHandValue)),
-            GreaterThan gt => new GreaterThan(Recurse(gt.LeftHandValue), Recurse(gt.RightHandValue)),
-            GreaterThanOrEqual ge => new GreaterThanOrEqual(Recurse(ge.LeftHandValue), Recurse(ge.RightHandValue)),
-            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(Recurse(add.LeftHandValue), Recurse(add.RightHandValue)),
-            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(Recurse(sub.LeftHandValue), Recurse(sub.RightHandValue)),
-            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(Recurse(mul.LeftHandValue), Recurse(mul.RightHandValue)),
-            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(Recurse(div.LeftHandValue), Recurse(div.RightHandValue)),
-            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(Recurse(and.LeftHandValue), Recurse(and.RightHandValue)),
-            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(Recurse(or.LeftHandValue), Recurse(or.RightHandValue)),
-            Coalesce c => new Coalesce(Recurse(c.LeftHandValue), Recurse(c.RightHandValue)),
-            TypeCast tc => new TypeCast(Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
-            New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
-            ThrowStatement ts => new ThrowStatement(Recurse(ts.Exception)),
-            TryCatchFinally tf => new TryCatchFinally(
-                Recurse(tf.TryBlock),
-                tf.CatchClauses?.Select(cc => cc with {
-                    ExceptionType = cc.ExceptionType is null ? null : Recurse(cc.ExceptionType),
-                    Body = Recurse(cc.Body)
-                }).ToList(),
-                tf.FinallyBlock is null ? null : Recurse(tf.FinallyBlock)),
-            ForEachLoop f => new ForEachLoop(
-                f.LoopVariable, Recurse(f.Collection), Recurse(f.Body), f.Label),
-            ContinueStatement or BreakStatement => node,
-            LabelDeclaration ld => new LabelDeclaration(ld.Name, Recurse(ld.Statement)),
-            Conditional cond => new Conditional(
-                Recurse(cond.Condition), Recurse(cond.IfTrue), Recurse(cond.IfFalse)),
-            UnaryMinus um => new UnaryMinus(Recurse(um.Operand)),
-            NullForgiving nf => new NullForgiving(Recurse(nf.Operand)),
-            ThisReference or Parameter or Variable or Constant
-                or TypeReference or NamedTypeReference or PrimitiveTypeReference
-                or ClrTypeReference => node,
-            _ => node
-        };
+        IReadOnlyDictionary<string, Parameter>? typed = rootParameters.Count > 0
+            ? rootParameters.ToDictionary(p => p.Name, StringComparer.Ordinal)
+            : null;
+        return (BindForSimulate(body, typed), rootParameters);
     }
 
     /// <summary>
@@ -1025,10 +969,14 @@ public sealed partial record DomainEntityInstance {
     /// </item>
     /// </list>
     /// Action parameters and <c>previousStage</c> are real SetArgs slots (C1a);
-    /// this bind no longer rewrites them.
+    /// this bind no longer rewrites them to bag members. Name-only Parameter
+    /// nodes become the method's typed Parameter when
+    /// <paramref name="typedParameters"/> is supplied.
     /// </summary>
-    private Node BindForSimulate(Node node) {
-        Node Recurse(Node n) => BindForSimulate(n);
+    private Node BindForSimulate(
+        Node node,
+        IReadOnlyDictionary<string, Parameter>? typedParameters = null) {
+        Node Recurse(Node n) => BindForSimulate(n, typedParameters);
         return node switch {
             Block b => new Block(
                 b.Nodes.Select(Recurse),
@@ -1092,6 +1040,8 @@ public sealed partial record DomainEntityInstance {
                 Recurse(cond.Condition), Recurse(cond.IfTrue), Recurse(cond.IfFalse)),
             UnaryMinus um => new UnaryMinus(Recurse(um.Operand)),
             NullForgiving nf => new NullForgiving(Recurse(nf.Operand)),
+            Parameter p when typedParameters is not null
+                && typedParameters.TryGetValue(p.Name, out var typed) => typed,
             ThisReference or Parameter or Variable or Constant
                 or NamedTypeReference or TypeReference
                 or PrimitiveTypeReference or ClrTypeReference => node,

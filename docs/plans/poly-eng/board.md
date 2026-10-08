@@ -38,6 +38,7 @@ Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../domain-modelin
 |-----------|-----|-------------|---------------|
 | **PR 113 review** (post-merge) misc: shrink agent surface, fail closed on dirty lower | merged `f398616e` (diff `2e70e477..f398616e`, 184 files) | top / Razor (OpenCode) then 100x | Scot merged unreviewed 2026-10-05. Razor post-merge review, findings in one table. Then 100x lands all fixes as one PR → Final Boss → merge. Everyone adopts 113 as baseline (short get_dsl_guide + section 12; PIPELINE-STATUS.md only CURRENT; Lower/Emit throw on analysis errors). Task [tasks/PR113-review.md](tasks/PR113-review.md). |
 | **PR 110** C1a root program parameters https://github.com/scoizzle/Poly/pull/110 | `d7b6b9a1` | B / 100x | CI red, BLOCKED. Rebases onto master after the 113 fixes land, then Razor → FB. Task [tasks/C1a.md](tasks/C1a.md). |
+| **C9** generators stop asking for the module | — | A / Grok (review OpenCode) | In flight. Task [tasks/C9.md](tasks/C9.md). Depends on A5b (merged `7943b5cc`). |
 
 Merged this wave: T0 bde1f7c5, A1 8e5ef81b, A2a 08eda8eb, A2b 16403b60, T2 afa246c2 (Scot), K1 7fb4b2a2 (PR 90), H1 47220d4f (PR 92), C4a dac9a6a8 (PR 91, Scot hand-merge). Plan status line fixes: H1 fixed by PR 93; C4a fixed in the C0 PR.
 Open nits to fold into a later docs slice: F180-F183 (K1), F210-F212 (H1; F212 K6 text says TryAnalyzeForEmit returns null on failure but code returns null only for empty module), F170-F175 (C4a; F174 add equality-on-assign note to C4c card). C8d done-when must include MapModuleRequireFailure mapping.
@@ -50,6 +51,7 @@ Open nits to fold into a later docs slice: F180-F183 (K1), F210-F212 (H1; F212 K
 
 ## Merged recently
 
+- 2026-10-08: #123 A5b register each printed file with a typed reference to its tree `7943b5cc` ([task](tasks/A5b.md)).
 - 2026-10-06 (squash-merged, CDT): #114 poly-eng board and task files in the repo `b480caaa` 06:32 (Final Boss SHIP `1926692c`); #116 F304 `0257a06f` 06:44 ([task](tasks/F304.md)); #115 F380 `dc281be7` 06:49 ([task](tasks/F380.md)).
 - 2026-10-05 (all squash-merged by Scot, CDT): #113 misc shrink agent surface `f398616e` 08:32 (unreviewed → post-merge review 2026-10-06); #106 N4 `9178b9de` 09:30; #105 A3b `331e4888` 09:37; #108 G1 `97652cfe` 09:40 ([task](tasks/G1.md)); #112 NU1903 `b57bbc27` 09:42 ([task](tasks/NU1903.md)); #111 A4 `3f5a7617` 09:45 ([task](tasks/A4.md)); #104 C4e `36471155` 09:51; #101 F292/F293 `11287134` 09:56 ([task](tasks/F292-rework.md)). Earlier same day: #109 B1c `e9e24a67` ([task](tasks/B1c-F291.md)); #103 M1 `2e70e477` (F380 follow-up merged as #115 on 2026-10-06); #107 N7 `56a16ab4`; #102 B1b `dc7029d8`.
 - 2026-10-04/05 merged rows moved off the open-lanes table: A3a PR 95 `89098229` (goldens byte-identical; F263 later answered by N5); T1 PR 98 `dd7d4204` (10 residuals carried: G1/G3/redesign/gap/N6); N6 PR 100 `bac2e8d5` (Text+Text analyzer); N5 PR 99 `bc7dfe42` (MCP add names match DSL); K0 PR 96 `2b3bdd64`; B1 PR 97 `076a9014`.

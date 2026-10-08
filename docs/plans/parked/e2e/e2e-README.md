@@ -1,8 +1,8 @@
 # DomainModeling e2e representation — Fleet queue (`e2e-*`)
 
-**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](../../domainmodeling-e2e-representation-2026-08-13.md)  
-**Probe IDs:** [`../fleet-eval-fixes-2026-08-12.md`](../../fleet-eval-fixes-2026-08-12.md) — reuse those IDs; do not invent a second numbering.  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md)  
+**Probe IDs:** [`../fleet-eval-fixes-2026-08-12.md`](../../archive/pre-convergence-2026-10/fleet-eval-fixes-2026-08-12.md) — reuse those IDs; do not invent a second numbering.  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`  
 **Not CURRENT.** This pack is **parked**. A human admits **one slice README** (or one wave) at a time via [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). This file exists so a fleet can be assigned without two agents editing the same hot file.
 

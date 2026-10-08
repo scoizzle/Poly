@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-04  
 **Status:** P1–P6 executed 2026-09-04. **Not CURRENT, not a suite.**  
-**Frozen:** [`docs/CORE.md`](../CORE.md) §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`AGENTS.md`](../../AGENTS.md) **Frozen core**
+**Frozen:** [`docs/CORE.md`](../../../CORE.md) §0 · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../../../decisions/2026-09-04-frozen-core-pipeline.md) · [`AGENTS.md`](../../../../AGENTS.md) **Frozen core**
 
 P1–P6 landed on the product path (`session.Lower`, one Create/CreateIn/EnsureUnique tree, compile-once action bodies, HTTP fail-closed against the module, analysis cache binds the authoring session, clocks in the tree). Still **not CURRENT** — do not invent a second CURRENT.
 

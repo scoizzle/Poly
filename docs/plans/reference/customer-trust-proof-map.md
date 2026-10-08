@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-07  
 **Status:** Design lock / living index — **not** an implementation suite  
-**Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
-**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) · index [`README.md`](README.md)
+**Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
+**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](../archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) · index [`README.md`](../README.md)
 
 ---
 
@@ -71,7 +71,7 @@ Status legend: **Green** = evidence in tree · **Yellow** = partial / known gap 
 | Claim | Gate | Proof instrument | Where (pointer) | Status |
 |-------|------|------------------|-----------------|--------|
 | Tool descriptions match behavior | T1 | Guide smoke + tool tests | `GetDslGuide_ReturnsProductSurface`; MCP tool honesty | **Yellow** — enforce on every tool change |
-| Session mutations do not silently lose concurrent writes | T1 | Revision / lock tests | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | **Red** — known race; fix before multi-agent design partners |
+| Session mutations do not silently lose concurrent writes | T1 | Revision / lock tests | [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) | **Red** — known race; fix before multi-agent design partners |
 | Rollback / conflict is diagnosable | T1 | Payload tests | Same plan | **Red** / proposal |
 | MCP does not claim unshipped domain capability | T1 | Honesty review | CORE: MCP must not claim core lacks | **Yellow** — process + tests |
 | MCP expressions are product DSL only (no JSON IR bags) | T1 | Grep + fragment tests | `mcp-minify` suite: zero `DomainExpressionJsonParser`; `DslExpressionFragmentTests` | **Green** (mcp-minify 2026-08-08) |

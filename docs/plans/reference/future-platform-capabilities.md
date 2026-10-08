@@ -8,9 +8,9 @@
 
 These are capabilities the platform will need as it matures beyond the compiler pipeline and into a usable product. They're recorded here to avoid losing them, not because they're urgent.
 
-**Domain DSL/plugins:** Experimental research plan for extension packs (facets like `column("…")`, target exporters) lives in [`docs/plans/archive/experiments/domain-plugin-extension-platform.md`](archive/experiments/domain-plugin-extension-platform.md) — research later, not an execution queue.
+**Domain DSL/plugins:** Experimental research plan for extension packs (facets like `column("…")`, target exporters) lives in [`docs/plans/archive/experiments/domain-plugin-extension-platform.md`](../archive/experiments/domain-plugin-extension-platform.md) — research later, not an execution queue.
 
-**Ship forms (post–Phase 3 product packaging):** Beyond C#/DLL artifacts, customers may primarily want **OCI container images from a registry** (pull-and-run) rather than orchestrating builds themselves. Ladder and notes: [`v2-to-v3/mcp-phase3-oracle-surface.md`](archive/completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md) §6d **L8**. Not current work.
+**Ship forms (post–Phase 3 product packaging):** Beyond C#/DLL artifacts, customers may primarily want **OCI container images from a registry** (pull-and-run) rather than orchestrating builds themselves. Ladder and notes: [`v2-to-v3/mcp-phase3-oracle-surface.md`](../archive/completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md) §6d **L8**. Not current work.
 
 ## 1. Onboarding Path
 

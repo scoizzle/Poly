@@ -6,9 +6,9 @@
 **Priority note (2026-08-04):** **P1 dates / temporal pack is not the preferred next ship.** Prefer dogfood of shipped SPE / peer / exists first; unpark P1 only when a real scenario forces temporal authoring.  
 **Unpark when:** Explicitly admit **one** P* (or a thin vertical that is only that P*) as the sole current suite; create `simple-agent-tasks/*` then.  
 **Do not:** start P1–P5 in parallel, treat dates as default CURRENT, re-open grammar re-base as a prerequisite, or treat this doc as CURRENT work.  
-**Source experiment:** [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](archive/experiments/DOMAIN-DSL-SPEC.md)  
-**Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
-**Related:** [`CORE.md`](../CORE.md) · [`2026-06-08-domain-lowering-boundary.md`](../decisions/2026-06-08-domain-lowering-boundary.md) · [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md) · [`2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`](../decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md) · SPE suite (complete) · store-aware `Rel exists` (shipped)
+**Source experiment:** [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](../archive/experiments/DOMAIN-DSL-SPEC.md)  
+**Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
+**Related:** [`CORE.md`](../../CORE.md) · [`2026-06-08-domain-lowering-boundary.md`](../../decisions/2026-06-08-domain-lowering-boundary.md) · [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](../../decisions/2026-07-22-persistence-units-medium-facets-pack-syntax-export.md) · [`2026-06-phase4-dynamic-calculation-and-readonly-navigation.md`](../../decisions/2026-06-phase4-dynamic-calculation-and-readonly-navigation.md) · SPE suite (complete) · store-aware `Rel exists` (shipped)
 
 ---
 
@@ -179,10 +179,10 @@ Parse remains pack-agnostic for open forms:
 
 | ID | Spec idea | Recommend | Style | Priority |
 |----|-----------|-----------|-------|----------|
-| **P1** | Dates / time arithmetic & compare | **Research only** — [`p1-temporal-research.md`](p1-temporal-research.md); no implement suite yet | D (pack) + C lower + B policies | Parked concept |
-| **P2** | Multi-hop path-prefix | **Absorb** — suite: [`simple-agent-tasks/p2-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) (after p3) | B then C for assign RHS if needed | **THEN** after P3 |
-| **P3** | Action return types honesty | **Harden existing** — not CURRENT (no live `p3-README.md`; authority [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md)) | A+C + analysis | Parked |
-| **P4** | `when any/all Rel Stage` | **Absorb** — suite ready: [`simple-agent-tasks/p4-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p4-README.md) | A + existing store dispatch | P1 |
+| **P1** | Dates / time arithmetic & compare | **Research only** — [`p1-temporal-research.md`](p1/p1-temporal-research.md); no implement suite yet | D (pack) + C lower + B policies | Parked concept |
+| **P2** | Multi-hop path-prefix | **Absorb** — suite: [`simple-agent-tasks/p2-README.md`](../archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) (after p3) | B then C for assign RHS if needed | **THEN** after P3 |
+| **P3** | Action return types honesty | **Harden existing** — not CURRENT (no live `p3-README.md`; authority [`simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md)) | A+C + analysis | Parked |
+| **P4** | `when any/all Rel Stage` | **Absorb** — suite ready: [`simple-agent-tasks/p4-README.md`](../archive/completed-2026-08-mid/simple-agent-tasks/p4-README.md) | A + existing store dispatch | P1 |
 | **P5** | Comment round-trip | **Absorb (thin)** | A only | P2 cheap |
 | **P6** | Actor + `actor` in policies | **Defer** until host identity | E + thin A | P2+ |
 | **P7** | `policy external` | **Defer** until resolver consumer | E + A | P2+ |

@@ -1,10 +1,10 @@
 # Simulate the lowered program (create/create-in remaining)
 
 **Date:** 2026-09-03  
-**Status:** DONE — simulate = Interpreter + bound Store. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).  
-**Suite README:** [`simple-agent-tasks/create-create-in-README.md`](archive/completed-2026-09/create-create-in-README.md)  
-**Language lock:** [`decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
-**Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Status:** DONE — simulate = Interpreter + bound Store. Authority: [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).  
+**Suite README:** [`simple-agent-tasks/create-create-in-README.md`](../completed-2026-09/create-create-in-README.md)  
+**Language lock:** [`decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../../../decisions/2026-09-03-facts-concerns-bags-store-bind.md)  
+**Pre-ship:** [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 Do not invent a second CURRENT. Unique Store bind already shipped on this stream. This plan is the rest of create/create-in: simulation must run the implementation lowering already produced.
 

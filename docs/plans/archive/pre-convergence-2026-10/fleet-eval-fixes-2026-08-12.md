@@ -1,6 +1,6 @@
 # Plan: Fleet-evaluation fixes — 2026-08-12
 
-**Date:** 2026-08-12 · **Status:** approved for execution (probe checklist). Representation sequence + what was absorbed vs left here: [`domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md). Do not admit both as CURRENT for the same files.
+**Date:** 2026-08-12 · **Status:** approved for execution (probe checklist). Representation sequence + what was absorbed vs left here: [`domainmodeling-e2e-representation-2026-08-13.md`](../../parked/e2e/domainmodeling-e2e-representation-2026-08-13.md). Do not admit both as CURRENT for the same files.
 **Source:** `docs/plans/archive/probes-2026-08/findings/fleet-eval/coordinator.md` (15 slice agents, read-only, five lenses:
 quality / consistency / product / security / reliability). Findings per slice:
 `docs/plans/archive/probes-2026-08/findings/fleet-eval/<slice>.md`. Historical probes: `docs/plans/archive/probes-2026-08/fleet-eval/<slice>/`. Live oracles: `docs/probes/`.

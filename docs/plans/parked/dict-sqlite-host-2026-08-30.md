@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-30  
 **Status:** Proposal — not CURRENT, not a suite  
-**Related:** [`docs/CORE.md`](../CORE.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md)
+**Related:** [`docs/CORE.md`](../../CORE.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../decisions/2026-08-15-domain-library-extensions-mcp-harness.md)
 
 The architecture we want is: VM runs Syntax; `This` is a dictionary; SQLite is the store; host ABI is tiny. That would be a better situation.
 

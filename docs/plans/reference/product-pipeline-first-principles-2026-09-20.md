@@ -1,13 +1,13 @@
 # Product pipeline — first principles (for Scot)
 
 **Date:** 2026-09-20
-**Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).
+**Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change [`simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
 **SHA:** `934b2409` (merge of [PR 71](https://github.com/scoizzle/Poly/pull/71); tip includes PR 68–71 analysis FailFast / snapshot / `HasErrors`)
 **Open PR out of scope:** [PR 72](https://github.com/scoizzle/Poly/pull/72) `refactor/domainmodeling-core-library-seams` — library extract (Temporal out of the core list, registration-order schedule). **Do not block. Do not review. Do not rebase this note onto it.**
 **Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Not a candidate in this note. Do not unpark. Do not mill Hotel occupancy in DEI. **PR 73** stays PARKED — do not touch, review, or unpark from this file.
 **Audience:** Scot
 **North star:** a domain is a library of legal operations that lowers to one Syntax module. **Simulation = Interpreter executing that real lowered tree** — not DEI, Effect-IR, or any fake runtime. Artifact producers deliver host call-sites; they are not simulate.
-**Hard lines:** [`docs/CORE.md`](../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](../decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../decisions/2026-09-03-facts-concerns-bags-store-bind.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) · [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](../decisions/2026-06-08-vm-as-canonical-semantics.md)
+**Hard lines:** [`docs/CORE.md`](../../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](../../decisions/2026-09-05-lowered-module-is-domain-meaning.md) · [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](../../decisions/2026-09-03-facts-concerns-bags-store-bind.md) · [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/decisions/2026-08-14-domain-libraries.md`](../../decisions/2026-08-14-domain-libraries.md) · [`docs/decisions/2026-06-08-vm-as-canonical-semantics.md`](../../decisions/2026-06-08-vm-as-canonical-semantics.md)
 
 This note does not implement C#, does not delete code, does not change PIPELINE-STATUS, and is not a CURRENT suite. Salvage / cut / reset of DomainModeling is not chosen *here*. Path-forward is unlocked as a **Session Compile** proposal in [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) — **not CURRENT**, slices unapproved, Eng WIP = 0. Item 5 stays PARKED.
 
@@ -300,7 +300,7 @@ What the prior tip (`2e430348`) understated, and what this amend still leaves th
 | **Item 5** Occupancy / `BusySections` | **PARKED.** |
 | **Cycles / DAG / layers / nested `uses` / fail-closed on those** | **Still thin.** §9 states the composition rule in English and the http/grpc/transport picture. It does not specify whether library-uses-library is a DAG, how layers work, whether nested `uses` is allowed in a `.poly` file, or what fails closed on a cycle or illegal graph. The example is not that spec. Do not mill it here. |
 | **PR 72** library extract | Independent; not reviewed here. |
-| **Half-state of emit** | Frozen story is “producers after clean analyze.” Reality still mixes core entity emit, bag-gated DbContext, and library/host contributors (and historical compiler-mode host registration). Naming the principle does not finish unifying emit into one producer loop. Inventory: [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md). |
+| **Half-state of emit** | Frozen story is “producers after clean analyze.” Reality still mixes core entity emit, bag-gated DbContext, and library/host contributors (and historical compiler-mode host registration). Naming the principle does not finish unifying emit into one producer loop. Inventory: [`domainmodeling-metadata-artifact-catalog-2026-08-15.md`](../archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md). |
 | **Residual dual-path debt** (runtime vs C# create/`Stay.Create`, execute-time lower leftovers, DEI/Effect-IR as fake sim) | Named as debt under §6 / §7 / the product rule. Not a mill list. Not product sim. |
 | **ImportedContract / bind** vs `uses` | Mentioned once under §3. Not expanded. |
 | **DomainEvolution / immutability** | CORE hard line; not restated as a long principle here. |
@@ -312,13 +312,13 @@ What the prior tip (`2e430348`) understated, and what this amend still leaves th
 
 | Doc | Role |
 |-----|------|
-| [`docs/CORE.md`](../CORE.md) §0 | Frozen pipeline; current machinery in §3 |
-| [`pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md) | Named stages. P1–P6 executed. **Not CURRENT.** |
-| [`ontology-pr51-pipeline-alignment-2026-09-04.md`](ontology-pr51-pipeline-alignment-2026-09-04.md) | Dual-path as cached product — diagnosis, not a suite |
-| [`archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Who publishes bags / who emits files / library hook honesty |
+| [`docs/CORE.md`](../../CORE.md) §0 | Frozen pipeline; current machinery in §3 |
+| [`pipeline-transformation-2026-09-04.md`](../archive/pre-convergence-2026-10/pipeline-transformation-2026-09-04.md) | Named stages. P1–P6 executed. **Not CURRENT.** |
+| [`ontology-pr51-pipeline-alignment-2026-09-04.md`](../archive/pre-convergence-2026-10/ontology-pr51-pipeline-alignment-2026-09-04.md) | Dual-path as cached product — diagnosis, not a suite |
+| [`archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](../archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md) | Who publishes bags / who emits files / library hook honesty |
 | [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) | Session Compile path-forward (proposal). **Not CURRENT.** Slices unapproved. |
 | [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for post-analyze Lower + artifact-set addendum. **Not CURRENT.** |
-| [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) | Sole CURRENT/DONE. Leave it. |
+| [`simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md) | Sole CURRENT/DONE. Leave it. |
 
 ---
 

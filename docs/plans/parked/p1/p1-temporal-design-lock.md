@@ -1,12 +1,12 @@
 # P1 temporal — design lock (research spike output)
 
 **Date:** 2026-08-06  
-**Status:** **Suite complete** (2026-08-13). Implementation suite done: [`simple-agent-tasks/p1-README.md`](parked/p1/p1-README.md) — DONE; gate [`simple-agent-tasks/p1-gate.md`](parked/p1/p1-gate.md) `[x]`. 2147/2147 green. Authoring/analysis/print-round-trip shipped; runtime clock eval (design-lock Q4 fixed `TimeProvider` seam) is a recorded follow-up, not shipped.
+**Status:** **Suite complete** (2026-08-13). Implementation suite done: [`simple-agent-tasks/p1-README.md`](p1-README.md) — DONE; gate [`simple-agent-tasks/p1-gate.md`](p1-gate.md) `[x]`. 2147/2147 green. Authoring/analysis/print-round-trip shipped; runtime clock eval (design-lock Q4 fixed `TimeProvider` seam) is a recorded follow-up, not shipped.
 
 **Pre-ship 2026-08-13 (🟡 filed, not blocking authoring):** shipped create/assign defaults use local `DateTime.Today` for `today`; VM/export lowering of a `Today` node still emits `DateOnly.FromDateTime(DateTime.UtcNow)`. Reconcile both to `TimeProvider` when Q4 ships. `ExpressionTypeAnalyzer.CategoryOf` still classifies IR property types `Time`/`Duration` as Date; DSL does not author those as primitives (`Hold: Duration` is a nav). DateOperation analysis now rejects them as date operands.  
-**Prereq:** Grammar GI + **E1** done (2026-08-07; plan archived under `archive/completed-2026-08-mid/grammar-integration.md`). Pack uses `ExpressionFormRegistry` / open forms **and matching print forms** ([`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) wave 1; admit p1 as wave 3 after the host).  
+**Prereq:** Grammar GI + **E1** done (2026-08-07; plan archived under `archive/completed-2026-08-mid/grammar-integration.md`). Pack uses `ExpressionFormRegistry` / open forms **and matching print forms** ([`pack-host-2026-08-13.md`](../pack/pack-host-2026-08-13.md) wave 1; admit p1 as wave 3 after the host).  
 **Source research:** [`p1-temporal-research.md`](p1-temporal-research.md) (Q1–Q5 answered 2026-08-06)  
-**Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](archive/experiments/DOMAIN-DSL-SPEC.md)
+**Parent vision:** [`domain-dsl-absorption-proposals.md`](../domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](../../archive/experiments/DOMAIN-DSL-SPEC.md)
 
 ---
 

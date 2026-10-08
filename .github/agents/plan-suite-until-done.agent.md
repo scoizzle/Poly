@@ -27,7 +27,7 @@ Mode: `until-done` (default) or `next`. Stop after `max_tasks` (default 8) even 
 
 Stop when build or tests stay red after two attempts, the task needs a design the file does not contain, or the tree conflicts with file ownership.
 
-On gate close, run [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). Update PIPELINE-STATUS in the same change only when the suite's own instructions say to. Do not invent a second status schema.
+On gate close, run [`docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). Update PIPELINE-STATUS in the same change only when the suite's own instructions say to. Do not invent a second status schema.
 
 ## Report
 

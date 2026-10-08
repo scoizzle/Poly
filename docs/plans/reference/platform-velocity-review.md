@@ -3,7 +3,7 @@
 **Date:** 2026-07-25  
 **Status:** Active reference (review, not a micro-task suite)  
 **Audience:** Agents/humans adding DAU D3, packs, RestApi/transport emit, Q4, MCP tools, dogfood  
-**Related:** [`archive/domainmodeling-completed-2026-08/domain-analysis-unification.md`](archive/domainmodeling-completed-2026-08/domain-analysis-unification.md) · [`CORE.md`](../CORE.md) · [`v2-to-v3/master-roadmap.md`](v2-to-v3/master-roadmap.md)
+**Related:** [`archive/domainmodeling-completed-2026-08/domain-analysis-unification.md`](../archive/domainmodeling-completed-2026-08/domain-analysis-unification.md) · [`CORE.md`](../../CORE.md) · [`v2-to-v3/master-roadmap.md`](../archive/v2-to-v3/master-roadmap.md)
 
 ---
 
@@ -49,7 +49,7 @@ If we keep adding features (packs, RestApi emit, Q4, E5 tools) **without finishi
 | | |
 |--|--|
 | **Symptom** | `DomainAuthoringContext` (type maps, conventions, `PassRegistry`) used for parse/print and DslCompiler; `DomainModelAnalyzer.Analyze(domain)` and `DomainEvolution` take no context. MCP has `CreateWithSqlPack()` but does not pass maps into analysis. |
-| **Blocks** | Pack plugins ([`domain-plugin-extension-platform.md`](archive/completed-2026-08-late/domain-plugin-extension-platform.md)); dialect-specific validation during authoring; PassRegistry enrichers on product path |
+| **Blocks** | Pack plugins ([`domain-plugin-extension-platform.md`](../archive/completed-2026-08-late/domain-plugin-extension-platform.md)); dialect-specific validation during authoring; PassRegistry enrichers on product path |
 | **Cost if ignored** | Packs stay “codegen-only toys”; evolve accepts models that cannot store under the session’s pack |
 | **Mitigation** | DAU **D3.1**, **D3.4** |
 
@@ -124,7 +124,7 @@ If we keep adding features (packs, RestApi emit, Q4, E5 tools) **without finishi
 |--|--|
 | **Symptom** | Types, MCP docs, README still say V3 after V2 delete. |
 | **Blocks** | Clarity for new contributors; post-v2 naming cleanup plan exists but idle |
-| **Mitigation** | [`post-v2-delete-naming-cleanup.md`](post-v2-delete-naming-cleanup.md) after DAU D3 green |
+| **Mitigation** | [`post-v2-delete-naming-cleanup.md`](../archive/pre-convergence-2026-10/post-v2-delete-naming-cleanup.md) after DAU D3 green |
 
 #### P2.2 HttpFile still string emit
 

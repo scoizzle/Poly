@@ -3,16 +3,16 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-19 (**E6** post-change code review — uncommitted DSL gap closure; suite **1398**)  
 **Status:** E1 **shipped**; E2.1 create-in only; E3a/E3b cross-entity invoke with quantifiers+filter + **DMEFF007** shape gates **DSL+RT shipped**; E4 conditional **DSL+RT shipped**; action params **DSL+RT shipped**; Q1′ authoring **complete**; arithmetic/`equals`/`enum`/inheritance/`owned` **DSL shipped** (suite **1425**)  
-**Not CURRENT.** Historical E* completeness map. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md). E6 / Q3′ are not the agent pick.
+**Not CURRENT.** Historical E* completeness map. CURRENT: [`../simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). E6 / Q3′ are not the agent pick.
 
 
 
 
 **Related:**  
-- [`dsl-query-surface.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · archived [`qe-README.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)
-- [`mcp-phase3-oracle-surface.md`](../archive/completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
-- [`mcp-tool-surface-expansion.md`](../archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) §0  
-- Product DSL: [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
+- [`dsl-query-surface.md`](../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) — **parallel** related **reads** (subject-first; §3.1 reads OK / writes banned) · archived [`qe-README.md`](../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)
+- [`mcp-phase3-oracle-surface.md`](../completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md) §6c RT · §6e SA  
+- [`mcp-tool-surface-expansion.md`](../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) §0  
+- Product DSL: [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
 
 **Principle:** Usefulness = **executable × authorable × honest**. Prefer finishing the path for effects that already run over inventing many new effect kinds. No domain VM opcodes for host I/O (email/HTTP) — host adapters later.
 
@@ -89,10 +89,10 @@ A domain is **useful** for internal process modeling when agents can author and 
 2. **DSL before MCP micro-tools** — batch path is proven; micro-tools only where incremental edit pain is real (dogfood).  
 3. **One golden domain per slice** — e.g. support ticket: open → assign (link) → escalate (invoke) → close (delete).  
 4. **Honesty** — guide + tool Description match parser; no lab keywords.  
-5. **SA constraints** — stage-action Option B snapshot limits still apply when placing actions with effects ([§6e](../archive/completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md)).  
+5. **SA constraints** — stage-action Option B snapshot limits still apply when placing actions with effects ([§6e](../completed-2026-08-mid/v2-to-v3/mcp-phase3-oracle-surface.md)).  
 6. **No effect soup** — prefer compose of assign/transition/create over one-off “business” effect types.  
 7. **Host I/O out of scope** — email/HTTP/payments are not Phase 1a effects.  
-8. **Query language is parallel** — customer policies need related **reads** ([`dsl-query-surface.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1/§4.0); effects alone do not make the DSL ship-ready. Assign never does cross-entity writes.
+8. **Query language is parallel** — customer policies need related **reads** ([`dsl-query-surface.md`](../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1/§4.0); effects alone do not make the DSL ship-ready. Assign never does cross-entity writes.
 
 ---
 
@@ -154,7 +154,7 @@ Honesty nits (error string, guide soft-delete/unlink/TRE, entry/exit) landed wit
 | **E1′′′.3** | Low | No dedicated fail-loud test for bad effect token error string (only happy path). Optional. |
 | **E1′′′.4** | Low | Matrix already shows delete ✅ DSL — keep E0.1 discipline on future effect PRs. |
 | **E1′′′.5** | **Next** | **E2.1** — record create-in-only vs bag/param link decision in § decision log. |
-| **E1′′′.6** | **Parallel** | **Q0** honesty; **Q1′** subject-first related **reads** (`Rel exists`, path-prefix, `where`) — [`dsl-query-surface.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1/§4.0. |
+| **E1′′′.6** | **Parallel** | **Q0** honesty; **Q1′** subject-first related **reads** (`Rel exists`, path-prefix, `where`) — [`dsl-query-surface.md`](../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1/§4.0. |
 | **E1′′′.7** | Pull | E3a/E3b invoke; TRE runtime-or-hide; ParameterBindings. |
 | **E1′′′.8** | Process | Prefer one agent pick: either E2.1 **or** Q0 first if parallel thrash is a risk — default **Q0** if customer ship = policies, **E2.1** if graph write is the pain. |
 
@@ -315,7 +315,7 @@ What you cannot write in DSL without this plan is the backlog order.
 
 ## 9. Agent pick (historical — not CURRENT)
 
-**Not CURRENT.** Query suite is complete (archived [`qe-README.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)). Agent pick is only [`../../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+**Not CURRENT.** Query suite is complete (archived [`qe-README.md`](../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md)). Agent pick is only [`../../simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
 
 ```text
 DONE:    E1; E2.1/E2.1′; E3a/E3b; E4; params; E6 authoring; Q1′+Q3′; link_instances MCP
@@ -330,7 +330,7 @@ LATER:   Host I/O; micro-catalog; link DSL keyword
 - Do not DSL non-executed IR (TransitionRelationship).  
 - **Invoke shape (DMEFF007, fail-closed):** self; source OneToOne bare; source OneToMany `any`/`all` (+ optional target-local `where`); empty match fails; no reverse/M2M/self-rel yet.  
 - Link targets = instance-valued properties; create-in is the easy graph write.  
-- **Query surface:** cross-entity **reads** legal; **writes** banned via assign — [`dsl-query-surface.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1 · §4.0.  
+- **Query surface:** cross-entity **reads** legal; **writes** banned via assign — [`dsl-query-surface.md`](../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) §3.1 · §4.0.  
 - **get_dsl_guide** embed-only — rebuild after guide edits.  
 - Authoring goldens ≠ RT goldens — E6.1 closes the gap for invoke/conditional/params.
 
@@ -539,7 +539,7 @@ Plan direction is **right** (authorability of effects that already run). Initial
 | **E6.10** | Process | Commit this tree; rebuild MCP so embedded guide matches. | `dotnet build Poly.Mcp` after guide edit. |
 | **E6.11** | **Closed** | **E3b cross-entity invoke — shipped.** `invoke RelName.ActionName(args)` resolves linked target via store relationship. | Requires store link (`create in` or explicit). |
 | **E6.12** | Pull | TRE runtime-or-hide; link DSL (E2.1 stands). | Unchanged. |
-| **E6.13** | Parallel | Query plan: mark arithmetic **shipped** (was Q2); Q3′ still open — see [`dsl-query-surface.md`](../archive/domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md). | Keep plans in lockstep. |
+| **E6.13** | Parallel | Query plan: mark arithmetic **shipped** (was Q2); Q3′ still open — see [`dsl-query-surface.md`](../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md). | Keep plans in lockstep. |
 
 ### Checklist
 

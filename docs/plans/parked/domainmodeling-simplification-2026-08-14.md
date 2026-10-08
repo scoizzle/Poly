@@ -1,9 +1,9 @@
 # Proposal: simplify DomainModeling by deletion
 
 **Date:** 2026-08-14  
-**Status:** Proposal (not CURRENT). Admission control: [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md).  
+**Status:** Proposal (not CURRENT). Admission control: [`simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).  
 **Lens:** The best next change is the one that **removes a noun, a table, or a pass** without shrinking the agent path (`.poly` → analyze → run / export).  
-**Related:** [`../complexity-semantic-map.md`](../complexity-semantic-map.md), [`../decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md), [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md)
+**Related:** [`../complexity-semantic-map.md`](../../complexity-semantic-map.md), [`../decisions/2026-08-14-domain-libraries.md`](../../decisions/2026-08-14-domain-libraries.md), [`pack-host-2026-08-13.md`](pack/pack-host-2026-08-13.md)
 
 This is not a rewrite plan and not a plugin-host plan.
 
@@ -184,7 +184,7 @@ These files are large because they **do the job**. File-split without deletion i
 |----|--------|
 | Archive `pack-*` / `e2e-*` task files that are not CURRENT into `docs/plans/archive/` once the suite is parked | Keep them in the live index as if they are the next 80 tickets |
 | One README per **admitted** suite | A second CURRENT line for this proposal |
-| Update [`complexity-semantic-map.md`](../complexity-semantic-map.md) when a facet dies | Restate CORE inside this file |
+| Update [`complexity-semantic-map.md`](../../complexity-semantic-map.md) when a facet dies | Restate CORE inside this file |
 
 This wave can happen any time and is the cheapest cognitive win for the next agent.
 

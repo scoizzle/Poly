@@ -1,7 +1,7 @@
 # Live demo reliability
 
 **Date:** 2026-08-13  
-**Kind:** Execution cut of [`domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md). Not ValueType/contracts/p1.  
+**Kind:** Execution cut of [`domainmodeling-e2e-representation-2026-08-13.md`](../../parked/e2e/domainmodeling-e2e-representation-2026-08-13.md). Not ValueType/contracts/p1.  
 **Bar:** Sit down, compile a `.poly`, `dotnet run`, hit HTTP. Do that twice in a row.
 
 ## What “live demo” means
@@ -41,4 +41,4 @@ Out of this cut: ValueType, contracts, DateOperation authoring, uniqueness EF in
 
 ## Tasking
 
-Use existing [`simple-agent-tasks/e2e-4-README.md`](parked/e2e/e2e-4-README.md) for generator work. Oracle + `live-demo.sh` live in this cut.
+Use existing [`simple-agent-tasks/e2e-4-README.md`](../../parked/e2e/e2e-4-README.md) for generator work. Oracle + `live-demo.sh` live in this cut.

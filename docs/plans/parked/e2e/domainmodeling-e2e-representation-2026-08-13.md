@@ -1,10 +1,10 @@
 # DomainModeling end-to-end representation
 
-**Date:** 2026-08-13 (revised same day against [`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md))  
+**Date:** 2026-08-13 (revised same day against [`fleet-eval-fixes-2026-08-12.md`](../../archive/pre-convergence-2026-10/fleet-eval-fixes-2026-08-12.md))  
 **Kind:** Parent plan (parked). Not CURRENT. Solidify a suite only when admitted.  
 **Status:** Sequenced from the 2026-08-12 deep-research pass, then folded with fleet-eval probe findings where those findings are the same capability (author → analyze → runtime → generate).  
 **Source:** workflow `deep-research` + `probes/findings/fleet-eval/` (coordinator + 15 slices).  
-**Admission:** [`README.md`](README.md) · CURRENT truth [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md). Do **not** start production work from this doc while Agent pick is `(none)` or another suite. **Do not admit this plan and fleet-eval as two CURRENT queues of the same bugs.**
+**Admission:** [`README.md`](../../README.md) · CURRENT truth [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). Do **not** start production work from this doc while Agent pick is `(none)` or another suite. **Do not admit this plan and fleet-eval as two CURRENT queues of the same bugs.**
 
 ---
 
@@ -24,7 +24,7 @@ Concepts that stay IR/evolution-only are named as such in the DSL guide and capa
 
 - Completing the DomainModeling type catalog for its own sake.
 - New grammar for IR nodes that already have a product spelling (`OwnedAccess`; bare identifiers for action params — see L3).
-- Forking temporal authoring — that is [`p1-temporal-design-lock.md`](p1-temporal-design-lock.md) / `p1-*`. Decimal literals (`0.9`) are **not** temporal and are in this plan.
+- Forking temporal authoring — that is [`p1-temporal-design-lock.md`](../p1/p1-temporal-design-lock.md) / `p1-*`. Decimal literals (`0.9`) are **not** temporal and are in this plan.
 - Re-adding deleted 2026-08-10 effects (`Link`/`Unlink`/`DeleteEntityInstance`/`TransitionRelationship`).
 - Splitting `DomainEntityInstance` / `DomainToCSharpExporter` (complexity pass #10).
 - Admitting this as CURRENT alongside grammar wrap-up, mut-safety, p1, **or** a live fleet-eval suite that already owns the same files.
@@ -40,7 +40,7 @@ Concepts that stay IR/evolution-only are named as such in the DSL guide and capa
 | L4 | **`DateOperation` authoring is p1**, not this plan. Generic `DueDate + 14` already lowers to CLR `AddDays` without building the node. When p1 lands, print must emit the pack form, not `Default()`. Date **parameter** arithmetic (`d + 30` where `d: Date`) is this plan (L3 + existing AddDays lowering), not p1. |
 | L5 | Store-aware Q3′ (`any`/`all`/`none`/`count`) is the **supported eval surface today**. Export that throws is only acceptable if those policies are **not** prepended as action guards that make generated actions un-runnable. |
 | L6 | `unique` as “storage metadata only” is an honesty claim, not a destination. This plan makes uniqueness real (store + Create + EF index) or the guide stays explicit until that slice ships. |
-| L7 | `ValueType` and contract IR are **kept product roadmap** ([complexity pass](archive/completed-2026-08-late/domainmodeling-complexity-pass-2026-08-10.md) #3/#6). Missing piece is authoring → analyze → export → runtime, not deletion. |
+| L7 | `ValueType` and contract IR are **kept product roadmap** ([complexity pass](../../archive/completed-2026-08-late/domainmodeling-complexity-pass-2026-08-10.md) #3/#6). Missing piece is authoring → analyze → export → runtime, not deletion. |
 | L8 | Fail-closed. Empty uniqueness, missing matches, unknown invoke args, and invalid configs fail loud. Tests first; smallest production change; guide + CORE updated in the same change when the shipped surface moves. |
 | L9 | Generation slices are **not done** while `scripts/run-probe.sh` compiles entities-only. Full-solution compile (entities + `Program.cs` + `DbContext`, 0 warnings) is the acceptance gate for slices 3–4 and entity-export. Fleet-eval P0-0 is that gate; do not invent a second probe runner. |
 | L10 | Every shipped construct that `export_dsl` prints must parse again (`apply_dsl`). Printer comments and comma-vs-whitespace drift are bugs, not documentation. |
@@ -71,7 +71,7 @@ Full-solution gate (L9 / fleet P0-0) lands **before or with** the first generati
 
 ## Relationship to fleet-eval
 
-[`fleet-eval-fixes-2026-08-12.md`](fleet-eval-fixes-2026-08-12.md) is the probe-finding execution checklist (IDs P0–P7, repro `.poly` paths). This doc is the representation sequence. Same bugs, two roles.
+[`fleet-eval-fixes-2026-08-12.md`](../../archive/pre-convergence-2026-10/fleet-eval-fixes-2026-08-12.md) is the probe-finding execution checklist (IDs P0–P7, repro `.poly` paths). This doc is the representation sequence. Same bugs, two roles.
 
 **Absorbed here** (agreed; work is named in slices below): P0-0 (as L9, not a second script), P1-1, P1-2, P1-3, P2-1…P2-10, P3-1…P3-8, P3-10…P3-20, P4-1…P4-5, P6-1…P6-4, P7-1, P7-4, P7-5, P7-6, P7-7.
 
@@ -96,7 +96,7 @@ Full-solution gate (L9 / fleet P0-0) lands **before or with** the first generati
 
 - Guide: keep L2 wording; rewrite L3 so agents do not treat `ParameterAccess` as a second syntax **or** as unused IR. Fix the store-dependent export bullet so it matches `DomainExpressionLoweringPass` (path-prefix / `Rel exists` now lower; **only** Q3′ still throws).
 - Guide sweep (fleet P4-5): §8 invoke `any/all` + decimal example, §11 inline `enum(...)`, §0.4 `;` create-in, §6 dotted binder args, §0.3 DMEFF011 / to-one claims, §9 `unlink_instances` (MCP `link_instances` is the shipped linker; no Unlink Effect IR), duplicate-annotation last-wins vs “parse error,” agent-vs-product guide divergence.
-- [`docs/interpretation/domain-execution-model.md`](../interpretation/domain-execution-model.md) and [`docs/domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md): remove `DeleteEntityInstance`, `Link`/`Unlink` Effect IR, `TransitionRelationship`. Linking existing instances = `store.Link` / MCP `link_instances` only.
+- [`docs/interpretation/domain-execution-model.md`](../../../interpretation/domain-execution-model.md) and [`docs/domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md): remove `DeleteEntityInstance`, `Link`/`Unlink` Effect IR, `TransitionRelationship`. Linking existing instances = `store.Link` / MCP `link_instances` only.
 - `Domain.cs` XML: stop listing an `Event` DomainType that does not exist.
 - `CompileMode.All` XML: stop saying “not implemented” if `DslCompiler.GenerateAllFiles` already emits `Program.cs` + `demo.http`.
 - Leftover delete-effect **grammar** pattern with no `ParseEffect` arm (fleet P7-1): delete the pattern or fail parse with a dedicated diagnostic (do not leave “Unhandled effect pattern”).
@@ -388,15 +388,15 @@ Also: if Q3′ still must not reach the shared VM compiler, keep the throw there
 
 | Item | Owner |
 |------|--------|
-| `Now - 12 days`, units, clock, DateOperation parse/print | `p1-*` / [p1-temporal-design-lock](p1-temporal-design-lock.md) |
+| `Now - 12 days`, units, clock, DateOperation parse/print | `p1-*` / [p1-temporal-design-lock](../p1/p1-temporal-design-lock.md) |
 | Session write lock / idempotent add | `mut-safety-*` |
 | Grammar LeftAssoc / span-vs-fold | grammar wrap-up (PIPELINE-STATUS ADMIT) |
-| Probe runner `--mode all`, warning-fail, 09/13 fixtures | [fleet-eval P0-0](fleet-eval-fixes-2026-08-12.md) (L9) |
+| Probe runner `--mode all`, warning-fail, 09/13 fixtures | [fleet-eval P0-0](../../archive/pre-convergence-2026-10/fleet-eval-fixes-2026-08-12.md) (L9) |
 | Range-envelope / unknown-writer CHECK / binder `Eval` | fleet-eval P5 |
 | Parser nesting-depth, unterminated string, test/benchmark hygiene | fleet-eval P7-2/3/8–11 |
 | MCP session ownership | fleet-eval deferred 12-F10 |
-| Broader EF/API productization | [ef-and-api-codegen.md](ef-and-api-codegen.md) (this plan takes slices 3–4) |
-| Related-entity **stage-of** reads | [related-entity-stage-gates-research-2026-08-11.md](related-entity-stage-gates-research-2026-08-11.md) — not implemented IR |
+| Broader EF/API productization | [ef-and-api-codegen.md](../ef-and-api-codegen.md) (this plan takes slices 3–4) |
+| Related-entity **stage-of** reads | [related-entity-stage-gates-research-2026-08-11.md](../../archive/pre-convergence-2026-10/related-entity-stage-gates-research-2026-08-11.md) — not implemented IR |
 | Relationship.Stages / Relationship.Policies consumption | Confirm unreachable, then complexity pass #9 |
 
 ## Stale text that is **not** a work item
@@ -410,22 +410,22 @@ Also: if Q3′ still must not reach the shared VM compiler, keep the throw there
 
 ## Implementation tasking (fleet)
 
-Solidified 2026-08-13. **Handoff:** [`simple-agent-tasks/e2e-README.md`](parked/e2e/e2e-README.md) — wave DAG, hot-file owners, one agent per slice.
+Solidified 2026-08-13. **Handoff:** [`simple-agent-tasks/e2e-README.md`](e2e-README.md) — wave DAG, hot-file owners, one agent per slice.
 
 | Slice README | Tasks |
 |--------------|--------|
-| [`e2e-0-README.md`](parked/e2e/e2e-0-README.md) | 0-1…0-5 + gate |
-| [`e2e-p-README.md`](parked/e2e/e2e-p-README.md) | p-1…p-4 + gate |
-| [`e2e-g0-README.md`](parked/e2e/e2e-g0-README.md) | g0-1…g0-3 + gate |
-| [`e2e-r-README.md`](parked/e2e/e2e-r-README.md) | r-0…r-9 + gate |
-| [`e2e-1-README.md`](parked/e2e/e2e-1-README.md) | 1-1…1-3 + gate |
-| [`e2e-s-README.md`](parked/e2e/e2e-s-README.md) | s-1…s-4 + gate |
-| [`e2e-4-README.md`](parked/e2e/e2e-4-README.md) | 4-1…4-8 + gate |
-| [`e2e-2-README.md`](parked/e2e/e2e-2-README.md) | 2-0…2-2 + gate |
-| [`e2e-x-README.md`](parked/e2e/e2e-x-README.md) | x-1…x-11 + gate |
-| [`e2e-3-README.md`](parked/e2e/e2e-3-README.md) | 3-1…3-5 + gate |
-| [`e2e-5-README.md`](parked/e2e/e2e-5-README.md) | 5-0…5-3 + gate |
-| [`e2e-6-README.md`](parked/e2e/e2e-6-README.md) | 6-0…6-2 + gate |
+| [`e2e-0-README.md`](e2e-0-README.md) | 0-1…0-5 + gate |
+| [`e2e-p-README.md`](e2e-p-README.md) | p-1…p-4 + gate |
+| [`e2e-g0-README.md`](e2e-g0-README.md) | g0-1…g0-3 + gate |
+| [`e2e-r-README.md`](e2e-r-README.md) | r-0…r-9 + gate |
+| [`e2e-1-README.md`](e2e-1-README.md) | 1-1…1-3 + gate |
+| [`e2e-s-README.md`](e2e-s-README.md) | s-1…s-4 + gate |
+| [`e2e-4-README.md`](e2e-4-README.md) | 4-1…4-8 + gate |
+| [`e2e-2-README.md`](e2e-2-README.md) | 2-0…2-2 + gate |
+| [`e2e-x-README.md`](e2e-x-README.md) | x-1…x-11 + gate |
+| [`e2e-3-README.md`](e2e-3-README.md) | 3-1…3-5 + gate |
+| [`e2e-5-README.md`](e2e-5-README.md) | 5-0…5-3 + gate |
+| [`e2e-6-README.md`](e2e-6-README.md) | 6-0…6-2 + gate |
 
 ## Suggested admit shapes (when unparking)
 

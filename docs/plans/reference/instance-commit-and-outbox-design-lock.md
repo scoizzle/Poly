@@ -3,8 +3,8 @@
 **Date:** 2026-08-07  
 **Status:** **Design lock — parked.** No product suite until explicit admit (typically when a host persists instance state beyond process memory).  
 **Trust role:** Enables honest **durable** and **async external** claims — see [`customer-trust-proof-map.md`](customer-trust-proof-map.md) §3.4  
-**Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) · stage-as-observable ADR under `docs/decisions/` (no domain event bus)  
-**Related:** absorption P9 `schedule at` (host) · [`mcp-mutation-safety.md`](mcp-mutation-safety.md) (authoring session, not instance durability) · CORE runtime (`DomainInstanceStore`, `DomainEntityInstance`) · index [`README.md`](README.md)
+**Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) · stage-as-observable ADR under `docs/decisions/` (no domain event bus)  
+**Related:** absorption P9 `schedule at` (host) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) (authoring session, not instance durability) · CORE runtime (`DomainInstanceStore`, `DomainEntityInstance`) · index [`README.md`](../README.md)
 
 ---
 
@@ -31,7 +31,7 @@ Name the **real mutation storage boundaries** and where **outbox-style “go do 
 
 `EvolutionTransaction` was removed on purpose (immutable propose-or-discard). That is **not** the instance unit-of-work model.
 
-**Session mutation safety** (MCP concurrent evolve) is layer **A + session store**, documented in [`mcp-mutation-safety.md`](mcp-mutation-safety.md). It is a **different** problem from instance commit/outbox.
+**Session mutation safety** (MCP concurrent evolve) is layer **A + session store**, documented in [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md). It is a **different** problem from instance commit/outbox.
 
 ---
 

@@ -1,7 +1,7 @@
 # session.Lower — plan (for Scot)
 
 **Date:** 2026-09-21
-**Status:** Vision / decision record — **not CURRENT** (does not admit a suite; do not invent a second CURRENT). Locked defs are always-on in [`AGENTS.md`](../../AGENTS.md) **Agent target** and [`docs/CORE.md`](../CORE.md) §0.
+**Status:** Vision / decision record — **not CURRENT** (does not admit a suite; do not invent a second CURRENT). Locked defs are always-on in [`AGENTS.md`](../../../AGENTS.md) **Agent target** and [`docs/CORE.md`](../../CORE.md) §0.
 **Scot decision (2026-09-21):** **post-analyze Lower is product SoT.** Clean analyze (fail-closed) → **then** Lower.
 **Scot addendum (2026-09-21):** **Lower’s result = a set of artifacts from 1+ producers.** May come from **multiple compilation units** producing **varying different concepts** — not solely “one Syntax module” as the entire output story.
 **Scot locked defs (2026-09-21):** compilation unit = **library**; artifact-set catalog = **on the session** after Lower (**fail closed** if empty when required); Syntax module = **privileged for operation meaning + Interpreter sim**.
@@ -14,7 +14,7 @@
 
 **Product rule (unchanged):** simulation = **Interpreter** on the **real lowered Syntax** (the sim tree in that set). Producers are **not** a fake runtime and **not** a second simulate path. DEI / Effect-IR are not product sim.
 
-**This note is SoT** for the Lower **vision**. Glossary: [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) — SoT for named concepts. Always-on agent summary: [`AGENTS.md`](../../AGENTS.md).
+**This note is SoT** for the Lower **vision**. Glossary: [`session-lower-abstractions-2026-09-21.md`](session-lower-abstractions-2026-09-21.md) — SoT for named concepts. Always-on agent summary: [`AGENTS.md`](../../../AGENTS.md).
 
 
 ## 1) What `session.Lower` is

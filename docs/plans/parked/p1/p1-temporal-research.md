@@ -3,7 +3,7 @@
 **Date:** 2026-08-06  
 **Status:** **Parked research** — concepting only  
 **Product admit order after pipeline:** **P3 → P2** (this file is **not** in that queue)  
-**Parent vision:** [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](archive/experiments/DOMAIN-DSL-SPEC.md)
+**Parent vision:** [`domain-dsl-absorption-proposals.md`](../domain-dsl-absorption-proposals.md) § P1 · experiment [`docs/plans/archive/experiments/DOMAIN-DSL-SPEC.md`](../../archive/experiments/DOMAIN-DSL-SPEC.md)
 
 ---
 
@@ -34,14 +34,14 @@ Capture how to model dates / `Now` / duration arithmetic **before** solidifying 
 ## Do not
 
 - Parallel P1 with P3/P2 CURRENT  
-- ~~Grammar re-base as prereq~~ — **superseded 2026-08-06 (user direction):** [`grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) (GI-1..GI-8) is a committed plan that lands **before** this work; P1 pack authoring rides on GI-4 registration, so this is no longer a speculative re-base
+- ~~Grammar re-base as prereq~~ — **superseded 2026-08-06 (user direction):** [`grammar-integration.md`](../../archive/completed-2026-08-mid/grammar-integration.md) (GI-1..GI-8) is a committed plan that lands **before** this work; P1 pack authoring rides on GI-4 registration, so this is no longer a speculative re-base
 - Ship incomplete `schedule at` as domain truth without host adapter  
 
 ## Related product next
 
 | Order | Suite |
 |-------|--------|
-| 1 | [`simple-agent-tasks/p3-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p3-README.md) — return types |
-| 2 | [`simple-agent-tasks/p2-README.md`](archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) — multi-hop |
-| 3 | [`grammar-integration.md`](archive/completed-2026-08-mid/grammar-integration.md) — GI-1..GI-8 (user direction: before P1) |
+| 1 | [`simple-agent-tasks/p3-README.md`](../../archive/completed-2026-08-mid/simple-agent-tasks/p3-README.md) — return types |
+| 2 | [`simple-agent-tasks/p2-README.md`](../../archive/completed-2026-08-mid/simple-agent-tasks/p2-README.md) — multi-hop |
+| 3 | [`grammar-integration.md`](../../archive/completed-2026-08-mid/grammar-integration.md) — GI-1..GI-8 (user direction: before P1) |
 | later | P1 after this research + explicit admit |

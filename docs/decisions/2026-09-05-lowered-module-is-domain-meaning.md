@@ -4,7 +4,7 @@
 **Status:** Accepted (agent-facing lock)  
 **Deciders:** Primary author  
 
-**Related:** [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md) · [`2026-08-15-domain-library-extensions-mcp-harness.md`](2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/CORE.md`](../CORE.md) §0 · [`AGENTS.md`](../../AGENTS.md) Frozen core + Agent target · [`docs/plans/pipeline-transformation-2026-09-04.md`](../plans/pipeline-transformation-2026-09-04.md)
+**Related:** [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md) · [`2026-08-15-domain-library-extensions-mcp-harness.md`](2026-08-15-domain-library-extensions-mcp-harness.md) · [`docs/CORE.md`](../CORE.md) §0 · [`AGENTS.md`](../../AGENTS.md) Frozen core + Agent target · [`docs/plans/archive/pre-convergence-2026-10/pipeline-transformation-2026-09-04.md`](../plans/archive/pre-convergence-2026-10/pipeline-transformation-2026-09-04.md)
 
 ## Context
 

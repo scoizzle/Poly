@@ -5,7 +5,7 @@
 **SHA:** `0b6fcab93b833ed1ee77b55b0fb01bb3f961921c`  
 **PR:** https://github.com/scoizzle/Poly/pull/51  
 **North star:** deterministic agent codegen from an ontology of ontology systems. Dual-path runtime vs export is a **bug**, not a host-bind footnote.  
-**Hard lines:** [`docs/CORE.md`](../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/plans/pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md)
+**Hard lines:** [`docs/CORE.md`](../../../CORE.md) §0 / hard lines · [`docs/decisions/2026-09-04-frozen-core-pipeline.md`](../../../decisions/2026-09-04-frozen-core-pipeline.md) · [`docs/plans/pipeline-transformation-2026-09-04.md`](pipeline-transformation-2026-09-04.md)
 
 Frozen pipeline: one analyze → **one operation module** (tree has no bags) **and** surface bags → host artifacts. Simulate and print consume that module. Consumers bind; they do not fork lower. `LowerStageTransitions` and the like are forbidden in new work.
 

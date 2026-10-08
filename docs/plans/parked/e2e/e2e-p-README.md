@@ -1,6 +1,6 @@
 # e2e-p — Printer round-trip
 
-**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](../../domainmodeling-e2e-representation-2026-08-13.md) § Slice P · L10  
+**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md) § Slice P · L10  
 **Fleet coordinator:** [`e2e-README.md`](./e2e-README.md)  
 **Wave:** 1 · **Parallel with:** e2e-0, e2e-g0  
 **Gate:** [`e2e-p-gate.md`](./e2e-p-gate.md)

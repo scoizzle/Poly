@@ -64,6 +64,6 @@ A `DatePack` (or fold into the sql pack family) added via `DomainInputBuilder` w
 
 ## Reference
 
-- Discovery findings: [`probes/findings/discovery-dates.md`](archive/probes-2026-08/findings/discovery-dates.md)
+- Discovery findings: [`probes/findings/discovery-dates.md`](../probes-2026-08/findings/discovery-dates.md)
 - Probes: `probes/discovery-dates/`
 - Pack precedent: `src/Poly.Packs.Sqlite/`, `src/Poly.Packs.SqlServer/`

@@ -28,3 +28,5 @@ Touches `AGENTS.md`.
 | 2026-10-08 | implementer | grok/grok-4.6 | `5d8da343` | single reviewer (Razor); Final Boss stage removed | link check: no new broken links |
 | 2026-10-08 | Razor | OpenCode | `5d8da343` | NOT SHIP | CI run https://github.com/scoizzle/Poly/actions/runs/37721954754 (Build & test failed at 5d8da343 and at 3cb82b40, so the plans restructure itself broke it; likely a test or link check that reads a moved docs/plans path). Finding: make CI green without undoing the restructure. |
 | 2026-10-08 | implementer | grok/grok-4.6 | `64627bcd` | fixes pushed | F1; disputed: none; tests 3410/3410 |
+| 2026-10-08 | Grug | opencode/opencode-go/deepseek-v4.1-flash | `aa5dce11` | NOT SHIP | 3 open findings (R1-R3); https://github.com/scoizzle/Poly/pull/124#issuecomment-6063732938 |
+| 2026-10-08 | implementer | grok/grok-4.6 | `9a4b14af` | fixes pushed | R1, R2, R3; disputed: none; tests 3413/3413 |

@@ -1,6 +1,6 @@
 # pack-3c — Composition-root artifacts
 
-**Parent:** [`../pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md) phase 3c  
+**Parent:** [`../pack-host-2026-08-13.md`](pack-host-2026-08-13.md) phase 3c  
 **Fleet:** [`pack-README.md`](./pack-README.md)  
 **Gate:** [`pack-3c-gate.md`](./pack-3c-gate.md)  
 **Prereq:** pack-3b-gate `[x]`

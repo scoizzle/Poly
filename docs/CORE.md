@@ -174,8 +174,8 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Principles (Rule + How) | [`decisions/2026-core-engineering-principles.md`](decisions/2026-core-engineering-principles.md) |
 | Trust bar | [`decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Domain library / MCP harness | [`decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
-| Lower vision | [`plans/session-lower-plan-2026-09-21.md`](plans/session-lower-plan-2026-09-21.md) |
-| CURRENT suite | [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md) |
+| Lower vision | [`plans/reference/session-lower-plan-2026-09-21.md`](plans/reference/session-lower-plan-2026-09-21.md) |
+| CURRENT suite | [`plans/poly-eng/board.md`](plans/poly-eng/board.md) |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 
 ---

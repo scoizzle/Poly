@@ -3,9 +3,9 @@
 > **Superseded.** Do not use this file for task status.
 >
 > **Use instead**:
-> - [`docs/plans/v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) — master coordination (**July 2026: Phase 1 complete; Phase 2 WS8 is active**)
+> - [`docs/plans/v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) — master coordination (**July 2026: Phase 1 complete; Phase 2 WS8 is active**)
 > - [`docs/plans/v2-to-v3/workstreams/`](workstreams/) — workstream files
-> - [`docs/plans/v2-to-v3/simple-agent-tasks/`](../../v2-to-v3/simple-agent-tasks/) — micro-tasks (`ws8-*` / `ws4-*`)
+> - [`docs/plans/v2-to-v3/simple-agent-tasks/`](../v2-to-v3/simple-agent-tasks/) — micro-tasks (`ws8-*` / `ws4-*`)
 
 **Status**: Superseded  
 **Last Updated**: 2026-07-10  

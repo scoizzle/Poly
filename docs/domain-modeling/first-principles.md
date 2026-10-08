@@ -359,9 +359,9 @@ These are named in documents (or in stale document claims) and have no matching 
 - Portable bytecode serialization so compiled programs can be cached, shipped, or resumed across processes (`docs/decisions/2026-06-08-bytecode-serialization.md`).
 - A peephole optimizer over a bytecode instruction stream (`docs/decisions/2026-06-08-peephole-optimizer.md`).
 - A permission table that sandboxes host method calls from untrusted macros (`docs/decisions/2026-06-08-sandboxing-approach.md`).
-- After Lower, a catalog of every produced artifact held on the session, which errors if empty when required (`docs/plans/session-lower-plan-2026-09-21.md` on `origin/ontology/talk-alignment-2026-09-21`).
-- Lower itself running every library producer into one artifact set, with “compilation unit” meaning a library (`docs/plans/session-lower-abstractions-2026-09-21.md` on that same branch).
-- `uses cli`, OpenAPI, and gRPC as further host libraries (`docs/plans/pipeline-transformation-2026-09-04.md`).
+- After Lower, a catalog of every produced artifact held on the session, which errors if empty when required (`docs/plans/reference/session-lower-plan-2026-09-21.md` on `origin/ontology/talk-alignment-2026-09-21`).
+- Lower itself running every library producer into one artifact set, with “compilation unit” meaning a library (`docs/plans/reference/session-lower-abstractions-2026-09-21.md` on that same branch).
+- `uses cli`, OpenAPI, and gRPC as further host libraries (`docs/plans/archive/pre-convergence-2026-10/pipeline-transformation-2026-09-04.md`).
 - Transport analysis (`TransportPass` / transport metadata) as an always-on domain pipeline surface (`docs/domainmodeling-capability-inventory.md`).
 - Link and Unlink as effect types that lower into the operation tree (the capability inventory records them as store operations only).
 - Virtual-actor lowering: grains instead of type-definition syntax trees (`docs/plans/archive/experiments/DOMAIN_ACTOR_LOWERING_PLAN.md`).

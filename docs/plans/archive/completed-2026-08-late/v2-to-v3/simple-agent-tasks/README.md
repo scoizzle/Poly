@@ -18,9 +18,9 @@
 
 ## Templates
 
-- Task: [`TEMPLATE-micro-task.md`](../../../../v2-to-v3/simple-agent-tasks/TEMPLATE-micro-task.md)  
-- Process: [`pr1-uncommitted-review-gate.md`](../../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) — pre-ship review loop (three-layer defense, fail-closed, re-review)  
-- Summary: [`../agent-summaries/TEMPLATE-task-summary.md`](../../../../v2-to-v3/agent-summaries/TEMPLATE-task-summary.md)
+- Task: [`TEMPLATE-micro-task.md`](../../../v2-to-v3/simple-agent-tasks/TEMPLATE-micro-task.md)  
+- Process: [`pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) — pre-ship review loop (three-layer defense, fail-closed, re-review)  
+- Summary: [`../agent-summaries/TEMPLATE-task-summary.md`](../../../v2-to-v3/agent-summaries/TEMPLATE-task-summary.md)
 
 ---
 

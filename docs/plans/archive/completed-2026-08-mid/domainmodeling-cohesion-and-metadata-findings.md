@@ -5,8 +5,8 @@
 **Audience:** Humans and agents choosing the next CURRENT workstream  
 **Related:**  
 - [`domainmodeling-workstream-map.md`](../completed-2026-08-late/domainmodeling-workstream-map.md)  
-- [`v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) (Agent pick)  
-- [`domain-dsl-absorption-proposals.md`](../../domain-dsl-absorption-proposals.md)  
+- [`v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) (Agent pick)  
+- [`domain-dsl-absorption-proposals.md`](../../parked/domain-dsl-absorption-proposals.md)  
 - [`docs/experiments/DOMAIN-DSL-SPEC.md`](../experiments/DOMAIN-DSL-SPEC.md) (vision; not product truth)  
 - Product DSL: `Poly.Mcp/Docs/poly-dsl-guide.md`  
 - Mechanisms: [`docs/CORE.md`](../../../CORE.md)  

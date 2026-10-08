@@ -1,6 +1,6 @@
 # TASK PR113-review — Post-merge review of PR 113 (misc: shrink the agent surface, fail closed on a dirty lower)
 
-Status: assigned 2026-10-06. Top-priority slice (Scot, 2026-10-06 06:12 CDT).
+Status: done; every finding fixed by #117 (`2931f01f`), none waived.
 
 PR: https://github.com/scoizzle/Poly/pull/113. Squash-merged by Scot 2026-10-05 as `f398616e` without review. 184 files, +1491 / -1599.
 Diff to review: `git diff 2e70e477..f398616e` (parent `2e70e477` = M1, #103).
@@ -29,3 +29,4 @@ Razor's table is posted (PR comment on #113 or a review file linked here); 100x'
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | Foreman | — | `f398616e` | Review assigned to Razor | — |
 | 2026-10-06 | 100x | hand | `be223ba0` | Fix PR 117 filed, every row fixed: [PR113-fixes.md](PR113-fixes.md) | B1–B3, S1–S14, N1–N4 |
+| 2026-10-07 | restructure | - | `2931f01f` | merged #117 | every finding fixed, none waived |

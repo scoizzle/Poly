@@ -3,7 +3,7 @@
 **Date:** 2026-07-18  
 **Revised:** 2026-07-18 (**SA′′** — all slices committed; suite **1359**)  
 **Status:** **All slices shipped.** Phase 3 thin + RT + RT′ + SA + SA′ honesty **committed**. Suite **1359**.  
-**Current pick:** Effect surface — [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
+**Current pick:** Effect surface — [`effect-surface-completeness.md`](../../v2-to-v3/effect-surface-completeness.md) (E0→E1); SA′.1 snapshot remains pull  
 
 
 **Predecessor:** Phase 2 spawn-and-wire ([archived](../../domainmodeling-completed-2026-08/v2-to-v3/domainmodeling-next-phase.md)); MCP gap inventory ([`mcp-tool-surface-expansion.md`](mcp-tool-surface-expansion.md) §0) 
@@ -49,7 +49,7 @@ Agent proposes expression / element name
 | **SA** | Stage-action Option B + fallthrough | Copy-on-stage-add + goldens | ✅ MVP in `a74af5d` |
 | **SA′ honesty** | hintCount field, tool Description, README target, order golden | ✅ **Committed** (suite 1359) |
 | **SA′.1 / .8** | Snapshot/stale-copy; Option A | Documented only | **Pull** with pain |
-| **Effect surface (E\*)** | Authorable effects that already run | [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) | **CURRENT** (E0→E1) |
+| **Effect surface (E\*)** | Authorable effects that already run | [`effect-surface-completeness.md`](../../v2-to-v3/effect-surface-completeness.md) | **CURRENT** (E0→E1) |
 | **V1 / S1** | Deep visibility / debug | … | Pull |
 | **Pull** | Full effect-micro, `remove_constraint`, Capture | — | Only if needed |
 
@@ -701,5 +701,5 @@ LATER:   SA stale snapshot / Option A; full effect-micro / V1 / L* — pull only
 - `hintCount` is separate from `infoCount` in `AnalysisData`.  
 - Entity-level policies gate all actions — documented on `add_policy`.  
 - Subscriptions fire on relationship **target** stage entry — in README.  
-- **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md).  
+- **Next usefulness track is effects authoring** — see [`effect-surface-completeness.md`](../../v2-to-v3/effect-surface-completeness.md).  
 - Do **not** open Option A / full effect-micro / host I/O / containers without named pain.

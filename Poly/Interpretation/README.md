@@ -356,7 +356,7 @@ to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 | `LanguageVmTests` | One `Interpreter.Compile` + execute or compile-reject per executable `CompileNodeInner` kind |
 | `LanguageSurfaceTests` | Inventory: Executable / CompileReject / AnalysisOnly for every `Poly.Ast` `Node` |
 | [`docs/plans/archive/interpretation/`](../../docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
-| [`docs/plans/v2-to-v3/master-roadmap.md`](../../docs/plans/v2-to-v3/master-roadmap.md) | Active product planning (DomainModeling V2→V3) |
+| [`docs/plans/archive/v2-to-v3/master-roadmap.md`](../../docs/plans/archive/v2-to-v3/master-roadmap.md) | Milestone history (archived) |
 | [`docs/interpretation-system-architecture-review.md`](../../docs/interpretation-system-architecture-review.md) | Holistic architecture review (living doc) |
 | [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |
 

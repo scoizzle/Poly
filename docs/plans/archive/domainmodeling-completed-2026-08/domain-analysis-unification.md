@@ -4,7 +4,7 @@
 **Status:** ✅ **Product Complete** (uncommitted) — §16. Ops residual: commit when user asks.  
 **Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)
 
-**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete) · [`platform-velocity-review.md`](../../platform-velocity-review.md) (full-project pain map) · [`domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../../../CORE.md)
+**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete) · [`platform-velocity-review.md`](../../reference/platform-velocity-review.md) (full-project pain map) · [`domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../../../CORE.md)
 
 ---
 
@@ -224,7 +224,7 @@ Minimum focused checks:
 | Sqlite vs generic pack tests | Pack refinement still differs |
 | MCP smoke if session analyze path changed | Context threading |
 
-Pre-ship: [`pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
+Pre-ship: [`pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
 
 ---
 

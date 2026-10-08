@@ -152,6 +152,13 @@ public static partial class DirectVmAbiEmitter {
         ctx.EnterActivation(rootArgCount, 0);
         var rootExpr = CompileStatement(root, ctx);
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
+        // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
+        // StackPointer. SetArgs writes this+params at slots[0..] without
+        // advancing SP, so a nested frame at SP=0 would overwrite them. Park
+        // SP past the reserved frame (runs only on a fresh start: resume jumps
+        // away in PC dispatch above).
+        if (rootArgCount > 0 && ctx.FrameSlotHighWater > 0)
+            body.Add(Assign(ctx.SlotsStackPointer, Constant(ctx.FrameSlotHighWater)));
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),

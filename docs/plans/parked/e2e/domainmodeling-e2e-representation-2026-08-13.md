@@ -4,7 +4,7 @@
 **Kind:** Parent plan (parked). Not CURRENT. Solidify a suite only when admitted.  
 **Status:** Sequenced from the 2026-08-12 deep-research pass, then folded with fleet-eval probe findings where those findings are the same capability (author → analyze → runtime → generate).  
 **Source:** workflow `deep-research` + `probes/findings/fleet-eval/` (coordinator + 15 slices).  
-**Admission:** [`README.md`](../../README.md) · CURRENT truth [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). Do **not** start production work from this doc while Agent pick is `(none)` or another suite. **Do not admit this plan and fleet-eval as two CURRENT queues of the same bugs.**
+**Admission:** [`README.md`](../../README.md) · CURRENT truth [`poly-eng/board.md`](../../poly-eng/board.md). Do **not** start production work from this doc while Agent pick is `(none)` or another suite. **Do not admit this plan and fleet-eval as two CURRENT queues of the same bugs.**
 
 ---
 

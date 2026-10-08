@@ -10,7 +10,7 @@ Not a queue. `CURRENT` does not name these.
 | [`mut-safety/`](mut-safety/mut-safety-README.md) | MCP session mutation safety |
 | [`gcyc/`](gcyc/gcyc-README.md) | Grammar cycle remainder |
 
-Admit only by editing [`../simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+Admit only by editing [`../poly-eng/board.md`](../poly-eng/board.md).
 
 | File | What | Status |
 |------|------|--------|

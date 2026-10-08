@@ -2,7 +2,7 @@
 
 Review: [2026-10-07-A5a.md](2026-10-07-A5a.md). Target: PR 122 @ `df59f33e`. Mode: standard.
 
-These tasks are evidence. They are not work until a human adds a line to the `THEN` pick in `docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`.
+These tasks are evidence. They are not work until a human adds a line to the `THEN` pick in `docs/plans/poly-eng/board.md`.
 
 ## Open
 

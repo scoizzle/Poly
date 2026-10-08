@@ -1,7 +1,7 @@
 # gcyc — Grammar cycle
 
 **Plan:** [`../grammar-cycle-2026-08-14.md`](../grammar-cycle-2026-08-14.md)  
-**Status:** Parked / THEN. First admit (E1 + G0 + G2/G4) shipped 2026-08-14. Remaining G4 unparse is not CURRENT. Authority: [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md).
+**Status:** Parked / THEN. First admit (E1 + G0 + G2/G4) shipped 2026-08-14. Remaining G4 unparse is not CURRENT. Authority: [`board.md`](../../poly-eng/board.md).
 
 | Task | Work |
 |------|------|

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24 (revised)  
 **Purpose:** Single reference for what DomainModeling can actually do — by capability, with code references. Answers “are we building this or does it already ship?”  
-**Not CURRENT.** Not a task queue. Agent pick: [`plans/simple-agent-tasks/PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md). Completed suites: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md).
+**Not CURRENT.** Not a task queue. Agent pick: [`plans/poly-eng/board.md`](plans/poly-eng/board.md). Completed suites: [`plans/archive/domainmodeling-completed-2026-08/`](plans/archive/domainmodeling-completed-2026-08/README.md).
 
 ---
 
@@ -274,7 +274,7 @@ Shipped highlights: entities, properties, constraints, enums, navs, stages, acti
 ## 12. Suggested reading order
 
 1. This inventory (what ships)  
-2. [`plans/archive/v2-to-v3/master-roadmap.md`](plans/archive/v2-to-v3/master-roadmap.md) (product path; the pick is in [`PIPELINE-STATUS.md`](plans/simple-agent-tasks/PIPELINE-STATUS.md))  
+2. [`plans/archive/v2-to-v3/master-roadmap.md`](plans/archive/v2-to-v3/master-roadmap.md) (product path; the pick is in [`board.md`](plans/poly-eng/board.md))  
 3. [`plans/domainmodeling-workstream-map.md`](plans/archive/completed-2026-08-late/domainmodeling-workstream-map.md) (done vs parked)  
 4. [`plans/infrastructure-pass-NEXT.md`](plans/archive/completed-2026-08-late/infrastructure-pass-NEXT.md) (codegen pull)  
 5. [`CORE.md`](CORE.md) before changing pipeline seams  

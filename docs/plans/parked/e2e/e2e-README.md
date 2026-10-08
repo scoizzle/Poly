@@ -4,7 +4,7 @@
 **Probe IDs:** [`../fleet-eval-fixes-2026-08-12.md`](../../archive/pre-convergence-2026-10/fleet-eval-fixes-2026-08-12.md) — reuse those IDs; do not invent a second numbering.  
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Guide:** `Poly.Mcp/Docs/poly-dsl-guide.md`  
-**Not CURRENT.** This pack is **parked**. A human admits **one slice README** (or one wave) at a time via [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). This file exists so a fleet can be assigned without two agents editing the same hot file.
+**Not CURRENT.** This pack is **parked**. A human admits **one slice README** (or one wave) at a time via [`board.md`](../../poly-eng/board.md). This file exists so a fleet can be assigned without two agents editing the same hot file.
 
 **Status:** Parked. No slice `[x]`.
 
@@ -43,7 +43,7 @@ Mark the task [x] and the slice README table. Stop at the slice gate for pr1.
 3. The agent opens the slice README, claims the first `[ ]` task (write `Claimed by` on that task file **before** editing code), walks tasks in order, runs that task’s verify, marks `[x]`, then the slice gate.
 4. **Edit only the File ownership table** on the claimed task. If you need a file you do not own, stop and note the blocker.
 5. `poly-dsl-guide.md`: slice **0** owns the honesty sweep. Later slices may **append** one “now shipped” bullet for their construct. Do not rewrite unrelated sections.
-6. After a slice gate: pr1 on that slice’s dirty files. Do not mark PIPELINE-STATUS unless the human asked.
+6. After a slice gate: pr1 on that slice’s dirty files. Do not mark `board.md` unless the human asked.
 
 ### Wave DAG
 

@@ -5,7 +5,7 @@
 **Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Note:** Prefer after or with **mcp-minify** so unified `add`/`remove` use the same Evolve lock. Works with either catalog.
 
-**Status:** Parked / THEN — not CURRENT. Authority: [`PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md). Do not treat this file as admit-next.
+**Status:** Parked / THEN — not CURRENT. Authority: [`board.md`](../../poly-eng/board.md). Do not treat this file as admit-next.
 
 ---
 

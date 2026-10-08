@@ -1,7 +1,7 @@
 # Proposal: simplify DomainModeling by deletion
 
 **Date:** 2026-08-14  
-**Status:** Proposal (not CURRENT). Admission control: [`simple-agent-tasks/PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).  
+**Status:** Proposal (not CURRENT). Admission control: [`poly-eng/board.md`](../poly-eng/board.md).  
 **Lens:** The best next change is the one that **removes a noun, a table, or a pass** without shrinking the agent path (`.poly` → analyze → run / export).  
 **Related:** [`../complexity-semantic-map.md`](../../complexity-semantic-map.md), [`../decisions/2026-08-14-domain-libraries.md`](../../decisions/2026-08-14-domain-libraries.md), [`pack-host-2026-08-13.md`](pack/pack-host-2026-08-13.md)
 

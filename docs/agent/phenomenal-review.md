@@ -350,7 +350,7 @@ Call out oracle strength (tests/types) and any multi-pass merge.
 5. If the suite states “all follow-ups go into the docs,” obey that rule literally.
 6. **Process follow-ups:** if the same bug class keeps recurring (e.g. metadata key mismatch, test theater), add an explicit task to tighten gates, tests, or this protocol — not only a one-off code fix.
 
-**Admission.** Follow-up tasks are evidence. They are not work until a human adds a line to the `THEN` pick in [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](../plans/simple-agent-tasks/PIPELINE-STATUS.md). Do not start them in the review session, and do not mark a suite current from a review.
+**Admission.** Follow-up tasks are evidence. They are not work until a human adds a line to the `THEN` pick in [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Do not start them in the review session, and do not mark a suite current from a review.
 
 ### 5.3 User-facing report
 

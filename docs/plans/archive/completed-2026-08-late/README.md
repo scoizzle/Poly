@@ -9,9 +9,9 @@
 | Need | Location |
 |------|----------|
 | Admission + CURRENT | [`../../README.md`](../../README.md) |
-| Ready agent suites | [`../../simple-agent-tasks/READY-TO-TASK.md`](../../simple-agent-tasks/READY-TO-TASK.md) |
-| Master roadmap | [`../../v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) |
-| Pre-ship gate (still live) | [`../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) |
+| Ready agent suites | [`../pre-convergence-2026-10/READY-TO-TASK.md`](../pre-convergence-2026-10/READY-TO-TASK.md) |
+| Master roadmap | [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) |
+| Pre-ship gate (still live) | [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) |
 | Product DSL guide | `Poly.Mcp/Docs/poly-dsl-guide.md` |
 | Mechanisms | [`../../../CORE.md`](../../../CORE.md) |
 | Live probe fixtures | [`../../../probes/`](../../../probes/) |

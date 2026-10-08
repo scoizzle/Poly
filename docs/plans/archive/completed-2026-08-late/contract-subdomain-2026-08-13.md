@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-13  
 **Status:** Executed 2026-08-13. Suite 2087 green.  
-**Does not:** OpenAPI/gRPC ingest, generated clients, nested `Domain` merge, InternalDomain producer (project another `.poly` into this IR). Producer hook: [`pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md) wave 4.
+**Does not:** OpenAPI/gRPC ingest, generated clients, nested `Domain` merge, InternalDomain producer (project another `.poly` into this IR). Producer hook: [`pack-host-2026-08-13.md`](../../parked/pack/pack-host-2026-08-13.md) wave 4.
 
 ## Poly-to-Poly composition (locked, not built)
 

@@ -3,7 +3,7 @@
 **Parent / orientation:** [`../domainmodeling-cohesion-and-metadata-findings.md`](../domainmodeling-cohesion-and-metadata-findings.md) §5  
 **Related:** archived DACR/DAS (catalog monopath already shipped); residual analysis-consuming-lowering  
 **Gate:** [`amu-gate.md`](./amu-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **CORE:** [`../../CORE.md`](../../../../CORE.md)  
 
 **Status:** **DONE** — 2026-08-06 (all waves + gate; see [`amu-gate.md`](./amu-gate.md)).

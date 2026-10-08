@@ -1,6 +1,6 @@
 # TASK C1a — Interpreter: root program with declared parameters after `this`
 
-Status: open PR #110 @ `495ef41a`, Grug NOT SHIP at 98c1407c; R5 pushed, suite 3418/3418 locally. Waiting for verify.
+Status: open PR #110 @ `95ad8fb1`, Grug NOT SHIP at b22da6d3 (0 open findings); merged origin/master `99d97e46` (PRs 124+125), suite 3418/3418 locally. Waiting for verify.
 
 Branch from master `dd7d4204` (or later). Lane B. Review 2. Not V11. Plan ~line 374.
 
@@ -28,3 +28,5 @@ SHIP if `when all` row passes and BindForSimulate no longer rewrites params. NOT
 | 2026-10-08 | implementer | grok/grok-4.6 | `099659b5` | fixes pushed | R1, R2, R3, R4, R6; disputed: none; R5 skipped (nit >1 line); tests 3418/3418 |
 | 2026-10-08 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `98c1407c` | NOT SHIP | https://github.com/scoizzle/Poly/pull/110#issuecomment-6067693925 (Grug NOT SHIP at 98c1407c, 1 open finding, mode verify). Scot approved ONE extra fix round on PR 110, only for Grug finding R5. |
 | 2026-10-08 | implementer | grok/grok-4.6 | `495ef41a` | fixes pushed | R5; disputed: none; tests 3418/3418 |
+| 2026-10-08 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `b22da6d3` | NOT SHIP | https://github.com/scoizzle/Poly/pull/110#issuecomment-6069811466 (Grug 0 open findings at b22da6d3, mode verify). CI never ran: PR 110 conflicts with master after PRs 124 and 125. Merge origin/master (99d97e46) with a normal merge commit. |
+| 2026-10-08 | implementer | grok/grok-4.6 | `95ad8fb1` | fixes pushed | F1; disputed: none; tests 3418/3418 |

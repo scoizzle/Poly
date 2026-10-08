@@ -157,7 +157,7 @@ public static partial class DirectVmAbiEmitter {
         // advancing SP, so a nested frame at SP=0 would overwrite them. Park
         // SP past the reserved frame (runs only on a fresh start: resume jumps
         // away in PC dispatch above).
-        if (rootArgCount > 0 && ctx.FrameSlotHighWater > 0)
+        if (rootArgCount > 0)
             body.Add(Assign(ctx.SlotsStackPointer, Constant(ctx.FrameSlotHighWater)));
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {

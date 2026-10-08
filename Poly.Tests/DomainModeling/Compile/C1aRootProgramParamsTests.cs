@@ -135,7 +135,7 @@ public class C1aRootProgramParamsTests {
         var plate = new Parameter("plate", TypeReference.To<string>());
         var body = plate;
         var analysis = Interpreter.Analyzer.Analyze(body);
-                var program = Interpreter.Compile(body, analysis, [plate]);
+        var program = Interpreter.Compile(body, analysis, [plate]);
         await Assert.That(program.RootParameterClrTypes).IsNotNull();
         await Assert.That(program.RootParameterClrTypes!.Count).IsGreaterThanOrEqualTo(2);
 
@@ -154,7 +154,7 @@ public class C1aRootProgramParamsTests {
             new Return(plate)
         ], [create0]);
         var analysis = Interpreter.Analyzer.Analyze(body);
-                var program = Interpreter.Compile(body, analysis, [plate]);
+        var program = Interpreter.Compile(body, analysis, [plate]);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object(), "KEEP"));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("KEEP");
     }

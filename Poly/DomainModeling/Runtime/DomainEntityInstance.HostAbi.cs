@@ -328,12 +328,8 @@ public sealed partial record DomainEntityInstance {
             AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
         setArgs[0] = this;
-        for (var i = 0; i < rootParameters.Count; i++) {
-            if (!string.Equals(rootParameters[i].Name, "previousStage", StringComparison.Ordinal))
-                throw new InvalidOperationException(
-                    $"Unexpected subscription parameter '{rootParameters[i].Name}' on '{Entity.Name}'.");
-            setArgs[i + 1] = previousStageName;
-        }
+        if (rootParameters.Count > 0)
+            setArgs[1] = previousStageName;
         using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
         if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
             return failed;

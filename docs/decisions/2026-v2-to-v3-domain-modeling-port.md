@@ -3,8 +3,8 @@
 **Date:** 2026-05-31 (initial)  
 **Status:** Living Plan — **July 2026: V2 frozen (2026-07-10); WP1–WP4 complete; V3 is the only modeling stack; WP7 port/delete in progress toward M4.**  
 **Owner:** Primary author  
-**Execution plan:** `docs/plans/archive/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/archive/v2-to-v3/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
-**First consumer spike:** `docs/plans/archive/v2-to-v3/spikes/first-v3-consumer.md`  
+**Execution plan:** `docs/plans/archive/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/archive/v2-to-v3-migration/designs/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
+**First consumer spike:** `docs/plans/archive/completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md`  
 **MCP principles:** `docs/plans/reference/mcp-guiding-principles.md`  
 **Related Decisions:**
 - `2026-core-engineering-principles.md` (foundational)
@@ -121,9 +121,9 @@ Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/archive/v
 
 **Related living documents (execution side):**
 - `docs/plans/archive/v2-to-v3/master-roadmap.md` — **Authoritative task status**
-- `docs/plans/archive/v2-to-v3/orchestration-guide.md` — multi-agent operating model
+- `docs/plans/archive/v2-to-v3-migration/designs/orchestration-guide.md` — multi-agent operating model
 - `docs/plans/archive/v2-to-v3/agent-summaries/` — executor reports
-- `docs/plans/archive/v2-to-v3/workstreams/` — workstream detail
+- `docs/plans/archive/v2-to-v3-migration/workstreams/` — workstream detail
 - `docs/plans/archive/v2-to-v3/simple-agent-tasks/` — micro-tasks (**prefer `ws8-*` / `ws4-*` / name-first-consumer; `ws1-*` superseded**)
 
 **Related decisions:**

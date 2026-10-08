@@ -544,6 +544,27 @@ internal static class DictionaryBackedValue {
                 return raw;
         }
     }
+
+    /// <summary>
+    /// Runtime counterpart of <see cref="CoerceRead"/>: GuardCompatible, then
+    /// the same Convert.* as the member-read expression.
+    /// </summary>
+    internal static object? CoerceReadValue(object? raw, PrimitiveType target) {
+        var guarded = GuardCompatible(raw, target);
+        return target switch {
+            PrimitiveType.Int64 => Convert.ToInt64(guarded),
+            PrimitiveType.Int32 => Convert.ToInt32(guarded),
+            PrimitiveType.Int16 => Convert.ToInt16(guarded),
+            PrimitiveType.Int8 => Convert.ToSByte(guarded),
+            PrimitiveType.Float64 => Convert.ToDouble(guarded),
+            PrimitiveType.Float32 => Convert.ToSingle(guarded),
+            PrimitiveType.Decimal => Convert.ToDecimal(guarded),
+            PrimitiveType.Boolean => Convert.ToBoolean(guarded),
+            PrimitiveType.String => Convert.ToString(guarded),
+            PrimitiveType.Char => Convert.ToChar(guarded),
+            _ => guarded
+        };
+    }
 }
 
 

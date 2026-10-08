@@ -83,11 +83,25 @@ public static partial class DirectVmAbiEmitter {
     public static VmProgram Emit(
         Node root,
         AnalysisResult analysis,
-        CompilationMode mode = CompilationMode.Normal) {
+        CompilationMode mode = CompilationMode.Normal,
+        IReadOnlyList<Parameter>? rootParameters = null) {
 
         var ctx = new AbiCtx();
         ctx.Mode = mode;
         ctx.Analysis = analysis;
+        // C1a root module bodies (SetArgs(this, params…)): slot 0 = this, params at 1+.
+        // Nested CompileFunctionBody uses a fresh AbiCtx and keeps slots from 0.
+        // Locals must not reuse SetArgs slots — EmitScopeStores would wipe them.
+        // Ordinary root programs (no rootParameters) keep the pre-C1a layout.
+        var rootArgCount = 0;
+        if (rootParameters is not null) {
+            ctx.IsCompiledFunctionBody = true;
+            ctx.RestoreParamSlots(1);
+            foreach (var parameter in rootParameters)
+                ctx.DeclareParameter(parameter);
+            rootArgCount = 1 + rootParameters.Count;
+            ctx.ReserveFrameSlots(rootArgCount);
+        }
         var body = new List<Expression>();
 
         var lambdas = new List<Lambda>();
@@ -135,9 +149,16 @@ public static partial class DirectVmAbiEmitter {
         }
 
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
-        ctx.EnterActivation(0, 0);
+        ctx.EnterActivation(rootArgCount, 0);
         var rootExpr = CompileStatement(root, ctx);
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
+        // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
+        // StackPointer. SetArgs writes this+params at slots[0..] without
+        // advancing SP, so a nested frame at SP=0 would overwrite them. Park
+        // SP past the reserved frame (runs only on a fresh start: resume jumps
+        // away in PC dispatch above).
+        if (rootArgCount > 0)
+            body.Add(Assign(ctx.SlotsStackPointer, Constant(ctx.FrameSlotHighWater)));
         body.Add(rootExpr);
         if (ctx.RingDepth > 0) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),

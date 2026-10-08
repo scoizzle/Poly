@@ -231,6 +231,17 @@ public static partial class DirectVmAbiEmitter {
             return loads;
         }
 
+        /// <summary>
+        /// Keep locals from colliding with root SetArgs slots (slot 0 = this,
+        /// slots 1..N = declared root parameters). EmitScopeStores writes
+        /// register-backed variables into <c>_slots[FP+slot]</c>; without this
+        /// reserve, create0/create1 wipe parameter values before they are read.
+        /// </summary>
+        public void ReserveFrameSlots(int count) {
+            if (count > _nextFrameSlot)
+                _nextFrameSlot = count;
+        }
+
         public void DeclareVariable(Variable v) {
             if (_scopeStack.Count == 0)
                 throw new InvalidOperationException("No active scope");

@@ -1,6 +1,6 @@
 # TASK PR113-fixes — Land every Razor finding on PR 113 as one PR
 
-Status: open PR #117 @ `be223ba0`, CI pending.
+Status: merged #117 `2931f01f` 2026-10-06.
 
 PR: https://github.com/scoizzle/Poly/pull/117. Lane A, top priority. Implementer 100x, hand mill. Review: Final Boss. Parent: [PR113-review.md](PR113-review.md).
 Findings: `docs/agent/reviews/2026-10-06-pr113-f398616e-razor.md` on `review/razor-pr113-f398616e` (addendum `ae6ff807`).
@@ -28,3 +28,4 @@ Every row fixed or explicitly waived; red-before tests where behavior changes; g
 | 2026-10-06 | 100x | hand | `be223ba0` | PR 117 filed: all Razor rows fixed, none waived | — |
 | 2026-10-06 | Final Boss | OpenCode | `61791a5c` | NOT SHIP #1 (bugs 0, gate NO) | F460–F463: [comment](https://github.com/scoizzle/Poly/pull/117#issuecomment-6016398940) |
 | 2026-10-06 | 100x | hand | child of `61791a5c` | Fix pass: F460 fixed (§12 `parameter` required, in the example and the smoke test); F461 folded in (message says CLR forwarder, not host job); F462–F463 left as is | — |
+| 2026-10-07 | restructure | - | `2931f01f` | merged #117 | squash-merged 2026-10-06 |

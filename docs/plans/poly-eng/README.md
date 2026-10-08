@@ -1,29 +1,26 @@
-# Poly eng plans (lanes, board, task files)
+# Poly eng: how the plan is kept
 
-This folder is where the Poly engineering bots keep their working plan. It moved here from a private box folder on 2026-10-06 (Scot: all Poly plans live in the repo).
+[`board.md`](board.md) is the one live queue. It says what is current, what is next, and what Scot must decide. Each slice has one file in [`tasks/`](tasks/) ([template](tasks/_TEMPLATE.md)). The slices come from [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md) (decisions in [`pipeline-convergence-plan.decisions.md`](../../domain-modeling/pipeline-convergence-plan.decisions.md)). Open pull requests are the live in-flight state.
 
-| File | What it is | Owner |
-|------|------------|-------|
-| [`board.md`](board.md) | The living lane board: open slices, who has them, tips, merges, parked cards | Foreman |
-| [`tasks/<slice>.md`](tasks/) | One file per slice: scope, files, done-when, SHIP / NOT SHIP, then a running log | The slice's implementer, reviewers and Foreman |
+## Pipeline in brief
 
-The plan the slices come from is [`docs/domain-modeling/pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md) (decisions in [`pipeline-convergence-plan.decisions.md`](../../domain-modeling/pipeline-convergence-plan.decisions.md)). The pick is in [`PIPELINE-STATUS.md`](../simple-agent-tasks/PIPELINE-STATUS.md).
+The full pipeline (stages, mills and models, budget rules, launch commands, hang handling) is [`PIPELINE.md`](PIPELINE.md). Summary:
 
-## Rule: update the task file with every change
+| Stage | Owner | Heavy work runs on | Leaves behind |
+|---|---|---|---|
+| Plan | Foreman | OpenCode (or Grok) | `tasks/<id>.md`, a draft PR on `slice/<id>` |
+| Implement | 100x | Grok Build (OpenCode if Grok is down) | commits, self-review sweep in a PR comment, a Log row |
+| Review (Review-2 slices) | Razor | the other mill | one PR comment: verdict and one findings table |
+| Fix | 100x | same mill as implement | commits, a PR comment mapping finding ids to fixes, Log rows |
+| Verify / ship gate | Final Boss | the other mill | a PR comment `SHIP <sha>` or `NOT SHIP <sha>`; CI green on that SHA |
+| Merge | Chieftan, with Scot's OK (or Scot) | none | squash merge pinned to the SHIP SHA |
 
-Every bot updates its slice's task file here with each change it makes: each push, each review verdict, each merge. Do it in the same PR, or in a short docs-only follow-up PR right after.
+Agents run the heavy steps headless from fixed prompt templates. Bots only launch runs and pass one-line hand-offs. Reviews always run on the mill the implementer did not use. Nobody reviews their own work.
 
-- **Implementer:** add the pushed SHA and the mill it ran on (hand, Grok, OpenCode).
-- **Reviewer:** add one verdict row: reviewer, mill, SHA reviewed, verdict (SHIP / NOT SHIP), link to the findings.
-- **Foreman:** record the merge (PR number, merge SHA, date) and update `board.md`.
+## Record rules
 
-Verdict rows use this table:
-
-| Date | Who | Mill | SHA | Verdict / event | Findings |
-|------|-----|------|-----|-----------------|----------|
-
-## New slices
-
-Foreman adds `tasks/<slice>.md` when the slice is assigned. Keep it short: smallest readable change, shape matrix, self-review sweep, hand-edit gate ("could Scot change this by hand?").
-
-Use repo-relative links only. No paths from any bot's machine.
+- **Task file:** every implement or fix commit adds its own Log row (date, who, mill, SHA, event, findings). Review verdicts are PR comments, and the next commit on the branch copies them into the Log. The merge row is added by the next slice's plan commit.
+- **Board:** the plan commit of each new slice moves that slice from Next to In flight and records the previous merge. There are no docs-only PRs just for bookkeeping.
+- **Review comments** start with one line, `ROLE | SHA | mill/model | SHIP or NOT SHIP | n open findings`, followed by one table `id | severity | file:line | finding | fix`.
+- **Hand-edit gate:** every review answers "could Scot change this by hand, opening the files cold, without an agent?" A "no" is a finding of severity suggestion or higher and blocks SHIP until fixed or waived by Scot.
+- **Code is truth;** plans are background. Use repo-relative links only, and no paths from any machine (except the box launch paths in `PIPELINE.md`).

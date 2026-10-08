@@ -1,6 +1,6 @@
 # TASK A5a — Contributors return artifacts
 
-Status: PR https://github.com/scoizzle/Poly/pull/122 open (not squash-merged). Branch `slice/a5a-contributor-artifacts` from master `2931f01f`. Implementation `5072c4c6`. Verify pass at `71fce505` (severity none). Build & test SUCCESS.
+Status: merged #122 `bfe66beb` 2026-10-07.
 
 Lane A. Review 2. Not on the V11 standing-merge list (decisions file: Scot hand-merges A5a). Plan: [`docs/domain-modeling/pipeline-convergence-plan.md`](../../../domain-modeling/pipeline-convergence-plan.md) **A5a**. Depends on A3a (merged). Does not touch PR 110 (C1a).
 
@@ -30,3 +30,4 @@ Hand-edit: yes. Public interface change; the four implementers are listed above.
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-07 | implementer | Grok | `5072c4c6` | PR 122 filed | filtered tests 98 passed, including Emit golden and CRM DslCompiler host files |
 | 2026-10-07 | verifier | Grok | `71fce505` | verify pass; PR 122 left open | severity none. Filtered tests 98 passed, 0 failed (SliceCProducerLoopCatalogTests, DslCompilerArtifactContributorTests, MinimalApiGeneratorTests, EmitGoldenTests, DslCompilerCompileOracleTests, DslCompilerSqliteOracleTests). Build & test SUCCESS on `71fce505`. Not squash-merged. |
+| 2026-10-07 | restructure | - | `bfe66beb` | merged #122 | squash-merged to master |

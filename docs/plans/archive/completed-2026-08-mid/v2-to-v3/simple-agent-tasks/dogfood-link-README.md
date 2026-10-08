@@ -1,6 +1,6 @@
 # Link/Unlink Runtime + MCP Slice (`dogfood-link-*`)
 
-**Parent synthesis:** [`../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md`](../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md)  
+**Parent synthesis:** [`../agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md`](../../../completed-2026-08-late/v2-to-v3/agent-summaries/dogfood/DOGFOOD-SYNTHESIS-20260725.md)  
 **Source findings:** DOGFOOD-S2 (S2-B1 no unlink, S2-B2 create-in store reg, S2-B3 get_instance navs)  
 **Discovery queue:** [`dogfood-README.md`](dogfood-README.md)
 
@@ -37,8 +37,8 @@ PULL:    —
 | **link-1** | [`dogfood-link-1-unlink-instances.md`](dogfood-link-1-unlink-instances.md) | `[x]` | S | — |
 | **link-2** | [`dogfood-link-2-createin-store-registration.md`](dogfood-link-2-createin-store-registration.md) | `[x]` | S | link-1 |
 | **link-3** | [`dogfood-link-3-get-instance-navs.md`](dogfood-link-3-get-instance-navs.md) | `[x]` | S | link-1 |
-| **link-4** | [`dogfood-link-4-dsl-link-effect.md`](dogfood-link-4-dsl-link-effect.md) | `[ ]` | M | link-1+2+3 |
-| **link-5** | [`dogfood-link-5-link-unlink-runtime.md`](dogfood-link-5-link-unlink-runtime.md) | `[ ]` | M | link-4 |
+| **link-4** | `dogfood-link-4-dsl-link-effect.md` | `[ ]` | M | link-1+2+3 |
+| **link-5** | `dogfood-link-5-link-unlink-runtime.md` | `[ ]` | M | link-4 |
 
 ---
 

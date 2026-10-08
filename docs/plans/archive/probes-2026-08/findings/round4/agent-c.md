@@ -1,6 +1,6 @@
 # Round 4 findings — agent-ut-c (COMMON UTILITIES: find + grep family, uutils-style)
 
-Agent: `agent-ut-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../docs/agent/poly-discovery-loop.md).
+Agent: `agent-ut-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../../agent/poly-discovery-loop.md).
 Round: 4 (findings to `probes/findings/round4/agent-c.md`).
 Slice: model real-world COMMON UTILITIES as Poly domains, uutils-style (findutils + grep-family).
 Utilities modeled: **find**, **grep**, **sed**, **awk**.

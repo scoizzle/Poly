@@ -3,7 +3,7 @@
 **Status:** Active (inventory)  
 **Last Updated:** 2026-07-11  
 **Purpose:** Gap inventory and WP0–WP9 history for finishing V3 as the only domain modeling stack.  
-**Authority:** Complements `master-roadmap.md` (milestones). **Day-to-day remaining execution order:** [`vertical-slice-finish-plan.md`](vertical-slice-finish-plan.md) (one vertical slice fully implemented at a time). This doc retains **what was missing**, **WP history**, and **micro-task seeds**.  
+**Authority:** Complements `master-roadmap.md` (milestones). **Day-to-day remaining execution order:** [`vertical-slice-finish-plan.md`](../../domainmodeling-completed-2026-08/v2-to-v3/vertical-slice-finish-plan.md) (one vertical slice fully implemented at a time). This doc retains **what was missing**, **WP history**, and **micro-task seeds**.  
 **Related:**
 - `spikes/first-v3-consumer.md` — named consumer
 - `spikes/mcp-guiding-principles.md` — MCP design rules

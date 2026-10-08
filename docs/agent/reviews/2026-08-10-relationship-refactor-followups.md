@@ -1,6 +1,6 @@
 # Follow-ups — relationship refactor review (2026-08-10)
 
-Review note: [`../agent/reviews/2026-08-10-relationship-refactor-review.md`](../agent/reviews/2026-08-10-relationship-refactor-review.md)
+Review note: [`../agent/reviews/2026-08-10-relationship-refactor-review.md`](2026-08-10-relationship-refactor-review.md)
 
 ## Resolved (2026-08-10, same commit)
 
@@ -23,7 +23,7 @@ Review note: [`../agent/reviews/2026-08-10-relationship-refactor-review.md`](../
 
 ## Addendum — 2026-08-10 metadata-simplification review
 
-Review note: [`../agent/reviews/2026-08-10-metadata-simplification-review.md`](../agent/reviews/2026-08-10-metadata-simplification-review.md)
+Review note: [`../agent/reviews/2026-08-10-metadata-simplification-review.md`](2026-08-10-metadata-simplification-review.md)
 
 Re-verify of THIS file (against committed HEAD): R1–R4 confirmed fixed with primary evidence (repro compiles 0 errors; guide §0.3 honest; `Redistribute` appends; multi-source error lists all sources). R5 accepted as-is (correct — the entity changed). R6 still open.
 

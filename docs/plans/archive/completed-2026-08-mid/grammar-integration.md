@@ -3,11 +3,11 @@
 **Date:** 2026-07-26  
 **Revised:** 2026-08-07  
 **Status:** **GI-1…7 + E1 landed (2026-08-07).** Structure/annotations Matcher; **E1** `DslExpressionParser` + `ExpressionFormRegistry` (open primaries for temporal); effects still structure RD. Park: GI-8 JSON expr, GI-9 binary. Temporal pack may admit on open-form seam.  
-**Engine:** [`Poly/Grammar/`](../../Poly/Grammar/) + [`Poly/Grammar/README.md`](../../Poly/Grammar/README.md)  
-**Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../Poly/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
-**Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../Poly.Mcp/Docs/poly-dsl-guide.md)  
-**Platform:** [`docs/CORE.md`](../CORE.md) — Grammar owns pattern-table engine; DomainModeling owns domain DSL until this plan lands  
-**Related:** temporal research [`p1-temporal-research.md`](p1-temporal-research.md) · absorption [`domain-dsl-absorption-proposals.md`](domain-dsl-absorption-proposals.md) · decomposition [`domainmodeling-decomposition-proposal.md`](domainmodeling-decomposition-proposal.md)
+**Engine:** [`Poly/Grammar/`](../../../../Poly/Grammar/) + `Poly/Grammar/README.md`  
+**Product DSL today:** [`Poly/DomainModeling/Parsing/`](../../../../Poly.Tests/DomainModeling/Parsing/) (~2.4k LOC hand RD)  
+**Product truth:** [`Poly.Mcp/Docs/poly-dsl-guide.md`](../../../../Poly.Mcp/Docs/poly-dsl-guide.md)  
+**Platform:** [`docs/CORE.md`](../../../CORE.md) — Grammar owns pattern-table engine; DomainModeling owns domain DSL until this plan lands  
+**Related:** temporal research [`p1-temporal-research.md`](../../p1-temporal-research.md) · absorption [`domain-dsl-absorption-proposals.md`](../../domain-dsl-absorption-proposals.md) · decomposition [`domainmodeling-decomposition-proposal.md`](domainmodeling-decomposition-proposal.md)
 
 ---
 
@@ -88,7 +88,7 @@ This is **not** a redesign of domain semantics, evolution, or analysis. Output r
 
 | Asset | Location / role |
 |-------|-----------------|
-| **Harness** | [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../Poly.Tests/Integration/C99ParserInterpreterTests.cs) (~1k LOC, ~20 end-to-end cases) |
+| **Harness** | [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../../../Poly.Tests/Integration/C99ParserInterpreterTests.cs) (~1k LOC, ~20 end-to-end cases) |
 | **Lexer already Grammar** | `C99TokenReader : StringTokenReader<C99TokenKind>` — token media path is already real |
 | **Parser still hand RD** | `C99Parser` — recursive descent → Poly AST → LINQ → execute |
 | **Stress shape** | Arithmetic / comparison / logical / ternary; if/else, while, for; structs, member access, assignments — closer to **DSL expression + block** load than JSON |
@@ -280,7 +280,7 @@ Domain walk + `Printer`/`TokenWriter`; round-trip corpus green; stable-ish outpu
 ### GI-8 — JSON expression parser — **CANCELLED** (2026-08-07)
 
 JSON expression bags were a stopgap for MCP `add_policy` / oracle tools. Product path is text DSL (E1).  
-**Do not port JSON to Grammar.** Retire JSON consumers via [`mcp-catalog-minify.md`](mcp-catalog-minify.md); delete `DomainExpressionJsonParser` when callers are gone.
+**Do not port JSON to Grammar.** Retire JSON consumers via [`mcp-catalog-minify.md`](../completed-2026-08-late/mcp-catalog-minify.md); delete `DomainExpressionJsonParser` when callers are gone.
 
 ### GI-9 — Non-text streams (defer)
 

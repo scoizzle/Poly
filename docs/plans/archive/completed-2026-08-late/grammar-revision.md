@@ -4,7 +4,7 @@
 **Status:** ✅ **DONE 2026-08-09** — tier A executed (parallel v2 rebuild + hard cutover; engine + DSL now `Grammar<TToken, TTokenKind>` canonical). All §7 criteria met; review items B1–B3, N1–N3, C1 closed. **Distinct from grammar wrap-up** (LeftAssoc live-fold / S5 — see PIPELINE-STATUS).
 **Sequencing (2026-08-09 revision):** **parallel v2 rebuild, hard cutover** — the same pattern as the V2→V3 immutable-core cutover (no migration utility). Build the re-visioned engine from scratch as **`Poly.GrammarV2`** (namespace `Poly.GrammarV2`, clean type names, zero dependence on v1) alongside the existing `Poly/Grammar/`; migrate consumers (DSL, test grammars) one at a time via a `using` swap; then delete v1 and rename the folder/namespace back to `Poly.Grammar` in the cutover commit (mechanical). Wrap-up (LeftAssoc live-fold) lands on v2 after cutover. Admit as an explicit suite after the cheap dead-dual deletions (Validation / Text.Matching).  
 **Principle:** One pattern-table engine for **language-shaped token streams** — tokenizer owns physical decoding and content, matcher owns recognition, handlers own meaning.  
-**Related:** [`grammar-pure-end-state.md`](grammar-pure-end-state.md) (gpure DONE) · [`dead-dual-inventory-2026-08-08.md`](dead-dual-inventory-2026-08-08.md) · [`simple-agent-tasks/PIPELINE-STATUS.md`](simple-agent-tasks/PIPELINE-STATUS.md) · AGENTS.md / CORE  
+**Related:** [`grammar-pure-end-state.md`](grammar-pure-end-state.md) (gpure DONE) · [`dead-dual-inventory-2026-08-08.md`](dead-dual-inventory-2026-08-08.md) · [`simple-agent-tasks/PIPELINE-STATUS.md`](../../simple-agent-tasks/PIPELINE-STATUS.md) · AGENTS.md / CORE  
 
 ---
 

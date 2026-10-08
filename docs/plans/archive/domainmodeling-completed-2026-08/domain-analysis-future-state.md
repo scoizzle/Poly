@@ -5,7 +5,7 @@
 **Audience:** Agents and humans shaping DomainModeling analysis, runtime, MCP, and export  
 **Companion (current inventory / migration steps):** [`domain-analysis-simplification.md`](./domain-analysis-simplification.md)  
 **Agent task queue (execute here):** [`simple-agent-tasks/das-README.md`](./simple-agent-tasks/das-README.md)  
-**Foundations:** [`docs/CORE.md`](../CORE.md) · [`domain-analysis-unification.md`](./domain-analysis-unification.md) · DACR fail-closed contract  
+**Foundations:** [`docs/CORE.md`](../../../CORE.md) · [`domain-analysis-unification.md`](./domain-analysis-unification.md) · DACR fail-closed contract  
 
 This document describes **where domain analysis is going**, not a catalog of today’s bugs. Use the companion inventory for pass-by-pass present state and tactical cutovers. **Kick off work via the `das-*` suite**, not by freelancing from this plan alone.
 

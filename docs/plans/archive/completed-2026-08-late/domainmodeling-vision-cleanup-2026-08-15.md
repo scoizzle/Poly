@@ -2,9 +2,9 @@
 
 **Date:** 2026-08-15 (edited for review follow-ups F1–F13)
 **Status:** **Superseded** by [`domainmodeling-vision-cleanup-2026-08-16.md`](domainmodeling-vision-cleanup-2026-08-16.md). Do not execute. Kept as the five-wave draft the 2026-08-15 review attacked.
-**Lock:** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) + [`2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md) + `docs/CORE.md` + AGENTS platform facts.
+**Lock:** [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../../../decisions/2026-08-15-domain-library-extensions-mcp-harness.md) + [`2026-08-14-domain-libraries.md`](../../../decisions/2026-08-14-domain-libraries.md) + `docs/CORE.md` + AGENTS platform facts.
 **Absorbs (not competing):** `domainmodeling-cleanup-inventory-2026-08-15.md`, `domainmodeling-session-is-the-compile-2026-08-15.md`, `domainmodeling-extension-architecture-2026-08-15.md`, `domainmodeling-metadata-artifact-catalog-2026-08-15.md`, `complexity-semantic-map.md`, `interpretation/domain-execution-model.md`.
-**Review:** [`docs/agent/reviews/2026-08-15-vision-cleanup-plan-followups.md`](../agent/reviews/2026-08-15-vision-cleanup-plan-followups.md).
+**Review:** [`docs/agent/reviews/2026-08-15-vision-cleanup-plan-followups.md`](../../../agent/reviews/2026-08-15-vision-cleanup-plan-followups.md).
 
 **This plan changes the story, not the spine.** The product path stays `.poly → Domain → session load → analyze → lower → export/VM`. It deletes the leftover composition nouns and the residual dual paths so the tree matches the lock. **No Grammar rewrite. No VM completeness. No new IR, coordinator, MEF, or 12-method plugin.**
 

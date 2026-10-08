@@ -4,7 +4,7 @@
 **Status:** ✅ **Product Complete** (uncommitted) — §16. Ops residual: commit when user asks.  
 **Micro-tasks:** [`simple-agent-tasks/dau-README.md`](simple-agent-tasks/dau-README.md)
 
-**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete) · [`platform-velocity-review.md`](platform-velocity-review.md) (full-project pain map) · [`domainmodeling-capability-inventory.md`](../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../CORE.md)
+**Related:** [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) (complete) · [`platform-velocity-review.md`](../../platform-velocity-review.md) (full-project pain map) · [`domainmodeling-capability-inventory.md`](../../../domainmodeling-capability-inventory.md) · [`docs/CORE.md`](../../../CORE.md)
 
 ---
 
@@ -224,7 +224,7 @@ Minimum focused checks:
 | Sqlite vs generic pack tests | Pack refinement still differs |
 | MCP smoke if session analyze path changed | Context threading |
 
-Pre-ship: [`pr1-uncommitted-review-gate.md`](v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
+Pre-ship: [`pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
 
 ---
 
@@ -256,7 +256,7 @@ PULL:    D2.1–D2.3; D4.3 naming; fail-message polish
 | Plan | Relation |
 |------|----------|
 | [`analysis-pipeline-merge.md`](analysis-pipeline-merge.md) | **Predecessor** — registration done; this plan finishes ownership + storage/transport + unify walks |
-| [`infrastructure-pass-NEXT.md`](infrastructure-pass-NEXT.md) | Archive for IR/codegen bar; do not reopen dual infra analysis |
+| [`infrastructure-pass-NEXT.md`](../completed-2026-08-late/infrastructure-pass-NEXT.md) | Archive for IR/codegen bar; do not reopen dual infra analysis |
 | Pack / plugin experiments | Consume unified Analysis metadata; do not fork a third pipeline |
 
 ---

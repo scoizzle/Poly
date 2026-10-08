@@ -2,7 +2,7 @@
 
 Source review: [`2026-10-01-platform-contract-review.md`](2026-10-01-platform-contract-review.md).
 
-No suite is CURRENT (`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`). These tasks are the work queue. F1–F7 are closed. F8 stays open. Do not mark the frozen contract closed while F8 is open.
+Queued on PIPELINE-STATUS `THEN` (not CURRENT) (`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`). F1–F7 are closed. F8 stays open. Do not mark the frozen contract closed while F8 is open.
 
 Evidence for F1–F6: `dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false` — 2900 succeeded, 0 failed (2026-10-01).
 

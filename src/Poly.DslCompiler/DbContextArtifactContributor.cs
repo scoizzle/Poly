@@ -10,8 +10,7 @@ namespace Poly.DslCompiler;
 /// is loaded — not invented mid-compile from bags.
 /// </summary>
 public sealed class DbContextArtifactContributor : IArtifactContributor {
-    public IReadOnlyList<(string FileName, string Source)> Contribute(
-        Domain domain, AnalysisResult analysis) {
+    public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
 
@@ -23,10 +22,18 @@ public sealed class DbContextArtifactContributor : IArtifactContributor {
                 "Infrastructure pipeline did not produce storage mapping metadata.");
 
         var dbContextName = $"{domain.Name}DbContext";
+        var fileName = $"{dbContextName}.cs";
+        var unit = new DbContextGenerator(domain, storageModel).GenerateCompilationUnit();
+        var tree = GeneratedTree.Create(domain, fileName, unit, nameof(DbContextArtifactContributor));
+        var source = new CSharpGenerator().Generate(unit);
         return [
-            ($"{dbContextName}.cs",
-                new CSharpGenerator().Generate(
-                    new DbContextGenerator(domain, storageModel).GenerateCompilationUnit())),
+            tree,
+            ContributedFile.Create(
+                domain,
+                fileName,
+                source,
+                nameof(DbContextArtifactContributor),
+                [tree.Descriptor.Id]),
         ];
     }
 }

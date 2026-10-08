@@ -49,12 +49,14 @@ public sealed class DslCompiler {
     private readonly List<IArtifactContributor> _extraArtifacts = [];
 
     /// <summary>
-    /// Result of a compilation attempt.
+    /// Result of a compilation attempt. On success, <see cref="Catalog"/> is the catalog
+    /// the files were written from, including contributed text files. Null when compile failed.
     /// </summary>
     public sealed record CompileResult(
         bool Success,
         IReadOnlyList<(string FileName, string Source)>? Files,
-        IReadOnlyList<string>? Errors
+        IReadOnlyList<string>? Errors,
+        ArtifactCatalog? Catalog = null
     );
 
     /// <summary>
@@ -136,8 +138,13 @@ public sealed class DslCompiler {
         var domainName = nameChange?.Name ?? "PolyDomain";
         var emptyDomain = new Domain(domainName, []);
         // OpenCompileSession links sqlite/sqlserver in place of generic persistence.
-        // The domain must name that unit, or analysis rejects an id the session did not load.
-        changes = RecordLinkedVendor(changes, session);
+        // The domain must name that unit, or DomainEvolution.Apply throws on an id the
+        // session did not load.
+        if (LinkedVendor(mode, dbms) is { } vendor) {
+            changes = SwapPersistence(changes, vendor,
+                c => (c as AddDomainExtensionChange)?.ExtensionId,
+                new AddDomainExtensionChange(vendor));
+        }
         EvolutionResult outcome;
         try {
             outcome = new DomainEvolution(emptyDomain).Apply(changes, session: session);
@@ -165,10 +172,22 @@ public sealed class DslCompiler {
         var domain = outcome.Root;
         try {
             var files = session.Emit(domain, outcome.Analysis).ToList();
-            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts))
-                foreach (var file in contributor.Contribute(domain, outcome.Analysis))
-                    files.Add(file);
-            return new CompileResult(Success: true, Files: files, Errors: null);
+            var catalog = session.ArtifactCatalog;
+            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
+                foreach (var artifact in contributor.Contribute(domain, outcome.Analysis))
+                    catalog.Register(FromContributor(contributor, artifact));
+            }
+            // Emit already returned its files. Appending the catalog copies would duplicate them.
+            var seen = new HashSet<string>(files.Select(f => f.FileName), StringComparer.Ordinal);
+            foreach (var artifact in catalog.Artifacts) {
+                if (artifact.Descriptor.Id.Type != ContributedFile.Type)
+                    continue;
+                var name = ContributedFile.FileName(artifact);
+                if (!seen.Add(name))
+                    continue;
+                files.Add((name, ContributedFile.Text(artifact)));
+            }
+            return new CompileResult(Success: true, Files: files, Errors: null, Catalog: catalog);
         }
         catch (Exception ex) {
             return Fail($"Code generation failed: {ex.Message}");
@@ -181,41 +200,39 @@ public sealed class DslCompiler {
         .With(new HttpLibrary());
 
     /// <summary>
-    /// Source <c>uses persistence</c> plus a vendor pack links the vendor, not both.
-    /// Rewrite the recorded id to the library <paramref name="session"/> loaded.
+    /// The vendor that Db and All link in place of generic <c>persistence</c>, so the host
+    /// Program.cs provider matches <paramref name="dbms"/>. Null when nothing is swapped.
     /// </summary>
-    private static List<DomainChange> RecordLinkedVendor(List<DomainChange> changes, DomainSession session) {
-        string? vendor = null;
-        var loadedPersistence = false;
-        foreach (var id in session.Extensions) {
-            if (id is "sqlite" or "sqlserver")
-                vendor = id;
-            else if (id == "persistence")
-                loadedPersistence = true;
-        }
-        if (vendor is null || loadedPersistence)
-            return changes;
+    private static string? LinkedVendor(CompileMode mode, DbmsPack dbms) {
+        if (mode is not (CompileMode.Db or CompileMode.All))
+            return null;
+        return dbms switch {
+            DbmsPack.Sqlite => "sqlite",
+            DbmsPack.SqlServer => "sqlserver",
+            _ => null
+        };
+    }
 
-        var hasVendor = false;
-        foreach (var change in changes) {
-            if (change is AddDomainExtensionChange add
-                && string.Equals(add.ExtensionId, vendor, StringComparison.Ordinal))
-                hasVendor = true;
-        }
-
-        var rewritten = new List<DomainChange>(changes.Count);
-        foreach (var change in changes) {
-            if (change is AddDomainExtensionChange add
-                && string.Equals(add.ExtensionId, "persistence", StringComparison.Ordinal)) {
-                if (!hasVendor) {
-                    rewritten.Add(new AddDomainExtensionChange(vendor));
-                    hasVendor = true;
-                }
+    /// <summary>
+    /// Drops every <c>persistence</c> item from an ordered extension list and puts
+    /// <paramref name="vendorItem"/> where the first one was, unless the vendor is
+    /// already listed. Items with no extension id pass through unchanged.
+    /// </summary>
+    private static List<T> SwapPersistence<T>(
+        IReadOnlyList<T> items, string vendor, Func<T, string?> extensionId, T vendorItem) {
+        var hasVendor = items.Any(item => extensionId(item) == vendor);
+        var swapped = new List<T>(items.Count);
+        foreach (var item in items) {
+            if (extensionId(item) != "persistence") {
+                swapped.Add(item);
                 continue;
             }
-            rewritten.Add(change);
+            if (!hasVendor) {
+                swapped.Add(vendorItem);
+                hasVendor = true;
+            }
         }
-        return rewritten;
+        return swapped;
     }
 
     private static IReadOnlyList<string> SeedFor(DbmsPack dbms, CompileMode mode) {
@@ -250,25 +267,14 @@ public sealed class DslCompiler {
             if (seen.Add(library.Id))
                 ids.Add(library.Id);
         }
-        if (mode is CompileMode.Db or CompileMode.All) {
-            // Prefer the compile-selected vendor over bare persistence so host
-            // Program.cs provider matches DbmsPack (Load-time, not bag invent).
-            if (dbms is DbmsPack.Sqlite) {
-                ids.RemoveAll(id => id == "persistence");
-                seen.Remove("persistence");
-                if (seen.Add("sqlite"))
-                    ids.Add("sqlite");
-            }
-            else if (dbms is DbmsPack.SqlServer) {
-                ids.RemoveAll(id => id == "persistence");
-                seen.Remove("persistence");
-                if (seen.Add("sqlserver"))
-                    ids.Add("sqlserver");
-            }
-            else if (!ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")
-                     && seen.Add("persistence")) {
-                ids.Add("persistence");
-            }
+        if (LinkedVendor(mode, dbms) is { } vendor) {
+            ids = SwapPersistence(ids, vendor, id => id, vendor);
+            if (!ids.Contains(vendor))
+                ids.Add(vendor);
+        }
+        else if (mode is CompileMode.Db or CompileMode.All
+                 && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")) {
+            ids.Add("persistence");
         }
 
         // Load-time registration (not bag invent): host producers for loaded doors.
@@ -321,4 +327,22 @@ public sealed class DslCompiler {
 
     private static CompileResult Fail(string message) =>
         new(Success: false, Files: null, Errors: [message]);
+
+    /// <summary>
+    /// The catalog producer is the contributor that was registered, not a name it chose.
+    /// A return that is not a contributed text file or a generator tree fails closed.
+    /// </summary>
+    private static Artifact FromContributor(IArtifactContributor contributor, Artifact artifact) {
+        ArgumentNullException.ThrowIfNull(contributor);
+        ArgumentNullException.ThrowIfNull(artifact);
+        var type = artifact.Descriptor.Id.Type;
+        var file = type == ContributedFile.Type && artifact.Payload is string;
+        var tree = type == GeneratedTree.Type && artifact.Payload is CompilationUnitNode;
+        if (!file && !tree)
+            throw new InvalidOperationException(
+                $"Contributor '{contributor.GetType().Name}' returned '{artifact.Descriptor.Id}', which is not a contributed text file or tree.");
+        return new Artifact(
+            new ArtifactDescriptor(artifact.Descriptor.Id, contributor.GetType().Name, artifact.Descriptor.References),
+            artifact.Payload);
+    }
 }

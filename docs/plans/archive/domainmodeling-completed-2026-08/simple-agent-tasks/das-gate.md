@@ -2,7 +2,7 @@
 
 **Queue:** [`das-README.md`](./das-README.md)  
 **Future state:** [`../domain-analysis-future-state.md`](../domain-analysis-future-state.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 Status: `[x]` Wave 4 + suite closed 2026-07-31
 

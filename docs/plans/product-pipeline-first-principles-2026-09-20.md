@@ -248,7 +248,7 @@ Variable-precision here: locks are tight (not CURRENT, Item 5 PARKED, Eng WIP = 
 | Temptation | This note |
 |------------|-----------|
 | **Salvage / cut / reset** DomainModeling | **Does not choose in this file.** First principles of the pipeline, not a keep/kill of the front-end. Path-forward is unlocked as a **Session Compile** proposal in [`domain-modeling-abstraction-path-2026-09-21.md`](domain-modeling-abstraction-path-2026-09-21.md) — **not CURRENT**, slices unapproved, Eng WIP = 0. |
-| Admit PIPELINE-STATUS **CURRENT** | **No.** CURRENT stays `(none)`. This file is not a suite. |
+| Admit PIPELINE-STATUS **CURRENT** | **No.** This file does not change PIPELINE-STATUS. This file is not a suite. |
 | Implement C# / lower residual / bind EF | **No.** Consult only. |
 | Delete DEI, `Stay.Create`, Runtime, Ontology, Language | **No.** Do not delete from this file. Frozen ADR already says DEI deletion is a non-goal of the module-meaning lock. |
 | Unpark Item 5 | **No.** Occupancy / `BusySections` stays PARKED. |

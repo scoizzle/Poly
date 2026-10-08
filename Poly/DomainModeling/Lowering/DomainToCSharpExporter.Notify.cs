@@ -385,7 +385,7 @@ public sealed partial class DomainToCSharpExporter {
                                 checks.Add(new IfStatement(
                                     new LessThan(paramRef, minVal),
                                     new Block([Failure(
-                                        $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
+                                        $"'{prop.Name}' must be >= {EffectLoweringPass.FormatConstraintValue(r.Minimum)}.")])));
                             }
                         }
                         if (isNumber && r.Maximum is not null) {
@@ -394,7 +394,7 @@ public sealed partial class DomainToCSharpExporter {
                                 checks.Add(new IfStatement(
                                     new GreaterThan(paramRef, maxVal),
                                     new Block([Failure(
-                                        $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
+                                        $"'{prop.Name}' must be <= {EffectLoweringPass.FormatConstraintValue(r.Maximum)}.")])));
                             }
                         }
                         break;
@@ -469,13 +469,6 @@ public sealed partial class DomainToCSharpExporter {
         if (value is bool b) return new Constant(b);
         return new Constant(value?.ToString());
     }
-
-    /// <summary>Formats a constraint boundary value for error messages.</summary>
-    private static string FormatConstraintValue(object? value) => value switch {
-        null => "?",
-        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
-        _ => value.ToString() ?? "?"
-    };
 
     /// <summary>
     /// Returns true if the domain type name maps to a nullable CLR type

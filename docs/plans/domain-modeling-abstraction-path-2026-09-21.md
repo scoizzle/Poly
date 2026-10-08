@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-21
 **Status:** Proposal / consultant note — **not CURRENT**. Do not admit a suite. Do not change `simple-agent-tasks/PIPELINE-STATUS.md`. Eng WIP stays **0** until Scot greenlights a slice.
-**Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) on this branch (principles SHA moved with talk alignment + this sim-rule amend) · [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) (middle path = **refactor behind abstraction**, not keep/kill as mill queue)
+**Grounding:** [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) on this branch (principles SHA moved with talk alignment + this sim-rule amend) · `domain-modeling-salvage-verdict-2026-09-18.md` (middle path = **refactor behind abstraction**, not keep/kill as mill queue)
 **Parked (locked):** store-vs-lower **Item 5** Occupancy / `BusySections`. Still PARKED. Do not unpark. **PR 73** stays PARKED. Do not touch.
 **Audience:** Scot
 
@@ -84,7 +84,7 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 
 ## Locks (repeat so agents do not “find” work)
 
-- **Not CURRENT.** PIPELINE-STATUS stays `(none)`.
+- **Not CURRENT.** This file does not change PIPELINE-STATUS.
 - **Item 5 PARKED.** Occupancy / `BusySections` — not a candidate.
 - **PR 73 PARKED.** Do not touch. Do not unpark.
 - **Product sim = Interpreter on the `session.Lower` tree.** DEI / Effect-IR are not sim. This file does not delete DEI.
@@ -100,5 +100,5 @@ Small, stop-conditioned. **No slice starts until Scot accepts the Lower plan, th
 |-----|------|
 | [`product-pipeline-first-principles-2026-09-20.md`](product-pipeline-first-principles-2026-09-20.md) | Pipeline + principles this path sits on |
 | [`session-lower-plan-2026-09-21.md`](session-lower-plan-2026-09-21.md) | **SoT** for post-analyze Lower + artifact-set addendum. Slices unapproved until Scot accepts. |
-| [`domain-modeling-salvage-verdict-2026-09-18.md`](domain-modeling-salvage-verdict-2026-09-18.md) | Scot middle path = abstraction refactor (not old keep/kill queue) |
+| `domain-modeling-salvage-verdict-2026-09-18.md` | Scot middle path = abstraction refactor (not old keep/kill queue) |
 | `simple-agent-tasks/PIPELINE-STATUS.md` | Sole CURRENT/DONE — leave it |

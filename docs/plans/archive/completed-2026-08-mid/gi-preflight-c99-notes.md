@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-07  
 **Status:** **DONE / green** — closed 2026-08-07  
-**Harness:** [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../Poly.Tests/Integration/C99ParserInterpreterTests.cs)  
+**Harness:** [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../../../Poly.Tests/Integration/C99ParserInterpreterTests.cs)  
 **Plan:** [`grammar-integration.md`](grammar-integration.md) §3.4 · §11.1
 
 ---

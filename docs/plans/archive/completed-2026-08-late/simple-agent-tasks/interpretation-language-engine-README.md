@@ -3,7 +3,7 @@
 **Status:** DONE 2026-08-31 — ile-gate closed (no POC passthrough, Compile fail-closed, LanguageVmTests + LanguageSurfaceTests)  
 **Owning stream:** Interpretation only (`Poly/Interpretation/`, `Poly.Tests/Interpretation/`, CORE/Interpretation docs). **Do not mix** DomainModeling create/create-in, MCP, Grammar.  
 **Prerequisite:** F1–F22 stabilization on `cleanup/interpretation-stabilization-review` (closed).  
-**Authority:** VM is canonical semantics ([ADR](../../decisions/2026-06-08-vm-as-canonical-semantics.md)). Domain lowers to generic ops ([ADR](../../decisions/2026-06-08-domain-lowering-boundary.md)). Shipped ⊆ executable.
+**Authority:** VM is canonical semantics ([ADR](../../../../decisions/2026-06-08-vm-as-canonical-semantics.md)). Domain lowers to generic ops ([ADR](../../../../decisions/2026-06-08-domain-lowering-boundary.md)). Shipped ⊆ executable.
 
 ---
 

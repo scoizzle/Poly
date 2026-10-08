@@ -4,7 +4,7 @@
 **Mode:** full-project adversarial review (not a single PR).  
 **Lens:** correctness contracts **and** multi-year growth (complexity, duals, ownership, operability).  
 **Evidence baseline:** current tree on `rewrite/domainmodeling-from-scratch` (ahead of origin; includes uncommitted complexity-map / grammar-revision docs).  
-**Maps used:** [`docs/CORE.md`](../../CORE.md), [`docs/complexity-semantic-map.md`](../../complexity-semantic-map.md), [`docs/plans/dead-dual-inventory-2026-08-08.md`](../../plans/dead-dual-inventory-2026-08-08.md), live greps/LOC.
+**Maps used:** [`docs/CORE.md`](../../CORE.md), [`docs/complexity-semantic-map.md`](../../complexity-semantic-map.md), [`docs/plans/dead-dual-inventory-2026-08-08.md`](../../plans/archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md), live greps/LOC.
 
 **Verdict:** The spine is real and shippable. Growth risk is **not** “no architecture” — it is **unbounded surface area around a correct core**, plus **process/docs inflation**, plus a few **god-modules** that will resist every next feature. Without a deliberate “one dual at a time” policy, agents will keep adding bags, changes, and suites until the project feels unmaintainable even when green.
 
@@ -226,6 +226,6 @@ Derived from the review — short enough to put next to AGENTS:
 ## 8. Related
 
 - [`docs/complexity-semantic-map.md`](../../complexity-semantic-map.md) — facet inventory  
-- [`docs/plans/grammar-revision.md`](../../plans/grammar-revision.md) — token/exception design lock  
-- [`docs/plans/dead-dual-inventory-2026-08-08.md`](../../plans/dead-dual-inventory-2026-08-08.md)  
+- [`docs/plans/grammar-revision.md`](../../plans/archive/completed-2026-08-late/grammar-revision.md) — token/exception design lock  
+- [`docs/plans/dead-dual-inventory-2026-08-08.md`](../../plans/archive/completed-2026-08-late/dead-dual-inventory-2026-08-08.md)  
 - [`docs/agent/phenomenal-review.md`](../phenomenal-review.md) — protocol used as stance  

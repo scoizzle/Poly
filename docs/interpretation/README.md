@@ -18,7 +18,7 @@ complementing the module README at `Poly/Interpretation/README.md`.
 - Analysis README: [`Poly/Interpretation/Analysis/README.md`](../../Poly/Interpretation/Analysis/README.md)
 - VM README: [`Poly/Interpretation/Vm/README.md`](../../Poly/Interpretation/Vm/README.md)
 - ADRs: [`docs/decisions/`](../decisions/) (especially VM, primitives-as-IR, EH)
-- Architecture review: [`docs/interpretation-system-architecture-review.md`](../interpretation-system-architecture-review.md)
+- Architecture review: [`docs/interpretation-system-architecture-review.md`](../plans/archive/interpretation/interpretation-system-architecture-review.md)
 
 ## Architecture Overview
 

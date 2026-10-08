@@ -1,7 +1,7 @@
 # MCP Domain Inspection Completeness
 
 **Date:** 2026-07-13  
-**Status:** Proposal — **SUPERSEDED 2026-08-08 by [`mcp-catalog-minify.md`](mcp-catalog-minify.md)** (inspection needs met by `get_relationships`/`get_constraints`/`get_entity_detail`; per-type creation tools deleted in favor of unified `add`/`remove` + `apply_dsl`). Do not re-admit without explicit suite admit.
+**Status:** Proposal — **SUPERSEDED 2026-08-08 by [`mcp-catalog-minify.md`](archive/completed-2026-08-late/mcp-catalog-minify.md)** (inspection needs met by `get_relationships`/`get_constraints`/`get_entity_detail`; per-type creation tools deleted in favor of unified `add`/`remove` + `apply_dsl`). Do not re-admit without explicit suite admit.
 **Source:** Agent feedback from ~150-call supply chain modeling session  
 **Related:** `mcp-tool-surface-expansion.md` (relationship = deferred), `mcp-guiding-principles.md` (discoverable surface)
 
@@ -160,5 +160,5 @@ If constraints aren't already checked by `get_domain_analysis`, add a constraint
 | Plan | Relationship |
 |------|-------------|
 | [`mcp-mutation-safety.md`](mcp-mutation-safety.md) | Constraints and relationships must survive rollbacks; idempotency applies to `add_constraint` and `add_relationship` too |
-| [`mcp-batch-snapshot-efficiency.md`](mcp-batch-snapshot-efficiency.md) | `get_domain_snapshot` includes relationships; `get_relationships` is the lightweight filtered alternative |
-| [`mcp-tool-surface-expansion.md`](v2-to-v3/mcp-tool-surface-expansion.md) | Slice 5 (relationships) is deferred there; this plan defines the concrete inspection tools |
+| [`mcp-batch-snapshot-efficiency.md`](archive/completed-2026-08-late/mcp-batch-snapshot-efficiency.md) | `get_domain_snapshot` includes relationships; `get_relationships` is the lightweight filtered alternative |
+| [`mcp-tool-surface-expansion.md`](archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md) | Slice 5 (relationships) is deferred there; this plan defines the concrete inspection tools |

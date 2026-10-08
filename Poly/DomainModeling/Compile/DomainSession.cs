@@ -46,8 +46,11 @@ public sealed class DomainSession {
     /// pointing at a <c>source-domain</c> artifact, one <c>entity</c> tree per entity
     /// (the entity type and its stage enum) pointing at a <c>source-entity</c> artifact,
     /// and one <c>analysis-report</c> for the domain's findings.
-    /// It is not an emit/contributor file inventory.
-    /// This is the live instance: anything registered on it by hand is dropped by the next Lower or Emit.
+    /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
+    /// each printed <c>.cs</c> file with a reference to the entity or scaffolding tree
+    /// it printed. The compiler then registers contributor trees and text files here
+    /// and writes the text files from this catalog. The next Lower or Emit drops
+    /// anything registered after that, including those files.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -57,6 +60,7 @@ public sealed class DomainSession {
     private const string SourceDomainType = "source-domain";
     private const string SourceEntityType = "source-entity";
     private const string LowerProducer = "Lower";
+    private const string EmitProducer = "Emit";
 
     private Analyzer? _analyzer;
 
@@ -170,29 +174,24 @@ public sealed class DomainSession {
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
-        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         return module;
     }
 
-    // Emit uses the catalog returned here, not the ArtifactCatalog property, which another
-    // Lower or Emit on this session may replace at any time.
+    // Lower and Emit both refuse here, before any catalog exists. Emit uses the catalog
+    // returned here, not the ArtifactCatalog property, which another Lower or Emit on
+    // this session may replace at any time.
     private (IReadOnlyList<TypeDefinitionNode> Module, ArtifactCatalog Catalog) LowerToCatalog(
         Domain domain, AnalysisResult analysis) {
-        if (analysis.HasErrors) {
-            var messages = string.Join("; ", analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Select(d => d.Message));
-            throw new InvalidOperationException(
-                $"Cannot lower '{domain.Name}' because analysis reported errors: {messages}");
-        }
-
+        DomainModelAnalyzer.ThrowIfHasErrors(analysis);
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         var catalog = new ArtifactCatalog();
         RegisterSourceElements(catalog, domain);
         RegisterTrees(catalog, domain, module);
         RegisterAnalysisReport(catalog, domain, analysis);
+        catalog.DeclareType(GeneratedTree.Type, mayPointAt: []);
+        catalog.DeclareType(ContributedFile.Type, mayPointAt: [EntityType, ScaffoldingType, GeneratedTree.Type]);
         return (module, catalog);
     }
 
@@ -276,11 +275,31 @@ public sealed class DomainSession {
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
         // Files come in registration order: entities in domain order, then the scaffolding.
-        foreach (var tree in catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType))
-            files.Add(($"{tree.Descriptor.Id.Segments[^1]}.cs", generator.Generate(TypesOf(tree))));
+        // Snapshot first: registering a file appends to the catalog being enumerated.
+        var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
+        foreach (var tree in entityTrees) {
+            AddPrintedFile(
+                catalog,
+                domain,
+                files,
+                $"{tree.Descriptor.Id.Segments[^1]}.cs",
+                generator.Generate(TypesOf(tree)),
+                tree);
+        }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
-        files.Add(("Poly.Types.cs", generator.Generate(TypesOf(scaffolding))));
+        AddPrintedFile(catalog, domain, files, "Poly.Types.cs", generator.Generate(TypesOf(scaffolding)), scaffolding);
         return files;
+    }
+
+    private static void AddPrintedFile(
+        ArtifactCatalog catalog,
+        Domain domain,
+        List<(string FileName, string Source)> files,
+        string fileName,
+        string source,
+        Artifact tree) {
+        files.Add((fileName, source));
+        catalog.Register(ContributedFile.Create(domain, fileName, source, EmitProducer, [tree.Descriptor.Id]));
     }
 
     /// <summary>

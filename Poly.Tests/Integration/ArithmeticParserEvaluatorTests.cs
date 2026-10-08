@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Grammar;
 using Poly.Tests.TestHelpers;
 
@@ -153,7 +155,7 @@ public class ArithmeticParserEvaluatorTests {
 
                 // Parse as double if it contains a decimal point, otherwise int
                 if (token.Text.Contains('.'))
-                    return new Constant(double.Parse(token.Text));
+                    return new Constant(double.Parse(token.Text, CultureInfo.InvariantCulture));
                 return new Constant(int.Parse(token.Text));
             }
 

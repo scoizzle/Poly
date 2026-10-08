@@ -1,6 +1,6 @@
 # DACR r3 review — 2026-07-30 (phenomenal, multi-pass)
 
-- **Mode**: multi-pass phenomenal review per [`docs/agent/phenomenal-review.md`](../../../agent/phenomenal-review.md)
+- **Mode**: multi-pass phenomenal review per [`docs/agent/phenomenal-review.md`](../../../../agent/phenomenal-review.md)
 - **Pass A**: session agent (wrote the r2 slice) — full-context verification of each Pass B finding against current source + `git show HEAD`
 - **Pass B**: fresh-context subagent (Explore), diff-only input from `/tmp/poly-dacr-diff.txt` (1140 lines)
 - **Branch**: `rewrite/domainmodeling-from-scratch`

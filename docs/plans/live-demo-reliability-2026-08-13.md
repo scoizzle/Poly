@@ -41,4 +41,4 @@ Out of this cut: ValueType, contracts, DateOperation authoring, uniqueness EF in
 
 ## Tasking
 
-Use existing [`simple-agent-tasks/e2e-4-README.md`](simple-agent-tasks/e2e-4-README.md) for generator work. Oracle + `live-demo.sh` live in this cut.
+Use existing [`simple-agent-tasks/e2e-4-README.md`](parked/e2e/e2e-4-README.md) for generator work. Oracle + `live-demo.sh` live in this cut.

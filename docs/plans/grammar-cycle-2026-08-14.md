@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-14  
 **Status:** Proposal — not CURRENT until admitted. Supersedes leftover “bridge” work in [`pack-host-2026-08-13.md`](pack-host-2026-08-13.md) phase-1 leftovers and the parked “LeftAssoc live fold” line as the *Grammar* workstream. Does not reopen MEF / IDomainPack.  
-**Suite:** [`simple-agent-tasks/gcyc-README.md`](simple-agent-tasks/gcyc-README.md)  
-**Related:** [`grammar-pure-end-state.md`](grammar-pure-end-state.md); [`../decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md); [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md)
+**Suite:** [`simple-agent-tasks/gcyc-README.md`](parked/gcyc/gcyc-README.md)  
+**Related:** [`grammar-pure-end-state.md`](archive/completed-2026-08-late/grammar-pure-end-state.md); [`../decisions/2026-08-14-domain-libraries.md`](../decisions/2026-08-14-domain-libraries.md); [`domainmodeling-simplification-2026-08-14.md`](domainmodeling-simplification-2026-08-14.md)
 
 ---
 

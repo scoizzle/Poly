@@ -73,20 +73,20 @@ public sealed partial record DomainEntityInstance {
         return analyzer;
     }
 
+    private static readonly ClrTypeReference HostJobsType = new(typeof(DomainInstanceHostJobs));
+
     /// <summary>
-    /// Instance method whose body is <c>DictionaryInstanceOps.Name(this, args)</c>.
+    /// Instance method whose body is <c>DomainInstanceHostJobs.Name(this, args)</c>.
     /// The same <see cref="Parameter"/> nodes are the signature and the call
     /// arguments, so each argument keeps its type.
     /// </summary>
     private static MethodDefinitionNode HostJob(
-        string name, Node returnType, IReadOnlyList<Parameter> parameters) {
-        var args = new Node[parameters.Count + 1];
-        args[0] = new ThisReference();
-        for (var i = 0; i < parameters.Count; i++)
-            args[i + 1] = parameters[i];
-        Node call = new Invoke(
-            new Member(new ClrTypeReference(typeof(DictionaryInstanceOps)), name),
-            args);
+        string name, Node returnType, IReadOnlyList<Parameter> parameters) =>
+        HostJob(name, returnType, parameters, [.. parameters]);
+
+    private static MethodDefinitionNode HostJob(
+        string name, Node returnType, IReadOnlyList<Parameter> parameters, IReadOnlyList<Node> args) {
+        Node call = new Invoke(new Member(HostJobsType, name), [new ThisReference(), .. args]);
         var isVoid = returnType is ClrTypeReference { RuntimeType: var runtime }
             && runtime == typeof(void);
         return new MethodDefinitionNode(
@@ -94,6 +94,78 @@ public sealed partial record DomainEntityInstance {
             returnType,
             Parameters: parameters,
             Body: new Block([isVoid ? call : new Return(call)]));
+    }
+
+    /// <summary>
+    /// <c>factory(name, p0, v0, p1, v1, …)</c>, the call the lowered create effect makes.
+    /// The body packs the pairs into a values bag
+    /// (<c>With(With(Values(), p0, v0), p1, v1)</c>) and calls the one host job that
+    /// takes the bag.
+    /// </summary>
+    private static MethodDefinitionNode PairsHostJob(
+        string factory, Node returnType, IReadOnlyList<Node> valueTypes) {
+        var str = TypeReference.To<string>();
+        var name = new Parameter("name", str);
+        var parameters = new List<Parameter> { name };
+        Node values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.Values)));
+        for (var i = 0; i < valueTypes.Count; i++) {
+            var key = new Parameter($"p{i}", str);
+            var value = new Parameter($"v{i}", valueTypes[i]);
+            parameters.Add(key);
+            parameters.Add(value);
+            values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.With)), values, key, value);
+        }
+        return HostJob(factory, returnType, parameters, [name, values]);
+    }
+
+    /// <summary>
+    /// The store jobs of every runtime entity type, built once. Their bodies call
+    /// <see cref="DomainInstanceHostJobs"/> and the receiver is <c>this</c>, so nothing
+    /// in them depends on the entity. The VM caches a compiled AST method by its
+    /// definition node, so the same nodes on every call let that cache hit.
+    /// </summary>
+    internal static readonly IReadOnlyList<MethodDefinitionNode> HostJobs = BuildHostJobs();
+
+    private static List<MethodDefinitionNode> BuildHostJobs() {
+        var voidType = new ClrTypeReference(typeof(void));
+        var resultType = TypeReference.To<DomainResult>();
+        var str = TypeReference.To<string>();
+        var i64 = TypeReference.To<long>();
+        var boolean = TypeReference.To<bool>();
+        var obj = TypeReference.To<object>();
+        var jobs = new List<MethodDefinitionNode> {
+            HostJob("Notify", voidType, [
+                new Parameter("stageName", new PrimitiveTypeReference(Prim.String))
+            ]),
+            HostJob("Notify", voidType, [
+                new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
+                new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
+            ]),
+            HostJob("LinkRelated", voidType, [
+                new Parameter("relationshipName", str),
+                new Parameter("target", obj)
+            ])
+        };
+        Node[] valueTypes = [i64, str, boolean, obj];
+        foreach (var vt in valueTypes) {
+            jobs.Add(HostJob("EnsureUnique", resultType, [
+                new Parameter("propertyName", str),
+                new Parameter("value", vt)
+            ]));
+        }
+        // One pair keeps its value's type; two or more pairs pass objects.
+        foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
+            jobs.Add(HostJob(factory, resultType, [
+                new Parameter("name", str),
+                new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
+            ]));
+            jobs.Add(PairsHostJob(factory, resultType, []));
+            foreach (var vt in valueTypes)
+                jobs.Add(PairsHostJob(factory, resultType, [vt]));
+            for (var pairs = 2; pairs <= 16; pairs++)
+                jobs.Add(PairsHostJob(factory, resultType, Enumerable.Repeat<Node>(obj, pairs).ToList()));
+        }
+        return jobs;
     }
 
     private static TypeDefinitionNode BuildTypeDefNode(
@@ -143,31 +215,13 @@ public sealed partial record DomainEntityInstance {
             }
         }
 
-        var voidType = new ClrTypeReference(typeof(void));
-        var resultType = TypeReference.To<DomainResult>();
         var str = TypeReference.To<string>();
-        var i64 = TypeReference.To<long>();
         var boolean = TypeReference.To<bool>();
         var obj = TypeReference.To<object>();
-        var methods = new List<MethodDefinitionNode> {
-            HostJob("Notify", voidType, [
-                new Parameter("stageName", new PrimitiveTypeReference(Prim.String))
-            ]),
-            HostJob("Notify", voidType, [
-                new Parameter("stageName", new PrimitiveTypeReference(Prim.String)),
-                new Parameter("previousStageName", new PrimitiveTypeReference(Prim.String))
-            ]),
-            HostJob("EnsureUnique", resultType, [
-                new Parameter("propertyName", str),
-                new Parameter("value", obj)
-            ])
-        };
+        var methods = new List<MethodDefinitionNode>(HostJobs);
         // Actions and policies stay empty so InvokeNamed owns them.
-        // Store jobs are calls in the body: dictionary this invokes
-        // DictionaryInstanceOps, which reaches the directory.
-        var methodNames = new HashSet<string>(StringComparer.Ordinal) {
-            "Notify", "EnsureUnique",
-            "ExistsRelated", "GetRelatedOne", "LinkRelated"
+        var methodNames = new HashSet<string>(HostJobs.Select(m => m.Name), StringComparer.Ordinal) {
+            "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
         // dispatches those names to Notify(stage, previousStage).
@@ -182,17 +236,6 @@ public sealed partial record DomainEntityInstance {
                     new PrimitiveTypeReference(Prim.String))],
                 Body: new Block([])));
         }
-        Node[] valueTypes = [i64, str, boolean, obj];
-        foreach (var vt in new Node[] { i64, str, boolean }) {
-            methods.Add(HostJob("EnsureUnique", resultType, [
-                new Parameter("propertyName", str),
-                new Parameter("value", vt)
-            ]));
-        }
-        methods.Add(HostJob("LinkRelated", voidType, [
-            new Parameter("relationshipName", str),
-            new Parameter("target", obj)
-        ]));
         methods.Add(new MethodDefinitionNode(
             "ExistsRelated",
             boolean,
@@ -203,29 +246,6 @@ public sealed partial record DomainEntityInstance {
             obj,
             Parameters: [new Parameter("relationshipName", str)],
             Body: new Block([])));
-        foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
-            methods.Add(HostJob(factory, resultType, [
-                new Parameter("name", str),
-                new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
-            ]));
-            methodNames.Add(factory);
-            methods.Add(HostJob(factory, resultType, [new Parameter("name", str)]));
-            foreach (var vt in valueTypes) {
-                methods.Add(HostJob(factory, resultType, [
-                    new Parameter("name", str),
-                    new Parameter("p0", str),
-                    new Parameter("v0", vt)
-                ]));
-            }
-            for (var pairs = 2; pairs <= 16; pairs++) {
-                var ps = new List<Parameter> { new Parameter("name", str) };
-                for (var i = 0; i < pairs; i++) {
-                    ps.Add(new Parameter($"p{i}", str));
-                    ps.Add(new Parameter($"v{i}", obj));
-                }
-                methods.Add(HostJob(factory, resultType, ps));
-            }
-        }
         foreach (var action in EnumerateTypeDefActions(entity)) {
             if (!methodNames.Add(action.Name))
                 continue;

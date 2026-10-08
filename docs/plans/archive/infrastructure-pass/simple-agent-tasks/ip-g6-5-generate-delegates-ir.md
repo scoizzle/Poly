@@ -1,7 +1,7 @@
 # Micro-Task: G6.5 — Optional: string Generate delegates to IR
 
 **Suite:** [`ip-README.md`](ip-README.md) **#G6.5**  
-**Parent:** [`../infrastructure-pass-NEXT.md`](../infrastructure-pass-NEXT.md)  
+**Parent:** [`../infrastructure-pass-NEXT.md`](../../completed-2026-08-late/infrastructure-pass-NEXT.md)  
 **Difficulty:** Low  
 **Estimated Context:** ~8k tokens  
 **Status:** `[ ]` Not Started  

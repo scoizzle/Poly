@@ -7,7 +7,7 @@ Slice probes in `probes/discovery-dates/`. Checked with `scripts/run-probe.sh`
 > **Resolution (2026-08-12):** the date surface is **unauthorized core-DSL surface** —
 > added by an agent without approval; the intent is to ship dates **as a pack**. The
 > compile-fail bugs below are symptoms of that, so they are **not** being fixed forward.
-> Recorded (deferred) in [`docs/plans/dates-to-pack-2026-08-12.md`](../../docs/plans/dates-to-pack-2026-08-12.md).
+> Recorded (deferred) in [`docs/plans/dates-to-pack-2026-08-12.md`](../../../dates-to-pack-2026-08-12.md).
 
 ## F-D1 — `default(guid)` on Text breaks the export (`string ?? Guid`)
 - **Signal:** compile-fail (export/runtime divergence)

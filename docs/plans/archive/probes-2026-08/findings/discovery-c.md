@@ -1,6 +1,6 @@
 # Discovery-c findings — CONSTRAINTS + CREATE PATHS + ENUMS
 
-Agent: `discovery-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../docs/agent/poly-discovery-loop.md).
+Agent: `discovery-c`. Protocol: [`docs/agent/poly-discovery-loop.md`](../../../../agent/poly-discovery-loop.md).
 Slice: required/unique/range/length/pattern/default constraints; `create Type` vs `create in Rel`;
 `-> EntityType` return contract (create-as-last-statement); enum types, enum-typed properties,
 enum members in assigns and policy comparisons.

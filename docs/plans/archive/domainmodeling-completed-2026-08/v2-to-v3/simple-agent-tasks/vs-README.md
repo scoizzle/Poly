@@ -13,7 +13,7 @@
 3. **Do not start Slice 2** until Slice 0 tasks marked **blocks Slice 2** are Done.
 4. **Do not start Slice 3** until Slice 2 is Done.
 5. **Do not pick Slice 4/5** unless an orchestrator reopens them (deferred).
-6. After Done: write `../agent-summaries/vs-<task-id>-summary.md` using [`TEMPLATE-task-summary.md`](../agent-summaries/TEMPLATE-task-summary.md). Update only the Status line on the task file.
+6. After Done: write `../agent-summaries/vs-<task-id>-summary.md` using [`TEMPLATE-task-summary.md`](../../../../v2-to-v3/agent-summaries/TEMPLATE-task-summary.md). Update only the Status line on the task file.
 7. Build: `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`  
    Tests: `dotnet run --project Poly.Tests/Poly.Tests.csproj` (or filter to tests you added).
 8. Principles: AGENTS.md — domain fidelity, thin slice, no domain VM opcodes, MCP honesty.
@@ -96,7 +96,7 @@
 | **pm2-1** | Multi-property MCP sample subject for `evaluate_policy` | [`vs-pm2-evaluate-policy-sample-bag.md`](vs-pm2-evaluate-policy-sample-bag.md) | **[x]** | McpSubjectBag (8 props); JSON + backward-compat Age; 1178 green |
 | **pm2-2** | Affordance: `add_policy` success → include `evaluate_policy` | [`vs-pm2-add-policy-evaluate-affordance.md`](vs-pm2-add-policy-evaluate-affordance.md) | **[x]** | `add_policy` response now includes `evaluate_policy` affordance |
 | **pm2-3** | First effect execution (Slice 4) | (use vertical-slice S4 / open when pulled) | **[ ]** | Pull when product needs behavior beyond guards |
-| **pm2-4** | Naming cleanup drop V3\* | [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) | **[x]** | R0–R2 done: MCP tools, demos, analyzer extensions renamed |
+| **pm2-4** | Naming cleanup drop V3\* | [`../../post-v2-delete-naming-cleanup.md`](../../../../post-v2-delete-naming-cleanup.md) | **[x]** | R0–R2 done: MCP tools, demos, analyzer extensions renamed |
 
 ### Deferred (do not pick without scenario)
 
@@ -111,7 +111,7 @@
 ## Archived pre-vs micro-tasks
 
 WP/ws/WS8 micro-tasks moved to  
-[`../../archive/v2-to-v3-migration/simple-agent-tasks/`](../../archive/v2-to-v3-migration/simple-agent-tasks/).  
+[`../../archive/v2-to-v3-migration/simple-agent-tasks/`](../../../v2-to-v3-migration/simple-agent-tasks/).  
 **Do not execute** — use this `vs-*` suite only.
 
 ---
@@ -149,7 +149,7 @@ Person Age is the **minimum expressive type** for proving policy evaluation. Pol
 1. **`vs-pm2-evaluate-policy-sample-bag.md` (pm2-1)** — multi-property sample subject (Age-only is M2-thin)  
 2. **`vs-pm2-add-policy-evaluate-affordance.md` (pm2-2)** — affordance chain polish  
 3. **`vs-s0-fail-loud-remove-zero-match.md` (0.1d)** — optional evolve honesty  
-4. **Naming cleanup R0–R1** — [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) when no feature thrash  
+4. **Naming cleanup R0–R1** — [`../../post-v2-delete-naming-cleanup.md`](../../../../post-v2-delete-naming-cleanup.md) when no feature thrash  
 5. **Slice 4 first effect** — only with a named product scenario  
 
 Orchestrator: prefer (1)–(2) if agents hit Total/Status policies or missing evaluate affordances.

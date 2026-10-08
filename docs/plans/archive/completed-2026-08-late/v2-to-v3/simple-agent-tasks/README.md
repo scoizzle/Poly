@@ -5,8 +5,8 @@
 
 ## Operating rule
 
-**Active queue:** [`qe-README.md`](qe-README.md) (Query + Effect Suite — post-E1).  
-**Completed:** [`vs-README.md`](vs-README.md) (M2 vertical slice — no new picks).  
+**Active queue:** [`qe-README.md`](../../../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md) (Query + Effect Suite — post-E1).  
+**Completed:** [`vs-README.md`](../../../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/vs-README.md) (M2 vertical slice — no new picks).  
 
 | Mark | Meaning |
 |------|---------|
@@ -18,9 +18,9 @@
 
 ## Templates
 
-- Task: [`TEMPLATE-micro-task.md`](TEMPLATE-micro-task.md)  
-- Process: [`pr1-uncommitted-review-gate.md`](pr1-uncommitted-review-gate.md) — pre-ship review loop (three-layer defense, fail-closed, re-review)  
-- Summary: [`../agent-summaries/TEMPLATE-task-summary.md`](../agent-summaries/TEMPLATE-task-summary.md)
+- Task: [`TEMPLATE-micro-task.md`](../../../../v2-to-v3/simple-agent-tasks/TEMPLATE-micro-task.md)  
+- Process: [`pr1-uncommitted-review-gate.md`](../../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) — pre-ship review loop (three-layer defense, fail-closed, re-review)  
+- Summary: [`../agent-summaries/TEMPLATE-task-summary.md`](../../../../v2-to-v3/agent-summaries/TEMPLATE-task-summary.md)
 
 ---
 
@@ -28,6 +28,6 @@
 
 Pre-`vs-*` tasks (`wp*`, `ws*`) and WS8 suite live under:
 
-[`../../archive/v2-to-v3-migration/simple-agent-tasks/`](../../archive/v2-to-v3-migration/simple-agent-tasks/)
+[`../../archive/v2-to-v3-migration/simple-agent-tasks/`](../../../v2-to-v3-migration/simple-agent-tasks/)
 
 **Do not execute** without re-open against current CORE/code.

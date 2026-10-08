@@ -7,7 +7,7 @@ namespace Poly.Mcp.Sessions;
 
 /// <summary>
 /// MCP session state: holds the current <see cref="Domain"/> root,
-/// the latest analysis result, a monotonically increasing revision number,
+/// the analysis of that root, a monotonically increasing revision number,
 /// the loaded <see cref="DomainSession"/>, and a runtime instance store.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
 /// </summary>
@@ -86,11 +86,11 @@ internal static class McpSessionStore {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return null;
 
+            // A rejected outcome leaves the session as it was: its analysis is of the
+            // proposal, not of the domain the session keeps.
             var outcome = mutate(current.Domain, current.Modeling);
-            if (!outcome.Succeeded) {
-                Sessions[sessionId] = current with { LatestAnalysis = outcome.Analysis };
+            if (!outcome.Succeeded)
                 return outcome;
-            }
 
             var modeling = current.Modeling.WithDomain(outcome.Root);
             Sessions[sessionId] = new McpSessionState(

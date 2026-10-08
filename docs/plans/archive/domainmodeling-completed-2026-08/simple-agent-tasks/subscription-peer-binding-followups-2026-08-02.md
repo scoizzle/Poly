@@ -1,6 +1,6 @@
 # Subscription peer binding residuals — 2026-08-02 (r2)
 
-**Source review:** [`../../agent/reviews/2026-08-02-subscription-peer-binding-r2.md`](../../agent/reviews/2026-08-02-subscription-peer-binding-r2.md)  
+**Source review:** [`../../agent/reviews/2026-08-02-subscription-peer-binding-r2.md`](../../../../agent/reviews/2026-08-02-subscription-peer-binding-r2.md)  
 **Prior closed full-send:** [`subscription-peer-binding-followups-2026-08-01.md`](./subscription-peer-binding-followups-2026-08-01.md)  
 **Status:** `[x]` Closed 2026-08-02  
 

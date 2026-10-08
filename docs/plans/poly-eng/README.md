@@ -10,12 +10,12 @@ The full pipeline (stages, mills and models, budget rules, launch commands, hang
 |---|---|---|---|
 | Plan | Foreman | OpenCode (or Grok) | `tasks/<id>.md`, a draft PR on `slice/<id>` |
 | Implement | 100x | Grok Build (OpenCode if Grok is down) | commits, self-review sweep in a PR comment, a Log row |
-| Review (Review-2 slices) | Razor | the other mill | one PR comment: verdict and one findings table |
+| Review | Razor (the only reviewer) | the other mill; Review-2 slices built on Grok or by hand get a second pass on the other OpenCode lab | one PR comment per pass: verdict and one findings table |
 | Fix | 100x | same mill as implement | commits, a PR comment mapping finding ids to fixes, Log rows |
-| Verify / ship gate | Final Boss | the other mill | a PR comment `SHIP <sha>` or `NOT SHIP <sha>`; CI green on that SHA |
-| Merge | Chieftan, with Scot's OK (or Scot) | none | squash merge pinned to the SHIP SHA |
+| Verify / ship gate | Razor | the other mill | a PR comment `SHIP <sha>` or `NOT SHIP <sha>` (listed findings and regressions only); SHIP needs CI green on that SHA |
+| Merge | Chieftan, with Scot's OK (or Scot) | none | squash merge pinned to the SHIP SHA (tip and CI rechecked) |
 
-Agents run the heavy steps headless from fixed prompt templates. Bots only launch runs and pass one-line hand-offs. Reviews always run on the mill the implementer did not use. Nobody reviews their own work.
+Agents run the heavy steps headless from fixed prompt templates. Bots only launch runs and pass one-line hand-offs. Razor is the only reviewer (Scot, 2026-10-07; Final Boss has no stage). Reviews always run on the mill the implementer did not use. Nobody reviews their own work. A second NOT SHIP goes to Scot as a decision (waive, narrow or split).
 
 ## Record rules
 

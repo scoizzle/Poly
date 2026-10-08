@@ -1,5 +1,5 @@
 <!-- Canonical pipeline. Box paths (/home/box/..., /workspace/...) are the shared Grok Bot box where mills run; they are the one allowed exception to the repo-relative-links rule. -->
-# Poly engineering pipeline (rebuilt 2026-10-07)
+# Poly engineering pipeline (rebuilt 2026-10-07; single reviewer 22:10)
 
 **One idea:** bots are dispatchers. All heavy work runs in Grok Build or OpenCode on the box, from a prompt file, with a turn cap and a timeout. Its output goes to the repo (commits, task file) and to PR comments. A bot turn only does three things: launch a run, read a one-line result, and pass a one-line baton.
 
@@ -9,22 +9,22 @@
 |---|-------|------------------|--------------|-----|--------|------------|
 | 0 | Select | Foreman (no mill) | none | 1 turn | picks the next slice from `board.md` "Next" + open PRs | launches 1 |
 | 1 | Plan | Foreman | OpenCode `deepseek-v4.1-flash` (else Grok) | 30 turns / 20 min | branch `slice/<id>`, commit 1 = `tasks/<id>.md` + board catch-up, **draft PR opened** | Foreman → 100x: `PR N \| tasks/<id>.md \| implement` |
-| 2 | Implement | 100x | Grok Build `grok-4.6` (OpenCode only if Grok is down) | 80 turns / 60 min | commits, self-review sweep in PR comment, task-file log row, PR marked ready | 100x → Razor (Review 2) or Final Boss (Review 1) |
-| 3 | Review | Razor | **opposite mill**: Grok-built → OpenCode `deepseek-v4.1-flash` (alt `mimo-v2.6-flash`/`mimo-v2.5`); OpenCode-built → Grok | 40 turns / 45 min | one PR comment: verdict + ONE findings table | Razor → 100x (findings) or → Final Boss (clean) |
-| 4 | Fix | 100x | same mill as stage 2 | 50 turns / 45 min | commits, PR comment mapping each finding id → fixed / disputed, task log rows | 100x → Final Boss |
-| 5 | Verify | Final Boss | opposite mill to the implementer | 30 turns / 30 min | PR comment `SHIP <sha>` or `NOT SHIP <sha>` + table; checks CI green on that SHA | FB → Chieftan (SHIP) or → 100x (NOT SHIP) |
-| 6 | Merge | Chieftan (no mill) | none | 1-2 turns | `git ls-remote` tip == SHIP SHA, Scot's OK, squash merge with `sha` pin | Chieftan → Foreman: `merged N <sha>` (wakes stage 0) |
+| 2 | Implement | 100x | Grok Build `grok-4.6` (OpenCode only if Grok is down) | 80 turns / 60 min | commits, self-review sweep in PR comment, task-file log row, PR marked ready | 100x → Razor |
+| 3 | Review | Razor (the only reviewer) | **opposite mill**. Grok- or hand-built → OpenCode `deepseek-v4.1-flash`; Review-2 slices add a second full pass on the other lab (`mimo-v2.6-flash`/`mimo-v2.5`). OpenCode-built → one Grok pass only | 40 turns / 45 min per pass | one PR comment per pass: verdict + ONE findings table (pass 2 lists only what pass 1 missed) | clean + CI green → Chieftan `PR N \| SHIP <full sha>`; else → 100x |
+| 4 | Fix | 100x | same mill as stage 2 | 50 turns / 45 min | commits, PR comment mapping each finding id → fixed / disputed, task log rows | 100x → Razor (verify) |
+| 5 | Verify | Razor | opposite mill (pass-1 lab) | 30 turns / 30 min | PR comment `SHIP <sha>` or `NOT SHIP <sha>`: listed findings + real regressions only; SHIP only with CI green on that SHA | SHIP → Chieftan; NOT SHIP → Chieftan for a Scot decision |
+| 6 | Merge | Chieftan (no mill) | none | 1-2 turns | `git ls-remote` tip == SHIP SHA, CI green on it, Scot's OK, squash merge with `sha` pin | Chieftan → Foreman: `merged N <sha>` (wakes stage 0) |
 
 Ontologist runs `research.md` only when Foreman or Scot names a design question. Its output is a file on the slice branch or a PR comment.
 
 ## Budget and WIP rules
 
 - **WIP:** 1 slice while the throttle is on, and 2 (one per plan lane, A and B) once Scot lifts it. No more than **2 mill runs at once** on the box.
-- **Passes per slice:** Review-1 slices go implement → Final Boss. Review-2 slices go implement → Razor → one fix round → Final Boss. A second Final Boss NOT SHIP goes to Scot as a decision (waive, narrow or split). There is never a third fix round without that decision.
+- **Passes per slice (one reviewer, Razor; Final Boss has no stage):** every slice gets one full Razor pass on the opposite mill. Review-2 slices built on Grok or by hand get a second full pass on the other OpenCode lab (DeepSeek ↔ MiMo). OpenCode-built slices get one Grok pass only, because a second Grok pass would be the same lab. A clean pass with CI green ships directly. Otherwise 100x runs one fix round, then Razor verifies. A second NOT SHIP (the verify) goes to Chieftan as a Scot decision (waive, narrow or split). There is never a second fix round without that decision.
 - **Re-review only on a new SHA,** and only of the listed findings plus real regressions.
 - **No re-fires by bots.** `mill.sh` re-fires once by itself (a hang on OpenCode falls back to a free model). After that the run is failed, and the bot reports a one-line blocker. Nobody checks in with "how's it going".
 - **No docs-only bookkeeping PRs.** Task-file and board catch-up ride on the next commit of a real slice branch.
-- Implementer never reviews its own SHA. Chieftan never mills, reviews or clones.
+- Implementer never reviews its own SHA. Razor is the only reviewer. Chieftan never mills, reviews or clones.
 
 ## How a run is launched
 
@@ -64,6 +64,7 @@ Raw commands (flags checked against `--help` and smoke-tested on 2026-10-07; mil
 | Multi-hop routing (every step through Foreman) | Direct baton to the next owner; Foreman only selects and plans |
 | FYI chatter (starting, acks, "merged" re-announces) | One line per stage change, nothing else (coordinator-reporting) |
 | Reviews stalling for hours waiting on a ping | The reviewer is the next baton holder and launches right away; CI can run alongside review, and only SHIP needs green |
+| Two review bots in series (Razor, then Final Boss) re-reading the same diff | One reviewer (Razor) runs a full pass and then a verify of only the listed findings; a second lab adds a pass only on Review-2 slices |
 | Docs-only bookkeeping PRs | Bookkeeping rides on slice commits |
 | Long prompts written in chat each time | Fixed prompt templates (`mills/*.md`) with placeholders |
 | Shared checkout and /tmp state (worktrees in /tmp went stale when /tmp was wiped) | One worktree and run dir per run under `/workspace/mill-runs/` |

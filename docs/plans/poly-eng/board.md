@@ -5,21 +5,21 @@ Updated 2026-10-07 21:30 CDT. Master `bfe66beb` (#122 A5a). Rules: [README](READ
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), wave 1 tail.
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
 **Throttle:** ON since 2026-10-06 07:34 (WIP 1, at most 2 mill runs at once, no re-fires, no bookkeeping PRs).
-**Merge:** V11 slices merge on Final Boss SHIP; every other slice needs Scot's OK. The standing window ended 2026-10-06 07:20.
+**Merge:** V11 slices merge on Razor SHIP (CI green on the SHIP SHA); every other slice needs Scot's OK. The standing window ended 2026-10-06 07:20.
 
 ## Needs Scot
 
-1. Lift the throttle to WIP 2 (one slice per lane)?
+1. ~~Lift the throttle to WIP 2?~~ Answered 2026-10-07: stays at WIP 1.
 2. HP4 release: once A5b merges, may lane A start C9, then Q2 / H2 / H3 / H4 / K4 / P1 (wave 2)?
-3. Post-merge review of #120 (L1) and #121 (G2+G3)? Both merged 2026-10-06 with no Razor or Final Boss pass. Default: no, unless asked.
+3. ~~Post-merge review of #120 (L1) and #121 (G2+G3)?~~ Answered 2026-10-07: deferred until the throttle lifts.
 4. Decision 19 (registering contributors) blocks N2. Decision 16 blocks N1. Not urgent.
 
 ## In flight (open PRs; GitHub is the live state)
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#123](https://github.com/scoizzle/Poly/pull/123) | A5b: printed files reference their trees | A | `3dd57ab1` | green | Review 2: Razor `review-diff MODE=full` on OpenCode (opened by Scot; check the implement mill), then Final Boss. Task file backfilled: [tasks/A5b.md](tasks/A5b.md). |
-| [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor, then Final Boss. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
+| [#123](https://github.com/scoizzle/Poly/pull/123) | A5b: printed files reference their trees | A | `3dd57ab1` | green | Razor review-diff MODE=full on OpenCode (DeepSeek, then a MiMo second pass; opened by Scot, so check the implement mill), then fix and Razor verify. Task file backfilled: [tasks/A5b.md](tasks/A5b.md). |
+| [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
 
 ## Next (in order; first unblocked row wins)
 

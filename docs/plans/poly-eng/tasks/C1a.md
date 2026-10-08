@@ -1,6 +1,6 @@
 # TASK C1a — Interpreter: root program with declared parameters after `this`
 
-Status: open PR #110 @ `d7b6b9a1`, CI red, base `11287134` behind master. Rebase + CI fix first, then Razor → Final Boss.
+Status: open PR #110 @ `d7b6b9a1`, CI red, base `11287134` behind master. Rebase + CI fix first, then Razor review → fix → Razor verify.
 
 Branch from master `dd7d4204` (or later). Lane B. Review 2. Not V11. Plan ~line 374.
 

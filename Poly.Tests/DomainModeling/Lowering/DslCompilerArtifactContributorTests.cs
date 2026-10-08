@@ -37,7 +37,7 @@ public class DslCompilerArtifactContributorTests {
     private sealed class HelloContributor : IArtifactContributor {
         public bool Called { get; private set; }
 
-        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis) {
+        public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
             Called = true;
             return [ContributedFile.Create(domain, "hello.txt", $"hello from {domain.Name}", nameof(HelloContributor))];
         }

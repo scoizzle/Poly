@@ -353,9 +353,11 @@ public class MinimalApiGeneratorTests {
             .FillInternalContracts(ParentWithBillingContract());
 
         var analysis = DomainModelAnalyzer.Analyze(filled);
+        var session = DomainSession.Open(filled);
+        session.Lower(filled, analysis);
 
         var contributor = new MinimalApiHostArtifactContributor();
-        var files = contributor.Contribute(filled, analysis);
+        var files = contributor.Contribute(filled, analysis, session.ArtifactCatalog);
         var program = ContributedFile.Text(files.Single(f =>
             f.Descriptor.Id.Type == ContributedFile.Type && ContributedFile.FileName(f) == "Program.cs"));
         var http = ContributedFile.Text(files.Single(f =>

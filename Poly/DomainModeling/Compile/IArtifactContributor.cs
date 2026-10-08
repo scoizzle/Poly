@@ -15,8 +15,9 @@ namespace Poly.DomainModeling.Compile;
 /// </summary>
 public interface IArtifactContributor {
     /// <summary>Artifacts for <paramref name="domain"/>, or an empty list when this
-    /// contributor has nothing to emit for the analyzed domain.</summary>
-    IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis);
+    /// contributor has nothing to emit for the analyzed domain. <paramref name="catalog"/>
+    /// already holds the entity and scaffolding trees Lower registered.</summary>
+    IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog);
 }
 
 /// <summary>

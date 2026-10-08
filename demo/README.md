@@ -43,4 +43,4 @@ All paths green.  The platform works end-to-end.
 - **[AGENTS.md](../AGENTS.md)** — Principles, placement rules, build/test commands
 - **[docs/CORE.md](../docs/CORE.md)** — Platform map: ownership, machinery, "use this / not that"
 - **[Poly/Introspection/README.md](../Poly/Introspection/README.md)** — Type/member model and multi-host design
-- **[docs/plans/ast-types-provider-instance-ergonomics.md](../docs/plans/ast-types-provider-instance-ergonomics.md)** — How AST types, instances, and MCP tools are layered
+- **[docs/plans/archive/pre-convergence-2026-10/ast-types-provider-instance-ergonomics.md](../docs/plans/archive/pre-convergence-2026-10/ast-types-provider-instance-ergonomics.md)** — How AST types, instances, and MCP tools are layered

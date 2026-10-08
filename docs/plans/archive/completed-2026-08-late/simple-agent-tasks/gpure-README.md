@@ -3,7 +3,7 @@
 **Parent:** [`../grammar-pure-end-state.md`](../grammar-pure-end-state.md) (**direction lock — authority**)  
 **Historical cutover:** [`../archive/completed-2026-08-mid/grammar-integration.md`](../../completed-2026-08-mid/grammar-integration.md)  
 **Gate:** [`gpure-gate.md`](./gpure-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **CORE:** [`../../CORE.md`](../../../../CORE.md) · **Grammar:** `Poly/Grammar/README.md` · **AGENTS:** repo root  
 
 **Status:** **DONE 2026-08-07** — pure Grammar product path (all tasks + gate; see [`gpure-gate.md`](./gpure-gate.md)). Post-gate follow-ups executed 2026-08-08: [`gpure-followups-2026-08-07.md`](./gpure-followups-2026-08-07.md) (S1–S5, N1–N4, P1 — all `[x]`).

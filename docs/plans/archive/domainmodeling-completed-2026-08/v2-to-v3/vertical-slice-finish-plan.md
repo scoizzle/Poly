@@ -8,7 +8,7 @@
 
 | Doc | Role |
 |-----|------|
-| [`master-roadmap.md`](../../../v2-to-v3/master-roadmap.md) | Milestones (M2 **Done**) |
+| [`master-roadmap.md`](../../v2-to-v3/master-roadmap.md) | Milestones (M2 **Done**) |
 | [`../archive/v2-to-v3-migration/designs/v3-completion-plan.md`](../../v2-to-v3-migration/designs/v3-completion-plan.md) | Archived WP inventory — **do not execute** |
 | [`2026-07-11-review-fix-plan.md`](../../completed-2026-08-mid/2026-07-11-review-fix-plan.md) | Trust layer 1 honesty (feeds Slice 0) |
 | [`../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md) | First customer; generation funds platform |
@@ -263,7 +263,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | DSL export/import | Deferred (first-v3-consumer) |
 | Fail-closed all VM POC nodes | Review WP-E — pull when a slice hits them |
 | **Flaky `VmDebugger_StepOver_TraversesStatements`** | [`simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md`](simple-agent-tasks/vs-fix-vmdebugger-stepover-locals.md) — CaptureResult re-reads dirty ArrayPool slots |
-| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../../../post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
+| **Rename V3\* product identifiers** | [`../post-v2-delete-naming-cleanup.md`](../../pre-convergence-2026-10/post-v2-delete-naming-cleanup.md) — after M2 / idle; not mixed with feature slices |
 
 ---
 
@@ -275,7 +275,7 @@ MCP: create session → structure (Slice 1) → add_policy → get_policy_expres
 | 1 | **pm2-1** multi-property evaluate sample bag | Post-M2 agent leverage |
 | 2 | **pm2-2** add_policy → evaluate_policy affordance | Tiny UX |
 | 3 | Optional **0.1d** remove-zero-match | Anytime |
-| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../../../post-v2-delete-naming-cleanup.md) |
+| 4 | **Naming cleanup** R0–R1 | Idle tree — [`../post-v2-delete-naming-cleanup.md`](../../pre-convergence-2026-10/post-v2-delete-naming-cleanup.md) |
 | 5 | **Slice 4** first effect | Named product scenario only |
 
 **Simple agents:** execute only from [`simple-agent-tasks/vs-README.md`](simple-agent-tasks/vs-README.md) (`vs-s0-*` … `vs-s3-*`). Older `ws8-*` files are optional reference; **this document owns slice exit criteria**.

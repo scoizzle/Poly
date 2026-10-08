@@ -1,13 +1,13 @@
 # Agent protocols
 
-Plain markdown. Any tool can follow them. Always-on policy is [`../../AGENTS.md`](../../AGENTS.md). Machinery is [`../CORE.md`](../CORE.md). Admission is [`../plans/simple-agent-tasks/PIPELINE-STATUS.md`](../plans/simple-agent-tasks/PIPELINE-STATUS.md).
+Plain markdown. Any tool can follow them. Always-on policy is [`../../AGENTS.md`](../../AGENTS.md). Machinery is [`../CORE.md`](../CORE.md). Admission is [`../plans/poly-eng/board.md`](../plans/poly-eng/board.md).
 
 | Protocol | When |
 |---|---|
 | [`phenomenal-review.md`](./phenomenal-review.md) | Adversarial correctness review of a diff. Writes findings and follow-ups. Does not fix code unless asked. |
-| Pre-ship gate | Before marking a slice Done. [`../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). |
+| Pre-ship gate | Before marking a slice Done. [`../plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md). |
 | [`poly-discovery-loop.md`](./poly-discovery-loop.md) | A discovery round the user started (`scripts/discovery-round.sh`). Not a default work mode. |
-| Suite run | One README path that PIPELINE-STATUS has not archived. Copilot: [`.github/agents/plan-suite-until-done.agent.md`](../../.github/agents/plan-suite-until-done.agent.md). Grok: `.grok/workflows/plan-orchestrator.rhai`. |
+| Suite run | One README path that is not under `docs/plans/archive/`. Copilot: [`.github/agents/plan-suite-until-done.agent.md`](../../.github/agents/plan-suite-until-done.agent.md). Grok: `.grok/workflows/plan-orchestrator.rhai`. |
 
 `reviews/` is evidence. Open a review only when a task names it. Do not scan the folder for what to do next.
 

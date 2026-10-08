@@ -2,7 +2,7 @@
 
 **Parent plan:** [`../domain-surface-extensions-plan.md`](../domain-surface-extensions-plan.md)  
 **Gate:** [`./spe-gate.md`](./spe-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)  
 **Related:** peer binding residuals (closed) · product guide `Poly.Mcp/Docs/poly-dsl-guide.md`
 
 Three **parallel** workstreams after optional SPE-0. Agents may claim **one task per workstream** concurrently if different agents; single agent: pick any free chain head.

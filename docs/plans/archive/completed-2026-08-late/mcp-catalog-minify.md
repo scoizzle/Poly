@@ -5,10 +5,10 @@
 **Agent suite:** [`simple-agent-tasks/mcp-minify-README.md`](simple-agent-tasks/mcp-minify-README.md) (trivial-agent micro-tasks 0→G)  
 **Principle:** One product authoring surface (`.poly` DSL); thin MCP; fewer non-overlapping tools  
 **Related:**  
-- Trust: [`customer-trust-proof-map.md`](../../customer-trust-proof-map.md) · ADR [`2026-07-11-platform-trust-bar-and-dogfood.md`](../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
+- Trust: [`customer-trust-proof-map.md`](../../reference/customer-trust-proof-map.md) · ADR [`2026-07-11-platform-trust-bar-and-dogfood.md`](../../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
 - Grammar (archived): [`archive/completed-2026-08-mid/grammar-integration.md`](../completed-2026-08-mid/grammar-integration.md) (E1 done; **GI-8 cancelled**)  
 - Expansion history (archived): [`archive/completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md`](../completed-2026-08-mid/v2-to-v3/mcp-tool-surface-expansion.md)  
-- Mutation safety: [`mcp-mutation-safety.md`](../../mcp-mutation-safety.md) (easier with fewer writers)
+- Mutation safety: [`mcp-mutation-safety.md`](../../parked/mut-safety/mcp-mutation-safety.md) (easier with fewer writers)
 
 ---
 

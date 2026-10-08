@@ -1,6 +1,6 @@
 # pack-2 — Pack surface (`IDomainPack`)
 
-**Parent:** [`../pack-host-2026-08-13.md`](../../pack-host-2026-08-13.md) phase 2  
+**Parent:** [`../pack-host-2026-08-13.md`](pack-host-2026-08-13.md) phase 2  
 **Fleet:** [`pack-README.md`](./pack-README.md)  
 **Gate:** [`pack-2-gate.md`](./pack-2-gate.md)  
 **Prereq:** pack-1-gate `[x]`

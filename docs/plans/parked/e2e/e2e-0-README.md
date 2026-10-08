@@ -1,10 +1,10 @@
 # e2e-0 — Honesty (docs + leftover grammar)
 
-**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](../../domainmodeling-e2e-representation-2026-08-13.md) § Slice 0  
+**Parent:** [`../domainmodeling-e2e-representation-2026-08-13.md`](domainmodeling-e2e-representation-2026-08-13.md) § Slice 0  
 **Fleet coordinator:** [`e2e-README.md`](./e2e-README.md)  
 **Wave:** 1 · **Parallel with:** e2e-p, e2e-g0  
 **Gate:** [`e2e-0-gate.md`](./e2e-0-gate.md)  
-**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Pre-ship:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 **Status:** `[x]` Done 2026-08-13 (opencode, fleet agent). Gate green — build 0/0, 2065/2065, pr1 clean.
 

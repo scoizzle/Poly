@@ -2,7 +2,7 @@
 
 **Parents:**  
 - [`../dsl-query-surface.md`](../dsl-query-surface.md) — product design + shipped Q1′/Q3′  
-- [`../effect-surface-completeness.md`](../../../../v2-to-v3/effect-surface-completeness.md) — effects track  
+- [`../effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) — effects track  
 
 **Status:** **Complete under current bar** (2026-07-24).  
 **Audience:** Historical micro-task index. **Do not pick new work from open Q3 residual tables.**
@@ -78,4 +78,4 @@ Depth: parent [`../dsl-query-surface.md`](../dsl-query-surface.md) §3.1 + §4.0
 ## Micro-task files
 
 Completed `qe-q0-*`, `qe-q1-*`, `qe-q3-r*`, `qe-e21-*` files remain in this folder for history (same pattern as [`vs-README.md`](vs-README.md)). **Do not execute them as open work.**  
-Always-on process: [`pr1-uncommitted-review-gate.md`](../../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).
+Always-on process: [`pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md).

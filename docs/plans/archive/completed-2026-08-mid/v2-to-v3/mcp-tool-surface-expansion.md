@@ -45,7 +45,7 @@
 | **P1** | Runtime MCP (RT) | create/call/list instances | ✅ **Shipped** + dogfood-2 |
 | **P1** | Parser honesty | `actor` message; optional nav FormatException | Pull (RT′.2–.3) |
 | **P2** | Visibility / debug (**V1/S1**) | analyze/compare/debug expression | Pull |
-| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](../../../v2-to-v3/effect-surface-completeness.md) |
+| **P1** | **Effect surface (E\*)** | DSL/runtime parity for delete/link/invoke; optional thin MCP | [`effect-surface-completeness.md`](../../v2-to-v3/effect-surface-completeness.md) |
 | **P1** | **DSL query surface (Q\*)** | Subject-first related **reads**: path-prefix, `Rel exists`, `where`; later `any/all/count where`; **no** cross-entity assign writes | [archived qe](../../domainmodeling-completed-2026-08/v2-to-v3/dsl-query-surface.md) · [qe-README](../../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md) |
 | **P2** | Full effect-micro MCP | Per-effect tools | **Pull** — only after E\* dogfood; prefer DSL first |
 | **P3** | Library builder hygiene | `AddActionWithEffect` naming | Pull |
@@ -570,6 +570,6 @@ Three companion plans were created from agent-driven domain modeling feedback. T
 
 | Plan | Focus | Overlaps with this doc |
 |------|-------|----------------------|
-| [`mcp-mutation-safety.md`](../../../mcp-mutation-safety.md) | Parallel call safety, idempotency, rollback diagnostics, stage ordering | `diff_state` tool (covered here); concurrency model (new) |
+| [`mcp-mutation-safety.md`](../../../parked/mut-safety/mcp-mutation-safety.md) | Parallel call safety, idempotency, rollback diagnostics, stage ordering | `diff_state` tool (covered here); concurrency model (new) |
 | [`mcp-batch-snapshot-efficiency.md`](../../completed-2026-08-late/mcp-batch-snapshot-efficiency.md) | Bulk/plural endpoints (`add_properties`, `add_stages`, `add_actions_to_stages`), `get_domain_snapshot` | DSL batch-apply path (this doc); plural endpoints are a complementary approach |
-| [`mcp-domain-inspection-completeness.md`](../../../mcp-domain-inspection-completeness.md) | `get_relationships`, `add_constraint`/`get_constraints`, constraint analysis integration | Relationship and constraint tools are new; not covered here |
+| [`mcp-domain-inspection-completeness.md`](../../pre-convergence-2026-10/mcp-domain-inspection-completeness.md) | `get_relationships`, `add_constraint`/`get_constraints`, constraint analysis integration | Relationship and constraint tools are new; not covered here |

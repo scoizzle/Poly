@@ -12,7 +12,7 @@
 | dogfood → amu → p4 → coh | `done` |
 | **p3** return types | `done` — DMEFF009, ResultInstance, MCP returnInstanceId |
 | **p2** multi-hop | `done` — parse + preprocess hop chain + analysis + goldens |
-| **p1** temporal | `research only` — [`../p1-temporal-research.md`](../../../p1-temporal-research.md) |
+| **p1** temporal | `research only` — [`../p1-temporal-research.md`](../../../parked/p1/p1-temporal-research.md) |
 
 **Review:** [`../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md`](../../../../agent/reviews/2026-08-06-pipeline-amu-p4-coh-dogfood.md)  
 **Follow-ups:** [`pipeline-followups-2026-08-06.md`](./pipeline-followups-2026-08-06.md) — F1–F7 + P1 closed 2026-08-06

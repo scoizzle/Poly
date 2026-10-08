@@ -9,8 +9,8 @@
 |------|------|
 | Agent pick queue | [`../../v2-to-v3/simple-agent-tasks/vs-README.md`](../domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/vs-README.md) |
 | Product slice status | [`../../v2-to-v3/vertical-slice-finish-plan.md`](../domainmodeling-completed-2026-08/v2-to-v3/vertical-slice-finish-plan.md) |
-| Milestones | [`../../v2-to-v3/master-roadmap.md`](../../v2-to-v3/master-roadmap.md) |
-| Naming cleanup (drop V3*) | [`../../post-v2-delete-naming-cleanup.md`](../../post-v2-delete-naming-cleanup.md) |
+| Milestones | [`../v2-to-v3/master-roadmap.md`](../v2-to-v3/master-roadmap.md) |
+| Naming cleanup (drop V3*) | [`../pre-convergence-2026-10/post-v2-delete-naming-cleanup.md`](../pre-convergence-2026-10/post-v2-delete-naming-cleanup.md) |
 | Platform mechanisms | [`../../../CORE.md`](../../../CORE.md) |
 
 ## Why these were archived

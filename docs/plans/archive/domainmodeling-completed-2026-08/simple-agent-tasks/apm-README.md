@@ -3,7 +3,7 @@
 **Parent:** [`../analysis-pipeline-merge.md`](../analysis-pipeline-merge.md)  
 **Inventory:** [`../../domainmodeling-capability-inventory.md`](../../../../domainmodeling-capability-inventory.md)  
 **CORE:** [`../../CORE.md`](../../../../CORE.md)  
-**Gate process:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
+**Gate process:** [`../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../../v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md)
 
 ---
 

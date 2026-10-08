@@ -20,14 +20,14 @@ These documents exist so that:
 - Update `AGENTS.md` when adding new decisions that agents must be aware of.
 
 **Note on Plans vs Decisions**: Execution roadmaps live in `docs/plans/`.  
-**Active product plan:** [`docs/plans/v2-to-v3/master-roadmap.md`](../plans/v2-to-v3/master-roadmap.md).  
+**Active product plan:** [`docs/plans/archive/v2-to-v3/master-roadmap.md`](../plans/archive/v2-to-v3/master-roadmap.md).  
 **Archived Interpretation IR-era plans:** [`docs/plans/archive/interpretation/`](../plans/archive/interpretation/README.md) (do not execute).
 
 ## Current Decisions
 
 - [2026-09-05: Lowered operation module is domain meaning](2026-09-05-lowered-module-is-domain-meaning.md) — Domain meaning is `session.Lower`. Scratch `DomainEntityInstance` / MCP simulate are harness, not product-surface proof. Agents fix lowering when execute and print diverge. Always-on: `AGENTS.md` Agent target.
 - [2026-09-04: Frozen core pipeline (AST / Node / Analysis)](2026-09-04-frozen-core-pipeline.md) — **Architecture freeze.** Nodes + analysis + session libraries + two products (operation module, surface artifacts). Current hosts (scratch store, C# print, HTTP, Store jobs) are replaceable; do not grow dual-paths. Always-on: `AGENTS.md` Frozen core · `docs/CORE.md` §0.
-- [2026-09-03: Facts, concern bags, and Store bind](2026-09-03-facts-concerns-bags-store-bind.md) — Domain is **facts**; analysis publishes **concern bags**; operation lowering **binds** bags and a named **Store** collaborator (`EnsureUnique`, then `Create` / `CreateIn`). Not `IStorage`. Simulate the lowered program. Remaining create dual-path: [`docs/plans/create-create-in-simulate.md`](../plans/create-create-in-simulate.md). Store job names are **current bind**, not frozen core (see 2026-09-04).
+- [2026-09-03: Facts, concern bags, and Store bind](2026-09-03-facts-concerns-bags-store-bind.md) — Domain is **facts**; analysis publishes **concern bags**; operation lowering **binds** bags and a named **Store** collaborator (`EnsureUnique`, then `Create` / `CreateIn`). Not `IStorage`. Simulate the lowered program. Remaining create dual-path: [`docs/plans/archive/pre-convergence-2026-10/create-create-in-simulate.md`](../plans/archive/pre-convergence-2026-10/create-create-in-simulate.md). Store job names are **current bind**, not frozen core (see 2026-09-04).
 - [2026-08-15: Domain is a library; extensions bind doors; MCP is the harness](2026-08-15-domain-library-extensions-mcp-harness.md) — Domain lowers to legal **operations**, not a process. Product entry points are opt-in extensions. MCP simulates by supplied context. Shipped ⊆ lowerable.
 - [2026-08-14: Domain libraries, not packs](2026-08-14-domain-libraries.md) — Libraries load into a session/compile. Temporal is language default; annotations are optional; no module-initializer meaning.
 - [2026-08-10: Relationships as Entity-Owned Navigations (Synthesized Domain View)](2026-08-10-relationships-as-entity-owned-navigations.md) — Relationship = source-entity-owned navigation; `Domain.Relationships` is a computed flatten; the semantic view is analysis-synthesized from entity navs; back-references are derived. Supersedes the domain-wide relationship-name uniqueness model (scoped in the 2026-08-10 slice).

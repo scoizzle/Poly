@@ -42,7 +42,7 @@ Compose Interpreter, exporter, DEI, and `uses http`. MCP tool `Description` is u
 
 The lowered operation module is the domain. Depth: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md).
 
-Compilation unit = library. Interpreter sim and C# print share the Syntax module body. When they diverge, fix Lower. Put meaning in the operation AST. Prove it on that body (VM on bound `This`, or generated CLR). Lower subs, OnEntry/OnExit, and entity policies into the module. `DomainEntityInstance` is scratch bind for MCP and authoring. Residual, do not grow: [`docs/plans/p3b-followups-2026-09-27.md`](docs/plans/p3b-followups-2026-09-27.md).
+Compilation unit = library. Interpreter sim and C# print share the Syntax module body. When they diverge, fix Lower. Put meaning in the operation AST. Prove it on that body (VM on bound `This`, or generated CLR). Lower subs, OnEntry/OnExit, and entity policies into the module. `DomainEntityInstance` is scratch bind for MCP and authoring. Residual, do not grow: [`docs/plans/parked/p3b-followups-2026-09-27.md`](docs/plans/parked/p3b-followups-2026-09-27.md).
 
 ## Ops
 
@@ -54,6 +54,6 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 - Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No `#region`.
 - **DSL:** before authoring, call `get_dsl_guide` (short body). Pass `section` for one heading, or `all` for [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md). Update that file in the same change as the parser, printer, tokenizer, or an MCP tool that authors DSL.
 - **Placement:** Ast → `Poly/Ast/`; analysis framework → `Poly/Analysis/`; semantic passes → `Poly/Interpretation/Analysis/`; VM → `Poly/Interpretation/Vm/`; types → `Poly/Introspection/`; domain → `Poly/DomainModeling/`; grammar → `Poly/Grammar/`; MCP → `Poly.Mcp/`.
-- **Admission:** [`docs/plans/simple-agent-tasks/PIPELINE-STATUS.md`](docs/plans/simple-agent-tasks/PIPELINE-STATUS.md) is the only CURRENT. If it is `(none)`, open only the file named on `THEN`. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
-- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](docs/plans/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) (fail closed; 🔴🟠 clear; suite green).
+- **Admission:** [`docs/plans/poly-eng/board.md`](docs/plans/poly-eng/board.md) is the only CURRENT. If it is `(none)`, open only the file named on `THEN`. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
+- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) (fail closed; 🔴🟠 clear; suite green).
 - **Doc roles:** CORE = machinery map · `docs/decisions/` = why · `docs/plans/` = execution (archive DONE) · `docs/agent/` = protocols. A CORE mechanism change updates CORE in the same change.

@@ -21,6 +21,7 @@ SHIP if `when all` row passes and BindForSimulate no longer rewrites params. NOT
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-06 | Foreman | — | `d7b6b9a1` | Open, CI red, BLOCKED; rebase after PR 113 fixes | — |
+| 2026-10-07 | restructure | - | `d7b6b9a1` | open #110 | still open, CI red, base `11287134` behind master |
 | 2026-10-08 | reviewer | grok/grok-4.6 | `d7b6b9a1` | NOT SHIP | First merge origin/master (7943b5cc) into fix/c1a-root-program-params with a normal merge commit (no rebase, no force-push) and resolve conflicts keeping master's intent. Then fix the red CI on PR 110 (see gh pr checks 110 and the failing run logs) until the full suite is green locally. Findings: F1 merge master 7943b5cc; F2 red CI. |
 | 2026-10-08 | implementer | grok/grok-4.6 | `9ac06fff` | fixes pushed | F1, F2; disputed: none; tests 3417/3417 |
 | 2026-10-08 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `6e3a05fd` | NOT SHIP | https://github.com/scoizzle/Poly/pull/110#issuecomment-6067249860 (Grug NOT SHIP at 6e3a05fd, 6 open findings, mode full) |

@@ -49,6 +49,42 @@ public class C1aRootProgramParamsTests {
     }
 
     [Test]
+    public async Task C1a_WrongTypedActionArgs_FailLoudLikeBagMemberReads() {
+        var (domain, analysis, session) = Evolve("""
+            domain T
+            Item: entity {
+              Qty: Number
+              Name: Text
+              Flag: Boolean
+              SetQty: action (n: Number) { assign Qty to n }
+              SetName: action (name: Text) { assign Name to name }
+              SetFlag: action (flag: Boolean) { assign Flag to flag }
+            }
+            """);
+        session.Lower(domain, analysis);
+        var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
+        var item = DomainEntityInstance.Create(itemE,
+            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "", ["Flag"] = false },
+            domain);
+
+        var exNum = Assert.Throws<InvalidOperationException>(() =>
+            item.InvokeAction("SetQty", new Dictionary<string, object?> { ["n"] = "not-a-number" }));
+        await Assert.That(exNum!.Message).Contains("Cannot store a value of type 'String' in a numeric property");
+
+        var exBool = Assert.Throws<InvalidOperationException>(() =>
+            item.InvokeAction("SetQty", new Dictionary<string, object?> { ["n"] = true }));
+        await Assert.That(exBool!.Message).Contains("Cannot store a Boolean value in a numeric property");
+
+        var exText = Assert.Throws<InvalidOperationException>(() =>
+            item.InvokeAction("SetName", new Dictionary<string, object?> { ["name"] = 7L }));
+        await Assert.That(exText!.Message).Contains("Cannot store a value of type 'Int64' in a Text property");
+
+        var exYes = Assert.Throws<InvalidOperationException>(() =>
+            item.InvokeAction("SetFlag", new Dictionary<string, object?> { ["flag"] = "yes" }));
+        await Assert.That(exYes!.Message).Contains("Cannot store a value of type 'String' in a Boolean property");
+    }
+
+    [Test]
     public async Task C1a_WhenAll_PreviousStageParameter_FiresOnce() {
         // Same shape as WhenAllSimulatePrintAgreeTests — previousStage is a real
         // SetArgs slot (not Constant-rewritten / not bag Member). Fires once.

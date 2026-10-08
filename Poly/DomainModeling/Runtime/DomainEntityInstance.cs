@@ -3,6 +3,7 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
@@ -424,14 +425,18 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// SetArgs must match bag Member reads for action parameters: Text null
-    /// becomes <c>""</c> (<see cref="Convert.ToString(object?)"/> via
-    /// DictionaryBackedValue.CoerceRead), and Boolean 0/1 become bool.
+    /// becomes <c>""</c>, Boolean 0/1 become bool, then
+    /// <see cref="DictionaryBackedValue.GuardCompatible"/> plus Convert
+    /// (the same path as <see cref="DictionaryBackedValue.CoerceRead"/>).
     /// </summary>
     private static object? CoerceActionArgForSetArgs(Parameter parameter, object? value) {
         if (value is null && IsTextLikeParameter(parameter))
-            return "";
+            value = "";
         var typeName = ParameterTypeName(parameter);
-        return CoerceBooleanBagValue(typeName, value);
+        value = CoerceBooleanBagValue(typeName, value);
+        if (PrimitiveForParameter(parameter) is { } primitive)
+            return DictionaryBackedValue.CoerceReadValue(value, primitive);
+        return value;
     }
 
     private static bool IsTextLikeParameter(Parameter parameter) =>
@@ -453,6 +458,20 @@ public sealed partial record DomainEntityInstance {
             TypeReference t => t.TypeName,
             _ => null
         };
+
+    private static Prim? PrimitiveForParameter(Parameter parameter) =>
+        parameter.TypeReference switch {
+            PrimitiveTypeReference p => p.PrimitiveId,
+            ClrTypeReference { RuntimeType: var rt } => rt.GetPrimitiveType(),
+            NamedTypeReference n => DomainPrimitive(n.TypeName),
+            TypeReference t => DomainPrimitive(t.TypeName),
+            _ => null
+        };
+
+    private static Prim? DomainPrimitive(string typeName) =>
+        DomainTypeMapping.TryPrimitiveType(
+            DomainTypeMapping.ToClrTypeName(typeName), out var prim)
+            ? prim : null;
 
 
     private static bool CoercePolicyBool(string policyName, object? boxed) => boxed switch {

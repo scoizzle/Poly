@@ -146,13 +146,15 @@ public class C1aRootProgramParamsTests {
 
     [Test]
     public async Task C1a_RootCompile_LocalsDoNotWipeParameterSlots() {
-        // create0 at a frame local must not overwrite SetArgs slot 1 (plate).
+        // Two locals: without ReserveFrameSlots they occupy slot 0 (this) then slot 1 (plate).
         var plate = new Parameter("plate", TypeReference.To<string>());
         var create0 = new Variable("create0");
+        var create1 = new Variable("create1");
         var body = new Block([
-            new Assignment(create0, new Constant("local-wipe")),
+            new Assignment(create0, new Constant("local-wipe-0")),
+            new Assignment(create1, new Constant("local-wipe-1")),
             new Return(plate)
-        ], [create0]);
+        ], [create0, create1]);
         var analysis = Interpreter.Analyzer.Analyze(body);
         var program = Interpreter.Compile(body, analysis, [plate]);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object(), "KEEP"));

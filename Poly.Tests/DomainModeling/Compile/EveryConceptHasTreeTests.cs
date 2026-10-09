@@ -29,7 +29,9 @@ public sealed class EveryConceptHasTreeTests {
     [Test]
     public async Task SampleDomains_UnionsGoldensAndLiveRoots_AndSkipsTheInvalidProbe() {
         var samples = SampleDomains().ToList();
-        await Assert.That(samples.Count).IsGreaterThanOrEqualTo(10);
+        await Assert.That(samples.Count).IsGreaterThan(EmitGoldenTests.SampleDomains().Count());
+        await Assert.That(samples.Contains("docs/probes/smoke/smoke.poly")).IsTrue();
+        await Assert.That(samples.Contains("demo/live/domain.poly")).IsTrue();
         await Assert.That(samples.Any(p =>
             string.Equals(Path.GetFileName(p), InvalidProbe, StringComparison.Ordinal))).IsFalse();
         foreach (var golden in EmitGoldenTests.SampleDomains())

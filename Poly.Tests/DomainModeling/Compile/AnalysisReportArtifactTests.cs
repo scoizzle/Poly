@@ -7,7 +7,10 @@ using Artifact = Poly.DomainModeling.Compile.Artifact;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
-/// <summary>A4: Lower registers an analysis-report artifact; findings carry element id paths.</summary>
+/// <summary>
+/// A4: Lower registers an analysis-report artifact; findings carry element id paths.
+/// H2: Emit also registers a vm-analysis-report; Lower does not.
+/// </summary>
 public sealed class AnalysisReportArtifactTests {
     // Loan points at Patron with no inverse many → Loan is a non-root orphan (DMAGG001).
     private const string WarningsDomain = """
@@ -36,6 +39,42 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(warnings.Any(f => f.ElementPath.StartsWith("Warehouse/", StringComparison.Ordinal)
             || f.ElementPath == "Warehouse")).IsTrue();
         await Assert.That(session.ArtifactCatalog.ToText()).Contains("analysis-report|Warehouse|Analyze");
+    }
+
+    [Test]
+    public async Task Lower_DoesNotRegisterVmAnalysisReport() {
+        const string dsl = """
+            domain Spotless
+            Item: entity {
+              Name: Text required
+              Open: stage { }
+            }
+            """;
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(dsl);
+        session.Lower(domain, analysis);
+
+        await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create(["Spotless"], "vm-analysis-report")))
+            .IsNull();
+        await Assert.That(session.ArtifactCatalog.ToText()).Contains("analysis-report|Spotless|Analyze");
+        await Assert.That(session.ArtifactCatalog.ToText()).DoesNotContain("vm-analysis-report");
+    }
+
+    [Test]
+    public async Task Emit_RegistersVmAnalysisReportListingErrors() {
+        var (session, domain, analysis) = EmitGoldenTests.AnalyzeSampleFile("docs/probes/smoke/smoke.poly");
+        var files = session.Emit(domain, analysis);
+
+        await Assert.That(files.Count).IsGreaterThan(0);
+        var artifact = session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "vm-analysis-report"));
+        await Assert.That(artifact).IsNotNull();
+        await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
+        var report = (AnalysisReport)artifact.Payload!;
+        var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(errors.Count).IsEqualTo(9);
+        await Assert.That(session.ArtifactCatalog.ToText())
+            .Contains($"vm-analysis-report|{domain.Name}|Emit");
+        await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))
+            .IsNotNull();
     }
 
     [Test]

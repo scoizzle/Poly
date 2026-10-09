@@ -3,8 +3,9 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// Findings from domain analysis, registered as one <c>analysis-report</c> artifact per domain.
-/// Each finding names the domain element it points at by id path (for example
+/// Findings from analysis. Payload of one <c>analysis-report</c> (domain analysis)
+/// or one <c>vm-analysis-report</c> (interpretation analysis of the lowered module).
+/// Each finding names the element it points at by id path (for example
 /// <c>Hotel/Reservation/Confirm</c>).
 /// </summary>
 public sealed record AnalysisReport(IReadOnlyList<AnalysisFinding> Findings) {

@@ -6,11 +6,9 @@ using Poly.Packs.Sqlite;
 namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
-/// Report only: runs the VM analyzer the way <see cref="DomainSession.Emit"/> does over
-/// every sample domain and prints what it finds. Emit passes the analysis to the C#
-/// generator but ignores its diagnostics today, so the counts say how much would break
-/// if Emit started refusing VM errors. Nothing here fails on the counts.
-/// Run with <c>--output Detailed</c> to see the table.
+/// Pins the sample domains whose VM analysis has Errors. Emit stays fail-open on
+/// this set. Remove a row when that domain becomes VM-clean; add a row when a new
+/// sample shows VM Errors. Run with <c>--output Detailed</c> to see the table.
 /// </summary>
 public sealed class VmAnalyzerReportTests {
     private static readonly ExtensionCatalog Catalog = ExtensionCatalog.Core
@@ -26,19 +24,62 @@ public sealed class VmAnalyzerReportTests {
     // Invalid by design: the domain analyzer rejects these. The same list is in ParityTests.
     private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
 
+    // H1 @ 0ba89d58: 15 VM Errors, 1 domain Errors, 0 clean.
+    private static readonly string[] VmErrorSamples = [
+        "demo/live/checkout.poly",
+        "demo/live/domain.poly",
+        "docs/probes/dogfood/crm.poly",
+        "docs/probes/dogfood/entry-transition-in-first-stage.poly",
+        "docs/probes/dogfood/hotel.poly",
+        "docs/probes/dogfood/peer-tracking-transition.poly",
+        "docs/probes/dogfood/simulate-create-create-in.poly",
+        "docs/probes/dogfood/simulate-create-in.poly",
+        "docs/probes/dogfood/simulate-create-type.poly",
+        "docs/probes/dogfood/university.poly",
+        "docs/probes/fleet-eval/09-transport/clinic.poly",
+        "docs/probes/fleet-eval/09-transport/orders.poly",
+        "docs/probes/fleet-eval/09-transport/warehouse.poly",
+        "docs/probes/fleet-eval/12-mcp/mcp-library.poly",
+        "docs/probes/smoke/smoke.poly",
+    ];
+
+    private const string DomainErrorSample = "docs/probes/dogfood/nested-invoke-type-mismatch.poly";
+
     [Test]
     public async Task SampleDomains_FindsTheSamples() =>
         await Assert.That(SampleDomains().Count()).IsGreaterThanOrEqualTo(10);
 
     [Test]
+    public async Task ListedSamples_HaveVmErrors_InvalidProbeHasDomainErrors() {
+        var rows = SampleDomains().Select(Measure).ToList();
+        var vmErrors = rows.Where(r => r.Outcome == "VM Errors")
+            .Select(r => r.Path)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var domainErrors = rows.Where(r => r.Outcome == "domain has Errors")
+            .Select(r => r.Path)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        await Assert.That(vmErrors).IsEquivalentTo(VmErrorSamples);
+        await Assert.That(domainErrors).IsEquivalentTo([DomainErrorSample]);
+        await Assert.That(rows.All(r => r.Outcome is "VM Errors" or "domain has Errors")).IsTrue();
+        await Assert.That(rows.Where(r => r.Outcome == "VM Errors").All(r => r.Errors > 0)).IsTrue();
+    }
+
+    [Test]
     public void ReportVmAnalysis() {
         var rows = SampleDomains().Select(path => Measure(path)).ToList();
 
-        Console.WriteLine("VM analyzer over sample domains (report only)");
+        Console.WriteLine("VM analyzer over sample domains");
         Console.WriteLine("| domain | outcome | types | VM errors | VM warnings |");
         Console.WriteLine("|---|---|---|---|---|");
-        foreach (var r in rows)
-            Console.WriteLine($"| {r.Path} | {r.Outcome} | {r.Types} | {r.Errors} | {r.Warnings} |");
+        foreach (var r in rows) {
+            var label = InvalidProbes.Contains(Path.GetFileName(r.Path))
+                ? r.Path + " (invalid by design)"
+                : r.Path;
+            Console.WriteLine($"| {label} | {r.Outcome} | {r.Types} | {r.Errors} | {r.Warnings} |");
+        }
         Console.WriteLine();
         Console.WriteLine($"sample domains: {rows.Count}");
         foreach (var group in rows.GroupBy(r => r.Outcome).OrderBy(g => g.Key, StringComparer.Ordinal))
@@ -58,7 +99,6 @@ public sealed class VmAnalyzerReportTests {
     private sealed record Row(string Path, string Outcome, int Types, int Errors, int Warnings);
 
     private static Row Measure(string relativePath) {
-        var name = InvalidProbes.Contains(Path.GetFileName(relativePath)) ? relativePath + " (invalid by design)" : relativePath;
         try {
             var poly = File.ReadAllText(Path.Combine(FindRepoRoot(), relativePath));
             var session = DomainSession.ForSource(poly, Seed, Catalog);
@@ -66,22 +106,22 @@ public sealed class VmAnalyzerReportTests {
             var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
             // Not Succeeded covers domain analysis Errors and a change that failed to apply.
             if (!outcome.Succeeded)
-                return new Row(name, "domain has Errors", 0, 0, 0);
+                return new Row(relativePath, "domain has Errors", 0, 0, 0);
 
             // These two calls mirror the start of DomainSession.Emit.
             var types = session.Lower(outcome.Root, outcome.Analysis);
             var vm = DomainSession.TryAnalyzeForEmit(types);
             // Null only means Lower produced no types; an analyzer exception lands in the catch below.
             if (vm is null)
-                return new Row(name, "TryAnalyzeForEmit null", types.Count, 0, 0);
+                return new Row(relativePath, "TryAnalyzeForEmit null", types.Count, 0, 0);
 
             var errors = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
             var warnings = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
-            return new Row(name, errors > 0 ? "VM Errors" : warnings > 0 ? "VM Warnings" : "VM clean", types.Count, errors, warnings);
+            return new Row(relativePath, errors > 0 ? "VM Errors" : warnings > 0 ? "VM Warnings" : "VM clean", types.Count, errors, warnings);
         }
         catch (Exception ex) {
             // A report keeps going: the failure shows in this domain's row.
-            return new Row(name, $"load failed: {ex.GetType().Name}", 0, 0, 0);
+            return new Row(relativePath, $"load failed: {ex.GetType().Name}", 0, 0, 0);
         }
     }
 

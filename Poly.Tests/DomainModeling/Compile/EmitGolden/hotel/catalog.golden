@@ -1,6 +1,7 @@
 analysis-report|Hotel|Analyze
 scaffolding|Hotel|Lower
 source-domain|Hotel|Lower
+vm-analysis-report|Hotel|Emit
 entity|Hotel/EventHold|Lower
 source-entity|Hotel/EventHold|Lower
 file|Hotel/EventHold.cs|Emit

@@ -1,6 +1,7 @@
 analysis-report|Clinic|Analyze
 scaffolding|Clinic|Lower
 source-domain|Clinic|Lower
+vm-analysis-report|Clinic|Emit
 entity|Clinic/Doctor|Lower
 source-entity|Clinic/Doctor|Lower
 file|Clinic/Doctor.cs|Emit

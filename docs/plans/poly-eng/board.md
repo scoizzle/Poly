@@ -19,6 +19,8 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
 | [#139](https://github.com/scoizzle/Poly/pull/139) | C4b: Unique on create in the factory tree | B | — | — | Plan only; implementation follows on this branch. [tasks/C4b.md](tasks/C4b.md) |
+| [#138](https://github.com/scoizzle/Poly/pull/138) | N2: Http library registers its own contributor | A | — | — | Plan only; implementation follows on this branch. [tasks/N2.md](tasks/N2.md) |
+| [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | In review. [tasks/C2b.md](tasks/C2b.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
 | [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
@@ -34,10 +36,8 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 ## Later (parked; not work until Scot admits it)
 
-- N2 (decision 19), N1 (decision 16), A6/A7 (wave 4), and runs-alone slices K2, C8-pre, C8d, K5, R1, R2.
+- N1 (decision 16), A6/A7 (wave 4), and runs-alone slices K2, C8-pre, C8d, K5, R1, R2.
 - Nits to fold into a later docs slice: F170-F175 (C4a), F180-F183 (K1), F210-F212 (H1). The C8d done-when must include the MapModuleRequireFailure mapping.
-- PR 136, `docs/plans/poly-eng/board.md`, in-flight #132 still shows tip `8719f7ce` after Q2 merged as `d30268ec`
-- PR 136, `docs/plans/poly-eng/board.md`, in-flight #135 tip `f38f4a00` predated P1 SHIP (merged `b38817e9`)
 - #126 `docs/plans/poly-eng/board.md`: in-flight row left at plan-only text / old tip after SHIP
 - #128 `Poly/DomainModeling/Compile/DomainSession.cs`: `vm-analysis-report` ElementPath resolves to the domain name
 - #128 `Poly.Tests/DomainModeling/Compile/VmAnalyzerReportTests.cs`: canary pins zero VM-clean/warning samples
@@ -63,13 +63,14 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 - PR 135, `Poly/DomainModeling/Language/DomainDslPrinter.cs:758,809`, `0.0###############` rounds tiny doubles to `0.0` and is duplicated in `PrintLiteral` / `PrintLiteralValue`.
 - PR 135, `Poly/DomainModeling/Language/PolyDslParser.cs:1417`, API-built `EqualityConstraint(null)` prints `equals(null)` which the parser rejects.
 - PR 135, `docs/plans/poly-eng/tasks/P1.md`, Log attributes all R1-R5 fixes to `40b1e4f0` and omits `8dc1fc93` / `38f0fe9a`.
+- PR 137, `docs/plans/poly-eng/board.md:21`, in-flight row left at plan-only text / empty Tip after SHIP.
+- PR 137, `docs/plans/poly-eng/tasks/K6.md:46`, Log attributes the inline sweep to `835ccf6a` and omits `d1270cdc` / `d3eac5a8`.
 - Suites on THEN/PULL live in [`../parked/`](../parked/README.md).
 
 ## Merged (last 30 days; older lines move to archive/)
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
-| 10-09 | #136 | C2b: run the compiled Create checks; delete the C# twins | `10e6570a` | Grug SHIP |
 | 10-09 | #137 | K6: replace Emit's re-analysis | `d1ac0cde` | Grug SHIP |
 | 10-09 | #135 | P1: Equality constraint is authorable and printed | `b38817e9` | Grug SHIP |
 | 10-09 | #134 | C2a: create initializers without re-lowering | `ede905f9` | Grug SHIP |

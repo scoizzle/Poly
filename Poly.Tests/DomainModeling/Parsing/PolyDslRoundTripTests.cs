@@ -1008,6 +1008,35 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
+    public async Task EqualityConstraint_ParseAndRoundTrip() {
+        var first = Apply("""
+            domain Test
+
+            Item: entity {
+              Status: Text equals("Active")
+              Level: Number equals(5)
+            }
+            """);
+        var item = first.Types.OfType<Entity>().Single();
+        var status = item.Properties.Single(p => p.Name == "Status")
+            .Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(status.ExpectedValue).IsEqualTo("Active");
+        var level = item.Properties.Single(p => p.Name == "Level")
+            .Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(level.ExpectedValue).IsEqualTo(5L);
+
+        var printed = new DomainDslPrinter().Print(first);
+        await Assert.That(printed.Contains("equals(\"Active\")")).IsTrue();
+        await Assert.That(printed.Contains("equals(5)")).IsTrue();
+        var second = Apply(printed);
+        var again = second.Types.OfType<Entity>().Single();
+        await Assert.That(again.Properties.Single(p => p.Name == "Status")
+            .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo("Active");
+        await Assert.That(again.Properties.Single(p => p.Name == "Level")
+            .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5L);
+    }
+
+    [Test]
     public async Task EnumType_ParseAndRoundTrip() {
         var poly = """
             domain Test
@@ -1388,7 +1417,7 @@ public class PolyDslRoundTripTests {
     }
 
     [Test]
-    public async Task Print_EqualityConstraint_IsOmitted() {
+    public async Task Print_EqualityConstraint_RoundTrips() {
         var domain = Apply("""
             domain Test
             Item: entity { Status: Text }
@@ -1403,11 +1432,11 @@ public class PolyDslRoundTripTests {
         };
         var withEq = new Domain(domain.Name, [pinned]);
         var printed = new DomainDslPrinter().Print(withEq);
-        await Assert.That(printed.Contains("equals")).IsFalse();
-        await Assert.That(printed.Contains("/*")).IsFalse();
+        await Assert.That(printed.Contains("equals(\"Active\")")).IsTrue();
         var second = Apply(printed);
-        await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single()
-            .Constraints.OfType<EqualityConstraint>().Any()).IsFalse();
+        var eq = second.Types.OfType<Entity>().Single().Properties.Single()
+            .Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(eq.ExpectedValue).IsEqualTo("Active");
     }
 
     private static Domain Apply(string poly) {

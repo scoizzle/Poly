@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 
 using Poly.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.Packs.Product;
 
 namespace Poly.Mcp.Sessions;
 
@@ -52,7 +53,7 @@ internal static class McpSessionStore {
             var domain = DomainFactory.Create(domainName) with {
                 Extensions = [.. ExtensionCatalog.ProductAuthoring]
             };
-            var modeling = DomainSession.Open(domain);
+            var modeling = DomainSession.Open(domain, ProductCatalog.Catalog);
             var analysis = modeling.Analyze(domain);
             var state = new McpSessionState(domain, analysis, Revision: 0, modeling);
             Sessions[sessionId] = state;
@@ -120,20 +121,24 @@ internal static class McpSessionStore {
     /// Atomically replaces a session's domain and analysis. The revision counter
     /// is set to the current revision + 1. Runtime instances are cleared.
     /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
+    /// <paramref name="modeling"/> is the ForSource session; required so a <c>uses</c>
+    /// change does not re-open against Core.
     /// </summary>
-    public static bool Replace(string sessionId, Domain domain, AnalysisResult? analysis) {
+    public static bool Replace(
+        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
+        ArgumentNullException.ThrowIfNull(modeling);
 
         lock (StoreLock) {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
-            var modeling = current.Modeling.WithDomain(domain);
+            var next = modeling.WithDomain(domain);
             Sessions[sessionId] = new McpSessionState(
                 domain,
                 analysis,
                 current.Revision + 1,
-                modeling);
+                next);
             return true;
         }
     }

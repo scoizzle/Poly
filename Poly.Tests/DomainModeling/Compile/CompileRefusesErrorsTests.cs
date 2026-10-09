@@ -76,8 +76,8 @@ public class CompileRefusesErrorsTests {
     [Test]
     public async Task CreateInstance_OnDomainWithErrors_ReportsFailure() {
         var (domain, analysis, first) = DomainWithUnknownType();
-        var (sessionId, _) = McpSessionStore.Create("Broken");
-        await Assert.That(McpSessionStore.Replace(sessionId, domain, analysis)).IsTrue();
+        var (sessionId, state) = McpSessionStore.Create("Broken");
+        await Assert.That(McpSessionStore.Replace(sessionId, domain, analysis, state.Modeling)).IsTrue();
 
         var response = RuntimeTool.CreateInstance(sessionId, "Order");
 

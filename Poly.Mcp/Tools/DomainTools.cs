@@ -10,6 +10,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Queries;
 using Poly.Mcp.Sessions;
+using Poly.Packs.Product;
 
 namespace Poly.Mcp.Tools;
 
@@ -1269,7 +1270,7 @@ internal sealed class DslTool {
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            parseSession = DomainSession.ForSource(polyText, seed);
+            parseSession = DomainSession.ForSource(polyText, seed, ProductCatalog.Catalog);
             var parser = new PolyDslParser(polyText, parseSession);
             changes = parser.Parse();
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
@@ -1324,7 +1325,7 @@ internal sealed class DslTool {
         }
 
         // ── 3. Atomically replace the session domain ─────────────
-        var replaced = McpSessionStore.Replace(sessionId, outcome.Root, outcome.Analysis);
+        var replaced = McpSessionStore.Replace(sessionId, outcome.Root, outcome.Analysis, parseSession);
         if (!replaced) {
             return new DomainToolResponse(
                 Success: false,

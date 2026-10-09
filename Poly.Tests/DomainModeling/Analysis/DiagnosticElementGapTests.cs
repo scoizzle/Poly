@@ -1,7 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
-using Poly.DslCompiler;
 using Poly.Packs.Sqlite;
 
 namespace Poly.Tests.DomainModeling.Analysis;

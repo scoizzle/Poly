@@ -1,12 +1,11 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Compile;
 
-namespace Poly.DslCompiler;
+namespace Poly.DomainModeling.Libraries.Http;
 
 /// <summary>
 /// Host door: <c>uses http</c> publishes <see cref="HttpSurfaceMetadata"/>.
-/// The Minimal API artifact producer is registered by the compiler session open
-/// path with the selected <see cref="DbmsPack"/> (Load-time, not bag invent).
+/// The compiler session open path registers the Minimal API artifact producer
+/// (Load-time, not bag invent).
 /// </summary>
 public sealed class HttpLibrary : IDomainLibrary {
     public string Id => "http";

@@ -21,8 +21,11 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
         return (true, null, instance);
     }
 
-    protected override StepResult InvokeCore(string action) {
-        var result = ((DomainEntityInstance)Current).InvokeAction(action);
+    protected override StepResult InvokeCore(string action, (string Name, object? Value)[] args) {
+        IReadOnlyDictionary<string, object?>? dict = args.Length == 0
+            ? null
+            : args.ToDictionary(a => a.Name, a => a.Value, StringComparer.Ordinal);
+        var result = ((DomainEntityInstance)Current).InvokeAction(action, dict);
         return (result.Succeeded, result.ErrorMessage, null);
     }
 
@@ -50,7 +53,24 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
         return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
     }
 
-    protected override StepResult InvokeCore(string action) => Unpack(Method(action).Invoke(Current, null)!);
+    protected override StepResult InvokeCore(string action, (string Name, object? Value)[] args) {
+        if (args.Length == 0)
+            return Unpack(Method(action).Invoke(Current, null)!);
+        var method = Current.GetType().GetMethods()
+            .FirstOrDefault(m => m.Name == action && m.GetParameters().Length == args.Length)
+            ?? throw new ArgumentException(
+                $"Printed type '{Current.GetType().Name}' has no public '{action}' with {args.Length} parameter(s).");
+        var parameters = method.GetParameters();
+        var callArgs = new object?[parameters.Length];
+        for (var i = 0; i < parameters.Length; i++) {
+            var match = args.FirstOrDefault(a =>
+                string.Equals(a.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
+            if (match.Name is null)
+                throw new ArgumentException($"Missing argument '{parameters[i].Name}' for '{action}'.");
+            callArgs[i] = Materialize(match.Value, parameters[i].ParameterType);
+        }
+        return Unpack(method.Invoke(Current, callArgs)!);
+    }
 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
 
@@ -70,6 +90,21 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
 
     MethodInfo Method(string name) => Current.GetType().GetMethod(name, Type.EmptyTypes)
         ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no public '{name}()'.");
+
+    static object? Materialize(object? value, Type target) {
+        if (value is null || target.IsInstanceOfType(value))
+            return value;
+        if (value is not Dictionary<string, object?> fields)
+            return value;
+        var instance = Activator.CreateInstance(target)
+            ?? throw new ArgumentException($"Could not create '{target.Name}' for invoke argument.");
+        foreach (var (name, field) in fields) {
+            var prop = target.GetProperty(name)
+                ?? throw new ArgumentException($"'{target.Name}' has no property '{name}'.");
+            prop.SetValue(instance, field);
+        }
+        return instance;
+    }
 
     // Printed members are public; names match ignoring case because navigations print in PascalCase. An entity without stages has no CurrentStage.
     static object? Read(object entity, string name) => entity.GetType().GetProperties()

@@ -181,8 +181,9 @@ public class DslCompilerCompileOracleTests {
     public async Task Compile_All_BoundContractDomain_EmitCompilableSolution() {
         // pack-3c-3: a root action bound to a produced contract endpoint compiles end-to-end —
         // entity file calls {Contract}Adapters.{Endpoint}(param); the fail-closed adapter class
-        // and the contract value type are emitted alongside. The child's Ledger entity never
-        // becomes a public route (composition root only).
+        // (DomainResult.Failure until an in-process adapter is registered) and the contract
+        // value type are emitted alongside. The child's Ledger entity never becomes a public
+        // route (composition root only).
         const string poly = """
             domain Shop
 
@@ -206,10 +207,11 @@ public class DslCompilerCompileOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
         var types = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types).Contains("class BillingAdapters");
-        await Assert.That(types).Contains("NotImplementedException");
+        await Assert.That(types).Contains("public static DomainResult Charge(");
+        await Assert.That(types).Contains("no in-process adapter");
         var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(program.Contains("/api/ledgers")).IsFalse();
 

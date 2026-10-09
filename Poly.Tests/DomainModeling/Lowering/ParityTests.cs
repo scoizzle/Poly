@@ -99,6 +99,41 @@ public class ParityTests {
         await Assert.That(outcomes[0].Message).Contains("must be <= 10");
     }
 
+    const string UnboundAdapterDsl = """
+        domain Shop
+        Order: entity {
+          Total: Number default(0)
+          Pay: action (request: ChargeRequest) {
+            assign Total to Total
+          }
+        }
+
+        Stripe: contract external stripe v1 {
+          ChargeRequest: value {
+            Amount: Number
+            Currency: Text
+          }
+          Charge: outbound operation ChargeRequest
+        }
+
+        ChargeOrder: bind Stripe Charge to Pay request
+        """;
+
+    [Test]
+    public async Task Invoke_WhenUnboundContractEndpoint_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(UnboundAdapterDsl, "ParityUnboundAdapter")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.Invoke("Pay", ("request", new Dictionary<string, object?> {
+                    ["Amount"] = 10L,
+                    ["Currency"] = "USD"
+                }));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo(
+            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+    }
+
     [Test]
     public async Task Invoke_WhenAssignBreaksRange_FailsTheSameWay() {
         var outcomes = await ParityScenario.FromDsl(ActionFailDsl, "ParityActionFail")

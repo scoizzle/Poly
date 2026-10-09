@@ -53,8 +53,5 @@ public class BillingAdapters
 {
     private BillingAdapters()
     { }
-    public static void Charge(ChargeRequest request)
-    {
-        throw new NotImplementedException("Contract endpoint 'Billing.Charge' has no implementation. The export emits a fail-closed adapter; register an in-process adapter to serve bound calls.");
-    }
+    public static DomainResult Charge(ChargeRequest request) => DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.");
 }

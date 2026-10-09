@@ -121,8 +121,8 @@ public static class DomainProgramProjection {
 
         // ── Emit fail-closed adapters for bound contracts (pack-3c-3) ──
         // A bind is a call in export: each contract with at least one bound endpoint gets
-        // an {Contract}Adapters class whose bound-endpoint methods throw
-        // NotImplementedException until an in-process adapter is registered. The binding
+        // an {Contract}Adapters class whose bound-endpoint methods return
+        // DomainResult.Failure until an in-process adapter is registered. The binding
         // is never dropped.
         foreach (var contract in domain.ImportedContracts) {
             var boundEndpoints = domain.ContractBindings

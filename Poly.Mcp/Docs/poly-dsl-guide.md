@@ -270,8 +270,9 @@ loaded domain; a hand-authored body is still legal and unchanged.
 
 A `bind` is a **call in export**: the bound action's generated method invokes a
 `{Contract}Adapters` adapter for the endpoint. Until an in-process adapter is registered,
-the emitted adapter **throws** `NotImplementedException` — an unimplemented binding fails
-closed at runtime, never a silent no-op. The binding is never dropped by export.
+the emitted adapter returns `DomainResult.Failure("… no in-process adapter.")` — an
+unimplemented binding fails closed at runtime, never a silent no-op. The binding is
+never dropped by export.
 
 ## 3. Entities and Properties
 

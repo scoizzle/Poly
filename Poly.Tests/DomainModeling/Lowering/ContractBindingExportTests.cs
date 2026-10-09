@@ -11,8 +11,9 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// pack-3c-3: an exported root action that <c>bind</c>s to a contract endpoint
-/// invokes the adapter (a documented not-implemented adapter that throws), rather
-/// than a bodyless local implementation. The binding is never dropped by export.
+/// invokes the adapter (a DomainResult.Failure stub until an in-process adapter
+/// is registered), rather than a bodyless local implementation. The binding is
+/// never dropped by export.
 /// </summary>
 public class ContractBindingExportTests {
     private static Compiler CompilerWithHttpHost() =>
@@ -77,13 +78,15 @@ public class ContractBindingExportTests {
         // The bound root action's generated method calls through the binding — the
         // adapter for Billing.Charge — instead of a bodyless local implementation.
         var order = files.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("if (!adapterResult.IsSuccess)");
 
-        // The adapter is emitted, not dropped: a documented fail-closed stub that
-        // throws NotImplementedException at runtime (no silent no-op).
+        // The adapter is emitted, not dropped: a DomainResult.Failure stub until
+        // an in-process adapter is registered (no silent no-op).
         var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types).Contains("class BillingAdapters");
-        await Assert.That(types).Contains("NotImplementedException");
+        await Assert.That(types).Contains("public static DomainResult Charge(");
+        await Assert.That(types).Contains("no in-process adapter");
 
         // Child Ledger entity never becomes a public route.
         var program = files.Single(f => f.FileName == "Program.cs").Source;
@@ -111,10 +114,10 @@ public class ContractBindingExportTests {
         await Assert.That(compiled.Success).IsTrue();
 
         var types = compiled.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
-        await Assert.That(types.Split("public static void Charge(").Length - 1).IsEqualTo(1);
+        await Assert.That(types.Split("public static DomainResult Charge(").Length - 1).IsEqualTo(1);
 
         var order = compiled.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
     }
 
     [Test]
@@ -128,6 +131,6 @@ public class ContractBindingExportTests {
         // The bound action is not exported as an expression-bodied silent success —
         // the adapter invocation is a real statement in the method body.
         await Assert.That(order.Contains("Pay(ChargeRequest request) => DomainResult.Success()")).IsFalse();
-        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
     }
 }

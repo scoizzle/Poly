@@ -98,6 +98,11 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
         }
 
+        foreach (var function in domain.Functions) {
+            PrintFunction(function);
+            _sb.AppendLine();
+        }
+
         foreach (var contract in domain.ImportedContracts.OrderBy(c => c.Name, StringComparer.Ordinal)) {
             PrintContract(contract);
             _sb.AppendLine();
@@ -109,6 +114,25 @@ public sealed class DomainDslPrinter {
         }
 
         return _sb.ToString().TrimEnd() + "\n";
+    }
+
+    private void PrintFunction(DomainFunction function) {
+        _sb.Append("function ");
+        _sb.Append(function.Name);
+        _sb.Append('(');
+        var first = true;
+        foreach (var param in function.Parameters) {
+            if (!first) _sb.Append(", ");
+            first = false;
+            _sb.Append(param.Name);
+            _sb.Append(": ");
+            _sb.Append(param.Type.TypeName);
+        }
+        _sb.Append("): ");
+        _sb.Append(function.ReturnType.TypeName);
+        _sb.Append(" = ");
+        _sb.Append(PrintExpression(function.Body));
+        _sb.AppendLine();
     }
 
     private void PrintEnumType(EnumType enumType) {

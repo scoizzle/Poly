@@ -18,7 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `b1fddf7e` | — | Plan; implementation follows. [tasks/C1b.md](tasks/C1b.md) |
+| [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `93c04dba` | — | Plan; implementation follows. [tasks/C1b.md](tasks/C1b.md) |
 
 ## Next (in order; first unblocked row wins)
 

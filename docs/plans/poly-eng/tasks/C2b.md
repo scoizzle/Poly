@@ -1,5 +1,5 @@
 # TASK C2b - Run the compiled Create checks; delete the C# twins
-Status: planned. Branch slice/c2b-create-initializers-followup. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c2b-create-initializers-followup. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 C2a (#134 `ede905f9`) already sends HostAbi `Create` / `CreateIn` / `ProbeCreate` (`Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:555-578`) through `StoreOrDefault` (`:585-591`). The card's `HostAbi.cs:658, 729` callers are gone (file is 645 lines). Remaining C# twins: `FillCreateDefaults` (`DomainEntityInstance.cs:152-167`) and `ValidateCreateConstraints` (`:360-365`, wraps `ValidateConstraints` `:176-232`, C4a `EqualityConstraint` arm `:212-220`) at `DomainInstanceStore.ProbeCreate` `:149-150` and `CreateCore` `:174-175`. `DomainEntityInstance.Create` `:135-137` also calls `ValidateConstraints` (no store, so no unique).
@@ -61,3 +61,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `ede905f9` | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | `4b870fce` | pushed | tests 3467/3467; sweep: factory prefix runs; twins gone |

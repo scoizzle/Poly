@@ -1,6 +1,7 @@
 analysis-report|Library|Analyze
 scaffolding|Library|Lower
 source-domain|Library|Lower
+vm-analysis-report|Library|Emit
 entity|Library/Book|Lower
 source-entity|Library/Book|Lower
 file|Library/Book.cs|Emit

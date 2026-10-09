@@ -1,6 +1,7 @@
 analysis-report|Fleet|Analyze
 scaffolding|Fleet|Lower
 source-domain|Fleet|Lower
+vm-analysis-report|Fleet|Emit
 entity|Fleet/Delivery|Lower
 source-entity|Fleet/Delivery|Lower
 file|Fleet/Delivery.cs|Emit

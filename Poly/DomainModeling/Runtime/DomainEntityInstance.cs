@@ -409,9 +409,10 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Sets a property value. Validates that the property exists on the entity.
+    /// Sets a property value. The property must exist on the entity.
+    /// Unique is enforced when this instance is in a store.
     /// </summary>
-    public void SetProperty(string name, object? value) {
+    internal void SetProperty(string name, object? value) {
         if (!_values.ContainsKey(name))
             throw new ArgumentException(
                 $"Property '{name}' does not exist on entity '{Entity.Name}'. " +

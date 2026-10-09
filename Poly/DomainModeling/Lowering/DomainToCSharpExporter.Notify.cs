@@ -322,6 +322,8 @@ public sealed partial class DomainToCSharpExporter {
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
     /// Each constraint on a constructor-parameter property produces an early-return
     /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
+    /// Enum-typed properties get a not-any-member guard from the same Member + NotEqual
+    /// nodes as assign.
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
     /// carry constraints in the current domain model. Defaulted props ARE constructor
@@ -450,6 +452,20 @@ public sealed partial class DomainToCSharpExporter {
                         //   • Default → already handled (only non-default props are params)
                         //   • Unique  → requires store awareness
                 }
+            }
+
+            if (TryResolveEnumType(domain, analysis: null, prop.Type.TypeName, out var enumType)
+                && enumType is { MemberNames.Count: > 0 }) {
+                Node? notMember = null;
+                var enumTypeRef = new NamedTypeReference(enumType.Name);
+                foreach (var member in enumType.MemberNames) {
+                    var ne = new NotEqual(paramRef, new Member(enumTypeRef, member));
+                    notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
+                }
+                checks.Add(new IfStatement(
+                    notMember!,
+                    new Block([Failure(
+                        $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
             }
         }
 

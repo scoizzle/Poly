@@ -45,6 +45,22 @@ public class ParityTests {
         }
         """;
 
+    const string EnumDsl = """
+        domain Shop
+        PatronStatus: enum { Active, Suspended }
+        Patron: entity {
+          Status: PatronStatus default(Active)
+          Open: stage {
+            Suspend: action {
+              assign Status to Suspended
+              transition to Closed
+            }
+          }
+          Closed: stage { }
+          IsActive: policy { Status is "Active" }
+        }
+        """;
+
     const string PolicyDsl = """
         domain Library
         Patron: entity {
@@ -155,6 +171,26 @@ public class ParityTests {
         await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Open");
         await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("Closed");
         await Assert.That(outcomes[1].State["Note"]).IsEqualTo("closed");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssigningEnumMember_AgreesOnStatusStageAndPolicy() {
+        var outcomes = await ParityScenario.FromDsl(EnumDsl, "ParityEnum")
+            .AssertAgree(side => {
+                side.Create("Patron");
+                side.EvaluatePolicy("IsActive");
+                side.Invoke("Suspend");
+                side.EvaluatePolicy("IsActive");
+            });
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Status"]).IsEqualTo("Active");
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Open");
+        await Assert.That(outcomes[1].State["IsActive"]).IsEqualTo("True");
+        await Assert.That(outcomes[2].Success).IsTrue();
+        await Assert.That(outcomes[2].Message).IsNull();
+        await Assert.That(outcomes[2].State["Status"]).IsEqualTo("Suspended");
+        await Assert.That(outcomes[2].State["Stage"]).IsEqualTo("Closed");
+        await Assert.That(outcomes[3].State["IsActive"]).IsEqualTo("False");
     }
 
     [Test]

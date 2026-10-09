@@ -191,6 +191,18 @@ public class DomainToCSharpExporterTests {
         await Assert.That(types.Any(t => t.Name == "PatronStatus")).IsTrue();
         await Assert.That(types.Any(t => t.Name == "FineStatus")).IsTrue();
         await Assert.That(types.Any(t => t.Name == "PremiumTier")).IsTrue();
+
+        var patronStatus = types.Single(t => t.Name == "PatronStatus");
+        await Assert.That(patronStatus.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Enumeration);
+        await Assert.That(patronStatus.Fields!.Select(f => f.Name).ToArray())
+            .IsEquivalentTo(["Active", "Suspended", "Closed"]);
+        foreach (var field in patronStatus.Fields!) {
+            await Assert.That(field.IsStatic).IsTrue();
+            await Assert.That(field.IsConst).IsTrue();
+            await Assert.That(((PrimitiveTypeReference)field.FieldType).PrimitiveId)
+                .IsEqualTo(Poly.Introspection.PrimitiveType.String);
+            await Assert.That((field.DefaultValue as Constant)?.Value).IsEqualTo(field.Name);
+        }
     }
 
     [Test]
@@ -386,7 +398,17 @@ public class DomainToCSharpExporterTests {
 
         var types = exporter.Export(domain, analysis);
 
-        await Assert.That(types.Any(t => t.Name == "PatronStage")).IsTrue();
+        var patronStage = types.Single(t => t.Name == "PatronStage");
+        await Assert.That(patronStage.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Enumeration);
+        await Assert.That(patronStage.Fields!.Select(f => f.Name).ToArray())
+            .IsEquivalentTo(["Active", "Suspended", "Closed"]);
+        foreach (var field in patronStage.Fields!) {
+            await Assert.That(field.IsStatic).IsTrue();
+            await Assert.That(field.IsConst).IsTrue();
+            await Assert.That(((PrimitiveTypeReference)field.FieldType).PrimitiveId)
+                .IsEqualTo(Poly.Introspection.PrimitiveType.String);
+            await Assert.That((field.DefaultValue as Constant)?.Value).IsEqualTo(field.Name);
+        }
     }
 
     [Test]

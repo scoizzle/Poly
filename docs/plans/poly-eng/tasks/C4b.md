@@ -48,3 +48,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `10e6570a` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `cd9fb4e5` | pushed | tests 3479/3479; sweep: created.EnsureUnique after new; prefix still stops at new |
+| 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `ee25ae5a` | NOT SHIP | https://github.com/scoizzle/Poly/pull/139#issuecomment-6089962049 (Grug NOT SHIP at ee25ae5a, 5 open findings, mode full) |
+| 2026-10-09 | implementer | grok/grok-4.6 | `dc26467b` | fixes pushed | R1, R2, R3, R4; disputed: none; R5 skipped (nit >1 line); tests 3479/3479 |

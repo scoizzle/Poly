@@ -128,11 +128,8 @@ public sealed class DomainDslPrinter {
             _sb.Append(": ");
             _sb.Append(prop.Type.TypeName);
             foreach (var c in prop.Constraints) {
-                var text = PrintConstraint(c);
-                if (text.Length == 0)
-                    continue;
                 _sb.Append(' ');
-                _sb.Append(text);
+                _sb.Append(PrintConstraint(c));
             }
             _sb.AppendLine();
         }
@@ -159,11 +156,8 @@ public sealed class DomainDslPrinter {
                 _sb.Append(": ");
                 _sb.Append(prop.Type.TypeName);
                 foreach (var c in prop.Constraints) {
-                    var text = PrintConstraint(c);
-                    if (text.Length == 0)
-                        continue;
                     _sb.Append(' ');
-                    _sb.Append(text);
+                    _sb.Append(PrintConstraint(c));
                 }
                 _sb.AppendLine();
             }
@@ -220,11 +214,8 @@ public sealed class DomainDslPrinter {
             _sb.Append(prop.Type.TypeName);
 
             foreach (var c in prop.Constraints) {
-                var text = PrintConstraint(c);
-                if (text.Length == 0)
-                    continue;
                 _sb.Append(' ');
-                _sb.Append(text);
+                _sb.Append(PrintConstraint(c));
             }
 
             foreach (var facet in prop.Facets) {

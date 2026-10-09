@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation;
 using Poly.Packs.Sqlite;
 
 namespace Poly.Tests.DomainModeling.Compile;
@@ -110,10 +111,7 @@ public sealed class VmAnalyzerReportTests {
 
             // These two calls mirror the start of DomainSession.Emit.
             var types = session.Lower(outcome.Root, outcome.Analysis);
-            var vm = DomainSession.TryAnalyzeForEmit(types);
-            // Null only means Lower produced no types; an analyzer exception lands in the catch below.
-            if (vm is null)
-                return new Row(relativePath, "TryAnalyzeForEmit null", types.Count, 0, 0);
+            var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, types, null));
 
             var errors = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
             var warnings = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);

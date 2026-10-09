@@ -1,3 +1,4 @@
+using Poly.Interpretation;
 using Poly.Introspection;
 
 namespace Poly.Tests.DomainModeling.Compile;
@@ -19,9 +20,8 @@ public sealed class EmitRefusesVmErrorsTests {
                     Body: new Not(new Constant(42)))
             ]);
 
-        var analysis = DomainSession.TryAnalyzeForEmit([type]);
-        await Assert.That(analysis).IsNotNull();
-        await Assert.That(analysis!.HasErrors).IsTrue();
+        var analysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, [type], null));
+        await Assert.That(analysis.HasErrors).IsTrue();
         var first = analysis.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message;
 
         var ex = Assert.Throws<InvalidOperationException>(() => DomainSession.ThrowIfVmHasErrors(analysis));
@@ -39,9 +39,8 @@ public sealed class EmitRefusesVmErrorsTests {
                     Body: new Not(new Constant(false)))
             ]);
 
-        var analysis = DomainSession.TryAnalyzeForEmit([type]);
-        await Assert.That(analysis).IsNotNull();
-        await Assert.That(analysis!.HasErrors).IsFalse();
+        var analysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, [type], null));
+        await Assert.That(analysis.HasErrors).IsFalse();
 
         DomainSession.ThrowIfVmHasErrors(analysis);
     }

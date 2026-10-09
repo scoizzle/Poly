@@ -1,5 +1,5 @@
 # TASK C4b - Unique on create in the factory tree
-Status: planned. Branch slice/c4b. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c4b. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
 ## Scope
 C2b (#136 `10e6570a`) runs the static `Create` Failure-return Ifs (`BuildCreateConstraintChecks` `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs:331-456`) and stops before `created = new` (`CreateFactoryCheckPrefix` `DomainEntityInstance.cs:224-235`). Unique on create is still the store scan: `TryAdd` (`DomainInstanceStore.cs:53-61`, `CreateCore` `:188-191`) with message `UniqueCollisionForProperty` `:323-345`. The factory switch skips `UniqueConstraint` (`Notify.cs:448-451`; card said `:448-450`). Assign already wraps `this.EnsureUnique` then Failure (`EffectLoweringPass.WrapConstrainedAssign` `:305-314`). Printed `EnsureUnique` is a Success stub (`StoreBind.cs:25-35`). `Create` is `IsStatic: true` (`DomainToCSharpExporter.cs:820-827`), so the call goes on `created` after `new` (`:774-778`), before Attach. Do not put `this` in the prefix (would not compile). Leave the stub and `TryAdd`. No new type.
 ## Files
@@ -47,3 +47,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `10e6570a` | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | `cd9fb4e5` | pushed | tests 3479/3479; sweep: created.EnsureUnique after new; prefix still stops at new |

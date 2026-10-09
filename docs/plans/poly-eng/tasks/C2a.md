@@ -10,7 +10,7 @@ Attach a default internal `DomainInstanceStore` only inside those three jobs whe
 - `Poly/DomainModeling/Runtime/DomainInstanceStore.cs` (comment `:224-225` still says `CreateChildInstance`)
 - `Poly.Tests/DomainModeling/Lowering/StoreBindCreateTests.cs` (new store-less create-with-initializer test)
 - `Poly.Tests/DomainModeling/Lowering/Item4FailBeforeMutateTests.cs` (must stay green; store-less probe is in scope)
-- `Poly.Tests/DomainModeling/DomainEntityInstanceTests.cs` (`CreateEntityInstance_RelationshipNameWithoutStore_NoOp` `:2229`, `CreateEntityInRelationship_WithoutStore_NoCrash` `:2677`, comments `:2013, :2698`)
+- `Poly.Tests/DomainModeling/DomainEntityInstanceTests.cs` (`CreateEntityInstance_RelationshipNameWithoutStore_CreatesChildAndAttachesStore` `:2229`, `CreateEntityInRelationship_WithoutStore_NoCrash` `:2677`, comments `:2013, :2698`)
 - `Poly.Tests/DomainModeling/Runtime/DomainInstanceHostJobsTests.cs` (pairs still land; no public API added)
 - `Poly.Tests/DomainModeling/Lowering/StoreBindUniqueTests.cs` (`UniqueAssign_WithoutStore_SucceedsWhenNoPeers` `:181` must stay green)
 

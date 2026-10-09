@@ -2226,7 +2226,7 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task CreateEntityInstance_RelationshipNameWithoutStore_NoOp() {
+    public async Task CreateEntityInstance_RelationshipNameWithoutStore_CreatesChildAndAttachesStore() {
         // Create with RelationshipName but no store at construction: the job
         // attaches the C8d named twin and still creates the child.
         var child = new Entity("Child", [], [], [], []);

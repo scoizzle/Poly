@@ -400,7 +400,7 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 $"Policy body '{policy.Name}' is missing on entity '{Entity.Name}'.");
         using var execModule = Interpreter.Execute(
-            CompileBody(cached, _typeDefAnalyzer),
+            CompileBody(cached, ModuleAwareTypeProvider(_typeDefAnalyzer)),
             s => s.SetArgs(new object?[] { this }));
         var boxedModule = BoxPathPrefixLeaf(expr, execModule.Result.GetValue<object>());
         return CoercePolicyBool(policy.Name, boxedModule);
@@ -898,7 +898,6 @@ public sealed partial record DomainEntityInstance {
         Node tree,
         ITypeDefinitionProvider types,
         IReadOnlyList<Parameter>? rootParameters = null) {
-        types = RuntimeEnumTypeProvider.Wrap(types, Domain);
         var entityType = types.GetTypeDefinition(Entity.Name)
             ?? throw new InvalidOperationException(
                 $"Type '{Entity.Name}' is missing from the type provider.");

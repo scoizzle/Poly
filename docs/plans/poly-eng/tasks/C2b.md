@@ -62,3 +62,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `ede905f9` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `4b870fce` | pushed | tests 3467/3467; sweep: factory prefix runs; twins gone |
+| 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `0e466201` | NOT SHIP | https://github.com/scoizzle/Poly/pull/136#issuecomment-6086765830 (Grug NOT SHIP at 0e466201, 2 open findings, mode full) |
+| 2026-10-09 | implementer | grok/grok-4.6 | `12d536bd` | fixes pushed | R1, R2; disputed: none; tests 3477/3477 |

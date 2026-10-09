@@ -68,3 +68,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `b1fddf7e` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `a08e2253` | pushed | tests 3423/3423; sweep: AsVoidResultBody gone, IOE still escapes Execute |
+| 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `ba76d6b2` | NOT SHIP | https://github.com/scoizzle/Poly/pull/127#issuecomment-6079449470 (Grug NOT SHIP at ba76d6b2, 2 open findings, mode full) |
+| 2026-10-09 | implementer | grok/grok-4.6 | `a3d6e982` | fixes pushed | R1, R2; disputed: none; tests 3426/3426 |

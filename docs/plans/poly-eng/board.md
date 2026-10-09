@@ -18,6 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
+| | C1c unbound adapter result shape; last `BindForSimulate` arm | B | `20fd11e0` | — | Plan only; implementation follows on this branch. [tasks/C1c.md](tasks/C1c.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
 | [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
 | [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
@@ -27,9 +28,8 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | # | Slice | Lane | Depends / hold | Review |
 |---|-------|------|----------------|--------|
-| 1 | C1c unbound adapter result shape; last `BindForSimulate` arm | B | C1b; V7 = a | 1 |
-| 2 | E1 domain enums become real enum types | B | C1c (wave 2) | 2 |
-| 3 | C2a create initializers without re-lowering | B | C0, C1c (wave 2) | 2 |
+| 1 | E1 domain enums become real enum types | B | C1c (wave 2) | 2 |
+| 2 | C2a create initializers without re-lowering | B | C0, C1c (wave 2) | 2 |
 
 Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
@@ -43,6 +43,8 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #127 | C1b: dedicated constraint-failure exception; delete `AsVoidResultBody` | `20fd11e0` | Scot merged |
+| 10-09 | #128 | H2: Emit refuses VM-analysis Errors and registers the report | `a0f56f58` | Scot merged |
 | 10-09 | #126 | K4: stage-scoped policies reach the printed output | `0ba89d58` | Scot merged |
 | 10-08 | #110 | C1a: root module bodies use real SetArgs slots after this | `b1fddf7e` | Razor + Grug |
 | 10-08 | #125 | C9: generators stop asking for the module | `99d97e46` | Razor |

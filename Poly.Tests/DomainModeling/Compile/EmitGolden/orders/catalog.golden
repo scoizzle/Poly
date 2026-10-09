@@ -1,4 +1,5 @@
 analysis-report|Logistics|Analyze
+catalog-reference-report|Logistics|Emit
 scaffolding|Logistics|Lower
 source-domain|Logistics|Lower
 vm-analysis-report|Logistics|Emit

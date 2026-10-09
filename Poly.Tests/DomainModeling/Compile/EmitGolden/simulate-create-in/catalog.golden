@@ -1,4 +1,5 @@
 analysis-report|SimulateCreateIn|Analyze
+catalog-reference-report|SimulateCreateIn|Emit
 scaffolding|SimulateCreateIn|Lower
 source-domain|SimulateCreateIn|Lower
 vm-analysis-report|SimulateCreateIn|Emit

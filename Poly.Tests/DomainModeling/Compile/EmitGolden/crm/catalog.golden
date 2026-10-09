@@ -1,4 +1,5 @@
 analysis-report|Crm|Analyze
+catalog-reference-report|Crm|Emit
 scaffolding|Crm|Lower
 source-domain|Crm|Lower
 vm-analysis-report|Crm|Emit

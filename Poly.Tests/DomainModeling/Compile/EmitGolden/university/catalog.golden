@@ -1,4 +1,5 @@
 analysis-report|University|Analyze
+catalog-reference-report|University|Emit
 scaffolding|University|Lower
 source-domain|University|Lower
 vm-analysis-report|University|Emit

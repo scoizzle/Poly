@@ -32,6 +32,11 @@ public class Course
             return DomainResult<Course>.Failure("'Title' is required.");
         }
         var created = new Course(code, title);
+        var uniqueCheck = created.EnsureUnique("Code", code);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Course>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Course>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

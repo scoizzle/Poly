@@ -764,7 +764,7 @@ public sealed class DomainDslPrinter {
         if (literal.Value is bool b) return b ? "true" : "false";
         if (literal.Value is string s) return $"\"{EscapeStringLiteral(s)}\"";
         if (literal.Value is long l) return l.ToString(CultureInfo.InvariantCulture);
-        if (literal.Value is double d) return d.ToString("0.#", CultureInfo.InvariantCulture);
+        if (literal.Value is double d) return d.ToString("0.0###############", CultureInfo.InvariantCulture);
         return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
     }
 
@@ -815,6 +815,7 @@ public sealed class DomainDslPrinter {
         true => "true",
         false => "false",
         string s => $"\"{EscapeStringLiteral(s)}\"",
+        double d => d.ToString("0.0###############", CultureInfo.InvariantCulture),
         _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "null",
     };
 }

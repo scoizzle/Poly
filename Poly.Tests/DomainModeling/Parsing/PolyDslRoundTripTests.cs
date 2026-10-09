@@ -1015,6 +1015,7 @@ public class PolyDslRoundTripTests {
             Item: entity {
               Status: Text equals("Active")
               Level: Number equals(5)
+              Rate: Number equals(5.0)
             }
             """);
         var item = first.Types.OfType<Entity>().Single();
@@ -1024,16 +1025,22 @@ public class PolyDslRoundTripTests {
         var level = item.Properties.Single(p => p.Name == "Level")
             .Constraints.OfType<EqualityConstraint>().Single();
         await Assert.That(level.ExpectedValue).IsEqualTo(5L);
+        var rate = item.Properties.Single(p => p.Name == "Rate")
+            .Constraints.OfType<EqualityConstraint>().Single();
+        await Assert.That(rate.ExpectedValue).IsEqualTo(5.0);
 
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains("equals(\"Active\")")).IsTrue();
         await Assert.That(printed.Contains("equals(5)")).IsTrue();
+        await Assert.That(printed.Contains("equals(5.0)")).IsTrue();
         var second = Apply(printed);
         var again = second.Types.OfType<Entity>().Single();
         await Assert.That(again.Properties.Single(p => p.Name == "Status")
             .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo("Active");
         await Assert.That(again.Properties.Single(p => p.Name == "Level")
             .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5L);
+        await Assert.That(again.Properties.Single(p => p.Name == "Rate")
+            .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5.0);
     }
 
     [Test]

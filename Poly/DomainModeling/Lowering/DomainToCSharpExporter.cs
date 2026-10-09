@@ -6,6 +6,7 @@ using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
+using TypeCategory = Poly.Introspection.TypeCategory;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
@@ -152,6 +153,26 @@ public sealed partial class DomainToCSharpExporter {
             acc = acc is null ? neq : new Syntactic.And(acc, neq);
         }
         return acc!;
+    }
+
+    /// <summary>
+    /// Enumeration type with a static const string field per member, defaulted to the member name.
+    /// </summary>
+    internal static TypeDefinitionNode BuildEnumTypeDef(string name, IEnumerable<string> memberNames) {
+        var fields = memberNames.Select(memberName => new FieldDefinitionNode(
+            memberName,
+            new PrimitiveTypeReference(PrimType.String),
+            DefaultValue: new Constant(memberName),
+            IsStatic: true,
+            IsConst: true,
+            AccessModifier: AccessModifier.Public
+        )).ToList();
+        return new TypeDefinitionNode(
+            name,
+            Fields: fields,
+            TypeCategory: TypeCategory.Enumeration,
+            Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
+        );
     }
 
     // ── Per-entity builder ──────────────────────────────────────
@@ -649,20 +670,7 @@ public sealed partial class DomainToCSharpExporter {
         // ── Stage enum + CurrentStage property ────────────────────
         if (entity.Stages.Count > 0) {
             var enumTypeName = stageEnumTypeName;
-            var stageEnumFields = new List<FieldDefinitionNode>();
-            for (int si = 0; si < entity.Stages.Count; si++) {
-                stageEnumFields.Add(new FieldDefinitionNode(
-                    entity.Stages[si].Name,
-                    new PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Constant((int)si),
-                    AccessModifier: AccessModifier.Public
-                ));
-            }
-            typeDefs.Add(new TypeDefinitionNode(
-                enumTypeName,
-                Fields: stageEnumFields,
-                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-            ));
+            typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
 
             props.Add(new PropertyDefinitionNode(
                 "CurrentStage",

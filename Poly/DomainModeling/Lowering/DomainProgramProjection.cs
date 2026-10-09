@@ -2,9 +2,6 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
-using AccessModifier = Poly.Introspection.AccessModifier;
-using PrimType = Poly.Introspection.PrimitiveType;
-using Syntactic = Poly.Ast.Nodes;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
@@ -90,22 +87,8 @@ public static class DomainProgramProjection {
         }
 
         // ── Build enum type definitions ────────────────────────
-        foreach (var enumType in domain.Types.OfType<EnumType>()) {
-            var enumFields = new List<FieldDefinitionNode>();
-            for (int i = 0; i < enumType.MemberNames.Count; i++) {
-                enumFields.Add(new FieldDefinitionNode(
-                    enumType.MemberNames[i],
-                    new PrimitiveTypeReference(PrimType.Int32),
-                    DefaultValue: new Constant((int)i),
-                    AccessModifier: AccessModifier.Public
-                ));
-            }
-            result.Add(new TypeDefinitionNode(
-                enumType.Name,
-                Fields: enumFields,
-                Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-            ));
-        }
+        foreach (var enumType in domain.Types.OfType<EnumType>())
+            result.Add(DomainToCSharpExporter.BuildEnumTypeDef(enumType.Name, enumType.MemberNames));
 
         foreach (var valueType in domain.Types.OfType<ValueType>())
             result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));

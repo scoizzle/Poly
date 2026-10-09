@@ -105,14 +105,15 @@ public abstract class ParitySide(Domain domain) {
         Record($"use {type}", () => (true, null, null));
     }
 
-    public void Invoke(string action) => Record($"invoke {action}", () => InvokeCore(action));
+    public void Invoke(string action, params (string Name, object? Value)[] args) =>
+        Record($"invoke {action}", () => InvokeCore(action, args));
 
     /// <summary>Evaluates a policy; its answer is recorded in the state under the policy's name.</summary>
     public void EvaluatePolicy(string policy) =>
         Record($"policy {policy}", () => (true, null, EvaluateCore(policy)), answerName: policy);
 
     protected abstract StepResult CreateCore(Entity model, (string Name, object? Value)[] values);
-    protected abstract StepResult InvokeCore(string action);
+    protected abstract StepResult InvokeCore(string action, (string Name, object? Value)[] args);
     protected abstract object? EvaluateCore(string policy);
     protected abstract Dictionary<string, string?> StateOf(object entity, Entity model);
     protected abstract string TypeName(object entity);

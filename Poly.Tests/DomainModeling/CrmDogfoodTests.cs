@@ -214,9 +214,10 @@ public class CrmDogfoodTests {
                     ["Currency"] = "USD"
                 }
             });
-        // F1: simulate fail-closes unbound contract adapters (export throws).
+        // Capture binds Billing.Charge; unbound adapter returns Failure.
         await Assert.That(capture.Succeeded).IsFalse();
         await Assert.That(capture.ErrorMessage).Contains("Billing.Charge");
+        await Assert.That(capture.ErrorMessage!).Contains("no in-process adapter");
 
         var wrap = opp.InvokeAction("CompleteOpenWork");
         await Assert.That(wrap.Succeeded).IsTrue();

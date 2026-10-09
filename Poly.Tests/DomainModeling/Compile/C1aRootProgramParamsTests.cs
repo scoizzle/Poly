@@ -15,7 +15,7 @@ namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
 /// C1a: root module bodies declare real parameter slots after SetArgs(this).
-/// BindForSimulate no longer rewrites action params / previousStage to bag members.
+/// BindModuleMethodBody swaps name-only body Parameter nodes for the method's typed Parameters.
 /// </summary>
 public class C1aRootProgramParamsTests {
     [Test]

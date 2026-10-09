@@ -1,5 +1,3 @@
-using System.Reflection;
-
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
@@ -53,10 +51,13 @@ public class ContractAdapterFailClosedTests {
         reqType.GetProperty("Currency")!.SetValue(req, "USD");
         var pay = printed.GetType().GetMethod("Pay")
             ?? throw new InvalidOperationException("Pay missing");
-        // The printed adapter stub throws until a host supplies an implementation;
-        // simulate reports the same missing adapter as a failed result.
-        var thrown = await Assert.That(() => pay.Invoke(printed, [req]))
-            .Throws<TargetInvocationException>();
-        await Assert.That(thrown!.InnerException).IsTypeOf<NotImplementedException>();
+        var printedResult = pay.Invoke(printed, [req])
+            ?? throw new InvalidOperationException("Pay returned null");
+        var printedType = printedResult.GetType();
+        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
+        var printedMessage = printedType.GetProperty("ErrorMessage")!.GetValue(printedResult) as string;
+        await Assert.That(printedMessage).IsEqualTo(sim.ErrorMessage);
+        await Assert.That(printedMessage).IsEqualTo(
+            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
     }
 }

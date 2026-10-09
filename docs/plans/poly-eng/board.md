@@ -18,6 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
+| [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `d1720b1d` | — | In review. [tasks/C2a.md](tasks/C2a.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
 | [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
@@ -28,7 +29,6 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | # | Slice | Lane | Depends / hold | Review |
 |---|-------|------|----------------|--------|
-| 1 | C2a create initializers without re-lowering | B | C0, C1c (wave 2) | 2 |
 
 Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
@@ -45,6 +45,8 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 - #129 `docs/plans/poly-eng/tasks/H3.md`: shape-matrix cites `AnalysisReportArtifactTests`, which never inspects `catalog-reference-report`
 - #131 `Poly.Tests/DomainModeling/Compile/EveryConceptHasTreeTests.cs`: constraint detection keys on exporter message fragments
 - #131 `Poly.Tests/DomainModeling/Compile/EveryConceptHasTreeTests.cs`: `HandlerNames` re-implements `BuildHandlerNames`
+- PR 133, `docs/plans/poly-eng/board.md:21`, in-flight row still showed tip `d0396038` and "Plan only".
+- PR 133, `docs/plans/poly-eng/tasks/E1.md:29`, duplicate-name row cites `LowerTreesTests`; proof is `EnumStageNameCollisionTests`.
 - PR 130, `docs/domain-modeling/pipeline-convergence-plan.md:395`, print still described as throwing `NotImplementedException`.
 - PR 130, `docs/domain-modeling/pipeline-convergence-plan.decisions.md:132`, print still described as throwing `NotImplementedException`.
 - PR 130, `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Actions.cs:435`, hardcoded `adapterResult` local (duplicate var if a bound action parameter has that name).
@@ -54,6 +56,7 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #133 | E1: domain enums become real enum type definitions | `71fef08f` | Grug SHIP |
 | 10-09 | #130 | C1c: unbound adapter result shape; last `BindForSimulate` arm | `4fc7a206` | Grug SHIP |
 | 10-09 | #131 | H4: every concept has its tree (ratchet) | `86ca12dd` | Scot merged |
 | 10-09 | #129 | H3: dangling and wrong-type references as diagnostics | `ec98f971` | Scot merged |

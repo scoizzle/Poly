@@ -210,6 +210,60 @@ public class StoreBindCreateTests {
     }
 
     [Test]
+    public async Task Create_WithoutStore_InitializerValueOnChild() {
+        var (domain, _) = Evolve("""
+            domain Shop
+            Order: entity { Code: Text required }
+            Customer: entity {
+              Place: action (code: Text) {
+                create Order { Code: code }
+              }
+            }
+            """);
+        var customerE = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
+        var customer = DomainEntityInstance.Create(customerE, domain: domain);
+        await Assert.That(customer.Store).IsNull();
+
+        var result = customer.InvokeAction("Place",
+            new Dictionary<string, object?> { ["code"] = "A1" });
+        await Assert.That(result.Succeeded).IsTrue();
+        var child = customer.CreatedChildren.Single();
+        await Assert.That(child.GetProperty<string>("Code")).IsEqualTo("A1");
+        await Assert.That(customer.Store).IsTypeOf<DomainInstanceStore>();
+        await Assert.That(child.Store).IsSameReferenceAs(customer.Store);
+
+        var storeProp = typeof(DomainEntityInstance).GetProperty(nameof(DomainEntityInstance.Store))!;
+        await Assert.That(storeProp.GetMethod!.IsPublic).IsTrue();
+        await Assert.That(storeProp.SetMethod!.IsPublic).IsFalse();
+        await Assert.That(storeProp.SetMethod.IsAssembly).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateIn_WithoutStore_InitializerValueOnChild() {
+        var (domain, _) = Evolve("""
+            domain Parking
+            Permit: entity { Plate: Text required }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) {
+                create in permits { Plate: plate }
+              }
+            }
+            """);
+        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var lot = DomainEntityInstance.Create(lotE, domain: domain);
+        await Assert.That(lot.Store).IsNull();
+
+        var result = lot.InvokeAction("Issue",
+            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsTrue();
+        var child = lot.CreatedChildren.Single();
+        await Assert.That(child.GetProperty<string>("Plate")).IsEqualTo("ABC123");
+        await Assert.That(lot.Store).IsTypeOf<DomainInstanceStore>();
+        await Assert.That(lot.Store!.GetRelatedInstances("permits", lot)).Contains(child);
+    }
+
+    [Test]
     public async Task CreateThenRelExists_SameAction_SeesChild() {
         var (domain, _) = Evolve("""
             domain Parking

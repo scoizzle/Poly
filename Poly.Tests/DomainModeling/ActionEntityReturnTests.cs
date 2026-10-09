@@ -1402,7 +1402,7 @@ public class ActionEntityReturnTests {
         try {
             DomainEntityInstance.Create(guestEntity, domain: domain);
         }
-        catch (InvalidOperationException ex) {
+        catch (ConstraintFailureException ex) {
             thrown = true;
             await Assert.That(ex.Message).Contains("Code");
         }

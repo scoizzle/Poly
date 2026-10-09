@@ -42,6 +42,11 @@ public class Product
             return DomainResult<Product>.Failure("'Sku' must be at most 32 characters.");
         }
         var created = new Product(listPrice, name, sku);
+        var uniqueCheck = created.EnsureUnique("Sku", sku);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Product>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Product>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

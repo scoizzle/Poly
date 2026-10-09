@@ -44,6 +44,22 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
+    public async Task Export_CreateFactory_InvokesEnsureUnique() {
+        var entity = PermitEntity();
+        var domain = ValidDomain.Create("Parking", [entity]);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
+        var createdAt = create.IndexOf("var created = new Permit(", StringComparison.Ordinal);
+        var uniqueAt = create.IndexOf("created.EnsureUnique(\"Plate\", plate)", StringComparison.Ordinal);
+        await Assert.That(createdAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(uniqueAt).IsGreaterThan(createdAt);
+        await Assert.That(create).Contains("if (!uniqueCheck.IsSuccess)");
+        await Assert.That(create).Contains("uniqueCheck.ErrorMessage ?? \"\"");
+        await Assert.That(create).DoesNotContain("this.EnsureUnique");
+    }
+
+    [Test]
     public async Task NonUniqueAssign_Runtime_IsBareAssignment() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var entity = new Entity("Person",

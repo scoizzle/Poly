@@ -67,6 +67,11 @@ public class Contact
             return DomainResult<Contact>.Failure("'Name' is required.");
         }
         var created = new Contact(email, name, account);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Contact>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         if (account != null)
         {
             account.AttachContacts(created);

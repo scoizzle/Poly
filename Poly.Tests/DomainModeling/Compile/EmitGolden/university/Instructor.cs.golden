@@ -54,6 +54,11 @@ public class Instructor
             return DomainResult<Instructor>.Failure("'Name' is required.");
         }
         var created = new Instructor(email, name);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Instructor>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Instructor>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

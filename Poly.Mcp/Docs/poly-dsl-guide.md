@@ -880,9 +880,10 @@ Decisions that narrow the shipped claim so authoring fails loud instead of silen
 diverging:
 
 - **`unique` is enforced at the runtime instance store** (`DomainInstanceStore.Add` /
-  property write) and projected to storage. The C# export's `Create` factory does not
-  emit a uniqueness check — export uniqueness is the generated unique index, not a
-  constructor guard. Duplicate values fail loud at the in-memory store.
+  property write) and projected to storage. The C# export's `Create` factory emits a
+  stub `EnsureUnique` call that still returns Success — export uniqueness is the
+  generated unique index, not a constructor guard. Duplicate values fail loud at the
+  in-memory store.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a

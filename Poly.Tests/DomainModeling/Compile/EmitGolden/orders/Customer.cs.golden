@@ -100,6 +100,11 @@ public class Customer
             return DomainResult<Customer>.Failure("'Name' must be at most 100 characters.");
         }
         var created = new Customer(email, name, orders, tier);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Customer>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Customer>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

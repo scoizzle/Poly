@@ -35,6 +35,7 @@ public class OnEntryConstraintAgreeTests {
             new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
         var thrown = await Assert.That(() => ExportedCSharp.CreateEntity(asm, "Widget"))
             .Throws<TargetInvocationException>();
+        // Printed assembly emits its own ConstraintFailureException type, so match by name.
         await Assert.That(thrown!.InnerException!.GetType().Name).IsEqualTo("ConstraintFailureException");
         await Assert.That(thrown.InnerException is InvalidOperationException).IsFalse();
         await Assert.That(thrown.InnerException!.Message).Contains("must be <= 10");

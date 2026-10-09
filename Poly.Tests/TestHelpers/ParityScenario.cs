@@ -136,6 +136,7 @@ public abstract class ParitySide(Domain domain) {
 
     static Exception Unwrap(Exception ex) => ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
 
+    // Printed C# defines its own ConstraintFailureException type, so match by name.
     static bool IsRecordedOutcome(Exception ex) =>
         ex is InvalidOperationException
         || string.Equals(ex.GetType().Name, nameof(ConstraintFailureException), StringComparison.Ordinal);

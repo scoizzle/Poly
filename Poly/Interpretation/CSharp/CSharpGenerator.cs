@@ -627,9 +627,7 @@ public sealed class CSharpGenerator {
 
     private void WriteTypeDefinition(StringBuilder sb, TypeDefinitionNode typeDef, int indent) {
         WriteAttributes(sb, typeDef.Attributes, indent);
-        var isEnum = typeDef.Fields?.All(f => f.DefaultValue is Constant) == true
-                     && (typeDef.Methods?.Count ?? 0) == 0
-                     && (typeDef.Constructors?.Count ?? 0) == 0;
+        var isEnum = typeDef.TypeCategory.Is(TypeCategory.Enumeration);
         if (isEnum) {
             Indent(sb, indent);
             WriteAccessModifier(sb, typeDef.AccessModifier);
@@ -642,10 +640,8 @@ public sealed class CSharpGenerator {
                 for (int i = 0; i < typeDef.Fields.Count; i++) {
                     Indent(sb, indent + 1);
                     sb.Append(typeDef.Fields[i].Name);
-                    if (typeDef.Fields[i].DefaultValue is Constant c && c.Value != null) {
-                        sb.Append(" = ");
-                        WriteExpression(sb, c);
-                    }
+                    sb.Append(" = ");
+                    sb.Append(i);
                     if (i < typeDef.Fields.Count - 1) sb.Append(',');
                     sb.AppendLine();
                 }

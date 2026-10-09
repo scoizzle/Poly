@@ -410,6 +410,8 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
     public Mutability Mutability => _node.Mutability;
 
     public Expression? EmitRead(Expression? instance) {
+        if ((_node.IsStatic || _node.IsConst) && _node.DefaultValue is Constant constant)
+            return Expression.Constant(constant.Value, typeof(object));
         if (instance is null) return null;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));

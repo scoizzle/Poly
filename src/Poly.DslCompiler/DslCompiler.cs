@@ -4,8 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
-using Poly.Packs.Sqlite;
-using Poly.Packs.SqlServer;
+using Poly.Packs.Product;
 
 namespace Poly.DslCompiler;
 
@@ -194,10 +193,7 @@ public sealed class DslCompiler {
         }
     }
 
-    private static readonly ExtensionCatalog CompilerCatalog = ExtensionCatalog.Core
-        .With(new SqliteLibrary())
-        .With(new SqlServerLibrary())
-        .With(new HttpLibrary());
+    private static readonly ExtensionCatalog CompilerCatalog = ProductCatalog.Catalog;
 
     /// <summary>
     /// The vendor that Db and All link in place of generic <c>persistence</c>, so the host

@@ -10,8 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../Poly/Poly.csproj" />
-    <ProjectReference Include="../Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj" />
-    <ProjectReference Include="../Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj" />
+    <ProjectReference Include="../Poly.Packs.Product/Poly.Packs.Product.csproj" />
   </ItemGroup>
 
 </Project>

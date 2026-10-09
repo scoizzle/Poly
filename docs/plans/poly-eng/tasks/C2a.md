@@ -1,5 +1,5 @@
 # TASK C2a - Create initializers without re-lowering
-Status: planned. Branch slice/c2a-create-initializers. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c2a-create-initializers. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Compiled create trees already invoke `Create` / `CreateIn` / `ProbeCreate` with VM-evaluated values (`EffectLoweringPass.LowerRuntimeFactoryCall` at `Poly/DomainModeling/Lowering/EffectLoweringPass.cs:1098-1148`; `RuntimeCreateFactory` at `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:495-528`). When `Store` is set, those jobs call `DomainInstanceStore` (`HostAbi.cs:556-560, 571-575, 586-590`). When `Store` is null they rebuild `PropertyBinding` literals (`ValuesAsLiteralBindings` `:605-611`) and re-lower them: `PrevalidateCreateInitializers` `:618-642` (`new DomainExpressionLoweringPass` at `:630`) and `CreateChildInstance` `:651-769` (`new DomainExpressionLoweringPass` at `:693`), reached from `Create` `:562` and `CreateIn` → `ExecuteCreateInRelationship` `:577-579, 851-878`. Those two constructions are the only `new DomainExpressionLoweringPass` under `Runtime/`.
@@ -58,3 +58,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `71fef08f` | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | `6443d178` | pushed | tests 3461/3461; sweep: Runtime re-lower gone, store-less create takes Store.Create |

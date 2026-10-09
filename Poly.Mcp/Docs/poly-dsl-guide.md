@@ -1027,6 +1027,7 @@ SetName: action (newName: Text) {
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: Text default("Active")` |
+| Equality | `equals(value)` | `Status: Text equals("Active")` |
 | Enum-typed property | `Prop: EnumType` | `Color: Color` (see §2 — top-level enum type; inline `enum(...)` constraints are not supported) |
 
 ### Annotations (portable metadata, not constraints)
@@ -1064,7 +1065,7 @@ property's constraints, merged by intersection across all such targets. This cov
 `assign Prop to param` on the action's entity and `create`/`create in` initializer
 bindings (`Prop: param`) on related entities. Conflicting targets (e.g. different
 patterns) merge to nothing and emit no attribute. A pinned literal in the model
-(`EqualityConstraint`, evolution-only — not DSL) still projects as `[AllowedValues]`.
+(`EqualityConstraint`) still projects as `[AllowedValues]`.
 Author a closed set as an **enum**, not a property constraint.
 
 **Soundness rules for implicit derivation:**

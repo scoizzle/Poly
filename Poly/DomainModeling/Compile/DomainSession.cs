@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.DomainModeling.Compile;
@@ -48,7 +49,7 @@ public sealed class DomainSession {
     /// and one <c>analysis-report</c> for the domain's findings.
     /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
     /// one <c>vm-analysis-report</c> for the interpretation analysis of the whole module
-    /// (empty when there were no types to analyze) and each printed <c>.cs</c> file with
+    /// (empty when the analyzer reported nothing) and each printed <c>.cs</c> file with
     /// a reference to the entity or scaffolding tree it printed. After the catalog is
     /// complete, Lower and Emit each register one <c>catalog-reference-report</c>
     /// (empty when every reference resolves). The compiler then
@@ -277,11 +278,9 @@ public sealed class DomainSession {
         // whole module, because the generator resolves types across entities from one analysis.
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
-        var interpAnalysis = TryAnalyzeForEmit(module);
+        var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
         RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
-        var generator = interpAnalysis is not null
-            ? new CSharpGenerator(interpAnalysis)
-            : new CSharpGenerator();
+        var generator = new CSharpGenerator(interpAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
         var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
@@ -332,20 +331,18 @@ public sealed class DomainSession {
 
     /// <summary>
     /// One <c>vm-analysis-report</c> per domain, from interpretation analysis of the
-    /// whole lowered module. Always registered on Emit (empty when there were no types
-    /// or the analyzer reported nothing).
+    /// whole lowered module. Always registered on Emit (empty when the analyzer
+    /// reported nothing).
     /// </summary>
-    private static void RegisterVmAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult? analysis) {
+    private static void RegisterVmAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult analysis) {
         catalog.DeclareType(VmAnalysisReportType, mayPointAt: []);
-        var findings = analysis is null
-            ? []
-            : analysis.Diagnostics
-                .Select(d => new AnalysisFinding(
-                    d.Code,
-                    d.Severity,
-                    d.Message,
-                    DomainElementPath.Resolve(domain, d.Node)))
-                .ToArray();
+        var findings = analysis.Diagnostics
+            .Select(d => new AnalysisFinding(
+                d.Code,
+                d.Severity,
+                d.Message,
+                DomainElementPath.Resolve(domain, d.Node)))
+            .ToArray();
         catalog.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create([domain.Name], VmAnalysisReportType), EmitProducer),
             Payload: new AnalysisReport(findings)));
@@ -381,17 +378,6 @@ public sealed class DomainSession {
 
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>
         (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;
-
-    /// <summary>
-    /// Runs interpretation analysis on lowered type definitions so the C# generator
-    /// can use type-aware features (variable type resolution, DCE).
-    /// </summary>
-    internal static AnalysisResult? TryAnalyzeForEmit(IReadOnlyList<TypeDefinitionNode> allTypes) {
-        if (allTypes.Count == 0)
-            return null;
-        var unit = new CompilationUnitNode([], null, allTypes, null);
-        return Interpretation.Interpreter.Analyzer.Analyze(unit);
-    }
 
     /// <summary>
     /// Throws <see cref="InvalidOperationException"/> naming the first VM analysis error.

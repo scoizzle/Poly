@@ -80,7 +80,7 @@ public sealed partial class DomainToCSharpExporter {
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
             postTransitionNotifyStages, loweringSourceStage, domain, analysis, isVoid, names);
-        effectsBody = PrependAdapterInvocation(domain, action, effectsBody);
+        effectsBody = PrependAdapterInvocation(domain, action, effectsBody, isVoid, analysis);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage);
     }
@@ -411,14 +411,16 @@ public sealed partial class DomainToCSharpExporter {
     // ── Lowering helpers ────────────────────────────────────────
 
     /// <summary>
-    /// When <paramref name="action"/> is bound to a contract endpoint, prepends the adapter
-    /// invocation (<c>{Contract}Adapters.{Endpoint}({param})</c>) to the effects body. The
-    /// binding is exported as a call into the emitted adapter (which throws until an
-    /// in-process adapter is registered) — never dropped, never a silent no-op. Unknown
-    /// contract/endpoint/binding are left untouched: analysis already rejected them, and the
-    /// projection never second-guesses a valid model.
+    /// When <paramref name="action"/> is bound to a contract endpoint, prepends
+    /// <c>adapterResult = {Contract}Adapters.{Endpoint}({param})</c> and
+    /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void
+    /// <c>DomainResult</c>) or <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c>
+    /// (typed). Unknown contract/endpoint/binding are left untouched: analysis
+    /// already rejected them, and the projection never second-guesses a valid model.
     /// </summary>
-    private static Node? PrependAdapterInvocation(Domain? domain, Action action, Node? effectsBody) {
+    private static Node? PrependAdapterInvocation(
+        Domain? domain, Action action, Node? effectsBody,
+        bool isVoid, INodeMetadataProvider? analysis) {
         if (domain is null) return effectsBody;
         var binding = domain.ContractBindings.FirstOrDefault(b =>
             string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
@@ -430,20 +432,41 @@ public sealed partial class DomainToCSharpExporter {
             string.Equals(e.Name, binding.EndpointName, StringComparison.Ordinal));
         if (endpoint is null) return effectsBody;
 
+        var adapterResult = new Variable("adapterResult");
         var call = new Invoke(
             new Member(new TypeReference($"{contract.Name}Adapters"), endpoint.Name),
-            new Variable(binding.LocalParameterName));
+            new Parameter(binding.LocalParameterName));
+        Node failureReturn;
+        if (isVoid) {
+            failureReturn = new Return(adapterResult);
+        }
+        else {
+            var actionResultType = new NamedTypeReference("DomainResult",
+                TypeArguments: [MapDomainTypeRef(action.Result!.Members[0].Type, domain, analysis)]);
+            failureReturn = new Return(
+                new Invoke(
+                    new Member(actionResultType, "Failure"),
+                    new Syntactic.Coalesce(
+                        new Member(adapterResult, "ErrorMessage"),
+                        new Constant(""))));
+        }
+        Node[] prefix = [
+            new Assignment(adapterResult, call),
+            new IfStatement(
+                new Syntactic.Not(new Member(adapterResult, "IsSuccess")),
+                new Block([failureReturn])),
+        ];
         return effectsBody is Block block
-            ? new Block([call, .. block.Nodes], block.Variables)
-            : new Block([call]);
+            ? new Block([.. prefix, .. block.Nodes], [adapterResult, .. block.Variables])
+            : effectsBody is null
+                ? new Block(prefix, [adapterResult])
+                : new Block([.. prefix, effectsBody], [adapterResult]);
     }
 
     /// <summary>
     /// Builds the fail-closed adapter class for a contract with at least one bound endpoint.
-    /// One static method per bound endpoint; each throws <c>NotImplementedException</c> at
-    /// runtime until an in-process adapter is registered. There is no second parse of the
-    /// child domain — the produced contract endpoint has no callable in the exported root,
-    /// so an unimplemented binding fails loud instead of silently succeeding.
+    /// One static <c>DomainResult</c> method per bound endpoint; each returns
+    /// <c>Failure</c> until an in-process adapter is registered.
     /// </summary>
     internal static TypeDefinitionNode BuildContractAdapterTypeDef(
         ImportedContract contract, IReadOnlyList<ContractEndpoint> boundEndpoints, Domain? domain = null) {
@@ -451,17 +474,17 @@ public sealed partial class DomainToCSharpExporter {
         foreach (var endpoint in boundEndpoints) {
             var payload = new NamedTypeReference(
                 RuntimeAnalysisCache.ClrTypeName(domain, endpoint.PayloadType.TypeName));
+            var domainResult = new NamedTypeReference("DomainResult");
             methods.Add(new MethodDefinitionNode(
                 endpoint.Name,
-                new NamedTypeReference("void"),
+                domainResult,
                 Parameters: [new Parameter("request", payload)],
                 Body: new Block([
-                    new ThrowStatement(
-                        new New(
-                            new NamedTypeReference("NotImplementedException"),
+                    new Return(
+                        new Invoke(
+                            new Member(domainResult, "Failure"),
                             new Constant(
-                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' has no implementation. " +
-                                "The export emits a fail-closed adapter; register an in-process adapter to serve bound calls."))),
+                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' has no in-process adapter."))),
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public

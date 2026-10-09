@@ -18,8 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `d1720b1d` | — | In review. [tasks/C2a.md](tasks/C2a.md) |
-| [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
+| [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | Plan only; implementation follows on this branch. [tasks/C2b.md](tasks/C2b.md) |
 | [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
 | [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
@@ -50,12 +49,18 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 - PR 130, `docs/domain-modeling/pipeline-convergence-plan.md:395`, print still described as throwing `NotImplementedException`.
 - PR 130, `docs/domain-modeling/pipeline-convergence-plan.decisions.md:132`, print still described as throwing `NotImplementedException`.
 - PR 130, `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Actions.cs:435`, hardcoded `adapterResult` local (duplicate var if a bound action parameter has that name).
+- #134 `docs/plans/poly-eng/board.md`: in-flight row left at tip `d1720b1d` after SHIP (head was `930dbecc`)
+- #134 `docs/plans/poly-eng/tasks/E1.md`: unrelated #133 merged-doc edits rode on the C2a branch
+- #134 `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`: `_bindingTypeProvider` has no explicit reader after C2a helper deletions
+- #134 `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs`: store-less create attaches the default store, so a later quantifier on that instance evaluates against the ad-hoc store instead of throwing
 - Suites on THEN/PULL live in [`../parked/`](../parked/README.md).
 
 ## Merged (last 30 days; older lines move to archive/)
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #134 | C2a: create initializers without re-lowering | `ede905f9` | Grug SHIP |
+| 10-09 | #132 | Q2: MCP harness opens domains that use sqlite or http | `d30268ec` | Grug SHIP |
 | 10-09 | #133 | E1: domain enums become real enum type definitions | `71fef08f` | Grug SHIP |
 | 10-09 | #130 | C1c: unbound adapter result shape; last `BindForSimulate` arm | `4fc7a206` | Grug SHIP |
 | 10-09 | #131 | H4: every concept has its tree (ratchet) | `86ca12dd` | Scot merged |

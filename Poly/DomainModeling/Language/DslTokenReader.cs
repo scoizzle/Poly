@@ -211,6 +211,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "pattern" => DslTokenKind.Pattern,
         "enum" => DslTokenKind.Enum,
         "default" => DslTokenKind.Equals,
+        "equals" => DslTokenKind.Equality,
         "relationship" => DslTokenKind.Relationship,
         "from" => DslTokenKind.From,
         "one" => DslTokenKind.One,

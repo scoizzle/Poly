@@ -49,7 +49,9 @@ public sealed class DomainSession {
     /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
     /// one <c>vm-analysis-report</c> for the interpretation analysis of the whole module
     /// (empty when there were no types to analyze) and each printed <c>.cs</c> file with
-    /// a reference to the entity or scaffolding tree it printed. The compiler then
+    /// a reference to the entity or scaffolding tree it printed. After the catalog is
+    /// complete, Lower and Emit each register one <c>catalog-reference-report</c>
+    /// (empty when every reference resolves). The compiler then
     /// registers contributor trees and text files here and writes the text files from
     /// this catalog. The next Lower or Emit drops anything registered after that,
     /// including those files.
@@ -60,6 +62,7 @@ public sealed class DomainSession {
     private const string EntityType = "entity";
     private const string AnalysisReportType = "analysis-report";
     private const string VmAnalysisReportType = "vm-analysis-report";
+    private const string CatalogReferenceReportType = "catalog-reference-report";
     private const string SourceDomainType = "source-domain";
     private const string SourceEntityType = "source-entity";
     private const string LowerProducer = "Lower";
@@ -178,6 +181,7 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         var (module, catalog) = LowerToCatalog(domain, analysis);
+        RegisterCatalogReferenceReport(catalog, domain, LowerProducer);
         ArtifactCatalog = catalog;
         return module;
     }
@@ -292,6 +296,7 @@ public sealed class DomainSession {
         }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
         AddPrintedFile(catalog, domain, files, "Poly.Types.cs", generator.Generate(TypesOf(scaffolding)), scaffolding);
+        RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
     }
 
@@ -344,6 +349,34 @@ public sealed class DomainSession {
         catalog.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create([domain.Name], VmAnalysisReportType), EmitProducer),
             Payload: new AnalysisReport(findings)));
+    }
+
+    /// <summary>
+    /// Maps each dangling or wrong-type catalog reference to an Error finding.
+    /// <see cref="AnalysisFinding.ElementPath"/> is the referrer's id path.
+    /// </summary>
+    internal static IReadOnlyList<AnalysisFinding> CatalogReferenceFindings(ArtifactCatalog catalog) {
+        ArgumentNullException.ThrowIfNull(catalog);
+        return catalog.FindDanglingOrWrongType()
+            .Select(p => new AnalysisFinding(
+                p.Kind.ToString(),
+                DiagnosticSeverity.Error,
+                $"{p.From} points at {p.Target}",
+                p.From.Path))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// One <c>catalog-reference-report</c> per catalog, from
+    /// <see cref="ArtifactCatalog.FindDanglingOrWrongType"/>. Always registered
+    /// after Lower or Emit has filled the catalog (empty when every reference
+    /// resolves).
+    /// </summary>
+    private static void RegisterCatalogReferenceReport(ArtifactCatalog catalog, Domain domain, string producer) {
+        catalog.DeclareType(CatalogReferenceReportType, mayPointAt: []);
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], CatalogReferenceReportType), producer),
+            Payload: new AnalysisReport(CatalogReferenceFindings(catalog))));
     }
 
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>

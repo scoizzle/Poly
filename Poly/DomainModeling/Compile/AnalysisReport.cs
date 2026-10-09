@@ -3,8 +3,9 @@ using Poly.Analysis;
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// Findings from analysis. Payload of one <c>analysis-report</c> (domain analysis)
-/// or one <c>vm-analysis-report</c> (interpretation analysis of the lowered module).
+/// Findings from analysis. Payload of one <c>analysis-report</c> (domain analysis),
+/// one <c>vm-analysis-report</c> (interpretation analysis of the lowered module),
+/// or one <c>catalog-reference-report</c> (dangling or wrong-type catalog references).
 /// Each finding names the element it points at by id path (for example
 /// <c>Hotel/Reservation/Confirm</c>).
 /// </summary>

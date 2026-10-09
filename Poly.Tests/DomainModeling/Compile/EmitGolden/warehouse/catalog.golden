@@ -1,4 +1,5 @@
 analysis-report|Fleet|Analyze
+catalog-reference-report|Fleet|Emit
 scaffolding|Fleet|Lower
 source-domain|Fleet|Lower
 vm-analysis-report|Fleet|Emit

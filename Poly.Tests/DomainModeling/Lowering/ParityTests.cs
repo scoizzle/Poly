@@ -333,7 +333,7 @@ public class ParityTests {
         }
         """;
 
-    // The DSL cannot author equals(...), so add the constraint to the parsed model.
+    // Injected so Level's expected value is int 5 against a long property (create-time widening).
     static ParityScenario EqualityScenario(string dsl, string assemblyName, params (string Property, object Expected)[] equalities) {
         var domain = EvolvedDomain.FromDsl(dsl).Domain;
         var entity = domain.Types.OfType<Entity>().Single();

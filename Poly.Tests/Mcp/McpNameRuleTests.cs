@@ -18,7 +18,7 @@ public class McpNameRuleTests {
     // Valid and invalid under the DSL scanner: digits first, punctuation, spaces, and keywords.
     private static readonly string[] Names = [
         "Order", "_x", "a1", "Café", "Order_Item",
-        "1Order", "Order-Item", "A.B", "A B", "A/B", "A#B", "stage", "length", "entity", "default", "",
+        "1Order", "Order-Item", "A.B", "A B", "A/B", "A#B", "stage", "length", "entity", "default", "equals", "",
     ];
 
     // Text, Number and Boolean are keywords the parser still accepts as a property name of a primitive type.

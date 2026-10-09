@@ -99,6 +99,8 @@ public sealed class PrinterTests {
         await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Domain)).IsEqualTo("domain");
         await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Entity)).IsEqualTo("entity");
         await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Transition)).IsEqualTo("transition");
+        await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Equals)).IsEqualTo("default");
+        await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Equality)).IsEqualTo("equals");
         await Assert.That(DslGrammar.CanonicalText(DslTokenKind.Colon)).IsEqualTo(":");
         await Assert.That(DslGrammar.CanonicalText(DslTokenKind.LBrace)).IsEqualTo("{");
     }

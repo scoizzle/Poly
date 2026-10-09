@@ -1409,6 +1409,15 @@ public sealed class PolyDslParser : DslCursor {
                 Expect(TokenKind.RParen);
                 return new DefaultValueConstraint(dvExpr);
 
+            case TokenKind.Equality:
+                Advance();
+                Expect(TokenKind.LParen);
+                var eqExpr = ParseExpression();
+                Expect(TokenKind.RParen);
+                if (eqExpr is not Literal { Value: { } expected })
+                    throw Error("equals() requires a literal value.");
+                return new EqualityConstraint(expected);
+
             case TokenKind.Enum:
                 throw Error("Inline enum(...) constraints are no longer supported. " +
                     "Use a top-level enum type declaration: Name: enum { Member1, Member2 }");
@@ -1516,7 +1525,7 @@ public sealed class PolyDslParser : DslCursor {
     private static bool IsConstraint(TokenKind kind) => kind switch {
         TokenKind.Required or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
-            or TokenKind.Equals or TokenKind.Enum => true,
+            or TokenKind.Equals or TokenKind.Equality or TokenKind.Enum => true,
         _ => false,
     };
 

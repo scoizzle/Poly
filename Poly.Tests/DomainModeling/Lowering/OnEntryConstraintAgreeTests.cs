@@ -28,14 +28,15 @@ public class OnEntryConstraintAgreeTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
 
         await Assert.That(() => DomainEntityInstance.Create(entity, domain: domain))
-            .Throws<InvalidOperationException>()
+            .Throws<ConstraintFailureException>()
             .WithMessageContaining("must be <= 10");
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
         var thrown = await Assert.That(() => ExportedCSharp.CreateEntity(asm, "Widget"))
             .Throws<TargetInvocationException>();
-        await Assert.That(thrown!.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(thrown!.InnerException!.GetType().Name).IsEqualTo("ConstraintFailureException");
+        await Assert.That(thrown.InnerException is InvalidOperationException).IsFalse();
         await Assert.That(thrown.InnerException!.Message).Contains("must be <= 10");
     }
 }

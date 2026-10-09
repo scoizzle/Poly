@@ -2010,7 +2010,7 @@ public class DomainEntityInstanceTests {
         var childInstance = parentInstance.CreatedChildren[0];
         await Assert.That(childInstance.GetProperty<string>("ChildName")).IsEqualTo("AutoAdded");
 
-        // Child should be in the store (auto-added by CreateChildInstance)
+        // Child should be in the store (auto-added by Store.Create)
         await Assert.That(childInstance.Store).IsNotNull();
     }
 
@@ -2227,7 +2227,8 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_RelationshipNameWithoutStore_NoOp() {
-        // Create with RelationshipName but no store → no crash, no link.
+        // Create with RelationshipName but no store at construction: the job
+        // attaches the C8d named twin and still creates the child.
         var child = new Entity("Child", [], [], [], []);
         var parent = new Entity("Parent", [], [
             new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [], [
@@ -2241,10 +2242,11 @@ public class DomainEntityInstanceTests {
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [parent, child], [rel]);
         var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+        await Assert.That(parentInstance.Store).IsNull();
 
-        // No store → should not crash
         parentInstance.InvokeAction("Spawn");
         await Assert.That(parentInstance.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(parentInstance.Store).IsTypeOf<DomainInstanceStore>();
     }
 
     [Test]
@@ -2675,8 +2677,8 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInRelationship_WithoutStore_NoCrash() {
-        // P2′.3: CreateIn without store → should not crash, child still created.
-        // Use direct API to avoid analysis gate issues (the create-in needs domain context)
+        // CreateIn with no store attached at construction: the job attaches the
+        // C8d named twin, creates the child, and links it. No crash.
         var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [])], [], [], []);
         var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [])], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
@@ -2693,10 +2695,8 @@ public class DomainEntityInstanceTests {
         ]);
 
         var custInstance = DomainEntityInstance.Create(customerEntity, domain: domain);
+        await Assert.That(custInstance.Store).IsNull();
 
-        // No store — the create-in resolves rel→target→creates child with RelationshipName,
-        // then CreateChildInstance tries Store?.Add(child) (null → skip),
-        // then tries to link (Store is null → skip). No crash expected.
         var threw = false;
         try {
             custInstance.InvokeAction("Go");
@@ -2706,6 +2706,9 @@ public class DomainEntityInstanceTests {
         }
         await Assert.That(threw).IsFalse();
         await Assert.That(custInstance.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(custInstance.Store).IsTypeOf<DomainInstanceStore>();
+        await Assert.That(custInstance.Store!.GetRelatedInstances("orders", custInstance))
+            .Contains(custInstance.CreatedChildren[0]);
     }
 
     // ── P2′′′.3 / P2′′′.4: Runtime source/target checks ─────────────────

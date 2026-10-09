@@ -13,7 +13,13 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var properties = values.Where(v => v.Value is not (IEnumerable<object> or DomainEntityInstance))
             .ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
-        var instance = DomainEntityInstance.Create(model, properties, Domain);
+        DomainEntityInstance instance;
+        try {
+            instance = DomainEntityInstance.Create(model, properties, Domain);
+        }
+        catch (ConstraintFailureException ex) {
+            return (false, ex.Message, null);
+        }
         _store.Add(instance);
         foreach (var (name, value) in values.Where(v => v.Value is IEnumerable<object> or DomainEntityInstance))
             foreach (var target in value is DomainEntityInstance one ? [one] : (IEnumerable<object>)value!)
@@ -50,7 +56,14 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => (v.Name, v.Value is IEnumerable<object> list ? ToArray(list) : v.Value));
-        return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
+        try {
+            return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
+        }
+        catch (TargetInvocationException ex) when (
+            ex.InnerException is { } inner
+            && string.Equals(inner.GetType().Name, nameof(ConstraintFailureException), StringComparison.Ordinal)) {
+            return (false, inner.Message, null);
+        }
     }
 
     protected override StepResult InvokeCore(string action, (string Name, object? Value)[] args) {

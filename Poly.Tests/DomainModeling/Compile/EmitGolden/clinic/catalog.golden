@@ -1,4 +1,5 @@
 analysis-report|Clinic|Analyze
+catalog-reference-report|Clinic|Emit
 scaffolding|Clinic|Lower
 source-domain|Clinic|Lower
 vm-analysis-report|Clinic|Emit

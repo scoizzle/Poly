@@ -1,9 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.Semantics;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Prim = Poly.Introspection.PrimitiveType;
@@ -551,249 +549,47 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Notify-shaped Store bind for by-type create. Dictionary <c>This</c> cannot
-    /// Member-read <see cref="Store"/>.
+    /// Member-read <see cref="Store"/>. No Store: attach the C8d named twin so
+    /// the compiled tree still runs.
     /// </summary>
     public DomainResult Create(string typeName, IReadOnlyDictionary<string, object?> values) {
         ArgumentException.ThrowIfNullOrEmpty(typeName);
         ArgumentNullException.ThrowIfNull(values);
-        if (Store is not null)
-            return Store.Create(this, typeName, values);
-        var bindings = ValuesAsLiteralBindings(values);
-        var created = CreateChildInstance(
-            new CreateEntityInstance(new DomainTypeReference(typeName), bindings),
-            _bindingTypeProvider ?? _typeDefAnalyzer);
-        return DomainResult.Success(created);
+        return StoreOrDefault().Create(this, typeName, values);
     }
 
     /// <summary>
     /// Notify-shaped Store bind for create-in (allocate, register, link).
+    /// No Store: attach the C8d named twin so the compiled tree still runs.
     /// </summary>
     public DomainResult CreateIn(string relationshipName, IReadOnlyDictionary<string, object?> values) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
         ArgumentNullException.ThrowIfNull(values);
-        if (Store is not null)
-            return Store.CreateIn(this, relationshipName, values);
-        var bindings = ValuesAsLiteralBindings(values);
-        var child = ExecuteCreateInRelationship(
-            new CreateEntityInRelationshipEffect(relationshipName, bindings),
-            _bindingTypeProvider ?? _typeDefAnalyzer);
-        return DomainResult.Success(child);
+        return StoreOrDefault().CreateIn(this, relationshipName, values);
     }
 
     /// <summary>
     /// Constraint probe without allocating. Fail-before-mutate prefix in the lowered tree.
+    /// No Store: attach the C8d named twin so the compiled tree still runs.
     /// </summary>
     public DomainResult ProbeCreate(string typeName, IReadOnlyDictionary<string, object?> values) {
         ArgumentException.ThrowIfNullOrEmpty(typeName);
         ArgumentNullException.ThrowIfNull(values);
-        if (Store is not null)
-            return Store.ProbeCreate(this, typeName, values);
-        Entity? target;
-        if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            if (!analysis.TryGetEntity(Domain, typeName, out target) || target is null)
-                return DomainResult.Failure(
-                    $"Entity type '{typeName}' not found in domain '{Domain.Name}'.");
-        }
-        else {
-            target = Entity;
-        }
-        var err = PrevalidateCreateInitializers(ValuesAsLiteralBindings(values), target);
-        return err is null ? DomainResult.Success() : DomainResult.Failure(err);
-    }
-
-    private static List<PropertyBinding> ValuesAsLiteralBindings(
-        IReadOnlyDictionary<string, object?> values) {
-        var bindings = new List<PropertyBinding>();
-        foreach (var (name, value) in values)
-            bindings.Add(new PropertyBinding(name, DomainExpression.Literal(value)));
-        return bindings;
+        return StoreOrDefault().ProbeCreate(this, typeName, values);
     }
 
     /// <summary>
-    /// Parking dogfood: <c>assign Occupied + 1</c> then <c>create in</c> left Occupied
-    /// bumped when Plate failed the pattern. Unconditional create/create-in probes live
-    /// in the lowered tree (<c>ProbeCreate</c>) so Failure happens before prior assigns.
+    /// C8d named twin: a default internal store so compiled Create trees always run.
+    /// Attached only from Create / CreateIn / ProbeCreate, not from construction.
     /// </summary>
-    private string? PrevalidateCreateInitializers(
-        IReadOnlyList<PropertyBinding> initializers, Entity targetEntity) {
-        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
-        var scalarNames = new HashSet<string>(
-            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
-        foreach (var binding in initializers) {
-            if (!scalarNames.Contains(binding.PropertyName))
-                continue;
-            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
-                values[binding.PropertyName] = fromParam;
-                continue;
-            }
-            var lowered = new DomainExpressionLoweringPass(new LoweringContext(
-                new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name)).Lower(
-                binding.Expression,
-                new Parameter("entity", new TypeReference(Entity.Name)));
-            var compiled = Interpreter.Compile(lowered, _bindingTypeProvider ?? _typeDefAnalyzer);
-            using var exec = Interpreter.Execute(compiled,
-                s => s.SetArgs(new object?[] { this }));
-            values[binding.PropertyName] = exec.Result.GetValue<object>();
-        }
-
-        return ValidateConstraints(
-            targetEntity, FillCreateDefaults(targetEntity, values, Domain), Store, Domain);
+    private DomainInstanceStore StoreOrDefault() {
+        var store = Store;
+        if (store is not null)
+            return store;
+        store = new DomainInstanceStore();
+        store.Add(this);
+        return store;
     }
-
-    /// <summary>
-    /// Creates a child entity instance from a <see cref="CreateEntityInstance"/>
-    /// effect. Looks up the target entity by type name — first from the parent
-    /// <see cref="Domain"/> if available, otherwise falls back to the current
-    /// entity (same-type creation). Initializer expressions are evaluated
-    /// against the <em>parent</em> instance and bound to the child's properties.
-    /// </summary>
-    private DomainEntityInstance CreateChildInstance(
-        CreateEntityInstance createEffect,
-        TypeDefinitionNodeAnalyzer? parentTypeProvider = null) {
-        var targetTypeName = createEffect.Type.TypeName;
-
-        // Resolve analysis once for the whole creation (F21).
-        var analysis = Domain is not null ? RuntimeAnalysisCache.GetOrAnalyze(Domain) : null;
-
-        // Resolve target entity definition via catalog/DTLM.
-        // With analysis present a miss is a genuine not-found — fail closed.
-        Entity targetEntity;
-        if (analysis is not null) {
-            targetEntity = analysis.TryGetEntity(Domain!, targetTypeName, out var resolvedEntity)
-                ? resolvedEntity!
-                : throw new InvalidOperationException(
-                    $"Entity type '{targetTypeName}' not found in domain '{Domain!.Name}'.");
-        }
-        else {
-            targetEntity = Entity; // same-type creation when no domain reference
-        }
-
-        // Evaluate initializers against the parent instance. Use the action-scoped type
-        // provider (entity props + action parameters) when available — the instance-level
-        // analyzer lacks action params, so `Capacity: qty` compiled with it would resolve
-        // the parameter as an unresolved member passthrough (garbage value).
-        var initializerTypeProvider = parentTypeProvider ?? _typeDefAnalyzer;
-        var initialValues = new Dictionary<string, object?>(StringComparer.Ordinal);
-        var navValues = new Dictionary<string, object?>(StringComparer.Ordinal);
-        var scalarNames = new HashSet<string>(
-            targetEntity.Properties.Select(p => p.Name), StringComparer.Ordinal);
-        var singularNavs = targetEntity.Navigations
-            .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
-                or RelationshipCardinality.ManyToMany))
-            .Select(n => n.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var binding in createEffect.Initializers) {
-            object? value;
-            if (TryEvalActionParamPath(binding.Expression, out var fromParam)) {
-                value = fromParam;
-            }
-            else {
-                var lowered = new DomainExpressionLoweringPass(new LoweringContext(
-                    new Parameter("entity"), Domain: Domain, SourceEntityName: Entity.Name)).Lower(
-                    binding.Expression,
-                    new Parameter("entity", new TypeReference(Entity.Name)));
-                var compiled = Interpreter.Compile(lowered, initializerTypeProvider);
-                using var exec = Interpreter.Execute(compiled,
-                    s => s.SetArgs(new object?[] { this }));
-                value = exec.Result.GetValue<object>();
-            }
-            if (scalarNames.Contains(binding.PropertyName))
-                initialValues[binding.PropertyName] = value;
-            else if (singularNavs.Contains(binding.PropertyName))
-                navValues[binding.PropertyName] = value;
-            else
-                throw new ArgumentException(
-                    $"Property '{binding.PropertyName}' does not exist on entity '{targetEntity.Name}'. " +
-                    $"Available: {string.Join(", ", scalarNames)}.");
-        }
-
-        initialValues = FillCreateDefaults(targetEntity, initialValues, Domain);
-        var uniqueOrConstraint = ValidateConstraints(targetEntity, initialValues, Store, Domain);
-        if (uniqueOrConstraint is not null)
-            throw new InvalidOperationException(uniqueOrConstraint);
-
-        var child = Create(targetEntity, initialValues, Domain);
-        _createdChildren.Add(child);
-
-        // BR.3.3: Auto-register child in the parent's store, if present.
-        if (Store is not null && !Store.TryAdd(child, out var addError)) {
-            _createdChildren.Remove(child);
-            throw new InvalidOperationException(addError);
-        }
-
-        if (Store is not null) {
-            foreach (var (navName, raw) in navValues) {
-                if (raw is not DomainEntityInstance linked)
-                    throw new InvalidOperationException(
-                        $"Create-in initializer '{navName}' on '{targetEntity.Name}' must resolve to a linked instance.");
-                if (!ReferenceEquals(linked.Store, Store)
-                    && !Store.TryAdd(linked, out var linkAddError)) {
-                    _createdChildren.Remove(child);
-                    throw new InvalidOperationException(linkAddError);
-                }
-                Store.Link(navName, child, linked);
-                TryLinkInverseCollection(linked, child);
-            }
-        }
-
-        // P2.1 / P2′.3 / P2′′′.3: Auto-link child to creator if the effect specifies a relationship name.
-        // Link direction: creator (this) = source, child = target.
-        // If Domain is available, validate the relationship exists, source entity, and target type.
-        // If Domain is null, link is best-effort (standalone instance).
-        if (createEffect.RelationshipName is not null && Store is not null) {
-            if (analysis is not null) {
-                // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-                var relationship = ResolveSourceRelationshipOrThrow(createEffect.RelationshipName,
-                    $"Relationship '{createEffect.RelationshipName}' not found in domain '{Domain!.Name}'.");
-                // Verify created type matches relationship target
-                if (!string.Equals(targetEntity.Name, relationship.Target.TypeName, StringComparison.Ordinal)) {
-                    throw new InvalidOperationException(
-                        $"CreateEntityInstance creates type '{targetEntity.Name}' but relationship " +
-                        $"'{createEffect.RelationshipName}' targets '{relationship.Target.TypeName}'.");
-                }
-            }
-            Store.Link(createEffect.RelationshipName, this, child);
-            TryLinkCreateInBackReference(child);
-        }
-        else if (Store is not null) {
-            // Type-create with no RelationshipName: when this source owns exactly one
-            // many-rel targeting the created type (e.g. Patron.fines → Fine), auto-link
-            // outbound + unambiguous reverse so list_instances and Rel-exists agree.
-            // Zero or several matching navs stay explicit (no silent pick).
-            TryAutoLinkUnambiguousOutbound(child, targetEntity);
-        }
-
-        return child;
-    }
-
-    /// <summary>
-    /// After a create-in to-one initializer (<c>section: offering</c>), also link the
-    /// peer's unique collection of this child type (<c>Section.enrollments</c>). Skip
-    /// when zero or several collections match — ambiguous inverses stay explicit.
-    /// </summary>
-    /// <summary>
-    /// <c>lead Name</c> in a create-in initializer: the first hop is an action
-    /// parameter holding a <see cref="DomainEntityInstance"/>, not a navigation
-    /// on this entity (CRM ConvertLead).
-    /// </summary>
-    private bool TryEvalActionParamPath(DomainExpression expr, out object? value) {
-        value = null;
-        if (expr is not RelationshipNavigation { TargetProperty: PropertyAccess leaf } nav)
-            return false;
-        if (!_values.TryGetValue(nav.RelationshipName, out var raw)
-            || raw is not DomainEntityInstance peer)
-            return false;
-        if (ContainsRelationshipNavigation(leaf))
-            return false;
-        peer.TryGetRaw(leaf.Name, out value);
-        return true;
-    }
-
-    private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
-        expr is RelationshipNavigation
-        || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 
     /// <summary>
     /// After bare <c>create Type</c> (no relationship name), if this source owns
@@ -830,6 +626,11 @@ public sealed partial record DomainEntityInstance {
         Store.Link(backs[0].Name, child, this);
     }
 
+    /// <summary>
+    /// After a create-in to-one initializer (<c>section: offering</c>), also link the
+    /// peer's unique collection of this child type (<c>Section.enrollments</c>). Skip
+    /// when zero or several collections match — ambiguous inverses stay explicit.
+    /// </summary>
     internal void TryLinkInverseCollection(DomainEntityInstance peer, DomainEntityInstance child) {
         if (Store is null) return;
         var inverses = peer.Entity.Navigations
@@ -840,40 +641,5 @@ public sealed partial record DomainEntityInstance {
         if (inverses.Count != 1)
             return;
         Store.Link(inverses[0].Name, peer, child);
-    }
-
-    /// <summary>
-    /// Executes a <see cref="CreateEntityInRelationshipEffect"/>: resolves the target
-    /// entity type from the relationship definition on the domain, creates the instance,
-    /// auto-registers it, and links it via the named relationship.
-    /// Returns the created <see cref="DomainEntityInstance"/>.
-    /// </summary>
-    private DomainEntityInstance ExecuteCreateInRelationship(
-        CreateEntityInRelationshipEffect effect,
-        TypeDefinitionNodeAnalyzer? parentTypeProvider = null) {
-        if (Domain is null)
-            throw new InvalidOperationException(
-                "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
-
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        // Catalog/RLM miss with analysis present is a genuine not-found — fail closed.
-        // ResolveSourceRelationshipOrThrow also reports the precise cause when the
-        // relationship exists on a different source entity.
-        var relationship = ResolveSourceRelationshipOrThrow(effect.RelationshipName,
-            $"Relationship '{effect.RelationshipName}' not found in domain '{Domain.Name}'.");
-
-        // Catalog/DTLM miss with analysis present is a genuine not-found — fail closed.
-        if (!analysis.TryGetEntity(Domain, relationship.Target.TypeName, out var targetEntity)
-            || targetEntity is null)
-            throw new InvalidOperationException(
-                $"Target entity '{relationship.Target.TypeName}' for relationship '{effect.RelationshipName}' not found.");
-
-        // Wrap into a CreateEntityInstance with the relationship name for auto-linking
-        var createEffect = new CreateEntityInstance(
-            new DomainTypeReference(targetEntity.Name),
-            effect.Initializers,
-            effect.RelationshipName);
-
-        return CreateChildInstance(createEffect, parentTypeProvider);
     }
 }

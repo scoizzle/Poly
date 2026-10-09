@@ -718,7 +718,7 @@ public sealed partial record DomainEntityInstance {
 
     private static void ThrowIfEffectListFailed(DomainResult? failed, string context) {
         if (failed is { IsSuccess: false })
-            throw new InvalidOperationException(
+            throw new ConstraintFailureException(
                 failed.ErrorMessage ?? $"{context} failed.");
     }
 
@@ -819,11 +819,6 @@ public sealed partial record DomainEntityInstance {
         if (tree is null)
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
-        // Void entry/exit/segment bodies fall through on success; give the VM
-        // root the DomainResult shape void action bodies already carry so an
-        // injected fail-closed return is visible after execution.
-        if (actionName is null)
-            tree = AsVoidResultBody(tree);
         var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(typeProvider, actionParameters), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
@@ -836,29 +831,15 @@ public sealed partial record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
         }
-        using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
-        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-            return failed;
-        return null;
-    }
-
-    /// <summary>
-    /// Void export bodies throw on failure and fall through on success. Simulate
-    /// binds the throw to <c>return DomainResult.Failure</c>, but the VM types a
-    /// block's root from its last statement unless a top-level return dominates —
-    /// a trailing assignment would surface a scalar and hide the failure. A
-    /// trailing success return (the same tail void action bodies carry) makes the
-    /// root a DomainResult.
-    /// </summary>
-    private static Node AsVoidResultBody(Node tree) {
-        var success = new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Success")));
-        if (tree is Block block) {
-            if (block.Nodes.Count > 0 && block.Nodes[^1] is ThrowStatement or Return)
-                return block;
-            return new Block([.. block.Nodes, success], block.Variables);
+        try {
+            using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
+            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+                return failed;
+            return null;
         }
-        return new Block([tree, success]);
+        catch (ConstraintFailureException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
     }
 
     private ITypeDefinitionProvider ModuleAwareTypeProvider(
@@ -874,8 +855,9 @@ public sealed partial record DomainEntityInstance {
         var ctx = new AnalysisContext(wrapped);
         TypeDefinitionNode? moduleEntity = null;
         foreach (var td in module) {
-            // CLR DomainResult wins via DomainResultTypeProvider.
-            if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal))
+            // CLR DomainResult / ConstraintFailureException win via DomainResultTypeProvider.
+            if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal)
+                || string.Equals(td.Name, "ConstraintFailureException", StringComparison.Ordinal))
                 continue;
             if (string.Equals(td.Name, Entity.Name, StringComparison.Ordinal)) {
                 moduleEntity = td;
@@ -954,24 +936,16 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Simulate-only bind of a printed module body. <see cref="ThisReference"/>
-    /// stays. Result-shape choices where simulate reports as
-    /// <c>DomainResult.Failure</c> what the printed C# throws:
-    /// <list type="bullet">
-    /// <item>
-    /// Unbound contract adapters — printed <c>{Contract}Adapters.{Endpoint}(…)</c>
-    /// throws <c>NotImplementedException</c>; simulate returns
-    /// <c>DomainResult.Failure</c> instead.
-    /// </item>
-    /// <item>
-    /// Void fail-closed <c>throw new InvalidOperationException(msg)</c> — OnEntry /
-    /// ctor trees throw; simulate returns <c>DomainResult.Failure(msg)</c> instead.
-    /// Catching at Execute would also swallow host fail-loud throws.
-    /// </item>
-    /// </list>
-    /// Action parameters and <c>previousStage</c> are real SetArgs slots (C1a);
-    /// this bind no longer rewrites them to bag members. Name-only Parameter
-    /// nodes become the method's typed Parameter when
-    /// <paramref name="typedParameters"/> is supplied.
+    /// stays. Unbound contract adapters — printed
+    /// <c>{Contract}Adapters.{Endpoint}(…)</c> throws
+    /// <c>NotImplementedException</c>; simulate returns
+    /// <c>DomainResult.Failure</c> instead. Void fail-closed
+    /// <c>throw new ConstraintFailureException</c> stays a throw; the host
+    /// around Execute catches only that type. Action parameters and
+    /// <c>previousStage</c> are real SetArgs slots (C1a); this bind no longer
+    /// rewrites them to bag members. Name-only Parameter nodes become the
+    /// method's typed Parameter when <paramref name="typedParameters"/> is
+    /// supplied.
     /// </summary>
     private Node BindForSimulate(
         Node node,
@@ -1016,14 +990,6 @@ public sealed partial record DomainEntityInstance {
             TypeCast tc => new TypeCast(
                 Recurse(tc.Operand), Recurse(tc.TargetTypeReference), tc.IsChecked),
             New n => new New(Recurse(n.Type), [.. n.Arguments.Select(Recurse)]),
-            ThrowStatement {
-                Exception: New {
-                    Type: NamedTypeReference { TypeName: "InvalidOperationException" },
-                    Arguments: var args
-                }
-            } => new Return(new Invoke(
-                new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                args.Length > 0 ? Recurse(args[0]) : new Constant(""))),
             ThrowStatement ts => new ThrowStatement(Recurse(ts.Exception)),
             TryCatchFinally t => new TryCatchFinally(
                 Recurse(t.TryBlock),

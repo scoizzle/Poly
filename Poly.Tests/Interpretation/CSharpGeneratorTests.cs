@@ -642,6 +642,36 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_EnumTypeDefinition_WritesIntegerOrdinals() {
+        var node = new TypeDefinitionNode(
+            Name: "Industry",
+            Fields: [
+                new FieldDefinitionNode(
+                    "Technology",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    DefaultValue: new Constant("Technology"),
+                    IsStatic: true,
+                    IsConst: true),
+                new FieldDefinitionNode(
+                    "Healthcare",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    DefaultValue: new Constant("Healthcare"),
+                    IsStatic: true,
+                    IsConst: true)
+            ],
+            TypeCategory: TypeCategory.Enumeration);
+
+        var result = new CSharpGenerator().Generate(node);
+
+        await Assert.That(result).IsEqualTo(
+            "public enum Industry" + Environment.NewLine +
+            "{" + Environment.NewLine +
+            "    Technology = 0," + Environment.NewLine +
+            "    Healthcare = 1" + Environment.NewLine +
+            "}");
+    }
+
+    [Test]
     public async Task Generate_TypeDefinition_WithBaseTypeAndInterfaces_WritesFullLineage() {
         var node = new TypeDefinitionNode(
             Name: "Widget",

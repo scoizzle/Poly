@@ -427,4 +427,34 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(dict.MemberTypeDefinition.GetRuntimeType())
             .IsEqualTo(typeof(Dictionary<string, int>));
     }
+
+    [Test]
+    public async Task AstField_EmitRead_StaticConstEnumMember_ReturnsNameWithoutInstance() {
+        var typeNode = new TypeDefinitionNode(
+            "PatronStatus",
+            Fields: [
+                new FieldDefinitionNode(
+                    "Active",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    DefaultValue: new Constant("Active"),
+                    IsStatic: true,
+                    IsConst: true)
+            ],
+            TypeCategory: TypeCategory.Enumeration);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeNode);
+
+        var field = analyzer.GetTypeDefinition("PatronStatus")!.Fields.Single();
+        var readExpr = field.EmitRead(null);
+        var lambda = Expression.Lambda<Func<object>>(readExpr!);
+        var result = lambda.Compile()();
+
+        await Assert.That(result).IsEqualTo("Active");
+        await Assert.That(field.IsStatic).IsTrue();
+        await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
+        await Assert.That(analyzer.GetTypeDefinition("PatronStatus")!.TypeCategory)
+            .IsEqualTo(TypeCategory.Enumeration);
+    }
 }

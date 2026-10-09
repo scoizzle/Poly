@@ -18,7 +18,9 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `c6b31083` | — | Plan only; implementation follows on this branch. [tasks/C2a.md](tasks/C2a.md) |
+| [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `d1720b1d` | — | In review. [tasks/C2a.md](tasks/C2a.md) |
+| [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
+| [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
 | [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
 | [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
@@ -34,6 +36,15 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 - N2 (decision 19), N1 (decision 16), A6/A7 (wave 4), and runs-alone slices K2, C8-pre, C8d, K5, R1, R2.
 - Nits to fold into a later docs slice: F170-F175 (C4a), F180-F183 (K1), F210-F212 (H1). The C8d done-when must include the MapModuleRequireFailure mapping.
+- #126 `docs/plans/poly-eng/board.md`: in-flight row left at plan-only text / old tip after SHIP
+- #128 `Poly/DomainModeling/Compile/DomainSession.cs`: `vm-analysis-report` ElementPath resolves to the domain name
+- #128 `Poly.Tests/DomainModeling/Compile/VmAnalyzerReportTests.cs`: canary pins zero VM-clean/warning samples
+- #128 `docs/plans/poly-eng/board.md`: in-flight row left at plan-only text after SHIP
+- #129 `docs/plans/poly-eng/board.md`: in-flight row left at plan-only text / old tip after SHIP
+- #129 `Poly/DomainModeling/Compile/DomainSession.cs`: comment "After the catalog is complete" overstates coverage (DslCompiler registers contributor files after Emit)
+- #129 `docs/plans/poly-eng/tasks/H3.md`: shape-matrix cites `AnalysisReportArtifactTests`, which never inspects `catalog-reference-report`
+- #131 `Poly.Tests/DomainModeling/Compile/EveryConceptHasTreeTests.cs`: constraint detection keys on exporter message fragments
+- #131 `Poly.Tests/DomainModeling/Compile/EveryConceptHasTreeTests.cs`: `HandlerNames` re-implements `BuildHandlerNames`
 - PR 133, `docs/plans/poly-eng/board.md:21`, in-flight row still showed tip `d0396038` and "Plan only".
 - PR 133, `docs/plans/poly-eng/tasks/E1.md:29`, duplicate-name row cites `LowerTreesTests`; proof is `EnumStageNameCollisionTests`.
 - PR 130, `docs/domain-modeling/pipeline-convergence-plan.md:395`, print still described as throwing `NotImplementedException`.

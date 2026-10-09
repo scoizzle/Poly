@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Sqlite;
 
@@ -24,7 +25,7 @@ public class DslCompilerSqliteOracleTests {
         """;
 
     private static Compiler CompilerWithHttpHost() =>
-        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+        new Compiler().Load(new HttpLibrary());
 
     [Test]
     public async Task DslCompiler_EntitiesMode_EmitsEntityTypesFromProjection() {

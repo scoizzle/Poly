@@ -247,8 +247,8 @@ _Lane A · Size S · Review 1 · Depends on: A5b_
 **N2. Http library registers its own contributor**
 
 _Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
-- Scope: Do the Http one now: `HttpLibrary` (same assembly as the Minimal API contributor) registers it. DbContext only once the database kind is read from loaded libraries (decision 19, still open).
-- Files: `src/Poly.DslCompiler/HttpLibrary.cs`, `DslCompiler.cs`.
+- Scope: Do the Http one now: `HttpLibrary` (`Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`) registers it. DbContext only once the database kind is read from loaded libraries (decision 19, still open).
+- Files: `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`, `DslCompiler.cs`.
 - Done when: The behavioral catalog test from A5a passes without edit.
 - SHIP if the A5a test needed no change. NOT SHIP if it needed a string edit.
 - Hand-edit: Yes.

@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Poly/Poly.csproj" />
+    <ProjectReference Include="../src/Poly.Packs.Product/Poly.Packs.Product.csproj" />
   </ItemGroup>
 
   <ItemGroup>

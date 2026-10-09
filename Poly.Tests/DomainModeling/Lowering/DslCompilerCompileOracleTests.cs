@@ -1,6 +1,8 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
+using Poly.DomainModeling.Libraries.Http;
+
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
 using DbmsPack = Poly.DslCompiler.DbmsPack;
@@ -42,7 +44,7 @@ public class DslCompilerCompileOracleTests {
         """;
 
     private static Compiler CompilerWithHttpHost() =>
-        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+        new Compiler().Load(new HttpLibrary());
 
     private static List<MetadataReference> GatherReferences() {
         var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);

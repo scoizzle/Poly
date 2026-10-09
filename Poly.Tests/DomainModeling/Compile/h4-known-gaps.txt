@@ -1,0 +1,7 @@
+# kind	key	closer	note
+no-tree	owned-or-aggregate	permanent	V9; analysis only; owner Scot
+no-tree	instance-delete	permanent	V9; no instance delete yet; owner Scot
+inside-entity-tree-only	action	A6	one artifact per action when a consumer needs it
+inside-entity-tree-only	policy	A6
+inside-entity-tree-only	subscription	A6
+inside-entity-tree-only	stage-entry-exit	A6

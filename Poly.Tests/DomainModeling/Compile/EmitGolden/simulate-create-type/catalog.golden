@@ -1,6 +1,7 @@
 analysis-report|SimulateCreateType|Analyze
 scaffolding|SimulateCreateType|Lower
 source-domain|SimulateCreateType|Lower
+vm-analysis-report|SimulateCreateType|Emit
 entity|SimulateCreateType/Fine|Lower
 source-entity|SimulateCreateType/Fine|Lower
 file|SimulateCreateType/Fine.cs|Emit

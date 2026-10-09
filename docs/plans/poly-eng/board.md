@@ -21,7 +21,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
 | [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
 | [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
-| [#126](https://github.com/scoizzle/Poly/pull/126) | K4: stage-scoped policies reach the printed output | A | `3a4658fe` | — | Plan only; implementation follows on this branch. [tasks/K4.md](tasks/K4.md) |
+| [#128](https://github.com/scoizzle/Poly/pull/128) | H2: Emit refuses VM-analysis Errors and registers the report | A | `0ba89d58` | — | Plan only; implementation follows on this branch. [tasks/H2.md](tasks/H2.md) |
 
 ## Next (in order; first unblocked row wins)
 
@@ -43,6 +43,7 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #126 | K4: stage-scoped policies reach the printed output | `0ba89d58` | Scot merged |
 | 10-08 | #110 | C1a: root module bodies use real SetArgs slots after this | `b1fddf7e` | Razor + Grug |
 | 10-08 | #125 | C9: generators stop asking for the module | `99d97e46` | Razor |
 | 10-08 | #124 | docs-restructure: one live board, pipeline doc, stale plans archived | `a13f1586` | Razor + Grug |

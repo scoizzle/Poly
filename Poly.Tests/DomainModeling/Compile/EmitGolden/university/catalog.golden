@@ -1,6 +1,7 @@
 analysis-report|University|Analyze
 scaffolding|University|Lower
 source-domain|University|Lower
+vm-analysis-report|University|Emit
 entity|University/Course|Lower
 source-entity|University/Course|Lower
 file|University/Course.cs|Emit

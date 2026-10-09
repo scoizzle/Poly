@@ -1,6 +1,7 @@
 analysis-report|Crm|Analyze
 scaffolding|Crm|Lower
 source-domain|Crm|Lower
+vm-analysis-report|Crm|Emit
 entity|Crm/Account|Lower
 source-entity|Crm/Account|Lower
 file|Crm/Account.cs|Emit

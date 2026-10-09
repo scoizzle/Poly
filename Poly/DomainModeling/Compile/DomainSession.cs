@@ -47,16 +47,19 @@ public sealed class DomainSession {
     /// (the entity type and its stage enum) pointing at a <c>source-entity</c> artifact,
     /// and one <c>analysis-report</c> for the domain's findings.
     /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
-    /// each printed <c>.cs</c> file with a reference to the entity or scaffolding tree
-    /// it printed. The compiler then registers contributor trees and text files here
-    /// and writes the text files from this catalog. The next Lower or Emit drops
-    /// anything registered after that, including those files.
+    /// one <c>vm-analysis-report</c> for the interpretation analysis of the whole module
+    /// (empty when there were no types to analyze) and each printed <c>.cs</c> file with
+    /// a reference to the entity or scaffolding tree it printed. The compiler then
+    /// registers contributor trees and text files here and writes the text files from
+    /// this catalog. The next Lower or Emit drops anything registered after that,
+    /// including those files.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
     private const string ScaffoldingType = "scaffolding";
     private const string EntityType = "entity";
     private const string AnalysisReportType = "analysis-report";
+    private const string VmAnalysisReportType = "vm-analysis-report";
     private const string SourceDomainType = "source-domain";
     private const string SourceEntityType = "source-entity";
     private const string LowerProducer = "Lower";
@@ -271,6 +274,7 @@ public sealed class DomainSession {
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         var interpAnalysis = TryAnalyzeForEmit(module);
+        RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
         var generator = interpAnalysis is not null
             ? new CSharpGenerator(interpAnalysis)
             : new CSharpGenerator();
@@ -321,6 +325,27 @@ public sealed class DomainSession {
             Payload: new AnalysisReport(findings)));
     }
 
+    /// <summary>
+    /// One <c>vm-analysis-report</c> per domain, from interpretation analysis of the
+    /// whole lowered module. Always registered on Emit (empty when there were no types
+    /// or the analyzer reported nothing).
+    /// </summary>
+    private static void RegisterVmAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult? analysis) {
+        catalog.DeclareType(VmAnalysisReportType, mayPointAt: []);
+        var findings = analysis is null
+            ? []
+            : analysis.Diagnostics
+                .Select(d => new AnalysisFinding(
+                    d.Code,
+                    d.Severity,
+                    d.Message,
+                    DomainElementPath.Resolve(domain, d.Node)))
+                .ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], VmAnalysisReportType), EmitProducer),
+            Payload: new AnalysisReport(findings)));
+    }
+
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>
         (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;
 
@@ -333,6 +358,17 @@ public sealed class DomainSession {
             return null;
         var unit = new CompilationUnitNode([], null, allTypes, null);
         return Interpretation.Interpreter.Analyzer.Analyze(unit);
+    }
+
+    /// <summary>
+    /// Throws <see cref="InvalidOperationException"/> naming the first VM analysis error.
+    /// </summary>
+    internal static void ThrowIfVmHasErrors(AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(analysis);
+        if (!analysis.HasErrors)
+            return;
+        var first = analysis.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error);
+        throw new InvalidOperationException(first?.Message ?? "VM analysis reported errors.");
     }
 
     internal static ExpressionFoldTable FoldsFor(ExpressionFormRegistry forms) {

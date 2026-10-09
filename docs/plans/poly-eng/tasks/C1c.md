@@ -1,5 +1,5 @@
 # TASK C1c - Unbound adapter result shape; last `BindForSimulate` arm
-Status: in review. Branch slice/c1c-unbound-adapter-result. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
+Status: merged #130 `4fc7a206` 2026-10-09. Branch slice/c1c-unbound-adapter-result. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 V7 = a (decided): an unbound contract endpoint returns the same `DomainResult.Failure` on simulate and print. C1b (#127 `20fd11e0`) already deleted the throw arm and `AsVoidResultBody`. The last `BindForSimulate` rewrite is the adapter arm (`Poly/DomainModeling/Runtime/DomainEntityInstance.cs:966-971`): an `Invoke` of `{Contract}Adapters.{Endpoint}` becomes `return DomainResult.Failure("Contract endpoint '{contract}.{endpoint}' has no in-process adapter on simulate.")`. Print still throws (`BuildContractAdapterTypeDef` `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Actions.cs:448-482`, throw at `:459-464`). The card's `~949-953` is the method comment; the arm is `:966-971`. Method starts at `:952`. Call sites: `:778`, `:785`, `:791`, `BindModuleMethodBody` `:936`, `DomainEntityInstance.HostAbi.cs:309`.
@@ -72,3 +72,4 @@ none
 | 2026-10-09 | implementer | grok/grok-4.6 | `1b5ddb2a` | pushed | tests 3432/3432; sweep: BindForSimulate gone, unbound Failure agrees |
 | 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `78a19cd8` | NOT SHIP | https://github.com/scoizzle/Poly/pull/130#issuecomment-6081770119 (Grug NOT SHIP at 78a19cd8, 3 open findings, mode full) |
 | 2026-10-09 | implementer | grok/grok-4.6 | `7e594125` | fixes pushed | R1, R2, R3; disputed: none; tests 3437/3437 |
+| 2026-10-09 | planner | grok/grok-4.6 | `4fc7a206` | merged #130 | squash-merged to master |

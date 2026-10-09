@@ -1,6 +1,6 @@
 # TASK C1b - Dedicated constraint-failure exception; delete `AsVoidResultBody`
 
-Status: planned. Branch slice/c1b-constraint-failure-v2. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c1b-constraint-failure-v2. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 Plan card: [`pipeline-convergence-plan.md` **C1b**](../../../domain-modeling/pipeline-convergence-plan.md) (line 383). Depends on C1a (merged #110 `b1fddf7e`). No open decision.
 
@@ -67,3 +67,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `b1fddf7e` | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | `a08e2253` | pushed | tests 3423/3423; sweep: AsVoidResultBody gone, IOE still escapes Execute |

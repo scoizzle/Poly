@@ -426,13 +426,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Failure for assign guards: <c>return DomainResult.Failure</c> when the
-    /// caller has a result type; <c>throw</c> in void export contexts (ctor /
-    /// stage entry) — same split as create-in fail-closed.
+    /// caller has a result type; <c>throw ConstraintFailureException</c> in void
+    /// export contexts (ctor / stage entry) — same split as create-in fail-closed.
     /// </summary>
     private Node AssignConstraintFailure(string message) {
         if (_context.ActionResultType is null) {
             return new ThrowStatement(new New(
-                new NamedTypeReference("InvalidOperationException"),
+                new NamedTypeReference("ConstraintFailureException"),
                 new Constant(message)));
         }
         return ReturnCallerFailure(new Constant(message));
@@ -1134,7 +1134,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var locals = new List<Node> { resultVar };
         Node failClosed = _context.ActionResultType is null
             ? new ThrowStatement(new New(
-                new NamedTypeReference("InvalidOperationException"),
+                new NamedTypeReference("ConstraintFailureException"),
                 new Syntactic.Coalesce(
                     new Member(resultVar, "ErrorMessage"),
                     new Constant(""))))

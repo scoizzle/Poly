@@ -77,7 +77,8 @@ public sealed class ParityScenario {
 
 /// <summary>
 /// One implementation of the scenario's steps; each step records a <see cref="ParityOutcome"/>.
-/// A step that throws <see cref="InvalidOperationException"/> is an outcome; any other exception is a harness fault and fails the row.
+/// A step that throws <see cref="InvalidOperationException"/> or
+/// <see cref="ConstraintFailureException"/> is an outcome; any other exception is a harness fault and fails the row.
 /// </summary>
 public abstract class ParitySide(Domain domain) {
     public List<ParityOutcome> Outcomes { get; } = [];
@@ -126,11 +127,17 @@ public abstract class ParitySide(Domain domain) {
             Outcomes.Add(new(step, success, message, null, state));
             return success ? value : null;
         }
-        catch (Exception ex) when (Unwrap(ex) is InvalidOperationException thrown) {
+        catch (Exception ex) when (IsRecordedOutcome(Unwrap(ex))) {
+            var thrown = Unwrap(ex);
             Outcomes.Add(new(step, false, thrown.Message, thrown.GetType().Name, new Dictionary<string, string?>()));
             return null;
         }
     }
 
     static Exception Unwrap(Exception ex) => ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+
+    // Printed C# defines its own ConstraintFailureException type, so match by name.
+    static bool IsRecordedOutcome(Exception ex) =>
+        ex is InvalidOperationException
+        || string.Equals(ex.GetType().Name, nameof(ConstraintFailureException), StringComparison.Ordinal);
 }

@@ -1,10 +1,10 @@
 # Poly board: the one live queue
 
-Updated 2026-10-08. Master `a13f1586` (#124 docs-restructure). A5b merged `7943b5cc` (#123). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
+Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), wave 1 tail.
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
-**Throttle:** ON since 2026-10-06 07:34 (WIP 1, at most 2 mill runs at once, no re-fires, no bookkeeping PRs).
+**Throttle:** full send, WIP 2 (one per lane), max 2 mill runs (Scot 2026-10-09 04:20).
 **Merge:** V11 slices merge on Razor SHIP (CI green on the SHIP SHA); every other slice needs Scot's OK. The standing window ended 2026-10-06 07:20.
 
 ## Needs Scot
@@ -18,6 +18,7 @@ Updated 2026-10-08. Master `a13f1586` (#124 docs-restructure). A5b merged `7943b
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
+| [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
 | [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
 | [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
 | [#128](https://github.com/scoizzle/Poly/pull/128) | H2: Emit refuses VM-analysis Errors and registers the report | A | `0ba89d58` | — | Plan only; implementation follows on this branch. [tasks/H2.md](tasks/H2.md) |
@@ -26,10 +27,9 @@ Updated 2026-10-08. Master `a13f1586` (#124 docs-restructure). A5b merged `7943b
 
 | # | Slice | Lane | Depends / hold | Review |
 |---|-------|------|----------------|--------|
-| 1 | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | C1a merged | 2 |
-| 2 | C1c unbound adapter result shape; last `BindForSimulate` arm | B | C1b; V7 = a | 1 |
-| 3 | E1 domain enums become real enum types | B | C1c (wave 2) | 2 |
-| 4 | C2a create initializers without re-lowering | B | C0, C1c (wave 2) | 2 |
+| 1 | C1c unbound adapter result shape; last `BindForSimulate` arm | B | C1b; V7 = a | 1 |
+| 2 | E1 domain enums become real enum types | B | C1c (wave 2) | 2 |
+| 3 | C2a create initializers without re-lowering | B | C0, C1c (wave 2) | 2 |
 
 Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
@@ -44,6 +44,8 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
 | 10-09 | #126 | K4: stage-scoped policies reach the printed output | `0ba89d58` | Scot merged |
+| 10-08 | #110 | C1a: root module bodies use real SetArgs slots after this | `b1fddf7e` | Razor + Grug |
+| 10-08 | #125 | C9: generators stop asking for the module | `99d97e46` | Razor |
 | 10-08 | #124 | docs-restructure: one live board, pipeline doc, stale plans archived | `a13f1586` | Razor + Grug |
 | 10-08 | #123 | A5b printed files reference their trees | `7943b5cc` | Scot merged |
 | 10-07 09:22 | #122 | A5a contributors return artifacts | `bfe66beb` | verify on Grok (same mill as implement) |

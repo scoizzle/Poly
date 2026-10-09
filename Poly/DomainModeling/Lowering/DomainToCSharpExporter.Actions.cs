@@ -713,6 +713,25 @@ public sealed partial class DomainToCSharpExporter {
         );
     }
 
+    /// <summary>
+    /// Printed twin of runtime <c>ConstraintFailureException</c>: a
+    /// string-message exception that void OnEntry / ctor / subscription trees throw.
+    /// </summary>
+    internal static TypeDefinitionNode BuildConstraintFailureExceptionTypeDef() {
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("message",
+                    new PrimitiveTypeReference(PrimType.String))
+            ],
+            BaseCall: [new Parameter("message")]
+        );
+        return new TypeDefinitionNode(
+            "ConstraintFailureException",
+            Constructors: [ctor],
+            BaseType: new NamedTypeReference("System.Exception")
+        );
+    }
+
     internal static TypeDefinitionNode BuildValueTypeTypeDef(
         ValueType valueType, Domain domain, INodeMetadataProvider metadata) {
         var props = new List<PropertyDefinitionNode>();

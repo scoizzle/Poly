@@ -325,15 +325,20 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<Parameter> rootParameters,
         string? previousStageName) {
         var compiled = CompileBody(
-            AsVoidResultBody(tree), ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
+            tree, ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
         setArgs[0] = this;
         if (rootParameters.Count > 0)
             setArgs[1] = previousStageName;
-        using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
-        if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
-            return failed;
-        return null;
+        try {
+            using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
+            if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
+                return failed;
+            return null;
+        }
+        catch (ConstraintFailureException ex) {
+            return DomainResult.Failure(ex.Message);
+        }
     }
 
     private static bool ContainsPreviousStageParameter(Node node) {

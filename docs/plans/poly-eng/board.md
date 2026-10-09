@@ -18,7 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#138](https://github.com/scoizzle/Poly/pull/138) | N2: Http library registers its own contributor | A | — | — | Plan only; implementation follows on this branch. [tasks/N2.md](tasks/N2.md) |
+| [#140](https://github.com/scoizzle/Poly/pull/140) | F1: The function record | A | — | — | Plan only; implementation follows on this branch. [tasks/F1.md](tasks/F1.md) |
 | [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | In review. [tasks/C2b.md](tasks/C2b.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
 | [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
@@ -30,6 +30,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | # | Slice | Lane | Depends / hold | Review |
 |---|-------|------|----------------|--------|
+| 1 | N2b: database library registers its own DbContext | A | N2 merged (`592a137f`); decision 19 = yes | 1 |
 
 Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
@@ -64,12 +65,16 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 - PR 135, `docs/plans/poly-eng/tasks/P1.md`, Log attributes all R1-R5 fixes to `40b1e4f0` and omits `8dc1fc93` / `38f0fe9a`.
 - PR 137, `docs/plans/poly-eng/board.md:21`, in-flight row left at plan-only text / empty Tip after SHIP.
 - PR 137, `docs/plans/poly-eng/tasks/K6.md:46`, Log attributes the inline sweep to `835ccf6a` and omits `d1270cdc` / `d3eac5a8`.
+- PR 138, `docs/plans/poly-eng/board.md:21`, in-flight row still showed plan-only text / empty Tip after SHIP.
+- PR 138, `docs/plans/poly-eng/board.md:65`, N2 PR carried #137/K6 bookkeeping; line 65's `board.md:21` now points at the #138 row.
+- PR 138, `src/Poly.DslCompiler/DslCompiler.cs:285`, `id == "http"` rebuilds `HttpLibrary`, so a contributor supplied on an extra `new HttpLibrary(...)` passed via `Load` is silently ignored.
 - Suites on THEN/PULL live in [`../parked/`](../parked/README.md).
 
 ## Merged (last 30 days; older lines move to archive/)
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #138 | N2: Http library registers its own contributor | `592a137f` | Grug SHIP |
 | 10-09 | #137 | K6: replace Emit's re-analysis | `d1ac0cde` | Grug SHIP |
 | 10-09 | #135 | P1: Equality constraint is authorable and printed | `b38817e9` | Grug SHIP |
 | 10-09 | #134 | C2a: create initializers without re-lowering | `ede905f9` | Grug SHIP |

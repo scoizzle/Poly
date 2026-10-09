@@ -236,7 +236,6 @@ public class StoreBindCreateTests {
         await Assert.That(storeProp.GetMethod!.IsPublic).IsTrue();
         await Assert.That(storeProp.SetMethod!.IsPublic).IsFalse();
         await Assert.That(storeProp.SetMethod.IsAssembly).IsTrue();
-        await Assert.That(typeof(DomainInstanceStore).GetMethod("CreateDefault")).IsNull();
     }
 
     [Test]

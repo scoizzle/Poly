@@ -70,3 +70,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `20fd11e0` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `1b5ddb2a` | pushed | tests 3432/3432; sweep: BindForSimulate gone, unbound Failure agrees |
+| 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `78a19cd8` | NOT SHIP | https://github.com/scoizzle/Poly/pull/130#issuecomment-6081770119 (Grug NOT SHIP at 78a19cd8, 3 open findings, mode full) |
+| 2026-10-09 | implementer | grok/grok-4.6 | `7e594125` | fixes pushed | R1, R2, R3; disputed: none; tests 3437/3437 |

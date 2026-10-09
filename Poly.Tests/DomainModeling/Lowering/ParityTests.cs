@@ -94,6 +94,27 @@ public class ParityTests {
         }
         """;
 
+    const string RequiredDsl = """
+        domain Lab
+        Widget: entity {
+          Name: Text required
+        }
+        """;
+
+    const string LengthDsl = """
+        domain Lab
+        Widget: entity {
+          Name: Text length(3, 10)
+        }
+        """;
+
+    const string PatternDsl = """
+        domain Lab
+        Widget: entity {
+          Code: Text pattern("^[A-Z]{2}$")
+        }
+        """;
+
     const string GuardDsl = """
         domain Board
         Task: entity {
@@ -335,19 +356,15 @@ public class ParityTests {
         await Assert.That(outcomes[0].Success).IsTrue();
     }
 
-    const string CreateThrowsVersusFails = "create Order: exception type differs (simulate 'InvalidOperationException', printed '')";
-
-    // Create failure still differs in how it is reported (simulate throws, printed returns a failure): see
-    // KnownGap_CreateOutOfRange_*. Everything else, including the message, must agree.
     [Test]
     [Arguments("Closed", 5L, "'Status' must equal Active.")]
     [Arguments("active", 5L, "'Status' must equal Active.")]
     [Arguments("Active", 6L, "'Level' must equal 5.")]
     public async Task Create_WhenEqualityViolated_FailsWithTheSameMessage(string status, long level, string message) {
-        var (simulate, printed) = OrderScenario("ParityEqualityViolated")
-            .Run(side => side.Create("Order", ("Status", status), ("Level", level)));
-        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed))).IsEqualTo(CreateThrowsVersusFails);
-        await Assert.That(simulate[0].Message).IsEqualTo(message);
+        var outcomes = await OrderScenario("ParityEqualityViolated")
+            .AssertAgree(side => side.Create("Order", ("Status", status), ("Level", level)));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).IsEqualTo(message);
     }
 
     [Test]
@@ -466,13 +483,44 @@ public class ParityTests {
     // Known gaps: the sides differ today. Each row pins the exact differences so a fix turns it red;
     // then replace it with an AssertAgree row.
 
-    // Owner: C2b (create-time checks run from the compiled Create). Simulate throws; the printed Create returns a failure.
     [Test]
-    public async Task KnownGap_CreateOutOfRange_SimulateThrowsAndPrintedReturnsFailure() {
-        var (simulate, printed) = ParityScenario.FromDsl(RangeDsl, "ParityGapCreate")
-            .Run(side => side.Create("Widget", ("Score", 99L)));
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(["create Widget: exception type differs (simulate 'InvalidOperationException', printed '')"]);
+    public async Task Create_WhenOutOfRange_FailsWithTheSameMessage() {
+        var outcomes = await ParityScenario.FromDsl(RangeDsl, "ParityCreateRange")
+            .AssertAgree(side => side.Create("Widget", ("Score", 99L)));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).IsEqualTo("'Score' must be <= 10.");
+    }
+
+    [Test]
+    public async Task Create_WhenRequiredOmitted_FailsWithTheSameMessage() {
+        var outcomes = await ParityScenario.FromDsl(RequiredDsl, "ParityCreateRequired")
+            .AssertAgree(side => side.Create("Widget"));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).IsEqualTo("'Name' is required.");
+    }
+
+    [Test]
+    public async Task Create_WhenLengthTooShort_FailsWithTheSameMessage() {
+        var outcomes = await ParityScenario.FromDsl(LengthDsl, "ParityCreateLength")
+            .AssertAgree(side => side.Create("Widget", ("Name", "ab")));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).IsEqualTo("'Name' must be at least 3 characters.");
+    }
+
+    [Test]
+    public async Task Create_WhenPatternMisses_FailsWithTheSameMessage() {
+        var outcomes = await ParityScenario.FromDsl(PatternDsl, "ParityCreatePattern")
+            .AssertAgree(side => side.Create("Widget", ("Code", "a1")));
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].Message).IsEqualTo("'Code' does not match the required pattern.");
+    }
+
+    [Test]
+    public async Task Create_WhenDefaultOmitted_LandsOnBothSides() {
+        var outcomes = await ParityScenario.FromDsl(RangeDsl, "ParityCreateDefault")
+            .AssertAgree(side => side.Create("Widget"));
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Score"]).IsEqualTo("5");
     }
 
     // Owner: none in the plan; the simulator's guard mapping (MapModuleRequireFailure) goes with C8d (delete DEI).
@@ -485,15 +533,11 @@ public class ParityTests {
             .IsEquivalentTo(["invoke Promote: failure message differs (simulate '', printed ''Promote' blocked by policy 'CanPromote'.')"]);
     }
 
-    // Owner: C2b (the compiled Create skips properties the first stage's entry assigns). The simulator checks
-    // constraints before entry effects run, so equals() on such a property rejects a create the printed code accepts.
-    // required() on the same property fails the same way today.
     [Test]
-    public async Task KnownGap_EqualityOnEntryAssignedProperty_SimulateRejectsCreate() {
-        var (simulate, printed) = EqualityScenario(EntryAssignedDsl, "ParityGapEntryAssigned", ("Mark", "x"))
-            .Run(side => side.Create("Job", ("Tag", "t")));
-        await Assert.That(printed[0].Success).IsTrue();
-        await Assert.That(simulate[0].Message).IsEqualTo("'Mark' must equal x.");
+    public async Task Create_WhenEqualityOnEntryAssignedProperty_Succeeds() {
+        var outcomes = await EqualityScenario(EntryAssignedDsl, "ParityEntryAssigned", ("Mark", "x"))
+            .AssertAgree(side => side.Create("Job", ("Tag", "t")));
+        await Assert.That(outcomes[0].Success).IsTrue();
     }
 
     // Owner: none named in the plan; closest is C2b (the compiled Create). The simulator's first-stage entry skips

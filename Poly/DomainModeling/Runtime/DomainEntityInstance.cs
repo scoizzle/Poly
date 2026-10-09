@@ -129,12 +129,18 @@ public sealed partial record DomainEntityInstance {
 
         var typeDefAnalyzer = BuildTypeDefAnalyzer(entity, domain: domain);
 
-        // Enforce constraints at creation, matching the C# export's Create factory guards.
-        // The runtime previously accepted out-of-range/pattern-violating/empty-required
-        // values silently while the export rejected them — a divergence (round-1 C-F3).
-        var validationError = ValidateConstraints(entity, values, domain: domain);
-        if (validationError is not null)
-            throw new InvalidOperationException(validationError);
+        // Domain-bound: compiled static Create Failure-return Ifs.
+        // Domain-null: required/range/length/pattern in ValidateConstraints.
+        var checkError = CreateCheckFailure(
+            entity,
+            domain is not null
+                ? propertyValues ?? new Dictionary<string, object?>()
+                : values,
+            domain);
+        if (checkError is not null)
+            throw domain is not null
+                ? new ConstraintFailureException(checkError)
+                : new InvalidOperationException(checkError);
 
         // Initial stage: first declared stage name (factory shape; not a semantic rediscovery).
         var currentStage = entity.Stages.FirstOrDefault()?.Name;
@@ -145,38 +151,120 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Fills missing/null scalar slots from <c>default(...)</c> before create
-    /// probe/validate. Store jobs see the same bag <see cref="Create"/> will store
-    /// — unique-from-default and required-default must not skip the probe.
+    /// First create-constraint Failure message, or null when the values pass.
+    /// Domain-bound runs the compiled static Create prefix (stop before
+    /// <c>created = new</c>). Domain-null keeps required/range/length/pattern.
+    /// Unique stays at <c>TryAdd</c>.
     /// </summary>
-    internal static Dictionary<string, object?> FillCreateDefaults(
+    internal static string? CreateCheckFailure(
         Entity entity,
         IReadOnlyDictionary<string, object?> values,
         Domain? domain) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(values);
-        var filled = new Dictionary<string, object?>(values, StringComparer.Ordinal);
-        foreach (var prop in entity.Properties) {
-            filled.TryGetValue(prop.Name, out var existing);
-            if (existing is not null)
-                continue;
-            if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is not { } def)
-                continue;
-            filled[prop.Name] = EvaluateDefaultValue(def.Expression, prop.Type.TypeName, domain);
-        }
-        return filled;
+        return domain is not null
+            ? RunCreateFactoryChecks(entity, values, domain)
+            : ValidateConstraints(entity, values, domain);
     }
 
     /// <summary>
-    /// Validates required/range/length/pattern/equality/unique constraints against the to-be-stored
-    /// values, mirroring the C# export's <c>Create</c> factory guards. Returns the first
-    /// violation message, or null when the values are valid. Unique is checked only when
-    /// <paramref name="store"/> is set — before any mutate, not after <c>TryAdd</c>.
+    /// Runs the static <c>Create</c> factory's leading Failure-return
+    /// <c>IfStatement</c>s. Slot 0 is unused (checks read Parameters);
+    /// slots 1+ are factory parameters from <paramref name="values"/>
+    /// (ToCamelCase names), missing slots <see cref="Parameter.DefaultValue"/>.
+    /// </summary>
+    private static string? RunCreateFactoryChecks(
+        Entity entity,
+        IReadOnlyDictionary<string, object?> values,
+        Domain domain) {
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var module = RuntimeAnalysisCache.GetOrLower(
+            domain, RuntimeAnalysisCache.Session(domain), analysis);
+        MethodDefinitionNode? create = null;
+        foreach (var type in module) {
+            if (!string.Equals(type.Name, entity.Name, StringComparison.Ordinal))
+                continue;
+            foreach (var candidate in type.Methods ?? []) {
+                if (string.Equals(candidate.Name, "Create", StringComparison.Ordinal)
+                    && candidate.IsStatic) {
+                    create = candidate;
+                    break;
+                }
+            }
+            break;
+        }
+        if (create?.Body is null)
+            return null;
+        var (tree, rootParameters) = BindModuleMethodBody(entity.Name, create);
+        tree = CreateFactoryCheckPrefix(tree);
+        if (tree is Block { Nodes.Count: 0 })
+            return null;
+        var types = ModuleAwareTypeProvider(
+            entity, domain, BuildTypeDefAnalyzer(entity, domain: domain));
+        var compiled = CompileBody(entity, tree, types, rootParameters);
+        var setArgs = new object?[1 + rootParameters.Count];
+        for (var i = 0; i < rootParameters.Count; i++) {
+            var param = rootParameters[i];
+            var raw = TryFactoryValue(param.Name, values, out var supplied)
+                ? supplied
+                : FactoryDefault(param.DefaultValue);
+            setArgs[i + 1] = CoerceActionArgForSetArgs(param, raw);
+        }
+        using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
+        return exec.Result.Value is DomainResult { IsSuccess: false } failed
+            ? failed.ErrorMessage ?? "Create failed."
+            : null;
+    }
+
+    /// <summary>
+    /// Leading Failure-return Ifs of static Create; stops before
+    /// <c>created = new</c> so the printed ctor does not run on a
+    /// <see cref="DomainEntityInstance"/>.
+    /// </summary>
+    private static Node CreateFactoryCheckPrefix(Node body) {
+        if (body is not Block block)
+            return new Block([]);
+        List<Node>? checks = null;
+        foreach (var node in block.Nodes) {
+            if (node is Assignment { Value: New })
+                break;
+            checks ??= [];
+            checks.Add(node);
+        }
+        return checks is null ? new Block([]) : new Block(checks);
+    }
+
+    private static bool TryFactoryValue(
+        string paramName,
+        IReadOnlyDictionary<string, object?> values,
+        out object? value) {
+        if (values.TryGetValue(paramName, out value))
+            return true;
+        foreach (var (key, v) in values) {
+            if (string.Equals(
+                    DomainTypeMapping.ToCamelCase(key), paramName, StringComparison.Ordinal)) {
+                value = v;
+                return true;
+            }
+        }
+        value = null;
+        return false;
+    }
+
+    private static object? FactoryDefault(Node? defaultValue) => defaultValue switch {
+        Constant c => c.Value,
+        Member m => m.MemberName,
+        _ => null
+    };
+
+    /// <summary>
+    /// Domain-null create checks: required/range/length/pattern. Equality
+    /// lives in the compiled factory (Domain-bound prefix above). Unique
+    /// lives at <c>TryAdd</c>.
     /// </summary>
     private static string? ValidateConstraints(
         Entity entity,
         IReadOnlyDictionary<string, object?> values,
-        DomainInstanceStore? store = null,
         Domain? domain = null) {
         foreach (var prop in entity.Properties) {
             values.TryGetValue(prop.Name, out var v);
@@ -208,23 +296,6 @@ public sealed partial record DomainEntityInstance {
                     case PatternConstraint pc:
                         if (v is string ps && !Regex.IsMatch(ps, pc.Pattern))
                             return $"'{prop.Name}' does not match the required pattern.";
-                        break;
-                    // Twin of the exported Create factory's equality check; slice C2b deletes it
-                    // when the simulator runs the compiled Create. Numbers compare by value.
-                    case EqualityConstraint eq:
-                        var equal = (v, eq.ExpectedValue) is (long or int or double or decimal, long or int or double or decimal)
-                            ? Convert.ToDecimal(v) == Convert.ToDecimal(eq.ExpectedValue)
-                            : Equals(v, eq.ExpectedValue);
-                        if (!equal)
-                            return $"'{prop.Name}' must equal {eq.ExpectedValue}.";
-                        break;
-                    case UniqueConstraint:
-                        if (store is not null && v is not null) {
-                            var unique = store.UniqueCollisionMessage(
-                                entity, values, except: null, candidate: null);
-                            if (unique is not null)
-                                return unique;
-                        }
                         break;
                 }
             }
@@ -356,13 +427,6 @@ public sealed partial record DomainEntityInstance {
 
     internal bool TryGetRaw(string name, out object? value) =>
         _values.TryGetValue(name, out value);
-
-    internal static string? ValidateCreateConstraints(
-        Entity entity,
-        IReadOnlyDictionary<string, object?> values,
-        DomainInstanceStore? store = null,
-        Domain? domain = null) =>
-        ValidateConstraints(entity, values, store, domain);
 
     internal void TrackCreatedChild(DomainEntityInstance child) =>
         _createdChildren.Add(child);
@@ -820,7 +884,7 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 "Cannot lower effect list to a Syntax AST.");
         var compiled = CompileBody(
-            tree, ModuleAwareTypeProvider(typeProvider, actionParameters), rootParameters);
+            Entity, tree, ModuleAwareTypeProvider(typeProvider, actionParameters), rootParameters);
         var setArgs = new object?[1 + rootParameters.Count];
         setArgs[0] = this;
         for (var i = 0; i < rootParameters.Count; i++) {
@@ -846,13 +910,20 @@ public sealed partial record DomainEntityInstance {
 
     private ITypeDefinitionProvider ModuleAwareTypeProvider(
         ITypeDefinitionProvider inner,
+        IReadOnlyList<Property>? actionParameters = null) =>
+        ModuleAwareTypeProvider(Entity, Domain, inner, actionParameters);
+
+    private static ITypeDefinitionProvider ModuleAwareTypeProvider(
+        Entity entity,
+        Domain? domain,
+        ITypeDefinitionProvider inner,
         IReadOnlyList<Property>? actionParameters = null) {
         var wrapped = DomainResultTypeProvider.Wrap(inner);
-        if (Domain is null)
+        if (domain is null)
             return wrapped;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
         var module = RuntimeAnalysisCache.GetOrLower(
-            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            domain, RuntimeAnalysisCache.Session(domain), analysis);
         var moduleTypes = new TypeDefinitionNodeAnalyzer();
         var ctx = new AnalysisContext(wrapped);
         TypeDefinitionNode? moduleEntity = null;
@@ -861,7 +932,7 @@ public sealed partial record DomainEntityInstance {
             if (string.Equals(td.Name, "DomainResult", StringComparison.Ordinal)
                 || string.Equals(td.Name, "ConstraintFailureException", StringComparison.Ordinal))
                 continue;
-            if (string.Equals(td.Name, Entity.Name, StringComparison.Ordinal)) {
+            if (string.Equals(td.Name, entity.Name, StringComparison.Ordinal)) {
                 moduleEntity = td;
                 continue;
             }
@@ -869,7 +940,7 @@ public sealed partial record DomainEntityInstance {
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
-        var runtimeEntity = BuildTypeDefNode(Entity, actionParameters, Domain);
+        var runtimeEntity = BuildTypeDefNode(entity, actionParameters, domain);
         if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
             var names = new HashSet<string>(
                 (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
@@ -897,10 +968,17 @@ public sealed partial record DomainEntityInstance {
     private VmProgram CompileBody(
         Node tree,
         ITypeDefinitionProvider types,
+        IReadOnlyList<Parameter>? rootParameters = null) =>
+        CompileBody(Entity, tree, types, rootParameters);
+
+    private static VmProgram CompileBody(
+        Entity entity,
+        Node tree,
+        ITypeDefinitionProvider types,
         IReadOnlyList<Parameter>? rootParameters = null) {
-        var entityType = types.GetTypeDefinition(Entity.Name)
+        var entityType = types.GetTypeDefinition(entity.Name)
             ?? throw new InvalidOperationException(
-                $"Type '{Entity.Name}' is missing from the type provider.");
+                $"Type '{entity.Name}' is missing from the type provider.");
         var analysis = Interpreter.Analyzer.Analyze(
             tree,
             typeDefinitions: types,
@@ -921,10 +999,15 @@ public sealed partial record DomainEntityInstance {
     }
 
     private (Node Tree, IReadOnlyList<Parameter> RootParameters) BindModuleMethodBody(
+        MethodDefinitionNode method) =>
+        BindModuleMethodBody(Entity.Name, method);
+
+    private static (Node Tree, IReadOnlyList<Parameter> RootParameters) BindModuleMethodBody(
+        string entityName,
         MethodDefinitionNode method) {
         var body = method.Body
             ?? throw new InvalidOperationException(
-                $"Module method '{method.Name}' on '{Entity.Name}' has no body.");
+                $"Module method '{method.Name}' on '{entityName}' has no body.");
         // C1a: action parameters are real VM slots after SetArgs(this, …).
         // Body Parameter nodes are name-only; swap in the method's typed Parameters
         // so analysis resolves them. Still Parameter nodes — not Member(this, name).

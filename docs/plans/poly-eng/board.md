@@ -18,8 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#135](https://github.com/scoizzle/Poly/pull/135) | P1: Equality constraint is authorable and printed | A | `f38f4a00` | — | In review. [tasks/P1.md](tasks/P1.md) |
-| [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `d1720b1d` | — | In review. [tasks/C2a.md](tasks/C2a.md) |
+| [#137](https://github.com/scoizzle/Poly/pull/137) | K6: replace Emit's re-analysis | A | — | — | Plan only; implementation follows on this branch. [tasks/K6.md](tasks/K6.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
 | [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
@@ -53,12 +52,19 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 - PR 130, `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Actions.cs:435`, hardcoded `adapterResult` local (duplicate var if a bound action parameter has that name).
 - PR 132, `Poly.Mcp/Sessions/McpSessionStore.cs:96`, `Evolve` still `WithDomain`s; a uses change would reopen Core.
 - PR 132, `Poly/DomainModeling/Compile/DomainSession.cs:146`, `WithDomain` still `Open(domain)` against Core when extensions change.
+- PR 135, `Poly.Tests/DomainModeling/Lowering/MinimalApiGeneratorTests.cs:250`, comment still says DSL does not author `equals(...)`.
+- PR 135, `docs/domain-modeling/pipeline-convergence-plan.md:333,359`, still say equality is DSL-unreachable / API-built only.
+- PR 135, `Poly/DomainModeling/Language/DomainDslPrinter.cs:758,809`, `0.0###############` rounds tiny doubles to `0.0` and is duplicated in `PrintLiteral` / `PrintLiteralValue`.
+- PR 135, `Poly/DomainModeling/Language/PolyDslParser.cs:1417`, API-built `EqualityConstraint(null)` prints `equals(null)` which the parser rejects.
+- PR 135, `docs/plans/poly-eng/tasks/P1.md`, Log attributes all R1-R5 fixes to `40b1e4f0` and omits `8dc1fc93` / `38f0fe9a`.
 - Suites on THEN/PULL live in [`../parked/`](../parked/README.md).
 
 ## Merged (last 30 days; older lines move to archive/)
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-09 | #135 | P1: Equality constraint is authorable and printed | `b38817e9` | Grug SHIP |
+| 10-09 | #134 | C2a: create initializers without re-lowering | `ede905f9` | Grug SHIP |
 | 10-09 | #133 | E1: domain enums become real enum type definitions | `71fef08f` | Grug SHIP |
 | 10-09 | #130 | C1c: unbound adapter result shape; last `BindForSimulate` arm | `4fc7a206` | Grug SHIP |
 | 10-09 | #131 | H4: every concept has its tree (ratchet) | `86ca12dd` | Scot merged |

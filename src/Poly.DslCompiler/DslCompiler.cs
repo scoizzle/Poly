@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
@@ -281,12 +282,13 @@ public sealed class DslCompiler {
                 throw new InvalidOperationException("Domain extension id must be non-empty.");
             if (!loaded.Add(id))
                 throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
-            builder.Load(catalog.Resolve(id));
+            if (id == "http")
+                builder.Load(new HttpLibrary(new MinimalApiHostArtifactContributor(dbms: dbms)));
+            else
+                builder.Load(catalog.Resolve(id));
         }
         if (ids.Exists(id => id is "persistence" or "sqlite" or "sqlserver" or "mysql"))
             builder.AddArtifactContributor(new DbContextArtifactContributor());
-        if (ids.Exists(id => id == "http"))
-            builder.AddArtifactContributor(new MinimalApiHostArtifactContributor(dbms: dbms));
         return builder.Build();
     }
 

@@ -19,6 +19,9 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
 | [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `cdaa688c` | — | Plan; implementation follows. [tasks/C1b.md](tasks/C1b.md) |
+| [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
+| [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
+| [#126](https://github.com/scoizzle/Poly/pull/126) | K4: stage-scoped policies reach the printed output | A | `3a4658fe` | — | Plan only; implementation follows on this branch. [tasks/K4.md](tasks/K4.md) |
 
 ## Next (in order; first unblocked row wins)
 

@@ -121,17 +121,19 @@ internal static class McpSessionStore {
     /// Atomically replaces a session's domain and analysis. The revision counter
     /// is set to the current revision + 1. Runtime instances are cleared.
     /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
-    /// Pass the ForSource session so a <c>uses</c> change does not re-open against Core.
+    /// <paramref name="modeling"/> is the ForSource session; required so a <c>uses</c>
+    /// change does not re-open against Core.
     /// </summary>
     public static bool Replace(
-        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession? modeling = null) {
+        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
+        ArgumentNullException.ThrowIfNull(modeling);
 
         lock (StoreLock) {
             if (!Sessions.TryGetValue(sessionId, out var current))
                 return false;
-            var next = (modeling ?? current.Modeling).WithDomain(domain);
+            var next = modeling.WithDomain(domain);
             Sessions[sessionId] = new McpSessionState(
                 domain,
                 analysis,

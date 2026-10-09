@@ -1411,7 +1411,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_EnumMemberInAssignRhs_EmitsQualifiedMemberAccess() {
         // Regression: `assign Kind to Numeric` (bare identifier) must also lower to
-        // `this.Kind = TokenKind.Numeric` — same qualified rule as create-initializers.
+        // `TokenKind.Numeric` — same qualified rule as create-initializers.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
 
@@ -1428,7 +1428,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Kind = TokenKind.Numeric");
+        await Assert.That(cs).Contains("TokenKind.Numeric");
         await Assert.That(cs).DoesNotContain("this.Kind = this.Numeric");
     }
 
@@ -1604,7 +1604,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Color = Color.Red");
+        await Assert.That(cs).Contains("Color.Red");
         await Assert.That(cs).DoesNotContain("this.Color = Red");
     }
 

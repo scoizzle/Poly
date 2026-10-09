@@ -837,7 +837,9 @@ public sealed partial record DomainEntityInstance {
                 return failed;
             return null;
         }
-        catch (ConstraintFailureException ex) {
+        catch (ConstraintFailureException ex) when (actionName is null) {
+            // Named action trees return Failure. A nested void throw
+            // (subscription / leftover TransitionStage) must still escape.
             return DomainResult.Failure(ex.Message);
         }
     }

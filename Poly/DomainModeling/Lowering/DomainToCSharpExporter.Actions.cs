@@ -728,7 +728,7 @@ public sealed partial class DomainToCSharpExporter {
         return new TypeDefinitionNode(
             "ConstraintFailureException",
             Constructors: [ctor],
-            BaseType: new NamedTypeReference("Exception")
+            BaseType: new NamedTypeReference("System.Exception")
         );
     }
 

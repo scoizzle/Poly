@@ -46,7 +46,7 @@ public record DomainResult<T>
     public static DomainResult<T> Failure(string message) => new DomainResult<T>(false, default!, message);
 }
 
-public class ConstraintFailureException : Exception
+public class ConstraintFailureException : System.Exception
 {
     public ConstraintFailureException(string message) : base(message) { }
 }

@@ -59,3 +59,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `71fef08f` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `6443d178` | pushed | tests 3461/3461; sweep: Runtime re-lower gone, store-less create takes Store.Create |
+| 2026-10-09 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `d1720b1d` | NOT SHIP | https://github.com/scoizzle/Poly/pull/134#issuecomment-6085023909 (Grug NOT SHIP at d1720b1d, 2 open findings, mode full) |
+| 2026-10-09 | implementer | grok/grok-4.6 | `b318da86` | fixes pushed | R1, R2; disputed: none; tests 3463/3463 |

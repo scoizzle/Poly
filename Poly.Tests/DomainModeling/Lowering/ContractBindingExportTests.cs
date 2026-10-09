@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Ontology;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
@@ -15,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class ContractBindingExportTests {
     private static Compiler CompilerWithHttpHost() =>
-        new Compiler().Load(new Poly.DslCompiler.HttpLibrary());
+        new Compiler().Load(new HttpLibrary());
 
     /// <summary>A billing domain whose Ledger.Charge action projects to the Billing contract
     /// endpoint (pack-3b producer). The child's Ledger entity must never surface in export.</summary>

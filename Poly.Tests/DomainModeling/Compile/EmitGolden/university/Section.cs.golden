@@ -225,6 +225,10 @@ public class Section
         {
             return DomainResult<Section>.Failure("'Cap' must be <= 200.");
         }
+        if (offeringTerm != Term.Fall && offeringTerm != Term.Spring && offeringTerm != Term.Summer)
+        {
+            return DomainResult<Section>.Failure("'OfferingTerm' is not a valid member of Term.");
+        }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, offeredSeats, seatsTaken, waitCleared);
         return DomainResult<Section>.Success(created);
     }

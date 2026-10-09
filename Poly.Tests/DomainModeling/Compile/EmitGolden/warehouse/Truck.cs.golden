@@ -24,7 +24,14 @@ public class Truck
         this.Warehouse = warehouse;
         this._deliveries = new List<Delivery>(deliveries ?? new List<Delivery>());
         this.CurrentStage = TruckStage.EnRoute;
-        this.Status = TruckStatus.EnRoute;
+        {
+            var assignValue0 = TruckStatus.EnRoute;
+            if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
+            {
+                throw new ConstraintFailureException("'Status' is not a valid member of TruckStatus.");
+            }
+            this.Status = assignValue0;
+        }
     }
     public long CurrentLoad { get; private set; }
     public long MaxLoad { get; private set; }
@@ -78,7 +85,14 @@ public class Truck
     public DomainResult Dispatch()
     {
         this.CurrentStage = TruckStage.EnRoute;
-        this.Status = TruckStatus.EnRoute;
+        {
+            var assignValue0 = TruckStatus.EnRoute;
+            if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
+            {
+                return DomainResult.Failure("'Status' is not a valid member of TruckStatus.");
+            }
+            this.Status = assignValue0;
+        }
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
@@ -468,6 +482,11 @@ public class Truck
     }
     private void OnEntryEnRoute()
     {
-        this.Status = TruckStatus.EnRoute;
+        var assignValue0 = TruckStatus.EnRoute;
+        if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
+        {
+            throw new ConstraintFailureException("'Status' is not a valid member of TruckStatus.");
+        }
+        this.Status = assignValue0;
     }
 }

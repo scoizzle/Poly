@@ -259,6 +259,10 @@ public class Account
     }
     public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
     {
+        if (industry != Industry.Technology && industry != Industry.Healthcare && industry != Industry.Finance && industry != Industry.Other)
+        {
+            return DomainResult<Account>.Failure("'Industry' is not a valid member of Industry.");
+        }
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Account>.Failure("'Name' is required.");

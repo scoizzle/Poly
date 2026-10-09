@@ -306,7 +306,6 @@ public sealed partial record DomainEntityInstance {
             var cached = body;
             if (peerBinding is { Length: > 0 })
                 cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            cached = BindForSimulate(cached);
             // C1a: previousStage is a real SetArgs slot after this (when the handler declares it).
             var rootParameters = ContainsPreviousStageParameter(cached)
                 ? (IReadOnlyList<Parameter>)[new Parameter("previousStage")]

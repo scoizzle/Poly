@@ -93,6 +93,34 @@ public class Item4FailBeforeMutateTests {
     }
 
     [Test]
+    public async Task StoreLess_OccupyIfOnMutatedProperty_ProbeCreateFailsBeforeOpenStaysAssign() {
+        var (domain, _) = Evolve("""
+            domain Hotel
+            Stay: entity {
+              Nights: Number range(1, 21) required
+            }
+            Guest: entity {
+              OpenStays: Number default(0)
+              Book: action (nights: Number) {
+                assign OpenStays to OpenStays + 1
+                if (OpenStays >= 1) {
+                  create Stay { Nights: nights }
+                }
+              }
+            }
+            """);
+        var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
+        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
+        await Assert.That(guest.Store).IsNull();
+        var result = guest.InvokeAction("Book",
+            new Dictionary<string, object?> { ["nights"] = 0L });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("Nights");
+        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
+        await Assert.That(guest.CreatedChildren).IsEmpty();
+    }
+
+    [Test]
     public async Task LowerActionBody_NestedIfOnMutatedProperty_InheritsPriorAssignRhs() {
         var (domain, analysis) = Evolve("""
             domain Hotel

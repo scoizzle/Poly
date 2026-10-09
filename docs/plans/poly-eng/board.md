@@ -18,7 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | Plan only; implementation follows on this branch. [tasks/C2b.md](tasks/C2b.md) |
+| [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | In review. [tasks/C2b.md](tasks/C2b.md) |
 | [#135](https://github.com/scoizzle/Poly/pull/135) | P1: Equality constraint is authorable and printed | A | `f38f4a00` | — | In review. [tasks/P1.md](tasks/P1.md) |
 | [#134](https://github.com/scoizzle/Poly/pull/134) | C2a create initializers without re-lowering | B | `d1720b1d` | — | In review. [tasks/C2a.md](tasks/C2a.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |

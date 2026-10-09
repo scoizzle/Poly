@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
@@ -304,6 +305,91 @@ public class ParityTests {
                 ["Level"] = 1L
             }, domain));
         await Assert.That(createEx!.Message).IsEqualTo(first);
+    }
+
+    // The DSL cannot author a stage policy. Same fixture as
+    // DomainSessionTests.Lower_StagePolicy_IsMethodAndActionGuard.
+    static Domain StagePolicyDomain(bool ready) {
+        var result = new DomainEvolution(DomainFactory.Create("D")).Evolve()
+            .AddEntity("Item")
+            .AddStage("Item", "Open")
+            .AddPolicyToStage("Item", "Open", "Ready", DomainExpression.Literal(ready))
+            .AddActionToStage("Item", "Open", "Go")
+            .Apply();
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return result.Root;
+    }
+
+    // Action-local policy via AddPolicyToAction, not on entity.Policies.
+    static Domain ActionLocalPolicyDomain() {
+        var result = new DomainEvolution(DomainFactory.Create("D")).Evolve()
+            .AddEntity("Item")
+            .AddStage("Item", "Open")
+            .AddActionToStage("Item", "Open", "Go")
+            .AddPolicyToAction("Item", "Go", "Ok", DomainExpression.Literal(false))
+            .Apply();
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return result.Root;
+    }
+
+    static string PrintedCSharp(Domain domain) {
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        return new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+    }
+
+    [Test]
+    public async Task Invoke_WhenStagePolicyIsTrue_Agrees() {
+        var outcomes = await ParityScenario.FromDomain(StagePolicyDomain(true), "ParityStagePolicyTrue")
+            .AssertAgree(side => {
+                side.Create("Item");
+                side.Invoke("Go");
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+    }
+
+    // Both sides fail. Simulate ErrorMessage is empty (ActionInvocationResult.Blocked);
+    // printed returns the Failure string — same C8d split as KnownGap_RequireBlocksAction.
+    [Test]
+    public async Task Invoke_WhenStagePolicyIsFalse_BothSidesFail() {
+        var domain = StagePolicyDomain(false);
+        var source = PrintedCSharp(domain);
+        await Assert.That(source).Contains("bool Ready(");
+        await Assert.That(source).Contains("blocked by policy 'Ready'");
+
+        var (simulate, printed) = ParityScenario.FromDomain(domain, "ParityStagePolicyFalse")
+            .Run(side => {
+                side.Create("Item");
+                side.Invoke("Go");
+            });
+        await Assert.That(simulate[1].Success).IsFalse();
+        await Assert.That(printed[1].Success).IsFalse();
+        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed)))
+            .IsEqualTo("invoke Go: failure message differs (simulate '', printed ''Go' blocked by policy 'Ready'.')");
+    }
+
+    [Test]
+    public async Task Invoke_WhenActionLocalPolicyIsFalse_BothSidesFail() {
+        var domain = ActionLocalPolicyDomain();
+        var item = domain.Types.OfType<Entity>().Single(e => e.Name == "Item");
+        await Assert.That(item.Policies).IsEmpty();
+        await Assert.That(item.Stages.Single().Policies).IsEmpty();
+        await Assert.That(item.Stages.Single().Actions.Single().Policies.Single().Name).IsEqualTo("Ok");
+
+        var source = PrintedCSharp(domain);
+        await Assert.That(source).Contains("bool Ok(");
+        await Assert.That(source).Contains("blocked by policy 'Ok'");
+
+        var (simulate, printed) = ParityScenario.FromDomain(domain, "ParityActionLocalPolicyFalse")
+            .Run(side => {
+                side.Create("Item");
+                side.Invoke("Go");
+            });
+        await Assert.That(simulate[1].Success).IsFalse();
+        await Assert.That(printed[1].Success).IsFalse();
+        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed)))
+            .IsEqualTo("invoke Go: failure message differs (simulate '', printed ''Go' blocked by policy 'Ok'.')");
     }
 
     // Known gaps: the sides differ today. Each row pins the exact differences so a fix turns it red;

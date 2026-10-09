@@ -58,6 +58,7 @@ public sealed class McpSqliteHttpHarnessTests {
         var fileCount = (int)csharp.Data!.GetType().GetProperty("fileCount")!.GetValue(csharp.Data)!;
         var files = (string[])csharp.Data.GetType().GetProperty("files")!.GetValue(csharp.Data)!;
         await Assert.That(fileCount).IsGreaterThan(0);
+        await Assert.That(files.Any(f => string.Equals(f, "Item.cs", StringComparison.Ordinal))).IsTrue();
         await Assert.That(files.Any(f => string.Equals(f, "Program.cs", StringComparison.Ordinal))).IsFalse();
         await Assert.That(files.Any(f => string.Equals(f, "demo.http", StringComparison.Ordinal))).IsFalse();
     }

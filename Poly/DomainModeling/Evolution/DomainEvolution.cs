@@ -498,6 +498,13 @@ public sealed class EvolutionBuilder {
     public EvolutionBuilder AddEnumType(string name, params string[] memberNames) =>
         Apply(new AddEnumTypeChange(name, memberNames));
 
+    public EvolutionBuilder AddFunction(
+        string name,
+        IReadOnlyList<Property> parameters,
+        DomainTypeReference returnType,
+        DomainExpression body) =>
+        Apply(new AddFunctionChange(name, parameters, returnType, body));
+
     // --- Relationship stage/policy builder methods ---
 
     public EvolutionBuilder AddStageToRelationship(string sourceEntityName, string relationshipName, string stageName) {

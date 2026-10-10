@@ -54,3 +54,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | c3b9d9d3 | planned | card's `when any` red-row premise stale (`76ab9346`); store/tree split verified |
 | 2026-10-10 | implementer | grok/grok-4.6 | 1fbe772b | pushed | tests 3503/3503; sweep: When overloads by args; guide still stage-first |
+| 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4-pro | 97241408 | NOT SHIP | https://github.com/scoizzle/Poly/pull/149#issuecomment-6098003464 (Grug NOT SHIP at 97241408, 2 open findings, mode full) |
+| 2026-10-10 | implementer | grok/grok-4.6 | d840d495 | fixes pushed | R1, R2; disputed: none; R3 skipped (nit >1 line); tests 3503/3503 |

@@ -27,4 +27,10 @@ public sealed record Relationship(
     public IReadOnlyList<Stage> Stages { get; init; } = [];
     public IReadOnlyList<Policy> Policies { get; init; } = [];
     public sealed override IEnumerable<Node?> Children => [Source, Target, .. Properties, .. Stages, .. Policies];
+
+    /// <summary>
+    /// Message when a OneToOne or ManyToOne source already has an outbound link.
+    /// </summary>
+    public static string LinkViolationMessage(string relationshipName) =>
+        $"Cannot add a second link on '{relationshipName}': the source already has a target.";
 }

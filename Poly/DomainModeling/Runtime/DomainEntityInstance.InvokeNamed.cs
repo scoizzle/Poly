@@ -103,12 +103,7 @@ public sealed partial record DomainEntityInstance {
     private bool TryWhenHandler(string name, object?[] args) {
         if (name.Length <= 4
             || !name.StartsWith("When", StringComparison.Ordinal)
-            || Domain is null)
-            return false;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        RuntimeAnalysisCache.GetOrLower(
-            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-        if (!TryMatchWhenHandler(name, out var entry, out var targetStageName))
+            || !TryMatchWhenHandler(name, out var entry, out var targetStageName))
             return false;
 
         DomainEntityInstance peer = this;

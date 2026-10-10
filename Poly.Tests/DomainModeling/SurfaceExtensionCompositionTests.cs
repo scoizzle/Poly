@@ -218,7 +218,7 @@ public class SurfaceExtensionCompositionTests {
     // ── stage peer + entity peer same notify ───────────────────
 
     [Test]
-    public async Task StageAndEntityPeer_SameNotify_StageFirstThenEntity_LastWriterOnSharedProp() {
+    public async Task StageAndEntityPeer_SameNotify_CompiledNotifyBodyOrder_LastWriterOnSharedProp() {
         // Stage assigns StageNote from peer; entity assigns LastCode from peer.
         // Compiled Notify body calls entity-level When… then stage-scoped When…
         // Shared Status: last writer = STAGE.

@@ -255,6 +255,24 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
+    public async Task Index_AfterGetOrLowerOnly_MethodMatchesTryGetModuleMethod() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+              Active: stage {
+                AssessByType: action { }
+              }
+            }
+            """);
+        RuntimeAnalysisCache.GetOrLower(domain);
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Patron", "AssessByType", out var fromModule)).IsTrue();
+        var fromIndex = RuntimeAnalysisCache.Index(domain).Method("Patron", "AssessByType");
+        await Assert.That(fromIndex).IsSameReferenceAs(fromModule);
+    }
+
+    [Test]
     public async Task Subscription_PeerBinding_MaterializesInsideTryCatchFinally() {
         // Stage transition in subscription effects emits TryCatchFinally; peer
         // Parameter reads in the same body must still Materialize (F3 walk).

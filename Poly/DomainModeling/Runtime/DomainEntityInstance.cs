@@ -177,9 +177,7 @@ public sealed partial record DomainEntityInstance {
         Entity entity,
         IReadOnlyDictionary<string, object?> values,
         Domain domain) {
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        var module = RuntimeAnalysisCache.GetOrLower(
-            domain, RuntimeAnalysisCache.Session(domain), analysis);
+        var module = RuntimeAnalysisCache.GetOrLower(domain);
         MethodDefinitionNode? create = null;
         foreach (var type in module) {
             if (!string.Equals(type.Name, entity.Name, StringComparison.Ordinal))
@@ -452,8 +450,7 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 $"Cannot evaluate policy '{policy.Name}' on '{Entity.Name}' without a Domain-bound module.");
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        RuntimeAnalysisCache.GetOrLower(Domain);
         if (!RuntimeAnalysisCache.TryGetPolicyBody(Domain, Entity.Name, policy.Name, out var cached)
             || cached is null)
             throw new InvalidOperationException(
@@ -660,8 +657,7 @@ public sealed partial record DomainEntityInstance {
         // both the action and the stage policies are checked here.
         var failures = new List<string>();
         if (Domain is not null) {
-            var ensureAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), ensureAnalysis);
+            RuntimeAnalysisCache.GetOrLower(Domain);
         }
         var moduleOwnsRequire = Domain is not null
             && RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var moduleMethod)
@@ -812,8 +808,7 @@ public sealed partial record DomainEntityInstance {
             if (Domain is null)
                 throw new InvalidOperationException(
                     $"Cannot invoke '{actionName}' on '{Entity.Name}' without a Domain-bound module.");
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            RuntimeAnalysisCache.GetOrLower(Domain);
             if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var method)
                 || method?.Body is null)
                 throw new InvalidOperationException(
@@ -821,8 +816,7 @@ public sealed partial record DomainEntityInstance {
             (tree, rootParameters) = BindModuleMethodBody(method);
         }
         else if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+            RuntimeAnalysisCache.GetOrLower(Domain);
             var hasStageName = entryStageName is not null || exitStageName is not null;
             if (hasStageName && entryExitSegmentIndex is int segmentIndex) {
                 var kind = exitStageName is not null ? "exit" : "entry";
@@ -916,9 +910,7 @@ public sealed partial record DomainEntityInstance {
         var wrapped = DomainResultTypeProvider.Wrap(inner);
         if (domain is null)
             return wrapped;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
-        var module = RuntimeAnalysisCache.GetOrLower(
-            domain, RuntimeAnalysisCache.Session(domain), analysis);
+        var module = RuntimeAnalysisCache.GetOrLower(domain);
         var moduleTypes = new TypeDefinitionNodeAnalyzer();
         var ctx = new AnalysisContext(wrapped);
         TypeDefinitionNode? moduleEntity = null;
@@ -931,7 +923,10 @@ public sealed partial record DomainEntityInstance {
                 moduleEntity = td;
                 continue;
             }
-            moduleTypes.Analyze(ctx, td);
+            // When… stays an empty stub so InvokeNamed runs the cached
+            // subscription body (TryGetSubscriptionBody), not the sibling
+            // module method inlined as an AST callable.
+            moduleTypes.Analyze(ctx, StubWhenMethodBodies(td));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
@@ -953,6 +948,20 @@ public sealed partial record DomainEntityInstance {
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+    }
+
+    private static TypeDefinitionNode StubWhenMethodBodies(TypeDefinitionNode td) {
+        if (td.Methods is null || td.Methods.Count == 0)
+            return td;
+        List<MethodDefinitionNode>? methods = null;
+        for (var i = 0; i < td.Methods.Count; i++) {
+            var method = td.Methods[i];
+            if (!method.Name.StartsWith("When", StringComparison.Ordinal))
+                continue;
+            methods ??= [.. td.Methods];
+            methods[i] = method with { Body = new Block([]) };
+        }
+        return methods is null ? td : td with { Methods = methods };
     }
 
     /// <summary>

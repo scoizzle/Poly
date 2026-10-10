@@ -11,16 +11,28 @@ namespace Poly.DomainModeling.Runtime;
 public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Returns all property names, values, and the current stage for debugging.
+    /// Subscriber-registry fields stay in the bag for the compiled Notify body
+    /// and are omitted here so MCP snapshots do not report them as properties.
     /// </summary>
     public IReadOnlyDictionary<string, object?> Snapshot() {
-        if (!_values.ContainsKey(CurrentStageBagKey))
-            return _values.AsReadOnly();
-        var schemaHasStage = Entity.Properties.Any(p =>
-            string.Equals(p.Name, CurrentStageBagKey, StringComparison.Ordinal));
-        if (schemaHasStage)
+        var hideStage = _values.ContainsKey(CurrentStageBagKey)
+            && !Entity.Properties.Any(p =>
+                string.Equals(p.Name, CurrentStageBagKey, StringComparison.Ordinal));
+        var registryFields = SubscriberRegistryFields(Entity, Domain);
+        var hideRegistry = false;
+        foreach (var field in registryFields) {
+            if (_values.ContainsKey(field.Name)) {
+                hideRegistry = true;
+                break;
+            }
+        }
+        if (!hideStage && !hideRegistry)
             return _values.AsReadOnly();
         var copy = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
-        copy.Remove(CurrentStageBagKey);
+        if (hideStage)
+            copy.Remove(CurrentStageBagKey);
+        foreach (var field in registryFields)
+            copy.Remove(field.Name);
         return copy;
     }
 
@@ -224,7 +236,8 @@ public sealed partial record DomainEntityInstance {
             "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
-        // dispatches those names to Notify(stage, previousStage).
+        // dispatches those names to Notify(stage, previousStage), which fills
+        // the registry and runs the compiled body.
         foreach (var stage in entity.Stages) {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))
@@ -265,11 +278,54 @@ public sealed partial record DomainEntityInstance {
                 Body: new Block([])));
         }
 
+        var fields = SubscriberRegistryFields(entity, domain);
         return new TypeDefinitionNode(
             Name: entity.Name,
             Properties: [.. propDefs],
             Methods: [.. methods],
+            Fields: fields.Count == 0 ? null : fields,
             Namespace: null);
+    }
+
+    /// <summary>
+    /// Registry field the compiled <c>Notify{Stage}Subscribers</c> body
+    /// iterates: <c>_{source}{stage}Subscribers</c>. Default null so a
+    /// missing bag key compares as null.
+    /// </summary>
+    internal static string SubscriberRegistryFieldName(string sourceEntityName, string stageName) =>
+        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{stageName}Subscribers";
+
+    private static List<FieldDefinitionNode> SubscriberRegistryFields(Entity entity, Domain? domain) {
+        var fields = new List<FieldDefinitionNode>();
+        if (domain is null)
+            return fields;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subscriber in domain.Types.OfType<Entity>()) {
+            void Consider(SubscriptionDispatchPlanMetadata? plan) {
+                if (plan is null)
+                    return;
+                foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
+                    if (!string.Equals(entry.TargetEntityName, entity.Name, StringComparison.Ordinal))
+                        continue;
+                    foreach (var stageName in entry.StageNames) {
+                        var fieldName = SubscriberRegistryFieldName(subscriber.Name, stageName);
+                        if (!seen.Add(fieldName))
+                            continue;
+                        fields.Add(new FieldDefinitionNode(
+                            fieldName,
+                            new OptionalTypeReference(
+                                new NamedTypeReference("List",
+                                    TypeArguments: [new NamedTypeReference(subscriber.Name)])),
+                            DefaultValue: new Constant(null!)));
+                    }
+                }
+            }
+            Consider(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriber));
+            foreach (var stage in subscriber.Stages)
+                Consider(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage));
+        }
+        return fields;
     }
 
     /// <summary>

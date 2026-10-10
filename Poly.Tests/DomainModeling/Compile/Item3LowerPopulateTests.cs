@@ -241,6 +241,20 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
+    public async Task GetOrLower_OneArg_ReturnsSameModuleAsThreeArg() {
+        var (domain, analysis, session) = Evolve("""
+            domain Guards
+            Gate: entity {
+              Age: Number required
+              IsAdult: policy { Age >= 18 }
+            }
+            """);
+        var threeArg = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+        var oneArg = RuntimeAnalysisCache.GetOrLower(domain);
+        await Assert.That(ReferenceEquals(threeArg, oneArg)).IsTrue();
+    }
+
+    [Test]
     public async Task Subscription_PeerBinding_MaterializesInsideTryCatchFinally() {
         // Stage transition in subscription effects emits TryCatchFinally; peer
         // Parameter reads in the same body must still Materialize (F3 walk).

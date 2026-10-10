@@ -12,25 +12,18 @@ using Poly.DomainModeling.Ontology.Constraints;
 ///
 /// <para><b>Subscription pipeline:</b></para>
 /// <list type="number">
-///   <item><c>TransitionStage</c> is called on a <see cref="DomainEntityInstance"/>.</item>
-///   <item><c>NotifyTransition</c> iterates registered instances to find subscribers.</item>
-///   <item>A subscriber matches if:
-///     <list type="bullet">
-///       <item>Stage-scoped: it is in a stage that declares a <see cref="StageSubscription"/>, <b>or</b>
-///         entity-level: <see cref="Entity.Subscriptions"/> (active regardless of current stage).</item>
-///       <item>The subscription's <c>RelationshipName</c> matches a domain relationship
-///         where Source = subscriber entity type and Target = transitioned entity type.</item>
-///       <item>An <b>instance link</b> exists for that relationship from subscriber → transitioned
-///         (see <see cref="Link"/>).</item>
-///       <item>The subscription's <c>StageNames</c> includes the target stage.</item>
-///       <item>Quantifier is Each, Any, or All — the store notifies the matching
-///         handler; Any/All set conditions live in the lowered handler body.</item>
-///     </list>
-///   </item>
-///   <item><b>Order:</b> stage-scoped handlers first, then entity-level (entity-level dispatch order).</item>
-///   <item>Subscription effects execute on the subscriber with <c>this</c>=subscriber,
-///     peer bag when <c>PeerBinding</c> is set.</item>
-///   <item>If a subscriber transitions as a side effect, notification recurses (depth-limited).</item>
+///   <item>A stage transition calls <c>Notify{Stage}Subscribers</c> on the
+///     transitioned instance (or a leftover <c>TransitionStage</c> helper
+///     calls <see cref="NotifyTransition"/> directly).</item>
+///   <item><see cref="NotifyTransition"/> fills that instance's subscriber
+///     registry lists from <c>_links</c> (who is linked on a matching
+///     subscription relationship for the target stage).</item>
+///   <item>The transitioned instance then runs the module's compiled
+///     <c>Notify{Stage}Subscribers</c> body, which iterates the registry
+///     and calls <c>sub.When…</c>. Any/All set conditions live in those
+///     handler bodies (the same trees print emits).</item>
+///   <item>If a subscriber transitions as a side effect, notification
+///     recurses (depth-limited).</item>
 /// </list>
 ///
 /// This is intentionally thin — not a full ORM or query engine.
@@ -445,9 +438,8 @@ public sealed class DomainInstanceStore {
 
     /// <summary>
     /// Called after an instance transitions to a new stage.
-    /// Finds subscriber instances whose stage-scoped or entity-level subscription matches
-    /// the transition <b>and</b> that are instance-linked to the transitioned entity, then runs effects.
-    /// Stage-scoped handlers run first; entity-level handlers run second (same match rules).
+    /// Fills the transitioned instance's subscriber registries from <c>_links</c>,
+    /// then runs that instance's compiled <c>Notify{Stage}Subscribers</c> body.
     /// </summary>
     /// <param name="transitionedInstance">The instance that changed stage.</param>
     /// <param name="targetStageName">The stage entered.</param>
@@ -478,96 +470,106 @@ public sealed class DomainInstanceStore {
 
         if (incomingContracts.Count == 0) return;
 
-        // For each subscriber: stage-scoped plan first, then always-active entity-level plan.
+        var registries = new Dictionary<string, List<DomainEntityInstance>>(StringComparer.Ordinal);
+        var notified = new List<(DomainEntityInstance Subscriber, string? StageBefore)>();
+        var anyHandler = false;
+        transitionedInstance.ClearSubscriberRegistries();
+
         foreach (var subscriber in _instances.ToArray()) {
+            var listed = false;
+            var hasEffects = false;
 
-            // --- Stage-scoped (requires resolvable current stage) ---
-            if (subscriber.CurrentStage is not null) {
-                if (analysis.TryGetStage(subscriber.Entity, subscriber.CurrentStage, out var subscriberStage)
-                    && subscriberStage is not null) {
-                    var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
-                        ?? throw new InvalidOperationException(
-                            $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");
-
-                    DispatchMatchingEntries(
-                        subscriber,
-                        transitionedInstance,
-                        targetStageName,
-                        stagePlan,
-                        incomingContracts,
-                        stageNameBeforeEffects: subscriberStage.Name,
-                        depth,
-                        maxDepth,
-                        previousStageName);
+            if (subscriber.CurrentStage is not null
+                && analysis.TryGetStage(subscriber.Entity, subscriber.CurrentStage, out var subscriberStage)
+                && subscriberStage is not null) {
+                var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriberStage)
+                    ?? throw new InvalidOperationException(
+                        $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for stage '{subscriberStage.Name}'.");
+                if (PlanListsSubscriber(
+                        stagePlan, subscriber, transitionedInstance, targetStageName, incomingContracts,
+                        out var stageHasEffects)) {
+                    listed = true;
+                    hasEffects |= stageHasEffects;
                 }
             }
 
-            // --- Entity-level (regardless of subscriber current stage) ---
             var entityPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriber.Entity)
                 ?? throw new InvalidOperationException(
                     $"Runtime dispatch requires {nameof(SubscriptionDispatchPlanMetadata)} for entity '{subscriber.Entity.Name}'.");
+            if (PlanListsSubscriber(
+                    entityPlan, subscriber, transitionedInstance, targetStageName, incomingContracts,
+                    out var entityHasEffects)) {
+                listed = true;
+                hasEffects |= entityHasEffects;
+            }
 
-            DispatchMatchingEntries(
-                subscriber,
-                transitionedInstance,
-                targetStageName,
-                entityPlan,
-                incomingContracts,
-                stageNameBeforeEffects: subscriber.CurrentStage,
-                depth,
-                maxDepth,
-                previousStageName);
+            if (!listed)
+                continue;
+
+            var fieldName = DomainEntityInstance.SubscriberRegistryFieldName(
+                subscriber.Entity.Name, targetStageName);
+            if (!registries.TryGetValue(fieldName, out var list)) {
+                list = [];
+                registries[fieldName] = list;
+            }
+            list.Add(subscriber);
+            notified.Add((subscriber, subscriber.CurrentStage));
+            anyHandler |= hasEffects;
         }
-    }
 
-    private void DispatchMatchingEntries(
-        DomainEntityInstance subscriber,
-        DomainEntityInstance transitionedInstance,
-        string targetStageName,
-        SubscriptionDispatchPlanMetadata dispatchPlan,
-        List<RelationshipContract> incomingContracts,
-        string? stageNameBeforeEffects,
-        int depth,
-        int maxDepth,
-        string? previousStageName) {
-        var applicableEntries = dispatchPlan.ByRelationshipName.Values
-            .SelectMany(entries => entries)
-            .Where(entry =>
-                string.Equals(entry.SourceEntityName, subscriber.Entity.Name, StringComparison.Ordinal)
-                && string.Equals(entry.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal)
-                && incomingContracts.Any(contract =>
-                    string.Equals(contract.Name, entry.RelationshipName, StringComparison.Ordinal)
-                    && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
-                    && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
-            .ToList();
+        foreach (var (fieldName, list) in registries)
+            transitionedInstance.WriteSubscriberRegistry(fieldName, list);
 
-        foreach (var entry in applicableEntries) {
-            // Instance-level link required (BR.4.4)
-            if (!IsLinked(entry.RelationshipName, subscriber, transitionedInstance))
-                continue;
+        // Notify-only (empty effects) skip GetOrLower — same as ExecuteSubscriptionEffects.
+        if (notified.Count == 0 || !anyHandler)
+            return;
 
-            // Does the target stage match?
-            if (!entry.StageNames.Any(sn =>
-                    string.Equals(sn, targetStageName, StringComparison.Ordinal)))
-                continue;
+        transitionedInstance.ExecuteNotifyStageSubscribers(targetStageName, previousStageName);
 
-            // Notify on every linked transition whose target stage is in the
-            // entry's StageNames. Each runs the handler as-is. Any/All set
-            // conditions live in the lowered handler (the same tree print emits).
-            subscriber.ExecuteSubscriptionEffects(
-                entry.Effects, transitionedInstance, entry.PeerBinding,
-                planEntry: entry, targetStageName: targetStageName,
-                previousStageName: previousStageName);
-
-            // Recurse if the subscriber also transitioned as a side effect
-            if (depth + 1 < maxDepth
-                && !string.Equals(subscriber.CurrentStage, stageNameBeforeEffects, StringComparison.Ordinal)
-                && subscriber.CurrentStage is not null)
+        if (depth + 1 >= maxDepth)
+            return;
+        foreach (var (subscriber, stageBefore) in notified) {
+            if (subscriber.CurrentStage is not null
+                && !string.Equals(subscriber.CurrentStage, stageBefore, StringComparison.Ordinal))
                 NotifyTransition(
                     subscriber,
                     subscriber.CurrentStage,
                     depth + 1,
-                    previousStageName: stageNameBeforeEffects);
+                    previousStageName: stageBefore);
         }
+    }
+
+    /// <summary>
+    /// True when <paramref name="subscriber"/> has a plan entry for this
+    /// target stage, on a contract-matching relationship that is instance-linked.
+    /// </summary>
+    private bool PlanListsSubscriber(
+        SubscriptionDispatchPlanMetadata dispatchPlan,
+        DomainEntityInstance subscriber,
+        DomainEntityInstance transitionedInstance,
+        string targetStageName,
+        List<RelationshipContract> incomingContracts,
+        out bool hasEffects) {
+        hasEffects = false;
+        var listed = false;
+        foreach (var entry in dispatchPlan.ByRelationshipName.Values.SelectMany(entries => entries)) {
+            if (!string.Equals(entry.SourceEntityName, subscriber.Entity.Name, StringComparison.Ordinal)
+                || !string.Equals(entry.TargetEntityName, transitionedInstance.Entity.Name, StringComparison.Ordinal))
+                continue;
+            if (!incomingContracts.Any(contract =>
+                    string.Equals(contract.Name, entry.RelationshipName, StringComparison.Ordinal)
+                    && string.Equals(contract.SourceEntityName, entry.SourceEntityName, StringComparison.Ordinal)
+                    && string.Equals(contract.TargetEntityName, entry.TargetEntityName, StringComparison.Ordinal)))
+                continue;
+            if (!IsLinked(entry.RelationshipName, subscriber, transitionedInstance))
+                continue;
+            if (!entry.StageNames.Any(sn =>
+                    string.Equals(sn, targetStageName, StringComparison.Ordinal)))
+                continue;
+            listed = true;
+            if (entry.Effects.Count > 0)
+                hasEffects = true;
+        }
+        return listed;
     }
 }

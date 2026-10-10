@@ -79,7 +79,10 @@ internal static class RuntimeAnalysisCache {
         }
     }
 
-    public static AnalysisResult GetOrAnalyze(Domain domain) {
+    public static AnalysisResult GetOrAnalyze(Domain domain) =>
+        EnsureAnalysis(domain);
+
+    private static AnalysisResult EnsureAnalysis(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         var holder = GetHolder(domain);
         if (holder.Analysis is not null)
@@ -93,6 +96,11 @@ internal static class RuntimeAnalysisCache {
             holder.Analysis = analysis;
             return analysis;
         }
+    }
+
+    public static IReadOnlyList<TypeDefinitionNode> GetOrLower(Domain domain) {
+        var analysis = EnsureAnalysis(domain);
+        return GetOrLower(domain, Session(domain), analysis);
     }
 
     public static IReadOnlyList<TypeDefinitionNode> GetOrLower(

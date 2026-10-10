@@ -2068,8 +2068,9 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_CreateType_UnambiguousManyRel_CreateAttaches_BindCreateDoesNotDoubleAdd() {
-        // Poly Item 2: Fine.Create(patron: this) AttachFines — BindCreate must not
-        // also _fines.Add (double-Add). AssessByType still hosts via this.Create.
+        // Fine.Create still AttachFines when a patron is passed. BindCreate
+        // Type-create takes patron from values / null, not this, and does not
+        // _fines.Add. AssessByType still hosts via this.Create.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
@@ -2104,9 +2105,9 @@ public class DomainToCSharpExporterTests {
         await Assert.That(fineCreateIdx).IsGreaterThanOrEqualTo(0);
         var fineCreateCallEnd = bindCreate.IndexOf(';', fineCreateIdx);
         var fineCreateCall = bindCreate[fineCreateIdx..fineCreateCallEnd];
-        await Assert.That(fineCreateCall).Contains("this");
-        await Assert.That(fineCreateCall).DoesNotContain("ContainsKey(\"patron\")");
-        await Assert.That(fineCreateCall).DoesNotContain("null");
+        await Assert.That(fineCreateCall).DoesNotContain("this");
+        await Assert.That(fineCreateCall).Contains("ContainsKey(\"patron\")");
+        await Assert.That(fineCreateCall).Contains("null");
 
         var assessByType = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> AssessByType(");
         await Assert.That(assessByType).Contains("this.Create(");

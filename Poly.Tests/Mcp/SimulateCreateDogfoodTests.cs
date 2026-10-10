@@ -7,10 +7,10 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.Mcp;
 
 /// <summary>
-/// Fail-closed MCP simulate for Fine Type-create vs create-in (PR 52).
+/// Fail-closed MCP simulate for Fine Type-create vs create-in.
 /// apply_dsl → create_instance → invoke_action → list_instances / evaluate_policy /
-/// store GetRelatedInstances + returnInstanceId. Type-create auto-links when the
-/// source owns an unambiguous many-rel to Fine (closes list-vs-policy skew).
+/// store GetRelatedInstances + returnInstanceId. Type-create lists Fine unlinked;
+/// create-in links outbound and the unambiguous reverse.
 /// </summary>
 public class SimulateCreateDogfoodTests {
     private static string FindRepoRoot() {
@@ -96,6 +96,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task TypeOnly_UnambiguousManyRel_ListsAndLinks() {
+        // Bare create Type lists Fine; Patron.fines and Fine.patron stay unlinked.
         var (sessionId, _) = McpSessionStore.Create("SimulateCreateType");
         await Assert.That(DslTool.ApplyDsl(sessionId, ReadProbe("simulate-create-type.poly")).Success)
             .IsTrue();
@@ -107,13 +108,11 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(fineId).IsNotNull();
 
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
-        await AssertPolicies(sessionId, patronId, hasFines: true, noFines: false);
+        await AssertPolicies(sessionId, patronId, hasFines: false, noFines: true);
 
         var (patron, fine, store) = ResolvePatronFine(sessionId, patronId, fineId);
-        await Assert.That(store.GetRelatedInstances("fines", patron).Count).IsEqualTo(1);
-        await Assert.That(store.GetRelatedInstances("patron", fine!).Count).IsEqualTo(1);
-        await Assert.That(store.GetRelatedInstances("patron", fine!).Single())
-            .IsEqualTo(patron);
+        await Assert.That(store.GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
+        await Assert.That(store.GetRelatedInstances("patron", fine!).Count).IsEqualTo(0);
     }
 
     [Test]
@@ -138,6 +137,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task Combined_TypeThenRel_OnOnePatron_BothLinked() {
+        // Type Fine unlinked; Rel Fine linked both ways. list=2, fines links=1.
         var (sessionId, _) = McpSessionStore.Create("SimulateCreateCreateIn");
         await Assert.That(DslTool.ApplyDsl(sessionId, ReadProbe("simulate-create-create-in.poly")).Success)
             .IsTrue();
@@ -150,12 +150,12 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(fineTypeId).IsNotNull();
 
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
-        await AssertPolicies(sessionId, patronId, hasFines: true, noFines: false);
+        await AssertPolicies(sessionId, patronId, hasFines: false, noFines: true);
         var afterType = ResolvePatronFine(sessionId, patronId, fineTypeId);
         await Assert.That(afterType.Store.GetRelatedInstances("fines", afterType.Patron).Count)
-            .IsEqualTo(1);
+            .IsEqualTo(0);
         await Assert.That(afterType.Store.GetRelatedInstances("patron", afterType.Fine!).Count)
-            .IsEqualTo(1);
+            .IsEqualTo(0);
 
         var relInvoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByRel");
         await Assert.That(relInvoke.Success).IsTrue();
@@ -172,16 +172,15 @@ public class SimulateCreateDogfoodTests {
         var fineType = state.InstanceMap[fineTypeId!];
         var fineRel = state.InstanceMap[fineRelId!];
         await Assert.That(state.InstanceStore.GetRelatedInstances("fines", patron).Count)
-            .IsEqualTo(2);
-        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineType).Count)
             .IsEqualTo(1);
+        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineType).Count)
+            .IsEqualTo(0);
         await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineRel).Count)
             .IsEqualTo(1);
     }
 
     [Test]
     public async Task TypeOnly_AmbiguousManyRel_ListsButDoesNotLink() {
-        // F6: two many-navs to Fine → TryAutoLinkUnambiguousOutbound no-ops (outs.Count != 1).
         var (sessionId, _) = McpSessionStore.Create("SimulateCreateAmbiguous");
         var dsl = """
             domain SimulateCreateAmbiguous

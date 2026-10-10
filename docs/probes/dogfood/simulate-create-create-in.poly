@@ -4,7 +4,7 @@ uses storage
 
 // Dogfood combined: Type-create then create-in under one MCP session.
 // Sequential AssessByType then AssessByRel on the same Patron.
-// Both actions link; list_instances(Fine)=2, fines links=2, reverse each 1.
+// Type Fine unlinked, Rel Fine linked both ways; list=2, fines links=1.
 // Compare list / policy / returnInstanceId after each action.
 
 Patron: entity {

@@ -41,7 +41,7 @@ public sealed partial class DomainToCSharpExporter {
                                 new Invoke(
                                     new Member(
                                         new Variable(subVarName),
-                                        $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                                        SubscriberRegisterMethodName(info)),
                                     [new ThisReference()])
                             ])
                         ));
@@ -52,7 +52,7 @@ public sealed partial class DomainToCSharpExporter {
                         bodyNodes.Add(new Invoke(
                             new Member(
                                 new Member(new ThisReference(), pascalNavName),
-                                $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                                SubscriberRegisterMethodName(info)),
                             [new ThisReference()])
                         );
                     }
@@ -250,7 +250,7 @@ public sealed partial class DomainToCSharpExporter {
                     bodyNodes.Add(new Invoke(
                         new Member(
                             local,
-                            $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                            SubscriberRegisterMethodName(info)),
                         [new ThisReference()]));
                 }
             }
@@ -295,7 +295,7 @@ public sealed partial class DomainToCSharpExporter {
                 .GroupBy(s => s.StageName)
                 .Select(g => g.First())) {
                 body.Add(new Invoke(
-                    new Member(child, $"Register{info.SourceEntity.Name}{info.StageName}Subscriber"),
+                    new Member(child, SubscriberRegisterMethodName(info)),
                     [new ThisReference()]));
             }
         }

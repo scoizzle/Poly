@@ -71,8 +71,8 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Printed stage transitions call <c>Notify{Stage}Subscribers(previousStage)</c>.
     /// The dictionary instance has no per-stage CLR method; this routes to
-    /// <see cref="Notify(string, string?)"/> so the store can fill the
-    /// registry and run the compiled Notify body.
+    /// <see cref="Notify(string, string?)"/> so the store runs the compiled
+    /// Notify body (registries are filled at Link).
     /// </summary>
     private bool TryNotifyStageSubscribers(string name, object?[] args) {
         const string prefix = "Notify";

@@ -237,8 +237,8 @@ public sealed partial record DomainEntityInstance {
             "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
-        // dispatches those names to Notify(stage, previousStage), which fills
-        // the registry and runs the compiled body.
+        // dispatches those names to Notify(stage, previousStage), which runs
+        // the compiled body (registries are filled at Link).
         foreach (var stage in entity.Stages) {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))
@@ -290,11 +290,12 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Registry field the compiled <c>Notify{Stage}Subscribers</c> body
-    /// iterates: <c>_{source}{stage}Subscribers</c>. Default null so a
+    /// iterates: <c>_{source}{relationship}{stage}Subscribers</c>. Default null so a
     /// missing bag key compares as null.
     /// </summary>
-    internal static string SubscriberRegistryFieldName(string sourceEntityName, string stageName) =>
-        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{stageName}Subscribers";
+    internal static string SubscriberRegistryFieldName(
+        string sourceEntityName, string relationshipName, string stageName) =>
+        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{DomainToCSharpExporter.ToPascalCase(relationshipName)}{stageName}Subscribers";
 
     private static List<FieldDefinitionNode> SubscriberRegistryFields(Entity entity, Domain? domain) {
         var fields = new List<FieldDefinitionNode>();
@@ -310,7 +311,8 @@ public sealed partial record DomainEntityInstance {
                     if (!string.Equals(entry.TargetEntityName, entity.Name, StringComparison.Ordinal))
                         continue;
                     foreach (var stageName in entry.StageNames) {
-                        var fieldName = SubscriberRegistryFieldName(subscriber.Name, stageName);
+                        var fieldName = SubscriberRegistryFieldName(
+                            subscriber.Name, entry.RelationshipName, stageName);
                         if (!seen.Add(fieldName))
                             continue;
                         fields.Add(new FieldDefinitionNode(

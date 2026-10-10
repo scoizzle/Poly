@@ -13,7 +13,7 @@ namespace Poly.DomainModeling.Analysis;
 /// Entity-level design: entity-level <c>Entity.Subscriptions</c> use the same
 /// <see cref="SubscriptionDispatchPlanMetadata"/> / <see cref="SubscriptionDispatchPlanEntry"/>
 /// shape as stage plans, bagged on the <see cref="Entity"/> node (not a domain-scoped map).
-/// Runtime notify (entity-level dispatch order) consults the entity bag in addition to the current stage plan;
+/// Link-time registration consults the entity bag in addition to each stage plan;
 /// this pass only publishes facts.
 /// </para>
 /// </remarks>

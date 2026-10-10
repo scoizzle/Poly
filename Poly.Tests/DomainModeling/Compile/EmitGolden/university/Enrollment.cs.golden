@@ -12,10 +12,11 @@ public enum EnrollmentStage
 
 public class Enrollment
 {
-    private List<Student>? _studentDroppedSubscribers;
-    private List<Student>? _studentCompletedSubscribers;
-    private List<Section>? _sectionRegisteredSubscribers;
-    private List<Section>? _sectionDroppedSubscribers;
+    private List<Student>? _studentEnrollmentsDroppedSubscribers;
+    private List<Student>? _studentEnrollmentsCompletedSubscribers;
+    private List<Section>? _sectionEnrollmentsRegisteredSubscribers;
+    private List<Section>? _sectionEnrollmentsDroppedSubscribers;
+    private int _notifyDepth;
     private Enrollment()
     { }
     private Enrollment(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
@@ -144,74 +145,98 @@ public class Enrollment
     }
     public bool SectionFull() => this.Section != null && this.Section!.SeatsTaken >= 1L;
     public bool IsPassing() => this.Grade >= 70L;
-    internal void RegisterStudentDroppedSubscriber(Student subscriber)
+    internal void RegisterStudentEnrollmentsDroppedSubscriber(Student subscriber)
     {
-        if (this._studentDroppedSubscribers == null)
+        if (this._studentEnrollmentsDroppedSubscribers == null)
         {
-            this._studentDroppedSubscribers = new List<Student>();
+            this._studentEnrollmentsDroppedSubscribers = new List<Student>();
         }
-        this._studentDroppedSubscribers.Add(subscriber);
+        this._studentEnrollmentsDroppedSubscribers.Add(subscriber);
     }
-    internal void RegisterStudentCompletedSubscriber(Student subscriber)
+    internal void RegisterStudentEnrollmentsCompletedSubscriber(Student subscriber)
     {
-        if (this._studentCompletedSubscribers == null)
+        if (this._studentEnrollmentsCompletedSubscribers == null)
         {
-            this._studentCompletedSubscribers = new List<Student>();
+            this._studentEnrollmentsCompletedSubscribers = new List<Student>();
         }
-        this._studentCompletedSubscribers.Add(subscriber);
+        this._studentEnrollmentsCompletedSubscribers.Add(subscriber);
     }
-    internal void RegisterSectionRegisteredSubscriber(Section subscriber)
+    internal void RegisterSectionEnrollmentsRegisteredSubscriber(Section subscriber)
     {
-        if (this._sectionRegisteredSubscribers == null)
+        if (this._sectionEnrollmentsRegisteredSubscribers == null)
         {
-            this._sectionRegisteredSubscribers = new List<Section>();
+            this._sectionEnrollmentsRegisteredSubscribers = new List<Section>();
         }
-        this._sectionRegisteredSubscribers.Add(subscriber);
+        this._sectionEnrollmentsRegisteredSubscribers.Add(subscriber);
     }
-    internal void RegisterSectionDroppedSubscriber(Section subscriber)
+    internal void RegisterSectionEnrollmentsDroppedSubscriber(Section subscriber)
     {
-        if (this._sectionDroppedSubscribers == null)
+        if (this._sectionEnrollmentsDroppedSubscribers == null)
         {
-            this._sectionDroppedSubscribers = new List<Section>();
+            this._sectionEnrollmentsDroppedSubscribers = new List<Section>();
         }
-        this._sectionDroppedSubscribers.Add(subscriber);
+        this._sectionEnrollmentsDroppedSubscribers.Add(subscriber);
     }
     internal void NotifyDroppedSubscribers(EnrollmentStage previousStage)
     {
-        if (this._studentDroppedSubscribers != null)
+        this.EnterNotifyCascade("Dropped");
+        try
         {
-            foreach (var sub in this._studentDroppedSubscribers)
+            if (this._studentEnrollmentsDroppedSubscribers != null)
             {
-                sub.WhenEachEnrollmentDropped();
+                foreach (var sub in this._studentEnrollmentsDroppedSubscribers)
+                {
+                    sub.WhenEachEnrollmentDropped();
+                }
+            }
+            if (this._sectionEnrollmentsDroppedSubscribers != null)
+            {
+                foreach (var sub in this._sectionEnrollmentsDroppedSubscribers)
+                {
+                    sub.WhenEachEnrollmentDropped();
+                }
             }
         }
-        if (this._sectionDroppedSubscribers != null)
+        finally
         {
-            foreach (var sub in this._sectionDroppedSubscribers)
-            {
-                sub.WhenEachEnrollmentDropped();
-            }
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyCompletedSubscribers(EnrollmentStage previousStage)
     {
-        if (this._studentCompletedSubscribers != null)
+        this.EnterNotifyCascade("Completed");
+        try
         {
-            foreach (var sub in this._studentCompletedSubscribers)
+            if (this._studentEnrollmentsCompletedSubscribers != null)
             {
-                sub.WhenEachEnrollmentCompleted();
-                sub.WhenEachEnrollmentCompleted(this);
+                foreach (var sub in this._studentEnrollmentsCompletedSubscribers)
+                {
+                    sub.WhenEachEnrollmentCompleted();
+                    sub.WhenEachEnrollmentCompleted(this);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyRegisteredSubscribers(EnrollmentStage previousStage)
     {
-        if (this._sectionRegisteredSubscribers != null)
+        this.EnterNotifyCascade("Registered");
+        try
         {
-            foreach (var sub in this._sectionRegisteredSubscribers)
+            if (this._sectionEnrollmentsRegisteredSubscribers != null)
             {
-                sub.WhenEachEnrollmentRegistered();
+                foreach (var sub in this._sectionEnrollmentsRegisteredSubscribers)
+                {
+                    sub.WhenEachEnrollmentRegistered();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
@@ -640,5 +665,17 @@ public class Enrollment
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Enrollment' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

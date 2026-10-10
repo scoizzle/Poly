@@ -103,6 +103,18 @@ internal static class RuntimeAnalysisCache {
         return GetOrLower(domain, Session(domain), analysis);
     }
 
+    /// <summary>
+    /// Lowers so <see cref="DomainSession.ArtifactCatalog"/> is filled, then indexes it.
+    /// <see cref="GetOrLower(Domain)"/> does not fill the catalog.
+    /// </summary>
+    internal static CatalogIndex Index(Domain domain) {
+        var analysis = EnsureAnalysis(domain);
+        DomainModelAnalyzer.RequireCatalog(analysis, domain);
+        var session = Session(domain);
+        session.Lower(domain, analysis);
+        return new CatalogIndex(session.ArtifactCatalog);
+    }
+
     public static IReadOnlyList<TypeDefinitionNode> GetOrLower(
         Domain domain, DomainSession session, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);

@@ -1,5 +1,5 @@
 # TASK Q1a - Parity rows for collection rules (any/all/none/filtered count)
-Status: planned. Branch slice/q1a-collection-parity-rows. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/q1a-collection-parity-rows. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
 ## Scope
 Quantifier lowering already landed: `DomainExpressionLoweringPass` turns filtered quantifiers into foreach loops (class remarks `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs:24-31`; dispatch `AnyExpr`/`AllExpr`/`NoneExpr`/`CountExpr` `:474-489`; `LowerFilteredQuantifier` `:503-539`). `git grep -nE 'AnyRelated|AllRelated|CountRelated' -- Poly Poly.Mcp Poly.Tests` exits 1 (verified).
 The T2 helper is live: `ParityScenario` (`Poly.Tests/TestHelpers/ParityScenario.cs:21`, `FromDsl`/`AssertAgree`; `ParitySide.Create` links by passing earlier creates as a collection value, `:83-113`). One row already exists: `ParityTests.EvaluatePolicy_HasOverdueLoans_AgreesForLinkedLoans` (`Poly.Tests/DomainModeling/Lowering/ParityTests.cs:224-241`, `any loans where Status is "Overdue"` via `PolicyDsl` `:64-76`).
@@ -40,3 +40,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode-go/deepseek-v4.1-flash | b894d9a6 | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | 79657397 | pushed | tests 3482/3482; sweep: rows name expected true/false including empty; AnyRelated grep empty |

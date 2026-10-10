@@ -19,7 +19,6 @@ public sealed partial record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
     private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
-    private bool _isExecutingSubscription;
     private int _invokeDepth;
     private int _transitionDepth;
     private HashSet<string>? _automaticStageChain;

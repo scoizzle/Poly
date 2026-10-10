@@ -236,8 +236,8 @@ public sealed partial record DomainEntityInstance {
             "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
-        // dispatches those names to Notify(stage, previousStage), which fills
-        // the registry and runs the compiled body.
+        // dispatches those names to Notify(stage, previousStage), which runs
+        // the compiled body (registries are filled at Link).
         foreach (var stage in entity.Stages) {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))

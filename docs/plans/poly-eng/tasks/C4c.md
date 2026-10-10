@@ -1,5 +1,5 @@
 # TASK C4c - Constraints on set; enum value check
-Status: in review. Branch slice/c4c-plan-ahead. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: merged #141 `cc5cd55a` 2026-10-09. Branch slice/c4c-plan-ahead. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Depends on C2b (#136 `10e6570a`) and E1 (#133 `71fef08f`); both are on master. C4b (#139, unique-on-create) is in review and is NOT a dependency of this slice. Decision 11 (every mutation enforces every invariant) and decision 12 (enum checks compile as trees) are settled (plan §19, `pipeline-convergence-plan.md:1064-1065`).
@@ -65,3 +65,4 @@ none
 | 2026-10-09 | implementer | grok/grok-4.6 | `af64777d` | pushed | tests 3486/3486; sweep: SetProperty internal; enum Member+NotEqual on create and assign |
 | 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `7318db0b` | NOT SHIP | https://github.com/scoizzle/Poly/pull/141#issuecomment-6092867956 (Grug NOT SHIP at 7318db0b, 4 open findings, mode full) |
 | 2026-10-10 | implementer | grok/grok-4.6 | `39e4f910` | fixes pushed | R1, R2, R3; disputed: none; R4 skipped (nit >1 line); tests 3495/3495 |
+| 2026-10-09 | planner | opencode-go/deepseek-v4.1-flash | `cc5cd55a` | merged #141 | squash-merged to master |

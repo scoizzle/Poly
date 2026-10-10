@@ -58,6 +58,11 @@ public class Doctor
             return DomainResult<Doctor>.Failure("'Name' must be at most 60 characters.");
         }
         var created = new Doctor(licenseNo, name, schedule);
+        var uniqueCheck = created.EnsureUnique("LicenseNo", licenseNo);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Doctor>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Doctor>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

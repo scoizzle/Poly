@@ -130,6 +130,11 @@ public class Warehouse
             return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
         }
         var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
+        var uniqueCheck = created.EnsureUnique("Code", code);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Warehouse>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Warehouse>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

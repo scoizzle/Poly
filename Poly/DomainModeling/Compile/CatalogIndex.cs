@@ -11,15 +11,18 @@ public sealed class CatalogIndex {
 
     public CatalogIndex(ArtifactCatalog catalog) {
         ArgumentNullException.ThrowIfNull(catalog);
-        _trees = new Dictionary<string, Artifact>(StringComparer.Ordinal);
+        var trees = new Dictionary<string, Artifact>(StringComparer.Ordinal);
         foreach (var artifact in catalog.Artifacts) {
             var id = artifact.Descriptor.Id;
             if (id.Type is not ("entity" or "scaffolding"))
                 continue;
             var name = id.Segments[^1];
-            if (id.Type == "entity" || !_trees.ContainsKey(name))
-                _trees[name] = artifact;
+            if (id.Type == "entity")
+                trees[name] = artifact;
+            else
+                trees.TryAdd(name, artifact);
         }
+        _trees = trees;
     }
 
     /// <summary>

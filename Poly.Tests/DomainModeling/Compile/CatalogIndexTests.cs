@@ -105,6 +105,7 @@ public sealed class CatalogIndexTests {
         var (index, _) = IndexOf(Library);
 
         await Assert.That(index.Navigation("Patron", "NoSuch")).IsNull();
+        await Assert.That(index.Navigation("NoSuch", "Fines")).IsNull();
     }
 
     [Test]

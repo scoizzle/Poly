@@ -742,16 +742,39 @@ public class ParityTests {
         await Assert.That(outcomes[0].Success).IsTrue();
     }
 
-    // Owner: none named in the plan; closest is C2b (the compiled Create). The simulator's first-stage entry skips
-    // transition effects (ApplyInitialStageEntryEffects), so the instance stays in the first stage; the printed
-    // constructor performs the transition. Both sides compile and run: this is a behaviour gap, not a compile failure.
     [Test]
-    public async Task KnownGap_FirstStageEntryTransition_SimulateStaysInFirstStage() {
+    public async Task Invoke_FirstStageEntryTransition_SimulateAndPrintedAgree() {
         var dsl = await File.ReadAllTextAsync(Path.Combine(FindRepoRoot(), "docs/probes/dogfood/entry-transition-in-first-stage.poly"));
-        var (simulate, printed) = ParityScenario.FromDsl(dsl, "ParityGapEntryTransition")
-            .Run(side => side.Create("Z", ("Tag", "t")));
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(["create Z: 'Stage' differs (simulate 'A', printed 'B')"]);
+        var outcomes = await ParityScenario.FromDsl(dsl, "ParityEntryTransition")
+            .AssertAgree(side => side.Create("Z", ("Tag", "t")));
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("B");
+    }
+
+    [Test]
+    public async Task Create_WhenFirstStageEntryMixesAssignAndTransition_Agrees() {
+        const string dsl = """
+            domain Entry
+            Z: entity {
+              Tag: Text
+              Note: Text
+              Log: Text
+              A: stage {
+                entry {
+                  assign Note to "before"
+                  transition to B
+                  assign Log to "after"
+                }
+              }
+              B: stage { }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "ParityEntryTransitionMixed")
+            .AssertAgree(side => side.Create("Z", ("Tag", "t"), ("Note", ""), ("Log", "")));
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("B");
+        await Assert.That(outcomes[0].State["Note"]).IsEqualTo("before");
+        await Assert.That(outcomes[0].State["Log"]).IsEqualTo("after");
     }
 
     // Owner: C5b (multi-hop leaves the store). A subscriber's handler transition notifies its own subscribers in

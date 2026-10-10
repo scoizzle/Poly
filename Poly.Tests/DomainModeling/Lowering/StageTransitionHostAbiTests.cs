@@ -24,6 +24,8 @@ public class StageTransitionHostAbiTests {
             Stages: [draft, activeStage]);
     }
 
+    const string UnknownNopeOnPerson = "Stage 'Nope' does not exist on entity 'Person'.";
+
     [Test]
     public async Task StageTransition_RuntimeContext_LowersToAssignmentWithoutInstanceNotify() {
         var entity = CreatePersonEntity();
@@ -91,6 +93,29 @@ public class StageTransitionHostAbiTests {
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.CurrentStage).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task TransitionStage_UnknownStage_ThrowsFailClosed() {
+        var entity = CreatePersonEntity();
+        var domain = ValidDomain.Create("People", [entity]);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("Nope"));
+        await Assert.That(ex!.Message).IsEqualTo(UnknownNopeOnPerson);
+    }
+
+    [Test]
+    public async Task Lower_UnknownStageTransition_ThrowsFailClosed() {
+        var entity = CreatePersonEntity();
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity"),
+            SourceStageName: "Draft"));
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            pass.TryLowerVmNode(new StageTransitionEffect(new StageReference("Nope"))));
+        await Assert.That(ex!.Message).IsEqualTo(UnknownNopeOnPerson);
     }
 
     [Test]

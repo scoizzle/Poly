@@ -1,5 +1,5 @@
 # TASK C7a - Six 'get compiled module' sites use the catalog
-Status: planned. Branch slice/c7a-plan-v2. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c7a-plan-v2. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 Plan card: [`pipeline-convergence-plan.md` **C7a**](../../../domain-modeling/pipeline-convergence-plan.md) (`:545-552`). Depends on C7-0, merged `d344de77`.
 
 ## Scope
@@ -55,3 +55,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | d344de77 | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | 46b75945 | pushed | tests 3514/3514; sweep: six pairs gone; HostAbi pair listed |

@@ -241,9 +241,31 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer (Scot, 2026-10-10 11:34 CDT):** the compiled tree and printed C# express real typed semantics; dictionary string/object instances belong only to the interpreter. Store jobs (`Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` lowered as string-named dictionary jobs) are an interpreter implementation detail, never a shape in the compiled tree. C8-tc therefore emits typed factory calls (`Fine.Create(amount, reason)`, `this.Create{Nav}(…)`), deletes `DomainToCSharpExporter.StoreBind.cs`, keeps results as `DomainResult<T>` with no cast to object, replaces the `EnsureUnique` Success stub with a real check, and maps the typed calls onto the interpreter's dictionary-backed instances via `HostAbi` / `InvokeNamed`. Goldens are regenerated; no golden may hold a `Dictionary<string, object>` construction or a string-named create call.
 
-**Related rulings.** C6b2 (`BuildTargetCreateArgs` self-referencing collection slot passing `this` where the constructor wants `IEnumerable<T>`) is folded into C8-tc, because C8-tc deletes the file that holds the bug. C8a2 (interpreter-side `TypeDefinitionNode` factory) now depends on C8-tc and must run the typed compiled Create tree.
+**Related rulings.** C6b2 (`BuildTargetCreateArgs` self-referencing collection slot passing `this` where the constructor wants `IEnumerable<T>`) is folded into C8-tc, because C8-tc deletes the file that holds the bug. C8a2 (interpreter-side `TypeDefinitionNode` factory) now depends on C8-tc and must run the typed compiled Create tree. C8-tc grew 2026-10-10 15:05 CT to also close K0, G1, G2, G3+D1, G4+D15, G6, G8, G9, G12.
 
 **Blocks.** C8-tc, then C8a2.
+
+### Ruling. Printed C# bar
+
+**Answer (Scot, 2026-10-10 15:05 CT):** printed C# must be as good as, or better than, hand-written production-quality C#. Every codegen finding is fixed, nits included, nothing deferred.
+
+**What it is.** Grug's codegen review of EmitGolden (rows K0, G1–G22, D1–D18) is the punch list. The bar is a principle of the convergence plan, not a later polish pass.
+
+**Blocks.** C8-tc, C8-lc, C8-web, C8-num, C8-clean (every finding except D2).
+
+### Ruling. Number C# type from constraints (D8)
+
+**Answer (Scot, 2026-10-10 15:05 CT):** a DSL `Number`'s C# type is decided by its applied constraints (integral means `long`; fractional bounds or precision mean `decimal`).
+
+**What it is.** Finding D8 (`orders/Order.cs.golden:24`): `Number` currently maps to `long` in `DomainTypeMapping.cs:14`, so money fields (`NightlyRate`, `Balance`, `DayRate`, `Discount`, `Total`, `ListPrice`) silently truncate. Slice C8-num.
+
+**Blocks.** C8-num.
+
+### Needs Scot. Contract adapter stub (D2)
+
+**Needs Scot (2026-10-10 15:05 CT):** D2 waits on Scot's call. Leave it out of every slice.
+
+**What it is.** Finding D2 (`crm/Poly.Types.cs.golden:56`): `BuildContractAdapterTypeDef` (`DomainToCSharpExporter.Actions.cs:471`) emits an always-fail stub (`DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")`), so `Opportunity.Capture` can never succeed in printed C#. No C8 slice owns it.
 
 ## Parked, not asking now
 

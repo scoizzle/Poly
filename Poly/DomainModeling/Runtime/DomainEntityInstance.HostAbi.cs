@@ -253,12 +253,63 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Writes the linked-subscriber list the compiled
+    /// <c>Notify{Stage}Subscribers</c> body iterates. Empty becomes null so
+    /// the body's <c>!= null</c> guard skips.
+    /// </summary>
+    internal void WriteSubscriberRegistry(
+        string fieldName, IReadOnlyList<DomainEntityInstance> subscribers) {
+        ArgumentException.ThrowIfNullOrEmpty(fieldName);
+        _values[fieldName] = subscribers.Count == 0 ? null : subscribers.ToList();
+    }
+
+    /// <summary>
+    /// Drops previously filled subscriber lists so an unlink is visible on
+    /// the next Notify.
+    /// </summary>
+    internal void ClearSubscriberRegistries() {
+        foreach (var field in SubscriberRegistryFields(Entity, Domain))
+            _values[field.Name] = null;
+    }
+
+    /// <summary>
+    /// Runs the module's compiled <c>Notify{Stage}Subscribers</c> body
+    /// (registry foreach → <c>sub.When…</c>). Missing method means this
+    /// stage is not watched.
+    /// </summary>
+    internal void ExecuteNotifyStageSubscribers(
+        string targetStageName, string? previousStageName) {
+        ArgumentException.ThrowIfNullOrEmpty(targetStageName);
+        if (Domain is null)
+            return;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        RuntimeAnalysisCache.GetOrLower(
+            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        var methodName = $"Notify{targetStageName}Subscribers";
+        if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, methodName, out var method)
+            || method?.Body is null)
+            return;
+        var (tree, rootParameters) = BindModuleMethodBody(method);
+        var setArgs = new List<object?> { this };
+        foreach (var parameter in rootParameters) {
+            if (string.Equals(parameter.Name, "previousStage", StringComparison.Ordinal))
+                setArgs.Add(previousStageName);
+            else
+                setArgs.Add(null);
+        }
+        ThrowIfEffectListFailed(
+            ExecuteCachedSubscriptionTree(tree, rootParameters, setArgs),
+            "notify subscribers");
+    }
+
+    /// <summary>
     /// Executes subscription effects in this instance's context (subscriber).
     /// <paramref name="peerInstance"/> is the related entity that transitioned.
     /// When <paramref name="peerBinding"/> is set (<c>when Rel Stage as name</c>),
     /// the peer is a typed SetArgs slot after this and previousStage.
     /// Notification-only subscriptions omit the binder.
-    /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
+    /// Called from the <c>When…</c> InvokeNamed arm (the compiled Notify body
+    /// calls <c>sub.When…</c> after the store fills the registry).
     ///
     /// Subscription-triggered transitions suppress store notification via
     /// <c>_isExecutingSubscription</c> — cascading is handled by the store's

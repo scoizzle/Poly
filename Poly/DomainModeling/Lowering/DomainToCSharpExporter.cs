@@ -105,7 +105,7 @@ public sealed partial class DomainToCSharpExporter {
         foreach (var (_, subList) in subscriptionsBySubscriber) {
             var counts = new Dictionary<(string Stage, string Target, string Quantifier, bool HasPeer), int>();
             foreach (var info in subList) {
-                var hasPeer = info.Subscription.PeerBinding is { Length: > 0 };
+                var hasPeer = HasPeerBinding(info);
                 var quantifier = QuantifierName(info.Subscription.Quantifier);
                 var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
                 counts.TryGetValue(key, out var occurrence);
@@ -123,7 +123,18 @@ public sealed partial class DomainToCSharpExporter {
         _ => "Each",
     };
 
-    private static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
+    /// <summary>
+    /// Handler takes a peer argument when the subscription binds <c>when … as name</c>.
+    /// Print (overload key and call args) and simulate (When arm) share this.
+    /// </summary>
+    internal static bool HasPeerBinding(SubscriptionInfo info) =>
+        info.Subscription.PeerBinding is { Length: > 0 };
+
+    /// <summary>
+    /// <c>when all</c> handlers take the transitioning record's previous stage.
+    /// Print (call args and handler params) and simulate (When arm) share this.
+    /// </summary>
+    internal static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
         info.Subscription.Quantifier == StageSubscriptionQuantifier.All
         && info.TargetEntity.Stages.Count > 0
         && info.Subscription.StageNames.Count > 0;
@@ -492,7 +503,7 @@ public sealed partial class DomainToCSharpExporter {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
                     var notifyCalls = infos.Select(info => {
                         var args = new List<Node>();
-                        if (info.Subscription.PeerBinding is { Length: > 0 })
+                        if (HasPeerBinding(info))
                             args.Add(new ThisReference());
                         if (NeedsAllPreviousStage(info))
                             args.Add(notifyPrevious);
@@ -530,8 +541,8 @@ public sealed partial class DomainToCSharpExporter {
                     ? new Parameter("previousStage", new NamedTypeReference(targetStageEnumName))
                     : null;
                 var handlerParamList = new List<Parameter>();
-                if (peerBinding is { Length: > 0 })
-                    handlerParamList.Add(new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name)));
+                if (HasPeerBinding(info))
+                    handlerParamList.Add(new Parameter(peerBinding!, new NamedTypeReference(info.TargetEntity.Name)));
                 if (previousStageParam is not null)
                     handlerParamList.Add(previousStageParam);
                 IReadOnlyList<Parameter>? handlerParams = handlerParamList.Count > 0
@@ -545,9 +556,9 @@ public sealed partial class DomainToCSharpExporter {
                 Node handlerBody;
                 if (subscriptionEffects.Count > 0) {
                     IReadOnlyDictionary<string, Node>? peerParams = null;
-                    if (peerBinding is { Length: > 0 }) {
+                    if (HasPeerBinding(info)) {
                         peerParams = new Dictionary<string, Node>(StringComparer.Ordinal) {
-                            [peerBinding] = new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name))
+                            [peerBinding!] = new Parameter(peerBinding!, new NamedTypeReference(info.TargetEntity.Name))
                         };
                     }
                     var context = new LoweringContext(

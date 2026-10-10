@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -26,6 +27,9 @@ public sealed partial record DomainEntityInstance {
             return RuntimeCreateFactory(name, args);
 
         if (TryNotifyStageSubscribers(name, args))
+            return null;
+
+        if (TryWhenHandler(name, args))
             return null;
 
         var action = ResolveActionForNamedInvoke(name);
@@ -69,8 +73,9 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Printed stage transitions call <c>Notify{Stage}Subscribers(previousStage)</c>.
-    /// The dictionary instance has no per-stage CLR method; this is the same
-    /// store fan-out as <see cref="Notify(string, string?)"/>.
+    /// The dictionary instance has no per-stage CLR method; this routes to
+    /// <see cref="Notify(string, string?)"/> so the store can fill the
+    /// registry and run the compiled Notify body.
     /// </summary>
     private bool TryNotifyStageSubscribers(string name, object?[] args) {
         const string prefix = "Notify";
@@ -88,6 +93,91 @@ public sealed partial record DomainEntityInstance {
             previous = args[0] as string ?? args[0]?.ToString();
         Notify(stage, previous);
         return true;
+    }
+
+    /// <summary>
+    /// Compiled <c>Notify{Stage}Subscribers</c> calls <c>sub.When…</c>.
+    /// That name is not an action; this arm runs the cached subscription
+    /// body (<see cref="RuntimeAnalysisCache.TryGetSubscriptionBody"/>).
+    /// </summary>
+    private bool TryWhenHandler(string name, object?[] args) {
+        if (name.Length <= 4
+            || !name.StartsWith("When", StringComparison.Ordinal)
+            || !TryMatchWhenHandler(name, args, out var entry, out var targetStageName))
+            return false;
+
+        DomainEntityInstance peer = this;
+        string? previousStageName = null;
+        foreach (var arg in args) {
+            if (arg is DomainEntityInstance instance)
+                peer = instance;
+            else if (arg is string text)
+                previousStageName = text;
+            else if (arg is not null)
+                previousStageName = arg.ToString();
+        }
+        ExecuteSubscriptionEffects(
+            entry.Effects, peer, entry.PeerBinding,
+            planEntry: entry, targetStageName: targetStageName,
+            previousStageName: previousStageName);
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves <c>When{Any|All|Each}{Target}{Stage}</c> to the plan entry
+    /// using the same names the exporter assigned. Peer and <c>when all</c>
+    /// previousStage are overloads of that name, so the compiled call's
+    /// arguments pick the entry (print uses C# overload resolution).
+    /// </summary>
+    private bool TryMatchWhenHandler(
+        string name,
+        object?[] args,
+        out SubscriptionDispatchPlanEntry entry,
+        out string targetStageName) {
+        entry = null!;
+        targetStageName = null!;
+        if (Domain is null)
+            return false;
+        var hasPeerArg = false;
+        var hasPreviousArg = false;
+        foreach (var arg in args) {
+            if (arg is DomainEntityInstance)
+                hasPeerArg = true;
+            else
+                hasPreviousArg = true;
+        }
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var entityLookup = Domain.Types.OfType<Entity>()
+            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        var subList = new List<DomainToCSharpExporter.SubscriptionInfo>();
+        var byTarget = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
+            StringComparer.Ordinal);
+        var entityPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(Entity);
+        if (entityPlan is not null)
+            DomainToCSharpExporter.CollectSubscriptionInfo(
+                entityPlan, Entity, null, entityLookup, subList, byTarget);
+        foreach (var stage in Entity.Stages) {
+            var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage);
+            if (stagePlan is not null)
+                DomainToCSharpExporter.CollectSubscriptionInfo(
+                    stagePlan, Entity, stage.Name, entityLookup, subList, byTarget);
+        }
+        if (subList.Count == 0)
+            return false;
+        var names = DomainToCSharpExporter.BuildHandlerNames(
+            [new KeyValuePair<string, List<DomainToCSharpExporter.SubscriptionInfo>>(Entity.Name, subList)]);
+        foreach (var (info, handlerName) in names) {
+            if (!string.Equals(handlerName, name, StringComparison.Ordinal))
+                continue;
+            var wantsPeer = DomainToCSharpExporter.HasPeerBinding(info);
+            var wantsPrevious = DomainToCSharpExporter.NeedsAllPreviousStage(info);
+            if (wantsPeer != hasPeerArg || wantsPrevious != hasPreviousArg)
+                continue;
+            entry = info.Subscription;
+            targetStageName = info.StageName;
+            return true;
+        }
+        return false;
     }
 
     private Action? ResolveActionForNamedInvoke(string name) {

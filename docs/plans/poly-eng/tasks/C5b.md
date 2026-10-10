@@ -60,3 +60,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | fa994ff7 | planned | card's Files list omits the exporter/HostAbi edits print parity needs; store still matches + caps depth after C5a |
 | 2026-10-10 | implementer | grok/grok-4.6 | 9221666f | pushed | tests 3516/3516; sweep: handler Notify drives cascade; unlink drops registry |
+| 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | 8f4022b5 | NOT SHIP | https://github.com/scoizzle/Poly/pull/152#issuecomment-6100249079 (Grug NOT SHIP at 8f4022b5, 4 open findings, mode full) |
+| 2026-10-10 | implementer | grok/grok-4.6 | 01711d52 | fixes pushed | R1, R2, R3, R4; disputed: none; tests 3525/3525 |

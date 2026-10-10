@@ -224,7 +224,8 @@ public sealed partial record DomainEntityInstance {
             "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
-        // dispatches those names to Notify(stage, previousStage).
+        // dispatches those names to Notify(stage, previousStage), which fills
+        // the registry and runs the compiled body.
         foreach (var stage in entity.Stages) {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))
@@ -265,11 +266,54 @@ public sealed partial record DomainEntityInstance {
                 Body: new Block([])));
         }
 
+        var fields = SubscriberRegistryFields(entity, domain);
         return new TypeDefinitionNode(
             Name: entity.Name,
             Properties: [.. propDefs],
             Methods: [.. methods],
+            Fields: fields.Count == 0 ? null : fields,
             Namespace: null);
+    }
+
+    /// <summary>
+    /// Registry field the compiled <c>Notify{Stage}Subscribers</c> body
+    /// iterates: <c>_{source}{stage}Subscribers</c>. Default null so a
+    /// missing bag key compares as null.
+    /// </summary>
+    internal static string SubscriberRegistryFieldName(string sourceEntityName, string stageName) =>
+        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{stageName}Subscribers";
+
+    private static List<FieldDefinitionNode> SubscriberRegistryFields(Entity entity, Domain? domain) {
+        var fields = new List<FieldDefinitionNode>();
+        if (domain is null)
+            return fields;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subscriber in domain.Types.OfType<Entity>()) {
+            void Consider(SubscriptionDispatchPlanMetadata? plan) {
+                if (plan is null)
+                    return;
+                foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
+                    if (!string.Equals(entry.TargetEntityName, entity.Name, StringComparison.Ordinal))
+                        continue;
+                    foreach (var stageName in entry.StageNames) {
+                        var fieldName = SubscriberRegistryFieldName(subscriber.Name, stageName);
+                        if (!seen.Add(fieldName))
+                            continue;
+                        fields.Add(new FieldDefinitionNode(
+                            fieldName,
+                            new OptionalTypeReference(
+                                new NamedTypeReference("List",
+                                    TypeArguments: [new NamedTypeReference(subscriber.Name)])),
+                            DefaultValue: new Constant(null!)));
+                    }
+                }
+            }
+            Consider(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(subscriber));
+            foreach (var stage in subscriber.Stages)
+                Consider(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage));
+        }
+        return fields;
     }
 
     /// <summary>

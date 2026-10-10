@@ -1,5 +1,5 @@
 # TASK C4c - Constraints on set; enum value check
-Status: planned. Branch slice/c4c-plan-ahead. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c4c-plan-ahead. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Depends on C2b (#136 `10e6570a`) and E1 (#133 `71fef08f`); both are on master. C4b (#139, unique-on-create) is in review and is NOT a dependency of this slice. Decision 11 (every mutation enforces every invariant) and decision 12 (enum checks compile as trees) are settled (plan §19, `pipeline-convergence-plan.md:1064-1065`).
@@ -62,3 +62,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode/deepseek-v4.1-flash | `592a137f` | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | `af64777d` | pushed | tests 3486/3486; sweep: SetProperty internal; enum Member+NotEqual on create and assign |

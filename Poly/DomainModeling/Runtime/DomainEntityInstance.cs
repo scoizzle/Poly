@@ -362,30 +362,14 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Action resolution missed. Distinguish a genuinely-unknown action from one
-    /// that exists but is stage-scoped to a different stage than the current one —
-    /// the latter is reported precisely ("only available in stage 'X'") instead of
-    /// the misleading "not found on entity", matching the export's guard message.
+    /// Action resolution missed. An action that exists on a different stage
+    /// is "only available in stage 'X'" via Entity.Stages; otherwise Missing.
     /// </summary>
-    private ActionInvocationResult ReportUnresolvedAction(string actionName, AnalysisResult? runtimeAnalysis) {
-        string? stageName = null;
-        if (Domain is not null && runtimeAnalysis is not null) {
-            var arm = runtimeAnalysis.GetActionResolution(Domain, Entity);
-            if (arm is not null) {
-                foreach (var (stage, actions) in arm.StageActions) {
-                    if (actions.ContainsKey(actionName)) {
-                        stageName = stage;
-                        break;
-                    }
-                }
-            }
-        }
-        else {
-            stageName = Entity.Stages
-                .FirstOrDefault(s => s.Actions.Any(a =>
-                    string.Equals(a.Name, actionName, StringComparison.Ordinal)))
-                ?.Name;
-        }
+    private ActionInvocationResult ReportUnresolvedAction(string actionName) {
+        var stageName = Entity.Stages
+            .FirstOrDefault(s => s.Actions.Any(a =>
+                string.Equals(a.Name, actionName, StringComparison.Ordinal)))
+            ?.Name;
         return stageName is not null
             ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageName)
             : ActionInvocationResult.Missing(Entity.Name, actionName);
@@ -595,31 +579,21 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Core action execution after args have been injected into <see cref="_values"/>.
-    /// Domain-bound: catalog/helpers only; missing action map or stage structure throws.
+    /// Domain-bound: <see cref="RuntimeAnalysisCache.Index"/> method then
+    /// <see cref="ResolveStandaloneAction"/> for the ontology action.
     /// Standalone: structural entity/stage lookup only (reduced contract).
     /// </summary>
     private ActionInvocationResult InvokeActionInternal(
         string actionName,
         IReadOnlyDictionary<string, object?>? args,
         List<string> injectedKeys) {
-        AnalysisResult? runtimeAnalysis = null;
-        Action? action;
-
-        if (Domain is not null) {
-            runtimeAnalysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            // Fail closed: domain-bound dispatch requires catalog action map (no scan).
-            if (runtimeAnalysis.GetActionResolution(Domain, Entity) is null)
-                throw new InvalidOperationException(
-                    $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} action map for entity '{Entity.Name}' in domain '{Domain.Name}'.");
-            runtimeAnalysis.TryResolveAction(Domain, Entity, CurrentStage, actionName, out action);
-        }
-        else {
-            // Standalone reduced contract — structural SA only (see type remarks).
-            action = ResolveStandaloneAction(actionName);
-        }
+        MethodDefinitionNode? method = null;
+        if (Domain is not null)
+            method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, actionName);
+        var action = ResolveStandaloneAction(actionName);
 
         if (action is null)
-            return ReportUnresolvedAction(actionName, runtimeAnalysis);
+            return ReportUnresolvedAction(actionName);
 
         var declared = action.Parameters
             .Select(p => p.Name)
@@ -656,12 +630,7 @@ public sealed partial record DomainEntityInstance {
         // same tree. Without a module method (no Domain, or no body for this action)
         // both the action and the stage policies are checked here.
         var failures = new List<string>();
-        if (Domain is not null) {
-            RuntimeAnalysisCache.GetOrLower(Domain);
-        }
-        var moduleOwnsRequire = Domain is not null
-            && RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var moduleMethod)
-            && moduleMethod?.Body is not null;
+        var moduleOwnsRequire = method?.Body is not null;
         if (!moduleOwnsRequire) {
             foreach (var guard in action.Policies)
                 if (!EvaluatePolicy(guard)) failures.Add(guard.Name);
@@ -671,12 +640,7 @@ public sealed partial record DomainEntityInstance {
         }
 
         Stage? stage = null;
-        if (runtimeAnalysis is not null && CurrentStage is not null) {
-            if (!runtimeAnalysis.TryGetStage(Entity, CurrentStage, out stage) || stage is null)
-                throw new InvalidOperationException(
-                    $"Stage '{CurrentStage}' not resolvable for entity '{Entity.Name}' during action dispatch.");
-        }
-        else if (Domain is null && CurrentStage is not null) {
+        if (Domain is null && CurrentStage is not null) {
             // Standalone reduced contract: stage policies from Entity.Stages only.
             stage = Entity.Stages.FirstOrDefault(
                 s => string.Equals(s.Name, CurrentStage, StringComparison.Ordinal));

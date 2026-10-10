@@ -39,9 +39,10 @@ public sealed partial record DomainEntityInstance {
     // ── Private helpers ─────────────────────────────────────────
 
     /// <summary>
-    /// Standalone (<see cref="Domain"/> null) action resolve: structural stage then
-    /// entity actions with SA fallthrough (empty stage-copy → entity action).
-    /// Parameters are ignored in the empty-copy predicate (same as catalog path).
+    /// Structural (catalog-free) action resolve used by Domain-bound dispatch and
+    /// standalone (<see cref="Domain"/> null): stage then entity actions with SA
+    /// fallthrough (empty stage-copy → entity action). Parameters are ignored in
+    /// the empty-copy predicate (same as catalog path).
     /// </summary>
     private Action? ResolveStandaloneAction(string actionName) {
         Action? stageAction = null;

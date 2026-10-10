@@ -1501,8 +1501,9 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task EntityLevelAndStageSubscription_StageFirstThenEntityLevel() {
-        // Dispatch order: stage-scoped effects run before entity-level for the same notify.
+    public async Task EntityLevelAndStageSubscription_CompiledNotifyBodyOrder() {
+        // Compiled Notify{Stage}Subscribers calls entity-level When… then
+        // stage-scoped When… (module collection order). Last writer wins.
         var tracker = new Entity("Tracker", [
             new Property("Status", new DomainTypeReference("Text"), [])
         ], [], [], [
@@ -1553,8 +1554,8 @@ public class DomainEntityInstanceTests {
 
         orderInstance.InvokeAction("Activate");
 
-        // Last writer wins: entity-level after stage → ENTITY
-        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("ENTITY");
+        // Last writer wins: stage-scoped after entity-level → STAGE
+        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("STAGE");
     }
 
     [Test]

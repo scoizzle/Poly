@@ -83,8 +83,19 @@ public class WhenAnySimulatePrintAgreeTests {
         await Assert.That(loan1.InvokeAction("Overdue").Succeeded).IsTrue();
         await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
 
+        IDictionary<string, object?> bag = loan1;
+        await Assert.That(bag.ContainsKey("_patronOverdueSubscribers")).IsTrue();
+        var registry = bag["_patronOverdueSubscribers"] as System.Collections.IList;
+        await Assert.That(registry).IsNotNull();
+        await Assert.That(registry!.Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(registry[0], patron)).IsTrue();
+
         patron.SetProperty("Flag", "NONE");
         await Assert.That(loan2.InvokeAction("Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+
+        patron.SetProperty("Flag", "NONE");
+        patron.InvokeNamed("WhenAnyLoanOverdue", []);
         await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
     }
 

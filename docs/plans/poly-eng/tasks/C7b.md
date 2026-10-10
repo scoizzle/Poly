@@ -1,5 +1,5 @@
 # TASK C7b - Three action-by-name lookups use the index
-Status: in review. Branch slice/c7b-plan-v2. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c7b-plan-v2. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 C7a (merged `#150` `3b53f0fa`) left 15 `GetOrAnalyze` call sites (16 `git grep` hits including the definition at `RuntimeAnalysisCache.cs:82`). The three action-by-name sites still resolve through analysis ARM + `TryResolveAction` (stage-first, SA empty-copy at run time): `InvokeActionInternal` `DomainEntityInstance.cs:609-614`, `ResolveActionForNamedInvoke` `InvokeNamed.cs:185-187`, and the unresolved arm `InvokeNamed.cs:44-47` (feeds `ReportUnresolvedAction`). Compile already bakes that fallthrough into one method per name (`AddStageDispatchedActionMethod` `DomainToCSharpExporter.Actions.cs:126-138`). This slice is the first `CatalogIndex` consumer: those three sites look up `index.Method(Entity.Name, actionName)` after Lower, drop their `GetOrAnalyze`, and keep `ResolveStandaloneAction` for the ontology `Action` (params/result). `GetOrLower(Domain)` (`RuntimeAnalysisCache.cs:101-104`) does not fill `Session.ArtifactCatalog` (only `DomainSession.Lower` `:181-187` does), so add `Index(Domain)` next to that accessor that Lowers then `new CatalogIndex(session.ArtifactCatalog)`.
@@ -55,3 +55,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | grok/grok-4.6 | 3b53f0fa | planned | - |
 | 2026-10-10 | implementer | grok/grok-4.6 | 5b795c31 | pushed | tests 3517/3517; sweep: Index.Method not a gate; remaining GetOrAnalyze listed |
+| 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | e2387c1c | NOT SHIP | https://github.com/scoizzle/Poly/pull/153#issuecomment-6100109115 (Grug NOT SHIP at e2387c1c, 2 open findings, mode full) |
+| 2026-10-10 | implementer | grok/grok-4.6 | 0b571dc4 | fixes pushed | R1, R2; disputed: none; tests 3517/3517 |

@@ -58,7 +58,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
         var arguments = values.Select(v => {
             var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;
             var prop = model.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, v.Name, StringComparison.Ordinal));
+                string.Equals(p.Name, v.Name, StringComparison.OrdinalIgnoreCase));
             var printed = prop is not null ? assembly.GetType(prop.Type.TypeName) : null;
             if (printed is not null)
                 value = Materialize(value, printed);

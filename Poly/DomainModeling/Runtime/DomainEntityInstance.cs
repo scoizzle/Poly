@@ -588,16 +588,9 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyDictionary<string, object?>? args,
         List<string> injectedKeys) {
         MethodDefinitionNode? method = null;
-        Action? action;
-
-        if (Domain is not null) {
+        if (Domain is not null)
             method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, actionName);
-            action = ResolveStandaloneAction(actionName);
-        }
-        else {
-            // Standalone reduced contract — structural SA only (see type remarks).
-            action = ResolveStandaloneAction(actionName);
-        }
+        var action = ResolveStandaloneAction(actionName);
 
         if (action is null)
             return ReportUnresolvedAction(actionName);

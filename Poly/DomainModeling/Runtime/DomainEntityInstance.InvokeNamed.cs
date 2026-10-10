@@ -169,10 +169,8 @@ public sealed partial record DomainEntityInstance {
         foreach (var (info, handlerName) in names) {
             if (!string.Equals(handlerName, name, StringComparison.Ordinal))
                 continue;
-            var wantsPeer = info.Subscription.PeerBinding is { Length: > 0 };
-            var wantsPrevious = info.Subscription.Quantifier == StageSubscriptionQuantifier.All
-                && info.TargetEntity.Stages.Count > 0
-                && info.Subscription.StageNames.Count > 0;
+            var wantsPeer = DomainToCSharpExporter.HasPeerBinding(info);
+            var wantsPrevious = DomainToCSharpExporter.NeedsAllPreviousStage(info);
             if (wantsPeer != hasPeerArg || wantsPrevious != hasPreviousArg)
                 continue;
             entry = info.Subscription;

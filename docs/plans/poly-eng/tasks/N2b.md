@@ -1,5 +1,5 @@
 # TASK N2b - Database libraries register their own DbContext artifact
-Status: planned. Branch slice/n2b-dbcontext-registers. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/n2b-dbcontext-registers. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
 ## Scope
 N2 (merged `592a137f`, #138) moved the HTTP host contributor into `HttpLibrary`. The follow-up half moves the DbContext contributor the same way. `DslCompiler.OpenCompileSession` still registers it from a post-loop id check (`src/Poly.DslCompiler/DslCompiler.cs:290-291`). Add an optional `IArtifactContributor` to the database libraries and have `Register` call `SessionBuilder.AddArtifactContributor` (`Poly/DomainModeling/Compile/SessionBuilder.cs:52-56`), mirroring `HttpLibrary` (`Poly/DomainModeling/Libraries/Http/HttpLibrary.cs:11-25`). `OpenCompileSession` then loads `persistence`, `sqlite`, `sqlserver` with `new DbContextArtifactContributor()` at Load (`:285-288`), and the post-loop is deleted. Per Scot's decision 19 (2026-10-09): the database library registers its own DbContext artifact, with the database kind read from the loaded libraries, exactly as Http registers `demo.http`. `DbContextArtifactContributor` stays in Compile (`DbContextArtifactContributor.cs:12`); `ProductCatalog` (`src/Poly.Packs.Product/ProductCatalog.cs:12-15`) keeps contributor-less instances so MCP is unchanged.
 ## Files
@@ -46,3 +46,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode/deepseek-v4.1-flash | 592a137f | planned | - |
+| 2026-10-09 | implementer | grok/grok-4.6 | 740cb109 | pushed | tests 3477/3477; sweep: post-loop gone; Register adds DbContext |

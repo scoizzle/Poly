@@ -777,6 +777,11 @@ public sealed partial class DomainToCSharpExporter {
                     new NamedTypeReference(entity.Name),
                     ctorParams.Select(p => new Parameter(p.Name)).ToArray())));
 
+            var uniqueCheck = new Variable("uniqueCheck");
+            var uniqueChecks = BuildCreateUniqueChecks(
+                entity, esm.EntryAssignedPropertyNames, createdLocal, createResultType, uniqueCheck);
+            createSuccessNodes.AddRange(uniqueChecks);
+
             var lookup = metadata.GetTypeLookup(domain);
             foreach (var navParam in esm.ConstructorParameters
                 .Where(p => p.IsNavigation && !p.IsCollection)) {
@@ -821,7 +826,8 @@ public sealed partial class DomainToCSharpExporter {
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Block(createSuccessNodes, [createdLocal]),
+                Body: new Block(createSuccessNodes,
+                    uniqueChecks.Count > 0 ? [createdLocal, uniqueCheck] : [createdLocal]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));

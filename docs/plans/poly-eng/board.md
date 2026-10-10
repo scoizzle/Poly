@@ -18,6 +18,7 @@ Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Ol
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
+| [#139](https://github.com/scoizzle/Poly/pull/139) | C4b: Unique on create in the factory tree | B | — | — | In review. [tasks/C4b.md](tasks/C4b.md) |
 | [#138](https://github.com/scoizzle/Poly/pull/138) | N2: Http library registers its own contributor | A | — | — | Plan only; implementation follows on this branch. [tasks/N2.md](tasks/N2.md) |
 | [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | In review. [tasks/C2b.md](tasks/C2b.md) |
 | [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |

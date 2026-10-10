@@ -79,6 +79,11 @@ public class Lead
             return DomainResult<Lead>.Failure("'Name' is required.");
         }
         var created = new Lead(company, email, name, account);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Lead>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Lead>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

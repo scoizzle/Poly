@@ -4,7 +4,7 @@
 
 V1 to V11 are all answered. V1–V9 and V11 as recommended; V10 as the revised scope below (an earlier answer rested on a false premise and was replaced). Standing approval in V11 does not release any wave (the release rule).
 
-Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Five older ones (13, 16, 18, 19, 20) are still open; each is asked only when its lane reaches it.
+Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Three older ones (16, 18, 20) are still open; each is asked only when its lane reaches it. Decision 13 (function body form) and decision 19 (registering contributors) were answered 2026-10-09.
 
 Each entry says what it is in plain English, the options, the recommendation, what it blocked, and the answer.
 
@@ -209,9 +209,31 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 ---
 
+## Scot's answers, 2026-10-09
+
+### Decision 13. Function body form
+
+**Answer (Scot, 2026-10-09 15:41 CDT):** a `DomainFunction` body is a single expression.
+
+**What it is.** F1 adds `DomainFunction(Name, Parameters, ReturnType, Body)` on `Domain`. The body had to be one form before the record could be written.
+
+**Blocks.** F1 (now unblocked).
+
+---
+
+### Decision 19. Registering contributors
+
+**Answer (Scot, 2026-10-09 15:41 CDT):** yes, the database library registers its own DbContext artifact, with the database kind read from loaded libraries the same way Http registers `demo.http`.
+
+**What it is.** N2 did the Http half: `HttpLibrary` registers `MinimalApiHostArtifactContributor`. The DbContext `AddArtifactContributor` in `DslCompiler.OpenCompileSession` waited on this answer. N2b is that remaining half.
+
+**Blocks.** N2 (merged as Http half); N2b is the DbContext half.
+
+---
+
 ## Parked, not asking now
 
-- Decision 13 (function body form) before F1. Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 19 (registering contributors) before N2. Decision 20 (rename scope) before R2.
+- Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 20 (rename scope) before R2.
 - Pulling "tests and spec exports" (A7) forward for sellability: recommended not now, because nothing consumes them yet. The sellable-proof scenario (author, compile, run on sqlite, replay over `demo.http`) needs no code and runs after wave 1.
 
 ## What did not need to be asked

@@ -184,6 +184,11 @@ public class Guest
             return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Guest>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()

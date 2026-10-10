@@ -42,6 +42,8 @@ internal sealed class DomainMutationContext {
 
     public List<string> Extensions { get; }
 
+    public List<DomainFunction> Functions { get; }
+
     /// <summary>
     /// Nodes replaced or added during this mutation batch (Update* helpers and direct additions).
     /// </summary>
@@ -59,13 +61,15 @@ internal sealed class DomainMutationContext {
         ImportedContracts = new List<ImportedContract>(source.ImportedContracts);
         ContractBindings = new List<ContractBinding>(source.ContractBindings);
         Extensions = new List<string>(source.Extensions);
+        Functions = new List<DomainFunction>(source.Functions);
         _mutationIndex = mutationIndex;
     }
 
     public Domain ToDomain() => new Domain(DomainName, Types) {
         ImportedContracts = ImportedContracts,
         ContractBindings = ContractBindings,
-        Extensions = Extensions
+        Extensions = Extensions,
+        Functions = Functions
     };
 
     // --- Generic list helpers for ApplyTo methods ---

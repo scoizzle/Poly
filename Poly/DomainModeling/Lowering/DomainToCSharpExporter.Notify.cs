@@ -445,14 +445,46 @@ public sealed partial class DomainToCSharpExporter {
                         }
                         break;
 
-                        // DefaultValueConstraint and UniqueConstraint
-                        // are not validated at factory time:
-                        //   • Default → already handled (only non-default props are params)
-                        //   • Unique  → requires store awareness
+                        // DefaultValueConstraint is not a factory If:
+                        // defaulted props are optional params; the ctor applies the default.
                 }
             }
         }
 
+        return checks;
+    }
+
+    /// <summary>
+    /// After <c>created = new</c>, one <c>created.EnsureUnique</c> / Failure
+    /// block per unique constructor-parameter property. Create is static, so
+    /// the call is on <paramref name="created"/>, not <c>this</c>.
+    /// </summary>
+    private static List<Node> BuildCreateUniqueChecks(
+        Entity entity,
+        IReadOnlySet<string> entryAssignedProps,
+        Node created,
+        NamedTypeReference resultType,
+        Variable uniqueCheck) {
+        var checks = new List<Node>();
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            if (entryAssignedProps.Contains(prop.Name)) continue;
+            if (!prop.Constraints.OfType<UniqueConstraint>().Any()) continue;
+
+            var paramRef = new Parameter(ToCamelCase(prop.Name));
+            checks.Add(new Assignment(uniqueCheck, new Invoke(
+                new Member(created, "EnsureUnique"),
+                new Constant(prop.Name),
+                paramRef)));
+            checks.Add(new IfStatement(
+                new Syntactic.Not(new Member(uniqueCheck, "IsSuccess")),
+                new Block([
+                    new Return(new Invoke(
+                        new Member(resultType, "Failure"),
+                        new Syntactic.Coalesce(
+                            new Member(uniqueCheck, "ErrorMessage"),
+                            new Constant(""))))
+                ])));
+        }
         return checks;
     }
 

@@ -179,6 +179,11 @@ public class Room
             return DomainResult<Room>.Failure("'Number' must be at most 8 characters.");
         }
         var created = new Room(floor, maxOccupancy, nightlyRate, number, property, roomType, stays, dirty, occupied, offline);
+        var uniqueCheck = created.EnsureUnique("Number", number);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Room>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         if (property != null)
         {
             property.AttachRooms(created);

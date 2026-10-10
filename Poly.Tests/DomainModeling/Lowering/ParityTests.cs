@@ -291,6 +291,26 @@ public class ParityTests {
         }
         """;
 
+    const string PeerReadDsl = """
+        domain Watch
+        Paper: entity {
+          Title: Text
+          A: stage {
+            Advance: action { transition to B }
+          }
+          B: stage { }
+        }
+        Tr: entity {
+          Label: Text default("")
+          Tracks: Paper
+          P: stage {
+            when Tracks B as paper {
+              assign Label to paper Title
+            }
+          }
+        }
+        """;
+
     // A stage-scoped subscription whose handler transitions the subscriber.
     [Test]
     public async Task Invoke_WhenTrackedPeerTransitions_SubscriberTransitionsToo() {
@@ -320,6 +340,20 @@ public class ParityTests {
             });
         await Assert.That(outcomes[5].State["Stage"]).IsEqualTo("Q");
         await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("Q");
+    }
+
+    [Test]
+    public async Task Invoke_WhenPeerHandlerReadsPeerProperty_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(PeerReadDsl, "ParityPeerRead")
+            .AssertAgree(side => {
+                var paper = side.Create("Paper", ("Title", "hello"));
+                var tr = side.Create("Tr", ("Tracks", paper));
+                side.Use(paper);
+                side.Invoke("Advance");
+                side.Use(tr);
+            });
+        await Assert.That(outcomes[1].State["Label"]).IsEqualTo("");
+        await Assert.That(outcomes[4].State["Label"]).IsEqualTo("hello");
     }
 
     const string EqualityDsl = """

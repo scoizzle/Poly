@@ -256,8 +256,8 @@ public sealed partial record DomainEntityInstance {
     /// Executes subscription effects in this instance's context (subscriber).
     /// <paramref name="peerInstance"/> is the related entity that transitioned.
     /// When <paramref name="peerBinding"/> is set (<c>when Rel Stage as name</c>),
-    /// path-prefix roots equal to that name resolve against the peer bag before
-    /// lowering (notification-only subscriptions omit the binder).
+    /// the peer is a typed SetArgs slot after this and previousStage.
+    /// Notification-only subscriptions omit the binder.
     /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
     ///
     /// Subscription-triggered transitions suppress store notification via
@@ -290,7 +290,7 @@ public sealed partial record DomainEntityInstance {
                 Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
             // Domain-bound: run the module handler cached at GetOrLower (same tree print emits).
-            // Miss or missing plan entry throws — never BindPeerInEffect + LowerActionBody.
+            // Miss or missing plan entry throws. Bound peer is a typed SetArgs slot.
             if (planEntry is null)
                 throw new InvalidOperationException(
                     $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
@@ -303,14 +303,19 @@ public sealed partial record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Subscription body is missing on entity '{Entity.Name}'.");
             var cached = body;
-            if (peerBinding is { Length: > 0 })
-                cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            // C1a: previousStage is a real SetArgs slot after this (when the handler declares it).
-            var rootParameters = ContainsPreviousStageParameter(cached)
-                ? (IReadOnlyList<Parameter>)[new Parameter("previousStage")]
-                : [];
+            var rootParameters = new List<Parameter>();
+            var setArgs = new List<object?> { this };
+            if (ContainsPreviousStageParameter(cached)) {
+                rootParameters.Add(new Parameter("previousStage"));
+                setArgs.Add(previousStageName);
+            }
+            if (peerBinding is { Length: > 0 }) {
+                rootParameters.Add(new Parameter(
+                    peerBinding, new NamedTypeReference(peerInstance.Entity.Name)));
+                setArgs.Add(peerInstance);
+            }
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, rootParameters, previousStageName),
+                ExecuteCachedSubscriptionTree(cached, rootParameters, setArgs),
                 "subscription");
         }
         finally {
@@ -321,13 +326,9 @@ public sealed partial record DomainEntityInstance {
     private DomainResult? ExecuteCachedSubscriptionTree(
         Node tree,
         IReadOnlyList<Parameter> rootParameters,
-        string? previousStageName) {
+        IReadOnlyList<object?> setArgs) {
         var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
-        var setArgs = new object?[1 + rootParameters.Count];
-        setArgs[0] = this;
-        if (rootParameters.Count > 0)
-            setArgs[1] = previousStageName;
         try {
             using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
@@ -349,142 +350,6 @@ public sealed partial record DomainEntityInstance {
         }
         return false;
     }
-
-    /// <summary>
-    /// Substitutes peer <see cref="Parameter"/> reads in a GetOrLower-cached
-    /// subscription tree with constants from the transitioned peer bag — not a re-lower.
-    /// </summary>
-    private static Node MaterializePeerInSyntax(
-        Node node, string peerBinding, DomainEntityInstance peer) => node switch {
-            Member { Value: Parameter p } m
-                when string.Equals(p.Name, peerBinding, StringComparison.Ordinal) =>
-                new Constant(peer.GetProperty<object?>(m.MemberName)),
-            Parameter p when string.Equals(p.Name, peerBinding, StringComparison.Ordinal) =>
-                new Constant(peer),
-            // Non-peer parameters (entity subject, loop vars, etc.) — leave unchanged.
-            Parameter => node,
-            Block b => new Block(
-                b.Nodes.Select(n => MaterializePeerInSyntax(n, peerBinding, peer)),
-                b.Variables.Select(n => MaterializePeerInSyntax(n, peerBinding, peer))),
-            IfStatement i => new IfStatement(
-                MaterializePeerInSyntax(i.Condition, peerBinding, peer),
-                MaterializePeerInSyntax(i.ThenBranch, peerBinding, peer),
-                i.ElseBranch is null ? null : MaterializePeerInSyntax(i.ElseBranch, peerBinding, peer)),
-            Return r => r.Value is null ? r : new Return(MaterializePeerInSyntax(r.Value, peerBinding, peer)),
-            Assignment a => new Assignment(
-                MaterializePeerInSyntax(a.Destination, peerBinding, peer),
-                MaterializePeerInSyntax(a.Value, peerBinding, peer)),
-            Invoke inv => new Invoke(
-                MaterializePeerInSyntax(inv.Delegate, peerBinding, peer),
-                [.. inv.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]) {
-                TypeArguments = inv.TypeArguments
-            },
-            Member m => new Member(MaterializePeerInSyntax(m.Value, peerBinding, peer), m.MemberName),
-            Poly.Ast.Nodes.Not n => new Poly.Ast.Nodes.Not(MaterializePeerInSyntax(n.Value, peerBinding, peer)),
-            Equal e => new Equal(
-                MaterializePeerInSyntax(e.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(e.RightHandValue, peerBinding, peer)),
-            NotEqual ne => new NotEqual(
-                MaterializePeerInSyntax(ne.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(ne.RightHandValue, peerBinding, peer)),
-            LessThan lt => new LessThan(
-                MaterializePeerInSyntax(lt.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(lt.RightHandValue, peerBinding, peer)),
-            LessThanOrEqual le => new LessThanOrEqual(
-                MaterializePeerInSyntax(le.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(le.RightHandValue, peerBinding, peer)),
-            GreaterThan gt => new GreaterThan(
-                MaterializePeerInSyntax(gt.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(gt.RightHandValue, peerBinding, peer)),
-            GreaterThanOrEqual ge => new GreaterThanOrEqual(
-                MaterializePeerInSyntax(ge.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(ge.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.Add add => new Poly.Ast.Nodes.Add(
-                MaterializePeerInSyntax(add.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(add.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.Subtract sub => new Poly.Ast.Nodes.Subtract(
-                MaterializePeerInSyntax(sub.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(sub.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.Multiply mul => new Poly.Ast.Nodes.Multiply(
-                MaterializePeerInSyntax(mul.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(mul.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.Divide div => new Poly.Ast.Nodes.Divide(
-                MaterializePeerInSyntax(div.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(div.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.And and => new Poly.Ast.Nodes.And(
-                MaterializePeerInSyntax(and.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(and.RightHandValue, peerBinding, peer)),
-            Poly.Ast.Nodes.Or or => new Poly.Ast.Nodes.Or(
-                MaterializePeerInSyntax(or.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(or.RightHandValue, peerBinding, peer)),
-            Coalesce c => new Coalesce(
-                MaterializePeerInSyntax(c.LeftHandValue, peerBinding, peer),
-                MaterializePeerInSyntax(c.RightHandValue, peerBinding, peer)),
-            Conditional cond => new Conditional(
-                MaterializePeerInSyntax(cond.Condition, peerBinding, peer),
-                MaterializePeerInSyntax(cond.IfTrue, peerBinding, peer),
-                MaterializePeerInSyntax(cond.IfFalse, peerBinding, peer)),
-            ForEachLoop f => new ForEachLoop(
-                f.LoopVariable,
-                MaterializePeerInSyntax(f.Collection, peerBinding, peer),
-                MaterializePeerInSyntax(f.Body, peerBinding, peer),
-                f.Label),
-            WhileLoop w => new WhileLoop(
-                MaterializePeerInSyntax(w.Condition, peerBinding, peer),
-                MaterializePeerInSyntax(w.Body, peerBinding, peer),
-                w.Label),
-            DoWhileLoop dw => new DoWhileLoop(
-                MaterializePeerInSyntax(dw.Body, peerBinding, peer),
-                MaterializePeerInSyntax(dw.Condition, peerBinding, peer),
-                dw.Label),
-            ForLoop fl => new ForLoop(
-                fl.Initializer is null ? null : MaterializePeerInSyntax(fl.Initializer, peerBinding, peer),
-                fl.Condition is null ? null : MaterializePeerInSyntax(fl.Condition, peerBinding, peer),
-                fl.Increment is null ? null : MaterializePeerInSyntax(fl.Increment, peerBinding, peer),
-                MaterializePeerInSyntax(fl.Body, peerBinding, peer),
-                fl.Label),
-            TryCatchFinally tcf => new TryCatchFinally(
-                MaterializePeerInSyntax(tcf.TryBlock, peerBinding, peer),
-                tcf.CatchClauses?.Select(c => new CatchClause(
-                    c.ExceptionType is null ? null : MaterializePeerInSyntax(c.ExceptionType, peerBinding, peer),
-                    c.VariableName,
-                    MaterializePeerInSyntax(c.Body, peerBinding, peer))).ToList(),
-                tcf.FinallyBlock is null ? null : MaterializePeerInSyntax(tcf.FinallyBlock, peerBinding, peer)),
-            UsingStatement us => new UsingStatement(
-                MaterializePeerInSyntax(us.Resource, peerBinding, peer),
-                MaterializePeerInSyntax(us.Body, peerBinding, peer)),
-            New n => new New(
-                MaterializePeerInSyntax(n.Type, peerBinding, peer),
-                [.. n.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]),
-            ThrowStatement ts => new ThrowStatement(MaterializePeerInSyntax(ts.Exception, peerBinding, peer)),
-            TypeCast tc => new TypeCast(
-                MaterializePeerInSyntax(tc.Operand, peerBinding, peer),
-                MaterializePeerInSyntax(tc.TargetTypeReference, peerBinding, peer),
-                tc.IsChecked),
-            TypeIs ti => new TypeIs(
-                MaterializePeerInSyntax(ti.Operand, peerBinding, peer),
-                MaterializePeerInSyntax(ti.TargetTypeReference, peerBinding, peer)),
-            TypeAs ta => new TypeAs(
-                MaterializePeerInSyntax(ta.Operand, peerBinding, peer),
-                MaterializePeerInSyntax(ta.TargetTypeReference, peerBinding, peer)),
-            IndexAccess ia => new IndexAccess(
-                MaterializePeerInSyntax(ia.Value, peerBinding, peer),
-                [.. ia.Arguments.Select(a => MaterializePeerInSyntax(a, peerBinding, peer))]),
-            UnaryMinus um => new UnaryMinus(MaterializePeerInSyntax(um.Operand, peerBinding, peer)),
-            NullForgiving nf => new NullForgiving(MaterializePeerInSyntax(nf.Operand, peerBinding, peer)),
-            LabelDeclaration ld => new LabelDeclaration(
-                ld.Name, MaterializePeerInSyntax(ld.Statement, peerBinding, peer)),
-            Default d => d.TargetType is null
-                ? d
-                : new Default(MaterializePeerInSyntax(d.TargetType, peerBinding, peer)),
-            BreakStatement or ContinueStatement or GotoStatement
-                or Variable or Constant or NamedTypeReference or TypeReference
-                or PrimitiveTypeReference or ClrTypeReference or ThisReference
-                or Comment => node,
-            _ => throw new InvalidOperationException(
-                $"MaterializePeerInSyntax: unhandled node type '{node.GetType().Name}' " +
-                $"(peer binding '{peerBinding}').")
-        };
 
     /// <summary>
     /// VM-called Store jobs for lowered create / create-in (body and probes).
@@ -590,24 +455,6 @@ public sealed partial record DomainEntityInstance {
         store = new DomainInstanceStore();
         store.Add(this);
         return store;
-    }
-
-    /// <summary>
-    /// After bare <c>create Type</c> (no relationship name), if this source owns
-    /// exactly one many-rel targeting that type, link outbound and reverse like create-in.
-    /// Ambiguous or absent matches leave the child registered but unlinked.
-    /// </summary>
-    internal void TryAutoLinkUnambiguousOutbound(DomainEntityInstance child, Entity targetEntity) {
-        if (Store is null) return;
-        var outs = Entity.Navigations
-            .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany
-                or RelationshipCardinality.ManyToMany)
-                && string.Equals(n.Target.TypeName, targetEntity.Name, StringComparison.Ordinal))
-            .ToList();
-        if (outs.Count != 1)
-            return;
-        Store.Link(outs[0].Name, this, child);
-        TryLinkCreateInBackReference(child);
     }
 
     /// <summary>

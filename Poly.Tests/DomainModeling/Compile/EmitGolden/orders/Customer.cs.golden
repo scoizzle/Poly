@@ -367,7 +367,7 @@ public class Customer
         }
         if (typeName == "Order")
         {
-            var typed = Order.Create((values.ContainsKey("CancelReason") ? (string?)values["CancelReason"] ?? "" : ""), (values.ContainsKey("Discount") ? (long?)values["Discount"] ?? 0L : 0L), (values.ContainsKey("Total") ? (long?)values["Total"] ?? 0L : 0L), this, new List<OrderItem>(), (values.ContainsKey("State") ? (OrderState?)values["State"] ?? OrderState.Pending : OrderState.Pending));
+            var typed = Order.Create((values.ContainsKey("CancelReason") ? (string?)values["CancelReason"] ?? "" : ""), (values.ContainsKey("Discount") ? (long?)values["Discount"] ?? 0L : 0L), (values.ContainsKey("Total") ? (long?)values["Total"] ?? 0L : 0L), (values.ContainsKey("customer") ? (Customer?)values["customer"] ?? null : null), new List<OrderItem>(), (values.ContainsKey("State") ? (OrderState?)values["State"] ?? OrderState.Pending : OrderState.Pending));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

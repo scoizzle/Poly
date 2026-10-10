@@ -522,7 +522,7 @@ public class Guest
         }
         if (typeName == "Reservation")
         {
-            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), this, (values.ContainsKey("room") ? (Room?)values["room"] ?? null : null));
+            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("room") ? (Room?)values["room"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -546,7 +546,7 @@ public class Guest
         }
         if (typeName == "EventHold")
         {
-            var typed = EventHold.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("EndDate") ? (DateOnly?)values["EndDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Headcount") ? (long?)values["Headcount"] ?? 0L : 0L), (values.ContainsKey("StartDate") ? (DateOnly?)values["StartDate"] ?? DateOnly.MinValue : DateOnly.MinValue), this, (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
+            var typed = EventHold.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("EndDate") ? (DateOnly?)values["EndDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Headcount") ? (long?)values["Headcount"] ?? 0L : 0L), (values.ContainsKey("StartDate") ? (DateOnly?)values["StartDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

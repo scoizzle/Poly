@@ -103,6 +103,39 @@ public class ParityTests {
         }
         """;
 
+    const string TypeCreateUnlinkedDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text
+          fines: many Fine
+          AssessByType: action {
+            create Fine { Amount: 5 Reason: "TypeCreate" }
+          }
+        }
+        Fine: entity {
+          Amount: Number
+          Reason: Text
+          patron: Patron
+        }
+        """;
+
+    const string CreateInBackRefDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text
+          fines: many Fine
+          HasPatronOnFine: policy { any fines where patron Name is "Bea" }
+          AssessByRel: action {
+            create in fines { Amount: 5 Reason: "CreateIn" }
+          }
+        }
+        Fine: entity {
+          Amount: Number
+          Reason: Text
+          patron: Patron
+        }
+        """;
+
     const string RangeDsl = """
         domain Lab
         Widget: entity {
@@ -428,6 +461,32 @@ public class ParityTests {
     }
 
     [Test]
+    public async Task Invoke_CreateType_UnambiguousManyRel_AgreesUnlinked() {
+        var outcomes = await ParityScenario.FromDsl(TypeCreateUnlinkedDsl, "ParityTypeCreateUnlinked")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Ada"));
+                side.Invoke("AssessByType");
+            });
+        await Assert.That(outcomes[0].State["fines"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Invoke_CreateIn_UnambiguousBackRef_AgreesLinkedBothWays() {
+        var outcomes = await ParityScenario.FromDsl(CreateInBackRefDsl, "ParityCreateInBackRef")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Bea"));
+                side.Invoke("AssessByRel");
+                side.EvaluatePolicy("HasPatronOnFine");
+            });
+        await Assert.That(outcomes[0].State["fines"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["HasPatronOnFine"]).IsEqualTo("True");
+    }
+
+    [Test]
     public async Task Create_ForSecondEntity_RecordsThatEntitysState() {
         var outcomes = await ParityScenario.FromDsl(ActionFailDsl, "ParitySecondCreate")
             .AssertAgree(side => {
@@ -467,6 +526,26 @@ public class ParityTests {
         }
         """;
 
+    const string PeerReadDsl = """
+        domain Watch
+        Paper: entity {
+          Title: Text
+          A: stage {
+            Advance: action { transition to B }
+          }
+          B: stage { }
+        }
+        Tr: entity {
+          Label: Text default("")
+          Tracks: Paper
+          P: stage {
+            when Tracks B as paper {
+              assign Label to paper Title
+            }
+          }
+        }
+        """;
+
     // A stage-scoped subscription whose handler transitions the subscriber.
     [Test]
     public async Task Invoke_WhenTrackedPeerTransitions_SubscriberTransitionsToo() {
@@ -496,6 +575,20 @@ public class ParityTests {
             });
         await Assert.That(outcomes[5].State["Stage"]).IsEqualTo("Q");
         await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("Q");
+    }
+
+    [Test]
+    public async Task Invoke_WhenPeerHandlerReadsPeerProperty_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(PeerReadDsl, "ParityPeerRead")
+            .AssertAgree(side => {
+                var paper = side.Create("Paper", ("Title", "hello"));
+                var tr = side.Create("Tr", ("Tracks", paper));
+                side.Use(paper);
+                side.Invoke("Advance");
+                side.Use(tr);
+            });
+        await Assert.That(outcomes[1].State["Label"]).IsEqualTo("");
+        await Assert.That(outcomes[4].State["Label"]).IsEqualTo("hello");
     }
 
     const string EqualityDsl = """

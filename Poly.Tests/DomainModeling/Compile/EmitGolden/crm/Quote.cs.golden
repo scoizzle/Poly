@@ -527,7 +527,7 @@ public class Quote
         }
         if (typeName == "QuoteLine")
         {
-            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), this);
+            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("quote") ? (Quote?)values["quote"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

@@ -70,14 +70,6 @@ When you create an entity in a navigation property, the runtime store links the 
 instance to the source — the child becomes reachable from the source through the
 relationship. You only specify the *other* property initializers.
 
-**Type-create auto-link (unambiguous many-rel):** bare `create Type { … }` from a
-source that owns **exactly one** many-navigation targeting that type (e.g. Patron
-with `fines: many Fine` running `create Fine { … }`) also auto-links outbound and
-the unambiguous reverse (`Fine.patron`), same as `create in fines`. C# export likewise
-emits `_fines.Add` for that unambiguous case. Zero or several matching many-rels leave
-the child registered but unlinked — use `create in Rel` or `link_instances` explicitly.
-Prefer `create in Rel` when you want the relationship named in the effect.
-
 ```poly
 Patron: entity {
   loans: many Loan
@@ -138,7 +130,7 @@ Patron: entity {
   fines: many Fine
 
   when loans Overdue {
-    create Fine { Amount: 5 Reason: "Overdue" }
+    create in fines { Amount: 5 Reason: "Overdue" }
   }
 }
 
@@ -989,7 +981,7 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime auto-links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

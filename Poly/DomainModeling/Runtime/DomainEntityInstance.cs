@@ -587,11 +587,12 @@ public sealed partial record DomainEntityInstance {
         string actionName,
         IReadOnlyDictionary<string, object?>? args,
         List<string> injectedKeys) {
+        MethodDefinitionNode? method = null;
         Action? action;
 
         if (Domain is not null) {
-            var method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, actionName);
-            action = method is not null ? ResolveStandaloneAction(actionName) : null;
+            method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, actionName);
+            action = ResolveStandaloneAction(actionName);
         }
         else {
             // Standalone reduced contract — structural SA only (see type remarks).
@@ -636,12 +637,7 @@ public sealed partial record DomainEntityInstance {
         // same tree. Without a module method (no Domain, or no body for this action)
         // both the action and the stage policies are checked here.
         var failures = new List<string>();
-        if (Domain is not null) {
-            RuntimeAnalysisCache.GetOrLower(Domain);
-        }
-        var moduleOwnsRequire = Domain is not null
-            && RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, actionName, out var moduleMethod)
-            && moduleMethod?.Body is not null;
+        var moduleOwnsRequire = method?.Body is not null;
         if (!moduleOwnsRequire) {
             foreach (var guard in action.Policies)
                 if (!EvaluatePolicy(guard)) failures.Add(guard.Name);

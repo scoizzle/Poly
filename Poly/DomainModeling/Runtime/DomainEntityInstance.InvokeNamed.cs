@@ -179,8 +179,8 @@ public sealed partial record DomainEntityInstance {
 
     private Action? ResolveActionForNamedInvoke(string name) {
         if (Domain is not null) {
-            var method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, name);
-            return method is not null ? ResolveStandaloneAction(name) : null;
+            _ = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, name);
+            return ResolveStandaloneAction(name);
         }
         return ResolveStandaloneAction(name);
     }

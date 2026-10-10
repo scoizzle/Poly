@@ -246,4 +246,102 @@ public class DomainInstanceStoreFailClosedTests {
         // because the store's NotifyTransition returns early when Domain is null.
         await Assert.That(() => instance.TransitionStage("Active")).ThrowsNothing();
     }
+
+    [Test]
+    public async Task Link_SingularSource_SecondTarget_Throws() {
+        var domain = BuildSingularLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child1 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        var child2 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child1);
+        store.Add(child2);
+        store.Link("Kid", parent, child1);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Link("Kid", parent, child2));
+        await Assert.That(ex!.Message).IsEqualTo(Relationship.LinkViolationMessage("Kid"));
+        await Assert.That(store.GetLinkedTargets("Kid", parent).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Link_CollectionSource_TwoTargets_Allows() {
+        var domain = BuildDomainWithSubscriptions();
+        var store = new DomainInstanceStore();
+        var tracker = DomainEntityInstance.Create(
+            TrackerOf(domain), new Dictionary<string, object?>(), domain);
+        var order1 = DomainEntityInstance.Create(
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
+        var order2 = DomainEntityInstance.Create(
+            OrderOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(tracker);
+        store.Add(order1);
+        store.Add(order2);
+
+        store.Link("Tracks", tracker, order1);
+        store.Link("Tracks", tracker, order2);
+
+        await Assert.That(store.GetLinkedTargets("Tracks", tracker).Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Link_NoDomain_SecondTarget_Allows() {
+        var entity = new Entity("Standalone",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [], [], []);
+        var source = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
+        var t1 = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
+        var t2 = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
+        var store = new DomainInstanceStore();
+        store.Add(source);
+        store.Add(t1);
+        store.Add(t2);
+
+        store.Link("Kid", source, t1);
+        store.Link("Kid", source, t2);
+
+        await Assert.That(store.GetLinkedTargets("Kid", source).Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Link_UnknownRelationship_SecondTarget_Allows() {
+        var domain = BuildSingularLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child1 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        var child2 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child1);
+        store.Add(child2);
+
+        store.Link("Nope", parent, child1);
+        store.Link("Nope", parent, child2);
+
+        await Assert.That(store.GetLinkedTargets("Nope", parent).Count).IsEqualTo(2);
+    }
+
+    private static Domain BuildSingularLinkDomain() {
+        var child = new Entity("Child",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var parent = new Entity("Parent",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var relationship = new Relationship(
+            "Kid",
+            new DomainTypeReference("Parent"),
+            new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne,
+            []);
+        return ValidDomain.Create("SingularLinkTest", [parent, child], [relationship]);
+    }
+
+    static Entity ParentOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Parent");
+    static Entity ChildOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Child");
 }

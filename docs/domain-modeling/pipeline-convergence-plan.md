@@ -523,6 +523,7 @@ _Lane B · Size M · Review 2 · Depends on: C6a, C2b_
 - Done when: Parity row: a cardinality violation on link fails identically.
 - SHIP if the row is red on master. NOT SHIP if only MCP `link_instances` enforces it.
 - Hand-edit: Partly.
+- Split (planner 2026-10-10): C6b1 = cardinality core (task `docs/plans/poly-eng/tasks/C6b1.md`); C6b2 = `BuildTargetCreateArgs` self-reference fix (`Node.Create(name, this, this)`, found by Grug on PR 144).
 
 **C6c. Unlink cannot drop below a required minimum**
 

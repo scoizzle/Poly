@@ -903,7 +903,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Lowers create-in to <c>this.CreateIn(relationship, prop, value, …)</c>
-    /// with Failure unwrap. Same tree for simulate and emit.
+    /// with Failure unwrap. Same tree for simulate and emit. OneToOne / ManyToOne
+    /// prepend <c>if (this.Rel != null) return Failure(…)</c> before <c>CreateIn</c>.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (_domain is null)
@@ -913,8 +914,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
         var runtimeEntity = runtimeTarget?.TargetEntity
             ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
-        return LowerRuntimeFactoryCall(
+        var create = LowerRuntimeFactoryCall(
             "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity);
+        if (runtimeRel is null
+            || runtimeRel.Cardinality is RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany)
+            return create;
+
+        var nav = new Member(Subject, DomainToCSharpExporter.ToPascalCase(runtimeRel.Name));
+        var guard = new IfStatement(
+            new NotEqual(nav, new Constant(null)),
+            new Block([AssignConstraintFailure(Relationship.LinkViolationMessage(runtimeRel.Name))]));
+        if (create is Block block)
+            return new Block([guard, .. block.Nodes], block.Variables);
+        return new Block([guard, create]);
     }
 
     internal List<Node> LowerCreateInConstraintProbes(

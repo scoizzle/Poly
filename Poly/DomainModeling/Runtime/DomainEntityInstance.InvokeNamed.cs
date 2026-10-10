@@ -103,7 +103,7 @@ public sealed partial record DomainEntityInstance {
     private bool TryWhenHandler(string name, object?[] args) {
         if (name.Length <= 4
             || !name.StartsWith("When", StringComparison.Ordinal)
-            || !TryMatchWhenHandler(name, out var entry, out var targetStageName))
+            || !TryMatchWhenHandler(name, args, out var entry, out var targetStageName))
             return false;
 
         DomainEntityInstance peer = this;
@@ -125,16 +125,27 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Resolves <c>When{Any|All|Each}{Target}{Stage}</c> to the plan entry
-    /// using the same names the exporter assigned.
+    /// using the same names the exporter assigned. Peer and <c>when all</c>
+    /// previousStage are overloads of that name, so the compiled call's
+    /// arguments pick the entry (print uses C# overload resolution).
     /// </summary>
     private bool TryMatchWhenHandler(
         string name,
+        object?[] args,
         out SubscriptionDispatchPlanEntry entry,
         out string targetStageName) {
         entry = null!;
         targetStageName = null!;
         if (Domain is null)
             return false;
+        var hasPeerArg = false;
+        var hasPreviousArg = false;
+        foreach (var arg in args) {
+            if (arg is DomainEntityInstance)
+                hasPeerArg = true;
+            else
+                hasPreviousArg = true;
+        }
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
         var entityLookup = Domain.Types.OfType<Entity>()
             .ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -157,6 +168,12 @@ public sealed partial record DomainEntityInstance {
             [new KeyValuePair<string, List<DomainToCSharpExporter.SubscriptionInfo>>(Entity.Name, subList)]);
         foreach (var (info, handlerName) in names) {
             if (!string.Equals(handlerName, name, StringComparison.Ordinal))
+                continue;
+            var wantsPeer = info.Subscription.PeerBinding is { Length: > 0 };
+            var wantsPrevious = info.Subscription.Quantifier == StageSubscriptionQuantifier.All
+                && info.TargetEntity.Stages.Count > 0
+                && info.Subscription.StageNames.Count > 0;
+            if (wantsPeer != hasPeerArg || wantsPrevious != hasPreviousArg)
                 continue;
             entry = info.Subscription;
             targetStageName = info.StageName;

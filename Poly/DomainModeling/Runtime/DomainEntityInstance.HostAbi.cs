@@ -103,7 +103,8 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
         if (!Entity.Stages.Any(s => string.Equals(s.Name, targetStageName, StringComparison.Ordinal)))
-            return;
+            throw new InvalidOperationException(
+                $"Stage '{targetStageName}' does not exist on entity '{Entity.Name}'.");
 
         var previousStageName = CurrentStage;
         if (string.Equals(previousStageName, targetStageName, StringComparison.Ordinal))

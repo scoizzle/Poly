@@ -570,7 +570,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? StageTransition(StageTransitionEffect t) {
         if (!_entity.Stages.Any(s =>
             string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal)))
-            return new Block([]);
+            throw new InvalidOperationException(
+                $"Stage '{t.TargetStage.StageName}' does not exist on entity '{_entity.Name}'.");
 
         var nodes = new List<Node>();
         Variable? previousStage = null;

@@ -1,5 +1,5 @@
 # TASK C6a - Remove auto-link; linking is explicit
-Status: in review. Branch slice/c6a-remove-auto-link-v3. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: merged #144 `7b6f69e2` 2026-10-09. Branch slice/c6a-remove-auto-link-v3. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 ## Scope
 Decision 10 (no guessing) is unconditional. Delete `TryAutoLinkUnambiguousOutbound` (`Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:599-610`; only caller is the `relationshipName is null` else at `DomainInstanceStore.cs:219-223` — card `HostAbi.cs:820` / `:782` are stale; file is 645 lines).
 Drop BindCreate's `outs.Count == 1` / `autoLink` / `wireUnambiguousBackRef: autoLink` (`StoreBind.cs:105-116, 123-124`) and the `BuildTargetCreateArgs` flag plus its `this` arm (`:237-257`; `FindAutoWireBackReference` is `Actions.cs:941`, not `:846`). BindCreate then calls `BuildTargetCreateArgs` like BindProbeCreate `:147`.
@@ -49,9 +49,10 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 ## Hand-edit
 One method and one store else-branch go away, BindCreate stops guessing `this`; create-in still names the relationship in Notify and HostAbi. Scot can open those three spots cold.
 ## Needs Scot
-Does decision 10 also cover `FindAutoWireBackReference` picking the create-in back-ref slot when the child has exactly one singular navigation to the source, or does that stay as C6a leaves it?
+Answered (Scot 2026-10-09 23:16): KEEP. Decision 10 does not cover the create-in back-reference slot choice, so `FindAutoWireBackReference` and `TryLinkCreateInBackReference` stay.
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | grok/grok-4.6 | `a5530ba9` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `1dabe15f` | pushed | tests 3488/3488; sweep: greps empty, BindCreate matches BindProbeCreate |
+| 2026-10-09 | planner | opencode/opencode-go/deepseek-v4.1-flash | `7b6f69e2` | merged #144 | squash-merged to master |

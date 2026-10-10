@@ -101,7 +101,7 @@ public sealed class CatalogIndexTests {
     }
 
     [Test]
-    public async Task Navigation_Absent_ReturnsNull() {
+    public async Task Navigation_AbsentOrUnknownTree_ReturnsNull() {
         var (index, _) = IndexOf(Library);
 
         await Assert.That(index.Navigation("Patron", "NoSuch")).IsNull();

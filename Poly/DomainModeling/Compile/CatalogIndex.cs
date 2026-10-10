@@ -14,13 +14,10 @@ public sealed class CatalogIndex {
         var trees = new Dictionary<string, Artifact>(StringComparer.Ordinal);
         foreach (var artifact in catalog.Artifacts) {
             var id = artifact.Descriptor.Id;
-            if (id.Type is not ("entity" or "scaffolding"))
-                continue;
-            var name = id.Segments[^1];
             if (id.Type == "entity")
-                trees[name] = artifact;
-            else
-                trees.TryAdd(name, artifact);
+                trees[id.Segments[^1]] = artifact;
+            else if (id.Type == "scaffolding")
+                trees.TryAdd(id.Segments[^1], artifact);
         }
         _trees = trees;
     }
@@ -41,9 +38,7 @@ public sealed class CatalogIndex {
         if (Tree(treeName)?.Payload is not IReadOnlyList<TypeDefinitionNode> types)
             return null;
         foreach (var type in types) {
-            if (type.Methods is null)
-                continue;
-            foreach (var method in type.Methods) {
+            foreach (var method in type.Methods ?? []) {
                 if (string.Equals(method.Name, methodName, StringComparison.Ordinal))
                     return method;
             }
@@ -58,9 +53,7 @@ public sealed class CatalogIndex {
         if (Tree(treeName)?.Payload is not IReadOnlyList<TypeDefinitionNode> types)
             return null;
         foreach (var type in types) {
-            if (type.Properties is null)
-                continue;
-            foreach (var property in type.Properties) {
+            foreach (var property in type.Properties ?? []) {
                 if (string.Equals(property.Name, memberName, StringComparison.Ordinal))
                     return property;
             }

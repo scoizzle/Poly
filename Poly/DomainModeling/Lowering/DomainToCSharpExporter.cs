@@ -547,7 +547,7 @@ public sealed partial class DomainToCSharpExporter {
                     IReadOnlyDictionary<string, Node>? peerParams = null;
                     if (peerBinding is { Length: > 0 }) {
                         peerParams = new Dictionary<string, Node>(StringComparer.Ordinal) {
-                            [peerBinding] = new Parameter(peerBinding)
+                            [peerBinding] = new Parameter(peerBinding, new NamedTypeReference(info.TargetEntity.Name))
                         };
                     }
                     var context = new LoweringContext(

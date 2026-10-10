@@ -255,8 +255,8 @@ public sealed partial record DomainEntityInstance {
     /// Executes subscription effects in this instance's context (subscriber).
     /// <paramref name="peerInstance"/> is the related entity that transitioned.
     /// When <paramref name="peerBinding"/> is set (<c>when Rel Stage as name</c>),
-    /// path-prefix roots equal to that name resolve against the peer bag before
-    /// lowering (notification-only subscriptions omit the binder).
+    /// the peer is a typed SetArgs slot after this and previousStage.
+    /// Notification-only subscriptions omit the binder.
     /// Called by <see cref="DomainInstanceStore.NotifyTransition"/>.
     ///
     /// Subscription-triggered transitions suppress store notification via
@@ -302,14 +302,19 @@ public sealed partial record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Subscription body is missing on entity '{Entity.Name}'.");
             var cached = body;
-            if (peerBinding is { Length: > 0 })
-                cached = MaterializePeerInSyntax(cached, peerBinding, peerInstance);
-            // C1a: previousStage is a real SetArgs slot after this (when the handler declares it).
-            var rootParameters = ContainsPreviousStageParameter(cached)
-                ? (IReadOnlyList<Parameter>)[new Parameter("previousStage")]
-                : [];
+            var rootParameters = new List<Parameter>();
+            var setArgs = new List<object?> { this };
+            if (ContainsPreviousStageParameter(cached)) {
+                rootParameters.Add(new Parameter("previousStage"));
+                setArgs.Add(previousStageName);
+            }
+            if (peerBinding is { Length: > 0 }) {
+                rootParameters.Add(new Parameter(
+                    peerBinding, new NamedTypeReference(peerInstance.Entity.Name)));
+                setArgs.Add(peerInstance);
+            }
             ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, rootParameters, previousStageName),
+                ExecuteCachedSubscriptionTree(cached, rootParameters, setArgs),
                 "subscription");
         }
         finally {
@@ -320,13 +325,9 @@ public sealed partial record DomainEntityInstance {
     private DomainResult? ExecuteCachedSubscriptionTree(
         Node tree,
         IReadOnlyList<Parameter> rootParameters,
-        string? previousStageName) {
+        IReadOnlyList<object?> setArgs) {
         var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
-        var setArgs = new object?[1 + rootParameters.Count];
-        setArgs[0] = this;
-        if (rootParameters.Count > 0)
-            setArgs[1] = previousStageName;
         try {
             using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)

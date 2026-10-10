@@ -11,16 +11,28 @@ namespace Poly.DomainModeling.Runtime;
 public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Returns all property names, values, and the current stage for debugging.
+    /// Subscriber-registry fields stay in the bag for the compiled Notify body
+    /// and are omitted here so MCP snapshots do not report them as properties.
     /// </summary>
     public IReadOnlyDictionary<string, object?> Snapshot() {
-        if (!_values.ContainsKey(CurrentStageBagKey))
-            return _values.AsReadOnly();
-        var schemaHasStage = Entity.Properties.Any(p =>
-            string.Equals(p.Name, CurrentStageBagKey, StringComparison.Ordinal));
-        if (schemaHasStage)
+        var hideStage = _values.ContainsKey(CurrentStageBagKey)
+            && !Entity.Properties.Any(p =>
+                string.Equals(p.Name, CurrentStageBagKey, StringComparison.Ordinal));
+        var registryFields = SubscriberRegistryFields(Entity, Domain);
+        var hideRegistry = false;
+        foreach (var field in registryFields) {
+            if (_values.ContainsKey(field.Name)) {
+                hideRegistry = true;
+                break;
+            }
+        }
+        if (!hideStage && !hideRegistry)
             return _values.AsReadOnly();
         var copy = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
-        copy.Remove(CurrentStageBagKey);
+        if (hideStage)
+            copy.Remove(CurrentStageBagKey);
+        foreach (var field in registryFields)
+            copy.Remove(field.Name);
         return copy;
     }
 

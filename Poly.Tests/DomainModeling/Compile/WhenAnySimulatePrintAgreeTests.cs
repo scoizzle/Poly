@@ -85,6 +85,7 @@ public class WhenAnySimulatePrintAgreeTests {
 
         IDictionary<string, object?> bag = loan1;
         await Assert.That(bag.ContainsKey("_patronOverdueSubscribers")).IsTrue();
+        await Assert.That(loan1.Snapshot().ContainsKey("_patronOverdueSubscribers")).IsFalse();
         var registry = bag["_patronOverdueSubscribers"] as System.Collections.IList;
         await Assert.That(registry).IsNotNull();
         await Assert.That(registry!.Count).IsEqualTo(1);

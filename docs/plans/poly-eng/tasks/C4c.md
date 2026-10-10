@@ -63,3 +63,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode/deepseek-v4.1-flash | `592a137f` | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | `af64777d` | pushed | tests 3486/3486; sweep: SetProperty internal; enum Member+NotEqual on create and assign |
+| 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | `7318db0b` | NOT SHIP | https://github.com/scoizzle/Poly/pull/141#issuecomment-6092867956 (Grug NOT SHIP at 7318db0b, 4 open findings, mode full) |
+| 2026-10-10 | implementer | grok/grok-4.6 | `39e4f910` | fixes pushed | R1, R2, R3; disputed: none; R4 skipped (nit >1 line); tests 3495/3495 |

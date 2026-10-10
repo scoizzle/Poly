@@ -566,7 +566,8 @@ public sealed partial class DomainToCSharpExporter {
                         Parameters: peerParams,
                         Analysis: metadata,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames);
+                        EnumPropertyNames: esm.EnumPropertyNames,
+                        PostTransitionNotifyStages: postTransitionNotifyStages);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -583,9 +584,9 @@ public sealed partial class DomainToCSharpExporter {
                 }
 
                 // Stage-scoped subscriptions (`when` inside a subscriber stage) fire only
-                // while the subscriber is in that stage — gate the handler to match the
-                // runtime store (NotifyTransition resolves the plan from CurrentStage).
-                // Entity-level subscriptions (SubscriberStageName == null) are always active.
+                // while the subscriber is in that stage — the handler returns when
+                // CurrentStage has moved on. Entity-level subscriptions
+                // (SubscriberStageName == null) are always active.
                 if (info.SubscriberStageName is { Length: > 0 }) {
                     var stageGate = new IfStatement(
                         new NotEqual(

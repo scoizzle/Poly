@@ -366,7 +366,8 @@ public class DomainEntityInstanceTests {
         // Standalone sibling: Entity.Stages scan path.
         var stages = new List<Stage>();
         for (var i = DomainEntityInstance.MaxTransitionDepth + 2; i >= 0; i--) {
-            var onEntry = i == DomainEntityInstance.MaxTransitionDepth + 2
+            // S0 OnEntry runs on Create; leave it empty so the depth chain starts at TransitionStage("S1").
+            var onEntry = i == 0 || i == DomainEntityInstance.MaxTransitionDepth + 2
                 ? Array.Empty<Effect>()
                 : new Effect[] { new StageTransitionEffect(new StageReference($"S{i + 1}")) };
             stages.Insert(0, new Stage($"S{i}", [], [], onEntry, []));
@@ -387,7 +388,8 @@ public class DomainEntityInstanceTests {
         // Domain-bound sibling: catalog + TryGetStage + analysis-aware lowering (Q6).
         var stages = new List<Stage>();
         for (var i = DomainEntityInstance.MaxTransitionDepth + 2; i >= 0; i--) {
-            var onEntry = i == DomainEntityInstance.MaxTransitionDepth + 2
+            // S0 OnEntry runs on Create; leave it empty so the depth chain starts at TransitionStage("S1").
+            var onEntry = i == 0 || i == DomainEntityInstance.MaxTransitionDepth + 2
                 ? Array.Empty<Effect>()
                 : new Effect[] { new StageTransitionEffect(new StageReference($"S{i + 1}")) };
             stages.Insert(0, new Stage($"S{i}", [], [], onEntry, []));

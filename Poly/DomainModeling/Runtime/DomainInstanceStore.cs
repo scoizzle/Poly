@@ -350,6 +350,7 @@ public sealed class DomainInstanceStore {
     /// Records an instance-level edge for <paramref name="relationshipName"/>
     /// from <paramref name="source"/> to <paramref name="target"/>.
     /// Both instances must already be registered in this store.
+    /// A second outbound link on a OneToOne or ManyToOne source throws.
     /// </summary>
     public void Link(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -360,6 +361,19 @@ public sealed class DomainInstanceStore {
                 "Both instances must be registered in this store before linking.");
         if (IsLinked(relationshipName, source, target))
             return;
+        if (source.Domain is not null) {
+            var contracts = RuntimeAnalysisCache.GetOrAnalyze(source.Domain)
+                .GetMetadata<RelationshipContractMetadata>(default);
+            var contract = contracts?.Contracts.FirstOrDefault(c =>
+                string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
+                && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
+            if (contract is not null
+                && contract.Cardinality is not (RelationshipCardinality.OneToMany
+                    or RelationshipCardinality.ManyToMany)
+                && GetLinkedTargets(relationshipName, source).Count > 0)
+                throw new InvalidOperationException(
+                    Relationship.LinkViolationMessage(relationshipName));
+        }
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.AddSubscriber(fieldName, source);
         _links.Add((relationshipName, source, target));

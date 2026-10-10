@@ -103,6 +103,18 @@ public class ParityTests {
         }
         """;
 
+    const string SingularLinkDsl = """
+        domain Shop
+        Child: entity {
+          Name: Text
+        }
+        Parent: entity {
+          Name: Text
+          kid: Child
+          AddKid: action { create in kid { Name: "x" } }
+        }
+        """;
+
     const string TypeCreateUnlinkedDsl = """
         domain Library
         Patron: entity {
@@ -458,6 +470,21 @@ public class ParityTests {
             });
         await Assert.That(outcomes[0].State["kids"]).IsEqualTo("0");
         await Assert.That(outcomes[1].State["kids"]).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Invoke_CreateIn_SingularRel_SecondLinkFailsIdentically() {
+        var outcomes = await ParityScenario.FromDsl(SingularLinkDsl, "ParitySingularLink")
+            .AssertAgree(side => {
+                side.Create("Parent", ("Name", "Pat"));
+                side.Invoke("AddKid");
+                side.Invoke("AddKid");
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["kid"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].Success).IsFalse();
+        await Assert.That(outcomes[2].Message).IsEqualTo(Relationship.LinkViolationMessage("kid"));
+        await Assert.That(outcomes[2].State["kid"]).IsEqualTo("1");
     }
 
     [Test]

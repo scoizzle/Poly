@@ -133,6 +133,10 @@ public class Account
         {
             return DomainResult<Site>.Failure(create0.ErrorMessage ?? "");
         }
+        if (this.Hq != null)
+        {
+            return DomainResult<Site>.Failure("Cannot add a second link on 'hq': the source already has a target.");
+        }
         var create1 = this.CreateIn("hq", "City", city, "Region", region);
         if (!create1.IsSuccess)
         {

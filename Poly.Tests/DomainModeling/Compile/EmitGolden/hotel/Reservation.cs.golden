@@ -139,6 +139,10 @@ public class Reservation
         {
             return DomainResult.Failure(create0.ErrorMessage ?? "");
         }
+        if (this.Folio != null)
+        {
+            return DomainResult.Failure("Cannot add a second link on 'folio': the source already has a target.");
+        }
         var create1 = this.CreateIn("folio", "Balance", 0L);
         if (!create1.IsSuccess)
         {

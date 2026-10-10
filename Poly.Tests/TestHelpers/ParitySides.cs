@@ -55,7 +55,15 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        var arguments = values.Select(v => (v.Name, v.Value is IEnumerable<object> list ? ToArray(list) : v.Value));
+        var arguments = values.Select(v => {
+            var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;
+            var prop = model.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, v.Name, StringComparison.OrdinalIgnoreCase));
+            var printed = prop is not null ? assembly.GetType(prop.Type.TypeName) : null;
+            if (printed is not null)
+                value = Materialize(value, printed);
+            return (v.Name, value);
+        });
         try {
             return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
         }
@@ -107,6 +115,9 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
     static object? Materialize(object? value, Type target) {
         if (value is null || target.IsInstanceOfType(value))
             return value;
+        var enumType = Nullable.GetUnderlyingType(target) ?? target;
+        if (value is string s && enumType.IsEnum)
+            return Enum.Parse(enumType, s);
         if (value is not Dictionary<string, object?> fields)
             return value;
         var instance = Activator.CreateInstance(target)

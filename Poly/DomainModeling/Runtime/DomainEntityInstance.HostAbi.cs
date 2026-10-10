@@ -593,24 +593,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// After bare <c>create Type</c> (no relationship name), if this source owns
-    /// exactly one many-rel targeting that type, link outbound and reverse like create-in.
-    /// Ambiguous or absent matches leave the child registered but unlinked.
-    /// </summary>
-    internal void TryAutoLinkUnambiguousOutbound(DomainEntityInstance child, Entity targetEntity) {
-        if (Store is null) return;
-        var outs = Entity.Navigations
-            .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany
-                or RelationshipCardinality.ManyToMany)
-                && string.Equals(n.Target.TypeName, targetEntity.Name, StringComparison.Ordinal))
-            .ToList();
-        if (outs.Count != 1)
-            return;
-        Store.Link(outs[0].Name, this, child);
-        TryLinkCreateInBackReference(child);
-    }
-
-    /// <summary>
     /// After <c>create in opportunities { … }</c>, bind the child's unique to-one
     /// back to this source (<c>Opportunity.account</c>) so Rel-exists policies match
     /// the C# auto-wired back-ref.

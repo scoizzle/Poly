@@ -102,30 +102,15 @@ public sealed partial class DomainToCSharpExporter {
         var cases = new List<Node>();
         foreach (var target in domain.Types.OfType<Entity>()) {
             var typed = new Variable("typed");
-            // Same outs.Count == 1 rule as HostAbi.TryAutoLinkUnambiguousOutbound.
-            // Reverse this uses FindAutoWireBackReference (CreateFines hook) — not
-            // ESM IsBackReference, which is self-rel only.
-            var outs = entity.Navigations
-                .Where(n => (n.Cardinality is RelationshipCardinality.OneToMany
-                    or RelationshipCardinality.ManyToMany)
-                    && string.Equals(n.Target.TypeName, target.Name, StringComparison.Ordinal))
-                .ToList();
-            var autoLink = outs.Count == 1;
-            var createArgs = BuildTargetCreateArgs(
-                entity, target, values, domain, metadata,
-                wireUnambiguousBackRef: autoLink);
-            var body = new List<Node> {
-                new Assignment(typed, new Invoke(
-                    new Member(new NamedTypeReference(target.Name), "Create"),
-                    [.. createArgs]))
-            };
-            var locals = new List<Node> { typed };
-            // When autoLink wires `this` as the back-ref, Target.Create already
-            // Attach*es into the sole matching collection — no separate Add.
-            body.Add(RewrapObjectResult(typed, objectResult));
+            var createArgs = BuildTargetCreateArgs(entity, target, values, domain, metadata);
             cases.Add(new IfStatement(
                 new Equal(name, new Constant(target.Name)),
-                new Block(body, locals)));
+                new Block([
+                    new Assignment(typed, new Invoke(
+                        new Member(new NamedTypeReference(target.Name), "Create"),
+                        [.. createArgs])),
+                    RewrapObjectResult(typed, objectResult)
+                ], [typed])));
         }
         cases.Add(UnknownFailure(objectResult, "Unknown type '", name, "'."));
         return new MethodDefinitionNode(
@@ -233,26 +218,15 @@ public sealed partial class DomainToCSharpExporter {
         Entity target,
         Parameter values,
         Domain domain,
-        INodeMetadataProvider metadata,
-        bool wireUnambiguousBackRef = false) {
+        INodeMetadataProvider metadata) {
         var args = new List<Node>();
         var parameters = GetConstructorParameters(target, metadata);
-        // Cross-entity reverse: same hook as CreateFines / FindAutoWireBackReference.
-        // IsBackReference is self-rel only (EntityStructureAnalyzer) — Fine.patron is not.
-        var autoWire = wireUnambiguousBackRef
-            ? FindAutoWireBackReference(target, source.Name)
-            : null;
         foreach (var parameter in parameters) {
             if (parameter.IsBackReference) {
                 // Self-rel slot (Account.parent): this only when source is that type.
                 args.Add(string.Equals(source.Name, target.Name, StringComparison.Ordinal)
                     ? (Node)new ThisReference()
                     : TypedNull(parameter.Type.TypeName));
-                continue;
-            }
-            if (autoWire is not null
-                && string.Equals(parameter.Name, autoWire.Name, StringComparison.Ordinal)) {
-                args.Add(new ThisReference());
                 continue;
             }
             if (parameter.IsCollection) {

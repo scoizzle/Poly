@@ -225,6 +225,10 @@ public class Section
         {
             return DomainResult<Section>.Failure("'Cap' must be <= 200.");
         }
+        if (offeringTerm != Term.Fall && offeringTerm != Term.Spring && offeringTerm != Term.Summer)
+        {
+            return DomainResult<Section>.Failure("'OfferingTerm' is not a valid member of Term.");
+        }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, offeredSeats, seatsTaken, waitCleared);
         return DomainResult<Section>.Success(created);
     }
@@ -543,7 +547,7 @@ public class Section
         }
         if (typeName == "WaitOffer")
         {
-            var typed = WaitOffer.Create((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), this);
+            var typed = WaitOffer.Create((values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("section") ? (Section?)values["section"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -555,7 +559,7 @@ public class Section
         }
         if (typeName == "Enrollment")
         {
-            var typed = Enrollment.Create(this, (values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
+            var typed = Enrollment.Create((values.ContainsKey("section") ? (Section?)values["section"] ?? null : null), (values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

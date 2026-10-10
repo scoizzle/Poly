@@ -120,6 +120,10 @@ public class Order
         {
             return DomainResult<Order>.Failure("'Discount' must be <= 100.");
         }
+        if (state != OrderState.Pending && state != OrderState.Paid && state != OrderState.Shipped && state != OrderState.Delivered && state != OrderState.Cancelled)
+        {
+            return DomainResult<Order>.Failure("'State' is not a valid member of OrderState.");
+        }
         if (total < 0L)
         {
             return DomainResult<Order>.Failure("'Total' must be >= 0.");
@@ -407,7 +411,7 @@ public class Order
         }
         if (typeName == "OrderItem")
         {
-            var typed = OrderItem.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""), this);
+            var typed = OrderItem.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""), (values.ContainsKey("order") ? (Order?)values["order"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

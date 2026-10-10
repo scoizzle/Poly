@@ -1929,4 +1929,79 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Types.OfType<Entity>().Single().Stages).IsEmpty();
     }
+
+    [Test]
+    public async Task Domain_FunctionsInitList_IsOnRootAndInChildren() {
+        var a = new Property("a", new DomainTypeReference("Number"), []);
+        var b = new Property("b", new DomainTypeReference("Number"), []);
+        var number = new DomainTypeReference("Number");
+        var body = DomainExpression.Add(DomainExpression.Parameter("a"), DomainExpression.Parameter("b"));
+        var fn = new DomainFunction("Add", [a, b], number, body);
+        var domain = new Domain("T", []) { Functions = [fn] };
+
+        await Assert.That(domain.Functions.Count).IsEqualTo(1);
+        await Assert.That(domain.Functions[0].Name).IsEqualTo("Add");
+        await Assert.That(domain.Functions[0].Parameters).IsEqualTo(fn.Parameters);
+        await Assert.That(domain.Functions[0].ReturnType).IsEqualTo(number);
+        await Assert.That(domain.Functions[0].Body).IsEqualTo(body);
+        await Assert.That(domain.Children.OfType<DomainFunction>().Single()).IsEqualTo(fn);
+        var children = fn.Children.ToList();
+        await Assert.That(children).Contains(a);
+        await Assert.That(children).Contains(b);
+        await Assert.That(children).Contains(number);
+        await Assert.That(children).Contains(body);
+    }
+
+    [Test]
+    public async Task Apply_AddFunctionChange_RoundTripsFunctionAndLeavesOriginalEmpty() {
+        var start = DomainFactory.Create("T");
+        var a = new Property("a", new DomainTypeReference("Number"), []);
+        var b = new Property("b", new DomainTypeReference("Number"), []);
+        var number = new DomainTypeReference("Number");
+        var body = DomainExpression.Add(DomainExpression.Parameter("a"), DomainExpression.Parameter("b"));
+        var change = new AddFunctionChange("Add", [a, b], number, body);
+
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root).IsNotSameReferenceAs(start);
+        await Assert.That(start.Functions).IsEmpty();
+        var got = result.Root.Functions.Single();
+        await Assert.That(got.Name).IsEqualTo("Add");
+        await Assert.That(got.Parameters.Count).IsEqualTo(2);
+        await Assert.That(got.Parameters[0].Name).IsEqualTo("a");
+        await Assert.That(got.Parameters[0].Type.TypeName).IsEqualTo("Number");
+        await Assert.That(got.Parameters[1].Name).IsEqualTo("b");
+        await Assert.That(got.Parameters[1].Type.TypeName).IsEqualTo("Number");
+        await Assert.That(got.ReturnType.TypeName).IsEqualTo("Number");
+        await Assert.That(got.Body).IsEqualTo(body);
+    }
+
+    [Test]
+    public async Task Apply_AddEntityChange_KeepsExistingFunction() {
+        var number = new DomainTypeReference("Number");
+        var fn = new DomainFunction("Pi", [], number, DomainExpression.Literal(3L));
+        var start = DomainFactory.Create("T") with { Functions = [fn] };
+
+        var result = new DomainEvolution(start).Apply([new AddEntityChange("Order", [])]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Functions.Count).IsEqualTo(1);
+        await Assert.That(result.Root.Functions[0].Name).IsEqualTo("Pi");
+        await Assert.That(result.Root.Functions[0].Body).IsEqualTo(fn.Body);
+        await Assert.That(result.Root.Types.OfType<Entity>().Single().Name).IsEqualTo("Order");
+    }
+
+    [Test]
+    public async Task Apply_AddFunctionChange_ResolvesNumberParameterType() {
+        var start = DomainFactory.Create("T");
+        var a = new Property("a", new DomainTypeReference("Number"), []);
+        var body = DomainExpression.Parameter("a");
+        var change = new AddFunctionChange("Id", [a], new DomainTypeReference("Number"), body);
+
+        var result = new DomainEvolution(start).Apply([change]);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root.Functions.Single().Parameters[0].Type.TypeName).IsEqualTo("Number");
+    }
 }

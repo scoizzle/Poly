@@ -115,6 +115,13 @@ public class ParityTests {
         }
         """;
 
+    const string UniqueDsl = """
+        domain Lab
+        Widget: entity {
+          Code: Text unique
+        }
+        """;
+
     const string AssignRequiredDsl = """
         domain Lab
         Person: entity {
@@ -609,6 +616,25 @@ public class ParityTests {
             .AssertAgree(side => side.Create("Widget", ("Code", "a1")));
         await Assert.That(outcomes[0].Success).IsFalse();
         await Assert.That(outcomes[0].Message).IsEqualTo("'Code' does not match the required pattern.");
+    }
+
+    // Unique after created = new is outside CreateFactoryCheckPrefix. Simulate TryAdd
+    // throws IOE; printed EnsureUnique is still the Success stub, so both Creates succeed.
+    [Test]
+    public async Task KnownGap_CreateDuplicateUnique_SimulateThrowsAndPrintedSucceeds() {
+        var (simulate, printed) = ParityScenario.FromDsl(UniqueDsl, "ParityGapCreateDuplicateUnique")
+            .Run(side => {
+                side.Create("Widget", ("Code", "A"));
+                side.Create("Widget", ("Code", "A"));
+            });
+        await Assert.That(ParityScenario.Differences(simulate, printed))
+            .IsEquivalentTo([
+                "create Widget: success differs (simulate 'False', printed 'True')",
+                "create Widget: failure message differs (simulate 'Unique constraint violated: 'Code' value is already used on another 'Widget'.', printed '')",
+                "create Widget: exception type differs (simulate 'InvalidOperationException', printed '')",
+                "create Widget: 'Code' differs (simulate '(absent)', printed 'A')",
+                "create Widget: 'Stage' differs (simulate '(absent)', printed '')"
+            ]);
     }
 
     [Test]

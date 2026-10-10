@@ -3,7 +3,8 @@ using Poly.DomainModeling.Ontology.Contract;
 namespace Poly.DomainModeling.Ontology;
 
 /// <summary>
-/// A <see cref="Domain"/> aggregates all <see cref="DomainType"/> definitions (entities, value types, primitives, enum types).
+/// A <see cref="Domain"/> aggregates all <see cref="DomainType"/> definitions (entities, value types, primitives, enum types)
+/// and domain-level <see cref="DomainFunction"/> members.
 /// It serves as the top-level container for the entire domain model and is the primary
 /// input to analyzers and lowering.
 /// </summary>
@@ -29,5 +30,7 @@ public sealed record Domain(
     /// </summary>
     public IReadOnlyList<string> Extensions { get; init; } = [];
 
-    public sealed override IEnumerable<Node?> Children => [.. Types, .. ImportedContracts, .. ContractBindings];
+    public IReadOnlyList<DomainFunction> Functions { get; init; } = [];
+
+    public sealed override IEnumerable<Node?> Children => [.. Types, .. ImportedContracts, .. ContractBindings, .. Functions];
 }

@@ -131,6 +131,11 @@ public class Truck
             return DomainResult<Truck>.Failure("'Vin' does not match the required pattern.");
         }
         var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad);
+        var uniqueCheck = created.EnsureUnique("Vin", vin);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Truck>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);

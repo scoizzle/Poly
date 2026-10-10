@@ -43,4 +43,18 @@ public class DomainChangeConstructionTests {
         await Assert.That(change.PropertyName).IsEqualTo("Status");
         await Assert.That(change).IsAssignableTo<DomainChange>();
     }
+
+    [Test]
+    public async Task AddFunctionChange_CanBeConstructed() {
+        var a = new Property("a", new DomainTypeReference("Number"), []);
+        var b = new Property("b", new DomainTypeReference("Number"), []);
+        var body = DomainExpression.Add(DomainExpression.Parameter("a"), DomainExpression.Parameter("b"));
+        var change = new AddFunctionChange("Add", [a, b], new DomainTypeReference("Number"), body);
+
+        await Assert.That(change.Name).IsEqualTo("Add");
+        await Assert.That(change.Parameters.Count).IsEqualTo(2);
+        await Assert.That(change.ReturnType.TypeName).IsEqualTo("Number");
+        await Assert.That(change.Body).IsEqualTo(body);
+        await Assert.That(change).IsAssignableTo<DomainChange>();
+    }
 }

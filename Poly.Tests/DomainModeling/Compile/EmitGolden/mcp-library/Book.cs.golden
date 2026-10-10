@@ -30,6 +30,11 @@ public class Book
             return DomainResult<Book>.Failure("'Title' is required.");
         }
         var created = new Book(isbn, title, copies);
+        var uniqueCheck = created.EnsureUnique("Isbn", isbn);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Book>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Book>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

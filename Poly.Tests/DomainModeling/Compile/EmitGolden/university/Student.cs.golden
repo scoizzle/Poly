@@ -228,6 +228,11 @@ public class Student
             return DomainResult<Student>.Failure("'Name' is required.");
         }
         var created = new Student(email, name, enrollments, completions, holds, lastGrade, maxCredits, openCredits);
+        var uniqueCheck = created.EnsureUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Student>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
         return DomainResult<Student>.Success(created);
     }
     private void InitializeSubscriptions()

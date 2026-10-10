@@ -235,6 +235,16 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer (Scot, 2026-10-09 23:16 CDT):** KEEP. Decision 10 (no guessing) does not cover the create-in back-reference slot choice, so `FindAutoWireBackReference` and `TryLinkCreateInBackReference` stay as C6a leaves them. This is a ruling, not a new numbered decision.
 
+## Scot's answers, 2026-10-10
+
+### Ruling. Typed create in the compiled tree (C8-tc)
+
+**Answer (Scot, 2026-10-10 11:34 CDT):** the compiled tree and printed C# express real typed semantics; dictionary string/object instances belong only to the interpreter. Store jobs (`Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` lowered as string-named dictionary jobs) are an interpreter implementation detail, never a shape in the compiled tree. C8-tc therefore emits typed factory calls (`Fine.Create(amount, reason)`, `this.Create{Nav}(…)`), deletes `DomainToCSharpExporter.StoreBind.cs`, keeps results as `DomainResult<T>` with no cast to object, replaces the `EnsureUnique` Success stub with a real check, and maps the typed calls onto the interpreter's dictionary-backed instances via `HostAbi` / `InvokeNamed`. Goldens are regenerated; no golden may hold a `Dictionary<string, object>` construction or a string-named create call.
+
+**Related rulings.** C6b2 (`BuildTargetCreateArgs` self-referencing collection slot passing `this` where the constructor wants `IEnumerable<T>`) is folded into C8-tc, because C8-tc deletes the file that holds the bug. C8a2 (interpreter-side `TypeDefinitionNode` factory) now depends on C8-tc and must run the typed compiled Create tree.
+
+**Blocks.** C8-tc, then C8a2.
+
 ## Parked, not asking now
 
 - Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 20 (rename scope) before R2.

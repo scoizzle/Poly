@@ -523,7 +523,7 @@ _Lane B · Size M · Review 2 · Depends on: C6a, C2b_
 - Done when: Parity row: a cardinality violation on link fails identically.
 - SHIP if the row is red on master. NOT SHIP if only MCP `link_instances` enforces it.
 - Hand-edit: Partly.
-- Split (planner 2026-10-10): C6b1 = cardinality core (task `docs/plans/poly-eng/tasks/C6b1.md`); C6b2 = `BuildTargetCreateArgs` self-reference fix (`Node.Create(name, this, this)`, found by Grug on PR 144).
+- Split (planner 2026-10-10): C6b1 = cardinality core (task `docs/plans/poly-eng/tasks/C6b1.md`, merged #151); C6b2 = `BuildTargetCreateArgs` self-reference fix (`Node.Create(name, this, this)`, found by Grug on PR 144). C6b2 is folded into C8-tc (2026-10-10): C8-tc deletes `StoreBind.cs`, so the self-referencing collection slot is fixed as part of the typed lowering.
 
 **C6c. Unlink cannot drop below a required minimum**
 
@@ -597,13 +597,22 @@ _Lane B · Size M · Review 2 · Depends on: C5b, C6c, C7d, decision V2 (decisio
 - SHIP if the storage structure test (inside C8a1) passes. NOT SHIP if storage contains any rule.
 - Hand-edit: Yes if it stays small. Probe: under ~200 lines, no domain terms.
 
+**C8-tc. Typed create in the compiled tree**
+
+_Lane B · Size M · Review 2 · Depends on: C6a, C6b1 (both merged; folds C6b2)_
+- Scope: Lowering emits the typed factory instead of a string-named store job. `LowerRuntimeFactoryCall` (`EffectLoweringPass.cs:1136-1198`, reached by `CreateEntityInstance` `:897`, `CreateEntityInRelationship` `:909`, `LowerCreateInProbe` `:1104`, `LowerCreateEntityInstanceProbe` `:1122`) emits `this.Create(name, prop, value, …)` with an object slot cast (`:1160-1162`), and `WrapConstrainedAssign` `:312` emits `this.EnsureUnique`. Replace with typed calls: the existing static `Entity.Create(…)` (`DomainToCSharpExporter.cs:838`) for create, `this.Create{Nav}(…)` (`DomainToCSharpExporter.Notify.cs:92`) for create-in, keeping results as `DomainResult<T>` with no cast to object. Delete `DomainToCSharpExporter.StoreBind.cs` (dictionary overloads, `BindCreate`/`BindCreateIn`/`BindProbeCreate`, `ValueFromDictionary`, the `EnsureUnique` Success stub) and the `AddStoreBindMethods` call (`DomainToCSharpExporter.cs:866`); the generated `EnsureUnique` becomes a real check. The interpreter maps typed factory calls onto its dictionary-backed `DomainEntityInstance` via `HostAbi` (`RuntimeCreateFactory` `DomainEntityInstance.HostAbi.cs:410`) and `InvokeNamed` (`DomainEntityInstance.InvokeNamed.cs:26`). Folds C6b2: a self-referencing collection slot gets `new List<T>()`, not `this` (current bug is `IsBackReference` `StoreBind.cs:225` tested before `IsCollection` `:232`).
+- Files: `EffectLoweringPass.cs`, `DomainToCSharpExporter.StoreBind.cs` (delete), `DomainToCSharpExporter.cs`, `DomainToCSharpExporter.Notify.cs`, `DomainEntityInstance.InvokeNamed.cs`, `DomainEntityInstance.HostAbi.cs`, `DomainInstanceStore.cs`, tests, goldens.
+- Done when: No golden contains `new Dictionary<string, object` or a string-named `Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` call; typed factory calls carry real parameters and defaults; create-in emits `this.Create{Nav}`; results are `DomainResult<T>` with no object cast; `StoreBind.cs` is gone and `EnsureUnique` is a real check; a self-referencing collection slot compiles.
+- SHIP if the golden greps are empty and the suite passes with regenerated goldens. NOT SHIP if any string-named create survives, a golden was hand-edited, or the compiled tree still constructs `Dictionary<string, object>`.
+- Hand-edit: Yes.
+
 **C8a2. Dictionary-backed instance from a type definition**
 
-_Lane B · Size M · Review 2 · Depends on: C8a1_
+_Lane B · Size M · Review 2 · Depends on: C8a1, C8-tc_
 - Scope: Interpreter-side factory: `TypeDefinitionNode` in, dictionary-backed instance out. Pieces exist (`TypeDefinitionNodeAnalyzer`, `DictionaryBackedValue`, `InvokeNamed`). No DEI change yet.
 - Files: `Poly/Interpretation/*`.
 - Done when: Own unit tests; no `Domain` or `Entity` parameter anywhere in the new code.
-- SHIP if the factory runs a compiled Create tree for a sample domain. NOT SHIP if it takes `Domain`.
+- SHIP if the factory runs the typed compiled Create tree (from C8-tc) for a sample domain. NOT SHIP if it takes `Domain`.
 - Hand-edit: Yes if small.
 
 **C8b. Move `Create` and the test helper over**
@@ -902,13 +911,13 @@ Why this order: tests and measurements come first so every later claim is checka
 
 **Wave 3: retire DEI and the cache (hold point HP5: every C slice merged)**
 - Lane A: K6, F1 to F4, F6, N2 (done, Http half), N2b (decision 19 = yes; DbContext half)
-- Lane B: K2 (runs alone), C8-pre (runs alone), C8a1, C8a2, C8b, C8c1, C8c2, T3, C8d (runs alone), K3c, K3a, K3b, K5 (runs alone), C10, F5
+- Lane B: K2 (runs alone), C8-pre (runs alone), C8a1, C8-tc, C8a2, C8b, C8c1, C8c2, T3, C8d (runs alone), K3c, K3a, K3b, K5 (runs alone), C10, F5
 
 **Wave 4: last**
 - Lane A: H5, A6, A7 (deferred; not schedulable until each has a named consumer and Scot approves the wave)
 - Lane B: R1 then R2 (each runs alone)
 
-Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1, H1, N3, A1, A2a, A2b, N1, C4a, C0, T1, K0, B1, G1, G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b, C1a, C1b, C1c, E1, C2a, C2b, C4b, C4c, C4d, Q1a, Q1b, C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a, C7b, C7c, C7d, C9, K4, M1, P1, H2, H3, H4, Q2, K2, C8-pre, C8a1, C8a2, C8b, C8c1, C8c2, T3, C8d, K3c, K3a, K3b, K5, C10, K6, F1, F2, F3, F4, F5, F6, N2, R1, R2, H5, A6, A7.
+Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1, H1, N3, A1, A2a, A2b, N1, C4a, C0, T1, K0, B1, G1, G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b, C1a, C1b, C1c, E1, C2a, C2b, C4b, C4c, C4d, Q1a, Q1b, C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a, C7b, C7c, C7d, C9, K4, M1, P1, H2, H3, H4, Q2, K2, C8-pre, C8a1, C8-tc, C8a2, C8b, C8c1, C8c2, T3, C8d, K3c, K3a, K3b, K5, C10, K6, F1, F2, F3, F4, F5, F6, N2, R1, R2, H5, A6, A7.
 
 Scot, 2026-10-09 18:56 CDT: plan trimmed to the DEI-retirement path, finish line through C8d plus C10. Parked until after it: F2, F3, F4, F5, F6, R1, R2, A6, A7, H5, T3, Q1b, N1.
 
@@ -917,7 +926,7 @@ Scot, 2026-10-09 18:56 CDT: plan trimmed to the DEI-retirement path, finish line
 **Two lanes, work-in-progress cap of 2 (one slice per lane).** Almost every C slice edits the same DEI files, and every A, H and K slice edits `Compile/DomainSession.cs`, so a third lane would only produce merge conflicts.
 
 - **Lane A (catalog):** T0, A1, A2a, A2b, A3a, A3b, A4, A5a, A5b, C9, N2, A6, A7, G1, G2, G3, N4, C4e, M1, P1, Q2, K1, K4, K6, H1 to H5, F1 to F4, F6, N1, N3.
-- **Lane B (DEI retire):** T1, T2, T3, B1, K0, C0, C1a to C1c, E1, C2a, C2b, C3a, C3b, C4a to C4d, C5a, C5b, C6a to C6c, C7-0 to C7d, Q1a, Q1b, C8-pre, C8a1 to C8d, C10, K2, K3a, K3b, K3c, K5, F5, R1, R2.
+- **Lane B (DEI retire):** T1, T2, T3, B1, K0, C0, C1a to C1c, E1, C2a, C2b, C3a, C3b, C4a to C4d, C5a, C5b, C6a to C6c, C7-0 to C7d, Q1a, Q1b, C8-pre, C8a1, C8-tc, C8a2 to C8d, C10, K2, K3a, K3b, K3c, K5, F5, R1, R2.
 - **Join points:** C7-0 needs A3a; K3a needs C2a; K5 needs C8d; C8a1 needs C5b, C6c and C7d; M1 and T3 join (T3 needs M1); H2 and K6 chain in lane A.
 - Do not put two slices from the same lane in flight.
 
@@ -1022,14 +1031,14 @@ flowchart TD
 | Collection rules | Q1a, Q1b | S, S |
 | Subscriptions and links | C5a, C5b, C6a, C6b, C6c | M, M, M, M, M |
 | Consumer lookups | C7-0, C7a, C7b, C7c, C7d | M, M, S, S, S |
-| Instances and DEI | C8-pre, C8a1, C8a2, C8b, C8c1, C8c2, C8d | M, M, M, M, M, M, M |
+| Instances and DEI | C8-pre, C8a1, C8-tc, C8a2, C8b, C8c1, C8c2, C8d | M, M, M, M, M, M, M, M |
 | Compile inputs | K1, K2, K3c, K3a, K3b, K4, K5, K6 | S, M, S, S, M, M, M, S |
 | Artifact analysis | H1, H2, H3, H4, H5 | S, M, S, M, M |
 | Harness | Q2 | M |
 | Functions | F1, F2, F3, F4, F5, F6 | S, S, M, M, S, S |
 | Naming and rename | N1, N3, R1, R2 | S, S, S, M |
 
-82 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 13 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, plus the conditional P1). Sizes: 38 S, 43 M, 1 L. Overall: **L**. The risky slices are C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 122.
+83 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 14 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, C8-tc, plus the conditional P1). Sizes: 38 S, 44 M, 1 L. Overall: **L**. The risky slices are C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 122.
 
 ## 17. Dogfood probes per wave
 

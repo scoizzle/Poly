@@ -189,6 +189,8 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Why it has to be true.** Principle 0 says the syntax tree is the unit of meaning. If execute still walked `Effect` objects, or print built a different tree than simulate, “the domain works” would mean two different programs. Lowering is the one translation. It may *read* analysis metadata; the tree it emits is generic syntax (assignments, calls, `this`, loops), not domain types.
 
+**Observation (C8-tc):** Store jobs named above (`Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` as string-named host calls carrying a `Dictionary<string, object>`) are interpreter-only — an implementation detail of how the dictionary-backed instance binds a job, never a shape in the compiled tree. Lowering emits typed factory calls (`Fine.Create(amount, reason)`, `this.Create{Nav}(…)`) whose results are `DomainResult<T>`; only the interpreter maps those typed calls onto its instances (`HostAbi` / `InvokeNamed`). Where this principle names store jobs, read them as the interpreter's bind, not as nodes in the tree.
+
 **Correct before optimal.** Lowering produces a correct, interpretable implementation of the domain, not necessarily an optimal one. Optimization is a later pass, not a precondition for lowering.
 
 **Where it lives in code.**

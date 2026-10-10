@@ -1,5 +1,5 @@
 # TASK C5b - Multi-hop, depth and fan-out leave the store
-Status: planned. Branch slice/c5b-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c5b-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Depends on C5a (#149 `fa994ff7`, on master) and decision 9 / V2 (storage-only, answered: `pipeline-convergence-plan.decisions.md:33-50`); no open decision.
@@ -59,3 +59,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | fa994ff7 | planned | card's Files list omits the exporter/HostAbi edits print parity needs; store still matches + caps depth after C5a |
+| 2026-10-10 | implementer | grok/grok-4.6 | 9221666f | pushed | tests 3516/3516; sweep: handler Notify drives cascade; unlink drops registry |

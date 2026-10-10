@@ -11,9 +11,12 @@ public enum LoanStage
 
 public class Loan
 {
-    private List<Patron>? _patronOverdueSubscribers;
+    private int _notifyDepth;
+    private List<Patron>? _patronLoansOverdueSubscribers;
     private Loan()
-    { }
+    {
+        this._notifyDepth = new int();
+    }
     private Loan(Book? book = null, long amount = 0L)
     {
         this.Amount = amount;
@@ -64,22 +67,42 @@ public class Loan
         this.CurrentStage = LoanStage.Returned;
         return DomainResult.Success();
     }
-    internal void RegisterPatronOverdueSubscriber(Patron subscriber)
+    private void EnterNotifyCascade(string stageName)
     {
-        if (this._patronOverdueSubscribers == null)
+        if (this._notifyDepth >= 16)
         {
-            this._patronOverdueSubscribers = new List<Patron>();
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Loan' exceeded max depth (16) while notifying '", stageName, "'."));
         }
-        this._patronOverdueSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
+    }
+    internal void RegisterPatronLoansOverdueSubscriber(Patron subscriber)
+    {
+        if (this._patronLoansOverdueSubscribers == null)
+        {
+            this._patronLoansOverdueSubscribers = new List<Patron>();
+        }
+        this._patronLoansOverdueSubscribers.Add(subscriber);
     }
     internal void NotifyOverdueSubscribers(LoanStage previousStage)
     {
-        if (this._patronOverdueSubscribers != null)
+        this.EnterNotifyCascade("Overdue");
+        try
         {
-            foreach (var sub in this._patronOverdueSubscribers)
+            if (this._patronLoansOverdueSubscribers != null)
             {
-                sub.WhenEachLoanOverdue(this);
+                foreach (var sub in this._patronLoansOverdueSubscribers)
+                {
+                    sub.WhenEachLoanOverdue(this);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<Loan> Create(Book? book = null, long amount = 0L)

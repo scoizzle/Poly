@@ -1292,7 +1292,7 @@ public class DomainEntityInstanceTests {
         await Assert.That(threw).IsTrue();
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("UNTOUCHED");
 
-        // Flag cleared: a second linked subscriber still receives the next notify (and throws).
+        // A second linked subscriber still receives the next notify (and throws).
         var freshTracker = DomainEntityInstance.Create(tracker,
             new Dictionary<string, object?> { ["Status"] = "FRESH", ["Token"] = "OTHER" }, domain: domain);
         store.Add(freshTracker);
@@ -2468,6 +2468,56 @@ public class DomainEntityInstanceTests {
         for (int i = 1; i <= 11; i++) {
             await Assert.That(instances[i].CurrentStage).IsEqualTo("Active");
         }
+    }
+
+    [Test]
+    public async Task Subscription_MutualWhenTransition_ExceedsMaxNotifyDepth_Throws() {
+        // A and B each `when` the other into Active and transition themselves.
+        // Same-target confirms skip NoteAutomaticStage, so the cascade is a
+        // notify ping-pong; the depth bound fails loud instead of overflowing.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var a = new Entity("A", [status], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("SeesB", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new StageTransitionEffect(new StageReference("Active"))
+                ])
+            ]
+        };
+        var b = new Entity("B", [status], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("SeesA", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new StageTransitionEffect(new StageReference("Active"))
+                ])
+            ]
+        };
+        var seesB = new Relationship("SeesB",
+            new DomainTypeReference("A"), new DomainTypeReference("B"),
+            RelationshipCardinality.OneToOne, []);
+        var seesA = new Relationship("SeesA",
+            new DomainTypeReference("B"), new DomainTypeReference("A"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = ValidDomain.Create("Cycle", [a, b], [seesB, seesA]);
+        var store = new DomainInstanceStore();
+        var instA = DomainEntityInstance.Create(a, domain: domain);
+        var instB = DomainEntityInstance.Create(b, domain: domain);
+        store.Add(instA);
+        store.Add(instB);
+        store.Link("SeesB", instA, instB);
+        store.Link("SeesA", instB, instA);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instA.InvokeAction("Go"));
+        await Assert.That(ex!.Message).Contains("Subscription cascade");
+        await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxNotifyDepth.ToString());
     }
 
     [Test]

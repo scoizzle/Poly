@@ -386,6 +386,8 @@ public sealed class DomainInstanceStore {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(target);
+        if (!IsLinked(relationshipName, source, target))
+            return;
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.RemoveSubscriber(fieldName, source);
         _links.RemoveAll(l =>
@@ -511,7 +513,7 @@ public sealed class DomainInstanceStore {
                     continue;
                 foreach (var stageName in entry.StageNames) {
                     var fieldName = DomainEntityInstance.SubscriberRegistryFieldName(
-                        source.Entity.Name, stageName);
+                        source.Entity.Name, relationshipName, stageName);
                     if (seen.Add(fieldName))
                         fields.Add(fieldName);
                 }

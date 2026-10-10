@@ -10,9 +10,10 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Store subscription fan-out after a stage assignment. Printed classes and
-    /// the shared StageTransition lowering call <c>Notify{Stage}Subscribers</c>
-    /// for watched stages, which routes here. Skips when no store is attached.
+    /// Store subscription fan-out after a stage assignment. The simulator's
+    /// <c>Notify{Stage}Subscribers</c> routes here; printed classes fan out in
+    /// their generated <c>Notify{Stage}Subscribers</c> method. Skips when no
+    /// store is attached.
     /// </summary>
     public void Notify(string targetStageName) =>
         Notify(targetStageName, previousStageName: null);
@@ -86,6 +87,23 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>Clears the automatic-transition visit set for a new trigger.</summary>
     public void ClearAutomaticStageChain() => _automaticStageChain = null;
+
+    /// <summary>
+    /// Nested <c>Notify{Stage}Subscribers</c> bound. Each hop increments; past
+    /// <see cref="MaxNotifyDepth"/> throws instead of overflowing the stack.
+    /// Matching <see cref="ExitNotifyCascade"/> runs in the compiled body's finally.
+    /// </summary>
+    public void EnterNotifyCascade(string stageName) {
+        ArgumentException.ThrowIfNullOrEmpty(stageName);
+        if (_notifyDepth >= MaxNotifyDepth)
+            throw new InvalidOperationException(
+                $"Subscription cascade on entity '{Entity.Name}' exceeded max depth " +
+                $"({MaxNotifyDepth}) while notifying '{stageName}'.");
+        _notifyDepth++;
+    }
+
+    /// <summary>Pairs with <see cref="EnterNotifyCascade"/> at the end of a hop.</summary>
+    public void ExitNotifyCascade() => _notifyDepth--;
 
     /// <summary>
     /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.

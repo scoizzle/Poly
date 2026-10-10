@@ -58,7 +58,7 @@ public class Guest
     internal void AttachEvents(EventHold child)
     {
         this._events.Add(child);
-        child.RegisterGuestReleasedSubscriber(this);
+        child.RegisterGuestEventsReleasedSubscriber(this);
     }
     private DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio, Room? room)
     {
@@ -73,7 +73,7 @@ public class Guest
     internal void AttachReservations(Reservation child)
     {
         this._reservations.Add(child);
-        child.RegisterGuestDepartedSubscriber(this);
+        child.RegisterGuestReservationsDepartedSubscriber(this);
     }
     public DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
     {
@@ -195,11 +195,11 @@ public class Guest
     {
         foreach (var target in this.Reservations)
         {
-            target.RegisterGuestDepartedSubscriber(this);
+            target.RegisterGuestReservationsDepartedSubscriber(this);
         }
         foreach (var target in this.Events)
         {
-            target.RegisterGuestReleasedSubscriber(this);
+            target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

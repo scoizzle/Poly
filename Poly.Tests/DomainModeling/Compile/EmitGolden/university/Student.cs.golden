@@ -53,8 +53,8 @@ public class Student
     internal void AttachEnrollments(Enrollment child)
     {
         this._enrollments.Add(child);
-        child.RegisterStudentDroppedSubscriber(this);
-        child.RegisterStudentCompletedSubscriber(this);
+        child.RegisterStudentEnrollmentsDroppedSubscriber(this);
+        child.RegisterStudentEnrollmentsCompletedSubscriber(this);
     }
     public DomainResult<Enrollment> Enroll(Section offering)
     {
@@ -239,11 +239,11 @@ public class Student
     {
         foreach (var target in this.Enrollments)
         {
-            target.RegisterStudentDroppedSubscriber(this);
+            target.RegisterStudentEnrollmentsDroppedSubscriber(this);
         }
         foreach (var target in this.Enrollments)
         {
-            target.RegisterStudentCompletedSubscriber(this);
+            target.RegisterStudentEnrollmentsCompletedSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

@@ -14,13 +14,16 @@ public enum ReservationStage
 
 public class Reservation
 {
-    private List<Room>? _roomInHouseSubscribers;
-    private List<Room>? _roomDepartedSubscribers;
-    private List<Room>? _roomCancelledSubscribers;
-    private List<Room>? _roomNoShowSubscribers;
-    private List<Guest>? _guestDepartedSubscribers;
+    private int _notifyDepth;
+    private List<Room>? _roomStaysInHouseSubscribers;
+    private List<Room>? _roomStaysDepartedSubscribers;
+    private List<Room>? _roomStaysCancelledSubscribers;
+    private List<Room>? _roomStaysNoShowSubscribers;
+    private List<Guest>? _guestReservationsDepartedSubscribers;
     private Reservation()
-    { }
+    {
+        this._notifyDepth = new int();
+    }
     private Reservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
         this.CheckInDate = checkInDate;
@@ -216,92 +219,136 @@ public class Reservation
     public bool HasGuest() => this.Guest != null;
     public bool BillSettled() => this.Folio != null && this.Folio!.Balance == 0L;
     public bool HasFolio() => this.Folio != null;
-    internal void RegisterRoomInHouseSubscriber(Room subscriber)
+    private void EnterNotifyCascade(string stageName)
     {
-        if (this._roomInHouseSubscribers == null)
+        if (this._notifyDepth >= 16)
         {
-            this._roomInHouseSubscribers = new List<Room>();
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Reservation' exceeded max depth (16) while notifying '", stageName, "'."));
         }
-        this._roomInHouseSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth + 1;
     }
-    internal void RegisterRoomDepartedSubscriber(Room subscriber)
+    private void ExitNotifyCascade()
     {
-        if (this._roomDepartedSubscribers == null)
-        {
-            this._roomDepartedSubscribers = new List<Room>();
-        }
-        this._roomDepartedSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth - 1;
     }
-    internal void RegisterRoomCancelledSubscriber(Room subscriber)
+    internal void RegisterRoomStaysInHouseSubscriber(Room subscriber)
     {
-        if (this._roomCancelledSubscribers == null)
+        if (this._roomStaysInHouseSubscribers == null)
         {
-            this._roomCancelledSubscribers = new List<Room>();
+            this._roomStaysInHouseSubscribers = new List<Room>();
         }
-        this._roomCancelledSubscribers.Add(subscriber);
+        this._roomStaysInHouseSubscribers.Add(subscriber);
     }
-    internal void RegisterRoomNoShowSubscriber(Room subscriber)
+    internal void RegisterRoomStaysDepartedSubscriber(Room subscriber)
     {
-        if (this._roomNoShowSubscribers == null)
+        if (this._roomStaysDepartedSubscribers == null)
         {
-            this._roomNoShowSubscribers = new List<Room>();
+            this._roomStaysDepartedSubscribers = new List<Room>();
         }
-        this._roomNoShowSubscribers.Add(subscriber);
+        this._roomStaysDepartedSubscribers.Add(subscriber);
     }
-    internal void RegisterGuestDepartedSubscriber(Guest subscriber)
+    internal void RegisterRoomStaysCancelledSubscriber(Room subscriber)
     {
-        if (this._guestDepartedSubscribers == null)
+        if (this._roomStaysCancelledSubscribers == null)
         {
-            this._guestDepartedSubscribers = new List<Guest>();
+            this._roomStaysCancelledSubscribers = new List<Room>();
         }
-        this._guestDepartedSubscribers.Add(subscriber);
+        this._roomStaysCancelledSubscribers.Add(subscriber);
+    }
+    internal void RegisterRoomStaysNoShowSubscriber(Room subscriber)
+    {
+        if (this._roomStaysNoShowSubscribers == null)
+        {
+            this._roomStaysNoShowSubscribers = new List<Room>();
+        }
+        this._roomStaysNoShowSubscribers.Add(subscriber);
+    }
+    internal void RegisterGuestReservationsDepartedSubscriber(Guest subscriber)
+    {
+        if (this._guestReservationsDepartedSubscribers == null)
+        {
+            this._guestReservationsDepartedSubscribers = new List<Guest>();
+        }
+        this._guestReservationsDepartedSubscribers.Add(subscriber);
     }
     internal void NotifyInHouseSubscribers(ReservationStage previousStage)
     {
-        if (this._roomInHouseSubscribers != null)
+        this.EnterNotifyCascade("InHouse");
+        try
         {
-            foreach (var sub in this._roomInHouseSubscribers)
+            if (this._roomStaysInHouseSubscribers != null)
             {
-                sub.WhenEachReservationInHouse();
+                foreach (var sub in this._roomStaysInHouseSubscribers)
+                {
+                    sub.WhenEachReservationInHouse();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyDepartedSubscribers(ReservationStage previousStage)
     {
-        if (this._roomDepartedSubscribers != null)
+        this.EnterNotifyCascade("Departed");
+        try
         {
-            foreach (var sub in this._roomDepartedSubscribers)
+            if (this._roomStaysDepartedSubscribers != null)
             {
-                sub.WhenEachReservationDeparted();
-                sub.WhenEachReservationDeparted_2();
+                foreach (var sub in this._roomStaysDepartedSubscribers)
+                {
+                    sub.WhenEachReservationDeparted();
+                    sub.WhenEachReservationDeparted_2();
+                }
+            }
+            if (this._guestReservationsDepartedSubscribers != null)
+            {
+                foreach (var sub in this._guestReservationsDepartedSubscribers)
+                {
+                    sub.WhenEachReservationDeparted(this);
+                }
             }
         }
-        if (this._guestDepartedSubscribers != null)
+        finally
         {
-            foreach (var sub in this._guestDepartedSubscribers)
-            {
-                sub.WhenEachReservationDeparted(this);
-            }
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyCancelledSubscribers(ReservationStage previousStage)
     {
-        if (this._roomCancelledSubscribers != null)
+        this.EnterNotifyCascade("Cancelled");
+        try
         {
-            foreach (var sub in this._roomCancelledSubscribers)
+            if (this._roomStaysCancelledSubscribers != null)
             {
-                sub.WhenEachReservationCancelled();
+                foreach (var sub in this._roomStaysCancelledSubscribers)
+                {
+                    sub.WhenEachReservationCancelled();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyNoShowSubscribers(ReservationStage previousStage)
     {
-        if (this._roomNoShowSubscribers != null)
+        this.EnterNotifyCascade("NoShow");
+        try
         {
-            foreach (var sub in this._roomNoShowSubscribers)
+            if (this._roomStaysNoShowSubscribers != null)
             {
-                sub.WhenEachReservationNoShow();
+                foreach (var sub in this._roomStaysNoShowSubscribers)
+                {
+                    sub.WhenEachReservationNoShow();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<Reservation> Create(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)

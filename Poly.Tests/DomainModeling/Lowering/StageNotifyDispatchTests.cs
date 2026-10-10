@@ -88,13 +88,65 @@ public class StageNotifyDispatchTests {
 
         store.Unlink("widgets", bin, dropped);
         IDictionary<string, object?> droppedBag = dropped;
-        await Assert.That(droppedBag["_binActiveSubscribers"]).IsNull();
+        await Assert.That(droppedBag["_binWidgetsActiveSubscribers"]).IsNull();
         IDictionary<string, object?> keptBag = kept;
-        var keptRegistry = keptBag["_binActiveSubscribers"] as System.Collections.IList;
+        var keptRegistry = keptBag["_binWidgetsActiveSubscribers"] as System.Collections.IList;
         await Assert.That(keptRegistry).IsNotNull();
         await Assert.That(keptRegistry!.Count).IsEqualTo(1);
 
         await Assert.That(dropped.InvokeAction("Go").Succeeded).IsTrue();
         await Assert.That(bin.GetProperty<object>("Fires")).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Unlink_SiblingRelationship_KeepsOtherSubscriptionFiring() {
+        var poly = """
+            domain Workshop
+            Widget: entity {
+              Draft: stage {
+                Go: action { transition to Active }
+              }
+              Active: stage { }
+            }
+            Bin: entity {
+              Fires: Number default(0)
+              widgets: many Widget
+              extras: many Widget
+              when widgets Active {
+                assign Fires to Fires + 1
+              }
+              when extras Active {
+                assign Fires to Fires + 10
+              }
+            }
+            """;
+        var (domain, _) = EvolvedDomain.FromDsl(poly);
+        Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
+        var store = new DomainInstanceStore();
+        var bin = DomainEntityInstance.Create(
+            E("Bin"), new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
+        var first = DomainEntityInstance.Create(E("Widget"), domain: domain);
+        var second = DomainEntityInstance.Create(E("Widget"), domain: domain);
+        store.Add(bin);
+        store.Add(first);
+        store.Add(second);
+        store.Link("widgets", bin, first);
+        store.Link("extras", bin, first);
+        store.Link("widgets", bin, second);
+        store.Link("extras", bin, second);
+
+        await Assert.That(first.InvokeAction("Go").Succeeded).IsTrue();
+        await Assert.That(bin.GetProperty<object>("Fires")).IsEqualTo(11L);
+
+        store.Unlink("nope", bin, second);
+        store.Unlink("widgets", bin, second);
+        IDictionary<string, object?> secondBag = second;
+        await Assert.That(secondBag["_binWidgetsActiveSubscribers"]).IsNull();
+        var extras = secondBag["_binExtrasActiveSubscribers"] as System.Collections.IList;
+        await Assert.That(extras).IsNotNull();
+        await Assert.That(extras!.Count).IsEqualTo(1);
+
+        await Assert.That(second.InvokeAction("Go").Succeeded).IsTrue();
+        await Assert.That(bin.GetProperty<object>("Fires")).IsEqualTo(21L);
     }
 }

@@ -42,7 +42,10 @@ public sealed partial class DomainToCSharpExporter {
     );
 
     private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
-        $"_{ToCamelCase(info.SourceEntity.Name)}{info.StageName}Subscribers";
+        $"_{ToCamelCase(info.SourceEntity.Name)}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscribers";
+
+    private static string SubscriberRegisterMethodName(SubscriptionInfo info) =>
+        $"Register{info.SourceEntity.Name}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscriber";
 
     /// <summary>
     /// Builds Syntax AST type definitions for all entities and their stage enums
@@ -445,13 +448,13 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Target entity: subscription registry ──────────────────
-        // One registry field + register method per (stage, subscriber) pair; the notify
-        // method calls EVERY subscription's handler for that pair — a subscriber may
-        // declare any/all/Each (or multiple Each) reactions on the same relation+stage,
-        // each with a quantifier-disambiguated handler name.
+        // One registry field + register method per (relationship, stage, subscriber)
+        // triple; the notify method calls EVERY subscription's handler for that
+        // triple — a subscriber may declare any/all/Each (or multiple Each) reactions
+        // on the same relation+stage, each with a quantifier-disambiguated handler name.
         if (targetSubs is { Count: > 0 }) {
             var groups = targetSubs
-                .GroupBy(i => (i.StageName, i.SourceEntity.Name))
+                .GroupBy(i => (i.StageName, i.SourceEntity.Name, i.Relationship.Name))
                 .Select(g => g.ToList())
                 .ToList();
             foreach (var infos in groups) {
@@ -482,7 +485,7 @@ public sealed partial class DomainToCSharpExporter {
                         [new Parameter(paramName)])
                 ]);
                 methods.Add(new MethodDefinitionNode(
-                    $"Register{infos[0].SourceEntity.Name}{infos[0].StageName}Subscriber",
+                    SubscriberRegisterMethodName(infos[0]),
                     new TypeReference("void"),
                     Parameters: [new Parameter(paramName, srcType)],
                     Body: registerBody,
@@ -491,9 +494,9 @@ public sealed partial class DomainToCSharpExporter {
             }
 
             // One Notify{Stage}Subscribers per watched stage, fanning out every
-            // (source, stage) registry. Two subscribers on the same target stage
-            // (Student + Section on Enrollment.Dropped) used to emit duplicate
-            // _droppedSubscribers / NotifyDroppedSubscribers members.
+            // (source, relationship, stage) registry. Two subscribers on the same
+            // target stage (Student + Section on Enrollment.Dropped) used to emit
+            // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
                 var notifyPrevious = new Parameter(
                     "previousStage",
@@ -524,7 +527,15 @@ public sealed partial class DomainToCSharpExporter {
                     $"Notify{stageGroup.Key}Subscribers",
                     new TypeReference("void"),
                     Parameters: [notifyPrevious],
-                    Body: new Block(notifyNodes),
+                    Body: new Block([
+                        new Invoke(
+                            new Member(new ThisReference(), "EnterNotifyCascade"),
+                            new Constant(stageGroup.Key)),
+                        new TryCatchFinally(
+                            notifyNodes.Count == 1 ? notifyNodes[0] : new Block(notifyNodes),
+                            FinallyBlock: new Invoke(
+                                new Member(new ThisReference(), "ExitNotifyCascade")))
+                    ]),
                     AccessModifier: AccessModifier.Internal
                 ));
             }
@@ -866,6 +877,8 @@ public sealed partial class DomainToCSharpExporter {
 
         AddStoreBindMethods(entity, domain, metadata, methods);
         AddAutomaticTransitionLoopGuard(entity, fields, methods);
+        if (targetSubs is { Count: > 0 })
+            AddNotifyCascadeDepthGuard(entity, fields, methods);
 
         typeDefs.Add(new TypeDefinitionNode(
             entity.Name,

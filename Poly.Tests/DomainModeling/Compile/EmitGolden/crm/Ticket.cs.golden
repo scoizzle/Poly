@@ -11,9 +11,12 @@ public enum TicketStage
 
 public class Ticket
 {
-    private List<Account>? _accountClosedSubscribers;
+    private int _notifyDepth;
+    private List<Account>? _accountTicketsClosedSubscribers;
     private Ticket()
-    { }
+    {
+        this._notifyDepth = new int();
+    }
     private Ticket(string subject, Account? account = null)
     {
         this.Subject = subject;
@@ -61,22 +64,42 @@ public class Ticket
         }
         return DomainResult.Failure("'Close' is not valid for the current stage on entity 'Ticket'.");
     }
-    internal void RegisterAccountClosedSubscriber(Account subscriber)
+    private void EnterNotifyCascade(string stageName)
     {
-        if (this._accountClosedSubscribers == null)
+        if (this._notifyDepth >= 16)
         {
-            this._accountClosedSubscribers = new List<Account>();
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Ticket' exceeded max depth (16) while notifying '", stageName, "'."));
         }
-        this._accountClosedSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
+    }
+    internal void RegisterAccountTicketsClosedSubscriber(Account subscriber)
+    {
+        if (this._accountTicketsClosedSubscribers == null)
+        {
+            this._accountTicketsClosedSubscribers = new List<Account>();
+        }
+        this._accountTicketsClosedSubscribers.Add(subscriber);
     }
     internal void NotifyClosedSubscribers(TicketStage previousStage)
     {
-        if (this._accountClosedSubscribers != null)
+        this.EnterNotifyCascade("Closed");
+        try
         {
-            foreach (var sub in this._accountClosedSubscribers)
+            if (this._accountTicketsClosedSubscribers != null)
             {
-                sub.WhenEachTicketClosed();
+                foreach (var sub in this._accountTicketsClosedSubscribers)
+                {
+                    sub.WhenEachTicketClosed();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<Ticket> Create(string subject, Account? account = null)

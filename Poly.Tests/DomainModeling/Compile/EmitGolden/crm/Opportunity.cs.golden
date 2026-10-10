@@ -16,14 +16,16 @@ public class Opportunity
     private List<Activity> _activities;
     private List<Line> _lines;
     private List<Quote> _quotes;
-    private List<Account>? _accountWonSubscribers;
-    private List<Account>? _accountProposeSubscribers;
-    private List<Account>? _accountLostSubscribers;
+    private int _notifyDepth;
+    private List<Account>? _accountOpportunitiesWonSubscribers;
+    private List<Account>? _accountOpportunitiesProposeSubscribers;
+    private List<Account>? _accountOpportunitiesLostSubscribers;
     private Opportunity()
     {
         this._activities = new List<Activity>();
         this._lines = new List<Line>();
         this._quotes = new List<Quote>();
+        this._notifyDepth = new int();
     }
     private Opportunity(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
@@ -472,59 +474,95 @@ public class Opportunity
     }
     public bool HasAccount() => this.Account != null;
     public bool HasLines() => this.Lines.Count > 0L;
-    internal void RegisterAccountWonSubscriber(Account subscriber)
+    private void EnterNotifyCascade(string stageName)
     {
-        if (this._accountWonSubscribers == null)
+        if (this._notifyDepth >= 16)
         {
-            this._accountWonSubscribers = new List<Account>();
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Opportunity' exceeded max depth (16) while notifying '", stageName, "'."));
         }
-        this._accountWonSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth + 1;
     }
-    internal void RegisterAccountProposeSubscriber(Account subscriber)
+    private void ExitNotifyCascade()
     {
-        if (this._accountProposeSubscribers == null)
-        {
-            this._accountProposeSubscribers = new List<Account>();
-        }
-        this._accountProposeSubscribers.Add(subscriber);
+        this._notifyDepth = this._notifyDepth - 1;
     }
-    internal void RegisterAccountLostSubscriber(Account subscriber)
+    internal void RegisterAccountOpportunitiesWonSubscriber(Account subscriber)
     {
-        if (this._accountLostSubscribers == null)
+        if (this._accountOpportunitiesWonSubscribers == null)
         {
-            this._accountLostSubscribers = new List<Account>();
+            this._accountOpportunitiesWonSubscribers = new List<Account>();
         }
-        this._accountLostSubscribers.Add(subscriber);
+        this._accountOpportunitiesWonSubscribers.Add(subscriber);
+    }
+    internal void RegisterAccountOpportunitiesProposeSubscriber(Account subscriber)
+    {
+        if (this._accountOpportunitiesProposeSubscribers == null)
+        {
+            this._accountOpportunitiesProposeSubscribers = new List<Account>();
+        }
+        this._accountOpportunitiesProposeSubscribers.Add(subscriber);
+    }
+    internal void RegisterAccountOpportunitiesLostSubscriber(Account subscriber)
+    {
+        if (this._accountOpportunitiesLostSubscribers == null)
+        {
+            this._accountOpportunitiesLostSubscribers = new List<Account>();
+        }
+        this._accountOpportunitiesLostSubscribers.Add(subscriber);
     }
     internal void NotifyWonSubscribers(OpportunityStage previousStage)
     {
-        if (this._accountWonSubscribers != null)
+        this.EnterNotifyCascade("Won");
+        try
         {
-            foreach (var sub in this._accountWonSubscribers)
+            if (this._accountOpportunitiesWonSubscribers != null)
             {
-                sub.WhenEachOpportunityWon();
-                sub.WhenEachOpportunityWon(this);
+                foreach (var sub in this._accountOpportunitiesWonSubscribers)
+                {
+                    sub.WhenEachOpportunityWon();
+                    sub.WhenEachOpportunityWon(this);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyProposeSubscribers(OpportunityStage previousStage)
     {
-        if (this._accountProposeSubscribers != null)
+        this.EnterNotifyCascade("Propose");
+        try
         {
-            foreach (var sub in this._accountProposeSubscribers)
+            if (this._accountOpportunitiesProposeSubscribers != null)
             {
-                sub.WhenEachOpportunityPropose(this);
+                foreach (var sub in this._accountOpportunitiesProposeSubscribers)
+                {
+                    sub.WhenEachOpportunityPropose(this);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyLostSubscribers(OpportunityStage previousStage)
     {
-        if (this._accountLostSubscribers != null)
+        this.EnterNotifyCascade("Lost");
+        try
         {
-            foreach (var sub in this._accountLostSubscribers)
+            if (this._accountOpportunitiesLostSubscribers != null)
             {
-                sub.WhenEachOpportunityLost(this);
+                foreach (var sub in this._accountOpportunitiesLostSubscribers)
+                {
+                    sub.WhenEachOpportunityLost(this);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<Opportunity> Create(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)

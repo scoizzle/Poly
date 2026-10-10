@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -1095,6 +1096,53 @@ public sealed partial class DomainToCSharpExporter {
                 new Assignment(
                     new Member(new ThisReference(), "_automaticStageChain"),
                     new Constant(null!))]),
+            AccessModifier: AccessModifier.Private));
+    }
+
+    /// <summary>
+    /// Printed twin of the simulator notify-depth bound: nested
+    /// <c>Notify{Stage}Subscribers</c> calls past <see cref="DomainEntityInstance.MaxNotifyDepth"/>
+    /// throw instead of overflowing the stack. Same message as the simulator.
+    /// </summary>
+    private static void AddNotifyCascadeDepthGuard(
+        Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
+        fields.Add(new FieldDefinitionNode(
+            "_notifyDepth",
+            new PrimitiveTypeReference(PrimType.Int32),
+            AccessModifier: AccessModifier.Private));
+        methods.Add(new MethodDefinitionNode(
+            "EnterNotifyCascade",
+            new TypeReference("void"),
+            Parameters: [new Parameter("stageName", new PrimitiveTypeReference(PrimType.String))],
+            Body: new Block([
+                new IfStatement(
+                    new GreaterThanOrEqual(
+                        new Member(new ThisReference(), "_notifyDepth"),
+                        new Constant(DomainEntityInstance.MaxNotifyDepth)),
+                    new ThrowStatement(new New(
+                        new NamedTypeReference("System.InvalidOperationException"),
+                        new Invoke(
+                            new Member(new NamedTypeReference("string"), "Concat"),
+                            new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({DomainEntityInstance.MaxNotifyDepth}) while notifying '"),
+                            new Parameter("stageName"),
+                            new Constant("'."))))),
+                new Assignment(
+                    new Member(new ThisReference(), "_notifyDepth"),
+                    new Syntactic.Add(
+                        new Member(new ThisReference(), "_notifyDepth"),
+                        new Constant(1)))
+            ]),
+            AccessModifier: AccessModifier.Private));
+        methods.Add(new MethodDefinitionNode(
+            "ExitNotifyCascade",
+            new TypeReference("void"),
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "_notifyDepth"),
+                    new Syntactic.Subtract(
+                        new Member(new ThisReference(), "_notifyDepth"),
+                        new Constant(1)))
+            ]),
             AccessModifier: AccessModifier.Private));
     }
 

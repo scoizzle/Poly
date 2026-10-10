@@ -1,5 +1,5 @@
 # TASK C4d - Stage transition table as a tree
-Status: planned. Branch slice/c4d-transition-table. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c4d-transition-table. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Depends on C4c (#141 `cc5cd55a`, on master) and decision V5 = a (decisions file `:91-106`, answered). The card's `HostAbi.cs:85-87` is stale: the unknown-stage silent no-op is `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs:105-106`; the tree twin is `Poly/DomainModeling/Lowering/EffectLoweringPass.cs:571-573` (`return new Block([])`). Unknown stage names are already Analyze errors (`EffectAnalyzer.ValidateStageTransition` `:840-848`, C4e #104) and `DomainProgramProjection.ToSyntax` refuses errors (`:18-22`), so this is fail-closed, not a new diagnostic. The same-stage return (`HostAbi.cs:109-110`) is idempotent and stays.
@@ -60,3 +60,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode-go/deepseek-v4.1-flash | `cc5cd55a` | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | `efe4570a` | pushed | tests 3501/3501; sweep: unknown-stage throws; first-stage OnEntry runs ST |

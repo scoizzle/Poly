@@ -41,10 +41,7 @@ public sealed partial record DomainEntityInstance {
                         $"Policy '{name}' does not take arguments.");
                 return EvaluatePolicy(policy);
             }
-            AnalysisResult? analysis = Domain is not null
-                ? RuntimeAnalysisCache.GetOrAnalyze(Domain)
-                : null;
-            var unresolved = ReportUnresolvedAction(name, analysis);
+            var unresolved = ReportUnresolvedAction(name);
             return DomainResult.Failure(
                 unresolved.ErrorMessage ?? $"Action '{name}' not found on entity '{Entity.Name}'.");
         }
@@ -182,9 +179,8 @@ public sealed partial record DomainEntityInstance {
 
     private Action? ResolveActionForNamedInvoke(string name) {
         if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            analysis.TryResolveAction(Domain, Entity, CurrentStage, name, out var action);
-            return action;
+            var method = RuntimeAnalysisCache.Index(Domain).Method(Entity.Name, name);
+            return method is not null ? ResolveStandaloneAction(name) : null;
         }
         return ResolveStandaloneAction(name);
     }

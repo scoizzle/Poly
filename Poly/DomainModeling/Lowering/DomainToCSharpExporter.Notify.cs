@@ -331,12 +331,14 @@ public sealed partial class DomainToCSharpExporter {
     /// entry-assigned props (body-initialized, never ctor params) are skipped.
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps) {
+        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps,
+        INodeMetadataProvider analysis) {
 
         var checks = new List<Node>();
         var entityTypeRef = new NamedTypeReference(entity.Name);
         var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
+        var enumProps = GetEnumPropertyNames(entity, domain, analysis);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
@@ -452,7 +454,9 @@ public sealed partial class DomainToCSharpExporter {
                 }
             }
 
-            if (TryResolveEnumType(domain, analysis: null, prop.Type.TypeName, out var enumType)
+            if (enumProps is not null
+                && enumProps.TryGetValue(prop.Name, out var enumTypeName)
+                && TryResolveEnumType(domain, analysis, enumTypeName, out var enumType)
                 && enumType is { MemberNames.Count: > 0 }) {
                 Node? notMember = null;
                 var enumTypeRef = new NamedTypeReference(enumType.Name);

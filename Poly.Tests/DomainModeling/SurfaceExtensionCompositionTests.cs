@@ -220,7 +220,8 @@ public class SurfaceExtensionCompositionTests {
     [Test]
     public async Task StageAndEntityPeer_SameNotify_StageFirstThenEntity_LastWriterOnSharedProp() {
         // Stage assigns StageNote from peer; entity assigns LastCode from peer.
-        // Shared Status: stage writes STAGE, entity writes ENTITY → last writer = ENTITY.
+        // Compiled Notify body calls entity-level When… then stage-scoped When…
+        // Shared Status: last writer = STAGE.
         var (domain, analysis) = ParseAndAnalyze("""
             domain StageEntityPeer
             Tracker: entity {
@@ -269,7 +270,7 @@ public class SurfaceExtensionCompositionTests {
 
         await Assert.That(tracker.GetProperty<string>("StageNote")).IsEqualTo("BOTH-7");
         await Assert.That(tracker.GetProperty<string>("LastCode")).IsEqualTo("BOTH-7");
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("ENTITY");
+        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("STAGE");
     }
 
     // ── multi-link path-prefix (also unit-tested elsewhere; DSL path) ──

@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -107,10 +108,7 @@ public sealed partial record DomainEntityInstance {
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
         RuntimeAnalysisCache.GetOrLower(
             Domain, RuntimeAnalysisCache.Session(Domain), analysis);
-        if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, name, out var method)
-            || method?.Body is null)
-            return false;
-        if (!TryMatchSubscriptionBody(method.Body, out var entry, out var targetStageName))
+        if (!TryMatchWhenHandler(name, out var entry, out var targetStageName))
             return false;
 
         DomainEntityInstance peer = this;
@@ -130,8 +128,12 @@ public sealed partial record DomainEntityInstance {
         return true;
     }
 
-    private bool TryMatchSubscriptionBody(
-        Node body,
+    /// <summary>
+    /// Resolves <c>When{Any|All|Each}{Target}{Stage}</c> to the plan entry
+    /// using the same names the exporter assigned.
+    /// </summary>
+    private bool TryMatchWhenHandler(
+        string name,
         out SubscriptionDispatchPlanEntry entry,
         out string targetStageName) {
         entry = null!;
@@ -139,38 +141,31 @@ public sealed partial record DomainEntityInstance {
         if (Domain is null)
             return false;
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        if (MatchPlan(
-                analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(Entity),
-                body, out entry, out targetStageName))
-            return true;
+        var entityLookup = Domain.Types.OfType<Entity>()
+            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        var subList = new List<DomainToCSharpExporter.SubscriptionInfo>();
+        var byTarget = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
+            StringComparer.Ordinal);
+        var entityPlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(Entity);
+        if (entityPlan is not null)
+            DomainToCSharpExporter.CollectSubscriptionInfo(
+                entityPlan, Entity, null, entityLookup, subList, byTarget);
         foreach (var stage in Entity.Stages) {
-            if (MatchPlan(
-                    analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage),
-                    body, out entry, out targetStageName))
-                return true;
+            var stagePlan = analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage);
+            if (stagePlan is not null)
+                DomainToCSharpExporter.CollectSubscriptionInfo(
+                    stagePlan, Entity, stage.Name, entityLookup, subList, byTarget);
         }
-        return false;
-    }
-
-    private bool MatchPlan(
-        SubscriptionDispatchPlanMetadata? plan,
-        Node body,
-        out SubscriptionDispatchPlanEntry entry,
-        out string targetStageName) {
-        entry = null!;
-        targetStageName = null!;
-        if (plan is null || Domain is null)
+        if (subList.Count == 0)
             return false;
-        foreach (var candidate in plan.ByRelationshipName.Values.SelectMany(e => e)) {
-            foreach (var stageName in candidate.StageNames) {
-                if (RuntimeAnalysisCache.TryGetSubscriptionBody(
-                        Domain, candidate, stageName, out var cached)
-                    && ReferenceEquals(cached, body)) {
-                    entry = candidate;
-                    targetStageName = stageName;
-                    return true;
-                }
-            }
+        var names = DomainToCSharpExporter.BuildHandlerNames(
+            [new KeyValuePair<string, List<DomainToCSharpExporter.SubscriptionInfo>>(Entity.Name, subList)]);
+        foreach (var (info, handlerName) in names) {
+            if (!string.Equals(handlerName, name, StringComparison.Ordinal))
+                continue;
+            entry = info.Subscription;
+            targetStageName = info.StageName;
+            return true;
         }
         return false;
     }

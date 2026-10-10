@@ -267,11 +267,8 @@ public sealed partial record DomainEntityInstance {
     /// the next Notify.
     /// </summary>
     internal void ClearSubscriberRegistries() {
-        foreach (var key in _values.Keys.ToList()) {
-            if (key.StartsWith("_", StringComparison.Ordinal)
-                && key.EndsWith("Subscribers", StringComparison.Ordinal))
-                _values[key] = null;
-        }
+        foreach (var field in SubscriberRegistryFields(Entity, Domain))
+            _values[field.Name] = null;
     }
 
     /// <summary>

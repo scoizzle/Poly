@@ -138,6 +138,47 @@ public class ParityTests {
         }
         """;
 
+    const string AssignRequiredDsl = """
+        domain Lab
+        Person: entity {
+          Name: Text required
+          Rename: action (name: Text) {
+            assign Name to name
+          }
+        }
+        """;
+
+    const string AssignLengthDsl = """
+        domain Lab
+        Person: entity {
+          Name: Text length(3, 10)
+          Rename: action (name: Text) {
+            assign Name to name
+          }
+        }
+        """;
+
+    const string AssignPatternDsl = """
+        domain Lab
+        Tag: entity {
+          Code: Text pattern("^[A-Z]{2}$")
+          Relabel: action (code: Text) {
+            assign Code to code
+          }
+        }
+        """;
+
+    const string AssignEnumDsl = """
+        domain Shop
+        PatronStatus: enum { Active, Suspended }
+        Patron: entity {
+          Status: PatronStatus default(Active)
+          SetStatus: action (status: PatronStatus) {
+            assign Status to status
+          }
+        }
+        """;
+
     const string GuardDsl = """
         domain Board
         Task: entity {
@@ -192,6 +233,61 @@ public class ParityTests {
         await Assert.That(outcomes[1].Success).IsFalse();
         await Assert.That(outcomes[1].Message).IsEqualTo(
             "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksRequired_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignRequiredDsl, "ParityAssignRequired")
+            .AssertAgree(side => {
+                side.Create("Person", ("Name", "Ada"));
+                side.Invoke("Rename", ("name", ""));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' is required.");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksLength_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignLengthDsl, "ParityAssignLength")
+            .AssertAgree(side => {
+                side.Create("Person", ("Name", "Ada"));
+                side.Invoke("Rename", ("name", "ab"));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' must be at least 3 characters.");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksPattern_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignPatternDsl, "ParityAssignPattern")
+            .AssertAgree(side => {
+                side.Create("Tag", ("Code", "AB"));
+                side.Invoke("Relabel", ("code", "a1"));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Code' does not match the required pattern.");
+        await Assert.That(outcomes[1].State["Code"]).IsEqualTo("AB");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssigningValidEnumMember_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(AssignEnumDsl, "ParityAssignEnum")
+            .AssertAgree(side => {
+                side.Create("Patron");
+                side.Invoke("SetStatus", ("status", "Suspended"));
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["Status"]).IsEqualTo("Suspended");
+    }
+
+    [Test]
+    public async Task Create_WhenEnumMemberValid_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(AssignEnumDsl, "ParityCreateEnum")
+            .AssertAgree(side => side.Create("Patron", ("Status", "Suspended")));
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Status"]).IsEqualTo("Suspended");
     }
 
     [Test]

@@ -120,6 +120,10 @@ public class Order
         {
             return DomainResult<Order>.Failure("'Discount' must be <= 100.");
         }
+        if (state != OrderState.Pending && state != OrderState.Paid && state != OrderState.Shipped && state != OrderState.Delivered && state != OrderState.Cancelled)
+        {
+            return DomainResult<Order>.Failure("'State' is not a valid member of OrderState.");
+        }
         if (total < 0L)
         {
             return DomainResult<Order>.Failure("'Total' must be >= 0.");

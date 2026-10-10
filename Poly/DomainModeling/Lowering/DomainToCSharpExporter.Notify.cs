@@ -322,6 +322,8 @@ public sealed partial class DomainToCSharpExporter {
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
     /// Each constraint on a constructor-parameter property produces an early-return
     /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
+    /// Enum-typed properties get a not-any-member guard from the same Member + NotEqual
+    /// nodes as assign.
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
     /// carry constraints in the current domain model. Defaulted props ARE constructor
@@ -329,12 +331,14 @@ public sealed partial class DomainToCSharpExporter {
     /// entry-assigned props (body-initialized, never ctor params) are skipped.
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps) {
+        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps,
+        INodeMetadataProvider analysis) {
 
         var checks = new List<Node>();
         var entityTypeRef = new NamedTypeReference(entity.Name);
         var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
+        var enumProps = GetEnumPropertyNames(entity, domain, analysis);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
@@ -448,6 +452,22 @@ public sealed partial class DomainToCSharpExporter {
                         // DefaultValueConstraint is not a factory If:
                         // defaulted props are optional params; the ctor applies the default.
                 }
+            }
+
+            if (enumProps is not null
+                && enumProps.TryGetValue(prop.Name, out var enumTypeName)
+                && TryResolveEnumType(domain, analysis, enumTypeName, out var enumType)
+                && enumType is { MemberNames.Count: > 0 }) {
+                Node? notMember = null;
+                var enumTypeRef = new NamedTypeReference(enumType.Name);
+                foreach (var member in enumType.MemberNames) {
+                    var ne = new NotEqual(paramRef, new Member(enumTypeRef, member));
+                    notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
+                }
+                checks.Add(new IfStatement(
+                    notMember!,
+                    new Block([Failure(
+                        $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
             }
         }
 

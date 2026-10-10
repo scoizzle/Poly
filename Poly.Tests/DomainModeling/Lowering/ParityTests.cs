@@ -942,10 +942,9 @@ public class ParityTests {
         await Assert.That(outcomes[0].State["Log"]).IsEqualTo("after");
     }
 
-    // Owner: C5b (multi-hop leaves the store). A subscriber's handler transition notifies its own subscribers in
-    // simulate (the store recurses); the printed handler does not, so W stays in P in printed code.
+    // Paper A→B notifies Tr P→Q; that handler Notify{Q}Subscribers drives W P→R.
     [Test]
-    public async Task KnownGap_SubscriberTransitionCascade_PrintedStopsAfterOneHop() {
+    public async Task Invoke_WhenSubscriberCascade_BothReachR() {
         const string cascade = """
 
             W: entity {
@@ -954,17 +953,18 @@ public class ParityTests {
               R: stage { }
             }
             """;
-        var (simulate, printed) = ParityScenario.FromDsl(TrackingDsl + cascade, "ParityGapCascade")
-            .Run(side => {
+        var outcomes = await ParityScenario.FromDsl(TrackingDsl + cascade, "ParityCascade")
+            .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "p"));
                 var tr = side.Create("Tr", ("Tracks", paper));
                 var w = side.Create("W", ("Tracks", tr));
                 side.Use(paper);
                 side.Invoke("Advance");
+                side.Use(tr);
                 side.Use(w);
             });
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(["use W: 'Stage' differs (simulate 'R', printed 'P')"]);
+        await Assert.That(outcomes[5].State["Stage"]).IsEqualTo("Q");
+        await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("R");
     }
 
     // Each Differences row differs from the baseline in exactly one field, so deleting that field's compare turns it red.

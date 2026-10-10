@@ -246,8 +246,8 @@ _Lane A · Size S · Review 1 · Depends on: A5b_
 
 **N2. Http library registers its own contributor**
 
-_Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (still open)_
-- Scope: Do the Http one now: `HttpLibrary` (`Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`) registers it. DbContext only once the database kind is read from loaded libraries (decision 19, still open).
+_Lane A · Size S · Review 1 · Depends on: A5a, decision 19 (answered 2026-10-09: database library registers its own DbContext; kind from loaded libraries)_
+- Scope: Do the Http one now: `HttpLibrary` (`Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`) registers it. DbContext is N2b (decision 19 = yes: the database library registers its own DbContext artifact, with the database kind read from loaded libraries the same way Http registers demo.http).
 - Files: `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`, `DslCompiler.cs`.
 - Done when: The behavioral catalog test from A5a passes without edit.
 - SHIP if the A5a test needed no change. NOT SHIP if it needed a string edit.
@@ -789,11 +789,11 @@ _Lane A · Size M · Review 1 · Depends on: H2_
 
 **F1. The function record**
 
-_Lane A · Size S · Review 1 · Depends on: decision 13 (still open)_
-- Scope: `DomainFunction(Name, Parameters, ReturnType, Body)` on `Domain`, with printing. Body form per decision 13 (still open; recommended: single expression).
+_Lane A · Size S · Review 1 · Depends on: decision 13 (answered 2026-10-09: body is a single expression)_
+- Scope: `DomainFunction(Name, Parameters, ReturnType, Body)` on `Domain`, with printing. Body is a single expression (decision 13, Scot 2026-10-09).
 - Files: Ontology, `Domain`.
 - Done when: Builds, prints, round-trips through evolution.
-- SHIP if the round trip is lossless. NOT SHIP if the body form was chosen without decision 13.
+- SHIP if the round trip is lossless. NOT SHIP if the body is not a single expression.
 - Hand-edit: Yes.
 
 **F2. Parser**
@@ -900,7 +900,7 @@ Why this order: tests and measurements come first so every later claim is checka
 - Lane B: E1, C2a, C2b, C4b, C4c, C4d (V5 = a), Q1a, Q1b (V10 = revised scope), C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a to C7d
 
 **Wave 3: retire DEI and the cache (hold point HP5: every C slice merged)**
-- Lane A: K6, F1 to F4, F6, N2 (F1 after decision 13, N2 after decision 19)
+- Lane A: K6, F1 to F4, F6, N2 (done, Http half), N2b (decision 19 = yes; DbContext half)
 - Lane B: K2 (runs alone), C8-pre (runs alone), C8a1, C8a2, C8b, C8c1, C8c2, T3, C8d (runs alone), K3c, K3a, K3b, K5 (runs alone), C10, F5
 
 **Wave 4: last**
@@ -940,7 +940,7 @@ Hold points exist so the coordinating agent does not have to guess. Each release
 | HP1 | reached (82 and 83 merged); still needs Scot's word to release | C4a, C0, T1, K0, B1, C1a (then C1b, C1c after V7), A3a and the rest of wave 1 |
 | HP2 | T1 and G1 merged, and A3a merged | C7-0, K4 (needs A3a); G2, G3 follow G1 |
 | HP3 | C2b merged | C4b, C4c (also needs E1), C6b |
-| HP4 | A5a/A5b merged | C9, N2 (after decision 19), K6 (after H2), Q2 |
+| HP4 | A5a/A5b merged | C9, N2 (done; decision 19 = yes, N2b is the DbContext half), K6 (after H2), Q2 |
 | HP5 | every C slice before C8 merged | C8-pre, C8a1 onward, then K5, C10, R1, R2 |
 
 F1 to F3 only fill an idle lane; they do not wait for HP5.
@@ -1065,12 +1065,14 @@ Run against the real MCP harness and the built C# API; they check the product, n
 | 10 | Auto-link | No guessing. The domain model decides links and cardinality; compiled trees enforce exactly that |
 | 11 | Constraints on set | Every mutation of state must enforce every specified invariant, including constraints on set, not just on create. Constraints propagate and are validated as early as possible. Only named actions may mutate their own entity's state; cross-entity property access is read-only. Simulation and printed code both follow this. Create, link and unlink are effects of relationship operations, and they are the only time an outside entity can influence another entity's state. The relationship owns those lifecycle effects (think RAII). So they are the one named exception to "only named actions mutate their own entity". |
 | 12 | Transitions and enum values | Transition tables and enum checks are compiled as trees, so constraints are validated at runtime. Unknown stage names and enum values are also Analyze errors, with static propagation catching what it can early. |
+| 13 | Function body form | A single expression (Scot 2026-10-09 15:41 CDT). |
 | 14 | Artifact analysis shape | Its own passes in the same analysis system, separate result set |
 | 15 | Start non-conflicting slices first | No preference. After you sign off, in the order Foreman picks. Scot signed off PR 84 on 2026-10-03, so wave 0 is released; N1 still waits for decision 16. |
 | 17 | `RuntimeEnumTypeProvider` | Accepted as interim; removed in the enum slice (E1) |
+| 19 | Registering contributors | Yes: the database library registers its own DbContext artifact, with the database kind read from loaded libraries the same way Http registers demo.http (Scot 2026-10-09 15:41 CDT). N2 was the Http half; N2b is the DbContext half. |
 
 Notes: v2 narrows the work on decision 8 to what is actually unprinted (K4). v2 rewrites C8 accordingly. v2 names the slices for decision 15: T0, A1, A2a, A2b, K1, H1, N3, T2 (and N1 after decision 16).
 
-**Still open from v1, not needed until the lane reaches them (ask then):** 13 function body form (before F1), 16 `Information` to `Info` (before N1), 18 cascading errors (after N3 results), 19 contributor registration (before N2), 20 rename scope (before R2).
+**Still open from v1, not needed until the lane reaches them (ask then):** 16 `Information` to `Info` (before N1), 18 cascading errors (after N3 results), 20 rename scope (before R2).
 
 V1 to V11 are in `pipeline-convergence-plan.decisions.md`, all answered 2026-10-03 (V10 as a revised scope).

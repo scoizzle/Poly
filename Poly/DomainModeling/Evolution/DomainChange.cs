@@ -959,6 +959,21 @@ public sealed record AddEnumTypeChange(
     internal override string GetDescription() => $"Add enum type '{Name}' with {MemberNames.Count} members";
 }
 
+public sealed record AddFunctionChange(
+    string Name,
+    IReadOnlyList<Property> Parameters,
+    DomainTypeReference ReturnType,
+    DomainExpression Body
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        var function = new DomainFunction(Name, Parameters, ReturnType, Body);
+        context.Functions.Add(function);
+        context.ModifiedNodes.Add(function);
+    }
+
+    internal override string GetDescription() => $"Add function '{Name}'";
+}
+
 public sealed record RemovePolicyFromRelationshipChange(
     string SourceEntityName,
     string RelationshipName,

@@ -239,7 +239,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             };
         }
 
-        // Item 6: assign-time required/range/length/pattern (+ unique) in the
+        // Item 6: assign-time required/range/length/pattern/enum (+ unique) in the
         // same Lower tree as simulate + C# print. Evaluate RHS once, fail-before-
         // mutate, then assign (EnsureUnique when unique).
         Property? assignProp = null;
@@ -263,11 +263,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return LoweredExpression.Before([target, value], assignment);
     }
 
-    private static bool HasAssignableConstraints(Property prop) =>
+    private bool HasAssignableConstraints(Property prop) =>
         prop.Constraints.Any(c => c is RequiredConstraint
             or RangeConstraint
             or LengthConstraint
-            or PatternConstraint);
+            or PatternConstraint)
+        || (DomainToCSharpExporter.TryResolveEnumType(
+                _domain, _analysis, prop.Type.TypeName, out var enumType)
+            && enumType is { MemberNames.Count: > 0 });
 
     private bool IsUniqueProperty(string propertyName) {
         if (_analysis is not null && _domain is not null) {
@@ -286,7 +289,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Fail-before-mutate wrap for assign: local RHS, constraint Failure checks
-    /// (required → range → length → pattern), optional EnsureUnique, then assign.
+    /// (required → range → length → pattern → enum member), optional EnsureUnique, then assign.
     /// </summary>
     private Node WrapConstrainedAssign(
         Node destination,
@@ -320,9 +323,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Emits assign-time constraint guards matching Create factory /
-    /// <c>ValidateConstraints</c> messages. Optional length (no Required) skips
-    /// empty values. Uses <see cref="ClrTypeReference"/> for string/Regex statics
-    /// so the VM resolves MethodInfo (NamedTypeReference is export-shaped only).
+    /// <c>ValidateConstraints</c> messages. Enum-typed properties get a
+    /// not-any-member guard. Optional length (no Required) skips empty values.
+    /// Uses <see cref="ClrTypeReference"/> for string/Regex statics so the VM
+    /// resolves MethodInfo (NamedTypeReference is export-shaped only).
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
     /// </summary>
     private void AppendAssignConstraintChecks(
@@ -421,6 +425,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                             [valueRef, new Constant(p.Pattern)]))),
                 new Block([Fail(
                     $"'{prop.Name}' does not match the required pattern.")])));
+        }
+
+        if (DomainToCSharpExporter.TryResolveEnumType(
+                _domain, _analysis, prop.Type.TypeName, out var enumType)
+            && enumType is { MemberNames.Count: > 0 }) {
+            Node? notMember = null;
+            var enumTypeRef = new NamedTypeReference(enumType.Name);
+            foreach (var member in enumType.MemberNames) {
+                var ne = new NotEqual(valueRef, new Member(enumTypeRef, member));
+                notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
+            }
+            nodes.Add(new IfStatement(
+                notMember!,
+                new Block([Fail(
+                    $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
         }
     }
 

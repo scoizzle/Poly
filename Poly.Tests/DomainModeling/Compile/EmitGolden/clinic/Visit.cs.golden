@@ -53,7 +53,14 @@ public class Visit
     public DomainResult CheckIn()
     {
         this.CurrentStage = VisitStage.CheckedIn;
-        this.State = VisitState.CheckedIn;
+        {
+            var assignValue0 = VisitState.CheckedIn;
+            if (assignValue0 != VisitState.Scheduled && assignValue0 != VisitState.CheckedIn && assignValue0 != VisitState.InTreatment && assignValue0 != VisitState.Completed && assignValue0 != VisitState.NoShow)
+            {
+                return DomainResult.Failure("'State' is not a valid member of VisitState.");
+            }
+            this.State = assignValue0;
+        }
         return DomainResult.Success();
     }
     public DomainResult AssignDoctor(Doctor doctor)
@@ -82,6 +89,10 @@ public class Visit
         if (reason.Length > 200L)
         {
             return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
+        }
+        if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
+        {
+            return DomainResult<Visit>.Failure("'State' is not a valid member of VisitState.");
         }
         var created = new Visit(reason, patient, primaryDoctor, state);
         if (patient != null)
@@ -456,6 +467,11 @@ public class Visit
     }
     private void OnEntryCheckedIn()
     {
-        this.State = VisitState.CheckedIn;
+        var assignValue0 = VisitState.CheckedIn;
+        if (assignValue0 != VisitState.Scheduled && assignValue0 != VisitState.CheckedIn && assignValue0 != VisitState.InTreatment && assignValue0 != VisitState.Completed && assignValue0 != VisitState.NoShow)
+        {
+            throw new ConstraintFailureException("'State' is not a valid member of VisitState.");
+        }
+        this.State = assignValue0;
     }
 }

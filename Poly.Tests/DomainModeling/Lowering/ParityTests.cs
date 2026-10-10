@@ -75,6 +75,22 @@ public class ParityTests {
         }
         """;
 
+    const string QuantifierDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text required
+          Email: Text unique
+          MaxItems: Number range(0, 20) required
+          loans: many Loan
+          AllActiveLoans: policy { all loans where Status is "Active" }
+          NoneLostLoans: policy { none loans where Status is "Lost" }
+          HasOverdueCount: policy { count loans where Status is "Overdue" > 0 }
+        }
+        Loan: entity {
+          Status: Text
+        }
+        """;
+
     const string LinkDsl = """
         domain Shop
         Kid: entity {
@@ -155,6 +171,47 @@ public class ParityTests {
         }
         """;
 
+    const string AssignRequiredDsl = """
+        domain Lab
+        Person: entity {
+          Name: Text required
+          Rename: action (name: Text) {
+            assign Name to name
+          }
+        }
+        """;
+
+    const string AssignLengthDsl = """
+        domain Lab
+        Person: entity {
+          Name: Text length(3, 10)
+          Rename: action (name: Text) {
+            assign Name to name
+          }
+        }
+        """;
+
+    const string AssignPatternDsl = """
+        domain Lab
+        Tag: entity {
+          Code: Text pattern("^[A-Z]{2}$")
+          Relabel: action (code: Text) {
+            assign Code to code
+          }
+        }
+        """;
+
+    const string AssignEnumDsl = """
+        domain Shop
+        PatronStatus: enum { Active, Suspended }
+        Patron: entity {
+          Status: PatronStatus default(Active)
+          SetStatus: action (status: PatronStatus) {
+            assign Status to status
+          }
+        }
+        """;
+
     const string GuardDsl = """
         domain Board
         Task: entity {
@@ -209,6 +266,61 @@ public class ParityTests {
         await Assert.That(outcomes[1].Success).IsFalse();
         await Assert.That(outcomes[1].Message).IsEqualTo(
             "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksRequired_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignRequiredDsl, "ParityAssignRequired")
+            .AssertAgree(side => {
+                side.Create("Person", ("Name", "Ada"));
+                side.Invoke("Rename", ("name", ""));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' is required.");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksLength_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignLengthDsl, "ParityAssignLength")
+            .AssertAgree(side => {
+                side.Create("Person", ("Name", "Ada"));
+                side.Invoke("Rename", ("name", "ab"));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' must be at least 3 characters.");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssignBreaksPattern_FailsTheSameWay() {
+        var outcomes = await ParityScenario.FromDsl(AssignPatternDsl, "ParityAssignPattern")
+            .AssertAgree(side => {
+                side.Create("Tag", ("Code", "AB"));
+                side.Invoke("Relabel", ("code", "a1"));
+            });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Code' does not match the required pattern.");
+        await Assert.That(outcomes[1].State["Code"]).IsEqualTo("AB");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAssigningValidEnumMember_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(AssignEnumDsl, "ParityAssignEnum")
+            .AssertAgree(side => {
+                side.Create("Patron");
+                side.Invoke("SetStatus", ("status", "Suspended"));
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["Status"]).IsEqualTo("Suspended");
+    }
+
+    [Test]
+    public async Task Create_WhenEnumMemberValid_Agrees() {
+        var outcomes = await ParityScenario.FromDsl(AssignEnumDsl, "ParityCreateEnum")
+            .AssertAgree(side => side.Create("Patron", ("Status", "Suspended")));
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Status"]).IsEqualTo("Suspended");
     }
 
     [Test]
@@ -271,6 +383,70 @@ public class ParityTests {
             });
         await Assert.That(outcomes[3].State["HasOverdueLoans"]).IsEqualTo("True");
         await Assert.That(outcomes[6].State["HasOverdueLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_All_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityAll")
+            .AssertAgree(side => {
+                var a1 = side.Create("Loan", ("Status", "Active"));
+                var a2 = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-all@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { a1, a2 }));
+                side.EvaluatePolicy("AllActiveLoans");
+
+                var active = side.Create("Loan", ("Status", "Active"));
+                var overdue = side.Create("Loan", ("Status", "Overdue"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-mixed@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { active, overdue }));
+                side.EvaluatePolicy("AllActiveLoans");
+
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("AllActiveLoans");
+            });
+        await Assert.That(outcomes[3].State["AllActiveLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[7].State["AllActiveLoans"]).IsEqualTo("False");
+        await Assert.That(outcomes[9].State["AllActiveLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_None_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityNone")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("NoneLostLoans");
+
+                var a1 = side.Create("Loan", ("Status", "Active"));
+                var a2 = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-active@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { a1, a2 }));
+                side.EvaluatePolicy("NoneLostLoans");
+
+                var lost = side.Create("Loan", ("Status", "Lost"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-lost@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { lost }));
+                side.EvaluatePolicy("NoneLostLoans");
+            });
+        await Assert.That(outcomes[1].State["NoneLostLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[5].State["NoneLostLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[8].State["NoneLostLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_FilteredCount_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityFilteredCount")
+            .AssertAgree(side => {
+                var overdue = side.Create("Loan", ("Status", "Overdue"));
+                var active = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-overdue@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { overdue, active }));
+                side.EvaluatePolicy("HasOverdueCount");
+
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("HasOverdueCount");
+            });
+        await Assert.That(outcomes[3].State["HasOverdueCount"]).IsEqualTo("True");
+        await Assert.That(outcomes[5].State["HasOverdueCount"]).IsEqualTo("False");
     }
 
     [Test]

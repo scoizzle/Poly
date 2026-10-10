@@ -43,6 +43,38 @@ public class EnumMemberAgreeTests {
     }
 
     [Test]
+    public async Task AssignEnumMemberFromParameter_AgreesOnSimulateAndPrintedCsharp() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Shop
+            PatronStatus: enum { Active, Suspended }
+            Patron: entity {
+              Status: PatronStatus default(Active)
+              SetStatus: action (status: PatronStatus) {
+                assign Status to status
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var store = new DomainInstanceStore();
+        var patron = DomainEntityInstance.Create(entity, domain: domain);
+        store.Add(patron);
+
+        await Assert.That(patron.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = "Suspended" }).Succeeded).IsTrue();
+        await Assert.That(patron.GetProperty<string>("Status")).IsEqualTo("Suspended");
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var printed = ExportedCSharp.CreateEntity(asm, "Patron");
+        var statusType = asm.GetType("PatronStatus")!;
+        var result = printed.GetType().GetMethod("SetStatus")!
+            .Invoke(printed, [Enum.Parse(statusType, "Suspended")])!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        await Assert.That(printed.GetType().GetProperty("Status")!.GetValue(printed)!.ToString())
+            .IsEqualTo("Suspended");
+    }
+
+    [Test]
     public async Task DomainEnumMemberInAction_AgreesOnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop

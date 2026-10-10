@@ -10,7 +10,7 @@ using Poly.Interpretation.CSharp;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// Item 6: required/range/length/pattern lower on assign in EffectLoweringPass
+/// Item 6: required/range/length/pattern/enum lower on assign in EffectLoweringPass
 /// (same tree for simulate + C# print). Optional length skips empty without required.
 /// </summary>
 public class ConstraintAssignLoweringTests {
@@ -266,6 +266,94 @@ public class ConstraintAssignLoweringTests {
             new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<string>("Plate")).IsEqualTo("ABC123");
+    }
+
+    [Test]
+    public async Task EnumAssign_OutOfMember_Fails() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            PatronStatus: enum { Active, Suspended }
+            Patron: entity {
+              Status: PatronStatus default(Active)
+              SetStatus: action (status: PatronStatus) {
+                assign Status to status
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+
+        var result = instance.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = "Bogus" });
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage)
+            .IsEqualTo("'Status' is not a valid member of PatronStatus.");
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task Create_WhenEnumOutOfMember_Fails() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            PatronStatus: enum { Active, Suspended }
+            Patron: entity {
+              Status: PatronStatus default(Active)
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+
+        var thrown = Assert.Throws<ConstraintFailureException>(() =>
+            DomainEntityInstance.Create(entity,
+                new Dictionary<string, object?> { ["Status"] = "Bogus" },
+                domain: domain));
+        await Assert.That(thrown!.Message)
+            .IsEqualTo("'Status' is not a valid member of PatronStatus.");
+    }
+
+    [Test]
+    public async Task AcceptedAssign_RuntimeGuardDoesNotTrip() {
+        var (domain, analysis) = Evolve("""
+            domain Lab
+            PatronStatus: enum { Active, Suspended }
+            Widget: entity {
+              Score: Number range(1, 10) default(5)
+              Status: PatronStatus default(Active)
+              Name: Text required
+              Code: Text length(2, 5)
+              Tag: Text pattern("^[A-Z]+$")
+              SetScore: action { assign Score to 7 }
+              SetStatus: action (status: PatronStatus) { assign Status to status }
+              Rename: action { assign Name to "Ada" }
+              SetCode: action { assign Code to "ab" }
+              SetTag: action { assign Tag to "OK" }
+            }
+            """);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation &&
+            d.Severity == DiagnosticSeverity.Error)).IsFalse();
+
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> {
+                ["Name"] = "Ada",
+                ["Code"] = "xy",
+                ["Tag"] = "A"
+            },
+            domain: domain);
+
+        var setScore = instance.InvokeAction("SetScore");
+        await Assert.That(setScore.Succeeded).IsTrue();
+        var setStatus = instance.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = "Suspended" });
+        await Assert.That(setStatus.Succeeded).IsTrue();
+        var rename = instance.InvokeAction("Rename");
+        await Assert.That(rename.Succeeded).IsTrue();
+        var setCode = instance.InvokeAction("SetCode");
+        await Assert.That(setCode.Succeeded).IsTrue();
+        var setTag = instance.InvokeAction("SetTag");
+        await Assert.That(setTag.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Suspended");
     }
 
     [Test]

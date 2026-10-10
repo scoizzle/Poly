@@ -3,9 +3,12 @@ using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Http;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
 using Poly.Packs.Product;
+using Poly.Packs.Sqlite;
+using Poly.Packs.SqlServer;
 
 namespace Poly.DslCompiler;
 
@@ -284,11 +287,15 @@ public sealed class DslCompiler {
                 throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
             if (id == "http")
                 builder.Load(new HttpLibrary(new MinimalApiHostArtifactContributor(dbms: dbms)));
+            else if (id == "persistence")
+                builder.Load(new PersistenceEmitLibrary(new DbContextArtifactContributor()));
+            else if (id == "sqlite")
+                builder.Load(new SqliteLibrary(new DbContextArtifactContributor()));
+            else if (id == "sqlserver")
+                builder.Load(new SqlServerLibrary(new DbContextArtifactContributor()));
             else
                 builder.Load(catalog.Resolve(id));
         }
-        if (ids.Exists(id => id is "persistence" or "sqlite" or "sqlserver" or "mysql"))
-            builder.AddArtifactContributor(new DbContextArtifactContributor());
         return builder.Build();
     }
 

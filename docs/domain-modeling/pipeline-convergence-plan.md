@@ -909,6 +909,8 @@ Why this order: tests and measurements come first so every later claim is checka
 
 Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1, H1, N3, A1, A2a, A2b, N1, C4a, C0, T1, K0, B1, G1, G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b, C1a, C1b, C1c, E1, C2a, C2b, C4b, C4c, C4d, Q1a, Q1b, C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a, C7b, C7c, C7d, C9, K4, M1, P1, H2, H3, H4, Q2, K2, C8-pre, C8a1, C8a2, C8b, C8c1, C8c2, T3, C8d, K3c, K3a, K3b, K5, C10, K6, F1, F2, F3, F4, F5, F6, N2, R1, R2, H5, A6, A7.
 
+Scot, 2026-10-09 18:56 CDT: plan trimmed to the DEI-retirement path, finish line through C8d plus C10. Parked until after it: F2, F3, F4, F5, F6, R1, R2, A6, A7, H5, T3, Q1b, N1.
+
 ## 13. Lane view, runs-alone slices and review capacity
 
 **Two lanes, work-in-progress cap of 2 (one slice per lane).** Almost every C slice edits the same DEI files, and every A, H and K slice edits `Compile/DomainSession.cs`, so a third lane would only produce merge conflicts.

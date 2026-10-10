@@ -868,7 +868,7 @@ public class Opportunity
         }
         if (typeName == "Activity")
         {
-            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), this, (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -880,7 +880,7 @@ public class Opportunity
         }
         if (typeName == "Quote")
         {
-            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), this, new List<QuoteLine>());
+            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), new List<QuoteLine>());
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -928,7 +928,7 @@ public class Opportunity
         }
         if (typeName == "Line")
         {
-            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), this);
+            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

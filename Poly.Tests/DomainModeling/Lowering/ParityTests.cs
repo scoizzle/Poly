@@ -103,6 +103,39 @@ public class ParityTests {
         }
         """;
 
+    const string TypeCreateUnlinkedDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text
+          fines: many Fine
+          AssessByType: action {
+            create Fine { Amount: 5 Reason: "TypeCreate" }
+          }
+        }
+        Fine: entity {
+          Amount: Number
+          Reason: Text
+          patron: Patron
+        }
+        """;
+
+    const string CreateInBackRefDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text
+          fines: many Fine
+          HasPatronOnFine: policy { any fines where patron Name is "Bea" }
+          AssessByRel: action {
+            create in fines { Amount: 5 Reason: "CreateIn" }
+          }
+        }
+        Fine: entity {
+          Amount: Number
+          Reason: Text
+          patron: Patron
+        }
+        """;
+
     const string RangeDsl = """
         domain Lab
         Widget: entity {
@@ -425,6 +458,32 @@ public class ParityTests {
             });
         await Assert.That(outcomes[0].State["kids"]).IsEqualTo("0");
         await Assert.That(outcomes[1].State["kids"]).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Invoke_CreateType_UnambiguousManyRel_AgreesUnlinked() {
+        var outcomes = await ParityScenario.FromDsl(TypeCreateUnlinkedDsl, "ParityTypeCreateUnlinked")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Ada"));
+                side.Invoke("AssessByType");
+            });
+        await Assert.That(outcomes[0].State["fines"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Invoke_CreateIn_UnambiguousBackRef_AgreesLinkedBothWays() {
+        var outcomes = await ParityScenario.FromDsl(CreateInBackRefDsl, "ParityCreateInBackRef")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Bea"));
+                side.Invoke("AssessByRel");
+                side.EvaluatePolicy("HasPatronOnFine");
+            });
+        await Assert.That(outcomes[0].State["fines"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["HasPatronOnFine"]).IsEqualTo("True");
     }
 
     [Test]

@@ -529,7 +529,7 @@ public class Room
         }
         if (typeName == "Reservation")
         {
-            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), this);
+            var typed = Reservation.Create((values.ContainsKey("CheckInDate") ? (DateOnly?)values["CheckInDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("CheckOutDate") ? (DateOnly?)values["CheckOutDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Nights") ? (long?)values["Nights"] ?? 0L : 0L), (values.ContainsKey("PartySize") ? (long?)values["PartySize"] ?? 0L : 0L), (values.ContainsKey("folio") ? (Folio?)values["folio"] ?? null : null), (values.ContainsKey("guest") ? (Guest?)values["guest"] ?? null : null), (values.ContainsKey("room") ? (Room?)values["room"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

@@ -331,7 +331,7 @@ public class Patron
         }
         if (typeName == "Fine")
         {
-            var typed = Fine.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Reason") ? (string?)values["Reason"] ?? "" : ""), this);
+            var typed = Fine.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Reason") ? (string?)values["Reason"] ?? "" : ""), (values.ContainsKey("patron") ? (Patron?)values["patron"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

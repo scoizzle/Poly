@@ -414,7 +414,7 @@ public class Truck
         }
         if (typeName == "Delivery")
         {
-            var typed = Delivery.Create((values.ContainsKey("Notes") ? (string?)values["Notes"] ?? "" : ""), (values.ContainsKey("Reference") ? (string?)values["Reference"] ?? "" : ""), (values.ContainsKey("Weight") ? (long?)values["Weight"] ?? 0L : 0L), this);
+            var typed = Delivery.Create((values.ContainsKey("Notes") ? (string?)values["Notes"] ?? "" : ""), (values.ContainsKey("Reference") ? (string?)values["Reference"] ?? "" : ""), (values.ContainsKey("Weight") ? (long?)values["Weight"] ?? 0L : 0L), (values.ContainsKey("truck") ? (Truck?)values["truck"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

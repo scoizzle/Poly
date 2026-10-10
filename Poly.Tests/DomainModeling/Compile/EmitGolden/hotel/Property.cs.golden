@@ -403,7 +403,7 @@ public class Property
         }
         if (typeName == "Room")
         {
-            var typed = Room.Create((values.ContainsKey("Floor") ? (long?)values["Floor"] ?? 0L : 0L), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Number") ? (string?)values["Number"] ?? "" : ""), this, (values.ContainsKey("roomType") ? (RoomType?)values["roomType"] ?? null : null), new List<Reservation>(), (values.ContainsKey("Dirty") ? (bool?)values["Dirty"] ?? false : false), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            var typed = Room.Create((values.ContainsKey("Floor") ? (long?)values["Floor"] ?? 0L : 0L), (values.ContainsKey("MaxOccupancy") ? (long?)values["MaxOccupancy"] ?? 0L : 0L), (values.ContainsKey("NightlyRate") ? (long?)values["NightlyRate"] ?? 0L : 0L), (values.ContainsKey("Number") ? (string?)values["Number"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), (values.ContainsKey("roomType") ? (RoomType?)values["roomType"] ?? null : null), new List<Reservation>(), (values.ContainsKey("Dirty") ? (bool?)values["Dirty"] ?? false : false), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -415,7 +415,7 @@ public class Property
         }
         if (typeName == "Hall")
         {
-            var typed = Hall.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), this, new List<Section>(), (values.ContainsKey("BusySections") ? (long?)values["BusySections"] ?? 0L : 0L), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
+            var typed = Hall.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("property") ? (Property?)values["property"] ?? null : null), new List<Section>(), (values.ContainsKey("BusySections") ? (long?)values["BusySections"] ?? 0L : 0L), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false), (values.ContainsKey("Offline") ? (bool?)values["Offline"] ?? false : false));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

@@ -473,7 +473,7 @@ public class Hall
         }
         if (typeName == "Section")
         {
-            var typed = Section.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), this, (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false));
+            var typed = Section.Create((values.ContainsKey("Capacity") ? (long?)values["Capacity"] ?? 0L : 0L), (values.ContainsKey("DayRate") ? (long?)values["DayRate"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("hall") ? (Hall?)values["hall"] ?? null : null), (values.ContainsKey("Occupied") ? (bool?)values["Occupied"] ?? false : false));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

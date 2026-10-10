@@ -231,6 +231,10 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 ---
 
+### Ruling. Create-in back-reference slot (scope of decision 10)
+
+**Answer (Scot, 2026-10-09 23:16 CDT):** KEEP. Decision 10 (no guessing) does not cover the create-in back-reference slot choice, so `FindAutoWireBackReference` and `TryLinkCreateInBackReference` stay as C6a leaves them. This is a ruling, not a new numbered decision.
+
 ## Parked, not asking now
 
 - Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 20 (rename scope) before R2.

@@ -1046,6 +1046,7 @@ Run against the real MCP harness and the built C# API; they check the product, n
 - Whether every diagnostic carries a domain element is checked at the start of A4.
 - Whether stage-scoped policies are the only unprinted policies, or an action-scoped policy that is not an entity policy also lacks its method, is checked at the start of K4.
 - File and line numbers are as of master `945a2164`. Re-check each at slice start.
+- Analyzer gap (later; no owner): a quantifier body cannot use a navigation-existence form such as `patron exists` (for example `any fines where patron exists`).
 
 ## 19. Decisions
 

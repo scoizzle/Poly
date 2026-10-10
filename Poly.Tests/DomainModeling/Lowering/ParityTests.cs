@@ -75,6 +75,22 @@ public class ParityTests {
         }
         """;
 
+    const string QuantifierDsl = """
+        domain Library
+        Patron: entity {
+          Name: Text required
+          Email: Text unique
+          MaxItems: Number range(0, 20) required
+          loans: many Loan
+          AllActiveLoans: policy { all loans where Status is "Active" }
+          NoneLostLoans: policy { none loans where Status is "Lost" }
+          HasOverdueCount: policy { count loans where Status is "Overdue" > 0 }
+        }
+        Loan: entity {
+          Status: Text
+        }
+        """;
+
     const string LinkDsl = """
         domain Shop
         Kid: entity {
@@ -334,6 +350,70 @@ public class ParityTests {
             });
         await Assert.That(outcomes[3].State["HasOverdueLoans"]).IsEqualTo("True");
         await Assert.That(outcomes[6].State["HasOverdueLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_All_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityAll")
+            .AssertAgree(side => {
+                var a1 = side.Create("Loan", ("Status", "Active"));
+                var a2 = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-all@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { a1, a2 }));
+                side.EvaluatePolicy("AllActiveLoans");
+
+                var active = side.Create("Loan", ("Status", "Active"));
+                var overdue = side.Create("Loan", ("Status", "Overdue"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-mixed@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { active, overdue }));
+                side.EvaluatePolicy("AllActiveLoans");
+
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("AllActiveLoans");
+            });
+        await Assert.That(outcomes[3].State["AllActiveLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[7].State["AllActiveLoans"]).IsEqualTo("False");
+        await Assert.That(outcomes[9].State["AllActiveLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_None_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityNone")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("NoneLostLoans");
+
+                var a1 = side.Create("Loan", ("Status", "Active"));
+                var a2 = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-active@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { a1, a2 }));
+                side.EvaluatePolicy("NoneLostLoans");
+
+                var lost = side.Create("Loan", ("Status", "Lost"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-lost@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { lost }));
+                side.EvaluatePolicy("NoneLostLoans");
+            });
+        await Assert.That(outcomes[1].State["NoneLostLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[5].State["NoneLostLoans"]).IsEqualTo("True");
+        await Assert.That(outcomes[8].State["NoneLostLoans"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task EvaluatePolicy_FilteredCount_AgreesForLinkedLoans() {
+        var outcomes = await ParityScenario.FromDsl(QuantifierDsl, "ParityFilteredCount")
+            .AssertAgree(side => {
+                var overdue = side.Create("Loan", ("Status", "Overdue"));
+                var active = side.Create("Loan", ("Status", "Active"));
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-overdue@lib.test"), ("MaxItems", 5L),
+                    ("loans", new[] { overdue, active }));
+                side.EvaluatePolicy("HasOverdueCount");
+
+                side.Create("Patron", ("Name", "Ada"), ("Email", "ada-empty@lib.test"), ("MaxItems", 5L));
+                side.EvaluatePolicy("HasOverdueCount");
+            });
+        await Assert.That(outcomes[3].State["HasOverdueCount"]).IsEqualTo("True");
+        await Assert.That(outcomes[5].State["HasOverdueCount"]).IsEqualTo("False");
     }
 
     [Test]

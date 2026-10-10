@@ -1,6 +1,6 @@
 # TASK C3a - Peer passed as a real argument
 
-Status: in review. Branch slice/c3a-peer-argument. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: merged #145 `019a7238` 2026-10-10. Branch slice/c3a-peer-argument. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 The printed handler already takes the peer as a typed parameter, peer first then
@@ -60,3 +60,4 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-09 | planner | opencode-go/deepseek-v4.1-flash | 91012793 | planned | - |
 | 2026-10-09 | implementer | grok/grok-4.6 | 8d3cd909 | pushed | tests 3487/3487; sweep: no MaterializePeerInSyntax callers; leftover rewrite comments listed |
+| 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | `019a7238` | merged #145 | squash-merged to master; leftover rewrite comments carry to C3b |

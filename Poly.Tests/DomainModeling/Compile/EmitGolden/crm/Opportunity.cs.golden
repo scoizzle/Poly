@@ -16,16 +16,15 @@ public class Opportunity
     private List<Activity> _activities;
     private List<Line> _lines;
     private List<Quote> _quotes;
-    private int _notifyDepth;
     private List<Account>? _accountOpportunitiesWonSubscribers;
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
+    private int _notifyDepth;
     private Opportunity()
     {
         this._activities = new List<Activity>();
         this._lines = new List<Line>();
         this._quotes = new List<Quote>();
-        this._notifyDepth = new int();
     }
     private Opportunity(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
@@ -474,18 +473,6 @@ public class Opportunity
     }
     public bool HasAccount() => this.Account != null;
     public bool HasLines() => this.Lines.Count > 0L;
-    private void EnterNotifyCascade(string stageName)
-    {
-        if (this._notifyDepth >= 16)
-        {
-            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Opportunity' exceeded max depth (16) while notifying '", stageName, "'."));
-        }
-        this._notifyDepth = this._notifyDepth + 1;
-    }
-    private void ExitNotifyCascade()
-    {
-        this._notifyDepth = this._notifyDepth - 1;
-    }
     internal void RegisterAccountOpportunitiesWonSubscriber(Account subscriber)
     {
         if (this._accountOpportunitiesWonSubscribers == null)
@@ -1174,6 +1161,18 @@ public class Opportunity
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Opportunity' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
     private void OnEntryQualify()
     {

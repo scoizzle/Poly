@@ -13,12 +13,10 @@ public enum EventHoldStage
 
 public class EventHold
 {
-    private int _notifyDepth;
     private List<Guest>? _guestEventsReleasedSubscribers;
+    private int _notifyDepth;
     private EventHold()
-    {
-        this._notifyDepth = new int();
-    }
+    { }
     private EventHold(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         this.Capacity = capacity;
@@ -213,18 +211,6 @@ public class EventHold
     public bool HasHall() => this.Hall != null;
     public bool HasSection() => this.Section != null;
     public bool HasSpace() => this.Hall != null || this.Section != null;
-    private void EnterNotifyCascade(string stageName)
-    {
-        if (this._notifyDepth >= 16)
-        {
-            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'EventHold' exceeded max depth (16) while notifying '", stageName, "'."));
-        }
-        this._notifyDepth = this._notifyDepth + 1;
-    }
-    private void ExitNotifyCascade()
-    {
-        this._notifyDepth = this._notifyDepth - 1;
-    }
     internal void RegisterGuestEventsReleasedSubscriber(Guest subscriber)
     {
         if (this._guestEventsReleasedSubscribers == null)
@@ -764,5 +750,17 @@ public class EventHold
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'EventHold' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

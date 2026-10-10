@@ -11,12 +11,10 @@ public enum LoanStage
 
 public class Loan
 {
-    private int _notifyDepth;
     private List<Patron>? _patronLoansOverdueSubscribers;
+    private int _notifyDepth;
     private Loan()
-    {
-        this._notifyDepth = new int();
-    }
+    { }
     private Loan(Book? book = null, long amount = 0L)
     {
         this.Amount = amount;
@@ -66,18 +64,6 @@ public class Loan
         this.Amount = assignValue0;
         this.CurrentStage = LoanStage.Returned;
         return DomainResult.Success();
-    }
-    private void EnterNotifyCascade(string stageName)
-    {
-        if (this._notifyDepth >= 16)
-        {
-            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Loan' exceeded max depth (16) while notifying '", stageName, "'."));
-        }
-        this._notifyDepth = this._notifyDepth + 1;
-    }
-    private void ExitNotifyCascade()
-    {
-        this._notifyDepth = this._notifyDepth - 1;
     }
     internal void RegisterPatronLoansOverdueSubscriber(Patron subscriber)
     {
@@ -469,5 +455,17 @@ public class Loan
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Loan' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

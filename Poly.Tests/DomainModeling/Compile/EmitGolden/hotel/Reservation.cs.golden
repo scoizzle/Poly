@@ -14,16 +14,14 @@ public enum ReservationStage
 
 public class Reservation
 {
-    private int _notifyDepth;
     private List<Room>? _roomStaysInHouseSubscribers;
     private List<Room>? _roomStaysDepartedSubscribers;
     private List<Room>? _roomStaysCancelledSubscribers;
     private List<Room>? _roomStaysNoShowSubscribers;
     private List<Guest>? _guestReservationsDepartedSubscribers;
+    private int _notifyDepth;
     private Reservation()
-    {
-        this._notifyDepth = new int();
-    }
+    { }
     private Reservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
         this.CheckInDate = checkInDate;
@@ -219,18 +217,6 @@ public class Reservation
     public bool HasGuest() => this.Guest != null;
     public bool BillSettled() => this.Folio != null && this.Folio!.Balance == 0L;
     public bool HasFolio() => this.Folio != null;
-    private void EnterNotifyCascade(string stageName)
-    {
-        if (this._notifyDepth >= 16)
-        {
-            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Reservation' exceeded max depth (16) while notifying '", stageName, "'."));
-        }
-        this._notifyDepth = this._notifyDepth + 1;
-    }
-    private void ExitNotifyCascade()
-    {
-        this._notifyDepth = this._notifyDepth - 1;
-    }
     internal void RegisterRoomStaysInHouseSubscriber(Room subscriber)
     {
         if (this._roomStaysInHouseSubscribers == null)
@@ -876,5 +862,17 @@ public class Reservation
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Reservation' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

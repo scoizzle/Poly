@@ -12,15 +12,13 @@ public enum EnrollmentStage
 
 public class Enrollment
 {
-    private int _notifyDepth;
     private List<Student>? _studentEnrollmentsDroppedSubscribers;
     private List<Student>? _studentEnrollmentsCompletedSubscribers;
     private List<Section>? _sectionEnrollmentsRegisteredSubscribers;
     private List<Section>? _sectionEnrollmentsDroppedSubscribers;
+    private int _notifyDepth;
     private Enrollment()
-    {
-        this._notifyDepth = new int();
-    }
+    { }
     private Enrollment(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
     {
         this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.Today);
@@ -147,18 +145,6 @@ public class Enrollment
     }
     public bool SectionFull() => this.Section != null && this.Section!.SeatsTaken >= 1L;
     public bool IsPassing() => this.Grade >= 70L;
-    private void EnterNotifyCascade(string stageName)
-    {
-        if (this._notifyDepth >= 16)
-        {
-            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Enrollment' exceeded max depth (16) while notifying '", stageName, "'."));
-        }
-        this._notifyDepth = this._notifyDepth + 1;
-    }
-    private void ExitNotifyCascade()
-    {
-        this._notifyDepth = this._notifyDepth - 1;
-    }
     internal void RegisterStudentEnrollmentsDroppedSubscriber(Student subscriber)
     {
         if (this._studentEnrollmentsDroppedSubscribers == null)
@@ -679,5 +665,17 @@ public class Enrollment
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Enrollment' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

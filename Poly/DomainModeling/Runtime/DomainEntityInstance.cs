@@ -923,7 +923,10 @@ public sealed partial record DomainEntityInstance {
                 moduleEntity = td;
                 continue;
             }
-            moduleTypes.Analyze(ctx, td);
+            // When… stays an empty stub so InvokeNamed runs the cached
+            // subscription body (TryGetSubscriptionBody), not the sibling
+            // module method inlined as an AST callable.
+            moduleTypes.Analyze(ctx, StubWhenMethodBodies(td));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
@@ -945,6 +948,20 @@ public sealed partial record DomainEntityInstance {
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+    }
+
+    private static TypeDefinitionNode StubWhenMethodBodies(TypeDefinitionNode td) {
+        if (td.Methods is null || td.Methods.Count == 0)
+            return td;
+        List<MethodDefinitionNode>? methods = null;
+        for (var i = 0; i < td.Methods.Count; i++) {
+            var method = td.Methods[i];
+            if (!method.Name.StartsWith("When", StringComparison.Ordinal))
+                continue;
+            methods ??= [.. td.Methods];
+            methods[i] = method with { Body = new Block([]) };
+        }
+        return methods is null ? td : td with { Methods = methods };
     }
 
     /// <summary>

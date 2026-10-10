@@ -506,6 +506,46 @@ public class ParityTests {
         await Assert.That(() => Agree(side => side.Invoke("Close"))).Throws<ArgumentException>();
     }
 
+    const string WhenAnyDsl = """
+        domain Watch
+        Loan: entity {
+          Code: Text
+          Draft: stage {
+            Overdue: action { transition to Overdue }
+          }
+          Overdue: stage { }
+        }
+        Patron: entity {
+          Flag: Text
+          loans: many Loan
+          when any loans Overdue {
+            assign Flag to "FIRED"
+          }
+        }
+        """;
+
+    const string WhenAllDsl = """
+        domain Watch
+        WorkItem: entity {
+          Code: Text
+          Draft: stage {
+            Prep: action { transition to Ready }
+            Finish: action { transition to Done }
+          }
+          Ready: stage {
+            Finish: action { transition to Done }
+          }
+          Done: stage { }
+        }
+        Board: entity {
+          Fires: Number default(0)
+          items: many WorkItem
+          when all items Ready, Done {
+            assign Fires to Fires + 1
+          }
+        }
+        """;
+
     const string TrackingDsl = """
         domain Watch
         Paper: entity {
@@ -545,6 +585,38 @@ public class ParityTests {
           }
         }
         """;
+
+    [Test]
+    public async Task Invoke_WhenAnyLinkedLoanOverdue_SubscriberAssigns() {
+        var outcomes = await ParityScenario.FromDsl(WhenAnyDsl, "ParityWhenAny")
+            .AssertAgree(side => {
+                var loan = side.Create("Loan", ("Code", "L1"));
+                var patron = side.Create("Patron", ("Flag", "NONE"), ("loans", new[] { loan }));
+                side.Use(loan);
+                side.Invoke("Overdue");
+                side.Use(patron);
+            });
+        await Assert.That(outcomes[1].State["Flag"]).IsEqualTo("NONE");
+        await Assert.That(outcomes[4].State["Flag"]).IsEqualTo("FIRED");
+    }
+
+    [Test]
+    public async Task Invoke_WhenAllLinkedItemsReachWatchedStages_FiresOnce() {
+        var outcomes = await ParityScenario.FromDsl(WhenAllDsl, "ParityWhenAll")
+            .AssertAgree(side => {
+                var item1 = side.Create("WorkItem", ("Code", "T1"));
+                var item2 = side.Create("WorkItem", ("Code", "T2"));
+                var board = side.Create("Board", ("items", new[] { item1, item2 }));
+                side.Use(item1);
+                side.Invoke("Prep");
+                side.Use(board);
+                side.Use(item2);
+                side.Invoke("Finish");
+                side.Use(board);
+            });
+        await Assert.That(outcomes[5].State["Fires"]).IsEqualTo("0");
+        await Assert.That(outcomes[8].State["Fires"]).IsEqualTo("1");
+    }
 
     // A stage-scoped subscription whose handler transitions the subscriber.
     [Test]

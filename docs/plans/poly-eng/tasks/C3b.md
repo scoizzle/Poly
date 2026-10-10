@@ -1,6 +1,6 @@
 # TASK C3b - Delete MaterializePeerInSyntax
 
-Status: planned. Branch slice/c3b-plan. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c3b-plan. Lane B. Review 1. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 C3a (merged `019a7238`, PR #145) replaced the peer rewrite with a typed `SetArgs` slot, so
@@ -65,3 +65,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | 019a7238 | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | 181519d4 | pushed | tests 3501/3501; sweep: walker gone; leftover peer-bag comment listed |

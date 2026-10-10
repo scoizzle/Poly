@@ -251,7 +251,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **What it is.** Grug's codegen review of EmitGolden (rows K0, G1–G22, D1–D18) is the punch list. The bar is a principle of the convergence plan, not a later polish pass.
 
-**Blocks.** C8-tc, C8-lc, C8-web, C8-num, C8-clean (every finding except D2).
+**Blocks.** C8-tc, C8-lc, C8-web, C8-num, C8-clean.
 
 ### Ruling. Number C# type from constraints (D8)
 
@@ -261,11 +261,13 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Blocks.** C8-num.
 
-### Needs Scot. Contract adapter stub (D2)
+### Ruling. Contract adapter stub (D2)
 
-**Needs Scot (2026-10-10 15:05 CT):** D2 waits on Scot's call. Leave it out of every slice.
+**Answer (Scot, 2026-10-10 15:11 CT):** for now the printed contract endpoint adapter writes a debug trace of the call and its request and returns success, instead of the always-fail stub. A real adapter seam comes later. Slice C8-clean.
 
-**What it is.** Finding D2 (`crm/Poly.Types.cs.golden:56`): `BuildContractAdapterTypeDef` (`DomainToCSharpExporter.Actions.cs:471`) emits an always-fail stub (`DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")`), so `Opportunity.Capture` can never succeed in printed C#. No C8 slice owns it.
+**What it is.** Finding D2 (`crm/Poly.Types.cs.golden:56`): `BuildContractAdapterTypeDef` (`DomainToCSharpExporter.Actions.cs:471`) emits an always-fail stub (`DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")`), so `Opportunity.Capture` can never succeed in printed C#.
+
+**Blocks.** C8-clean.
 
 ## Parked, not asking now
 

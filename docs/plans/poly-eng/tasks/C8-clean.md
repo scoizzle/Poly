@@ -1,7 +1,8 @@
 # TASK C8-clean - Codegen cleanups
 Status: planned. Branch slice/c8-clean-codegen. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 ## Scope
-Findings G11, G15, G16, G18, G19, G20, G22, D7, D9, D11, D13, D14, D18. Depends on C8-lc (same `EffectLoweringPass.cs`, `DomainToCSharpExporter.cs`, `Notify.cs`). Printed C# bar: nits included, nothing deferred.
+Findings G11, G15, G16, G18, G19, G20, G22, D2, D7, D9, D11, D13, D14, D18. Depends on C8-lc (same `EffectLoweringPass.cs`, `DomainToCSharpExporter.cs`, `Notify.cs`). Printed C# bar: nits included, nothing deferred.
+D2 `crm/Poly.Types.cs.golden:56`: `BuildContractAdapterTypeDef` (`DomainToCSharpExporter.Actions.cs:471`) emits an always-fail stub (`DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")`), so `Opportunity.Capture` can never succeed. Per Scot (2026-10-10 15:11 CT), for now the printed adapter writes a debug trace of the call and its request (e.g. `System.Diagnostics.Debug.WriteLine`) and returns success. A real adapter seam comes later; do not build it here.
 G11 `warehouse/Warehouse.cs.golden:137`: Zip is not `required` in the DSL but `Create` always runs `^\d{5}$`, so empty Zip fails. Same for Doctor.LicenseNo (pattern, no required). Skip pattern/length when the property is optional and the value is default/empty (`BuildCreateConstraintChecks` `DomainToCSharpExporter.Notify.cs`).
 G15 `orders/Customer.cs.golden:67`: for-invoke skip is `if (!(target0.CurrentStage == OrderStage.Pending))`. Emit `!=` (`DomainExpressionLoweringPass.cs`, `Not` of `Equal`). Also clinic/Patient, university/Student (2), crm/Opportunity.
 G16 `warehouse/Truck.cs.golden:29`: membership checks on values already typed as the enum (`assignValue0 != Idle && != EnRoute && …`) in ctor entry, `SetStatus`, `Order.Create` State, Visit.CheckIn. Skip enum-membership guards when the CLR type is already that enum (`EffectLoweringPass.cs:430`; `BuildCreateConstraintChecks`).
@@ -16,6 +17,7 @@ D13 `clinic/Visit.cs.golden:55` (also university/Section.cs.golden `WhenAnyWaitO
 D14 `university/Enrollment.cs.golden:76`: `RecordGrade` else branch assigns literal `0L` then re-checks `0L` against `range(0,100)` (always true); same for `OnEntryEnRoute` re-checking `TruckStatus.EnRoute`. Skip range/enum validation when the RHS is a compile-time constant already within bounds (`EffectLoweringPass.cs:292`). Same family as G20.
 D18 `orders/Order.cs.golden:2`: every emitted file carries `using System;` but nothing references an unqualified `System` member. Emit only the usings the body actually needs (`DomainProgramProjection.cs`).
 ## Files
+- `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Actions.cs` (D2 `:471` `BuildContractAdapterTypeDef`)
 - `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` (G11 `BuildCreateConstraintChecks`; G16; G19 param order)
 - `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` (G15 `!=`; G18 count `0`)
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (G16 `:430`; G20 assign wrap; G22 `:699`; D13 extra block; D14 `:292`)
@@ -27,6 +29,7 @@ D18 `orders/Order.cs.golden:2`: every emitted file carries `using System;` but n
 ## Shape matrix
 | Input kind | Before | After | Test that proves it |
 |---|---|---|---|
+| Contract endpoint adapter (D2) | always returns `DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")` | writes a debug trace of the call and request, returns success | D2 `crm/Poly.Types.cs.golden:56` |
 | Optional Zip / LicenseNo on create (G11) | pattern always runs; empty Zip fails | skip pattern/length when optional and default/empty | G11 `warehouse/Warehouse.cs.golden:137` |
 | For-invoke stage skip (G15) | `if (!(target0.CurrentStage == OrderStage.Pending))` | `if (target0.CurrentStage != OrderStage.Pending)` | G15 `orders/Customer.cs.golden:67` |
 | Enum-typed assign (G16) | membership walk `!= Idle && != EnRoute && …` | no membership guard when the CLR type is that enum | G16 `warehouse/Truck.cs.golden:29` |
@@ -44,7 +47,7 @@ D18 `orders/Order.cs.golden:2`: every emitted file carries `using System;` but n
 ## SHIP if / NOT SHIP if
 SHIP if each cited golden no longer shows its finding and the suite passes with regenerated goldens.
 
-NOT SHIP if optional Zip still fails create, or any listed nit is deferred.
+NOT SHIP if optional Zip still fails create, `Billing.Charge` still always fails, or any listed nit is deferred.
 ## Tests
 ```
 dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/DomainToCSharpExporterTests/*'
@@ -59,3 +62,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | grok/grok-4.6 | c0bd182b | planned | G11 G15 G16 G18 G19 G20 G22 D7 D9 D11 D13 D14 D18 |
+| 2026-10-10 | Foreman | - | - | D2 added (Scot 15:11 CT ruling) | D2 |

@@ -326,16 +326,10 @@ public sealed partial record DomainEntityInstance {
         if (firstStage?.OnEntryEffects is not { Count: > 0 })
             return;
 
-        var entryEffects = firstStage.OnEntryEffects
-            .Where(e => e is not StageTransitionEffect)
-            .ToList();
-        if (entryEffects.Count == 0)
-            return;
         instance.ClearAutomaticStageChain();
-        ThrowIfEffectListFailed(
-            instance.ExecuteEffectList(entryEffects, instance._typeDefAnalyzer,
-                entryStageName: firstStage.Name),
-            "first-stage OnEntry");
+        instance.RunTransitionEffectList(
+            firstStage.OnEntryEffects, notifyStore: true,
+            entryStageName: firstStage.Name);
     }
 
     /// <summary>

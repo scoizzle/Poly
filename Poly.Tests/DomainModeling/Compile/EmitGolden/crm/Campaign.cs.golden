@@ -434,7 +434,7 @@ public class Campaign
         }
         if (typeName == "CampaignMember")
         {
-            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), this);
+            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), (values.ContainsKey("campaign") ? (Campaign?)values["campaign"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

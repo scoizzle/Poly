@@ -581,7 +581,7 @@ public class Account
         }
         if (typeName == "Contact")
         {
-            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), this);
+            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -593,7 +593,7 @@ public class Account
         }
         if (typeName == "Opportunity")
         {
-            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), this, (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
+            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null), (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
@@ -653,7 +653,7 @@ public class Account
         }
         if (typeName == "Ticket")
         {
-            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), this);
+            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

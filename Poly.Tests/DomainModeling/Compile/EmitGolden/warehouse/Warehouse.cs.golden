@@ -397,7 +397,7 @@ public class Warehouse
         }
         if (typeName == "Truck")
         {
-            var typed = Truck.Create((values.ContainsKey("MaxLoad") ? (long?)values["MaxLoad"] ?? 0L : 0L), (values.ContainsKey("Vin") ? (string?)values["Vin"] ?? "" : ""), this, new List<Delivery>(), (values.ContainsKey("CurrentLoad") ? (long?)values["CurrentLoad"] ?? 0L : 0L));
+            var typed = Truck.Create((values.ContainsKey("MaxLoad") ? (long?)values["MaxLoad"] ?? 0L : 0L), (values.ContainsKey("Vin") ? (string?)values["Vin"] ?? "" : ""), (values.ContainsKey("warehouse") ? (Warehouse?)values["warehouse"] ?? null : null), new List<Delivery>(), (values.ContainsKey("CurrentLoad") ? (long?)values["CurrentLoad"] ?? 0L : 0L));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

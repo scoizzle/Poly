@@ -407,7 +407,7 @@ public class Order
         }
         if (typeName == "OrderItem")
         {
-            var typed = OrderItem.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""), this);
+            var typed = OrderItem.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""), (values.ContainsKey("order") ? (Order?)values["order"] ?? null : null));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

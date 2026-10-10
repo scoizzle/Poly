@@ -554,7 +554,7 @@ public class Student
         }
         if (typeName == "Enrollment")
         {
-            var typed = Enrollment.Create((values.ContainsKey("section") ? (Section?)values["section"] ?? null : null), this, (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
+            var typed = Enrollment.Create((values.ContainsKey("section") ? (Section?)values["section"] ?? null : null), (values.ContainsKey("student") ? (Student?)values["student"] ?? null : null), (values.ContainsKey("DueDate") ? (DateOnly?)values["DueDate"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("EnrolledOn") ? (DateOnly?)values["EnrolledOn"] ?? DateOnly.MinValue : DateOnly.MinValue), (values.ContainsKey("Grade") ? (long?)values["Grade"] ?? 0L : 0L));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

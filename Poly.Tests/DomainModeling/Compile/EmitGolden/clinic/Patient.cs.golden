@@ -348,7 +348,7 @@ public class Patient
         }
         if (typeName == "Visit")
         {
-            var typed = Visit.Create((values.ContainsKey("Reason") ? (string?)values["Reason"] ?? "" : ""), this, (values.ContainsKey("primaryDoctor") ? (Doctor?)values["primaryDoctor"] ?? null : null), (values.ContainsKey("State") ? (VisitState?)values["State"] ?? VisitState.Scheduled : VisitState.Scheduled));
+            var typed = Visit.Create((values.ContainsKey("Reason") ? (string?)values["Reason"] ?? "" : ""), (values.ContainsKey("patient") ? (Patient?)values["patient"] ?? null : null), (values.ContainsKey("primaryDoctor") ? (Doctor?)values["primaryDoctor"] ?? null : null), (values.ContainsKey("State") ? (VisitState?)values["State"] ?? VisitState.Scheduled : VisitState.Scheduled));
             if (!typed.IsSuccess)
             {
                 return DomainResult<object>.Failure(typed.ErrorMessage ?? "");

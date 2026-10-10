@@ -1234,9 +1234,9 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task ExecuteSubscriptionEffects_Exception_ClearsSubscriptionFlag_AllowsRetry() {
-        // If a subscription effect throws, _isExecutingSubscription must clear so a later
-        // transition can fire subscriptions again (F8 — retired event.* bag oracle).
+    public async Task ExecuteSubscriptionEffects_Exception_AllowsLaterNotify() {
+        // If a subscription effect throws, a later transition on another linked
+        // instance still fires (F8 — retired event.* bag oracle).
         // The throw is a unique collision. An unknown property is an analysis error, and
         // Create refuses that domain before the subscription runs.
         var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
@@ -1292,7 +1292,7 @@ public class DomainEntityInstanceTests {
         await Assert.That(threw).IsTrue();
         await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("UNTOUCHED");
 
-        // Flag cleared: a second linked subscriber still receives the next notify (and throws).
+        // A second linked subscriber still receives the next notify (and throws).
         var freshTracker = DomainEntityInstance.Create(tracker,
             new Dictionary<string, object?> { ["Status"] = "FRESH", ["Token"] = "OTHER" }, domain: domain);
         store.Add(freshTracker);
@@ -2256,8 +2256,6 @@ public class DomainEntityInstanceTests {
     public async Task Subscription_OneHop_Cascade() {
         // BR.3.4: Subscription body transitions subscriber. A ──rel──► B.
         // When B goes to Active, A's subscription fires and transitions A to Done.
-        // The store recurses but this is only one hop (actual depth-limit
-        // enforcement is tested in <see cref="Subscription_Cascade_ExceedsDepthLimit"/>).
         var aStatus = new Property("Status", new DomainTypeReference("Text"), []);
         var a = new Entity("A", [aStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
@@ -2406,11 +2404,10 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task Subscription_Cascade_ExceedsDepthLimit() {
-        // BR.3′.3: Prove maxDepth=10 enforcement. Chain: E0 → E1 → E2 → ... → E11
-        // where each Ei subscribes to Ei-1 transitioning, then transitions itself.
+    public async Task Subscription_Cascade_EveryHopFires() {
+        // Chain: E0 → E1 → … → E11. Each Ei subscribes to Ei-1 entering Active
+        // and transitions itself. No store depth cap; every hop fires.
         // Relationships go: Ei (Source) → Ei-1 (Target), so Ei is the subscriber.
-        // E0 starts it via manual action; cascade propagates through recursive NotifyTransition.
 
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var allEntities = new List<Entity>();
@@ -2437,9 +2434,6 @@ public class DomainEntityInstanceTests {
             var sub = new StageSubscription($"rel{i}", ["Active"], StageSubscriptionQuantifier.Each, [
                 new StageTransitionEffect(new StageReference("Active"))
             ]);
-            // E11 HAS a subscription (rel11, same pattern) — if notified,
-            // it WOULD transition to Active. This proves the depth limit
-            // (maxDepth=10) is what keeps E11 in Draft, not a missing subscription.
             var entity = new Entity(name, [status], [], [], [
                 new Stage("Draft", [], [], [], []) {
                     Subscriptions = [sub]
@@ -2470,15 +2464,60 @@ public class DomainEntityInstanceTests {
         // Trigger the cascade
         instances[0].InvokeAction("Go");
 
-        // E0 triggered manually — in Active
         await Assert.That(instances[0].CurrentStage).IsEqualTo("Active");
-        // E1..E10 fired by cascade (10 hops)
-        for (int i = 1; i <= 10; i++) {
+        for (int i = 1; i <= 11; i++) {
             await Assert.That(instances[i].CurrentStage).IsEqualTo("Active");
         }
+    }
 
-        // E11 should still be in Draft (depth limit stopped before it)
-        await Assert.That(instances[11].CurrentStage).IsEqualTo("Draft");
+    [Test]
+    public async Task Subscription_MutualWhenTransition_ExceedsMaxNotifyDepth_Throws() {
+        // A and B each `when` the other into Active and transition themselves.
+        // Same-target confirms skip NoteAutomaticStage, so the cascade is a
+        // notify ping-pong; the depth bound fails loud instead of overflowing.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var a = new Entity("A", [status], [
+            new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
+                new StageTransitionEffect(new StageReference("Active"))
+            ], [])
+        ], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("SeesB", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new StageTransitionEffect(new StageReference("Active"))
+                ])
+            ]
+        };
+        var b = new Entity("B", [status], [], [], [
+            new Stage("Draft", [], [], [], []),
+            new Stage("Active", [], [], [], [])
+        ]) {
+            Subscriptions = [
+                new StageSubscription("SeesA", ["Active"], StageSubscriptionQuantifier.Each, [
+                    new StageTransitionEffect(new StageReference("Active"))
+                ])
+            ]
+        };
+        var seesB = new Relationship("SeesB",
+            new DomainTypeReference("A"), new DomainTypeReference("B"),
+            RelationshipCardinality.OneToOne, []);
+        var seesA = new Relationship("SeesA",
+            new DomainTypeReference("B"), new DomainTypeReference("A"),
+            RelationshipCardinality.OneToOne, []);
+        var domain = ValidDomain.Create("Cycle", [a, b], [seesB, seesA]);
+        var store = new DomainInstanceStore();
+        var instA = DomainEntityInstance.Create(a, domain: domain);
+        var instB = DomainEntityInstance.Create(b, domain: domain);
+        store.Add(instA);
+        store.Add(instB);
+        store.Link("SeesB", instA, instB);
+        store.Link("SeesA", instB, instA);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => instA.InvokeAction("Go"));
+        await Assert.That(ex!.Message).Contains("Subscription cascade");
+        await Assert.That(ex.Message).Contains(DomainEntityInstance.MaxNotifyDepth.ToString());
     }
 
     [Test]

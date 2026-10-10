@@ -637,7 +637,7 @@ public class DomainToCSharpExporterTests {
 
         var notify = orderType.Methods?.FirstOrDefault(m => m.Name == "NotifyActiveSubscribers");
         await Assert.That(notify).IsNotNull();
-        var invoke = FindFirstInvoke(notify!.Body);
+        var invoke = FindFirstWhenInvoke(notify!.Body);
         await Assert.That(invoke).IsNotNull();
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<ThisReference>();
@@ -740,7 +740,7 @@ public class DomainToCSharpExporterTests {
 
         var notify = orderType.Methods?.FirstOrDefault(m => m.Name == "NotifyActiveSubscribers");
         await Assert.That(notify).IsNotNull();
-        var invoke = FindFirstInvoke(notify!.Body);
+        var invoke = FindFirstWhenInvoke(notify!.Body);
         await Assert.That(invoke).IsNotNull();
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<ThisReference>();
@@ -840,7 +840,7 @@ public class DomainToCSharpExporterTests {
         var notify = types.First(t => t.Name == "Order").Methods?
             .FirstOrDefault(m => m.Name == "NotifyActiveSubscribers");
         await Assert.That(notify).IsNotNull();
-        var invoke = FindFirstInvoke(notify!.Body);
+        var invoke = FindFirstWhenInvoke(notify!.Body);
         await Assert.That(invoke).IsNotNull();
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(0);
     }
@@ -887,7 +887,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(called).Contains("WhenAllPaymentCaptured");
         await Assert.That(called).Contains("WhenEachPaymentCaptured");
 
-        var register = payment.Methods!.Count(m => m.Name == "RegisterOrderCapturedSubscriber");
+        var register = payment.Methods!.Count(m => m.Name == "RegisterOrderPaymentsCapturedSubscriber");
         await Assert.That(register).IsEqualTo(1);
     }
 
@@ -916,11 +916,13 @@ public class DomainToCSharpExporterTests {
         var ticket = types.First(t => t.Name == "Ticket");
         var methods = ticket.Methods!.Select(m => m.Name).ToList();
         await Assert.That(methods.Count(n => n == "NotifyClosedSubscribers")).IsEqualTo(1);
-        await Assert.That(methods.Contains("RegisterDeskClosedSubscriber")).IsTrue();
-        await Assert.That(methods.Contains("RegisterQueueClosedSubscriber")).IsTrue();
+        await Assert.That(methods.Contains("EnterNotifyCascade")).IsTrue();
+        await Assert.That(methods.Contains("ExitNotifyCascade")).IsTrue();
+        await Assert.That(methods.Contains("RegisterDeskTicketsClosedSubscriber")).IsTrue();
+        await Assert.That(methods.Contains("RegisterQueueTicketsClosedSubscriber")).IsTrue();
         var fields = ticket.Fields!.Select(f => f.Name).ToHashSet(StringComparer.Ordinal);
-        await Assert.That(fields.Contains("_deskClosedSubscribers")).IsTrue();
-        await Assert.That(fields.Contains("_queueClosedSubscribers")).IsTrue();
+        await Assert.That(fields.Contains("_deskTicketsClosedSubscribers")).IsTrue();
+        await Assert.That(fields.Contains("_queueTicketsClosedSubscribers")).IsTrue();
     }
 
     [Test]
@@ -1109,6 +1111,10 @@ public class DomainToCSharpExporterTests {
         }
         return null;
     }
+
+    private static Invoke? FindFirstWhenInvoke(Node? node) =>
+        node is null ? null : FindAllInvokes(node).FirstOrDefault(i =>
+            i.Delegate is Member m && m.MemberName.StartsWith("When", StringComparison.Ordinal));
 
     // ── R6: in-suite compile oracle (Roslyn) ─────────────────────
 

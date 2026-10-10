@@ -38,13 +38,13 @@ public class Patron
         }
         var loan = loanResult.Value;
         this._loans.Add(loan);
-        loan.RegisterPatronOverdueSubscriber(this);
+        loan.RegisterPatronLoansOverdueSubscriber(this);
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)
     {
         this._loans.Add(child);
-        child.RegisterPatronOverdueSubscriber(this);
+        child.RegisterPatronLoansOverdueSubscriber(this);
     }
     private DomainResult<Fine> CreateFines(string reason, long amount = 0L)
     {
@@ -103,7 +103,7 @@ public class Patron
     {
         foreach (var target in this.Loans)
         {
-            target.RegisterPatronOverdueSubscriber(this);
+            target.RegisterPatronLoansOverdueSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

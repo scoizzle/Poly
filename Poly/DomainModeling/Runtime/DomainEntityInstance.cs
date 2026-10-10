@@ -19,9 +19,9 @@ public sealed partial record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
     private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
-    private bool _isExecutingSubscription;
     private int _invokeDepth;
     private int _transitionDepth;
+    private int _notifyDepth;
     private HashSet<string>? _automaticStageChain;
     private readonly HashSet<string> _exitsRunning = new(StringComparer.Ordinal);
     private TypeDefinitionNodeAnalyzer? _bindingTypeProvider;
@@ -29,6 +29,8 @@ public sealed partial record DomainEntityInstance {
     public const int MaxInvokeDepth = 16;
     /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
     public const int MaxTransitionDepth = 16;
+    /// <summary>Max nested <c>Notify{Stage}Subscribers</c> depth (subscription cascade re-entrancy).</summary>
+    public const int MaxNotifyDepth = 16;
     public DomainInstanceStore? Store { get; internal set; }
 
     private DomainEntityInstance(

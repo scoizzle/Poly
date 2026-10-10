@@ -82,8 +82,8 @@ public class Section
     internal void AttachEnrollments(Enrollment child)
     {
         this._enrollments.Add(child);
-        child.RegisterSectionRegisteredSubscriber(this);
-        child.RegisterSectionDroppedSubscriber(this);
+        child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
+        child.RegisterSectionEnrollmentsDroppedSubscriber(this);
     }
     private DomainResult<WaitOffer> CreateWaitlist(Student? student)
     {
@@ -98,8 +98,8 @@ public class Section
     internal void AttachWaitlist(WaitOffer child)
     {
         this._waitlist.Add(child);
-        child.RegisterSectionOfferedSubscriber(this);
-        child.RegisterSectionCancelledSubscriber(this);
+        child.RegisterSectionWaitlistOfferedSubscriber(this);
+        child.RegisterSectionWaitlistCancelledSubscriber(this);
     }
     public DomainResult Close()
     {
@@ -236,19 +236,19 @@ public class Section
     {
         foreach (var target in this.Enrollments)
         {
-            target.RegisterSectionRegisteredSubscriber(this);
+            target.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         }
         foreach (var target in this.Enrollments)
         {
-            target.RegisterSectionDroppedSubscriber(this);
+            target.RegisterSectionEnrollmentsDroppedSubscriber(this);
         }
         foreach (var target in this.Waitlist)
         {
-            target.RegisterSectionOfferedSubscriber(this);
+            target.RegisterSectionWaitlistOfferedSubscriber(this);
         }
         foreach (var target in this.Waitlist)
         {
-            target.RegisterSectionCancelledSubscriber(this);
+            target.RegisterSectionWaitlistCancelledSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

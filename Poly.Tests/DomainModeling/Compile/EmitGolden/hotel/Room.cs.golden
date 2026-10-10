@@ -79,10 +79,10 @@ public class Room
     internal void AttachStays(Reservation child)
     {
         this._stays.Add(child);
-        child.RegisterRoomInHouseSubscriber(this);
-        child.RegisterRoomDepartedSubscriber(this);
-        child.RegisterRoomCancelledSubscriber(this);
-        child.RegisterRoomNoShowSubscriber(this);
+        child.RegisterRoomStaysInHouseSubscriber(this);
+        child.RegisterRoomStaysDepartedSubscriber(this);
+        child.RegisterRoomStaysCancelledSubscriber(this);
+        child.RegisterRoomStaysNoShowSubscriber(this);
     }
     public DomainResult TakeOutOfService()
     {
@@ -194,19 +194,19 @@ public class Room
     {
         foreach (var target in this.Stays)
         {
-            target.RegisterRoomInHouseSubscriber(this);
+            target.RegisterRoomStaysInHouseSubscriber(this);
         }
         foreach (var target in this.Stays)
         {
-            target.RegisterRoomDepartedSubscriber(this);
+            target.RegisterRoomStaysDepartedSubscriber(this);
         }
         foreach (var target in this.Stays)
         {
-            target.RegisterRoomCancelledSubscriber(this);
+            target.RegisterRoomStaysCancelledSubscriber(this);
         }
         foreach (var target in this.Stays)
         {
-            target.RegisterRoomNoShowSubscriber(this);
+            target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

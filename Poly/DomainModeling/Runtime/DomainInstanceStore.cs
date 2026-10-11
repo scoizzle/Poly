@@ -337,7 +337,11 @@ public sealed class DomainInstanceStore {
         return null;
     }
 
-    /// <summary>Removes an instance (e.g. after delete effect). Also drops its links and subscriber-registry entries.</summary>
+    /// <summary>
+    /// Removes an instance (e.g. after a delete effect or a create-in rollback). Also drops its
+    /// links and subscriber-registry entries. Deleting an owned target drops its last owner's
+    /// link too: delete is outside the owned-target minimum that <see cref="Unlink"/> enforces.
+    /// </summary>
     public void Remove(DomainEntityInstance instance) {
         var drop = new List<(string RelationshipName, DomainEntityInstance Source, DomainEntityInstance Target)>();
         foreach (var l in _links) {
@@ -345,7 +349,7 @@ public sealed class DomainInstanceStore {
                 drop.Add(l);
         }
         foreach (var l in drop)
-            Unlink(l.RelationshipName, l.Source, l.Target);
+            Detach(l.RelationshipName, l.Source, l.Target);
         instance.Store = null;
         _instances.Remove(instance);
     }
@@ -365,19 +369,13 @@ public sealed class DomainInstanceStore {
                 "Both instances must be registered in this store before linking.");
         if (IsLinked(relationshipName, source, target))
             return;
-        if (source.Domain is not null) {
-            var contracts = RuntimeAnalysisCache.Analysis(source.Domain)
-                .GetMetadata<RelationshipContractMetadata>(default);
-            var contract = contracts?.Contracts.FirstOrDefault(c =>
-                string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
-                && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
-            if (contract is not null
-                && contract.Cardinality is not (RelationshipCardinality.OneToMany
-                    or RelationshipCardinality.ManyToMany)
-                && GetLinkedTargets(relationshipName, source).Count > 0)
-                throw new InvalidOperationException(
-                    Relationship.LinkViolationMessage(relationshipName));
-        }
+        var contract = ResolveRelationshipContract(relationshipName, source);
+        if (contract is not null
+            && contract.Cardinality is not (RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany)
+            && GetLinkedTargets(relationshipName, source).Count > 0)
+            throw new InvalidOperationException(
+                Relationship.LinkViolationMessage(relationshipName));
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.AddSubscriber(fieldName, source);
         _links.Add((relationshipName, source, target));
@@ -385,7 +383,7 @@ public sealed class DomainInstanceStore {
 
     /// <summary>
     /// Removes an instance-level edge if present.
-    /// Unlinking the last owner of an owned target throws.
+    /// Unlinking the last owner of an owned target throws; <see cref="Remove"/> is exempt.
     /// </summary>
     public void Unlink(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -393,24 +391,41 @@ public sealed class DomainInstanceStore {
         ArgumentNullException.ThrowIfNull(target);
         if (!IsLinked(relationshipName, source, target))
             return;
-        if (source.Domain is not null) {
-            var contracts = RuntimeAnalysisCache.GetOrAnalyze(source.Domain)
-                .GetMetadata<RelationshipContractMetadata>(default);
-            var contract = contracts?.Contracts.FirstOrDefault(c =>
-                string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
-                && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
-            if (contract is not null
-                && contract.SourceOwnsTarget
-                && GetLinkedSources(relationshipName, target).Count == 1)
-                throw new InvalidOperationException(
-                    Relationship.UnlinkViolationMessage(relationshipName));
-        }
+        var contract = ResolveRelationshipContract(relationshipName, source);
+        if (contract is not null
+            && contract.SourceOwnsTarget
+            && GetLinkedSources(relationshipName, target).Count == 1)
+            throw new InvalidOperationException(
+                Relationship.UnlinkViolationMessage(relationshipName));
+        Detach(relationshipName, source, target);
+    }
+
+    /// <summary>
+    /// Drops an existing edge and its subscriber-registry entries. No cardinality check:
+    /// callers decide whether the edge may be dropped.
+    /// </summary>
+    private void Detach(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.RemoveSubscriber(fieldName, source);
         _links.RemoveAll(l =>
             string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
             && ReferenceEquals(l.Source, source)
             && ReferenceEquals(l.Target, target));
+    }
+
+    /// <summary>
+    /// The relationship contract named <paramref name="relationshipName"/> as authored by
+    /// <paramref name="source"/>, or null when the source has no domain or no contract matches.
+    /// </summary>
+    private static RelationshipContract? ResolveRelationshipContract(
+        string relationshipName, DomainEntityInstance source) {
+        if (source.Domain is null)
+            return null;
+        var contracts = RuntimeAnalysisCache.Analysis(source.Domain)
+            .GetMetadata<RelationshipContractMetadata>(default);
+        return contracts?.Contracts.FirstOrDefault(c =>
+            string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
+            && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
     }
 
     /// <summary>

@@ -411,6 +411,42 @@ public class DomainInstanceStoreFailClosedTests {
         await Assert.That(store.IsLinked("Nope", parent, child)).IsFalse();
     }
 
+    [Test]
+    public async Task Remove_OwnedTarget_LastOwner_DropsInstanceAndLink() {
+        var domain = BuildOwnedLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child);
+        store.Link("Kid", parent, child);
+
+        store.Remove(child);
+
+        await Assert.That(store.IsLinked("Kid", parent, child)).IsFalse();
+        await Assert.That(child.Store).IsNull();
+    }
+
+    [Test]
+    public async Task Remove_OwnedSource_LastOwner_DropsChildLink() {
+        var domain = BuildOwnedLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child);
+        store.Link("Kid", parent, child);
+
+        store.Remove(parent);
+
+        await Assert.That(store.IsLinked("Kid", parent, child)).IsFalse();
+        await Assert.That(child.Store).IsNotNull();
+    }
+
     private static Domain BuildOwnedLinkDomain() {
         var child = new Entity("Child",
             [new Property("Name", new DomainTypeReference("Text"), [])],

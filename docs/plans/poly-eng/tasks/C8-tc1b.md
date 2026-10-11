@@ -1,6 +1,6 @@
 # TASK C8-tc1b - create-in lowers to `this.Create{Nav}` (G1)
 
-Status: planned (blocked on C8-tc1a). Branch `slice/c8-tc1b`. Lane B. Review 2.
+Status: implemented. Suite green (3529/0). Branch `slice/c8-tc1b`. Lane B. Review 2.
 Split from C8-tc1 on 2026-10-10 by the local agent. Parent: [`tasks/C8-tc1.md`](C8-tc1.md).
 Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md).
 
@@ -65,3 +65,4 @@ C8-tc1a.
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | handoff | - | - | split from C8-tc1 | G1 |
+| 2026-10-11 | implementer | grok | f93a95a7 | suite 3529/0; goldens 32b51c5f. `BindTyped` accepts `OptionalTypeReference` so `(T?)null` in parameterized actions binds. Probes stay `ProbeCreate`. | G1 |

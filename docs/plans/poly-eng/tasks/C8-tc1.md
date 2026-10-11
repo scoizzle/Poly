@@ -1,6 +1,6 @@
 # TASK C8-tc1 - Lowering emits typed create calls
 Status: planned (written for the local-agent handoff, 2026-10-10). Branch `slice/c8-tc1` (not created yet). Lane B. Review 2.
-Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md) on branch `slice/c8-tc-typed-create` (PR 155). C8-tc was split into tc1, tc2 and tc3 on 2026-10-10 after its run hung four times; this file is part 1 of 3.
+Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md). C8-tc was split into tc1, tc2 and tc3 on 2026-10-10 after its run hung four times; this file is part 1 of 3.
 
 ## Scope
 Findings K0 (lowering half) and G1 from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10-codegen-review.md). Lowering still emits string-named store jobs: `LowerRuntimeFactoryCall` (`Poly/DomainModeling/Lowering/EffectLoweringPass.cs:1136`), reached from `CreateEntityInstance` (`:897`) and `CreateEntityInRelationship` (`:909`, call `:917`), prints `this.Create("Fine", "Amount", 5L, …)` and `this.CreateIn("enrollments", …)` with object casts. The typed factories already exist: static `Entity.Create(…)` (`DomainToCSharpExporter.cs`, near `:805`) and `Create{Nav}(…)` (`DomainToCSharpExporter.Notify.cs:92`, singular `:84`).

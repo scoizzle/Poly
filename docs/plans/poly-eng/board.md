@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-10. Master `78231090` (#156 C7c). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
+Updated 2026-10-10. Master: see GitHub (C7d #159 merged). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -11,17 +11,14 @@ Updated 2026-10-10. Master `78231090` (#156 C7c). Rules: [README](README.md). Ol
 ## Needs Scot
 
 1. C8d depends on T3, which the 2026-10-09 trim parked. Un-park T3 or drop it from C8d's Depends.
-2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them on the PR 155 branch. Parking one means editing those Depends lines.
-3. PR 155 holds the only copies of `tasks/C8-lc.md`, `C8-num.md`, `C8-web.md`, `C8-clean.md` and the plan cards for the C8-tc family. Merge or cherry-pick its docs before closing it.
+2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them. Parking one means editing those Depends lines.
+3. PR 157 (C6c) review is NOT SHIP (R1 major: `Remove` → `Unlink` throws on create-in rollback). Fix on `slice/c6c-plan`, then re-review.
 
 ## In flight (open PRs; GitHub is the live state)
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#159](https://github.com/scoizzle/Poly/pull/159) | C7d: One-offs and BehaviorMetadata | A | `e37978de` | green | Implemented (3529/3529). Needs review on a different model, then merge. |
-| [#158](https://github.com/scoizzle/Poly/pull/158) | C8-vm: VM analysis gate | B | `1308e7ee` | - | Draft, plan only. Implement after C8-tc2. |
-| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | `b0a5a9d2` | - | Draft, plan only. Unblocked. |
-| [#155](https://github.com/scoizzle/Poly/pull/155) | C8-tc: Typed create in the compiled tree | B | `abe82a44` | - | Draft, docs only. Replaced by C8-tc1/tc2/tc3 (`tasks/C8-tc1.md` to `C8-tc3.md`); WIP code in [research/c8-tc-wip.patch](research/c8-tc-wip.patch). |
+| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | `5cd51cd4` | green | Implemented; review NOT SHIP (R1 major, R2 nit). Fix, then re-review. |
 
 ## Next (in order; first unblocked row wins)
 
@@ -30,15 +27,15 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
 | 1 | C6c | C6b (merged) | PR 157 branch |
-| 2 | C7d | C7c (merged); implemented, needs review | PR 159 branch |
+| 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
 | 3 | C8-tc1 | C6a, C6b1 (merged) | [tasks/C8-tc1.md](tasks/C8-tc1.md) |
 | 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
-| 6 | C8-vm | C8-tc (after tc2) | PR 158 branch |
-| 7 | C8-lc | C8-tc | PR 155 branch |
-| 8 | C8-clean (optional before C8d) | C8-lc | PR 155 branch |
-| 9 | C8-num | C8-clean | PR 155 branch |
-| 10 | C8-web (optional; parkable) | C8-num | PR 155 branch |
+| 6 | C8-vm | C8-tc2 | [tasks/C8-vm.md](tasks/C8-vm.md) |
+| 7 | C8-lc | C8-tc | [tasks/C8-lc.md](tasks/C8-lc.md) |
+| 8 | C8-clean (optional before C8d) | C8-lc | [tasks/C8-clean.md](tasks/C8-clean.md) |
+| 9 | C8-num | C8-clean | [tasks/C8-num.md](tasks/C8-num.md) |
+| 10 | C8-web (optional; parkable) | C8-num | [tasks/C8-web.md](tasks/C8-web.md) |
 | 11 | K2 (runs alone) | C0 (merged) | plan card |
 | 12 | C8-pre (runs alone) | C2b, C7d | plan card |
 | 13 | C8a1 | C5b, C6c, C7d | plan card |

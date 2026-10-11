@@ -138,7 +138,7 @@ public sealed partial record DomainEntityInstance {
             // Standalone: Entity.Stages scan (reduced contract).
             AnalysisResult? analysis = null;
             if (Domain is not null) {
-                analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+                analysis = RuntimeAnalysisCache.Analysis(Domain);
                 if (analysis.GetCatalog(Domain) is null)
                     throw new InvalidOperationException(
                         $"Runtime transition requires {nameof(DomainCatalogMetadata)} for domain '{Domain.Name}' (TransitionStage).");
@@ -310,9 +310,7 @@ public sealed partial record DomainEntityInstance {
         ArgumentException.ThrowIfNullOrEmpty(targetStageName);
         if (Domain is null)
             return;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        RuntimeAnalysisCache.GetOrLower(
-            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        RuntimeAnalysisCache.GetOrLower(Domain);
         var methodName = $"Notify{targetStageName}Subscribers";
         if (!RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, methodName, out var method)
             || method?.Body is null)
@@ -360,9 +358,7 @@ public sealed partial record DomainEntityInstance {
             throw new InvalidOperationException(
                 $"Cannot execute subscription effects on '{Entity.Name}' without a Domain-bound module.");
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        RuntimeAnalysisCache.GetOrLower(
-            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        RuntimeAnalysisCache.GetOrLower(Domain);
 
         // Domain-bound: run the module handler cached at GetOrLower (same tree print emits).
         // Miss or missing plan entry throws. Bound peer is a typed SetArgs slot.

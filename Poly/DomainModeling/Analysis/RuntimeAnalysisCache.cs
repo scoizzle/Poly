@@ -106,6 +106,8 @@ internal static class RuntimeAnalysisCache {
         return GetOrLower(domain, Session(domain), analysis);
     }
 
+    internal static AnalysisResult Analysis(Domain domain) => EnsureAnalysis(domain);
+
     /// <summary>
     /// Lowers so <see cref="DomainSession.ArtifactCatalog"/> is filled, then indexes it.
     /// The index is reused until Bind replaces the session or analysis.

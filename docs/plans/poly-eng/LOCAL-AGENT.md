@@ -45,7 +45,7 @@ Each slice's `Depends` line is authoritative. The task file is listed where one 
 | 19 | C10 | End check: the interpreter runs exactly the catalog artifact (node identity / structural hash) | C1c, C3b, C2b, E1 (merged), C8d | plan card only | a deliberately added rewrite step makes the test fail | M |
 
 **Dependency conflicts Scot must settle (unverified as resolved):**
-- C8d's card on master depends on **T3**, but the 2026-10-09 trim parked T3. Either un-park T3 (mutation-by-invariant matrix; depends on C4d, C6c, M1, all merged after C6c) or remove T3 from C8d's Depends. Without one of those, C8d cannot start as written.
+- C8d's card on master depends on **T3**, but the 2026-10-09 trim parked T3. Either un-park T3 (mutation-by-invariant matrix; depends on C4d and M1, merged, and C6c) or remove T3 from C8d's Depends. Without one of those, C8d cannot start as written.
 - C8-web and C8-clean are listed as optional, but on the PR 155 branch C8d also depends on them, and C8-num depends on C8-clean. Parking either one means editing C8d's Depends line (and C8-num's, if C8-clean is parked) in the same PR that parks it.
 - The parent request listed C8-num → C8-web → C8-clean. The task files on the PR 155 branch chain C8-lc → C8-clean → C8-num → C8-web (file overlap). The table follows the task files.
 - In the C8-tc split, G2 moved from tc3 to tc2 (deleting `StoreBind.cs` removes the probe), and G9 and G12 moved from tc2 to tc3 (size). C6b2 is placed in tc3. These are handoff choices; adjust freely.

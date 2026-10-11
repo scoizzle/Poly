@@ -125,7 +125,7 @@ public class Section
         {
             return DomainResult<WaitOffer>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("waitlist", "student", (object)who);
+        var create1 = this.CreateWaitlist(who);
         if (!create1.IsSuccess)
         {
             return DomainResult<WaitOffer>.Failure(create1.ErrorMessage ?? "");

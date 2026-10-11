@@ -260,7 +260,7 @@ public class Opportunity
             {
                 return DomainResult<Activity>.Failure(create0.ErrorMessage ?? "");
             }
-            var create1 = this.CreateIn("activities", "Subject", subject);
+            var create1 = this.CreateActivities(subject);
             if (!create1.IsSuccess)
             {
                 return DomainResult<Activity>.Failure(create1.ErrorMessage ?? "");
@@ -275,7 +275,7 @@ public class Opportunity
             {
                 return DomainResult<Activity>.Failure(create3.ErrorMessage ?? "");
             }
-            var create4 = this.CreateIn("activities", "Subject", subject);
+            var create4 = this.CreateActivities(subject);
             if (!create4.IsSuccess)
             {
                 return DomainResult<Activity>.Failure(create4.ErrorMessage ?? "");
@@ -290,7 +290,7 @@ public class Opportunity
             {
                 return DomainResult<Activity>.Failure(create6.ErrorMessage ?? "");
             }
-            var create7 = this.CreateIn("activities", "Subject", subject);
+            var create7 = this.CreateActivities(subject);
             if (!create7.IsSuccess)
             {
                 return DomainResult<Activity>.Failure(create7.ErrorMessage ?? "");
@@ -319,7 +319,7 @@ public class Opportunity
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
             this.Amount = assignValue1;
-            var create2 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
+            var create2 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create2.IsSuccess)
             {
                 return DomainResult<Line>.Failure(create2.ErrorMessage ?? "");
@@ -344,7 +344,7 @@ public class Opportunity
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
             this.Amount = assignValue5;
-            var create6 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
+            var create6 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create6.IsSuccess)
             {
                 return DomainResult<Line>.Failure(create6.ErrorMessage ?? "");
@@ -369,7 +369,7 @@ public class Opportunity
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
             this.Amount = assignValue9;
-            var create10 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
+            var create10 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create10.IsSuccess)
             {
                 return DomainResult<Line>.Failure(create10.ErrorMessage ?? "");
@@ -390,7 +390,7 @@ public class Opportunity
         {
             return DomainResult<Quote>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("quotes", "Title", this.Title, "Amount", 0L);
+        var create1 = this.CreateQuotes(0L, this.Title);
         if (!create1.IsSuccess)
         {
             return DomainResult<Quote>.Failure(create1.ErrorMessage ?? "");

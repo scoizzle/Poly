@@ -51,7 +51,7 @@ public class Patron
         {
             return DomainResult<Fine>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("fines", "Amount", 5L, "Reason", "CreateIn");
+        var create1 = this.CreateFines(5L, "CreateIn");
         if (!create1.IsSuccess)
         {
             return DomainResult<Fine>.Failure(create1.ErrorMessage ?? "");

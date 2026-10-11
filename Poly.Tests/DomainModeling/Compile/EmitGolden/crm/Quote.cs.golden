@@ -79,7 +79,7 @@ public class Quote
             return DomainResult<QuoteLine>.Failure("'Amount' must be <= 100000000.");
         }
         this.Amount = assignValue1;
-        var create2 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
+        var create2 = this.CreateLines(qty, sku.ListPrice, sku);
         if (!create2.IsSuccess)
         {
             return DomainResult<QuoteLine>.Failure(create2.ErrorMessage ?? "");

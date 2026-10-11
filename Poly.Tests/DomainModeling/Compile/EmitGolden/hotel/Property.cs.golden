@@ -75,7 +75,7 @@ public class Property
         {
             return DomainResult<Hall>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("halls", "Name", name, "Capacity", seats, "DayRate", rate);
+        var create1 = this.CreateHalls(seats, rate, name);
         if (!create1.IsSuccess)
         {
             return DomainResult<Hall>.Failure(create1.ErrorMessage ?? "");

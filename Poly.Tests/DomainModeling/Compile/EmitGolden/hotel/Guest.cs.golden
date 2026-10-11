@@ -86,7 +86,7 @@ public class Guest
         {
             return DomainResult<Reservation>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("reservations", "room", (object)room, "PartySize", party, "Nights", nights, "NightlyRate", room.NightlyRate, "MaxOccupancy", room.MaxOccupancy, "CheckInDate", arrive, "CheckOutDate", depart);
+        var create1 = this.CreateReservations(arrive, depart, room.MaxOccupancy, room.NightlyRate, nights, party, (Folio?)null, room);
         if (!create1.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(create1.ErrorMessage ?? "");
@@ -105,7 +105,7 @@ public class Guest
         {
             return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("events", "hall", (object)hall, "Headcount", party, "Capacity", hall.Capacity, "DayRate", hall.DayRate, "StartDate", arrive, "EndDate", depart);
+        var create1 = this.CreateEvents(hall.Capacity, hall.DayRate, depart, party, arrive, hall, (Section?)null);
         if (!create1.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create1.ErrorMessage ?? "");
@@ -124,7 +124,7 @@ public class Guest
         {
             return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("events", "section", (object)section, "hall", (object)hall, "Headcount", party, "Capacity", section.Capacity, "DayRate", section.DayRate, "StartDate", arrive, "EndDate", depart);
+        var create1 = this.CreateEvents(section.Capacity, section.DayRate, depart, party, arrive, hall, section);
         if (!create1.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create1.ErrorMessage ?? "");

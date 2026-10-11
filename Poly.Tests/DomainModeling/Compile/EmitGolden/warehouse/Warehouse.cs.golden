@@ -74,7 +74,7 @@ public class Warehouse
         {
             return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("trucks", "Vin", vin, "MaxLoad", maxLoad);
+        var create1 = this.CreateTrucks(maxLoad, vin);
         if (!create1.IsSuccess)
         {
             return DomainResult<Truck>.Failure(create1.ErrorMessage ?? "");

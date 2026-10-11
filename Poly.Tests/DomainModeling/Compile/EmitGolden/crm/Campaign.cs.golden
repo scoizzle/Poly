@@ -52,7 +52,7 @@ public class Campaign
         {
             return DomainResult<CampaignMember>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("members", "contact", (object)who);
+        var create1 = this.CreateMembers(who);
         if (!create1.IsSuccess)
         {
             return DomainResult<CampaignMember>.Failure(create1.ErrorMessage ?? "");

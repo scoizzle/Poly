@@ -137,7 +137,7 @@ public class Account
         {
             return DomainResult<Site>.Failure("Cannot add a second link on 'hq': the source already has a target.");
         }
-        var create1 = this.CreateIn("hq", "City", city, "Region", region);
+        var create1 = this.CreateHq(city, region);
         if (!create1.IsSuccess)
         {
             return DomainResult<Site>.Failure(create1.ErrorMessage ?? "");
@@ -156,7 +156,7 @@ public class Account
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("contacts", "Name", name, "Email", email);
+        var create1 = this.CreateContacts(email, name);
         if (!create1.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create1.ErrorMessage ?? "");
@@ -175,7 +175,7 @@ public class Account
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("contacts", "Name", lead.Name, "Email", lead.Email);
+        var create1 = this.CreateContacts(lead.Email, lead.Name);
         if (!create1.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create1.ErrorMessage ?? "");
@@ -194,7 +194,7 @@ public class Account
         {
             return DomainResult<Opportunity>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("opportunities", "Title", title, "Amount", amount);
+        var create1 = this.CreateOpportunities(amount, title, (Contact?)null);
         if (!create1.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(create1.ErrorMessage ?? "");
@@ -222,7 +222,7 @@ public class Account
         {
             return DomainResult<Ticket>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("tickets", "Subject", subject);
+        var create1 = this.CreateTickets(subject);
         if (!create1.IsSuccess)
         {
             return DomainResult<Ticket>.Failure(create1.ErrorMessage ?? "");

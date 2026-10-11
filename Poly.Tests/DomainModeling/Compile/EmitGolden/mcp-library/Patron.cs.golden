@@ -72,7 +72,7 @@ public class Patron
         {
             return DomainResult<Loan>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("loans", "book", (object)book);
+        var create1 = this.CreateLoans(book);
         if (!create1.IsSuccess)
         {
             return DomainResult<Loan>.Failure(create1.ErrorMessage ?? "");
@@ -83,7 +83,7 @@ public class Patron
     public bool GoodStanding() => this.Status == "Active";
     internal void WhenEachLoanOverdue(Loan loan)
     {
-        var create0 = this.Create("Fine", "Amount", loan.Amount, "Reason", "Overdue");
+        var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
             throw new ConstraintFailureException(create0.ErrorMessage ?? "");

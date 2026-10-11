@@ -72,7 +72,7 @@ public class Student
             return DomainResult<Enrollment>.Failure(create0.ErrorMessage ?? "");
         }
         this.OpenCredits = this.OpenCredits + 3L;
-        var create1 = this.CreateIn("enrollments", "section", (object)offering);
+        var create1 = this.CreateEnrollments(offering);
         if (!create1.IsSuccess)
         {
             return DomainResult<Enrollment>.Failure(create1.ErrorMessage ?? "");

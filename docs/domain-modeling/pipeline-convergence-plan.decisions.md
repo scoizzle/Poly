@@ -235,14 +235,39 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer (Scot, 2026-10-09 23:16 CDT):** KEEP. Decision 10 (no guessing) does not cover the create-in back-reference slot choice, so `FindAutoWireBackReference` and `TryLinkCreateInBackReference` stay as C6a leaves them. This is a ruling, not a new numbered decision.
 
-## Parked, not asking now
+## Scot's answers, 2026-10-10
 
-- Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 20 (rename scope) before R2.
-- Pulling "tests and spec exports" (A7) forward for sellability: recommended not now, because nothing consumes them yet. The sellable-proof scenario (author, compile, run on sqlite, replay over `demo.http`) needs no code and runs after wave 1.
+### Ruling. Typed create in the compiled tree (C8-tc)
 
-## What did not need to be asked
+**Answer (Scot, 2026-10-10 11:34 CDT):** the compiled tree and printed C# express real typed semantics; dictionary string/object instances belong only to the interpreter. Store jobs (`Create` / `CreateIn` / `ProbeCreate` / `EnsureUnique` lowered as string-named dictionary jobs) are an interpreter implementation detail, never a shape in the compiled tree. C8-tc therefore emits typed factory calls (`Fine.Create(amount, reason)`, `this.Create{Nav}(…)`), deletes `DomainToCSharpExporter.StoreBind.cs`, keeps results as `DomainResult<T>` with no cast to object, replaces the `EnsureUnique` Success stub with a real check, and maps the typed calls onto the interpreter's dictionary-backed instances via `HostAbi` / `InvokeNamed`. Goldens are regenerated; no golden may hold a `Dictionary<string, object>` construction or a string-named create call.
 
-These look like decisions but were answered by earlier rulings or by the code: gating Errors everywhere (decision 7); no auto-link (decision 10); constraints on set, transitions as trees, unknown names as Analyze errors (decisions 11 and 12); action- and stage-scoped policies compile into the printed output (decision 8); same-named stage actions share one id (the exporter makes them one method).
+**Related rulings.** C6b2 (`BuildTargetCreateArgs` self-referencing collection slot passing `this` where the constructor wants `IEnumerable<T>`) is folded into C8-tc, because C8-tc deletes the file that holds the bug. C8a2 (interpreter-side `TypeDefinitionNode` factory) now depends on C8-tc and must run the typed compiled Create tree. C8-tc grew 2026-10-10 15:05 CT to also close K0, G1, G2, G3+D1, G4+D15, G6, G8, G9, G12.
+
+**Blocks.** C8-tc, then C8a2.
+
+### Ruling. Printed C# bar
+
+**Answer (Scot, 2026-10-10 15:05 CT):** printed C# must be as good as, or better than, hand-written production-quality C#. Every codegen finding is fixed, nits included, nothing deferred.
+
+**What it is.** Grug's codegen review of EmitGolden (rows K0, G1–G22, D1–D18) is the punch list. The bar is a principle of the convergence plan, not a later polish pass.
+
+**Blocks.** C8-tc, C8-lc, C8-web, C8-num, C8-clean.
+
+### Ruling. Number C# type from constraints (D8)
+
+**Answer (Scot, 2026-10-10 15:05 CT):** a DSL `Number`'s C# type is decided by its applied constraints (integral means `long`; fractional bounds or precision mean `decimal`).
+
+**What it is.** Finding D8 (`orders/Order.cs.golden:24`): `Number` currently maps to `long` in `DomainTypeMapping.cs:14`, so money fields (`NightlyRate`, `Balance`, `DayRate`, `Discount`, `Total`, `ListPrice`) silently truncate. Slice C8-num.
+
+**Blocks.** C8-num.
+
+### Ruling. Contract adapter stub (D2)
+
+**Answer (Scot, 2026-10-10 15:11 CT):** for now the printed contract endpoint adapter writes a debug trace of the call and its request and returns success, instead of the always-fail stub. A real adapter seam comes later. Slice C8-clean.
+
+**What it is.** Finding D2 (`crm/Poly.Types.cs.golden:56`): `BuildContractAdapterTypeDef` (`DomainToCSharpExporter.Actions.cs:471`) emits an always-fail stub (`DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.")`), so `Opportunity.Capture` can never succeed in printed C#.
+
+**Blocks.** C8-clean.
 
 ### Ruling. VM analysis gate (C8-vm)
 
@@ -251,3 +276,12 @@ These look like decisions but were answered by earlier rulings or by the code: g
 **Related.** Depends on C8-tc (PR 155), which removes the K0 string-named create jobs behind most of the VM noise and moves the exporter code; the C8-vm plan cites symbols and is implemented after C8-tc lands. C8-vm lands before C8-lc, C8-web, C8-num, C8-clean and C8d.
 
 **Blocks.** C8-lc, C8-web, C8-num, C8-clean, C8d.
+
+## Parked, not asking now
+
+- Decision 16 (`Information` to `Info`) before N1. Decision 18 (cascading errors) after N3's numbers. Decision 20 (rename scope) before R2.
+- Pulling "tests and spec exports" (A7) forward for sellability: recommended not now, because nothing consumes them yet. The sellable-proof scenario (author, compile, run on sqlite, replay over `demo.http`) needs no code and runs after wave 1.
+
+## What did not need to be asked
+
+These look like decisions but were answered by earlier rulings or by the code: gating Errors everywhere (decision 7); no auto-link (decision 10); constraints on set, transitions as trees, unknown names as Analyze errors (decisions 11 and 12); action- and stage-scoped policies compile into the printed output (decision 8); same-named stage actions share one id (the exporter makes them one method).

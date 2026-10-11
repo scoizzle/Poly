@@ -1,6 +1,6 @@
 # TASK C8-tc3 - Typed create follow-ups: event create, self and singular navs, public factories, failed Value
 Status: planned (written for the local-agent handoff, 2026-10-10). Branch `slice/c8-tc3` (not created yet). Lane B. Review 2.
-Plan card: **C8-tc** on branch `slice/c8-tc-typed-create` (PR 155); part 3 of 3. Depends on C8-tc2.
+Plan card: **C8-tc**; part 3 of 3. Depends on C8-tc2.
 
 ## Scope
 Findings G4+D15, G6, G8, G9, G12, and the folded C6b2 fix, from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10-codegen-review.md).

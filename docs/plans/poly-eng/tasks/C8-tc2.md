@@ -1,6 +1,6 @@
 # TASK C8-tc2 - Typed probe and real EnsureUnique; delete StoreBind.cs
 Status: planned (written for the local-agent handoff, 2026-10-10). Branch `slice/c8-tc2` (not created yet). Lane B. Review 2.
-Plan card: **C8-tc** on branch `slice/c8-tc-typed-create` (PR 155); part 2 of 3. Depends on C8-tc1.
+Plan card: **C8-tc**; part 2 of 3. Depends on C8-tc1.
 
 ## Scope
 Findings K0 (exporter half), G2, G3+D1 from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10-codegen-review.md). `DomainToCSharpExporter.StoreBind.cs` (317 lines) backs the string-named jobs with `Dictionary<string,object>` overloads, `BindCreate` / `BindCreateIn` / `BindProbeCreate` and an always-Success `EnsureUnique` stub (`:26`); it is added by `AddStoreBindMethods` (`DomainToCSharpExporter.cs:878`). 48 golden files hold `new Dictionary<string, object`.

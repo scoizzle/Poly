@@ -1,5 +1,5 @@
 # TASK C7c - Entity and relationship lookups use index and navigation
-Status: planned. Branch slice/c7c-plan. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c7c-plan. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Card `**C7c**` (`docs/domain-modeling/pipeline-convergence-plan.md:564-571`; Depends on C7b, merged `67427b72`) is the entity/relationship member of the C7-0..C7d lookup group. C7b added `RuntimeAnalysisCache.Index(Domain)` (`Analysis/RuntimeAnalysisCache.cs:110-116`): `EnsureAnalysis` + `RequireCatalog`, `session.Lower` so `Session.ArtifactCatalog` fills, then `new CatalogIndex(session.ArtifactCatalog)`; `CatalogIndex.Tree`/`Navigation` (`Compile/CatalogIndex.cs:29-58`) answer entity-by-name and member-by-name. The card counted 4 entity + 3 relationship lookups; two relationship ones sat in C0's deleted helpers (`GetOutboundRelatedInstances`, `TryEvaluateRelationshipPresence`, removed `ab0772cd`). The live group on master is five sites: Create's G1 gate (`DomainEntityInstance.cs:94-101`), `TryResolveTargetEntity` (`DomainInstanceStore.cs:223-244`), `NavigationsFor` (`DomainEntityInstance.Runtime.cs:347-355`), `MapDomainTypeToAstNode` (`:517-521`), `ResolveSourceRelationshipOrThrow` (`:398-416`). Three still call `GetOrAnalyze` (`:101`, `:231`, `:402`); the other two scan `domain.Types` directly. This slice moves the name questions onto the index; ontology objects (`Entity`, `Relationship`) still come from the domain — the index carries `Artifact`/`PropertyDefinitionNode` only. The nine other `Runtime` `GetOrAnalyze` sites (subscription fan-out, stage names, storage target, link contract, `BehaviorMetadata`) are C7d. Lane B is on C8-tc (PR 155, `EffectLoweringPass` / `StoreBind.cs`); this touch is `Runtime/*` plus one test file, no overlap.
@@ -53,3 +53,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | 60089ef0 | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | 3cdb415f | pushed | tests 3526/3526; sweep: GetOrAnalyze Runtime 9; remaining listed C7d |

@@ -10,4 +10,5 @@ namespace Poly.Interpretation.Vm;
 /// Includes the instance slot for instance methods.</param>
 /// <param name="LocalCount">Number of local variable slots required by this
 /// function. Defaults to 0.</param>
+[Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
 public sealed record FunctionEntry(int PC, int ArgSlots, int LocalCount = 0);

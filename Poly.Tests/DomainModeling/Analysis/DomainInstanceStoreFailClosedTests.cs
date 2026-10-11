@@ -333,7 +333,30 @@ public class DomainInstanceStoreFailClosedTests {
         var ex = Assert.Throws<InvalidOperationException>(() => store.Unlink("Kid", parent, child));
         await Assert.That(ex!.Message).IsEqualTo(Relationship.UnlinkViolationMessage("Kid"));
         await Assert.That(store.IsLinked("Kid", parent, child)).IsTrue();
-        await Assert.That(store.GetLinkedTargets("Kid", parent).Count).IsEqualTo(1);
+        await Assert.That(store.GetLinkedSources("Kid", child).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Unlink_OwnedCollection_ChildKeepsOwner() {
+        var domain = BuildOwnedCollectionDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child1 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        var child2 = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child1);
+        store.Add(child2);
+        store.Link("Kids", parent, child1);
+        store.Link("Kids", parent, child2);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Unlink("Kids", parent, child1));
+        await Assert.That(ex!.Message).IsEqualTo(Relationship.UnlinkViolationMessage("Kids"));
+        await Assert.That(store.IsLinked("Kids", parent, child1)).IsTrue();
+        await Assert.That(store.IsLinked("Kids", parent, child2)).IsTrue();
+        await Assert.That(store.GetLinkedSources("Kids", child1).Count).IsEqualTo(1);
     }
 
     [Test]
@@ -402,6 +425,22 @@ public class DomainInstanceStoreFailClosedTests {
             RelationshipCardinality.OneToOne,
             []) { SourceOwnsTarget = true };
         return ValidDomain.Create("OwnedLinkTest", [parent, child], [relationship]);
+    }
+
+    private static Domain BuildOwnedCollectionDomain() {
+        var child = new Entity("Child",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var parent = new Entity("Parent",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var relationship = new Relationship(
+            "Kids",
+            new DomainTypeReference("Parent"),
+            new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToMany,
+            []) { SourceOwnsTarget = true };
+        return ValidDomain.Create("OwnedCollectionTest", [parent, child], [relationship]);
     }
 
     private static Domain BuildSingularLinkDomain() {

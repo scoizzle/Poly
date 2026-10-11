@@ -399,17 +399,11 @@ public sealed class DomainInstanceStore {
             var contract = contracts?.Contracts.FirstOrDefault(c =>
                 string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
                 && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
-            if (contract is not null && contract.SourceOwnsTarget) {
-                var inbound = 0;
-                foreach (var l in _links) {
-                    if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
-                        && ReferenceEquals(l.Target, target))
-                        inbound++;
-                }
-                if (inbound == 1)
-                    throw new InvalidOperationException(
-                        Relationship.UnlinkViolationMessage(relationshipName));
-            }
+            if (contract is not null
+                && contract.SourceOwnsTarget
+                && GetLinkedSources(relationshipName, target).Count == 1)
+                throw new InvalidOperationException(
+                    Relationship.UnlinkViolationMessage(relationshipName));
         }
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.RemoveSubscriber(fieldName, source);
@@ -467,6 +461,23 @@ public sealed class DomainInstanceStore {
             if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
                 && ReferenceEquals(l.Source, source))
                 results.Add(l.Target);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Inbound links only: sources of <paramref name="relationshipName"/> where
+    /// <paramref name="target"/> is the link target.
+    /// </summary>
+    public IReadOnlyList<DomainEntityInstance> GetLinkedSources(
+        string relationshipName, DomainEntityInstance target) {
+        ArgumentException.ThrowIfNullOrEmpty(relationshipName);
+        ArgumentNullException.ThrowIfNull(target);
+        var results = new List<DomainEntityInstance>();
+        foreach (var l in _links) {
+            if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
+                && ReferenceEquals(l.Target, target))
+                results.Add(l.Source);
         }
         return results;
     }

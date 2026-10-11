@@ -1,5 +1,5 @@
 # TASK C7d - One-offs and BehaviorMetadata
-Status: planned. Branch slice/c7d-plan. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c7d-plan. Lane A. Review 1. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Card `**C7d**` (`docs/domain-modeling/pipeline-convergence-plan.md:573-580`; Depends on C7c, merged `78231090`) closes the C7-0..C7d lookup group: "Stage enum names, subscription fan-out, storage target, `BehaviorMetadata`" and "`git grep GetOrAnalyze -- Poly/DomainModeling/Runtime` is empty." C7b added `RuntimeAnalysisCache.Index(Domain)` (`Analysis/RuntimeAnalysisCache.cs:114-129`); C7a added the 1-arg `GetOrLower(Domain)` (`:104-107`). C7c left nine `GetOrAnalyze` sites in `Runtime/` plus one in `Analysis/BehaviorMetadata.cs:47` and one in `Poly.Mcp/Tools/OracleTool.cs:420`. Two of the nine are pure pairs (`HostAbi.cs:313-315`, `:363-365`) where `analysis` is used only to feed the 3-arg `GetOrLower`, so they collapse to `GetOrLower(Domain)` exactly as C7a did. The other seven read analysis metadata (`SubscriptionDispatchPlanMetadata` `:327`; `DomainCatalogMetadata` `:142`; `StorageMappingMetadata` `Store.cs:104`; `RelationshipContractMetadata` `Store.cs:370`; `ResolvedTypeReferenceMetadata` `BehaviorMetadata.cs:76`) and need `AnalysisResult`; the cache already holds it via the private `EnsureAnalysis` (`:88-102`). This slice adds one `internal static AnalysisResult Analysis(Domain)` accessor over `EnsureAnalysis` and routes every product site through it. `GetOrAnalyze` keeps its public signature and body for the 12 test files (C8d deletes it and moves those tests); `Index` and `CatalogIndex` are untouched.
@@ -71,3 +71,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | 78231090 | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | 8a2ed7e9 | pushed | tests 3529/3529; sweep: Runtime GetOrAnalyze empty; product definition only |

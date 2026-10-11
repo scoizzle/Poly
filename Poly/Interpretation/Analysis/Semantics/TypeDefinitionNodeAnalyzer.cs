@@ -26,9 +26,16 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         }
 
         if (node is TypeDefinitionNode typeDef) {
-            var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
-            registry.Add(definition);
-            context.SetMetadata(node, new TypeDefinitionMetadata(definition));
+            // A re-analysis of a type the caller already built must keep that
+            // instance. A second Patron is not assignable to the first, so
+            // this fails to match a Patron parameter.
+            if (context.GetMetadata<TypeDefinitionMetadata>(typeDef)?.TypeDefinition is AstTypeDefinition existing)
+                registry.Add(existing);
+            else {
+                var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
+                registry.Add(definition);
+                context.SetMetadata(node, new TypeDefinitionMetadata(definition));
+            }
         }
 
         this.AnalyzeChildren(context, node);
@@ -825,6 +832,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     private readonly AstCollectionItemProperty _item;
     private readonly ITypeProperty? _count;
     private readonly ITypeConstructor _ctor;
+    private readonly ITypeConstructor _copy;
     private readonly ITypeMethod _add;
 
     public AstCollectionTypeDefinition(ITypeDefinition element, CollectionKind kind) {
@@ -835,7 +843,11 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
             .GetTypeDefinition(typeof(System.Collections.IList))
             ?.Properties.FirstOrDefault(p => string.Equals(p.Name, "Count", StringComparison.Ordinal));
         _ctor = new AstCollectionParameterlessConstructor(this);
-        _add = new AstCollectionAddMethod(this, element);
+        // new List<T>(items ?? new List<T>()) on a printed entity constructor.
+        _copy = new AstCollectionCopyConstructor(this);
+        // DomainResult.Value is object. Add still has to accept the entity.
+        var addArg = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>();
+        _add = new AstCollectionAddMethod(this, addArg);
     }
 
     public ITypeDefinition ElementType { get; }
@@ -846,11 +858,13 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
-    public IEnumerable<ITypeMember> Members => _count is null ? [_item, _ctor, _add] : [_item, _count, _ctor, _add];
+    public IEnumerable<ITypeMember> Members => _count is null
+        ? [_item, _ctor, _copy, _add]
+        : [_item, _count, _ctor, _copy, _add];
     public IEnumerable<ITypeField> Fields => [];
     public IEnumerable<ITypeProperty> Properties => _count is null ? [_item] : [_item, _count];
     public IEnumerable<ITypeMethod> Methods => [_add];
-    public IEnumerable<ITypeConstructor> Constructors => [_ctor];
+    public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public PrimitiveType? PrimitiveType => null;
     public TypeCategory TypeCategory => TypeCategory.Collection;
     public Type RuntimeType => typeof(System.Collections.IList);
@@ -865,6 +879,26 @@ internal sealed class AstCollectionParameterlessConstructor(AstCollectionTypeDef
     public AccessModifier AccessModifier => AccessModifier.Public;
     public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
     public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary><c>new List&lt;T&gt;(items)</c> for a synthetic collection type.</summary>
+internal sealed class AstCollectionCopyConstructor(AstCollectionTypeDefinition declaring) : ITypeConstructor {
+    public string Name => declaring.Name;
+    public ITypeDefinition MemberTypeDefinition => declaring;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [new AstCollectionSourceParameter(declaring)];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary>The source sequence of <c>new List&lt;T&gt;(items)</c>.</summary>
+internal sealed class AstCollectionSourceParameter(AstCollectionTypeDefinition source) : IParameter {
+    public int Position => 0;
+    public string Name => "collection";
+    public ITypeDefinition ParameterTypeDefinition => source;
+    public bool IsOptional => false;
+    public object? DefaultValue => null;
 }
 
 /// <summary><c>Add(X)</c> on a synthetic collection type.</summary>

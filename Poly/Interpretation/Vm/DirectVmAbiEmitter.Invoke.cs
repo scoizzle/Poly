@@ -524,10 +524,14 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++)
             fnCtx.DeclareCapture(captures[i].Binding, i);
 
-        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
+        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx]).
+        // Locals start after those slots. An instance frame also keeps slot 0
+        // for the receiver. Without the reserve, block-local zeros land on the
+        // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
         foreach (var param in parameters)
             fnCtx.DeclareParameter(param);
+        fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Enter the activation in the compile-time simulator.
         // Local count is 0 initially; DeclareVariable calls inside the body
@@ -811,8 +815,18 @@ public static partial class DirectVmAbiEmitter {
         // the forwarder. An error on the method, its signature, or its body
         // still fails it. Every other member keeps the type-level result, so a
         // dirty type still falls through to InvokeNamed.
-        var analysis = Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
-        if (!analysis.HasErrors || !ForwardsToClrStatic(body) || ErrorsTouch(member, analysis))
+        var analysis = Interpreter.Analyzer.Analyze(
+            astType.Syntax,
+            typeDefinitions: provider,
+            setup: ctx => ctx.SetMetadata(astType.Syntax, new TypeDefinitionMetadata(astType)));
+        // Sibling members (notify-depth throws, collection constructors) can
+        // be dirty. Create and Create{Nav} still have to run: their bodies are
+        // the factory, and a missed compile falls through to InvokeNamed.
+        var createDespiteSiblings = member is MethodDefinitionNode { Name: var methodName }
+            && methodName.StartsWith("Create", StringComparison.Ordinal);
+        if (!analysis.HasErrors
+            || (!ForwardsToClrStatic(body) && !createDespiteSiblings)
+            || ErrorsTouch(member, analysis))
             return analysis;
         return analysis with {
             HasErrors = false,
@@ -1014,6 +1028,10 @@ public static partial class DirectVmAbiEmitter {
             return 0L;
         }
         if (target.IsInstanceOfType(value))
+            return raw;
+        // Entity types publish IDictionary<string, object>. The instance is
+        // IDictionary<string, object?> (invariance blocks the CLR cast).
+        if (target == typeof(IDictionary<string, object>) && value is IDictionary<string, object?>)
             return raw;
         throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }

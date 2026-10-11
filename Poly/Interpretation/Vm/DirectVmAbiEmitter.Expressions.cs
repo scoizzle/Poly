@@ -579,7 +579,8 @@ public static partial class DirectVmAbiEmitter {
             return Assign(ctx.RingVar(slot), Constant(0L));
         var instance = Activator.CreateInstance(target);
         return Assign(ctx.RingVar(slot),
-            Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(instance, typeof(object)), typeof(object))));
+            Convert(Call(ctx.HeapLocal, HeapAllocate,
+                Convert(Constant(instance, typeof(object)), typeof(object))), typeof(long)));
     }
 
     private static Expression EmitTypeOf(TypeOf t, AbiCtx ctx) {

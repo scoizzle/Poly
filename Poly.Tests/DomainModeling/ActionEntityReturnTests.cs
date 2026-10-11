@@ -735,20 +735,18 @@ public class ActionEntityReturnTests {
         await Assert.That(lot.GetProperty<bool>("Create")).IsFalse();
         await Assert.That(lot.CreatedChildren).IsEmpty();
 
-        // Module ProbeCreate-before-assign (Create/Occupied) — not Unique restore theater.
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Lot", "Issue", out var issue)).IsTrue();
         await Assert.That(issue?.Body).IsNotNull();
         var flat = FlattenSyntax(issue!.Body!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "CreatePermits" });
         var createAssignIdx = flat.FindIndex(n =>
             n is Assignment a && a.Destination is Member { MemberName: "Create" });
-        var occupiedAssignIdx = flat.FindIndex(n =>
-            n is Assignment a && a.Destination is Member { MemberName: "Occupied" });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(createAssignIdx).IsGreaterThan(probeIdx);
-        await Assert.That(occupiedAssignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(createAssignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(createAssignIdx);
     }
 
     [Test]
@@ -897,7 +895,7 @@ public class ActionEntityReturnTests {
         await Assert.That(station.InvokeAction("Fire").Succeeded).IsTrue();
         var send = ticket.InvokeAction("Send");
         await Assert.That(send.Succeeded).IsFalse();
-        await Assert.That(send.ErrorMessage).Contains("only available in stage");
+        await Assert.That(send.ErrorMessage).Contains("requires stage 'Ready'");
         await Assert.That(ticket.CurrentStage).IsEqualTo("Queued");
         await Assert.That(station.CurrentStage).IsEqualTo("Busy");
     }
@@ -1207,9 +1205,7 @@ public class ActionEntityReturnTests {
 
     [Test]
     public async Task InvokeAction_IfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
-        // Item 4 fail-before-mutate: assign OpenStays+1 then if (OpenStays >= 1)
-        // { create illegal } probes with post-assign condition so Failure leaves
-        // OpenStays unchanged. Oracle is module ProbeCreate-before-assign, not DEI restore.
+        // Assign, then the if, then Stay.Create. A Nights failure restores OpenStays.
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -1241,19 +1237,19 @@ public class ActionEntityReturnTests {
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "Create" });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment a
             && a.Destination is Member { MemberName: "OpenStays" });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
     }
 
     [Test]
     public async Task InvokeAction_NestedIfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
-        // Nested if after ancestor OpenStays assign must inherit assignedRhs so
-        // ProbeCreate sees OpenStays+1 and Failure leaves OpenStays==0.
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -1287,26 +1283,19 @@ public class ActionEntityReturnTests {
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "Create" });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment a
             && a.Destination is Member { MemberName: "OpenStays" });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        // Inner probe guard must contain substituted OpenStays + 1 (not bare OpenStays).
-        var probePrefix = flat.Take(probeIdx + 1).ToList();
-        var hasOpenStaysPlusOne = probePrefix.Any(n =>
-            n is global::Poly.Ast.Nodes.Add add
-            && add.LeftHandValue is Member { MemberName: "OpenStays" }
-            && add.RightHandValue is Constant { Value: 1L or 1 });
-        await Assert.That(hasOpenStaysPlusOne).IsTrue();
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
     }
 
     [Test]
     public async Task InvokeAction_ElseIfOnMutatedProperty_CreateIllegal_DoesNotApplyPriorAssign() {
-        // else-if on OpenStays after ancestor assign must inherit assignedRhs
-        // (else walk copy of priorAssignRhs; not then-branch overlays).
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -1339,19 +1328,15 @@ public class ActionEntityReturnTests {
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke inv && inv.Delegate is Member { MemberName: "ProbeCreate" });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke inv && inv.Delegate is Member { MemberName: "Create" });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment a
             && a.Destination is Member { MemberName: "OpenStays" });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var probePrefix = flat.Take(probeIdx + 1).ToList();
-        var hasOpenStaysPlusOne = probePrefix.Any(n =>
-            n is global::Poly.Ast.Nodes.Add add
-            && add.LeftHandValue is Member { MemberName: "OpenStays" }
-            && add.RightHandValue is Constant { Value: 1L or 1 });
-        await Assert.That(hasOpenStaysPlusOne).IsTrue();
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
     }
 
     [Test]

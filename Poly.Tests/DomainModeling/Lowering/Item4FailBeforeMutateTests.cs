@@ -11,12 +11,13 @@ using Poly.DomainModeling.Runtime;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// Item 4: sequential Failure fail-before-mutate in the Lower tree
-/// (ProbeCreate prefix with post-prior-assign conditions). Not DEI restore.
+/// Item 4: a failed create leaves earlier assigns unchanged.
+/// The printed method is the handwritten order (assign, then create).
+/// The interpreter restores the snapshot when the method returns Failure.
 /// </summary>
 public class Item4FailBeforeMutateTests {
     [Test]
-    public async Task LowerActionBody_OccupyIfOnMutatedProperty_ProbeCreateBeforeOpenStaysAssign() {
+    public async Task LowerActionBody_OccupyIfOnMutatedProperty_AssignThenCreate() {
         var (domain, analysis) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -42,16 +43,18 @@ public class Item4FailBeforeMutateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke { Delegate: Member { MemberName: "Create" } });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment { Destination: Member { MemberName: "OpenStays" } });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
     }
 
     [Test]
-    public async Task ModuleBook_OccupyIfOnMutatedProperty_ProbeCreateBeforeOpenStaysAssign() {
+    public async Task ModuleBook_OccupyIfOnMutatedProperty_AssignThenCreate_FailureRestores() {
         var (domain, analysis, session) = EvolveWithSession("""
             domain Hotel
             Stay: entity {
@@ -72,12 +75,14 @@ public class Item4FailBeforeMutateTests {
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = Flatten(book!.Body!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke { Delegate: Member { MemberName: "Create" } });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment { Destination: Member { MemberName: "OpenStays" } });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
 
         // Runtime fail-before-mutate (not order-only): Nights Failure, bag unchanged.
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
@@ -93,7 +98,7 @@ public class Item4FailBeforeMutateTests {
     }
 
     [Test]
-    public async Task StoreLess_OccupyIfOnMutatedProperty_ProbeCreateFailsBeforeOpenStaysAssign() {
+    public async Task StoreLess_OccupyIfOnMutatedProperty_FailureLeavesOpenStaysUnchanged() {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
@@ -149,24 +154,20 @@ public class Item4FailBeforeMutateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();
-        var probeIdx = flat.FindIndex(n =>
-            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } });
+        var createIdx = flat.FindIndex(n =>
+            n is Invoke { Delegate: Member { MemberName: "Create" } });
         var assignIdx = flat.FindIndex(n =>
             n is Assignment { Destination: Member { MemberName: "OpenStays" } });
-        await Assert.That(probeIdx).IsGreaterThanOrEqualTo(0);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var probePrefix = flat.Take(probeIdx + 1).ToList();
-        var hasOpenStaysPlusOne = probePrefix.Any(n =>
-            n is global::Poly.Ast.Nodes.Add add
-            && add.LeftHandValue is Member { MemberName: "OpenStays" }
-            && add.RightHandValue is Constant { Value: 1L or 1 });
-        await Assert.That(hasOpenStaysPlusOne).IsTrue();
+        await Assert.That(flat.Any(n =>
+            n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
+        await Assert.That(assignIdx).IsGreaterThanOrEqualTo(0);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
     }
 
     [Test]
     public async Task LowerActionBody_QuantifierBody_DoesNotSubstituteRelatedActive() {
         // Subject assign Active must not rewrite related-entity Active inside
-        // any-body for ProbeCreate guard.
+        // the any-body.
         var (domain, analysis) = Evolve("""
             domain Yard
             Widget: entity {

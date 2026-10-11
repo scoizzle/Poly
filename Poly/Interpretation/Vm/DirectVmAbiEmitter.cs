@@ -314,6 +314,8 @@ public static partial class DirectVmAbiEmitter {
         }
         if (resolved is AstConstructorDefinition astCtor)
             return EmitAstNew(n, astCtor, ctx);
+        if (resolved is AstCollectionParameterlessConstructor or AstCollectionCopyConstructor)
+            return EmitSyntheticCollection(n, (AstCollectionTypeDefinition)resolved.DeclaringTypeDefinition, ctx);
 
         if (ctor is not null) {
             int d = ctx.RingDepth;
@@ -357,6 +359,72 @@ public static partial class DirectVmAbiEmitter {
         var typeName = targetType?.Name ?? n.Type.ToString();
         throw new InvalidOperationException(
             $"VM compile rejected: no matching constructor for {typeName} with {n.Arguments.Length} argument(s).");
+    }
+
+    /// <summary>
+    /// <c>new List&lt;Entity&gt;()</c> and <c>new List&lt;Entity&gt;(items)</c>. The
+    /// element is an AST type, so the collection is not a closed CLR
+    /// <c>List&lt;T&gt;</c>. The instance is <c>List&lt;object&gt;</c> (or
+    /// <c>HashSet&lt;object&gt;</c>), which <c>Add</c> finds by name.
+    /// </summary>
+    private static Expression EmitSyntheticCollection(New n, AstCollectionTypeDefinition collection, AbiCtx ctx) {
+        var seq = new List<Expression>();
+        Expression created;
+        if (n.Arguments.Length == 0) {
+            created = Call(null, NewEmptyCollectionInfo, Constant((int)collection.Kind));
+        }
+        else {
+            int before = ctx.RingDepth;
+            seq.Add(CompileNode(n.Arguments[0], ctx));
+            int got = ctx.RingDepth - 1;
+            seq.Add(FoldResultToSlot(ref got, before, ctx));
+            ctx.RingDepth = got + 1;
+            var source = Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ctx.RingVar(got), typeof(int)));
+            created = Call(null, CopyCollectionInfo, Constant((int)collection.Kind), source);
+        }
+        int slot = ctx.AllocSlot();
+        var handle = Call(ctx.HeapLocal, HeapAllocate, created);
+        ctx.RingDepth = slot + 1;
+        seq.Add(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+        return Block(seq);
+    }
+
+    private static readonly MethodInfo NewEmptyCollectionInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(NewEmptyCollection), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static readonly MethodInfo CopyCollectionInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(CopyCollection), BindingFlags.NonPublic | BindingFlags.Static)!;
+
+    private static object NewEmptyCollection(int kind) => (CollectionKind)kind switch {
+        CollectionKind.Set => new HashSet<object>(),
+        CollectionKind.List => new List<object>(),
+        _ => throw new InvalidOperationException(
+            $"VM compile rejected: synthetic {(CollectionKind)kind} has no parameterless constructor.")
+    };
+
+    private static object CopyCollection(int kind, object? source) {
+        if (source is null)
+            throw new ArgumentNullException(nameof(source));
+        var items = source as System.Collections.IEnumerable
+            ?? throw new InvalidOperationException(
+                $"Collection constructor source '{source.GetType().Name}' is not IEnumerable.");
+        switch ((CollectionKind)kind) {
+            case CollectionKind.Set: {
+                    var set = new HashSet<object>();
+                    foreach (var item in items)
+                        set.Add(item!);
+                    return set;
+                }
+            case CollectionKind.List: {
+                    var list = new List<object>();
+                    foreach (var item in items)
+                        list.Add(item!);
+                    return list;
+                }
+            default:
+                throw new InvalidOperationException(
+                    $"VM compile rejected: synthetic {(CollectionKind)kind} has no copy constructor.");
+        }
     }
 
     /// <summary>

@@ -673,10 +673,7 @@ public sealed partial record DomainEntityInstance {
             var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, actionParameters: action.Parameters, actionArgs: args);
             if (failed is { IsSuccess: false }) {
-                // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
-                // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
-                if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
-                    RestoreActionState(bagBefore, stageBefore, createdBefore);
+                RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return MapModuleRequireFailure(actionName, action, failed.ErrorMessage);
             }
 
@@ -714,7 +711,11 @@ public sealed partial record DomainEntityInstance {
         message ??= "invoke failed.";
         const string blockedPrefix = "blocked by policy '";
         var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
-        if (blockedIdx >= 0) {
+        // "'StartHall' blocked by policy 'HasSection'." is this action's gate.
+        // "'Occupy' blocked by policy 'CanBook'." is a nested invoke; keep the
+        // text so the caller can see which policy failed.
+        if (blockedIdx >= 0
+            && message.StartsWith($"'{actionName}'", StringComparison.Ordinal)) {
             var start = blockedIdx + blockedPrefix.Length;
             var end = message.IndexOf('\'', start);
             if (end > start) {
@@ -903,24 +904,44 @@ public sealed partial record DomainEntityInstance {
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
         var runtimeEntity = BuildTypeDefNode(entity, actionParameters, domain);
-        if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
-            var names = new HashSet<string>(
-                (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+        if (moduleEntity is not null) {
             List<MethodDefinitionNode>? extras = null;
-            foreach (var m in moduleMethods) {
-                if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
+            if (moduleEntity.Methods is { Count: > 0 } moduleMethods) {
+                var names = new HashSet<string>(
+                    (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+                foreach (var m in moduleMethods) {
+                    if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
+                        extras ??= [];
+                        extras.Add(BindStaticFactory(m, entity.Name, domain));
+                        continue;
+                    }
+                    if (!names.Add(m.Name))
+                        continue;
                     extras ??= [];
-                    extras.Add(BindStaticFactory(m, entity.Name, domain));
-                    continue;
+                    // Create{Nav} and Attach{Nav} are the printed methods. The
+                    // rest stay empty so InvokeNamed still owns actions and policies.
+                    var keepBody = m.Name.StartsWith("Create", StringComparison.Ordinal)
+                        || m.Name.StartsWith("Attach", StringComparison.Ordinal);
+                    extras.Add(keepBody ? m : m with { Body = new Block([]) });
                 }
-                if (!names.Add(m.Name))
-                    continue;
-                extras ??= [];
-                extras.Add(m with { Body = new Block([]) });
             }
-            if (extras is not null)
+            // Printed Create/Attach bodies use the class fields (`_fines`).
+            // The interpreted instance is this dictionary, so those fields
+            // have to be members or the body does not analyze.
+            var fields = new List<FieldDefinitionNode>(runtimeEntity.Fields ?? []);
+            var fieldNames = new HashSet<string>(fields.Select(f => f.Name), StringComparer.Ordinal);
+            if (moduleEntity.Fields is not null) {
+                foreach (var field in moduleEntity.Fields) {
+                    if (fieldNames.Add(field.Name))
+                        fields.Add(field);
+                }
+            }
+            if (extras is not null || fields.Count != (runtimeEntity.Fields?.Count ?? 0))
                 runtimeEntity = runtimeEntity with {
-                    Methods = [.. runtimeEntity.Methods ?? [], .. extras]
+                    Methods = extras is null
+                        ? runtimeEntity.Methods
+                        : [.. runtimeEntity.Methods ?? [], .. extras],
+                    Fields = fields.Count == 0 ? null : fields
                 };
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
@@ -961,7 +982,9 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Replaces a static factory body with the dictionary-backed host job
     /// <c>DomainInstanceHostJobs.TypedCreate(typeName, values)</c>, where values
-    /// carries the non-collection factory parameters by name.
+    /// carries the non-collection factory parameters by name. Printed
+    /// <c>Attach*</c> calls stay, so a create-in that skipped its own
+    /// <c>_field.Add</c> still links under simulate.
     /// </summary>
     private static MethodDefinitionNode BindStaticFactory(
         MethodDefinitionNode method, string typeName, Domain domain) {
@@ -977,13 +1000,59 @@ public sealed partial record DomainEntityInstance {
                 new Member(host, nameof(DomainInstanceHostJobs.With)),
                 values, new Constant(key), parameters[i]);
         }
-        return method with {
-            Body = new Block([
-                new Return(new Invoke(
-                    new Member(host, nameof(DomainInstanceHostJobs.TypedCreate)),
-                    new Constant(typeName), values))
-            ])
+
+        var result = new Variable("typed");
+        var nodes = new List<Node> {
+            new Assignment(result, new Invoke(
+                new Member(host, nameof(DomainInstanceHostJobs.TypedCreate)),
+                new Constant(typeName), values)),
+            new IfStatement(
+                new Ast.Nodes.Not(new Member(result, "IsSuccess")),
+                new Block([new Return(result)]))
         };
+        var locals = new List<Node> { result };
+        var attaches = AttachCalls(method.Body);
+        if (attaches.Count > 0 && CreatedLocal(method.Body) is { } created) {
+            nodes.Add(new Assignment(
+                created,
+                new TypeCast(
+                    new Member(result, "Value"),
+                    new NamedTypeReference(typeName))));
+            nodes.AddRange(attaches);
+            locals.Add(created);
+        }
+        nodes.Add(new Return(result));
+        return method with { Body = new Block(nodes, locals) };
+    }
+
+    private static Variable? CreatedLocal(Node? body) {
+        if (body is not Block block)
+            return null;
+        foreach (var variable in block.Variables) {
+            if (variable is Variable created && created.Name == "created")
+                return created;
+        }
+        return null;
+    }
+
+    private static List<Node> AttachCalls(Node? body) {
+        var found = new List<Node>();
+        if (body is not Block block)
+            return found;
+        foreach (var node in block.Nodes) {
+            if (node is IfStatement { ThenBranch: Block then } && CallsAttach(then))
+                found.Add(node);
+        }
+        return found;
+    }
+
+    private static bool CallsAttach(Block block) {
+        foreach (var node in block.Nodes) {
+            if (node is Invoke { Delegate: Member { MemberName: var name } }
+                && name.StartsWith("Attach", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 
     private static List<string> FactoryDictKeys(string typeName, Domain domain) {

@@ -69,7 +69,7 @@ public class Opportunity
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
-    private DomainResult<Account> CreateAccount(Industry industry, string name, Site? hq, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
+    private DomainResult<Account> CreateAccount(Industry industry, string name, Site? hq = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
     {
         var accountResult = Account.Create(industry, name, (Account?)null, hq, new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), closedTickets, openPipeline, wonCount);
         if (!accountResult.IsSuccess)
@@ -80,7 +80,7 @@ public class Opportunity
         this.Account = account;
         return DomainResult<Account>.Success(account);
     }
-    private DomainResult<Contact> CreateContact(string email, string name, Account? account)
+    private DomainResult<Contact> CreateContact(string email, string name, Account? account = null)
     {
         var contactResult = Contact.Create(email, name, account);
         if (!contactResult.IsSuccess)
@@ -105,7 +105,7 @@ public class Opportunity
     {
         this._activities.Add(child);
     }
-    private DomainResult<Line> CreateLines(long qty, long unitPrice, Product? product)
+    private DomainResult<Line> CreateLines(long qty, long unitPrice, Product? product = null)
     {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
@@ -255,48 +255,33 @@ public class Opportunity
     {
         if (this.CurrentStage == OpportunityStage.Qualify)
         {
-            var create0 = this.ProbeCreate("Activity", "Subject", subject);
+            var create0 = this.CreateActivities(subject);
             if (!create0.IsSuccess)
             {
                 return DomainResult<Activity>.Failure(create0.ErrorMessage ?? "");
             }
-            var create1 = this.CreateIn("activities", "Subject", subject);
-            if (!create1.IsSuccess)
-            {
-                return DomainResult<Activity>.Failure(create1.ErrorMessage ?? "");
-            }
-            var created2 = create1.Value;
-            return DomainResult<Activity>.Success((Activity)created2);
+            var created1 = create0.Value;
+            return DomainResult<Activity>.Success(created1);
         }
         if (this.CurrentStage == OpportunityStage.Propose)
         {
-            var create3 = this.ProbeCreate("Activity", "Subject", subject);
-            if (!create3.IsSuccess)
+            var create2 = this.CreateActivities(subject);
+            if (!create2.IsSuccess)
             {
-                return DomainResult<Activity>.Failure(create3.ErrorMessage ?? "");
+                return DomainResult<Activity>.Failure(create2.ErrorMessage ?? "");
             }
-            var create4 = this.CreateIn("activities", "Subject", subject);
+            var created3 = create2.Value;
+            return DomainResult<Activity>.Success(created3);
+        }
+        if (this.CurrentStage == OpportunityStage.Commit)
+        {
+            var create4 = this.CreateActivities(subject);
             if (!create4.IsSuccess)
             {
                 return DomainResult<Activity>.Failure(create4.ErrorMessage ?? "");
             }
             var created5 = create4.Value;
-            return DomainResult<Activity>.Success((Activity)created5);
-        }
-        if (this.CurrentStage == OpportunityStage.Commit)
-        {
-            var create6 = this.ProbeCreate("Activity", "Subject", subject);
-            if (!create6.IsSuccess)
-            {
-                return DomainResult<Activity>.Failure(create6.ErrorMessage ?? "");
-            }
-            var create7 = this.CreateIn("activities", "Subject", subject);
-            if (!create7.IsSuccess)
-            {
-                return DomainResult<Activity>.Failure(create7.ErrorMessage ?? "");
-            }
-            var created8 = create7.Value;
-            return DomainResult<Activity>.Success((Activity)created8);
+            return DomainResult<Activity>.Success(created5);
         }
         return DomainResult<Activity>.Failure("'Log' is not valid for the current stage on entity 'Opportunity'.");
     }
@@ -304,78 +289,63 @@ public class Opportunity
     {
         if (this.CurrentStage == OpportunityStage.Qualify)
         {
-            var create0 = this.ProbeCreate("Line", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
-            if (!create0.IsSuccess)
-            {
-                return DomainResult<Line>.Failure(create0.ErrorMessage ?? "");
-            }
-            var assignValue1 = this.Amount + qty * sku.ListPrice;
-            if (assignValue1 < 0L)
+            var assignValue0 = this.Amount + qty * sku.ListPrice;
+            if (assignValue0 < 0L)
             {
                 return DomainResult<Line>.Failure("'Amount' must be >= 0.");
             }
-            if (assignValue1 > 100000000L)
+            if (assignValue0 > 100000000L)
             {
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
-            this.Amount = assignValue1;
-            var create2 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
-            if (!create2.IsSuccess)
+            this.Amount = assignValue0;
+            var create1 = this.CreateLines(qty, sku.ListPrice, sku);
+            if (!create1.IsSuccess)
             {
-                return DomainResult<Line>.Failure(create2.ErrorMessage ?? "");
+                return DomainResult<Line>.Failure(create1.ErrorMessage ?? "");
             }
-            var created3 = create2.Value;
-            return DomainResult<Line>.Success((Line)created3);
+            var created2 = create1.Value;
+            return DomainResult<Line>.Success(created2);
         }
         if (this.CurrentStage == OpportunityStage.Propose)
         {
-            var create4 = this.ProbeCreate("Line", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
+            var assignValue3 = this.Amount + qty * sku.ListPrice;
+            if (assignValue3 < 0L)
+            {
+                return DomainResult<Line>.Failure("'Amount' must be >= 0.");
+            }
+            if (assignValue3 > 100000000L)
+            {
+                return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
+            }
+            this.Amount = assignValue3;
+            var create4 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create4.IsSuccess)
             {
                 return DomainResult<Line>.Failure(create4.ErrorMessage ?? "");
             }
-            var assignValue5 = this.Amount + qty * sku.ListPrice;
-            if (assignValue5 < 0L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be >= 0.");
-            }
-            if (assignValue5 > 100000000L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
-            }
-            this.Amount = assignValue5;
-            var create6 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
-            if (!create6.IsSuccess)
-            {
-                return DomainResult<Line>.Failure(create6.ErrorMessage ?? "");
-            }
-            var created7 = create6.Value;
-            return DomainResult<Line>.Success((Line)created7);
+            var created5 = create4.Value;
+            return DomainResult<Line>.Success(created5);
         }
         if (this.CurrentStage == OpportunityStage.Commit)
         {
-            var create8 = this.ProbeCreate("Line", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
-            if (!create8.IsSuccess)
-            {
-                return DomainResult<Line>.Failure(create8.ErrorMessage ?? "");
-            }
-            var assignValue9 = this.Amount + qty * sku.ListPrice;
-            if (assignValue9 < 0L)
+            var assignValue6 = this.Amount + qty * sku.ListPrice;
+            if (assignValue6 < 0L)
             {
                 return DomainResult<Line>.Failure("'Amount' must be >= 0.");
             }
-            if (assignValue9 > 100000000L)
+            if (assignValue6 > 100000000L)
             {
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
-            this.Amount = assignValue9;
-            var create10 = this.CreateIn("lines", "product", (object)sku, "Qty", qty, "UnitPrice", sku.ListPrice);
-            if (!create10.IsSuccess)
+            this.Amount = assignValue6;
+            var create7 = this.CreateLines(qty, sku.ListPrice, sku);
+            if (!create7.IsSuccess)
             {
-                return DomainResult<Line>.Failure(create10.ErrorMessage ?? "");
+                return DomainResult<Line>.Failure(create7.ErrorMessage ?? "");
             }
-            var created11 = create10.Value;
-            return DomainResult<Line>.Success((Line)created11);
+            var created8 = create7.Value;
+            return DomainResult<Line>.Success(created8);
         }
         return DomainResult<Line>.Failure("'AddLine' is not valid for the current stage on entity 'Opportunity'.");
     }
@@ -385,18 +355,13 @@ public class Opportunity
         {
             return DomainResult<Quote>.Failure("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.");
         }
-        var create0 = this.ProbeCreate("Quote", "Title", this.Title, "Amount", 0L);
+        var create0 = this.CreateQuotes(0L, this.Title);
         if (!create0.IsSuccess)
         {
             return DomainResult<Quote>.Failure(create0.ErrorMessage ?? "");
         }
-        var create1 = this.CreateIn("quotes", "Title", this.Title, "Amount", 0L);
-        if (!create1.IsSuccess)
-        {
-            return DomainResult<Quote>.Failure(create1.ErrorMessage ?? "");
-        }
-        var created2 = create1.Value;
-        return DomainResult<Quote>.Success((Quote)created2);
+        var created1 = create0.Value;
+        return DomainResult<Quote>.Success(created1);
     }
     public DomainResult Commit()
     {
@@ -572,595 +537,6 @@ public class Opportunity
             account.AttachOpportunities(created);
         }
         return DomainResult<Opportunity>.Success(created);
-    }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
-    public DomainResult<object> Create(string name, object? __job = null)
-    {
-        var values = new Dictionary<string, object>();
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> Create(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        values[p7] = v7;
-        return this.BindCreate(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, object? __job = null)
-    {
-        var values = new Dictionary<string, object>();
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult<object> CreateIn(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        values[p7] = v7;
-        return this.BindCreateIn(name, values);
-    }
-    public DomainResult ProbeCreate(string name, object? __job = null)
-    {
-        var values = new Dictionary<string, object>();
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        return this.BindProbeCreate(name, values);
-    }
-    public DomainResult ProbeCreate(string name, string p0, object v0, string p1, object v1, string p2, object v2, string p3, object v3, string p4, object v4, string p5, object v5, string p6, object v6, string p7, object v7)
-    {
-        var values = new Dictionary<string, object>();
-        values[p0] = v0;
-        values[p1] = v1;
-        values[p2] = v2;
-        values[p3] = v3;
-        values[p4] = v4;
-        values[p5] = v5;
-        values[p6] = v6;
-        values[p7] = v7;
-        return this.BindProbeCreate(name, values);
-    }
-    private DomainResult<object> BindCreate(string typeName, Dictionary<string, object> values)
-    {
-        if (typeName == "Site")
-        {
-            var typed = Site.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Region") ? (string?)values["Region"] ?? "" : ""));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Product")
-        {
-            var typed = Product.Create((values.ContainsKey("ListPrice") ? (long?)values["ListPrice"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Lead")
-        {
-            var typed = Lead.Create((values.ContainsKey("Company") ? (string?)values["Company"] ?? "" : ""), (values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Account")
-        {
-            var typed = Account.Create((values.ContainsKey("Industry") ? (Industry?)values["Industry"] ?? Industry.Technology : Industry.Technology), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (Account?)null, (values.ContainsKey("hq") ? (Site?)values["hq"] ?? null : null), new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), (values.ContainsKey("ClosedTickets") ? (long?)values["ClosedTickets"] ?? 0L : 0L), (values.ContainsKey("OpenPipeline") ? (long?)values["OpenPipeline"] ?? 0L : 0L), (values.ContainsKey("WonCount") ? (long?)values["WonCount"] ?? 0L : 0L));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Contact")
-        {
-            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Opportunity")
-        {
-            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null), (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Activity")
-        {
-            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Quote")
-        {
-            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), new List<QuoteLine>());
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Campaign")
-        {
-            var typed = Campaign.Create((values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<CampaignMember>());
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "CampaignMember")
-        {
-            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), (values.ContainsKey("campaign") ? (Campaign?)values["campaign"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Ticket")
-        {
-            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "Line")
-        {
-            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (typeName == "QuoteLine")
-        {
-            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("quote") ? (Quote?)values["quote"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        return DomainResult<object>.Failure("Unknown type '" + typeName + "'.");
-    }
-    private DomainResult<object> BindCreateIn(string relationshipName, Dictionary<string, object> values)
-    {
-        if (relationshipName == "account")
-        {
-            var typed = this.CreateAccount((values.ContainsKey("Industry") ? (Industry?)values["Industry"] ?? Industry.Technology : Industry.Technology), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("hq") ? (Site?)values["hq"] ?? null : null), (values.ContainsKey("ClosedTickets") ? (long?)values["ClosedTickets"] ?? 0L : 0L), (values.ContainsKey("OpenPipeline") ? (long?)values["OpenPipeline"] ?? 0L : 0L), (values.ContainsKey("WonCount") ? (long?)values["WonCount"] ?? 0L : 0L));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (relationshipName == "contact")
-        {
-            var typed = this.CreateContact((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (relationshipName == "activities")
-        {
-            var typed = this.CreateActivities((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (relationshipName == "lines")
-        {
-            var typed = this.CreateLines((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        if (relationshipName == "quotes")
-        {
-            var typed = this.CreateQuotes((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult<object>.Failure(typed.ErrorMessage ?? "");
-            }
-            else
-            {
-                return DomainResult<object>.Success(typed.Value);
-            }
-        }
-        return DomainResult<object>.Failure("Unknown relationship '" + relationshipName + "'.");
-    }
-    private DomainResult BindProbeCreate(string typeName, Dictionary<string, object> values)
-    {
-        if (typeName == "Site")
-        {
-            var typed = Site.Create((values.ContainsKey("City") ? (string?)values["City"] ?? "" : ""), (values.ContainsKey("Region") ? (string?)values["Region"] ?? "" : ""));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Product")
-        {
-            var typed = Product.Create((values.ContainsKey("ListPrice") ? (long?)values["ListPrice"] ?? 0L : 0L), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("Sku") ? (string?)values["Sku"] ?? "" : ""));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Lead")
-        {
-            var typed = Lead.Create((values.ContainsKey("Company") ? (string?)values["Company"] ?? "" : ""), (values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Account")
-        {
-            var typed = Account.Create((values.ContainsKey("Industry") ? (Industry?)values["Industry"] ?? Industry.Technology : Industry.Technology), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (Account?)null, (values.ContainsKey("hq") ? (Site?)values["hq"] ?? null : null), new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), (values.ContainsKey("ClosedTickets") ? (long?)values["ClosedTickets"] ?? 0L : 0L), (values.ContainsKey("OpenPipeline") ? (long?)values["OpenPipeline"] ?? 0L : 0L), (values.ContainsKey("WonCount") ? (long?)values["WonCount"] ?? 0L : 0L));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Contact")
-        {
-            var typed = Contact.Create((values.ContainsKey("Email") ? (string?)values["Email"] ?? "" : ""), (values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Opportunity")
-        {
-            var typed = Opportunity.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null), (values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), new List<Activity>(), new List<Line>(), new List<Quote>(), (values.ContainsKey("CloseBy") ? (DateOnly?)values["CloseBy"] ?? DateOnly.MinValue : DateOnly.MinValue));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Activity")
-        {
-            var typed = Activity.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), (values.ContainsKey("DueOn") ? (DateOnly?)values["DueOn"] ?? DateOnly.MinValue : DateOnly.MinValue));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Quote")
-        {
-            var typed = Quote.Create((values.ContainsKey("Amount") ? (long?)values["Amount"] ?? 0L : 0L), (values.ContainsKey("Title") ? (string?)values["Title"] ?? "" : ""), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null), new List<QuoteLine>());
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Campaign")
-        {
-            var typed = Campaign.Create((values.ContainsKey("Name") ? (string?)values["Name"] ?? "" : ""), new List<CampaignMember>());
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "CampaignMember")
-        {
-            var typed = CampaignMember.Create((values.ContainsKey("contact") ? (Contact?)values["contact"] ?? null : null), (values.ContainsKey("campaign") ? (Campaign?)values["campaign"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Ticket")
-        {
-            var typed = Ticket.Create((values.ContainsKey("Subject") ? (string?)values["Subject"] ?? "" : ""), (values.ContainsKey("account") ? (Account?)values["account"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "Line")
-        {
-            var typed = Line.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("opportunity") ? (Opportunity?)values["opportunity"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        if (typeName == "QuoteLine")
-        {
-            var typed = QuoteLine.Create((values.ContainsKey("Qty") ? (long?)values["Qty"] ?? 0L : 0L), (values.ContainsKey("UnitPrice") ? (long?)values["UnitPrice"] ?? 0L : 0L), (values.ContainsKey("product") ? (Product?)values["product"] ?? null : null), (values.ContainsKey("quote") ? (Quote?)values["quote"] ?? null : null));
-            if (!typed.IsSuccess)
-            {
-                return DomainResult.Failure(typed.ErrorMessage ?? "");
-            }
-            return DomainResult.Success();
-        }
-        return DomainResult.Failure("Unknown type '" + typeName + "'.");
     }
     private void EnterNotifyCascade(string stageName)
     {

@@ -70,7 +70,15 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
-        await Assert.That(errors.Count).IsEqualTo(9);
+        var messages = string.Join("\n", errors.Select(e => e.Message).OrderBy(m => m, StringComparer.Ordinal));
+        await Assert.That(messages).IsEqualTo("""
+            no matching constructor for 'DomainResult' with 2 argument(s)
+            no matching constructor for 'DomainResult' with 2 argument(s)
+            no matching constructor for 'DomainResult<T>' with 3 argument(s)
+            no matching constructor for 'DomainResult<T>' with 3 argument(s)
+            no matching constructor for 'Placeholder' with 1 argument(s)
+            no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)
+            """);
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

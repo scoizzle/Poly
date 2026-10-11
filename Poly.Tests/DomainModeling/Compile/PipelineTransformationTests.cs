@@ -31,7 +31,7 @@ public class PipelineTransformationTests {
         await Assert.That(ReferenceEquals(module, again)).IsTrue();
         var lot = module.First(t => t.Name == "Lot");
         await Assert.That(lot.Methods?.Any(m => m.Name == "Issue")).IsTrue();
-        await Assert.That(lot.Methods?.Any(m => m.Name == "CreateIn")).IsTrue();
+        await Assert.That(lot.Methods?.Any(m => m.Name == "CreatePermits")).IsTrue();
     }
 
     [Test]

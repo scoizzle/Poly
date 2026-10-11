@@ -705,8 +705,11 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Private constructor + public static Create factory ─────
+        // Every entity publishes Create, including one with no slots, so
+        // a type-name call resolves. No slots and no stages still emit a
+        // single private parameterless constructor (CS0111).
         List<ConstructorDefinitionNode>? ctors = null;
-        if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
+        {
             var bodyNodes = new List<Node>();
             bodyNodes.AddRange(ctorAssignments);
 
@@ -875,7 +878,9 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        AddStoreBindMethods(entity, domain, metadata, methods);
+        if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any()))
+            methods.Add(EnsureUniqueAssignMethod());
+
         AddAutomaticTransitionLoopGuard(entity, fields, methods);
         if (targetSubs is { Count: > 0 })
             AddNotifyCascadeDepthGuard(entity, fields, methods);
@@ -891,4 +896,21 @@ public sealed partial class DomainToCSharpExporter {
 
         return typeDefs;
     }
+
+    /// <summary>
+    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The session
+    /// index replaces this method. It is not part of the factory.
+    /// </summary>
+    private static MethodDefinitionNode EnsureUniqueAssignMethod() =>
+        new(
+            "EnsureUnique",
+            new NamedTypeReference("DomainResult"),
+            Parameters: [
+                new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String)),
+                new Parameter("value", StoreJobObjectType())
+            ],
+            Body: new Block([
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
+            ]),
+            AccessModifier: AccessModifier.Public);
 }

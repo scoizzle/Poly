@@ -365,13 +365,12 @@ public sealed partial class DomainToCSharpExporter {
                         // Already wrapped — leave as-is.
                     }
                     else if (last is Syntactic.Assignment a) {
-                        Node produced = a.Destination;
-                        if (!isVoid)
-                            produced = new TypeCast(produced, resultTypeRef);
+                        // `var created = Fine.Create(...).Value` is already T.
+                        // A cast would print `(Fine)created` over a typed Value.
                         nodes.Add(new Return(
                             new Invoke(
                                 new Member(actionResultType, "Success"),
-                                [produced])));
+                                [a.Destination])));
                     }
                     else if (last is Syntactic.Invoke
                              or Syntactic.Member or Syntactic.Constant

@@ -296,6 +296,19 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
+    public async Task Index_Twice_ReturnsSameIndex() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+            }
+            """);
+        var first = RuntimeAnalysisCache.Index(domain);
+        var second = RuntimeAnalysisCache.Index(domain);
+        await Assert.That(ReferenceEquals(first, second)).IsTrue();
+    }
+
+    [Test]
     public async Task Subscription_PeerBinding_MaterializesInsideTryCatchFinally() {
         // Stage transition in subscription effects emits TryCatchFinally; peer
         // Parameter reads in the same body must still Materialize (F3 walk).

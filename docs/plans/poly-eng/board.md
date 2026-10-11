@@ -1,42 +1,57 @@
 # Poly board: the one live queue
 
-Updated 2026-10-09. Master `b1fddf7e` (#110 C1a). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
+**Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-**CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), wave 1 tail.
+Updated 2026-10-10. Master `78231090` (#156 C7c). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
+
+**CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
-**Throttle:** full send, WIP 2 (one per lane), max 2 mill runs (Scot 2026-10-09 04:20).
-**Merge:** V11 slices merge on Razor SHIP (CI green on the SHIP SHA); every other slice needs Scot's OK. The standing window ended 2026-10-06 07:20.
+**Throttle / merge:** not applicable while the bot pipeline is suspended; Scot merges.
 
 ## Needs Scot
 
-1. ~~Lift the throttle to WIP 2?~~ Answered 2026-10-07: stays at WIP 1.
-2. HP4 release: once A5b merges, may lane A start C9, then Q2 / H2 / H3 / H4 / K4 / P1 (wave 2)?
-3. ~~Post-merge review of #120 (L1) and #121 (G2+G3)?~~ Answered 2026-10-07: deferred until the throttle lifts.
-4. Decision 19 (registering contributors) blocks N2. Decision 16 blocks N1. Not urgent.
+1. C8d depends on T3, which the 2026-10-09 trim parked. Un-park T3 or drop it from C8d's Depends.
+2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them on the PR 155 branch. Parking one means editing those Depends lines.
+3. PR 155 holds the only copies of `tasks/C8-lc.md`, `C8-num.md`, `C8-web.md`, `C8-clean.md` and the plan cards for the C8-tc family. Merge or cherry-pick its docs before closing it.
 
 ## In flight (open PRs; GitHub is the live state)
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#139](https://github.com/scoizzle/Poly/pull/139) | C4b: Unique on create in the factory tree | B | — | — | In review. [tasks/C4b.md](tasks/C4b.md) |
-| [#138](https://github.com/scoizzle/Poly/pull/138) | N2: Http library registers its own contributor | A | — | — | Plan only; implementation follows on this branch. [tasks/N2.md](tasks/N2.md) |
-| [#136](https://github.com/scoizzle/Poly/pull/136) | C2b: run the compiled Create checks; delete the C# twins | B | — | — | In review. [tasks/C2b.md](tasks/C2b.md) |
-| [#132](https://github.com/scoizzle/Poly/pull/132) | Q2: MCP harness opens domains that use sqlite or http | A | `8719f7ce` | — | In review. [tasks/Q2.md](tasks/Q2.md) |
-| [#133](https://github.com/scoizzle/Poly/pull/133) | E1 domain enums become real enum types | B | `d0396038` | — | Plan only; implementation follows on this branch. [tasks/E1.md](tasks/E1.md) |
-| [#127](https://github.com/scoizzle/Poly/pull/127) | C1b dedicated constraint-failure exception; delete `AsVoidResultBody` | B | `ba76d6b2` | — | In review. [tasks/C1b.md](tasks/C1b.md) |
-| [#125](https://github.com/scoizzle/Poly/pull/125) | C9: generators stop asking for the module | A | `0757a400` | — | Implementer sweep done; ready for Razor on OpenCode. [tasks/C9.md](tasks/C9.md) |
-| [#110](https://github.com/scoizzle/Poly/pull/110) | C1a: root program params after `this` | B | `d7b6b9a1` | **red** | Base `11287134` is 9 commits behind. 100x rebases onto master and fixes CI, then Razor review, then fix and Razor verify. Waits for WIP room while the throttle is on. [tasks/C1a.md](tasks/C1a.md) |
+| [#159](https://github.com/scoizzle/Poly/pull/159) | C7d: One-offs and BehaviorMetadata | A | `e37978de` | green | Implemented (3529/3529). Needs review on a different model, then merge. |
+| [#158](https://github.com/scoizzle/Poly/pull/158) | C8-vm: VM analysis gate | B | `1308e7ee` | - | Draft, plan only. Implement after C8-tc2. |
+| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | `b0a5a9d2` | - | Draft, plan only. Unblocked. |
+| [#155](https://github.com/scoizzle/Poly/pull/155) | C8-tc: Typed create in the compiled tree | B | `abe82a44` | - | Draft, docs only. Replaced by C8-tc1/tc2/tc3 (`tasks/C8-tc1.md` to `C8-tc3.md`); WIP code in [research/c8-tc-wip.patch](research/c8-tc-wip.patch). |
 
 ## Next (in order; first unblocked row wins)
 
-| # | Slice | Lane | Depends / hold | Review |
-|---|-------|------|----------------|--------|
+Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-AGENT.md) §3.
 
-Further order is §12 of the plan ("Full sequence"). Do not copy it here.
+| # | Slice | Depends / hold | Task file |
+|---|-------|----------------|-----------|
+| 1 | C6c | C6b (merged) | PR 157 branch |
+| 2 | C7d | C7c (merged); implemented, needs review | PR 159 branch |
+| 3 | C8-tc1 | C6a, C6b1 (merged) | [tasks/C8-tc1.md](tasks/C8-tc1.md) |
+| 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
+| 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
+| 6 | C8-vm | C8-tc (after tc2) | PR 158 branch |
+| 7 | C8-lc | C8-tc | PR 155 branch |
+| 8 | C8-clean (optional before C8d) | C8-lc | PR 155 branch |
+| 9 | C8-num | C8-clean | PR 155 branch |
+| 10 | C8-web (optional; parkable) | C8-num | PR 155 branch |
+| 11 | K2 (runs alone) | C0 (merged) | plan card |
+| 12 | C8-pre (runs alone) | C2b, C7d | plan card |
+| 13 | C8a1 | C5b, C6c, C7d | plan card |
+| 14 | C8a2 | C8a1, C8-tc | plan card |
+| 15 | C8b | C8a2, C8-pre | plan card |
+| 16 | C8c1 | C8b | plan card |
+| 17 | C8c2 | C8c1 | plan card |
+| 18 | C8d (runs alone) | C8c2, T3 (parked; see Needs Scot), C8-lc/web/num/clean | plan card |
+| 19 | C10 | C8d | plan card |
 
 ## Later (parked; not work until Scot admits it)
 
-- N1 (decision 16), A6/A7 (wave 4), and runs-alone slices K2, C8-pre, C8d, K5, R1, R2.
+- N1 (decision 16), A6/A7 (wave 4), K3c/K3a/K3b/K5, R1, R2, and the rest of the 2026-10-09 trim list (F2-F6, H5, T3, Q1b). K2, C8-pre and C8d are now in Next.
 - Nits to fold into a later docs slice: F170-F175 (C4a), F180-F183 (K1), F210-F212 (H1). The C8d done-when must include the MapModuleRequireFailure mapping.
 - #126 `docs/plans/poly-eng/board.md`: in-flight row left at plan-only text / old tip after SHIP
 - #128 `Poly/DomainModeling/Compile/DomainSession.cs`: `vm-analysis-report` ElementPath resolves to the domain name
@@ -71,6 +86,24 @@ Further order is §12 of the plan ("Full sequence"). Do not copy it here.
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-10 | #156 | C7c: Entity and relationship lookups use index and navigation | `78231090` | see PR |
+| 10-10 | #152 | C5b: Multi-hop, depth and fan-out leave the store | `60089ef0` | see PR |
+| 10-10 | #153 | C7b: Three action-by-name lookups use the index | `67427b72` | see PR |
+| 10-10 | #151 | C6b1: Link cardinality as a tree | `931b1461` | see PR |
+| 10-10 | #150 | C7a: Six 'get compiled module' sites use the catalog | `3b53f0fa` | see PR |
+| 10-10 | #149 | C5a: Store fan-out runs the compiled Notify tree | `fa994ff7` | see PR |
+| 10-10 | #147 | C7-0: Catalog index | `d344de77` | see PR |
+| 10-10 | #146 | C4d: Stage transition table as a tree | `3fdb8bb5` | see PR |
+| 10-10 | #148 | C3b: Delete MaterializePeerInSyntax | `c3b9d9d3` | see PR |
+| 10-10 | #145 | C3a: Peer passed as a real argument | `019a7238` | see PR |
+| 10-09 | #144 | C6a: Remove auto-link; linking is explicit | `7b6f69e2` | see PR |
+| 10-09 | #141 | C4c: Constraints on set; enum value check | `cc5cd55a` | see PR |
+| 10-09 | #143 | Q1a: Parity rows for collection rules (any/all/none/filtered count) | `914e5ff2` | see PR |
+| 10-09 | #142 | N2b: Database libraries register their own DbContext artifact | `91012793` | see PR |
+| 10-09 | #140 | F1: The function record | `a5530ba9` | see PR |
+| 10-09 | #139 | C4b: Unique on create in the factory tree | `b894d9a6` | see PR |
+| 10-09 | #138 | N2: Http library registers its own contributor | `592a137f` | see PR |
+| 10-09 | #136 | C2b: Run the compiled Create checks; delete the C# twins | `10e6570a` | see PR |
 | 10-09 | #137 | K6: replace Emit's re-analysis | `d1ac0cde` | Grug SHIP |
 | 10-09 | #135 | P1: Equality constraint is authorable and printed | `b38817e9` | Grug SHIP |
 | 10-09 | #134 | C2a: create initializers without re-lowering | `ede905f9` | Grug SHIP |

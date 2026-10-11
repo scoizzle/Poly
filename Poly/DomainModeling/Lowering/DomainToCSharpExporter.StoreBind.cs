@@ -312,7 +312,7 @@ public sealed partial class DomainToCSharpExporter {
         return new Constant(null);
     }
 
-    private static Node TypedNull(string typeName) =>
+    internal static Node TypedNull(string typeName) =>
         new TypeCast(new Constant(null),
             new OptionalTypeReference(new NamedTypeReference(typeName)));
 }

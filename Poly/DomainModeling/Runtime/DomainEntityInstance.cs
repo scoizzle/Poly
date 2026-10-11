@@ -850,6 +850,7 @@ public sealed partial record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
         }
+        PushAmbient(this);
         try {
             using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
@@ -860,6 +861,9 @@ public sealed partial record DomainEntityInstance {
             // Named action trees return Failure. A nested void throw
             // (subscription / leftover TransitionStage) must still escape.
             return DomainResult.Failure(ex.Message);
+        }
+        finally {
+            PopAmbient();
         }
     }
 
@@ -891,8 +895,10 @@ public sealed partial record DomainEntityInstance {
             }
             // When… stays an empty stub so InvokeNamed runs the cached
             // subscription body (TryGetSubscriptionBody), not the sibling
-            // module method inlined as an AST callable.
-            moduleTypes.Analyze(ctx, StubWhenMethodBodies(td));
+            // module method inlined as an AST callable. A static Create is
+            // rebound onto the dictionary store so the typed factory the
+            // lowering emits runs under simulate.
+            moduleTypes.Analyze(ctx, RewriteTypedFactories(StubWhenMethodBodies(td), td.Name, domain));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
@@ -914,6 +920,84 @@ public sealed partial record DomainEntityInstance {
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+    }
+
+    [ThreadStatic]
+    static Stack<DomainEntityInstance>? t_ambient;
+
+    /// <summary>The instance whose compiled tree is running on this thread.</summary>
+    internal static DomainEntityInstance? Ambient =>
+        t_ambient is { Count: > 0 } ? t_ambient.Peek() : null;
+
+    internal static void PushAmbient(DomainEntityInstance instance) =>
+        (t_ambient ??= new Stack<DomainEntityInstance>()).Push(instance);
+
+    internal static void PopAmbient() => t_ambient?.Pop();
+
+    /// <summary>
+    /// Rebinds a module entity's static <c>Create</c> onto the dictionary store so
+    /// the typed factory call the lowering emits runs under simulate.
+    /// </summary>
+    private static TypeDefinitionNode RewriteTypedFactories(
+        TypeDefinitionNode td, string typeName, Domain domain) {
+        if (td.Methods is null || td.Methods.Count == 0)
+            return td;
+        List<MethodDefinitionNode>? methods = null;
+        for (var i = 0; i < td.Methods.Count; i++) {
+            var method = td.Methods[i];
+            if (!method.IsStatic || !string.Equals(method.Name, "Create", StringComparison.Ordinal))
+                continue;
+            methods ??= [.. td.Methods];
+            methods[i] = BindStaticFactory(method, typeName, domain);
+        }
+        return methods is null ? td : td with { Methods = methods };
+    }
+
+    /// <summary>
+    /// Replaces a static factory body with the dictionary-backed host job
+    /// <c>DomainInstanceHostJobs.TypedCreate(typeName, values)</c>, where values
+    /// carries the non-collection factory parameters by name.
+    /// </summary>
+    private static MethodDefinitionNode BindStaticFactory(
+        MethodDefinitionNode method, string typeName, Domain domain) {
+        var host = new ClrTypeReference(typeof(DomainInstanceHostJobs));
+        Node values = new Invoke(new Member(host, nameof(DomainInstanceHostJobs.Values)));
+        var keys = FactoryDictKeys(typeName, domain);
+        var parameters = method.Parameters ?? [];
+        for (var i = 0; i < parameters.Count; i++) {
+            if (IsEnumerableParam(parameters[i]))
+                continue;
+            var key = i < keys.Count ? keys[i] : parameters[i].Name;
+            values = new Invoke(
+                new Member(host, nameof(DomainInstanceHostJobs.With)),
+                values, new Constant(key), parameters[i]);
+        }
+        return method with {
+            Body = new Block([
+                new Return(new Invoke(
+                    new Member(host, nameof(DomainInstanceHostJobs.TypedCreate)),
+                    new Constant(typeName), values))
+            ])
+        };
+    }
+
+    private static List<string> FactoryDictKeys(string typeName, Domain domain) {
+        var keys = new List<string>();
+        var entity = domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, typeName, StringComparison.Ordinal));
+        if (entity is null)
+            return keys;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        foreach (var p in DomainToCSharpExporter.GetConstructorParameters(entity, analysis))
+            keys.Add(p.Name);
+        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(entity, analysis))
+            keys.Add(prop.Name);
+        return keys;
+    }
+
+    private static bool IsEnumerableParam(Parameter p) {
+        var t = p.TypeReference is OptionalTypeReference opt ? opt.InnerType : p.TypeReference;
+        return t is NamedTypeReference { TypeName: "IEnumerable" or "List" };
     }
 
     private static TypeDefinitionNode StubWhenMethodBodies(TypeDefinitionNode td) {

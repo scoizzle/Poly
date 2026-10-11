@@ -2076,7 +2076,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_CreateType_UnambiguousManyRel_CreateAttaches_BindCreateDoesNotDoubleAdd() {
         // Fine.Create still AttachFines when a patron is passed. BindCreate
         // Type-create takes patron from values / null, not this, and does not
-        // _fines.Add. AssessByType still hosts via this.Create.
+        // _fines.Add. AssessByType now hosts via the typed Fine.Create.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
@@ -2094,7 +2094,7 @@ public class DomainToCSharpExporterTests {
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        await Assert.That(cs).Contains("this.Create(");
+        await Assert.That(cs).Contains("Fine.Create(");
 
         var fineCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Fine> Create(");
         await Assert.That(fineCreate).Contains("AttachFines");
@@ -2116,7 +2116,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(fineCreateCall).Contains("null");
 
         var assessByType = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> AssessByType(");
-        await Assert.That(assessByType).Contains("this.Create(");
+        await Assert.That(assessByType).Contains("Fine.Create(");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
 
         // F4: unique-path CreateNav defers Add when Create already Attached.

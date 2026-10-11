@@ -308,7 +308,7 @@ public sealed partial class DomainToCSharpExporter {
         ));
     }
 
-    private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
+    internal static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
         INodeMetadataProvider analysis) {
         if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
@@ -317,6 +317,31 @@ public sealed partial class DomainToCSharpExporter {
         throw new InvalidOperationException(
             $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
     }
+
+    /// <summary>
+    /// Trailing optional Create/ctor parameters: defaulted properties that are
+    /// not entry-assigned, in the order the Create factory appends them.
+    /// </summary>
+    internal static List<Property> TrailingDefaultedProperties(
+        Entity entity,
+        INodeMetadataProvider metadata) {
+        var entryAssigned = metadata.GetStructure(entity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+        var list = new List<Property>();
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any())
+                continue;
+            if (entryAssigned.Contains(prop.Name))
+                continue;
+            list.Add(prop);
+        }
+        return list;
+    }
+
+    /// <summary>Empty <c>List&lt;T&gt;</c> for a collection create argument.</summary>
+    internal static Node EmptyListNode(string elementTypeName) =>
+        new New(new NamedTypeReference("List",
+            TypeArguments: [new NamedTypeReference(elementTypeName)]));
 
     /// <summary>
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.

@@ -891,14 +891,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers CreateEntityInstance to <c>this.Create(type, prop, value, …)</c>
-    /// with Failure unwrap. Same tree for simulate and emit.
+    /// Lowers CreateEntityInstance in an action-result context to the typed static
+    /// factory <c>Type.Create(args…)</c> (Failure unwrap, no object cast). A void /
+    /// subscription context keeps the string-named job until C8-tc1b turns it into
+    /// <c>this.Create{Nav}(…)</c>.
     /// </summary>
-    protected override Node? CreateEntityInstance(CreateEntityInstance cei) =>
-        LowerRuntimeFactoryCall(
-            "Create", cei.Type.TypeName, cei.Initializers,
-            ResolveEntity(cei.Type.TypeName),
-            cei.RelationshipName);
+    protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
+        var target = ResolveEntity(cei.Type.TypeName);
+        if (target is null
+            || _context.ActionResultType is not NamedTypeReference { TypeArguments.Count: > 0 })
+            return LowerRuntimeFactoryCall(
+                "Create", cei.Type.TypeName, cei.Initializers, target, cei.RelationshipName);
+        return LowerTypedCreateCall(target, cei.Initializers, cei.RelationshipName);
+    }
 
 
     /// <summary>
@@ -928,6 +933,149 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (create is Block block)
             return new Block([guard, .. block.Nodes], block.Variables);
         return new Block([guard, create]);
+    }
+
+    /// <summary>
+    /// Typed by-type create in an action-result context: <c>Type.Create(args…)</c>
+    /// returning <c>DomainResult&lt;Type&gt;</c> with no object cast. Arguments are
+    /// positional against the printed static factory: constructor parameters, then
+    /// trailing defaulted properties. Omitted optional properties pass their
+    /// default; the interpreter trims nulls so the store applies the same defaults.
+    /// </summary>
+    private Node LowerTypedCreateCall(
+        Entity targetEntity,
+        IReadOnlyList<PropertyBinding> initializers,
+        string? linkRelationshipName) {
+        if (_analysis is null)
+            throw new InvalidOperationException(
+                $"Cannot lower typed create of '{targetEntity.Name}' without analysis.");
+        var resultType = _context.ActionResultType
+            ?? throw new InvalidOperationException(
+                $"Typed create lowering requires an action result type on '{targetEntity.Name}'.");
+
+        var loweredInitializers = new List<LoweredExpression>();
+        var args = BuildFullCreateArgs(targetEntity, initializers, loweredInitializers);
+
+        var resultVar = _names.Next("create");
+        var locals = new List<Node> { resultVar };
+        var nodes = new List<Node> {
+            new Assignment(resultVar, new Invoke(
+                new Member(new NamedTypeReference(targetEntity.Name), "Create"), [.. args])),
+            new IfStatement(
+                new Syntactic.Not(new Member(resultVar, "IsSuccess")),
+                new Block([
+                    new Return(new Invoke(
+                        new Member(resultType, "Failure"),
+                        new Syntactic.Coalesce(
+                            new Member(resultVar, "ErrorMessage"),
+                            new Constant(""))))
+                ]))
+        };
+        if (resultType is NamedTypeReference { TypeArguments.Count: > 0 }
+            || linkRelationshipName is not null) {
+            var valueVar = _names.Next("created");
+            locals.Add(valueVar);
+            nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
+            if (linkRelationshipName is not null) {
+                nodes.Add(new Invoke(
+                    new Member(Subject, "LinkRelated"),
+                    new Constant(linkRelationshipName),
+                    valueVar));
+            }
+        }
+        return LoweredExpression.Before(loweredInitializers, new Block(nodes, locals));
+    }
+
+    /// <summary>
+    /// Positional arguments for the printed <c>Type.Create</c> factory: constructor
+    /// parameters (initializer value, empty list for collections, typed null for
+    /// missing navigations, default for missing properties) then trailing defaulted
+    /// properties.
+    /// </summary>
+    private List<Node> BuildFullCreateArgs(
+        Entity target,
+        IReadOnlyList<PropertyBinding> initializers,
+        List<LoweredExpression> loweredInitializers) {
+        var inits = BindingsByName(initializers);
+        var args = new List<Node>();
+        foreach (var parameter in DomainToCSharpExporter.GetConstructorParameters(target, _analysis!))
+            args.Add(ArgumentFor(
+                target, parameter.Name, parameter.Type, parameter.IsNavigation,
+                parameter.IsCollection, inits, loweredInitializers));
+        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(target, _analysis!))
+            args.Add(ArgumentFor(
+                target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
+                inits, loweredInitializers));
+        return args;
+    }
+
+    private Node ArgumentFor(
+        Entity target,
+        string name,
+        DomainTypeReference type,
+        bool isNavigation,
+        bool isCollection,
+        Dictionary<string, PropertyBinding> inits,
+        List<LoweredExpression> loweredInitializers) {
+        if (inits.TryGetValue(name, out var binding)) {
+            var lowered = LowerInitializerValue(target, name, binding.Expression);
+            loweredInitializers.Add(lowered);
+            return lowered.Value;
+        }
+        if (isCollection)
+            return DomainToCSharpExporter.EmptyListNode(type.TypeName);
+        if (isNavigation)
+            return DomainToCSharpExporter.TypedNull(type.TypeName);
+        var prop = target.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
+        if (prop is not null) {
+            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            if (defaultConstraint is not null) {
+                if (LowerDefault(defaultConstraint.Expression,
+                        new NamedTypeReference(prop.Type.TypeName)) is { } runtime)
+                    return runtime;
+                if (DomainToCSharpExporter.LowerDefaultConstantNode(
+                        defaultConstraint, prop, _domain, _analysis) is { } constant)
+                    return constant;
+            }
+        }
+        return TypeDefaultNode(type);
+    }
+
+    private LoweredExpression LowerInitializerValue(
+        Entity target, string name, DomainExpression expr) {
+        var prop = target.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
+        if (prop is not null
+            && LowerDefault(expr, new NamedTypeReference(prop.Type.TypeName)) is { } adapted)
+            return LoweredExpression.Of(adapted);
+        if (prop is not null)
+            return LowerEnumAwareValue(expr, prop.Type, Subject);
+        return _expressionPass.LowerExpression(expr, Subject);
+    }
+
+    private static Dictionary<string, PropertyBinding> BindingsByName(
+        IReadOnlyList<PropertyBinding> initializers) {
+        var inits = new Dictionary<string, PropertyBinding>(StringComparer.Ordinal);
+        foreach (var init in initializers)
+            inits[init.PropertyName] = init;
+        return inits;
+    }
+
+    private Node TypeDefaultNode(DomainTypeReference type) {
+        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, type.TypeName, out var enumType)
+            && enumType is { MemberNames.Count: > 0 })
+            return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
+        var clr = RuntimeAnalysisCache.ClrTypeName(_domain, type.TypeName);
+        if (clr is "string") return new Constant("");
+        if (clr is "long") return new Constant(0L);
+        if (clr is "int") return new Constant(0);
+        if (clr is "bool") return new Constant(false);
+        if (DomainTypeMapping.TryDefaultMember(clr, out var defaultType, out var member))
+            return new Member(new NamedTypeReference(defaultType), member);
+        if (IsDomainEntityType(type))
+            return DomainToCSharpExporter.TypedNull(type.TypeName);
+        return new Constant(null);
     }
 
     internal List<Node> LowerCreateInConstraintProbes(

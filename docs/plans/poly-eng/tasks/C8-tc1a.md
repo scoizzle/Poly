@@ -1,6 +1,6 @@
 # TASK C8-tc1a - Lowering emits typed by-type create calls (K0)
 
-Status: planned. Branch `slice/c8-tc1a`. Lane B. Review 2.
+Status: implemented, BLOCKED on the C8-vm analyzer fixes (see Blocker). Branch `slice/c8-tc1a`. Lane B. Review 2.
 Split from C8-tc1 on 2026-10-10 by the local agent, because C8-tc1 needed
 [`EffectLoweringPass`] + the exporter helper surface + the interpreter
 static-factory bind (6 source files, well past the ~3-file rule in
@@ -36,6 +36,31 @@ in the interpreter, so `Fine.Create` must bind onto the dictionary-backed
 instance: static `Create`/`ProbeCreate` bodies are rewritten to
 `DomainInstanceHostJobs.TypedCreate(typeName, values)` using the ambient subject
 (the interpreter thread's current instance).
+
+## Blocker (2026-10-10)
+Implemented and verified for the **printer**: build clean, `StoreBindCreateTests` 16/16,
+`DomainToCSharpExporterTests` 100/100, `ParityTests` 66/66, goldens regenerated (2 files,
+one line each: `this.Create("Fine", …)` → `Fine.Create(5L, "TypeCreate", (Patron?)null)`),
+and only the void-context `mcp-library` create stays string-named.
+
+But the **interpreter** cannot run the typed call yet. Full suite: 3 fails
+(`SimulateCreateDogfoodTests`: `TypeOnly_UnambiguousManyRel_ListsAndLinks`,
+`TypeOnly_AmbiguousManyRel_ListsButDoesNotLink`, `Combined_TypeThenRel_OnOnePatron_BothLinked`),
+all `VM compile rejected: AST method 'Create' forwards to a CLR static method and could
+not be compiled`, with inner errors:
+- `no matching member 'Create' on 'Fine' for invoke with 3 argument(s)`
+- `no matching member 'Create' on 'Patron' for invoke with 2 argument(s)`
+- `no matching constructor for 'List<Fine>' with 0 argument(s)`
+
+These are the C8-vm analyzer items ("`List<T>` with no ctor/`Add`", "create-arg
+assignability", "exact ctor match"). So **C8-tc1 depends on the C8-vm analyzer fixes**;
+the plan's order (C8-vm after C8-tc2, LOCAL-AGENT §3 row 6) is wrong for the lowerable
+path. The code on this branch is the reference: it is the `c8-tc-wip.patch` lowering,
+done for the value-returning context with `RewriteTypedFactories` / `BindStaticFactory`
+/ `TypedCreate`.
+
+**Needs Scot:** fold the four C8-vm analyzer fixes into C8-tc1a, or land C8-vm's analyzer
+half before C8-tc1a. Do not merge this branch until one of those happens.
 
 ## Files
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (`CreateEntityInstance` lowers to a typed `Type.Create` call via a new `LowerTypedCreateCall` / `BuildFullCreateArgs` / `ArgumentFor` / `LowerInitializerValue` / `BindingsByName` / `TypeDefaultNode`. `LowerRuntimeFactoryCall` stays for `create in` and probes.)
@@ -92,3 +117,4 @@ C6a, C6b1 (merged).
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | handoff | - | - | split from C8-tc1 | K0 |
+| 2026-10-10 | implementer | opencode/opencode-go/deepseek-v4.1-flash | (this branch) | implemented; **BLOCKED**: printer green (goldens, 16/16, 100/100, 66/66), 3 `SimulateCreateDogfoodTests` fail on VM analyzer errors — needs the C8-vm analyzer fixes | K0 |

@@ -680,6 +680,15 @@ _Lane B · Size M · Review 2 · Depends on: C8c1_
 - As C8c1.
 - Hand-edit: Yes.
 
+**C8-vm. VM analysis gate**
+
+_Lane B · Size M · Review 2 · Depends on: C8-tc (PR 155)_
+- Scope: Findings V1–V5, R1, R2, D1, D2 plus the Emit gate. Fix four VM-analyzer false positives (`TypeDefinitionNodeAnalyzer.AstTypeRegistry.Add` keys by `FullName` so `DomainResult<T>` overwrites `DomainResult`; `AstCollectionTypeDefinition` exposes no `List<T>` ctor/`Add`; create-arg assignability in `SyntaxTypeCompatibilityAnalyzer.HasPlausibleMemberOverload`; null arg type in `ConstructorInvocationSemanticResolver.ResolveConstructor`). Fix the five real bugs the noise hides (null singular-nav subscription registration in the ctor; non-nullable `_automaticStageChain`; unknown bare identifiers accepted by domain analysis; `create in` unused-parameter hint; grandchild orphan warning). Then call `ThrowIfVmHasErrors` from `Emit`, drop the 15-sample `VmAnalyzerReportTests` allowlist and the smoke.poly 9-error pin, and compile every maintained probe with Roslyn warnings-as-errors.
+- Files: the three `Interpretation/Analysis/Semantics` analyzers, `ExpressionTypeAnalyzer`, `EffectAnalyzer`, `OwnershipAggregatePass`, `DomainToCSharpExporter.Notify.cs`, `DomainToCSharpExporter.Actions.cs`, `DomainSession.cs`, tests and `ExportedCSharp`.
+- Done when: 0 VM errors and 0 Roslyn warnings on every maintained sample; `Emit` fails on any new VM error; the allowlist and 9-error pin are gone.
+- SHIP if the samples are VM-clean and compile warnings-as-errors with `Emit` fail-closed. NOT SHIP if a sample still errors, `Emit` stays fail-open, or a gap is "fixed" by loosening the analyzer.
+- Hand-edit: Yes.
+
 **C8d. Delete DEI**
 
 _Lane B · Size M · Review 2 · **RUNS ALONE** · Depends on: C8c2, T3, C8-lc, C8-web, C8-num, C8-clean_

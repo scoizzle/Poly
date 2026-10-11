@@ -273,6 +273,19 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
+    public async Task Analysis_AfterOneCall_IsSameReferenceAsGetOrAnalyze() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+            }
+            """);
+        var fromAnalysis = RuntimeAnalysisCache.Analysis(domain);
+        var fromGetOrAnalyze = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        await Assert.That(fromAnalysis).IsSameReferenceAs(fromGetOrAnalyze);
+    }
+
+    [Test]
     public async Task Index_AfterGetOrLowerOnly_TreeAndNavigationAreCatalogNodes() {
         var (domain, _, _) = Evolve("""
             domain Library

@@ -301,7 +301,7 @@ public sealed partial record DomainEntityInstance {
         var fields = new List<FieldDefinitionNode>();
         if (domain is null)
             return fields;
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var subscriber in domain.Types.OfType<Entity>()) {
             void Consider(SubscriptionDispatchPlanMetadata? plan) {

@@ -100,7 +100,7 @@ public sealed class DomainInstanceStore {
         var domain = source.Domain
             ?? throw new InvalidOperationException(
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain);
         var mapped = storage?.Storage.Relationships.FirstOrDefault(r =>
             string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
@@ -228,12 +228,16 @@ public sealed class DomainInstanceStore {
         target = null;
         error = null;
         if (creator.Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(creator.Domain);
-            if (!analysis.TryGetEntity(creator.Domain, typeName, out target) || target is null) {
-                error = $"Entity type '{typeName}' not found in domain '{creator.Domain.Name}'.";
-                return false;
+            if (RuntimeAnalysisCache.Index(creator.Domain).Tree(typeName)?.Descriptor.Id.Type == "entity") {
+                foreach (var entity in creator.Domain.Types.OfType<Entity>()) {
+                    if (!string.Equals(entity.Name, typeName, StringComparison.Ordinal))
+                        continue;
+                    target = entity;
+                    return true;
+                }
             }
-            return true;
+            error = $"Entity type '{typeName}' not found in domain '{creator.Domain.Name}'.";
+            return false;
         }
         if (!string.Equals(creator.Entity.Name, typeName, StringComparison.Ordinal)) {
             error = $"Entity type '{typeName}' not found.";
@@ -362,7 +366,7 @@ public sealed class DomainInstanceStore {
         if (IsLinked(relationshipName, source, target))
             return;
         if (source.Domain is not null) {
-            var contracts = RuntimeAnalysisCache.GetOrAnalyze(source.Domain)
+            var contracts = RuntimeAnalysisCache.Analysis(source.Domain)
                 .GetMetadata<RelationshipContractMetadata>(default);
             var contract = contracts?.Contracts.FirstOrDefault(c =>
                 string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
@@ -463,7 +467,7 @@ public sealed class DomainInstanceStore {
         var domain = transitionedInstance.Domain;
         if (domain is null) return;
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         if (analysis.GetCatalog(domain) is null)
             throw new InvalidOperationException(
                 $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} for domain '{domain.Name}' (NotifyTransition).");
@@ -485,7 +489,7 @@ public sealed class DomainInstanceStore {
         if (domain is null)
             return [];
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         var relationshipContracts = analysis.GetMetadata<RelationshipContractMetadata>(default)
             ?? throw new InvalidOperationException(
                 $"Runtime dispatch requires {nameof(RelationshipContractMetadata)}.");

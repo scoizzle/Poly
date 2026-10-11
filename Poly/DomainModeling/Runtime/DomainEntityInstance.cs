@@ -98,7 +98,7 @@ public sealed partial record DomainEntityInstance {
             if (canonical is not null)
                 entity = canonical;
             // Decision 7: simulate refuses a domain whose analysis has Errors.
-            DomainModelAnalyzer.ThrowIfHasErrors(RuntimeAnalysisCache.GetOrAnalyze(domain));
+            RuntimeAnalysisCache.GetOrLower(domain);
         }
 
         var entityPropNames = new HashSet<string>(

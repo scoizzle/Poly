@@ -44,7 +44,7 @@ public sealed record BehaviorMetadata(BehaviorModel Behavior) {
     }
 
     internal static BehaviorModel BuildBehavior(Domain domain) {
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         return From(domain, analysis);
     }
 

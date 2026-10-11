@@ -143,7 +143,7 @@ public sealed partial record DomainEntityInstance {
             else
                 hasPreviousArg = true;
         }
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        var analysis = RuntimeAnalysisCache.Analysis(Domain);
         var entityLookup = Domain.Types.OfType<Entity>()
             .ToDictionary(e => e.Name, StringComparer.Ordinal);
         var subList = new List<DomainToCSharpExporter.SubscriptionInfo>();

@@ -1,6 +1,8 @@
 <!-- Canonical pipeline. Box paths (/home/box/..., /workspace/...) are the shared Grok Bot box where mills run; they are the one allowed exception to the repo-relative-links rule. -->
 # Poly engineering pipeline (rebuilt 2026-10-07; single reviewer 22:10)
 
+> **Suspended 2026-10-10 21:33 CT.** The bot pipeline below (Foreman, 100x, Grug/Razor, `mill.sh` runs) is not running. Scot runs the remaining slices from a local agent: see [LOCAL-AGENT.md](LOCAL-AGENT.md). This file is kept for history.
+
 **One idea:** bots are dispatchers. All heavy work runs in Grok Build or OpenCode on the box, from a prompt file, with a turn cap and a timeout. Its output goes to the repo (commits, task file) and to PR comments. A bot turn only does three things: launch a run, read a one-line result, and pass a one-line baton.
 
 ## Stages

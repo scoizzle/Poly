@@ -15,9 +15,19 @@ Lowering still emits a string-named store job for by-type create:
 calls `LowerRuntimeFactoryCall` (`:1136`), which prints
 `this.Create("Fine", "Amount", 5L, …)` with a `DomainResult<object>` cast.
 This slice makes *by-type* create lower to the typed static factory
-`Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` with no object cast.
-`create in` (G1) stays string-named until C8-tc1b; probes and `EnsureUnique`
-stay as they are until C8-tc2.
+`Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` with no object cast,
+**in an action-result context** (the enclosing action returns `DomainResult<T>`,
+as in `simulate-create-type` / `simulate-create-create-in`). Probes and
+`EnsureUnique` stay as they are until C8-tc2.
+
+**Boundary (corrected 2026-10-10).** The finding-based split (K0 = "by-type",
+G1 = "create-in") is *not* clean: a by-type create in a **void / subscription**
+context lowers to `this.Create{Nav}(...)`, i.e. create-in machinery.
+`mcp-library/Patron.cs.golden:86` is exactly that (`internal void
+WhenEachLoanOverdue(Loan loan)` creates a `Fine` onto `Patron.Fines`). So the
+honest seam is **context**, not finding: tc1a takes the action-result context
+(`Type.Create`), and tc1b takes `create in` **plus** the void-context by-type
+create (`this.Create{Nav}`).
 
 The typed factory already exists in the printed C#: static `Entity.Create(…)`
 (`DomainToCSharpExporter.cs`, near `:805`; params `GetConstructorParameters`
@@ -42,18 +52,19 @@ instance: static `Create`/`ProbeCreate` bodies are rewritten to
 | `create Fine { Amount: 5 }` | `this.Create("Fine", "Amount", 5L)`, `DomainResult<object>`, cast | `Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` | `StoreBindCreateTests`; golden `simulate-create-type/*.golden` |
 | same scenario simulated vs printed | agree | still agree | `ParityTests` |
 | `create in …` (G1) | `this.CreateIn("…")` | **unchanged** (C8-tc1b) | existing goldens still string-named |
+| by-type create in a void context (`mcp-library` `WhenEachLoanOverdue`) | `this.Create("Fine", …)` | **unchanged** (C8-tc1b) | existing `mcp-library/Patron.cs.golden` |
 | probe (`ProbeCreate`) | `this.ProbeCreate("…")` | **unchanged** (C8-tc2) | existing probe goldens |
 
 ## Done when
-- No golden contains a string-named `this.Create("` call; `git grep -n 'this.Create("' -- Poly.Tests/DomainModeling/Compile/EmitGolden` empty.
+- No action-result-context golden contains a string-named `this.Create("` call; the two `simulate-create-*` goldens show `Fine.Create(...)`. (`mcp-library/Patron.cs.golden` keeps its void-context string form until C8-tc1b.)
 - The interpreter runs the typed static `Create`; `ParityTests` green.
 - Goldens regenerated, not hand-edited. Full suite green.
 - `CreateIn("` goldens are untouched (that is C8-tc1b).
 
 ## SHIP if / NOT SHIP if
-SHIP if by-type create lowers to `Type.Create(...)`, parity holds, and no `create in` or probe change rode along.
+SHIP if by-type create in an action-result context lowers to `Type.Create(...)`, parity holds, and no `create in`, void-context create, or probe change rode along.
 
-NOT SHIP if any by-type create still lowers string-named, a golden was hand-edited, or a `CreateIn`/probe/`EnsureUnique` change rode along (t1b/tc2).
+NOT SHIP if any action-result-context create still lowers string-named, a golden was hand-edited, or a `CreateIn`/void-context/probe/`EnsureUnique` change rode along (t1b/tc2).
 
 ## Tests
 ```
@@ -68,7 +79,11 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 One lowering path for by-type create, and one name map in the interpreter type provider; Scot can open both cold.
 
 ## Needs Scot
-none
+The K0/G1 split is not clean (see Boundary). Two options: (a) take the
+context-based seam above — tc1a is still ~5 source files (lowering + the shared
+exporter helpers + the interpreter static bind + host job), tc1b is ~4; or
+(b) run C8-tc1 as one ~6-file slice on a dedicated run. Recommend (a): the
+static-factory bind is the risky part and lands first, verified on two goldens.
 
 ## Depends
 C6a, C6b1 (merged).

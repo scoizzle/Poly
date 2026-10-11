@@ -50,7 +50,7 @@ Each slice's `Depends` line is authoritative. The task file is listed where one 
 - C8-web and C8-clean are listed as optional, but C8d's card also depends on them, and C8-num depends on C8-clean. Parking either one means editing C8d's Depends line (and C8-num's, if C8-clean is parked) in the same PR that parks it.
 - The parent request listed C8-num → C8-web → C8-clean. The task files chain C8-lc → C8-clean → C8-num → C8-web (file overlap). The table follows the task files.
 - In the C8-tc split, G2 moved from tc3 to tc2 (deleting `StoreBind.cs` removes the probe), and G9 and G12 moved from tc2 to tc3 (size). C6b2 is placed in tc3. These are handoff choices; adjust freely.
-- C8-tc1 was split into C8-tc1a and C8-tc1b (2026-10-10) for the same reason: tc1 also needs the interpreter static-factory bind, so it is 6 files, not 3. See the parent card [`tasks/C8-tc1.md`](tasks/C8-tc1.md).
+- C8-tc1 was split into C8-tc1a and C8-tc1b (2026-10-10) for the same reason: tc1 also needs the interpreter static-factory bind, so it is 6 files, not 3. The seam is **by context**, not by finding: a by-type create in a void context lowers to `this.Create{Nav}`, so tc1a is action-result `Type.Create` and tc1b is `create in` **plus** the void-context by-type create. See the parent card [`tasks/C8-tc1.md`](tasks/C8-tc1.md).
 
 Out of the finish line and not listed: K3c, K3a, K3b and K5 come after C8d in §12 and are not needed for C10. Parked by the trim: F2–F6, R1, R2, A6, A7, H5, T3, Q1b, N1. Old `slice/*` branches (`a3b`, `a4-analysis-report`, `a5a-contributor-artifacts`, `c4e`, `m1`, `n4`, `c6b2-plan`) are leftovers. Their slices merged or were folded; that was not checked branch by branch.
 

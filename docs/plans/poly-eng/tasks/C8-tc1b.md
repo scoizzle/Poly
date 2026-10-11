@@ -11,7 +11,11 @@ Finding G1 from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10
 `Poly/DomainModeling/Lowering/EffectLoweringPass.cs:909`, call `:917`). This
 slice lowers it to the typed `this.CreateEnrollments(offering)` that the printed
 C# already has (`DomainToCSharpExporter.Notify.cs`, `AddCreateNavMethod`), and
-routes the interpreter call back onto the dictionary `CreateIn` job.
+routes the interpreter call back onto the dictionary `CreateIn` job. It also
+takes the **void-context by-type create** (`mcp-library/Patron.cs.golden:86`,
+`WhenEachLoanOverdue`), which lowers to the same `this.CreateFines(...)` shape —
+that is why the K0/G1 boundary is by context, not by finding
+(see [`C8-tc1a.md`](C8-tc1a.md) Boundary).
 
 Depends on C8-tc1a for the shared plumbing: `internal GetConstructorParameters`,
 `TrailingDefaultedProperties`, `EmptyListNode`, `TypedNull`, and the ambient
@@ -31,7 +35,7 @@ subject the interpreter uses for typed factories.
 | same scenario simulated vs printed | agree | still agree | `ParityTests` |
 
 ## Done when
-- No golden contains a string-named `this.CreateIn("` call; `university/Student.cs.golden` shows `this.CreateEnrollments(offering)` (also Guest.BookStay, Warehouse.RegisterTruck, Account.PlaceHq, Patron.CheckOut, Opportunity.Log/AddLine).
+- No golden contains a string-named `this.CreateIn("` **or** `this.Create("` call; `university/Student.cs.golden` shows `this.CreateEnrollments(offering)` (also Guest.BookStay, Warehouse.RegisterTruck, Account.PlaceHq, Patron.CheckOut, Opportunity.Log/AddLine) and `mcp-library/Patron.cs.golden:86` shows the typed `CreateFines(...)`.
 - The interpreter runs the typed `Create{Nav}`; `ParityTests` green. Goldens regenerated, not hand-edited. Full suite green.
 
 ## SHIP if / NOT SHIP if

@@ -8,7 +8,7 @@ Method for this revision: the five reviews were read, the headline experiment (t
 
 ## 0. How to read this
 
-- **Printed C# bar (Scot, 2026-10-10 15:05 CT).** Printed C# must be as good as, or better than, hand-written production-quality C#. Every codegen finding is fixed, nits included, nothing deferred. Findings K0, G1–G22, D1–D18 are owned by C8-tc, C8-lc, C8-web, C8-num, C8-clean; D2 (debug-trace contract adapter, Scot 15:11 CT) is in C8-clean.
+- **Printed C# bar (Scot, 2026-10-10 15:05 CT).** Printed C# must be as good as, or better than, hand-written production-quality C#. Every codegen finding is fixed, nits included, nothing deferred. Findings K0, G1–G22, D1–D18 are owned by C8-tc1/C8-tc2/C8-tc3, C8-lc, C8-web, C8-num, C8-clean; D2 (debug-trace contract adapter, Scot 15:11 CT) is in C8-clean.
 - **Slice** = one PR. Each carries: scope, files, a **Done when** condition, a **SHIP / NOT SHIP** check a reviewer can run, a hand-edit check, size (S under a day of mill time and readable in one sitting; M a few files and tests; L new design or many files), the lane (A catalog, B DEI retire), whether it **runs alone**, how many review passes it gets, and what it depends on.
 - Every PR lists its exact test command (a `dotnet test` filter or TUnit tree filter, the named test classes) and any `git grep` probe with the expected output. Use `git grep`, not `rg`: `rg` hangs in these clones. Before editing, re-check every file and line claim on current master and report any that moved; the line numbers below are as of master `945a2164`; re-check at slice start.
 - **Release rule:** no code slice or wave starts until Scot says so; a sign-off for one wave does not release another.
@@ -29,7 +29,7 @@ Method for this revision: the five reviews were read, the headline experiment (t
 | No auto-link guessing | `TryAutoLinkUnambiguousOutbound` gone (`git grep`), printed by-name create no longer auto-links, an unlinked navigation stays unlinked, guide edited | C6a |
 | Artifact ids are name path plus type | `ArtifactId` tests; ids survive recompilation; catalog text identical across fresh sessions | A1, A2a, T0 |
 | Hand-editability | The three-probe gate above, plus scripted commands for mechanical diffs | every slice |
-| Printed C# bar: as good as, or better than, hand-written production-quality C#; every codegen finding fixed, nits included, nothing deferred (Scot 2026-10-10 15:05 CT) | Each finding id (K0, G1–G22, D1–D18) is gone from its cited golden | C8-tc, C8-lc, C8-web, C8-num, C8-clean |
+| Printed C# bar: as good as, or better than, hand-written production-quality C#; every codegen finding fixed, nits included, nothing deferred (Scot 2026-10-10 15:05 CT) | Each finding id (K0, G1–G22, D1–D18) is gone from its cited golden | C8-tc1/tc2/tc3, C8-lc, C8-web, C8-num, C8-clean |
 | Opposite-mill review | Lane rules in section 13 | process |
 | Code is truth | Every "Wrong today" claim below was checked or is flagged | this document |
 
@@ -525,7 +525,7 @@ _Lane B · Size M · Review 2 · Depends on: C6a, C2b_
 - Done when: Parity row: a cardinality violation on link fails identically.
 - SHIP if the row is red on master. NOT SHIP if only MCP `link_instances` enforces it.
 - Hand-edit: Partly.
-- Split (planner 2026-10-10): C6b1 = cardinality core (task `docs/plans/poly-eng/tasks/C6b1.md`, merged #151); C6b2 = `BuildTargetCreateArgs` self-reference fix (`Node.Create(name, this, this)`, found by Grug on PR 144). C6b2 is folded into C8-tc (2026-10-10): C8-tc deletes `StoreBind.cs`, so the self-referencing collection slot is fixed as part of the typed lowering.
+- Split (planner 2026-10-10): C6b1 = cardinality core (task `docs/plans/poly-eng/tasks/C6b1.md`, merged #151); C6b2 = `BuildTargetCreateArgs` self-reference fix (`Node.Create(name, this, this)`, found by Grug on PR 144). C6b2 is folded into the C8-tc split (2026-10-10): the call-site slot is fixed by C8-tc1's typed lowering (collection before back-ref), and the `StoreBind.cs` copy dies when C8-tc2 deletes the file.
 
 **C6c. Unlink cannot drop below a required minimum**
 
@@ -599,18 +599,36 @@ _Lane B · Size M · Review 2 · Depends on: C5b, C6c, C7d, decision V2 (decisio
 - SHIP if the storage structure test (inside C8a1) passes. NOT SHIP if storage contains any rule.
 - Hand-edit: Yes if it stays small. Probe: under ~200 lines, no domain terms.
 
-**C8-tc. Typed create in the compiled tree**
+**C8-tc1. Typed create in the compiled tree (1 of 3: typed lowering + interpreter map)**
 
-_Lane B · Size M · Review 2 · Depends on: C6a, C6b1 (both merged; folds C6b2)_
-- Scope: Findings K0, G1, G2, G3+D1, G4+D15, G6, G8, G9, G12. Lowering emits typed factories instead of string-named store jobs (`LowerRuntimeFactoryCall` `EffectLoweringPass.cs:1136-1198`). K0 `orders/Customer.cs.golden:111`: delete `StoreBind.cs` dictionary `Create`/`CreateIn`/`ProbeCreate` overloads. G1 `university/Student.cs.golden:69`: `this.ProbeCreate("Enrollment", …)` / `CreateIn("enrollments", …)` becomes `this.CreateEnrollments(offering)`. G2 `university/Enrollment.cs.golden:228`: probe must not call `Enrollment.Create` (it attaches). G3+D1 `orders/Customer.cs.golden:110`: `EnsureUnique` is a real unique check, not `=> DomainResult.Success()`. G4 `mcp-library/Patron.cs.golden:86` + D15 `:84`: `when loans Overdue` emits `this.CreateFines(...)`, failure is `DomainResult`, no throw, drop dead `created1`. G6 `crm/Account.cs.golden:59`: `CreateParent` passes null, not `this`. G8 `orders/OrderItem.cs.golden:26`: singular `Create{Nav}` attaches the inverse. G9 `orders/Customer.cs.golden:26`: `Create{Nav}` is public. G12 `orders/Poly.Types.cs.golden:39`: failed `DomainResult<T>.Value` is not `default!`. Interpreter maps typed calls via `HostAbi` / `InvokeNamed`. Folds C6b2: collection slot gets `new List<T>()`.
-- Files: `EffectLoweringPass.cs`, `DomainToCSharpExporter.StoreBind.cs` (delete), `DomainToCSharpExporter.cs`, `DomainToCSharpExporter.Notify.cs`, `DomainProgramProjection.cs` / `Actions.cs` (G12), `DomainEntityInstance.InvokeNamed.cs`, `DomainEntityInstance.HostAbi.cs`, `DomainInstanceStore.cs`, tests, goldens.
-- Done when: each cited golden no longer shows its finding; no `new Dictionary<string, object` or string-named `Create`/`CreateIn`/`ProbeCreate`/`EnsureUnique`; probe does not mutate; `EnsureUnique` is a real check; Fine handler uses `CreateFines` and `DomainResult`; `CreateParent` is acyclic; singular inverse attaches; `Create{Nav}` is public; failed `.Value` does not return `default!`; C6b2 slot compiles.
-- SHIP if those greps are empty, every finding id in this slice is gone from its cited golden, and the suite passes with regenerated goldens. NOT SHIP if any listed finding remains, a golden was hand-edited, or the compiled tree still constructs `Dictionary<string, object>`.
+_Lane B · Size M · Review 2 · Depends on: C6a, C6b1 (both merged; folds the C6b2 call-site)_
+- Scope: Findings G1, K0 (call-site half), C6b2 (call-site). `LowerRuntimeFactoryCall` (`EffectLoweringPass.cs:1136-1198`) emits string-named `this.Create("Type", "prop", value, …)` / `CreateIn` / `ProbeCreate` with entity values cast to object (`:1160-1162`); replace with typed `Entity.Create(…)` (`DomainToCSharpExporter.cs:849`), `this.Create{Nav}(…)` (`DomainToCSharpExporter.Notify.cs:92`) and `Entity.ProbeCreate(…)` (new, same probe semantics as today — G2 stays open), all returning `DomainResult`/`DomainResult<T>` with no object cast; collections as `new List<T>()` before back-ref slots (C6b2). Interpreter maps typed calls onto its dictionary-backed instances (ambient host job + `InvokeNamed`/`HostAbi`). Regenerate affected goldens. Probes' *behavior*, `EnsureUnique` (G3+D1), `StoreBind.cs` (K0 rest), `Create{Nav}` public (G9) and `DomainResult<T>` shape (G12) are untouched. Task `docs/plans/poly-eng/tasks/C8-tc1.md`.
+- Files: `EffectLoweringPass.cs`, `DomainToCSharpExporter.Notify.cs`, `DomainToCSharpExporter.cs`, `DomainEntityInstance.cs`, `DomainEntityInstance.HostAbi.cs`, `DomainEntityInstance.InvokeNamed.cs`, `DomainInstanceHostJobs.cs`, tests, goldens.
+- Done when: no string-named create/create-in/probe call site and no object cast remains in the lowered tree or goldens; interpreter runs the typed calls (parity green); C6b2 slot is a list; suite green with regenerated goldens.
+- SHIP if every call site is typed with real parameters and the suite passes. NOT SHIP if a string-named call survives, behavior of probe/unique changed, or a golden was hand-edited.
+- Hand-edit: Yes.
+
+**C8-tc2. Typed create in the compiled tree (2 of 3: StoreBind out, public navs, real unique, G12)**
+
+_Lane B · Size M · Review 2 · Depends on: C8-tc1 (C8-vm, slice/c8-vm-plan, follows)_
+- Scope: Findings K0 (rest), G9, G3+D1, G12. Delete `DomainToCSharpExporter.StoreBind.cs` (dictionary overloads, `BindCreate`/`BindCreateIn`/`BindProbeCreate`, always-Success `EnsureUnique` stub) and the `AddStoreBindMethods` call; zero `new Dictionary<string, object` in goldens. G9 `orders/Customer.cs.golden:26`: `Create{Nav}` is public. G3+D1 `orders/Customer.cs.golden:110`: real per-property `EnsureUnique{Prop}` check (printed index + interpreter store), duplicate unique fails on both sides. G12 `orders/Poly.Types.cs.golden:39`: `DomainResult<T>.Value` is `T?`, `Failure` is not `default!`. Task `docs/plans/poly-eng/tasks/C8-tc2.md`.
+- Files: `DomainToCSharpExporter.StoreBind.cs` (delete), `DomainToCSharpExporter.cs`, `DomainToCSharpExporter.Notify.cs`, `DomainToCSharpExporter.Actions.cs` (G12), `EffectLoweringPass.cs`, `DomainEntityInstance.InvokeNamed.cs`, `DomainEntityInstance.HostAbi.cs`, tests, goldens.
+- Done when: the K0 greps are empty; `Create{Nav}` public; duplicate unique fails identically both modes; failed `.Value` is not `default!`.
+- SHIP if those hold and the suite passes with regenerated goldens. NOT SHIP if StoreBind or a dictionary construction survives, unique is still a stub, or G12 remains.
+- Hand-edit: Yes.
+
+**C8-tc3. Typed create in the compiled tree (3 of 3: side-effect-free probe, void-context create, nav fixes)**
+
+_Lane B · Size M · Review 2 · Depends on: C8-tc2 (C8-lc, C8-web, C8-num, C8-clean and C8a2 follow)_
+- Scope: Findings G2, G4+D15, G6, G8. G2 `university/Enrollment.cs.golden:255`: `Entity.ProbeCreate` checks constraints + unique only — no construct, no attach. G4 `mcp-library/Patron.cs.golden:86` + D15 `:84`: `when loans Overdue` emits `this.CreateFines(...)`, failure is `DomainResult`, no throw, drop dead `created1`. G6 `crm/Account.cs.golden:59`: `CreateParent` passes null, not `this`. G8 `orders/OrderItem.cs.golden:26`: singular `Create{Nav}` attaches the inverse. Task `docs/plans/poly-eng/tasks/C8-tc3.md`.
+- Files: `DomainToCSharpExporter.cs`, `EffectLoweringPass.cs`, `DomainToCSharpExporter.Notify.cs`, `DomainEntityInstance.HostAbi.cs`, tests, goldens.
+- Done when: probe does not mutate; Fine handler uses `CreateFines` and `DomainResult`; `CreateParent` is acyclic; singular inverse attaches; each cited golden no longer shows its finding.
+- SHIP if those hold and the suite passes. NOT SHIP if probe still attaches, the overdue handler throws, or a listed finding remains.
 - Hand-edit: Yes.
 
 **C8-lc. Lifecycle in printed C#**
 
-_Lane B · Size M · Review 2 · Depends on: C8-tc_
+_Lane B · Size M · Review 2 · Depends on: C8-tc3_
 - Scope: Findings G5, G7, G10, G17, G21, D10, D12. G5 `warehouse/Truck.cs.golden:26`: ctor must not set `CurrentStage` to the first declared stage and run its entry (`EnRoute` + tautological throw; Opportunity Qualify assigns Probability and can throw). Pick an explicit initial stage; run entry only on transition; never throw from `Create`. G7 `orders/Order.cs.golden:108`: `IsPaid` reads `OrderState` while `Pay`/`Ship`/`Cancel` assign `OrderStage` — one lifecycle type, or assign the domain enum on every transition. G10 `crm/Opportunity.cs.golden:253`: stage copies of `Log`/`AddLine`/`Lose` print the same body three times; emit one body with a stage-set guard (`AddStageDispatchedActionMethod`). G17 `orders/Order.cs.golden:66`: entity-level `Ship()` assigns `Shipped` from any stage, including Cancelled; guard with legal source stages from the lifecycle graph. G21 `simulate-create-in/Patron.cs.golden:5`: omit the stage enum when there is only an implicit initial stage. D10 `university/Student.cs.golden:643`: `OnEntry*` is dead (entry is inlined into the transitioning action); emit and call one helper, or stop emitting the orphan. D12 `hotel/Reservation.cs.golden:259`: `previousStage` only on the `when all` notify path.
 - Files: `DomainToCSharpExporter.cs` (`:681`, `:702`, `:713`, `:499`/`:540`), `DomainToCSharpExporter.Actions.cs` (`AddStageDispatchedActionMethod`, entity-level transition), `EffectLoweringPass.cs` (transition / entry inlining).
 - Done when: each cited golden no longer shows its finding; `Create` does not run first-stage entry or throw; Order has one lifecycle (or domain enum assigned on every transition); shared stage bodies are not triplicated; illegal entity-level transitions fail; single-stage entities have no stage enum; no dead `OnEntry*` or unused `previousStage` on non-all notifiers.
@@ -646,11 +664,11 @@ _Lane B · Size M · Review 2 · Depends on: C8-num_
 
 **C8a2. Dictionary-backed instance from a type definition**
 
-_Lane B · Size M · Review 2 · Depends on: C8a1, C8-tc_
+_Lane B · Size M · Review 2 · Depends on: C8a1, C8-tc3_
 - Scope: Interpreter-side factory: `TypeDefinitionNode` in, dictionary-backed instance out. Pieces exist (`TypeDefinitionNodeAnalyzer`, `DictionaryBackedValue`, `InvokeNamed`). No DEI change yet.
 - Files: `Poly/Interpretation/*`.
 - Done when: Own unit tests; no `Domain` or `Entity` parameter anywhere in the new code.
-- SHIP if the factory runs the typed compiled Create tree (from C8-tc) for a sample domain. NOT SHIP if it takes `Domain`.
+- SHIP if the factory runs the typed compiled Create tree (from C8-tc1) for a sample domain. NOT SHIP if it takes `Domain`.
 - Hand-edit: Yes if small.
 
 **C8b. Move `Create` and the test helper over**
@@ -949,13 +967,13 @@ Why this order: tests and measurements come first so every later claim is checka
 
 **Wave 3: retire DEI and the cache (hold point HP5: every C slice merged)**
 - Lane A: K6, F1 to F4, F6, N2 (done, Http half), N2b (decision 19 = yes; DbContext half)
-- Lane B: K2 (runs alone), C8-pre (runs alone), C8a1, C8-tc, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, T3, C8d (runs alone), K3c, K3a, K3b, K5 (runs alone), C10, F5
+- Lane B: K2 (runs alone), C8-pre (runs alone), C8a1, C8-tc1, C8-tc2, C8-tc3, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, T3, C8d (runs alone), K3c, K3a, K3b, K5 (runs alone), C10, F5
 
 **Wave 4: last**
 - Lane A: H5, A6, A7 (deferred; not schedulable until each has a named consumer and Scot approves the wave)
 - Lane B: R1 then R2 (each runs alone)
 
-Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1, H1, N3, A1, A2a, A2b, N1, C4a, C0, T1, K0, B1, G1, G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b, C1a, C1b, C1c, E1, C2a, C2b, C4b, C4c, C4d, Q1a, Q1b, C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a, C7b, C7c, C7d, C9, K4, M1, P1, H2, H3, H4, Q2, K2, C8-pre, C8a1, C8-tc, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, T3, C8d, K3c, K3a, K3b, K5, C10, K6, F1, F2, F3, F4, F5, F6, N2, R1, R2, H5, A6, A7.
+Full sequence (dependencies verified to appear earlier in this list): T0, T2, K1, H1, N3, A1, A2a, A2b, N1, C4a, C0, T1, K0, B1, G1, G2, G3, C4e, N4, A3a, A3b, A4, A5a, A5b, C1a, C1b, C1c, E1, C2a, C2b, C4b, C4c, C4d, Q1a, Q1b, C3a, C3b, C5a, C5b, C6a, C6b, C6c, C7-0, C7a, C7b, C7c, C7d, C9, K4, M1, P1, H2, H3, H4, Q2, K2, C8-pre, C8a1, C8-tc1, C8-tc2, C8-tc3, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, T3, C8d, K3c, K3a, K3b, K5, C10, K6, F1, F2, F3, F4, F5, F6, N2, R1, R2, H5, A6, A7.
 
 Scot, 2026-10-09 18:56 CDT: plan trimmed to the DEI-retirement path, finish line through C8d plus C10. Parked until after it: F2, F3, F4, F5, F6, R1, R2, A6, A7, H5, T3, Q1b, N1.
 
@@ -964,8 +982,8 @@ Scot, 2026-10-09 18:56 CDT: plan trimmed to the DEI-retirement path, finish line
 **Two lanes, work-in-progress cap of 2 (one slice per lane).** Almost every C slice edits the same DEI files, and every A, H and K slice edits `Compile/DomainSession.cs`, so a third lane would only produce merge conflicts.
 
 - **Lane A (catalog):** T0, A1, A2a, A2b, A3a, A3b, A4, A5a, A5b, C9, N2, A6, A7, G1, G2, G3, N4, C4e, M1, P1, Q2, K1, K4, K6, H1 to H5, F1 to F4, F6, N1, N3.
-- **Lane B (DEI retire):** T1, T2, T3, B1, K0, C0, C1a to C1c, E1, C2a, C2b, C3a, C3b, C4a to C4d, C5a, C5b, C6a to C6c, C7-0 to C7d, Q1a, Q1b, C8-pre, C8a1, C8-tc, C8-lc, C8-clean, C8-num, C8-web, C8a2 to C8d, C10, K2, K3a, K3b, K3c, K5, F5, R1, R2.
-- **Join points:** C7-0 needs A3a; K3a needs C2a; K5 needs C8d; C8a1 needs C5b, C6c and C7d; C8-tc then C8-lc then C8-clean then C8-num then C8-web (file overlap); C8d needs C8-lc, C8-web, C8-num, C8-clean; M1 and T3 join (T3 needs M1); H2 and K6 chain in lane A.
+- **Lane B (DEI retire):** T1, T2, T3, B1, K0, C0, C1a to C1c, E1, C2a, C2b, C3a, C3b, C4a to C4d, C5a, C5b, C6a to C6c, C7-0 to C7d, Q1a, Q1b, C8-pre, C8a1, C8-tc1 to C8-tc3, C8-lc, C8-clean, C8-num, C8-web, C8a2 to C8d, C10, K2, K3a, K3b, K3c, K5, F5, R1, R2.
+- **Join points:** C7-0 needs A3a; K3a needs C2a; K5 needs C8d; C8a1 needs C5b, C6c and C7d; C8-tc1 then C8-tc2 then C8-tc3 then C8-lc then C8-clean then C8-num then C8-web (file overlap); C8-vm (slice/c8-vm-plan) after C8-tc2; C8d needs C8-lc, C8-web, C8-num, C8-clean; M1 and T3 join (T3 needs M1); H2 and K6 chain in lane A.
 - Do not put two slices from the same lane in flight.
 
 **Slices that run alone** (both lanes idle, no other open PR, scheduled right after a merge window): **K2, C8-pre, C8d, K5, R1, R2.** T1 is a partial freeze: no other PR may touch the 11 test files it edits.
@@ -1034,9 +1052,11 @@ flowchart TD
     C6c --> C8a1
     C7d --> C8a1
     C8a1 --> C8a2 --> C8b
-    C6a --> C8tc[C8-tc]
-    C8tc --> C8a2
-    C8tc --> C8lc[C8-lc]
+    C6a --> C8tc1[C8-tc1]
+    C8tc1 --> C8tc2[C8-tc2]
+    C8tc2 --> C8tc3[C8-tc3]
+    C8tc3 --> C8a2
+    C8tc3 --> C8lc[C8-lc]
     C8lc --> C8clean[C8-clean]
     C8clean --> C8num[C8-num]
     C8num --> C8web[C8-web]
@@ -1079,14 +1099,14 @@ flowchart TD
 | Collection rules | Q1a, Q1b | S, S |
 | Subscriptions and links | C5a, C5b, C6a, C6b, C6c | M, M, M, M, M |
 | Consumer lookups | C7-0, C7a, C7b, C7c, C7d | M, M, S, S, S |
-| Instances and DEI | C8-pre, C8a1, C8-tc, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, C8d | M, M, M, M, M, S, M, M, M, M, M, M |
+| Instances and DEI | C8-pre, C8a1, C8-tc1, C8-tc2, C8-tc3, C8-lc, C8-clean, C8-num, C8-web, C8a2, C8b, C8c1, C8c2, C8d | M, M, M, M, M, M, S, M, M, M, M, M, M |
 | Compile inputs | K1, K2, K3c, K3a, K3b, K4, K5, K6 | S, M, S, S, M, M, M, S |
 | Artifact analysis | H1, H2, H3, H4, H5 | S, M, S, M, M |
 | Harness | Q2 | M |
 | Functions | F1, F2, F3, F4, F5, F6 | S, S, M, M, S, S |
 | Naming and rename | N1, N3, R1, R2 | S, S, S, M |
 
-87 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 18 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, C8-tc, C8-lc, C8-web, C8-num, C8-clean, plus the conditional P1). Sizes: 39 S, 47 M, 1 L. Overall: **L**. The risky slices are C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 130.
+89 slices (v1 had about 55 but several were bundles: old C1 is now three, C3, C5, C6, C8a, C8c, K3 and A2/A5 are split, and 20 slices are new: T0, T1, T2, T3, B1, K0, E1, M1, N4, C4e, Q1a, Q1b, Q2, C8-tc1, C8-tc2, C8-tc3, C8-lc, C8-web, C8-num, C8-clean, plus the conditional P1). Sizes: 39 S, 49 M, 1 L. Overall: **L**. The risky slices are C1a, C3a, C5a, C8a1/C8a2 and K2; everything before them is small and reviewed on its own. The first PRs in order (T0, A1, A2a, C4a, C0) are S with low risk. Review passes: about 130.
 
 ## 17. Dogfood probes per wave
 

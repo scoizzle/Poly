@@ -243,7 +243,9 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Related rulings.** C6b2 (`BuildTargetCreateArgs` self-referencing collection slot passing `this` where the constructor wants `IEnumerable<T>`) is folded into C8-tc, because C8-tc deletes the file that holds the bug. C8a2 (interpreter-side `TypeDefinitionNode` factory) now depends on C8-tc and must run the typed compiled Create tree. C8-tc grew 2026-10-10 15:05 CT to also close K0, G1, G2, G3+D1, G4+D15, G6, G8, G9, G12.
 
-**Blocks.** C8-tc, then C8a2.
+**Split (Scot, 2026-10-10 19:58 CT).** C8-tc is too big for one implement run (a stopped run froze four times before a first commit; its uncommitted attempt, 650 insertions across 15 files, is at `/workspace/c8-tc-wip-10101958.patch`). Replaced by three slices on lane B, review 2 each, run in order; nothing from C8-tc is dropped. **C8-tc1** (task `docs/plans/poly-eng/tasks/C8-tc1.md`): lowering emits typed `Type.Create(…)` / `CreateX(…)` / `Type.ProbeCreate(…)` returning `DomainResult`/`DomainResult<T>` with no cast to object, the interpreter maps them onto its dictionary-backed instances (`HostAbi` / `InvokeNamed`, ambient host jobs), the C6b2 call-site slot becomes `new List<T>()`, and the affected goldens are regenerated; owns G1 and the call-site half of K0 (probe *behavior* unchanged, G2 open). **C8-tc2** (`C8-tc2.md`): delete `DomainToCSharpExporter.StoreBind.cs` (rest of K0), make `Create{Nav}` public (G9), replace the `EnsureUnique` stub with a real per-property check (G3+D1), fix G12. **C8-tc3** (`C8-tc3.md`): the semantic create bugs — G2 (probe has no side effects), G4+D15 (`CreateFines`, `DomainResult` handler), G6 (`CreateParent` null), G8 (singular inverse attaches). C8-tc.md is marked superseded; PR 155 stays open only as plan history. C8-vm (slice/c8-vm-plan, PR 158) follows C8-tc2 — its card retargets from C8-tc when that branch rebases. C8-lc, C8-web, C8-num, C8-clean and C8a2 follow C8-tc3; C8a2's done test still runs the typed compiled Create tree (from C8-tc1).
+
+**Blocks.** C8-tc1, then C8-tc2 (C8-vm after it), then C8-tc3; C8a2 after C8-tc3.
 
 ### Ruling. Printed C# bar
 
@@ -251,7 +253,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **What it is.** Grug's codegen review of EmitGolden (rows K0, G1–G22, D1–D18) is the punch list. The bar is a principle of the convergence plan, not a later polish pass.
 
-**Blocks.** C8-tc, C8-lc, C8-web, C8-num, C8-clean.
+**Blocks.** C8-tc1/tc2/tc3, C8-lc, C8-web, C8-num, C8-clean.
 
 ### Ruling. Number C# type from constraints (D8)
 

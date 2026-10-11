@@ -824,6 +824,8 @@ internal static class AstTypeReferenceResolver {
 internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly AstCollectionItemProperty _item;
     private readonly ITypeProperty? _count;
+    private readonly ITypeConstructor _ctor;
+    private readonly ITypeMethod _add;
 
     public AstCollectionTypeDefinition(ITypeDefinition element, CollectionKind kind) {
         ElementType = element;
@@ -832,6 +834,8 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
         _count = ClrTypeDefinitionRegistry.Shared
             .GetTypeDefinition(typeof(System.Collections.IList))
             ?.Properties.FirstOrDefault(p => string.Equals(p.Name, "Count", StringComparison.Ordinal));
+        _ctor = new AstCollectionParameterlessConstructor(this);
+        _add = new AstCollectionAddMethod(this, element);
     }
 
     public ITypeDefinition ElementType { get; }
@@ -842,14 +846,46 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
-    public IEnumerable<ITypeMember> Members => _count is null ? [_item] : [_item, _count];
+    public IEnumerable<ITypeMember> Members => _count is null ? [_item, _ctor, _add] : [_item, _count, _ctor, _add];
     public IEnumerable<ITypeField> Fields => [];
     public IEnumerable<ITypeProperty> Properties => _count is null ? [_item] : [_item, _count];
-    public IEnumerable<ITypeMethod> Methods => [];
-    public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeMethod> Methods => [_add];
+    public IEnumerable<ITypeConstructor> Constructors => [_ctor];
     public PrimitiveType? PrimitiveType => null;
     public TypeCategory TypeCategory => TypeCategory.Collection;
     public Type RuntimeType => typeof(System.Collections.IList);
+}
+
+/// <summary>Parameterless constructor for a synthetic collection type.</summary>
+internal sealed class AstCollectionParameterlessConstructor(AstCollectionTypeDefinition declaring) : ITypeConstructor {
+    public string Name => declaring.Name;
+    public ITypeDefinition MemberTypeDefinition => declaring;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary><c>Add(X)</c> on a synthetic collection type.</summary>
+internal sealed class AstCollectionAddMethod(AstCollectionTypeDefinition declaring, ITypeDefinition element) : ITypeMethod {
+    public string Name => "Add";
+    public ITypeDefinition MemberTypeDefinition => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(void))!;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [new AstCollectionElementParameter(element)];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public bool IsStatic => false;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary>The element parameter of <c>Add(X)</c>.</summary>
+internal sealed class AstCollectionElementParameter(ITypeDefinition element) : IParameter {
+    public int Position => 0;
+    public string Name => "item";
+    public ITypeDefinition ParameterTypeDefinition => element;
+    public bool IsOptional => false;
+    public object? DefaultValue => null;
 }
 
 internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrTypeDefinition {

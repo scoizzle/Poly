@@ -62,6 +62,24 @@ done for the value-returning context with `RewriteTypedFactories` / `BindStaticF
 **Needs Scot:** fold the four C8-vm analyzer fixes into C8-tc1a, or land C8-vm's analyzer
 half before C8-tc1a. Do not merge this branch until one of those happens.
 
+## Blocker update (2026-10-11) — root-caused
+`AnalysisForAstBody` (`DirectVmAbiEmitter.Invoke.cs:796`) re-analyzes the **whole declaring
+type** (`Interpreter.Analyzer.Analyze(astType.Syntax, …)`), so compiling the rebound static
+`Create` forwarder pulls in the module entity's other printed methods (`CreatePatron`,
+`CreateFines`) and surfaces pre-existing VM-analyzer false positives:
+
+- `Fine.Create` with a `Conditional` third argument resolving to `Object` (the printed
+  optional/back-ref default) against the `Patron` parameter.
+- `Patron.Create(name, new List<Fine>())` resolving to the runtime entity's dictionary
+  `Create(name, Dictionary)` host job instead of the module static
+  `Create(name, IEnumerable<Fine>?…)`.
+
+Folded in so far (kept; no regressions): the current-entity static `Create` bind in
+`DomainEntityInstance` (tc1a's own design) and C8-vm V2 — synthetic `List<T>` exposes a
+parameterless ctor and `Add(X)` (`AstCollectionTypeDefinition`). Remaining: C8-vm V1
+(registry keying), V3 (member-overload assignability incl. `Conditional`/null/collection
+args), V5. These are interpreter-machinery fixes and belong in C8-vm, done first.
+
 ## Files
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (`CreateEntityInstance` lowers to a typed `Type.Create` call via a new `LowerTypedCreateCall` / `BuildFullCreateArgs` / `ArgumentFor` / `LowerInitializerValue` / `BindingsByName` / `TypeDefaultNode`. `LowerRuntimeFactoryCall` stays for `create in` and probes.)
 - `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` (`GetConstructorParameters` private → internal; add `internal static TrailingDefaultedProperties(Entity, INodeMetadataProvider)` and `internal static EmptyListNode(string)`.)

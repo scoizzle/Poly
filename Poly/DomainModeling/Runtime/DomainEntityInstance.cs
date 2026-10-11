@@ -908,6 +908,11 @@ public sealed partial record DomainEntityInstance {
                 (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
             List<MethodDefinitionNode>? extras = null;
             foreach (var m in moduleMethods) {
+                if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
+                    extras ??= [];
+                    extras.Add(BindStaticFactory(m, entity.Name, domain));
+                    continue;
+                }
                 if (!names.Add(m.Name))
                     continue;
                 extras ??= [];

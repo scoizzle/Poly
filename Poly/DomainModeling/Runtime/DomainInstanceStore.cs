@@ -228,15 +228,13 @@ public sealed class DomainInstanceStore {
         target = null;
         error = null;
         if (creator.Domain is not null) {
-            if (RuntimeAnalysisCache.Index(creator.Domain).Tree(typeName) is null) {
-                error = $"Entity type '{typeName}' not found in domain '{creator.Domain.Name}'.";
-                return false;
-            }
-            foreach (var entity in creator.Domain.Types.OfType<Entity>()) {
-                if (!string.Equals(entity.Name, typeName, StringComparison.Ordinal))
-                    continue;
-                target = entity;
-                return true;
+            if (RuntimeAnalysisCache.Index(creator.Domain).Tree(typeName) is not null) {
+                foreach (var entity in creator.Domain.Types.OfType<Entity>()) {
+                    if (!string.Equals(entity.Name, typeName, StringComparison.Ordinal))
+                        continue;
+                    target = entity;
+                    return true;
+                }
             }
             error = $"Entity type '{typeName}' not found in domain '{creator.Domain.Name}'.";
             return false;

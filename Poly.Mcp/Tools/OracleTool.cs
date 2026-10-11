@@ -417,7 +417,7 @@ internal sealed class OracleTool {
             var domain = boot with { Types = [.. boot.Types, entity] };
             // Create refuses a domain with analysis errors; report them as diagnostics instead.
             // Create reads this same cached analysis.
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+            var analysis = RuntimeAnalysisCache.Analysis(domain);
             if (analysis.HasErrors)
                 return new DomainToolResponse(Success: false, Message: "Expression has analysis errors.", Diagnostics: ErrorMessages(analysis), Affordances: []);
             var instance = DomainEntityInstance.Create(entity, subjectValues, domain);

@@ -243,3 +243,11 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 ## What did not need to be asked
 
 These look like decisions but were answered by earlier rulings or by the code: gating Errors everywhere (decision 7); no auto-link (decision 10); constraints on set, transitions as trees, unknown names as Analyze errors (decisions 11 and 12); action- and stage-scoped policies compile into the printed output (decision 8); same-named stage actions share one id (the exporter makes them one method).
+
+### Ruling. VM analysis gate (C8-vm)
+
+**Answer (Scot, 2026-10-10 19:35 CT):** the VM analyzer must be clean on the maintained samples and Emit must fail closed. Four analyzer false positives are fixed (`DomainResult<T>` overwriting `DomainResult`, `List<T>` with no ctor/`Add`, create-arg assignability, exact ctor match), the real bugs they hide are fixed (null subscription registration, `_automaticStageChain` nullability, unknown bare identifiers, the `create in` unused-parameter hint, the grandchild orphan warning), and `ThrowIfVmHasErrors` is wired into `Emit`. The `VmAnalyzerReportTests` 15-sample allowlist and the `smoke.poly` 9-error pin are removed; every maintained probe is compiled with Roslyn warnings-as-errors. Done when 0 VM errors and 0 Roslyn warnings hold on every maintained sample and `Emit` fails on any new VM error.
+
+**Related.** Depends on C8-tc (PR 155), which removes the K0 string-named create jobs behind most of the VM noise and moves the exporter code; the C8-vm plan cites symbols and is implemented after C8-tc lands. C8-vm lands before C8-lc, C8-web, C8-num, C8-clean and C8d.
+
+**Blocks.** C8-lc, C8-web, C8-num, C8-clean, C8d.

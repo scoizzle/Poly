@@ -240,15 +240,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
         foreach (var candidate in targetType.Methods.WithName(member.MemberName)) {
             var parameters = candidate.Parameters?.ToArray() ?? [];
-            if (parameters.Length != invoke.Arguments.Length)
+            if (!CallFits(parameters, invoke.Arguments.Length))
                 continue;
             var ok = true;
-            for (var i = 0; i < parameters.Length; i++) {
-                var paramType = parameters[i].ParameterTypeDefinition;
-                var argType = argTypes[i];
-                if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
-                    continue;
-                if (IsNumericWidening(argType, paramType))
+            for (var i = 0; i < invoke.Arguments.Length; i++) {
+                if (ArgumentMatches(context, parameters[i], argTypes[i], invoke.Arguments[i]))
                     continue;
                 ok = false;
                 break;
@@ -256,6 +252,136 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             if (ok)
                 return true;
         }
+        return false;
+    }
+
+    private static bool CallFits(IParameter[] parameters, int argCount) {
+        if (argCount > parameters.Length)
+            return false;
+        for (var i = argCount; i < parameters.Length; i++) {
+            if (!parameters[i].IsOptional)
+                return false;
+        }
+        return true;
+    }
+
+    private static bool ArgumentMatches(
+        AnalysisContext context, IParameter parameter, ITypeDefinition argType, Node arg) {
+        var paramType = parameter.ParameterTypeDefinition;
+        if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
+            return true;
+        if (IsNumericWidening(argType, paramType))
+            return true;
+        if (arg is Constant { Value: null })
+            return AcceptsNull(paramType);
+        if (NullableValueAccepts(paramType, argType))
+            return true;
+        if (CollectionsMatch(paramType, argType))
+            return true;
+        return OptionalNullBoxMatches(context, parameter, paramType, argType, arg);
+    }
+
+    private static bool AcceptsNull(ITypeDefinition type) {
+        if (!type.TryGetRuntimeType(out var runtimeType))
+            return true;
+        if (!runtimeType.IsValueType)
+            return true;
+        return Nullable.GetUnderlyingType(runtimeType) is not null;
+    }
+
+    private static bool NullableValueAccepts(ITypeDefinition paramType, ITypeDefinition argType) {
+        if (!paramType.TryGetRuntimeType(out var paramRuntime) || !argType.TryGetRuntimeType(out var argRuntime))
+            return false;
+        var underlying = Nullable.GetUnderlyingType(paramRuntime);
+        return underlying is not null && (argRuntime == underlying || underlying.IsAssignableFrom(argRuntime));
+    }
+
+    private static bool CollectionsMatch(ITypeDefinition paramType, ITypeDefinition argType) {
+        var paramElement = ElementOf(paramType);
+        var argElement = ElementOf(argType);
+        if (paramElement is null || argElement is null)
+            return false;
+        if (ReferenceEquals(paramElement, argElement))
+            return true;
+        if (string.Equals(paramElement.FullName, argElement.FullName, StringComparison.Ordinal)
+            && paramElement.GenericParameters.Count() == argElement.GenericParameters.Count())
+            return true;
+        // object.IsAssignableFrom(everything) would pair unrelated lists.
+        if (IsUniversalObject(paramElement))
+            return false;
+        return paramElement.IsAssignableFrom(argElement);
+    }
+
+    private static ITypeDefinition? ElementOf(ITypeDefinition type) {
+        if (type is AstCollectionTypeDefinition collection)
+            return collection.ElementType;
+        if (type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(string))
+            return null;
+        if (!type.TypeCategory.IsCollection)
+            return null;
+        var element = type.GetElementType();
+        return element is not null && !IsUniversalObject(element) ? element : null;
+    }
+
+    private static bool IsUniversalObject(ITypeDefinition type) =>
+        type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(object);
+
+    /// <summary>
+    /// Optional AST reference params take a null-coalesce that resolves as object
+    /// (dictionary fetch ?? null). The non-null branch must still be that parameter's type.
+    /// </summary>
+    private static bool OptionalNullBoxMatches(
+        AnalysisContext context,
+        IParameter parameter,
+        ITypeDefinition paramType,
+        ITypeDefinition argType,
+        Node arg) {
+        if (!parameter.IsOptional)
+            return false;
+        if (paramType is not (AstTypeDefinition or AstCollectionTypeDefinition))
+            return false;
+        if (!AcceptsNull(paramType))
+            return false;
+        if (!argType.TryGetRuntimeType(out var runtimeType) || runtimeType != typeof(object))
+            return false;
+        return arg is Conditional or Coalesce && NullBoxCarries(context, paramType, arg);
+    }
+
+    private static bool NullBoxCarries(AnalysisContext context, ITypeDefinition paramType, Node node) {
+        switch (node) {
+            case Constant { Value: null }:
+                return true;
+            case Constant:
+                return false;
+            case Coalesce coal:
+                return NullBoxCarries(context, paramType, coal.LeftHandValue)
+                    && NullBoxCarries(context, paramType, coal.RightHandValue);
+            case Conditional cond:
+                return NullBoxCarries(context, paramType, cond.IfTrue)
+                    && NullBoxCarries(context, paramType, cond.IfFalse);
+            case TypeCast cast:
+                return CastMatches(context, paramType, cast);
+            default:
+                var resolved = context.GetResolvedType(node);
+                if (resolved is null || IsUniversalObject(resolved))
+                    return false;
+                return ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved);
+        }
+    }
+
+    private static bool CastMatches(AnalysisContext context, ITypeDefinition paramType, TypeCast cast) {
+        var target = cast.TargetTypeReference;
+        while (target is OptionalTypeReference optional)
+            target = optional.InnerType;
+        if (context.GetResolvedType(target) is { } resolved
+            && !IsUniversalObject(resolved)
+            && (ReferenceEquals(paramType, resolved) || paramType.IsAssignableFrom(resolved)))
+            return true;
+        if (target is NamedTypeReference named)
+            return string.Equals(named.TypeName, paramType.Name, StringComparison.Ordinal)
+                && (named.Namespace is null || string.Equals(named.Namespace, paramType.Namespace, StringComparison.Ordinal));
+        if (target is PrimitiveTypeReference primitive)
+            return paramType.TryGetRuntimeType(out var runtimeType) && primitive.PrimitiveId.GetClrType() == runtimeType;
         return false;
     }
 

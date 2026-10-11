@@ -28,7 +28,8 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 |---|-------|----------------|-----------|
 | 1 | C6c | C6b (merged) | PR 157 branch |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
-| 3 | C8-tc1 | C6a, C6b1 (merged) | [tasks/C8-tc1.md](tasks/C8-tc1.md) |
+| 3 | C8-tc1a | C6a, C6b1 (merged) | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
+| 3b | C8-tc1b | C8-tc1a | [tasks/C8-tc1b.md](tasks/C8-tc1b.md) |
 | 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
 | 6 | C8-vm | C8-tc2 | [tasks/C8-vm.md](tasks/C8-vm.md) |

@@ -390,28 +390,37 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Resolves an outbound relationship by (this entity, name). Relationship identity
-    /// is (source entity, name). Defense-in-depth for a source-scoped miss: when the
-    /// name exists on a different source entity, report the precise cause instead of
+    /// Resolves an outbound relationship by (this entity, name). Presence is
+    /// <see cref="RuntimeAnalysisCache.Index"/> Navigation; the ontology
+    /// <see cref="Relationship"/> comes from <see cref="NavigationsFor"/>.
+    /// When the name exists on a different source entity, report that instead of
     /// a generic not-found.
     /// </summary>
     private Relationship ResolveSourceRelationshipOrThrow(string relationshipName, string notFoundMessage) {
         if (Domain is null)
             throw new InvalidOperationException(notFoundMessage);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        var rlm = analysis.GetRelationshipLookup(Domain);
-        if (rlm is null)
-            throw new InvalidOperationException(notFoundMessage);
+        var memberName = DomainToCSharpExporter.ToPascalCase(relationshipName);
+        if (RuntimeAnalysisCache.Index(Domain).Navigation(Entity.Name, memberName) is not null) {
+            foreach (var nav in NavigationsFor(Entity, Domain)) {
+                if (string.Equals(nav.Name, relationshipName, StringComparison.Ordinal))
+                    return nav;
+            }
+        }
 
-        if (rlm.TryGetRelationship(Entity.Name, relationshipName, out var relationship))
-            return relationship;
-
-        var elsewhere = rlm.FindByNameAcrossSources(relationshipName).ToList();
-        if (elsewhere.Count > 0)
+        var declaredOn = new List<string>();
+        foreach (var other in Domain.Types.OfType<Entity>()) {
+            if (string.Equals(other.Name, Entity.Name, StringComparison.Ordinal))
+                continue;
+            foreach (var nav in other.Navigations) {
+                if (string.Equals(nav.Name, relationshipName, StringComparison.Ordinal))
+                    declaredOn.Add(nav.Source.TypeName);
+            }
+        }
+        if (declaredOn.Count > 0)
             throw new InvalidOperationException(
                 $"Entity '{Entity.Name}' is not the source of relationship '{relationshipName}'. " +
-                $"Declared on: {string.Join(", ", elsewhere.Select(r => r.Source.TypeName))}.");
+                $"Declared on: {string.Join(", ", declaredOn)}.");
         throw new InvalidOperationException(notFoundMessage);
     }
 
@@ -516,8 +525,8 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private static Node MapDomainTypeToAstNode(DomainTypeReference domainType, Domain? domain) {
         var typeName = domainType.TypeName;
-        if (domain?.Types.OfType<Entity>().Any(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
+        if (domain is not null
+            && RuntimeAnalysisCache.Index(domain).Tree(typeName)?.Descriptor.Id.Type == "entity")
             return new TypeReference(typeName);
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
         if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))

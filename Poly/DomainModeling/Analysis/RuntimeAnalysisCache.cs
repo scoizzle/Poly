@@ -36,6 +36,8 @@ internal static class RuntimeAnalysisCache {
         public Dictionary<(string Entity, string Stage, string Kind, int Segment), Node>? EntryExitSegmentBodies { get; set; }
         /// <summary>Policy expression trees from session.Lower (same Lower as print).</summary>
         public Dictionary<(string Entity, string Policy), Node>? PolicyBodies { get; set; }
+        /// <summary>Catalog index after Index Lowers; dropped when Bind replaces session or analysis.</summary>
+        public CatalogIndex? Index { get; set; }
     }
 
     private static readonly ConditionalWeakTable<Domain, Holder> Cache = new();
@@ -71,6 +73,7 @@ internal static class RuntimeAnalysisCache {
                 holder.Analysis = null;
             if (sessionChanged || analysisChanged) {
                 holder.Module = null;
+                holder.Index = null;
                 holder.SubscriptionBodies = null;
                 holder.EntryExitBodies = null;
                 holder.EntryExitSegmentBodies = null;
@@ -105,14 +108,24 @@ internal static class RuntimeAnalysisCache {
 
     /// <summary>
     /// Lowers so <see cref="DomainSession.ArtifactCatalog"/> is filled, then indexes it.
+    /// The index is reused until Bind replaces the session or analysis.
     /// <see cref="GetOrLower(Domain)"/> does not fill the catalog.
     /// </summary>
     internal static CatalogIndex Index(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        if (holder.Index is not null)
+            return holder.Index;
         var analysis = EnsureAnalysis(domain);
         DomainModelAnalyzer.RequireCatalog(analysis, domain);
-        var session = Session(domain);
-        session.Lower(domain, analysis);
-        return new CatalogIndex(session.ArtifactCatalog);
+        lock (holder) {
+            if (holder.Index is not null)
+                return holder.Index;
+            var session = holder.Session;
+            session.Lower(domain, analysis);
+            holder.Index = new CatalogIndex(session.ArtifactCatalog);
+            return holder.Index;
+        }
     }
 
     public static IReadOnlyList<TypeDefinitionNode> GetOrLower(

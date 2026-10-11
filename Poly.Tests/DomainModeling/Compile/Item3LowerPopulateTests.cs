@@ -255,6 +255,60 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
+    public async Task Index_AfterGetOrLowerOnly_MethodMatchesTryGetModuleMethod() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+              Active: stage {
+                AssessByType: action { }
+              }
+            }
+            """);
+        RuntimeAnalysisCache.GetOrLower(domain);
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Patron", "AssessByType", out var fromModule)).IsTrue();
+        var fromIndex = RuntimeAnalysisCache.Index(domain).Method("Patron", "AssessByType");
+        await Assert.That(fromIndex).IsSameReferenceAs(fromModule);
+    }
+
+    [Test]
+    public async Task Index_AfterGetOrLowerOnly_TreeAndNavigationAreCatalogNodes() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+            }
+            Fine: entity {
+              Amount: Number
+            }
+            """);
+        RuntimeAnalysisCache.GetOrLower(domain);
+        var index = RuntimeAnalysisCache.Index(domain);
+        var catalog = RuntimeAnalysisCache.Session(domain).ArtifactCatalog;
+        var tree = catalog.Find(ArtifactId.Create(["Library", "Patron"], "entity"));
+        await Assert.That(index.Tree("Patron")).IsSameReferenceAs(tree);
+        var fines = ((IReadOnlyList<TypeDefinitionNode>)tree!.Payload!)
+            .SelectMany(t => t.Properties ?? [])
+            .Single(p => p.Name == "Fines");
+        await Assert.That(index.Navigation("Patron", "Fines")).IsSameReferenceAs(fines);
+    }
+
+    [Test]
+    public async Task Index_Twice_ReturnsSameIndex() {
+        var (domain, _, _) = Evolve("""
+            domain Library
+            Patron: entity {
+              Name: Text required
+            }
+            """);
+        var first = RuntimeAnalysisCache.Index(domain);
+        var second = RuntimeAnalysisCache.Index(domain);
+        await Assert.That(ReferenceEquals(first, second)).IsTrue();
+    }
+
+    [Test]
     public async Task Subscription_PeerBinding_MaterializesInsideTryCatchFinally() {
         // Stage transition in subscription effects emits TryCatchFinally; peer
         // Parameter reads in the same body must still Materialize (F3 walk).

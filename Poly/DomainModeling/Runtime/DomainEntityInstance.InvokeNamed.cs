@@ -41,10 +41,7 @@ public sealed partial record DomainEntityInstance {
                         $"Policy '{name}' does not take arguments.");
                 return EvaluatePolicy(policy);
             }
-            AnalysisResult? analysis = Domain is not null
-                ? RuntimeAnalysisCache.GetOrAnalyze(Domain)
-                : null;
-            var unresolved = ReportUnresolvedAction(name, analysis);
+            var unresolved = ReportUnresolvedAction(name);
             return DomainResult.Failure(
                 unresolved.ErrorMessage ?? $"Action '{name}' not found on entity '{Entity.Name}'.");
         }
@@ -74,8 +71,8 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Printed stage transitions call <c>Notify{Stage}Subscribers(previousStage)</c>.
     /// The dictionary instance has no per-stage CLR method; this routes to
-    /// <see cref="Notify(string, string?)"/> so the store can fill the
-    /// registry and run the compiled Notify body.
+    /// <see cref="Notify(string, string?)"/> so the store runs the compiled
+    /// Notify body (registries are filled at Link).
     /// </summary>
     private bool TryNotifyStageSubscribers(string name, object?[] args) {
         const string prefix = "Notify";
@@ -180,14 +177,8 @@ public sealed partial record DomainEntityInstance {
         return false;
     }
 
-    private Action? ResolveActionForNamedInvoke(string name) {
-        if (Domain is not null) {
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            analysis.TryResolveAction(Domain, Entity, CurrentStage, name, out var action);
-            return action;
-        }
-        return ResolveStandaloneAction(name);
-    }
+    private Action? ResolveActionForNamedInvoke(string name) =>
+        ResolveStandaloneAction(name);
 
     private Policy? ResolvePolicyForNamedInvoke(string name) {
         foreach (var policy in EnumerateTypeDefPolicies(Entity)) {

@@ -103,9 +103,9 @@ public class Account
     internal void AttachOpportunities(Opportunity child)
     {
         this._opportunities.Add(child);
-        child.RegisterAccountWonSubscriber(this);
-        child.RegisterAccountProposeSubscriber(this);
-        child.RegisterAccountLostSubscriber(this);
+        child.RegisterAccountOpportunitiesWonSubscriber(this);
+        child.RegisterAccountOpportunitiesProposeSubscriber(this);
+        child.RegisterAccountOpportunitiesLostSubscriber(this);
     }
     private DomainResult<Ticket> CreateTickets(string subject)
     {
@@ -120,7 +120,7 @@ public class Account
     internal void AttachTickets(Ticket child)
     {
         this._tickets.Add(child);
-        child.RegisterAccountClosedSubscriber(this);
+        child.RegisterAccountTicketsClosedSubscriber(this);
     }
     public DomainResult<Site> PlaceHq(string city, string region)
     {
@@ -278,19 +278,19 @@ public class Account
     {
         foreach (var target in this.Opportunities)
         {
-            target.RegisterAccountWonSubscriber(this);
+            target.RegisterAccountOpportunitiesWonSubscriber(this);
         }
         foreach (var target in this.Opportunities)
         {
-            target.RegisterAccountProposeSubscriber(this);
+            target.RegisterAccountOpportunitiesProposeSubscriber(this);
         }
         foreach (var target in this.Opportunities)
         {
-            target.RegisterAccountLostSubscriber(this);
+            target.RegisterAccountOpportunitiesLostSubscriber(this);
         }
         foreach (var target in this.Tickets)
         {
-            target.RegisterAccountClosedSubscriber(this);
+            target.RegisterAccountTicketsClosedSubscriber(this);
         }
     }
     public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();

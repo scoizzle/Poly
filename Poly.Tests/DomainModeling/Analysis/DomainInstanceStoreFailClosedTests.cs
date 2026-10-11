@@ -44,8 +44,7 @@ public class DomainInstanceStoreFailClosedTests {
 
 
     [Test]
-    public async Task NotifyTransition_Throws_WhenRelationshipContractMetadataMissing() {
-        // Arrange: Build a domain with subscriptions and create instances
+    public async Task Link_Throws_WhenRelationshipContractMetadataMissing() {
         var domain = BuildDomainWithSubscriptions();
         var store = new DomainInstanceStore();
 
@@ -56,19 +55,16 @@ public class DomainInstanceStoreFailClosedTests {
 
         store.Add(order);
         store.Add(tracker);
-        store.Link("Tracks", tracker, order);
 
-        // Corrupt the cache: remove RelationshipContractMetadata after analysis
         RuntimeAnalysisCache.GetOrAnalyze(domain)
             .RebindWithoutMetadata<RelationshipContractMetadata>(domain, null);
 
-        // Act & Assert: throws when runtime metadata is missing
-        await Assert.That(() => order.TransitionStage("Active"))
-            .Throws<InvalidOperationException>();
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Link("Tracks", tracker, order));
+        await Assert.That(ex!.Message).Contains(nameof(RelationshipContractMetadata));
     }
 
     [Test]
-    public async Task NotifyTransition_ResolvesStage_FromCatalog_WhenEntityStructureMissing() {
+    public async Task Link_Succeeds_WhenEntityStructureMissing() {
         var domain = BuildDomainWithSubscriptions();
         var store = new DomainInstanceStore();
 
@@ -79,12 +75,11 @@ public class DomainInstanceStoreFailClosedTests {
 
         store.Add(order);
         store.Add(tracker);
-        store.Link("Tracks", tracker, order);
 
         RuntimeAnalysisCache.GetOrAnalyze(domain)
             .RebindWithoutMetadata<EntityStructureMetadata>(domain, TrackerOf(domain));
 
-        await Assert.That(() => order.TransitionStage("Active")).ThrowsNothing();
+        await Assert.That(() => store.Link("Tracks", tracker, order)).ThrowsNothing();
     }
 
     [Test]
@@ -159,7 +154,7 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
-    public async Task NotifyTransition_Throws_WhenEntityLevelSubscriptionPlanMissing() {
+    public async Task Link_Throws_WhenEntityLevelSubscriptionPlanMissing() {
         var domain = BuildDomainWithSubscriptions();
         var store = new DomainInstanceStore();
 
@@ -170,14 +165,11 @@ public class DomainInstanceStoreFailClosedTests {
 
         store.Add(order);
         store.Add(tracker);
-        store.Link("Tracks", tracker, order);
-
-        order.TransitionStage("Active", notifyStore: false);
 
         RuntimeAnalysisCache.GetOrAnalyze(domain)
             .RebindWithoutMetadata<SubscriptionDispatchPlanMetadata>(domain, trackerEntity);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => store.NotifyTransition(order, "Active"));
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Link("Tracks", tracker, order));
         await Assert.That(ex!.Message).Contains(nameof(SubscriptionDispatchPlanMetadata));
         await Assert.That(ex.Message).Contains("Tracker");
     }

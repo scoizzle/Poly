@@ -39,9 +39,10 @@ public sealed partial record DomainEntityInstance {
     // ── Private helpers ─────────────────────────────────────────
 
     /// <summary>
-    /// Standalone (<see cref="Domain"/> null) action resolve: structural stage then
-    /// entity actions with SA fallthrough (empty stage-copy → entity action).
-    /// Parameters are ignored in the empty-copy predicate (same as catalog path).
+    /// Structural (catalog-free) action resolve used by Domain-bound dispatch and
+    /// standalone (<see cref="Domain"/> null): stage then entity actions with SA
+    /// fallthrough (empty stage-copy → entity action). Parameters are ignored in
+    /// the empty-copy predicate (same as catalog path).
     /// </summary>
     private Action? ResolveStandaloneAction(string actionName) {
         Action? stageAction = null;
@@ -236,8 +237,8 @@ public sealed partial record DomainEntityInstance {
             "ExistsRelated", "GetRelatedOne"
         };
         // Printed trees call Notify{Stage}Subscribers(previousStage); InvokeNamed
-        // dispatches those names to Notify(stage, previousStage), which fills
-        // the registry and runs the compiled body.
+        // dispatches those names to Notify(stage, previousStage), which runs
+        // the compiled body (registries are filled at Link).
         foreach (var stage in entity.Stages) {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))
@@ -289,11 +290,12 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Registry field the compiled <c>Notify{Stage}Subscribers</c> body
-    /// iterates: <c>_{source}{stage}Subscribers</c>. Default null so a
+    /// iterates: <c>_{source}{relationship}{stage}Subscribers</c>. Default null so a
     /// missing bag key compares as null.
     /// </summary>
-    internal static string SubscriberRegistryFieldName(string sourceEntityName, string stageName) =>
-        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{stageName}Subscribers";
+    internal static string SubscriberRegistryFieldName(
+        string sourceEntityName, string relationshipName, string stageName) =>
+        $"_{DomainToCSharpExporter.ToCamelCase(sourceEntityName)}{DomainToCSharpExporter.ToPascalCase(relationshipName)}{stageName}Subscribers";
 
     private static List<FieldDefinitionNode> SubscriberRegistryFields(Entity entity, Domain? domain) {
         var fields = new List<FieldDefinitionNode>();
@@ -309,7 +311,8 @@ public sealed partial record DomainEntityInstance {
                     if (!string.Equals(entry.TargetEntityName, entity.Name, StringComparison.Ordinal))
                         continue;
                     foreach (var stageName in entry.StageNames) {
-                        var fieldName = SubscriberRegistryFieldName(subscriber.Name, stageName);
+                        var fieldName = SubscriberRegistryFieldName(
+                            subscriber.Name, entry.RelationshipName, stageName);
                         if (!seen.Add(fieldName))
                             continue;
                         fields.Add(new FieldDefinitionNode(
@@ -387,28 +390,37 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Resolves an outbound relationship by (this entity, name). Relationship identity
-    /// is (source entity, name). Defense-in-depth for a source-scoped miss: when the
-    /// name exists on a different source entity, report the precise cause instead of
+    /// Resolves an outbound relationship by (this entity, name). Presence is
+    /// <see cref="RuntimeAnalysisCache.Index"/> Navigation; the ontology
+    /// <see cref="Relationship"/> comes from <see cref="NavigationsFor"/>.
+    /// When the name exists on a different source entity, report that instead of
     /// a generic not-found.
     /// </summary>
     private Relationship ResolveSourceRelationshipOrThrow(string relationshipName, string notFoundMessage) {
         if (Domain is null)
             throw new InvalidOperationException(notFoundMessage);
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-        var rlm = analysis.GetRelationshipLookup(Domain);
-        if (rlm is null)
-            throw new InvalidOperationException(notFoundMessage);
+        var memberName = DomainToCSharpExporter.ToPascalCase(relationshipName);
+        if (RuntimeAnalysisCache.Index(Domain).Navigation(Entity.Name, memberName) is not null) {
+            foreach (var nav in NavigationsFor(Entity, Domain)) {
+                if (string.Equals(nav.Name, relationshipName, StringComparison.Ordinal))
+                    return nav;
+            }
+        }
 
-        if (rlm.TryGetRelationship(Entity.Name, relationshipName, out var relationship))
-            return relationship;
-
-        var elsewhere = rlm.FindByNameAcrossSources(relationshipName).ToList();
-        if (elsewhere.Count > 0)
+        var declaredOn = new List<string>();
+        foreach (var other in Domain.Types.OfType<Entity>()) {
+            if (string.Equals(other.Name, Entity.Name, StringComparison.Ordinal))
+                continue;
+            foreach (var nav in other.Navigations) {
+                if (string.Equals(nav.Name, relationshipName, StringComparison.Ordinal))
+                    declaredOn.Add(nav.Source.TypeName);
+            }
+        }
+        if (declaredOn.Count > 0)
             throw new InvalidOperationException(
                 $"Entity '{Entity.Name}' is not the source of relationship '{relationshipName}'. " +
-                $"Declared on: {string.Join(", ", elsewhere.Select(r => r.Source.TypeName))}.");
+                $"Declared on: {string.Join(", ", declaredOn)}.");
         throw new InvalidOperationException(notFoundMessage);
     }
 
@@ -513,8 +525,8 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private static Node MapDomainTypeToAstNode(DomainTypeReference domainType, Domain? domain) {
         var typeName = domainType.TypeName;
-        if (domain?.Types.OfType<Entity>().Any(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
+        if (domain is not null
+            && RuntimeAnalysisCache.Index(domain).Tree(typeName)?.Descriptor.Id.Type == "entity")
             return new TypeReference(typeName);
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
         if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))

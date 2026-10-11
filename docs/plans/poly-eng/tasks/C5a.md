@@ -1,6 +1,6 @@
 # TASK C5a - Store fan-out runs the compiled Notify tree
 
-Status: in review. Branch slice/c5a-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: merged #149 `fa994ff7` 2026-10-10. Branch slice/c5a-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 
 ## Scope
 Depends on C3b, merged at `c3b9d9d3` (#148); C5a names no open decision (V10's note "C5a no longer depends on Q1a", `pipeline-convergence-plan.decisions.md:189`). The card's "known `when any` mismatch (>=1 vs exactly 1)" is stale: it was fixed by `76ab9346` (2026-09-27); `WhenAnySimulatePrintAgreeTests` (2/2) and `ParityTests` (62/62) are green on master `c3b9d9d3` (ran). What is still true is the *implementation split*: simulate fans out in `DomainInstanceStore.NotifyTransition` (`DomainInstanceStore.cs:441-507`) via `DispatchMatchingEntries` (`:509-558`) hand-matching relationship contracts (`:519-528`), `IsLinked` (`:532`) and `entry.StageNames` (`:536`); print fans out through the module's compiled `Notify{Stage}Subscribers` body (`DomainToCSharpExporter.cs:482-519`) which iterates the registry field `_{source}{stage}Subscribers` (`:44-45`) and calls `sub.When…` handlers. The transition tree already invokes `Notify{Target}Subscribers` (`EffectLoweringPass.cs:652-655`), but the VM reroutes that name to `DomainEntityInstance.Notify` → the store (`InvokeNamed.cs:75-91` → `HostAbi.cs:19-29`), so the simulated Notify body is store C#, not the compiled tree.
@@ -56,3 +56,4 @@ none
 | 2026-10-10 | implementer | grok/grok-4.6 | 1fbe772b | pushed | tests 3503/3503; sweep: When overloads by args; guide still stage-first |
 | 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4-pro | 97241408 | NOT SHIP | https://github.com/scoizzle/Poly/pull/149#issuecomment-6098003464 (Grug NOT SHIP at 97241408, 2 open findings, mode full) |
 | 2026-10-10 | implementer | grok/grok-4.6 | d840d495 | fixes pushed | R1, R2; disputed: none; R3 skipped (nit >1 line); tests 3503/3503 |
+| 2026-10-10 | planner | opencode-go/deepseek-v4.1-flash | fa994ff7 | merged #149 | - |

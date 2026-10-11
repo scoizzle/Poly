@@ -10,11 +10,10 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     /// <summary>
-    /// Store subscription fan-out after a stage assignment. Printed classes and
-    /// the shared StageTransition lowering do not call this (they use
-    /// <c>Notify{Stage}Subscribers</c> for watched stages). Kept for HostAbi
-    /// and direct callers. Skips when executing a subscription (cascade is
-    /// store-owned) or when no store is attached.
+    /// Store subscription fan-out after a stage assignment. The simulator's
+    /// <c>Notify{Stage}Subscribers</c> routes here; printed classes fan out in
+    /// their generated <c>Notify{Stage}Subscribers</c> method. Skips when no
+    /// store is attached.
     /// </summary>
     public void Notify(string targetStageName) =>
         Notify(targetStageName, previousStageName: null);
@@ -24,7 +23,7 @@ public sealed partial record DomainEntityInstance {
     /// is the stage left by this transition; All handlers use it as the once-edge.
     /// </summary>
     public void Notify(string targetStageName, string? previousStageName) {
-        if (Store is not null && !_isExecutingSubscription)
+        if (Store is not null)
             Store.NotifyTransition(this, targetStageName, previousStageName: previousStageName);
     }
 
@@ -90,15 +89,30 @@ public sealed partial record DomainEntityInstance {
     public void ClearAutomaticStageChain() => _automaticStageChain = null;
 
     /// <summary>
+    /// Nested <c>Notify{Stage}Subscribers</c> bound. Each hop increments; past
+    /// <see cref="MaxNotifyDepth"/> throws instead of overflowing the stack.
+    /// Matching <see cref="ExitNotifyCascade"/> runs in the compiled body's finally.
+    /// </summary>
+    public void EnterNotifyCascade(string stageName) {
+        ArgumentException.ThrowIfNullOrEmpty(stageName);
+        if (_notifyDepth >= MaxNotifyDepth)
+            throw new InvalidOperationException(
+                $"Subscription cascade on entity '{Entity.Name}' exceeded max depth " +
+                $"({MaxNotifyDepth}) while notifying '{stageName}'.");
+        _notifyDepth++;
+    }
+
+    /// <summary>Pairs with <see cref="EnterNotifyCascade"/> at the end of a hop.</summary>
+    public void ExitNotifyCascade() => _notifyDepth--;
+
+    /// <summary>
     /// Leftover helper for nested OnEntry/OnExit depth bounding and test callers.
     /// Action <see cref="StageTransitionEffect"/> lowers via <see cref="ExecuteEffectList"/>;
     /// this is not the shipped action path.
     /// When the helper runs, order is OnExit (current stage), set
     /// <see cref="CurrentStage"/>, OnEntry (target; partial-entry if an effect throws),
     /// then store notify in <c>finally</c>. Notify fires when <paramref name="notifyStore"/>
-    /// is true, <c>Store</c> is set, and we are not inside
-    /// <see cref="ExecuteSubscriptionEffects"/> (subscription cascades through
-    /// <see cref="DomainInstanceStore.NotifyTransition"/>, not a second store call).
+    /// is true and <c>Store</c> is set.
     /// Nested same-instance transitions are bounded by <see cref="MaxTransitionDepth"/>.
     /// </summary>
     internal void TransitionStage(string targetStageName, bool notifyStore = true) {
@@ -163,7 +177,7 @@ public sealed partial record DomainEntityInstance {
                 }
             }
             finally {
-                if (notifyStore && Store is not null && !_isExecutingSubscription) {
+                if (notifyStore && Store is not null) {
                     Store.NotifyTransition(
                         this, targetStageName, previousStageName: previousStageName);
                 }
@@ -253,23 +267,37 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// Writes the linked-subscriber list the compiled
-    /// <c>Notify{Stage}Subscribers</c> body iterates. Empty becomes null so
-    /// the body's <c>!= null</c> guard skips.
+    /// Adds <paramref name="subscriber"/> to the linked-subscriber list the
+    /// compiled <c>Notify{Stage}Subscribers</c> body iterates. Called from
+    /// <see cref="DomainInstanceStore.Link"/>.
     /// </summary>
-    internal void WriteSubscriberRegistry(
-        string fieldName, IReadOnlyList<DomainEntityInstance> subscribers) {
+    internal void AddSubscriber(string fieldName, DomainEntityInstance subscriber) {
         ArgumentException.ThrowIfNullOrEmpty(fieldName);
-        _values[fieldName] = subscribers.Count == 0 ? null : subscribers.ToList();
+        ArgumentNullException.ThrowIfNull(subscriber);
+        if (_values.TryGetValue(fieldName, out var raw) && raw is List<DomainEntityInstance> list) {
+            foreach (var existing in list) {
+                if (ReferenceEquals(existing, subscriber))
+                    return;
+            }
+            list.Add(subscriber);
+            return;
+        }
+        _values[fieldName] = new List<DomainEntityInstance> { subscriber };
     }
 
     /// <summary>
-    /// Drops previously filled subscriber lists so an unlink is visible on
-    /// the next Notify.
+    /// Drops <paramref name="subscriber"/> from a registry list. Empty becomes
+    /// null so the body's <c>!= null</c> guard skips. Called from
+    /// <see cref="DomainInstanceStore.Unlink"/>.
     /// </summary>
-    internal void ClearSubscriberRegistries() {
-        foreach (var field in SubscriberRegistryFields(Entity, Domain))
-            _values[field.Name] = null;
+    internal void RemoveSubscriber(string fieldName, DomainEntityInstance subscriber) {
+        ArgumentException.ThrowIfNullOrEmpty(fieldName);
+        ArgumentNullException.ThrowIfNull(subscriber);
+        if (!_values.TryGetValue(fieldName, out var raw) || raw is not List<DomainEntityInstance> list)
+            return;
+        list.RemoveAll(s => ReferenceEquals(s, subscriber));
+        if (list.Count == 0)
+            _values[fieldName] = null;
     }
 
     /// <summary>
@@ -309,11 +337,9 @@ public sealed partial record DomainEntityInstance {
     /// the peer is a typed SetArgs slot after this and previousStage.
     /// Notification-only subscriptions omit the binder.
     /// Called from the <c>When…</c> InvokeNamed arm (the compiled Notify body
-    /// calls <c>sub.When…</c> after the store fills the registry).
-    ///
-    /// Subscription-triggered transitions suppress store notification via
-    /// <c>_isExecutingSubscription</c> — cascading is handled by the store's
-    /// depth-limited recursion instead.
+    /// calls <c>sub.When…</c>; Link filled the registry). A transition
+    /// inside the handler emits <c>Notify{Target}Subscribers</c>, which fans
+    /// out the next hop.
     /// </summary>
     internal void ExecuteSubscriptionEffects(
         IReadOnlyList<Effect> effects,
@@ -322,56 +348,50 @@ public sealed partial record DomainEntityInstance {
         SubscriptionDispatchPlanEntry? planEntry = null,
         string? targetStageName = null,
         string? previousStageName = null) {
-        _isExecutingSubscription = true;
         // A subscription is its own trigger for the automatic-transition loop guard.
         ClearAutomaticStageChain();
 
-        try {
-            // Empty subscription (notify-only) — avoid GetOrLower side effects for fail-closed tests.
-            if (effects.Count == 0)
-                return;
+        // Empty subscription (notify-only) — avoid GetOrLower side effects for fail-closed tests.
+        if (effects.Count == 0)
+            return;
 
-            // Domain-null: fail closed immediately (mirror EvaluatePolicy Domain-bound requirement).
-            if (Domain is null)
-                throw new InvalidOperationException(
-                    $"Cannot execute subscription effects on '{Entity.Name}' without a Domain-bound module.");
+        // Domain-null: fail closed immediately (mirror EvaluatePolicy Domain-bound requirement).
+        if (Domain is null)
+            throw new InvalidOperationException(
+                $"Cannot execute subscription effects on '{Entity.Name}' without a Domain-bound module.");
 
-            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
-            RuntimeAnalysisCache.GetOrLower(
-                Domain, RuntimeAnalysisCache.Session(Domain), analysis);
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        RuntimeAnalysisCache.GetOrLower(
+            Domain, RuntimeAnalysisCache.Session(Domain), analysis);
 
-            // Domain-bound: run the module handler cached at GetOrLower (same tree print emits).
-            // Miss or missing plan entry throws. Bound peer is a typed SetArgs slot.
-            if (planEntry is null)
-                throw new InvalidOperationException(
-                    $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
-            if (targetStageName is not { Length: > 0 })
-                throw new InvalidOperationException(
-                    $"Subscription dispatch on '{Entity.Name}' requires a target stage name.");
-            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
-                    Domain, planEntry, targetStageName, out var body)
-                || body is null)
-                throw new InvalidOperationException(
-                    $"Subscription body is missing on entity '{Entity.Name}'.");
-            var cached = body;
-            var rootParameters = new List<Parameter>();
-            var setArgs = new List<object?> { this };
-            if (ContainsPreviousStageParameter(cached)) {
-                rootParameters.Add(new Parameter("previousStage"));
-                setArgs.Add(previousStageName);
-            }
-            if (peerBinding is { Length: > 0 }) {
-                rootParameters.Add(new Parameter(
-                    peerBinding, new NamedTypeReference(peerInstance.Entity.Name)));
-                setArgs.Add(peerInstance);
-            }
-            ThrowIfEffectListFailed(
-                ExecuteCachedSubscriptionTree(cached, rootParameters, setArgs),
-                "subscription");
+        // Domain-bound: run the module handler cached at GetOrLower (same tree print emits).
+        // Miss or missing plan entry throws. Bound peer is a typed SetArgs slot.
+        if (planEntry is null)
+            throw new InvalidOperationException(
+                $"Subscription dispatch on '{Entity.Name}' requires a plan entry for cache bind.");
+        if (targetStageName is not { Length: > 0 })
+            throw new InvalidOperationException(
+                $"Subscription dispatch on '{Entity.Name}' requires a target stage name.");
+        if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
+                Domain, planEntry, targetStageName, out var body)
+            || body is null)
+            throw new InvalidOperationException(
+                $"Subscription body is missing on entity '{Entity.Name}'.");
+        var cached = body;
+        var rootParameters = new List<Parameter>();
+        var setArgs = new List<object?> { this };
+        if (ContainsPreviousStageParameter(cached)) {
+            rootParameters.Add(new Parameter("previousStage"));
+            setArgs.Add(previousStageName);
         }
-        finally {
-            _isExecutingSubscription = false;
+        if (peerBinding is { Length: > 0 }) {
+            rootParameters.Add(new Parameter(
+                peerBinding, new NamedTypeReference(peerInstance.Entity.Name)));
+            setArgs.Add(peerInstance);
         }
+        ThrowIfEffectListFailed(
+            ExecuteCachedSubscriptionTree(cached, rootParameters, setArgs),
+            "subscription");
     }
 
     private DomainResult? ExecuteCachedSubscriptionTree(

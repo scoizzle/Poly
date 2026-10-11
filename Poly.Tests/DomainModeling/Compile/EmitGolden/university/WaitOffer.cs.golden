@@ -11,8 +11,9 @@ public enum WaitOfferStage
 
 public class WaitOffer
 {
-    private List<Section>? _sectionOfferedSubscribers;
-    private List<Section>? _sectionCancelledSubscribers;
+    private List<Section>? _sectionWaitlistOfferedSubscribers;
+    private List<Section>? _sectionWaitlistCancelledSubscribers;
+    private int _notifyDepth;
     private WaitOffer()
     { }
     private WaitOffer(Student? student = null, Section? section = null)
@@ -75,40 +76,56 @@ public class WaitOffer
         }
         return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'WaitOffer'.");
     }
-    internal void RegisterSectionOfferedSubscriber(Section subscriber)
+    internal void RegisterSectionWaitlistOfferedSubscriber(Section subscriber)
     {
-        if (this._sectionOfferedSubscribers == null)
+        if (this._sectionWaitlistOfferedSubscribers == null)
         {
-            this._sectionOfferedSubscribers = new List<Section>();
+            this._sectionWaitlistOfferedSubscribers = new List<Section>();
         }
-        this._sectionOfferedSubscribers.Add(subscriber);
+        this._sectionWaitlistOfferedSubscribers.Add(subscriber);
     }
-    internal void RegisterSectionCancelledSubscriber(Section subscriber)
+    internal void RegisterSectionWaitlistCancelledSubscriber(Section subscriber)
     {
-        if (this._sectionCancelledSubscribers == null)
+        if (this._sectionWaitlistCancelledSubscribers == null)
         {
-            this._sectionCancelledSubscribers = new List<Section>();
+            this._sectionWaitlistCancelledSubscribers = new List<Section>();
         }
-        this._sectionCancelledSubscribers.Add(subscriber);
+        this._sectionWaitlistCancelledSubscribers.Add(subscriber);
     }
     internal void NotifyOfferedSubscribers(WaitOfferStage previousStage)
     {
-        if (this._sectionOfferedSubscribers != null)
+        this.EnterNotifyCascade("Offered");
+        try
         {
-            foreach (var sub in this._sectionOfferedSubscribers)
+            if (this._sectionWaitlistOfferedSubscribers != null)
             {
-                sub.WhenAnyWaitOfferOffered();
+                foreach (var sub in this._sectionWaitlistOfferedSubscribers)
+                {
+                    sub.WhenAnyWaitOfferOffered();
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     internal void NotifyCancelledSubscribers(WaitOfferStage previousStage)
     {
-        if (this._sectionCancelledSubscribers != null)
+        this.EnterNotifyCascade("Cancelled");
+        try
         {
-            foreach (var sub in this._sectionCancelledSubscribers)
+            if (this._sectionWaitlistCancelledSubscribers != null)
             {
-                sub.WhenAllWaitOfferCancelled(previousStage);
+                foreach (var sub in this._sectionWaitlistCancelledSubscribers)
+                {
+                    sub.WhenAllWaitOfferCancelled(previousStage);
+                }
             }
+        }
+        finally
+        {
+            this.ExitNotifyCascade();
         }
     }
     public static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
@@ -525,5 +542,17 @@ public class WaitOffer
             return DomainResult.Success();
         }
         return DomainResult.Failure("Unknown type '" + typeName + "'.");
+    }
+    private void EnterNotifyCascade(string stageName)
+    {
+        if (this._notifyDepth >= 16)
+        {
+            throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'WaitOffer' exceeded max depth (16) while notifying '", stageName, "'."));
+        }
+        this._notifyDepth = this._notifyDepth + 1;
+    }
+    private void ExitNotifyCascade()
+    {
+        this._notifyDepth = this._notifyDepth - 1;
     }
 }

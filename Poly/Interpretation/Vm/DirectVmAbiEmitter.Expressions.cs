@@ -519,6 +519,10 @@ public static partial class DirectVmAbiEmitter {
             return ctr.RuntimeType;
         if (typeRef is PrimitiveTypeReference ptr)
             return ptr.PrimitiveId.GetClrType();
+        // Patron? is the same reference type as Patron. The annotation is not a
+        // separate CLR type, and the cast node itself often has no resolution.
+        if (typeRef is OptionalTypeReference optional)
+            return ResolveClrType(optional.InnerType, optional.InnerType, ctx);
         if (ctx.Analysis is not null) {
             var fromNode = ctx.Analysis.GetResolvedType(typedNode)?.GetRuntimeType();
             if (fromNode is not null) return fromNode;

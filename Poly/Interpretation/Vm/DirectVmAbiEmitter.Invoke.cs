@@ -805,7 +805,40 @@ public static partial class DirectVmAbiEmitter {
         var provider = astType.ResolutionProvider;
         if (provider is TypeDefinitionProviderCollection collection)
             provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
-        return Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
+        // Re-analyze the declaring type so members resolve. A typed Create
+        // forwarder shares that type with printed helpers the VM analyzer
+        // still flags (C8-vm). Those sibling diagnostics must not reject the
+        // forwarder. Every other member keeps the type-level result, so a
+        // dirty type still falls through to InvokeNamed.
+        var analysis = Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
+        if (!analysis.HasErrors || !ForwardsToClrStatic(body) || ErrorsTouch(body, analysis))
+            return analysis;
+        return analysis with {
+            HasErrors = false,
+            Diagnostics = analysis.Diagnostics
+                .Where(d => d.Severity != DiagnosticSeverity.Error)
+                .ToArray()
+        };
+    }
+
+    private static bool ErrorsTouch(Node body, AnalysisResult analysis) {
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity != DiagnosticSeverity.Error)
+                continue;
+            if (ReferenceEquals(diagnostic.Node, body) || ContainsNode(body, diagnostic.Node))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsNode(Node root, Node target) {
+        foreach (var child in root.Children) {
+            if (child is null)
+                continue;
+            if (ReferenceEquals(child, target) || ContainsNode(child, target))
+                return true;
+        }
+        return false;
     }
 
     private static bool AstBodyMembersResolved(Node node, AnalysisResult analysis) {

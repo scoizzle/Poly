@@ -1,6 +1,6 @@
 # TASK C8-tc1a - Lowering emits typed by-type create calls (K0)
 
-Status: implemented, BLOCKED on the C8-vm analyzer fixes (see Blocker). Branch `slice/c8-tc1a`. Lane B. Review 2.
+Status: implemented. Suite green (3529/0). Branch `slice/c8-tc1a`. Lane B. Review 2.
 Split from C8-tc1 on 2026-10-10 by the local agent, because C8-tc1 needed
 [`EffectLoweringPass`] + the exporter helper surface + the interpreter
 static-factory bind (6 source files, well past the ~3-file rule in
@@ -59,26 +59,19 @@ path. The code on this branch is the reference: it is the `c8-tc-wip.patch` lowe
 done for the value-returning context with `RewriteTypedFactories` / `BindStaticFactory`
 / `TypedCreate`.
 
-**Needs Scot:** fold the four C8-vm analyzer fixes into C8-tc1a, or land C8-vm's analyzer
-half before C8-tc1a. Do not merge this branch until one of those happens.
+Superseded by the blocker update below. The forwarder compiles without folding V1/V3/V5.
 
-## Blocker update (2026-10-11) — root-caused
-`AnalysisForAstBody` (`DirectVmAbiEmitter.Invoke.cs:796`) re-analyzes the **whole declaring
-type** (`Interpreter.Analyzer.Analyze(astType.Syntax, …)`), so compiling the rebound static
-`Create` forwarder pulls in the module entity's other printed methods (`CreatePatron`,
-`CreateFines`) and surfaces pre-existing VM-analyzer false positives:
+## Blocker update (2026-10-11) — cleared for this slice
+`AnalysisForAstBody` re-analyzes the whole declaring type, so compiling the rebound
+static `Create` forwarder was rejected by sibling helpers (`BindCreate`'s
+`Fine.Create` / `Patron.Create(name, new List<Fine>())`). The forwarder body itself
+is one CLR call. Sibling diagnostics are ignored only when the body forwards to a
+CLR static method. Every other member still sees the type-level result and falls
+through to `InvokeNamed`. `(Patron?)null` is an `OptionalTypeReference`; the VM
+resolves that cast as the inner reference type.
 
-- `Fine.Create` with a `Conditional` third argument resolving to `Object` (the printed
-  optional/back-ref default) against the `Patron` parameter.
-- `Patron.Create(name, new List<Fine>())` resolving to the runtime entity's dictionary
-  `Create(name, Dictionary)` host job instead of the module static
-  `Create(name, IEnumerable<Fine>?…)`.
-
-Folded in so far (kept; no regressions): the current-entity static `Create` bind in
-`DomainEntityInstance` (tc1a's own design) and C8-vm V2 — synthetic `List<T>` exposes a
-parameterless ctor and `Add(X)` (`AstCollectionTypeDefinition`). Remaining: C8-vm V1
-(registry keying), V3 (member-overload assignability incl. `Conditional`/null/collection
-args), V5. These are interpreter-machinery fixes and belong in C8-vm, done first.
+C8-vm V1/V3/V5 stay in C8-vm. They are no longer a merge hold on tc1a. V2 (synthetic
+`List<T>` ctor and `Add`) stays on this branch.
 
 ## Files
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (`CreateEntityInstance` lowers to a typed `Type.Create` call via a new `LowerTypedCreateCall` / `BuildFullCreateArgs` / `ArgumentFor` / `LowerInitializerValue` / `BindingsByName` / `TypeDefaultNode`. `LowerRuntimeFactoryCall` stays for `create in` and probes.)
@@ -122,11 +115,7 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 One lowering path for by-type create, and one name map in the interpreter type provider; Scot can open both cold.
 
 ## Needs Scot
-The K0/G1 split is not clean (see Boundary). Two options: (a) take the
-context-based seam above — tc1a is still ~5 source files (lowering + the shared
-exporter helpers + the interpreter static bind + host job), tc1b is ~4; or
-(b) run C8-tc1 as one ~6-file slice on a dedicated run. Recommend (a): the
-static-factory bind is the risky part and lands first, verified on two goldens.
+none. The context seam (tc1a = action-result `Type.Create`) is the one this branch implements.
 
 ## Depends
 C6a, C6b1 (merged).
@@ -136,3 +125,4 @@ C6a, C6b1 (merged).
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | handoff | - | - | split from C8-tc1 | K0 |
 | 2026-10-10 | implementer | opencode/opencode-go/deepseek-v4.1-flash | (this branch) | implemented; **BLOCKED**: printer green (goldens, 16/16, 100/100, 66/66), 3 `SimulateCreateDogfoodTests` fail on VM analyzer errors — needs the C8-vm analyzer fixes | K0 |
+| 2026-10-11 | implementer | grok | (this branch) | unblocked: CLR forwarder ignores sibling VM diagnostics; `OptionalTypeReference` resolves to its inner type. Full suite 3529/0 | K0 |

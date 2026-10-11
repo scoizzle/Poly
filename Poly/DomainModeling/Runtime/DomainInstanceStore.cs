@@ -385,6 +385,7 @@ public sealed class DomainInstanceStore {
 
     /// <summary>
     /// Removes an instance-level edge if present.
+    /// Unlinking the last owner of an owned target throws.
     /// </summary>
     public void Unlink(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -392,6 +393,24 @@ public sealed class DomainInstanceStore {
         ArgumentNullException.ThrowIfNull(target);
         if (!IsLinked(relationshipName, source, target))
             return;
+        if (source.Domain is not null) {
+            var contracts = RuntimeAnalysisCache.GetOrAnalyze(source.Domain)
+                .GetMetadata<RelationshipContractMetadata>(default);
+            var contract = contracts?.Contracts.FirstOrDefault(c =>
+                string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
+                && string.Equals(c.SourceEntityName, source.Entity.Name, StringComparison.Ordinal));
+            if (contract is not null && contract.SourceOwnsTarget) {
+                var inbound = 0;
+                foreach (var l in _links) {
+                    if (string.Equals(l.RelationshipName, relationshipName, StringComparison.Ordinal)
+                        && ReferenceEquals(l.Target, target))
+                        inbound++;
+                }
+                if (inbound == 1)
+                    throw new InvalidOperationException(
+                        Relationship.UnlinkViolationMessage(relationshipName));
+            }
+        }
         foreach (var fieldName in SubscriberFieldsForRelationship(relationshipName, source, target))
             target.RemoveSubscriber(fieldName, source);
         _links.RemoveAll(l =>

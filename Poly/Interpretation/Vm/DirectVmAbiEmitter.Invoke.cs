@@ -712,7 +712,7 @@ public static partial class DirectVmAbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis);
+            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis, key);
             if (analysis.HasErrors) {
                 var text = string.Join("; ", analysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -794,7 +794,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static AnalysisResult AnalysisForAstBody(
-        Node body, ITypeDefinition declaring, AnalysisResult? caller) {
+        Node body, ITypeDefinition declaring, AnalysisResult? caller, Node member) {
         if (caller is not null && AstBodyMembersResolved(body, caller))
             return caller;
         if (declaring is not AstTypeDefinition astType)
@@ -807,11 +807,12 @@ public static partial class DirectVmAbiEmitter {
             provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
         // Re-analyze the declaring type so members resolve. A typed Create
         // forwarder shares that type with printed helpers the VM analyzer
-        // still flags (C8-vm). Those sibling diagnostics must not reject the
-        // forwarder. Every other member keeps the type-level result, so a
+        // still flags (C8-vm). Diagnostics outside this method must not reject
+        // the forwarder. An error on the method, its signature, or its body
+        // still fails it. Every other member keeps the type-level result, so a
         // dirty type still falls through to InvokeNamed.
         var analysis = Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
-        if (!analysis.HasErrors || !ForwardsToClrStatic(body) || ErrorsTouch(body, analysis))
+        if (!analysis.HasErrors || !ForwardsToClrStatic(body) || ErrorsTouch(member, analysis))
             return analysis;
         return analysis with {
             HasErrors = false,

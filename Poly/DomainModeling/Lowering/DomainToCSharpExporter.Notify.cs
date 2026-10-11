@@ -338,10 +338,18 @@ public sealed partial class DomainToCSharpExporter {
         return list;
     }
 
-    /// <summary>Empty <c>List&lt;T&gt;</c> for a collection create argument.</summary>
-    internal static Node EmptyListNode(string elementTypeName) =>
-        new New(new NamedTypeReference("List",
-            TypeArguments: [new NamedTypeReference(elementTypeName)]));
+    /// <summary>
+    /// Null <c>IEnumerable&lt;T&gt;?</c> for an omitted collection create argument.
+    /// The printed constructor already coalesces that null into an empty list.
+    /// A synthetic <c>new List&lt;T&gt;()</c> is a different collection instance the
+    /// VM cannot assign or construct.
+    /// </summary>
+    internal static Node NullCollectionNode(string elementTypeName) =>
+        new TypeCast(
+            new Constant(null),
+            new OptionalTypeReference(
+                new NamedTypeReference("IEnumerable",
+                    TypeArguments: [new NamedTypeReference(elementTypeName)])));
 
     /// <summary>
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.

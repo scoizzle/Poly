@@ -2126,6 +2126,33 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_OmittedCollectionArgument_IsNullNotSyntheticList() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Clerk: entity {
+              Name: Text required
+              Hire: action (name: Text) -> Patron {
+                create Patron { Name: name }
+              }
+            }
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+            }
+            Fine: entity {
+              Amount: Number required
+              Reason: Text required
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var hire = ExportedCSharp.ExtractMethod(cs, "DomainResult<Patron> Hire(");
+        await Assert.That(hire).Contains("Patron.Create(");
+        await Assert.That(hire).Contains("(IEnumerable<Fine>?)null");
+        await Assert.That(hire).DoesNotContain("new List<Fine>()");
+    }
+
+    [Test]
     public async Task Export_CreateInitializer_StringLiteralEnumMember_Qualifies() {
         // Discovery pilot C-F2: `Kind: "Keyword"` in a create/create-in initializer passed
         // the string literal through as `string` (CS1503) — the assign path qualifies it.

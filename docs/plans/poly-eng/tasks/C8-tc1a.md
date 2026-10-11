@@ -75,7 +75,7 @@ C8-vm V1/V3/V5 stay in C8-vm. They are no longer a merge hold on tc1a. V2 (synth
 
 ## Files
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (`CreateEntityInstance` lowers to a typed `Type.Create` call via a new `LowerTypedCreateCall` / `BuildFullCreateArgs` / `ArgumentFor` / `LowerInitializerValue` / `BindingsByName` / `TypeDefaultNode`. `LowerRuntimeFactoryCall` stays for `create in` and probes.)
-- `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` (`GetConstructorParameters` private → internal; add `internal static TrailingDefaultedProperties(Entity, INodeMetadataProvider)` and `internal static EmptyListNode(string)`.)
+- `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` (`GetConstructorParameters` private → internal; add `internal static TrailingDefaultedProperties(Entity, INodeMetadataProvider)` and `internal static NullCollectionNode(string)`.)
 - `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` (`TypedNull` private → internal.)
 - `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` (push/pop an ambient subject around `ExecuteCachedSubscriptionTree` / the action-body execute; in `ModuleAwareTypeProvider` wrap the module so static `Create`/`ProbeCreate` are rebound by `BindStaticFactory`; add `BindStaticFactory`, `RewriteTypedFactories`, `FactoryDictKeys`, `IsEnumerableParam`.)
 - `Poly/DomainModeling/Runtime/DomainInstanceHostJobs.cs` (add `TypedCreate(string typeName, Dictionary<string, object?> values)` routing to `Receiver(DomainEntityInstance.Ambient, nameof(Create)).Create(...)`, trimming nulls; `Values()`/`With(...)` already exist.)
@@ -126,3 +126,4 @@ C6a, C6b1 (merged).
 | 2026-10-10 | handoff | - | - | split from C8-tc1 | K0 |
 | 2026-10-10 | implementer | opencode/opencode-go/deepseek-v4.1-flash | (this branch) | implemented; **BLOCKED**: printer green (goldens, 16/16, 100/100, 66/66), 3 `SimulateCreateDogfoodTests` fail on VM analyzer errors — needs the C8-vm analyzer fixes | K0 |
 | 2026-10-11 | implementer | grok | (this branch) | unblocked: CLR forwarder ignores sibling VM diagnostics; `OptionalTypeReference` resolves to its inner type. Full suite 3529/0 | K0 |
+| 2026-10-11 | implementer | grok | (this branch) | review bugs: omitted collection is `(IEnumerable<T>?)null`; `T` assigns to `T?`; `BindModuleMethodBody` keeps `OptionalTypeReference`. Sibling-error strip is the forwarder method, not only its body. Value-type optional unwrap stays | K0 |

@@ -988,8 +988,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Positional arguments for the printed <c>Type.Create</c> factory: constructor
-    /// parameters (initializer value, empty list for collections, typed null for
-    /// missing navigations, default for missing properties) then trailing defaulted
+    /// parameters (initializer value, null for an omitted collection, typed null for
+    /// a missing navigation, default for a missing property) then trailing defaulted
     /// properties.
     /// </summary>
     private List<Node> BuildFullCreateArgs(
@@ -1023,7 +1023,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             return lowered.Value;
         }
         if (isCollection)
-            return DomainToCSharpExporter.EmptyListNode(type.TypeName);
+            return DomainToCSharpExporter.NullCollectionNode(type.TypeName);
         if (isNavigation)
             return DomainToCSharpExporter.TypedNull(type.TypeName);
         var prop = target.Properties.FirstOrDefault(p =>

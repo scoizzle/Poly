@@ -1128,7 +1128,8 @@ public sealed partial record DomainEntityInstance {
                 Parameter p when typed.TryGetValue(p.Name, out var bound) => bound,
                 ThisReference or Parameter or Variable or Constant
                     or NamedTypeReference or TypeReference
-                    or PrimitiveTypeReference or ClrTypeReference => node,
+                    or PrimitiveTypeReference or ClrTypeReference
+                    or OptionalTypeReference => node,
                 _ => throw new InvalidOperationException(
                     $"Cannot bind typed parameters on {node.GetType().Name}.")
             };

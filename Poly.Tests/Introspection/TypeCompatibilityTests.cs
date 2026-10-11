@@ -59,6 +59,15 @@ public class TypeCompatibilityTests {
     }
 
     [Test]
+    public async Task IsAssignableFrom_ValueType_ToNullable_ReturnsTrue() {
+        var registry = new ClrTypeDefinitionRegistry();
+        var dateOnly = registry.GetTypeDefinition(typeof(DateOnly));
+        var nullable = registry.GetTypeDefinition(typeof(DateOnly?));
+        await Assert.That(nullable.IsAssignableFrom(dateOnly)).IsTrue();
+        await Assert.That(dateOnly.IsAssignableFrom(nullable)).IsFalse();
+    }
+
+    [Test]
     public async Task IsAssignableFrom_SameType_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
         var stringType = registry.GetTypeDefinition<string>();

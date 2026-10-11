@@ -1,5 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
 
@@ -416,6 +417,41 @@ public sealed partial record DomainEntityInstance {
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// <c>this.Create{Nav}(typed args)</c> from the compiled tree. Packs positional
+    /// arguments into the dictionary <see cref="CreateIn"/> job. Nulls are omitted
+    /// so the store applies the same defaults as a missing initializer.
+    /// </summary>
+    private bool TryTypedCreateNav(string name, object?[] args, out DomainResult result) {
+        result = default!;
+        const string prefix = "Create";
+        if (name.Length <= prefix.Length
+            || !name.StartsWith(prefix, StringComparison.Ordinal)
+            || Domain is null)
+            return false;
+        var pascal = name[prefix.Length..];
+        Relationship? rel = null;
+        foreach (var nav in Entity.Navigations) {
+            if (string.Equals(DomainToCSharpExporter.ToPascalCase(nav.Name), pascal, StringComparison.Ordinal)) {
+                rel = nav;
+                break;
+            }
+        }
+        if (rel is null)
+            return false;
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+        if (!analysis.TryGetEntity(Domain, rel.Target.TypeName, out var target) || target is null)
+            return false;
+        var names = DomainToCSharpExporter.CreateNavArgumentNames(Entity, target, analysis);
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        for (var i = 0; i < names.Count && i < args.Length; i++) {
+            if (args[i] is not null)
+                values[names[i]] = args[i];
+        }
+        result = CreateIn(rel.Name, values);
+        return true;
     }
 
     /// <summary>

@@ -1640,9 +1640,8 @@ public class DomainToCSharpExporterTests {
 
         // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
         await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
-        // Action names the Store job; host bind forwards the override through the factory.
-        await Assert.That(cs).Contains("CreateIn(");
-        await Assert.That(cs).Contains("\"Severity\"");
+        await Assert.That(cs).Contains("this.CreateDiagnostics(");
+        await Assert.That(cs).DoesNotContain("this.CreateIn(");
         await Assert.That(cs).Contains("Severity.Hint");
         // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
         await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
@@ -2147,8 +2146,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateIn(");
-        await Assert.That(cs).Contains("\"Kind\", TokenKind.Keyword");
+        await Assert.That(cs).Contains("this.CreateTokens(");
+        await Assert.That(cs).Contains("TokenKind.Keyword");
+        await Assert.That(cs).DoesNotContain("this.CreateIn(");
     }
 
     [Test]
@@ -2291,7 +2291,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("this.CreateFiles(");
+        await Assert.That(cs).DoesNotContain("this.CreateIn(");
         await Assert.That(cs).Contains("srcContent");
         await Assert.That(cs).Contains("srcMode");
         await Assert.That(cs).Contains("newName");

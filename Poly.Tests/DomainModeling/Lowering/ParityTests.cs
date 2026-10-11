@@ -115,7 +115,7 @@ public class ParityTests {
         }
         """;
 
-    const string TypeCreateUnlinkedDsl = """
+    const string TypeCreateLinkedDsl = """
         domain Library
         Patron: entity {
           Name: Text
@@ -488,15 +488,15 @@ public class ParityTests {
     }
 
     [Test]
-    public async Task Invoke_CreateType_UnambiguousManyRel_AgreesUnlinked() {
-        var outcomes = await ParityScenario.FromDsl(TypeCreateUnlinkedDsl, "ParityTypeCreateUnlinked")
+    public async Task Invoke_CreateType_UnambiguousManyRel_AgreesLinked() {
+        var outcomes = await ParityScenario.FromDsl(TypeCreateLinkedDsl, "ParityTypeCreateLinked")
             .AssertAgree(side => {
                 side.Create("Patron", ("Name", "Ada"));
                 side.Invoke("AssessByType");
             });
         await Assert.That(outcomes[0].State["fines"]).IsEqualTo("0");
         await Assert.That(outcomes[1].Success).IsTrue();
-        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["fines"]).IsEqualTo("1");
     }
 
     [Test]

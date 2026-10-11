@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 public class StoreBindCreateTests {
     [Test]
-    public async Task CreateIn_Runtime_LowersToCreateInNotCreateInNav() {
+    public async Task CreateIn_Runtime_LowersToCreatePermits() {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text unique required }
@@ -34,7 +34,8 @@ public class StoreBindCreateTests {
             .Select(i => (i.Delegate as Member)?.MemberName)
             .Where(n => n is not null)
             .ToList();
-        await Assert.That(names.Contains("CreateIn")).IsTrue();
+        await Assert.That(names.Contains("CreatePermits")).IsTrue();
+        await Assert.That(names.Contains("CreateIn")).IsFalse();
         await Assert.That(names.Contains("CreateInNav")).IsFalse();
         await Assert.That(names.Contains("CreateByType")).IsFalse();
     }
@@ -64,7 +65,7 @@ public class StoreBindCreateTests {
     }
 
     [Test]
-    public async Task CreateIn_Export_UsesCreateIn() {
+    public async Task CreateIn_Export_UsesCreatePermits() {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -84,12 +85,12 @@ public class StoreBindCreateTests {
             ActionParameterNames: ["plate"]));
         var lowered = pass.LowerActionBody(action.Effects);
         var cs = new CSharpGenerator().Generate(lowered!);
-        await Assert.That(cs).Contains("CreateIn(");
-        await Assert.That(cs).DoesNotContain("CreatePermits(");
+        await Assert.That(cs).Contains("CreatePermits(");
+        await Assert.That(cs).DoesNotContain("CreateIn(");
     }
 
     [Test]
-    public async Task CreateIn_EmitAndRuntime_ShareCreateInInvoke() {
+    public async Task CreateIn_EmitAndRuntime_ShareCreatePermitsInvoke() {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text required }
@@ -112,14 +113,12 @@ public class StoreBindCreateTests {
             Analysis: analysis,
             Domain: domain,
             ActionParameterNames: ["plate"]));
-        Invoke Name(Node tree) => Flatten(tree).OfType<Invoke>()
-            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
+        static Invoke Name(Node tree) => Flatten(tree).OfType<Invoke>()
+            .First(i => i.Delegate is Member { MemberName: "CreatePermits" });
         var runtimeInvoke = Name(runtime.LowerActionBody(action.Effects)!);
         var emitInvoke = Name(emit.LowerActionBody(action.Effects)!);
         await Assert.That((runtimeInvoke.Delegate as Member)!.MemberName)
             .IsEqualTo((emitInvoke.Delegate as Member)!.MemberName);
-        await Assert.That((runtimeInvoke.Arguments[0] as Constant)?.Value)
-            .IsEqualTo((emitInvoke.Arguments[0] as Constant)?.Value);
         await Assert.That(runtimeInvoke.Arguments.Length).IsEqualTo(emitInvoke.Arguments.Length);
     }
 
@@ -314,7 +313,7 @@ public class StoreBindCreateTests {
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(Flatten(lowered!).Any(n => n is IfStatement)).IsTrue();
         await Assert.That(Flatten(lowered!).OfType<Invoke>().Any(i =>
-            i.Delegate is Member { MemberName: "CreateIn" })).IsTrue();
+            i.Delegate is Member { MemberName: "CreatePermits" })).IsTrue();
     }
 
     [Test]
@@ -367,7 +366,7 @@ public class StoreBindCreateTests {
     }
 
     [Test]
-    public async Task CreateIn_EntityInitializer_Runtime_CastsValueToObject() {
+    public async Task CreateIn_EntityInitializer_Runtime_DoesNotCastValueToObject() {
         var (domain, analysis) = Evolve("""
             domain CreateNavBinding
             Book: entity { Title: Text }
@@ -391,8 +390,8 @@ public class StoreBindCreateTests {
             ActionParameterNames: ["book"]));
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
-            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
-        await Assert.That(createIn.Arguments.Last()).IsTypeOf<TypeCast>();
+            .First(i => i.Delegate is Member { MemberName: "CreateLoans" });
+        await Assert.That(createIn.Arguments.Last() is TypeCast).IsFalse();
     }
 
     [Test]
@@ -416,7 +415,7 @@ public class StoreBindCreateTests {
             ActionParameterNames: ["plate"]));
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
-            .First(i => i.Delegate is Member { MemberName: "CreateIn" });
+            .First(i => i.Delegate is Member { MemberName: "CreatePermits" });
         await Assert.That(createIn.Arguments.Last() is TypeCast).IsFalse();
     }
 

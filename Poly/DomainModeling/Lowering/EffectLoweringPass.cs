@@ -17,13 +17,12 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Create / create-in / unique lower to Store jobs
-/// (<c>Create</c> / <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>)
-/// on the one operation tree. C# print of those jobs is ordinary methods;
-/// generated <c>Create</c> factories may still call <c>Stay.Create</c> as the
-/// host bind of the job. Persistence unique indexes stay a host-artifact concern.
-/// Mixed if+create is the same guarded-probe + body tree.
-/// StageTransition and invoke are handwritten IR on both paths.</para>
+/// <para>By-type create in an action-result context lowers to <c>Type.Create</c>.
+/// <c>create in</c>, and a void-context by-type create with one collection of
+/// that type, lower to <c>this.Create{Nav}</c>. Probes stay <c>ProbeCreate</c>
+/// and unique stays <c>EnsureUnique</c>. Mixed if+create is the same
+/// guarded-probe + body tree. StageTransition and invoke are handwritten IR
+/// on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -893,11 +892,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Lowers CreateEntityInstance in an action-result context to the typed static
     /// factory <c>Type.Create(args…)</c> (Failure unwrap, no object cast). A void /
-    /// subscription context keeps the string-named job until C8-tc1b turns it into
-    /// <c>this.Create{Nav}(…)</c>.
+    /// subscription context with one collection of that type lowers to
+    /// <c>this.Create{Nav}(…)</c>. An explicit relationship name keeps the
+    /// string-named job so <c>LinkRelated</c> still names that relationship.
     /// </summary>
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
         var target = ResolveEntity(cei.Type.TypeName);
+        if (target is not null
+            && cei.RelationshipName is null
+            && _context.ActionResultType is not NamedTypeReference { TypeArguments.Count: > 0 }
+            && DomainToCSharpExporter.FindInverseCollection(_entity, target.Name) is { } collection)
+            return LowerTypedCreateNav(target, collection, cei.Initializers);
         if (target is null
             || _context.ActionResultType is not NamedTypeReference { TypeArguments.Count: > 0 })
             return LowerRuntimeFactoryCall(
@@ -907,9 +912,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
 
     /// <summary>
-    /// Lowers create-in to <c>this.CreateIn(relationship, prop, value, …)</c>
-    /// with Failure unwrap. Same tree for simulate and emit. OneToOne / ManyToOne
-    /// prepend <c>if (this.Rel != null) return Failure(…)</c> before <c>CreateIn</c>.
+    /// Lowers create-in to <c>this.Create{Nav}(…)</c> with Failure unwrap.
+    /// Same tree for simulate and emit. OneToOne / ManyToOne prepend
+    /// <c>if (this.Rel != null) return Failure(…)</c> before the factory.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (_domain is null)
@@ -919,11 +924,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
         var runtimeEntity = runtimeTarget?.TargetEntity
             ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
-        var create = LowerRuntimeFactoryCall(
-            "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity);
-        if (runtimeRel is null
-            || runtimeRel.Cardinality is RelationshipCardinality.OneToMany
-                or RelationshipCardinality.ManyToMany)
+        if (runtimeRel is null || runtimeEntity is null)
+            throw new InvalidOperationException(
+                $"Cannot lower 'create in {cr.RelationshipName}' without a resolved target entity.");
+        var create = LowerTypedCreateNav(runtimeEntity, runtimeRel, cr.Initializers);
+        if (runtimeRel.Cardinality is RelationshipCardinality.OneToMany
+            or RelationshipCardinality.ManyToMany)
             return create;
 
         var nav = new Member(Subject, DomainToCSharpExporter.ToPascalCase(runtimeRel.Name));
@@ -1310,6 +1316,75 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 : loweredValue.Value);
         }
 
+        return FinishFactoryInvoke(
+            new Member(Subject, methodName),
+            args,
+            loweredInitializers,
+            keepValue: !methodName.StartsWith("Probe", StringComparison.Ordinal),
+            linkRelationshipName);
+    }
+
+    /// <summary>
+    /// <c>this.Create{Nav}(args…)</c> in <see cref="DomainToCSharpExporter.CreateNavArgumentNames"/> order.
+    /// Trailing defaulted properties that the initializer does not set are omitted
+    /// so the call matches the printed optional parameters.
+    /// </summary>
+    private Node LowerTypedCreateNav(
+        Entity target,
+        Relationship rel,
+        IReadOnlyList<PropertyBinding> initializers) {
+        if (_analysis is null)
+            throw new InvalidOperationException(
+                $"Cannot lower Create{DomainToCSharpExporter.ToPascalCase(rel.Name)} without analysis.");
+        var loweredInitializers = new List<LoweredExpression>();
+        var args = BuildCreateNavArgs(target, rel, initializers, loweredInitializers);
+        return FinishFactoryInvoke(
+            new Member(Subject, $"Create{DomainToCSharpExporter.ToPascalCase(rel.Name)}"),
+            args,
+            loweredInitializers,
+            keepValue: true,
+            linkRelationshipName: null);
+    }
+
+    private List<Node> BuildCreateNavArgs(
+        Entity target,
+        Relationship rel,
+        IReadOnlyList<PropertyBinding> initializers,
+        List<LoweredExpression> loweredInitializers) {
+        var inits = BindingsByName(initializers);
+        var names = DomainToCSharpExporter.CreateNavArgumentNames(_entity, target, _analysis!);
+        var trailing = new HashSet<string>(
+            DomainToCSharpExporter.TrailingDefaultedProperties(target, _analysis!)
+                .Select(p => p.Name),
+            StringComparer.Ordinal);
+        var last = names.Count - 1;
+        while (last >= 0 && trailing.Contains(names[last]) && !inits.ContainsKey(names[last]))
+            last--;
+        var args = new List<Node>();
+        for (var i = 0; i <= last; i++) {
+            var name = names[i];
+            var prop = target.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.Ordinal));
+            var nav = prop is null
+                ? target.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, name, StringComparison.Ordinal))
+                : null;
+            var type = prop?.Type ?? nav?.Target
+                ?? throw new InvalidOperationException(
+                    $"Create{DomainToCSharpExporter.ToPascalCase(rel.Name)} argument '{name}' is not a member of '{target.Name}'.");
+            args.Add(ArgumentFor(
+                target, name, type, isNavigation: nav is not null, isCollection: false,
+                inits, loweredInitializers));
+        }
+        return args;
+    }
+
+    private Node FinishFactoryInvoke(
+        Node callee,
+        List<Node> args,
+        List<LoweredExpression> loweredInitializers,
+        bool keepValue,
+        string? linkRelationshipName) {
         var resultVar = _names.Next("create");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
@@ -1326,12 +1401,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                         new Member(resultVar, "ErrorMessage"),
                         new Constant(""))));
         var nodes = new List<Node> {
-            new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
+            new Assignment(resultVar, new Invoke(callee, [.. args])),
             new IfStatement(
                 new Syntactic.Not(new Member(resultVar, "IsSuccess")),
                 new Block([failClosed]))
         };
-        if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
+        if (keepValue) {
             var valueVar = _names.Next("created");
             locals.Add(valueVar);
             nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));

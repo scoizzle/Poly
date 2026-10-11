@@ -26,6 +26,9 @@ public sealed partial record DomainEntityInstance {
         if (name is "Create" or "CreateIn" or "ProbeCreate")
             return RuntimeCreateFactory(name, args);
 
+        if (TryTypedCreateNav(name, args, out var createNav))
+            return createNav;
+
         if (TryNotifyStageSubscribers(name, args))
             return null;
 

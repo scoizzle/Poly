@@ -344,6 +344,32 @@ public sealed partial class DomainToCSharpExporter {
             TypeArguments: [new NamedTypeReference(elementTypeName)]));
 
     /// <summary>
+    /// <c>Create{Nav}</c> parameter names in signature order: constructor scalars
+    /// and non-wired singular navs, then trailing defaulted properties.
+    /// Collections and auto-wired / self-rel back-refs are filled inside the factory.
+    /// </summary>
+    internal static List<string> CreateNavArgumentNames(
+        Entity source,
+        Entity target,
+        INodeMetadataProvider metadata) {
+        var names = new List<string>();
+        var autoWire = FindAutoWireBackReference(target, source.Name);
+        foreach (var parameter in GetConstructorParameters(target, metadata)) {
+            if (parameter.IsCollection)
+                continue;
+            if (parameter.IsNavigation && parameter.IsBackReference)
+                continue;
+            if (autoWire is not null
+                && string.Equals(parameter.Name, autoWire.Name, StringComparison.Ordinal))
+                continue;
+            names.Add(parameter.Name);
+        }
+        foreach (var prop in TrailingDefaultedProperties(target, metadata))
+            names.Add(prop.Name);
+        return names;
+    }
+
+    /// <summary>
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
     /// Each constraint on a constructor-parameter property produces an early-return
     /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>

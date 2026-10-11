@@ -525,7 +525,8 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private static Node MapDomainTypeToAstNode(DomainTypeReference domainType, Domain? domain) {
         var typeName = domainType.TypeName;
-        if (domain is not null && RuntimeAnalysisCache.Index(domain).Tree(typeName) is not null)
+        if (domain is not null
+            && RuntimeAnalysisCache.Index(domain).Tree(typeName)?.Descriptor.Id.Type == "entity")
             return new TypeReference(typeName);
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
         if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))

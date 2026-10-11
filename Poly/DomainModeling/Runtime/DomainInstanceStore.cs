@@ -228,7 +228,7 @@ public sealed class DomainInstanceStore {
         target = null;
         error = null;
         if (creator.Domain is not null) {
-            if (RuntimeAnalysisCache.Index(creator.Domain).Tree(typeName) is not null) {
+            if (RuntimeAnalysisCache.Index(creator.Domain).Tree(typeName)?.Descriptor.Id.Type == "entity") {
                 foreach (var entity in creator.Domain.Types.OfType<Entity>()) {
                     if (!string.Equals(entity.Name, typeName, StringComparison.Ordinal))
                         continue;

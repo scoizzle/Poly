@@ -219,6 +219,26 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task InvokeAction_DomainNamedDate_DateProperty_Executes() {
+        // CatalogIndex.Tree("Date") is the scaffolding tree; a Date property is still a primitive.
+        var due = new Property("Due", new DomainTypeReference("Date"), []);
+        var stamp = new Poly.DomainModeling.Ontology.Action("Stamp", InvocationResult.Void, [],
+            [new AssignEffect(DomainExpression.Property("Due"), new Today())], []);
+        var entity = new Entity("Loan",
+            Properties: [due],
+            Actions: [stamp],
+            Policies: [],
+            Stages: []);
+        var domain = ValidDomain.Create("Date", [entity], extensions: [ExtensionCatalog.TemporalId]);
+
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var result = instance.InvokeAction("Stamp");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
+        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+    }
+
+    [Test]
     public async Task InvokeAction_WithPassingGuards_Succeeds() {
         var entity = CreatePersonEntity();
         var instance = CreateWithDomain(entity,

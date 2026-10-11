@@ -337,6 +337,50 @@ public class DomainInstanceStoreFailClosedTests {
     }
 
     [Test]
+    public async Task Unlink_OwnedTarget_OtherSourceEntitySameName_Throws() {
+        var domain = BuildSameNameOwnedDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var sponsor = DomainEntityInstance.Create(
+            SponsorOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(sponsor);
+        store.Add(child);
+        store.Link("Kid", parent, child);
+        store.Link("Kid", sponsor, child);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Unlink("Kid", parent, child));
+        await Assert.That(ex!.Message).IsEqualTo(Relationship.UnlinkViolationMessage("Kid"));
+        await Assert.That(store.IsLinked("Kid", parent, child)).IsTrue();
+        await Assert.That(store.IsLinked("Kid", sponsor, child)).IsTrue();
+    }
+
+    [Test]
+    public async Task Unlink_OwnedTarget_OneOfTwoSameEntityOwners_DropsThatEdge() {
+        var domain = BuildOwnedLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent1 = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var parent2 = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent1);
+        store.Add(parent2);
+        store.Add(child);
+        store.Link("Kid", parent1, child);
+        store.Link("Kid", parent2, child);
+
+        store.Unlink("Kid", parent1, child);
+
+        await Assert.That(store.IsLinked("Kid", parent1, child)).IsFalse();
+        await Assert.That(store.IsLinked("Kid", parent2, child)).IsTrue();
+    }
+
+    [Test]
     public async Task Unlink_OwnedCollection_ChildKeepsOwner() {
         var domain = BuildOwnedCollectionDomain();
         var store = new DomainInstanceStore();
@@ -463,6 +507,31 @@ public class DomainInstanceStoreFailClosedTests {
         return ValidDomain.Create("OwnedLinkTest", [parent, child], [relationship]);
     }
 
+    private static Domain BuildSameNameOwnedDomain() {
+        var child = new Entity("Child",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var parent = new Entity("Parent",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var sponsor = new Entity("Sponsor",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var owned = new Relationship(
+            "Kid",
+            new DomainTypeReference("Parent"),
+            new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne,
+            []) { SourceOwnsTarget = true };
+        var other = new Relationship(
+            "Kid",
+            new DomainTypeReference("Sponsor"),
+            new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne,
+            []);
+        return ValidDomain.Create("SameNameOwned", [parent, child, sponsor], [owned, other]);
+    }
+
     private static Domain BuildOwnedCollectionDomain() {
         var child = new Entity("Child",
             [new Property("Name", new DomainTypeReference("Text"), [])],
@@ -497,4 +566,5 @@ public class DomainInstanceStoreFailClosedTests {
 
     static Entity ParentOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Parent");
     static Entity ChildOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Child");
+    static Entity SponsorOf(Domain domain) => domain.Types.OfType<Entity>().Single(e => e.Name == "Sponsor");
 }

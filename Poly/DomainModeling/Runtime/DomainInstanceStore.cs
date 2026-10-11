@@ -383,7 +383,9 @@ public sealed class DomainInstanceStore {
 
     /// <summary>
     /// Removes an instance-level edge if present.
-    /// Unlinking the last owner of an owned target throws; <see cref="Remove"/> is exempt.
+    /// Unlinking the last owner from this source entity throws;
+    /// <see cref="Remove"/> is exempt. Another source entity that shares the
+    /// relationship name is not an owner of this contract.
     /// </summary>
     public void Unlink(string relationshipName, DomainEntityInstance source, DomainEntityInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -392,12 +394,25 @@ public sealed class DomainInstanceStore {
         if (!IsLinked(relationshipName, source, target))
             return;
         var contract = ResolveRelationshipContract(relationshipName, source);
-        if (contract is not null
-            && contract.SourceOwnsTarget
-            && GetLinkedSources(relationshipName, target).Count == 1)
+        if (contract is { SourceOwnsTarget: true }
+            && OwnerCount(relationshipName, target, contract.SourceEntityName) == 1)
             throw new InvalidOperationException(
                 Relationship.UnlinkViolationMessage(relationshipName));
         Detach(relationshipName, source, target);
+    }
+
+    /// <summary>
+    /// Inbound edges of <paramref name="relationshipName"/> whose source entity is
+    /// <paramref name="sourceEntityName"/>. Relationship identity is that pair, not the name.
+    /// </summary>
+    private int OwnerCount(
+        string relationshipName, DomainEntityInstance target, string sourceEntityName) {
+        var count = 0;
+        foreach (var source in GetLinkedSources(relationshipName, target)) {
+            if (string.Equals(source.Entity.Name, sourceEntityName, StringComparison.Ordinal))
+                count++;
+        }
+        return count;
     }
 
     /// <summary>

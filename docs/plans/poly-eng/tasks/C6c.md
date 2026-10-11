@@ -20,7 +20,7 @@ Unlink is store/tool-only: the only unlink is `DomainInstanceStore.Unlink` (`:38
 | Unlink when not linked, `Domain` null, or no matching contract | silent no-op / removed | unchanged | existing `UnlinkInstances_NoExistingLink_Fails` `:3521-3538`; new `Unlink_NoDomain_Allows`, `Unlink_UnknownRelationship_Allows` |
 | `store.Remove` of an `owned` target or its owner (delete / create-in rollback) | edge removed | unchanged: `Remove` detaches without the minimum check | new `Remove_OwnedTarget_LastOwner_DropsInstanceAndLink`, `Remove_OwnedSource_LastOwner_DropsChildLink` (both red with R1 reintroduced) |
 ## Done when
-- `Relationship.UnlinkViolationMessage` is the single message source; `DomainInstanceStore.Unlink` throws it before mutating the subscriber registry or `_links` when the resolved contract has `SourceOwnsTarget` and the target has exactly one inbound link on that relationship.
+- `Relationship.UnlinkViolationMessage` is the single message source; `DomainInstanceStore.Unlink` throws it before mutating the subscriber registry or `_links` when the resolved contract has `SourceOwnsTarget` and the target has exactly one inbound link from that source entity. Another source entity that reuses the relationship name does not count.
 - `Unlink` does not throw for non-owned relationships, when the link is absent, when `source.Domain` is null, or when no `RelationshipContract` matches.
 - MCP `unlink_instances` surfaces the same message as Failure (it already catches exceptions, `RuntimeTool.cs:461-467`) and the edge is not removed.
 - The owned-target store row is red on master (master orphans the target) and green after; full suite green; no golden changed.
@@ -47,3 +47,5 @@ Answered as Decision 21 (Scot 2026-10-10 18:03 CT): an owned target must keep it
 | 2026-10-10 | implementer | grok/grok-4.6 | d19b6c9e | pushed | tests 3531/3531; sweep: owned min-1 in Unlink before mutate |
 | 2026-10-10 | reviewer | (different model) | 5cd51cd4 | NOT SHIP | R1 major: `Remove` calls `Unlink`, so create-in rollback throws and leaves the owned child linked; R2 nit: `Link`/`Unlink` duplicate the contract lookup |
 | 2026-10-10 | fixer | opencode/opencode-go/deepseek-v4.1-flash | 537fb70b | pushed | R1: `Remove` uses private `Detach`; R2: one `ResolveRelationshipContract`; 2 new `Remove_*` tests (red with R1 reintroduced); rebased on master; full suite 3537/3537 |
+| 2026-10-11 | reviewer | grok | 012614d9 | NOT SHIP | F1: owned-minimum count is name-global, so a second source entity sharing the name lets Unlink drop the last owner |
+| 2026-10-11 | fixer | grok | (this commit) | pushed | F1: count owners of the source entity only; same-name and two-owner regressions; full suite 3539/3539 |

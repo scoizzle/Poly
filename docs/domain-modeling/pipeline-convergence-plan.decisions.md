@@ -4,7 +4,7 @@
 
 V1 to V11 are all answered. V1–V9 and V11 as recommended; V10 as the revised scope below (an earlier answer rested on a false premise and was replaced). Standing approval in V11 does not release any wave (the release rule).
 
-Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Three older ones (16, 18, 20) are still open; each is asked only when its lane reaches it. Decision 13 (function body form) and decision 19 (registering contributors) were answered 2026-10-09.
+Companion to `pipeline-convergence-plan.md`. These were the only choices the five reviews and the code check left open. Everything else the reviews raised was either accepted into the plan or rejected with a reason. The eleven below are numbered **V1 to V11** so they do not collide with the older decision list (1 to 20) in PR 84. Three older ones (16, 18, 20) are still open; each is asked only when its lane reaches it. Decision 13 (function body form) and decision 19 (registering contributors) were answered 2026-10-09. Decision 21 (owned-target unlink minimum) was answered 2026-10-10.
 
 Each entry says what it is in plain English, the options, the recommendation, what it blocked, and the answer.
 
@@ -276,6 +276,14 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 **Related.** Depends on C8-tc (PR 155), which removes the K0 string-named create jobs behind most of the VM noise and moves the exporter code; the C8-vm plan cites symbols and is implemented after C8-tc lands. C8-vm lands before C8-lc, C8-web, C8-num, C8-clean and C8d.
 
 **Blocks.** C8-lc, C8-web, C8-num, C8-clean, C8d.
+
+### Decision 21. Owned-target unlink minimum
+
+**Answer (Scot, 2026-10-10 18:03 CT):** an owned target must always keep its owner (minimum 1, unlinking it is rejected); non-owned links stay minimum 0.
+
+**What it is.** `RelationshipCardinality` is max-only, and navigations cannot be `required`. C6c's modelled minimum is ownership: when `SourceOwnsTarget` is true, `Unlink` refuses to drop the target's last inbound link on that relationship. Non-owned relationships may go to zero links. Delete remains out of scope (V9).
+
+**Blocks.** C6c (now unblocked).
 
 ## Parked, not asking now
 

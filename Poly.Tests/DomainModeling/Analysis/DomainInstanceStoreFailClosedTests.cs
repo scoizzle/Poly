@@ -318,6 +318,92 @@ public class DomainInstanceStoreFailClosedTests {
         await Assert.That(store.GetLinkedTargets("Nope", parent).Count).IsEqualTo(2);
     }
 
+    [Test]
+    public async Task Unlink_OwnedTarget_LastOwner_Throws() {
+        var domain = BuildOwnedLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child);
+        store.Link("Kid", parent, child);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => store.Unlink("Kid", parent, child));
+        await Assert.That(ex!.Message).IsEqualTo(Relationship.UnlinkViolationMessage("Kid"));
+        await Assert.That(store.IsLinked("Kid", parent, child)).IsTrue();
+        await Assert.That(store.GetLinkedTargets("Kid", parent).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Unlink_NonOwned_Singular_Succeeds() {
+        var domain = BuildSingularLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child);
+        store.Link("Kid", parent, child);
+
+        store.Unlink("Kid", parent, child);
+
+        await Assert.That(store.IsLinked("Kid", parent, child)).IsFalse();
+        await Assert.That(store.GetLinkedTargets("Kid", parent).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Unlink_NoDomain_Allows() {
+        var entity = new Entity("Standalone",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [], [], []);
+        var source = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
+        var target = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
+        var store = new DomainInstanceStore();
+        store.Add(source);
+        store.Add(target);
+        store.Link("Kid", source, target);
+
+        store.Unlink("Kid", source, target);
+
+        await Assert.That(store.IsLinked("Kid", source, target)).IsFalse();
+    }
+
+    [Test]
+    public async Task Unlink_UnknownRelationship_Allows() {
+        var domain = BuildSingularLinkDomain();
+        var store = new DomainInstanceStore();
+        var parent = DomainEntityInstance.Create(
+            ParentOf(domain), new Dictionary<string, object?>(), domain);
+        var child = DomainEntityInstance.Create(
+            ChildOf(domain), new Dictionary<string, object?>(), domain);
+        store.Add(parent);
+        store.Add(child);
+        store.Link("Nope", parent, child);
+
+        store.Unlink("Nope", parent, child);
+
+        await Assert.That(store.IsLinked("Nope", parent, child)).IsFalse();
+    }
+
+    private static Domain BuildOwnedLinkDomain() {
+        var child = new Entity("Child",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var parent = new Entity("Parent",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var relationship = new Relationship(
+            "Kid",
+            new DomainTypeReference("Parent"),
+            new DomainTypeReference("Child"),
+            RelationshipCardinality.OneToOne,
+            []) { SourceOwnsTarget = true };
+        return ValidDomain.Create("OwnedLinkTest", [parent, child], [relationship]);
+    }
+
     private static Domain BuildSingularLinkDomain() {
         var child = new Entity("Child",
             [new Property("Name", new DomainTypeReference("Text"), [])],

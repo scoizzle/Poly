@@ -100,7 +100,7 @@ public sealed class DomainInstanceStore {
         var domain = source.Domain
             ?? throw new InvalidOperationException(
                 "Cannot execute 'create in' effect without a domain to resolve relationship targets.");
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain);
         var mapped = storage?.Storage.Relationships.FirstOrDefault(r =>
             string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
@@ -366,7 +366,7 @@ public sealed class DomainInstanceStore {
         if (IsLinked(relationshipName, source, target))
             return;
         if (source.Domain is not null) {
-            var contracts = RuntimeAnalysisCache.GetOrAnalyze(source.Domain)
+            var contracts = RuntimeAnalysisCache.Analysis(source.Domain)
                 .GetMetadata<RelationshipContractMetadata>(default);
             var contract = contracts?.Contracts.FirstOrDefault(c =>
                 string.Equals(c.Name, relationshipName, StringComparison.Ordinal)
@@ -467,7 +467,7 @@ public sealed class DomainInstanceStore {
         var domain = transitionedInstance.Domain;
         if (domain is null) return;
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         if (analysis.GetCatalog(domain) is null)
             throw new InvalidOperationException(
                 $"Runtime dispatch requires {nameof(DomainCatalogMetadata)} for domain '{domain.Name}' (NotifyTransition).");
@@ -489,7 +489,7 @@ public sealed class DomainInstanceStore {
         if (domain is null)
             return [];
 
-        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var analysis = RuntimeAnalysisCache.Analysis(domain);
         var relationshipContracts = analysis.GetMetadata<RelationshipContractMetadata>(default)
             ?? throw new InvalidOperationException(
                 $"Runtime dispatch requires {nameof(RelationshipContractMetadata)}.");

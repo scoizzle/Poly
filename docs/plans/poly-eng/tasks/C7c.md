@@ -54,3 +54,5 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | 60089ef0 | planned | - |
 | 2026-10-10 | implementer | grok/grok-4.6 | 3cdb415f | pushed | tests 3526/3526; sweep: GetOrAnalyze Runtime 9; remaining listed C7d |
+| 2026-10-10 | reviewer | opencode/opencode-go/deepseek-v4.1-flash | 0c1cfb12 | NOT SHIP | https://github.com/scoizzle/Poly/pull/156#issuecomment-6103754032 (Grug NOT SHIP at 0c1cfb12, 2 open findings, mode full) |
+| 2026-10-10 | implementer | grok/grok-4.6 | eef9df92 | fixes pushed | R1, R2; disputed: none; tests 3528/3528 |

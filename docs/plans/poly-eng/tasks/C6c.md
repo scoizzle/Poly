@@ -1,5 +1,5 @@
 # TASK C6c - Unlink cannot drop below a required minimum
-Status: planned. Branch slice/c6c-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
+Status: in review. Branch slice/c6c-plan. Lane B. Review 2. Implement mill: Grok (review on OpenCode).
 ## Scope
 C6b1 (merged #151) enforces the link maximum in two places: the shared lowered `create in` tree (`Poly/DomainModeling/Lowering/EffectLoweringPass.cs:909-931`) and `DomainInstanceStore.Link` (`Poly/DomainModeling/Runtime/DomainInstanceStore.cs:355-380`; contract lookup `:364-376`), message `Relationship.LinkViolationMessage` (`Poly/DomainModeling/Ontology/Relationship.cs:34-35`).
 `RelationshipCardinality` is max-only (no minimum; `Relationship.cs:6-11`) and navigations cannot be `required` (`Poly.Mcp/Docs/poly-dsl-guide.md:94-100`). The one modelled minimum is ownership: an `owned` target (`SourceOwnsTarget`, `Relationship.cs:26`; `RelationshipContract.SourceOwnsTarget` `DomainModelMetadata.cs:88`) must keep its owner. Delete semantics are out of scope (V9), so unlink is where that minimum is enforced.
@@ -37,8 +37,9 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 ## Hand-edit
 One static message helper and one contract-lookup branch in `Unlink`; Scot can open `Relationship.UnlinkViolationMessage` and `DomainInstanceStore.Unlink` cold.
 ## Needs Scot
-`RelationshipCardinality` is max-only, so confirm "the modelled minimum" means an `owned` target must keep its owner (non-owned unlink stays at min 0), per the V9(a) minimum-link tree.
+Answered as Decision 21 (Scot 2026-10-10 18:03 CT): an owned target must keep its owner (minimum 1); non-owned links stay minimum 0.
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | 60089ef0 | planned | - |
+| 2026-10-10 | implementer | grok/grok-4.6 | d19b6c9e | pushed | tests 3531/3531; sweep: owned min-1 in Unlink before mutate |

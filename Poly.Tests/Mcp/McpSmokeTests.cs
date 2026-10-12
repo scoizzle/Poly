@@ -3518,6 +3518,33 @@ E: entity {{
     }
 
     [Test]
+    public async Task UnlinkInstances_OwnedTarget_LastOwner_Fails() {
+        var (sessionId, _) = McpSessionStore.Create("Test");
+        DslTool.ApplyDsl(sessionId, """
+            domain T
+            Parent: entity { kid: owned Child }
+            Child: entity { }
+            """);
+
+        var parentResult = RuntimeTool.CreateInstance(sessionId, "Parent", "{}");
+        await Assert.That(parentResult.Success).IsTrue();
+        var childResult = RuntimeTool.CreateInstance(sessionId, "Child", "{}");
+        await Assert.That(childResult.Success).IsTrue();
+
+        McpSessionStore.TryGet(sessionId, out var st);
+        var parentId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Parent").Key;
+        var childId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Child").Key;
+
+        var link = RuntimeTool.LinkInstances(sessionId, parentId, "kid", childId);
+        await Assert.That(link.Success).IsTrue();
+
+        var unlink = RuntimeTool.UnlinkInstances(sessionId, parentId, "kid", childId);
+        await Assert.That(unlink.Success).IsFalse();
+        await Assert.That(unlink.Message).Contains(Relationship.UnlinkViolationMessage("kid"));
+        await Assert.That(st.InstanceStore!.IsLinked("kid", st.InstanceMap[parentId], st.InstanceMap[childId])).IsTrue();
+    }
+
+    [Test]
     public async Task UnlinkInstances_NoExistingLink_Fails() {
         var (sessionId, _) = McpSessionStore.Create("Test");
         DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");

@@ -488,11 +488,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Route(effect);
 
     /// <summary>Inline a stage's exit at most once per lowering (no self-re-entry).</summary>
-    private void InlineExitOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+    private void InlineExitOnce(Stage stage, List<Node> bodySink) {
         if (!_exitsInlining.Add(stage.Name))
             return;
         try {
-            AppendInlinedStageEffects(stage.OnExitEffects, probeSink, bodySink);
+            AppendInlinedStageEffects(stage.OnExitEffects, bodySink);
         }
         finally {
             _exitsInlining.Remove(stage.Name);
@@ -500,11 +500,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>Inline a stage's entry at most once per lowering (no self-re-entry).</summary>
-    private void InlineEntryOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+    private void InlineEntryOnce(Stage stage, List<Node> bodySink) {
         if (!_entriesInlining.Add(stage.Name))
             return;
         try {
-            AppendInlinedStageEffects(stage.OnEntryEffects, probeSink, bodySink);
+            AppendInlinedStageEffects(stage.OnEntryEffects, bodySink);
         }
         finally {
             _entriesInlining.Remove(stage.Name);
@@ -512,20 +512,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Mixed if+create in OnEntry/OnExit uses the same guarded-probe walk as
-    /// <see cref="LowerActionBodyCore"/>. Probes go to <paramref name="probeSink"/>
-    /// (before CurrentStage for entry); the body goes to <paramref name="bodySink"/>.
+    /// OnEntry/OnExit effects lower into <paramref name="bodySink"/>. Create
+    /// effects lower as one composite so nested structure stays intact.
     /// </summary>
-    private void AppendInlinedStageEffects(
-        IReadOnlyList<Effect> effects, List<Node> probeSink, List<Node> bodySink) {
+    private void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
         if (effects.Count == 0)
             return;
-        // CurrentStage is a prior mutation for inlined entry: probe if-only and
-        // unconditional create before the stage flip (runtime and C# export).
         if (HasCreate(effects)) {
-            var probes = LowerCreateInConstraintProbes(effects, priorMutation: true);
-            if (probes.Count > 0)
-                probeSink.Add(FlattenProbeBlocks(probes));
             var body = TryLowerVmNode(new CompositeEffect(effects));
             if (body is not null)
                 bodySink.Add(body);
@@ -597,7 +590,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
             if (sourceStage is not null)
-                InlineExitOnce(sourceStage, nodes, nodes);
+                InlineExitOnce(sourceStage, nodes);
         }
         else {
             // Entity-level transition: source stage is CurrentStage at run time.
@@ -606,7 +599,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 if (stage.OnExitEffects.Count == 0)
                     continue;
                 var exitNodes = new List<Node>();
-                InlineExitOnce(stage, exitNodes, exitNodes);
+                InlineExitOnce(stage, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
                 Node stageMatch = new Member(
@@ -618,9 +611,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
-        // Entry probes run BEFORE CurrentStage so a taken illegal create fails
-        // closed without flipping the stage. Entry body still runs after the
-        // assign (nested entry transition must end at Y).
+        // Entry effects run after the stage assign (a nested entry transition
+        // must end at Y). Constraint probes are not emitted.
         var tryNodes = new List<Node>();
         Stage? targetStage = null;
         if (_analysis is not null)
@@ -628,10 +620,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         else
             targetStage = _entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
-        var entryProbes = new List<Node>();
         if (targetStage is not null)
-            InlineEntryOnce(targetStage, entryProbes, tryNodes);
-        nodes.AddRange(entryProbes);
+            InlineEntryOnce(targetStage, tryNodes);
 
         // Loop-guard backstop shared with printed C#: each stage once per trigger.
         if (Subject is ThisReference && _emitAutomaticStageGuard) {
@@ -1149,204 +1139,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Constant(null);
     }
 
-    internal List<Node> LowerCreateInConstraintProbes(
-        IReadOnlyList<Effect> effects, bool priorMutation = false) {
-        var nodes = new List<Node>();
-        var assignedRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        CollectCreateInProbes(effects, nodes, ref priorMutation, assignedRhs);
-        return nodes;
-    }
-
     /// <summary>
-    /// Guarded create probes (before prior assigns) plus the action body.
-    /// Same tree for simulate and emit (Item 4 fail-before-mutate).
+    /// The action body. Create-in is <c>this.Create{Nav}</c>. Constraint probes
+    /// are not prefixed.
     /// </summary>
     internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
-        LowerActionBodyCore(effects);
+        TryLowerVmNode(new CompositeEffect(effects));
 
-    private Node? LowerActionBodyCore(IReadOnlyList<Effect> effects) {
-        var probes = LowerCreateInConstraintProbes(effects);
-        var lowered = TryLowerVmNode(new CompositeEffect(effects));
-        if (probes.Count == 0)
-            return lowered;
-        var nodes = new List<Node>();
-        var locals = new List<Node>();
-        foreach (var probe in probes) {
-            if (probe is Block pb) {
-                nodes.AddRange(pb.Nodes);
-                locals.AddRange(pb.Variables);
-            }
-            else {
-                nodes.Add(probe);
-            }
-        }
-        if (lowered is Block block) {
-            nodes.AddRange(block.Nodes);
-            locals.AddRange(block.Variables);
-        }
-        else if (lowered is not null) {
-            nodes.Add(lowered);
-        }
-        return new Block(nodes, locals);
-    }
-
-    private void CollectCreateInProbes(
-        IReadOnlyList<Effect> effects,
-        List<Node> nodes,
-        ref bool priorMutation,
-        Dictionary<string, DomainExpression> assignedRhs) {
-        // Unconditional create / create-in (and composites of them) probe at method
-        // start — same set as runtime PrevalidateUnconditionalCreates.
-        // ConditionalEffect is not probed unguarded (illegal then-branch on an
-        // untaken if must not fail the action). When a prior sibling already
-        // mutates (assign / create / invoke / transition), emit a condition-guarded
-        // probe so a taken illegal create returns Failure before those assigns
-        // (Item 4 fail-before-mutate). Probe if-conditions are lowered as after
-        // prior sibling AssignEffects (property→RHS substitution for probe only)
-        // so Occupy-shaped OpenStays+1 then if (OpenStays>=1) probes taken, and
-        // AssignFalse ConditionDrift probes constant false (not taken).
-        foreach (var effect in effects) {
-            switch (effect) {
-                case CompositeEffect composite:
-                    CollectCreateInProbes(composite.Effects, nodes, ref priorMutation, assignedRhs);
-                    break;
-                case CreateEntityInRelationshipEffect cr:
-                    if (LowerCreateInProbe(cr) is { } probe)
-                        nodes.Add(probe);
-                    priorMutation = true;
-                    break;
-                case CreateEntityInstance cei:
-                    if (LowerCreateEntityInstanceProbe(cei) is { } createProbe)
-                        nodes.Add(createProbe);
-                    priorMutation = true;
-                    break;
-                case ConditionalEffect cond:
-                    if (priorMutation)
-                        CollectGuardedBranchProbes(cond, nodes, assignedRhs);
-                    priorMutation = true;
-                    break;
-                case AssignEffect a:
-                    priorMutation = true;
-                    // Probe subst tracks PropertyAccess targets only (owned / other
-                    // assign targets leave conditions unsubstituted — pre-assign bag).
-                    if (a.Target is PropertyAccess pa)
-                        assignedRhs[pa.Name] = SubstituteAssignedProperties(a.Value, assignedRhs);
-                    break;
-                case StageTransitionEffect or InvokeActionEffect or ForEachInvokeEffect:
-                    priorMutation = true;
-                    break;
-            }
-        }
-    }
 
     /// <summary>
-    /// For probe-prefix conditions only: replace PropertyAccess with prior sibling
-    /// assign RHS so taken-ness matches post-assign bag without mutating yet.
-    /// </summary>
-    private static DomainExpression SubstituteAssignedProperties(
-        DomainExpression expr,
-        IReadOnlyDictionary<string, DomainExpression> assignedRhs) {
-        if (assignedRhs.Count == 0)
-            return expr;
-        return new SubstituteAssignedPropertiesRewrite(assignedRhs).Route(expr);
-    }
-
-    private sealed class SubstituteAssignedPropertiesRewrite(
-        IReadOnlyDictionary<string, DomainExpression> assignedRhs)
-        : DomainExpressionRewriteBase {
-        protected override DomainExpression PropertyAccess(PropertyAccess e) =>
-            assignedRhs.TryGetValue(e.Name, out var rhs) ? rhs : e;
-
-        // Subject-rooted PropertyAccess only: related-entity props inside
-        // quantifier bodies / RelationshipNavigation.TargetProperty must not
-        // inherit subject assign RHS (those bodies rebind the subject to the
-        // loop variable over the navigation collection).
-        protected override DomainExpression AnyExpr(AnyExpr e) => e;
-        protected override DomainExpression AllExpr(AllExpr e) => e;
-        protected override DomainExpression NoneExpr(NoneExpr e) => e;
-        protected override DomainExpression CountExpr(CountExpr e) => e;
-        protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) => e;
-    }
-
-    private void CollectGuardedBranchProbes(
-        ConditionalEffect cond,
-        List<Node> nodes,
-        IReadOnlyDictionary<string, DomainExpression> priorAssignRhs) {
-        var thenProbes = new List<Node>();
-        // Nested else-if is a ConditionalEffect in ElseEffects. Runtime
-        // PrevalidateUnconditionalCreates recurses regardless of nested
-        // priorMutation; start then/else as already-mutating so those probes
-        // are collected (this walk is only entered after a prior mutation).
-        // Inner then/else walks inherit ancestor sibling assigns (copy of
-        // priorAssignRhs) so nested if (OpenStays>=1) / else-if see OpenStays+1;
-        // separate dictionaries so else does not see then-branch assigns.
-        var thenPrior = true;
-        var thenRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var (k, v) in priorAssignRhs) thenRhs[k] = v;
-        CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior, thenRhs);
-        if (thenProbes.Count > 0) {
-            var conditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-            var condition = _expressionPass.LowerExpression(conditionExpr, Subject);
-            nodes.Add(condition.Before(new IfStatement(condition.Value, FlattenProbeBlocks(thenProbes))));
-        }
-
-        if (cond.ElseEffects is not { Count: > 0 })
-            return;
-        var elseProbes = new List<Node>();
-        var elsePrior = true;
-        var elseRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var (k, v) in priorAssignRhs) elseRhs[k] = v;
-        CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior, elseRhs);
-        if (elseProbes.Count == 0)
-            return;
-        var elseConditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-        var elseCondition = _expressionPass.LowerExpression(elseConditionExpr, Subject);
-        nodes.Add(elseCondition.Before(new IfStatement(
-            new Syntactic.Not(elseCondition.Value), FlattenProbeBlocks(elseProbes))));
-    }
-
-    private static Block FlattenProbeBlocks(List<Node> probes) {
-        var nodes = new List<Node>();
-        var locals = new List<Node>();
-        foreach (var probe in probes) {
-            if (probe is Block b) {
-                nodes.AddRange(b.Nodes);
-                locals.AddRange(b.Variables);
-            }
-            else {
-                nodes.Add(probe);
-            }
-        }
-        return new Block(nodes, locals);
-    }
-
-    private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
-        if (_domain is null || _analysis is null)
-            throw new InvalidOperationException(
-                "Cannot probe 'create in' without a domain and analysis; dropping the probe would skip the constraint check.");
-
-        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
-        var relationship = resolvedTarget?.Relationship
-            ?? ResolveRelationship(cr.RelationshipName);
-        if (relationship is null) return null;
-        var targetEntity = resolvedTarget?.TargetEntity
-            ?? ResolveEntity(relationship.Target.TypeName);
-        if (targetEntity is null) return null;
-
-        _ = (cr, targetEntity);
-        return null;
-    }
-
-    private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
-        _ = cei;
-        return null;
-    }
-
-    /// <summary>
-    /// Runtime create / probe: <c>this.Create/CreateIn/ProbeCreate(name, prop, value, ...)</c>
-    /// with Failure unwrap. Entity-typed values are cast to object so the 1-pair
-    /// object slot matches; primitives stay unboxed so the VM still boxes them at
-    /// the object-parameter invoke (a TypeCast to object is a no-op on scalars).
+    /// String-named <c>this.Create</c> / <c>this.CreateIn</c> used only when the
+    /// positional factory signature is unknown. Entity-typed values are cast to
+    /// object so the pair slot matches; primitives stay unboxed so the VM still
+    /// boxes them at the object-parameter invoke.
     /// </summary>
     private Node LowerRuntimeFactoryCall(
         string methodName,

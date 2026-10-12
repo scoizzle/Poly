@@ -8,6 +8,16 @@ static-factory bind (6 source files, well past the ~3-file rule in
 
 Parent: [`tasks/C8-tc1.md`](C8-tc1.md). Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md).
 
+## Shipped scope (2026-10-12)
+
+This branch absorbed the create-in and probe work that the split below reserved for C8-tc1b and C8-tc2. The review on PR 162 records that expansion instead of splitting the PR again.
+
+- By-type create in every context lowers to `Type.Create(...)`.
+- `create in` lowers to `this.Create{Nav}(...)`. Printed `CreateIn(` and `ProbeCreate(` are gone.
+- The probe prefix is deleted. `LowerCreateInProbe` no longer throws and then returns null.
+- `BuildCreateUniqueChecks` (a no-op) and the uncalled `AddStoreBindMethods` are deleted. `EnsureUnique` on a unique property is still the printed `DomainResult.Success()` stub. A real uniqueness check stays C8-tc2.
+- `DomainToCSharpExporter.StoreBind.cs` remains only for `StoreJobObjectType` and `TypedNull`.
+
 ## Scope
 Finding K0 (lowering half) from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10-codegen-review.md).
 Lowering still emits a string-named store job for by-type create:
@@ -87,20 +97,20 @@ C8-vm V1/V3/V5 stay in C8-vm. They are no longer a merge hold on tc1a. V2 (synth
 |---|---|---|---|
 | `create Fine { Amount: 5 }` | `this.Create("Fine", "Amount", 5L)`, `DomainResult<object>`, cast | `Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` | `StoreBindCreateTests`; golden `simulate-create-type/*.golden` |
 | same scenario simulated vs printed | agree | still agree | `ParityTests` |
-| `create in …` (G1) | `this.CreateIn("…")` | **unchanged** (C8-tc1b) | existing goldens still string-named |
-| by-type create in a void context (`mcp-library` `WhenEachLoanOverdue`) | `this.Create("Fine", …)` | **unchanged** (C8-tc1b) | existing `mcp-library/Patron.cs.golden` |
-| probe (`ProbeCreate`) | `this.ProbeCreate("…")` | **unchanged** (C8-tc2) | existing probe goldens |
+| `create in …` (G1) | `this.CreateIn("…")` | `this.Create{Nav}(...)` | goldens have no `CreateIn(` |
+| by-type create in a void context (`mcp-library` `WhenEachLoanOverdue`) | `this.Create("Fine", …)` | `Fine.Create(...)` | `mcp-library/Patron.cs.golden` |
+| probe (`ProbeCreate`) | `this.ProbeCreate("…")` | not emitted | goldens have no `ProbeCreate(` |
 
 ## Done when
-- No action-result-context golden contains a string-named `this.Create("` call; the two `simulate-create-*` goldens show `Fine.Create(...)`. (`mcp-library/Patron.cs.golden` keeps its void-context string form until C8-tc1b.)
+- No golden contains a string-named `this.Create("`, `CreateIn(`, or `ProbeCreate(`. By-type create is `Type.Create(...)`. Create-in is `this.Create{Nav}(...)`.
 - The interpreter runs the typed static `Create`; `ParityTests` green.
 - Goldens regenerated, not hand-edited. Full suite green.
-- `CreateIn("` goldens are untouched (that is C8-tc1b).
+- `EnsureUnique` on assign is still `DomainResult.Success()`. `BuildCreateUniqueChecks` is gone.
 
 ## SHIP if / NOT SHIP if
-SHIP if by-type create in an action-result context lowers to `Type.Create(...)`, parity holds, and no `create in`, void-context create, or probe change rode along.
+SHIP if by-type create lowers to `Type.Create(...)`, create-in lowers to `this.Create{Nav}(...)`, probes are not emitted, parity holds, and the dead probe / unique-check / store-bind shells are gone.
 
-NOT SHIP if any action-result-context create still lowers string-named, a golden was hand-edited, or a `CreateIn`/void-context/probe/`EnsureUnique` change rode along (t1b/tc2).
+NOT SHIP if a golden was hand-edited, a string-named `Create` / `CreateIn` / `ProbeCreate` remains under `EmitGolden/`, or `EnsureUnique` grew a real check in this slice.
 
 ## Tests
 ```

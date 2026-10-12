@@ -534,16 +534,6 @@ public sealed partial class DomainToCSharpExporter {
         return checks;
     }
 
-    private static List<Node> BuildCreateUniqueChecks(
-        Entity entity,
-        IReadOnlySet<string> entryAssignedProps,
-        Node created,
-        NamedTypeReference resultType,
-        Variable uniqueCheck) {
-        _ = (entity, entryAssignedProps, created, resultType, uniqueCheck);
-        return [];
-    }
-
     /// <summary>Converts a constraint value object to a Syntax Constant.</summary>
     private static Constant? ConvertToConstant(object? value) {
         if (value is null) return null;

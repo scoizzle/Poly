@@ -70,7 +70,8 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
-        await Assert.That(errors.Count).IsEqualTo(9);
+        // Two DomainResult<T>.Success(value) calls remain: T is not substituted onto the open AST generic.
+        await Assert.That(errors.Count).IsEqualTo(2);
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

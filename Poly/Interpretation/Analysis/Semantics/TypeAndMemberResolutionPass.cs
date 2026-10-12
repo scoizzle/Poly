@@ -566,18 +566,94 @@ internal static class ConstructorInvocationSemanticResolver {
         if (targetType == null)
             return null;
 
-        var argumentTypes = new ITypeDefinition[@new.Arguments.Length];
+        var argumentTypes = new ITypeDefinition?[@new.Arguments.Length];
+        var incomplete = false;
         for (var i = 0; i < @new.Arguments.Length; i++) {
-            var argumentType = context.GetResolvedType(@new.Arguments[i]);
-            if (argumentType == null)
-                return null;
+            // A null literal's resolved type is object, which rejects string? / entity?.
+            if (@new.Arguments[i] is Constant { Value: null }) {
+                argumentTypes[i] = null;
+                incomplete = true;
+                continue;
+            }
 
-            argumentTypes[i] = argumentType;
+            argumentTypes[i] = context.GetResolvedType(@new.Arguments[i]);
+            if (argumentTypes[i] is null)
+                incomplete = true;
         }
 
-        return targetType
-            .FindMatchingConstructors(argumentTypes)
-            .FirstOrDefault();
+        if (!incomplete) {
+            var complete = new ITypeDefinition[argumentTypes.Length];
+            for (var i = 0; i < argumentTypes.Length; i++)
+                complete[i] = argumentTypes[i]!;
+            return targetType.FindMatchingConstructors(complete).FirstOrDefault();
+        }
+
+        return MatchIncompleteConstructor(targetType, @new, argumentTypes);
+    }
+
+    /// <summary>
+    /// Member invoke already treats a null argument type as incomplete and skips the error.
+    /// Constructors still have to bind: an exact-arity ctor whose known args are assignable,
+    /// and whose null literals fit a reference or <c>Nullable&lt;T&gt;</c> parameter.
+    /// </summary>
+    private static ITypeConstructor? MatchIncompleteConstructor(
+        ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
+        ITypeConstructor? best = null;
+        var bestScore = int.MaxValue;
+        var ties = 0;
+        foreach (var constructor in targetType.Constructors) {
+            if (!TryScoreConstructor(constructor, @new, argumentTypes, out var score))
+                continue;
+            if (score < bestScore) {
+                bestScore = score;
+                best = constructor;
+                ties = 1;
+            }
+            else if (score == bestScore) {
+                ties++;
+            }
+        }
+
+        return ties == 1 ? best : null;
+    }
+
+    private static bool TryScoreConstructor(
+        ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
+        score = 0;
+        var parameters = constructor.Parameters?.ToArray() ?? [];
+        if (!SyntaxTypeCompatibilityAnalyzer.CallFits(parameters, argumentTypes.Length))
+            return false;
+
+        if (parameters.Length != argumentTypes.Length)
+            score++;
+
+        for (var i = 0; i < argumentTypes.Length; i++) {
+            var paramType = parameters[i].ParameterTypeDefinition;
+            if (@new.Arguments[i] is Constant { Value: null }) {
+                if (!SyntaxTypeCompatibilityAnalyzer.AcceptsNull(paramType))
+                    return false;
+                score++;
+                continue;
+            }
+
+            var argType = argumentTypes[i];
+            // A non-literal argument with no resolved type is incomplete, same as
+            // a member invoke. It does not reject the constructor and it does not
+            // change the score. Two constructors that both accept the known args
+            // still tie and bind nothing.
+            if (argType is null)
+                continue;
+            if (paramType == argType)
+                continue;
+            if (paramType.IsAssignableFrom(argType)) {
+                score++;
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 }
 

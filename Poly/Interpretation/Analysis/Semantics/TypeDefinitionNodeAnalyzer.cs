@@ -52,8 +52,12 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetadata {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
+    /// <summary>CLR arity suffix so <c>DomainResult</c> and <c>DomainResult&lt;T&gt;</c> both stay registered.</summary>
+    internal static string Key(string fullName, int arity) =>
+        arity <= 0 ? fullName : $"{fullName}`{arity}";
+
     public void Add(AstTypeDefinition definition) {
-        _types[definition.FullName] = definition;
+        _types[Key(definition.FullName, definition.GenericParameters.Count())] = definition;
     }
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
@@ -62,15 +66,32 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetada
         if (_types.TryGetValue(typeName, out var def))
             return def;
 
+        var arity = TryReadArity(typeName, out var bareName);
         AstTypeDefinition? match = null;
         foreach (var type in _types.Values) {
-            if (!string.Equals(type.Name, typeName, StringComparison.Ordinal))
+            if (!string.Equals(type.Name, bareName, StringComparison.Ordinal)
+                && !string.Equals(type.FullName, bareName, StringComparison.Ordinal))
+                continue;
+            if (arity is int required && type.GenericParameters.Count() != required)
                 continue;
             if (match is not null)
                 return null;
             match = type;
         }
         return match;
+    }
+
+    private static int? TryReadArity(string typeName, out string bareName) {
+        var tick = typeName.LastIndexOf('`');
+        if (tick > 0
+            && int.TryParse(typeName.AsSpan(tick + 1), out var parsed)
+            && parsed >= 0) {
+            bareName = typeName[..tick];
+            return parsed;
+        }
+
+        bareName = typeName;
+        return null;
     }
 
     public ITypeDefinition? GetTypeDefinition(Type type) =>
@@ -650,8 +671,15 @@ internal static class AstTypeReferenceResolver {
         ITypeDefinition? enclosing) {
         if (named.TypeArguments is { Count: > 0 } args) {
             var resolvedArgs = new ITypeDefinition[args.Count];
+            ITypeDefinition? open = null;
             for (var i = 0; i < args.Count; i++) {
                 var resolved = TryResolve(args[i], provider, enclosing);
+                if (resolved is null && !TryCollectionKind(named.TypeName, out _)) {
+                    // DomainResult<T> inside the open definition: T is that definition's parameter,
+                    // not a separate type. An unknown name still fails.
+                    open ??= LookupOpenGeneric(named, args.Count, provider);
+                    resolved = open is null ? null : TypeParameterOf(open, args[i]);
+                }
                 if (resolved is null)
                     return null;
                 resolvedArgs[i] = resolved;
@@ -694,10 +722,40 @@ internal static class AstTypeReferenceResolver {
         if (args.Length == 1 && TryCollectionKind(named.TypeName, out var kind))
             return CloseCollection(args[0], kind, clr);
 
-        var open = LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
+        var open = LookupOpenGeneric(named, args.Length, provider)
+            ?? LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
         if (open is null)
             return null;
         return CloseGeneric(open, args, clr);
+    }
+
+    private static ITypeDefinition? TypeParameterOf(ITypeDefinition open, Node argument) {
+        if (argument is not NamedTypeReference named || named.Namespace is not null || named.TypeArguments is { Count: > 0 })
+            return null;
+        foreach (var parameter in open.GenericParameters) {
+            if (string.Equals(parameter.Name, named.TypeName, StringComparison.Ordinal))
+                return new AstGenericParameterTypeDefinition(parameter, open);
+        }
+        return null;
+    }
+
+    private static ITypeDefinition? LookupOpenGeneric(
+        NamedTypeReference named,
+        int arity,
+        ITypeDefinitionProvider provider) {
+        if (arity <= 0)
+            return null;
+
+        // Arity keys are an AST-registry fact. A CLR hit on `Name`1` (a loaded
+        // DomainResult<T>) must not steal the call from the non-generic runtime type.
+        var fullKey = AstTypeRegistry.Key(named.FullName, arity);
+        if (provider.GetTypeDefinition(fullKey) is AstTypeDefinition full)
+            return full;
+        if (named.FullName == named.TypeName)
+            return null;
+
+        var shortKey = AstTypeRegistry.Key(named.TypeName, arity);
+        return provider.GetTypeDefinition(shortKey) as AstTypeDefinition;
     }
 
     private static bool TryCollectionKind(string typeName, out CollectionKind kind) {

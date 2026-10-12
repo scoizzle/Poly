@@ -59,7 +59,7 @@ Each item: what, why, evidence/anchors, rough size (S/M/L).
 ### Tier 3 — expressiveness real ontologies need (strategic; language change)
 
 13. **Entity inheritance / abstract entities / mixins** (L). TypeDB's core and LinkML's is-a + mixins. The single biggest "ontology" credibility gap; touches analyzer, lowering, and the sim together.
-14. **Many-to-many (N:N) / reified relationship entities** (L). The DSL is deliberately N1-only today (`Poly.Mcp/Docs/poly-dsl-guide.md` §4 "Navigation Properties (N1 Relationships Only)"), and the repo already flags the risk: "Ownership, many-to-many … need careful analyzer rules" (`docs/plans/archive/experiments/domain-modeling-dsl-tour-feedback.md:127`).
+14. **Many-to-many (N:N) / reified relationship entities** (L). The `.poly` DSL surface is N1-only (`Poly.Mcp/Docs/poly-dsl-guide.md` §4 "Navigation Properties (N1 Relationships Only)"), but the incremental `add relationship` tool already accepts `OneToOne` / `OneToMany` / `ManyToMany` / `ManyToOne` (§12) — so the gap is authoring/round-trip/emit for N:N, not the model. The repo flags the analyzer risk: "Ownership, many-to-many … need careful analyzer rules" (`docs/plans/archive/experiments/domain-modeling-dsl-tour-feedback.md:127`).
 15. **Cardinality annotations** on navigations (0..1, 1..\*, required) (M). Currently implied by the navigation kind.
 
 ### Tier 4 — ecosystem and governance moat
@@ -119,7 +119,7 @@ Absent (verified 2026-10-12):
 | JSON Schema / OpenAPI / GraphQL / Protobuf emitters | no matches in `Poly/`, `src/`, `Poly.Mcp/` |
 | OWL / SHACL / RDF / JSON-LD / SPARQL | no matches in `Poly/`, `src/`, `Poly.Mcp/` |
 | Entity inheritance / mixins / abstract entities | DSL has no such construct |
-| Many-to-many relationships | `Poly.Mcp/Docs/poly-dsl-guide.md` §4 (N1 only) |
+| Many-to-many in the `.poly` DSL (the `add relationship` tool accepts it) | `Poly.Mcp/Docs/poly-dsl-guide.md` §4 vs §12 |
 | Enum member → external term mapping | enums exist without term metadata |
 | EF Core / API codegen | parked: [`docs/plans/parked/ef-and-api-codegen.md`](../../parked/ef-and-api-codegen.md) |
 | Domain package registry / playground / `.poly` LSP | none |

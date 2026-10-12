@@ -165,6 +165,19 @@ public class EffectAnalyzerFailClosedTests {
     }
 
     [Test]
+    public async Task Assign_ParameterOnlyAsTarget_ReportsUnusedHint() {
+        var analysis = AnalyzeDsl("""
+            domain Test
+            Item: entity {
+              Title: Text
+              Set: action (name: Text) { assign name to Title }
+            }
+            """);
+
+        await Assert.That(UnusedHint(analysis, "name")).IsTrue();
+    }
+
+    [Test]
     public async Task CreateIn_UnusedParameter_ReportsHint() {
         var analysis = AnalyzeDsl("""
             domain Test

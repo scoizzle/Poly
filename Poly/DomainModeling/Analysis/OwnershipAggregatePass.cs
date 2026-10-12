@@ -73,6 +73,25 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
             resolved[name] = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
         }
 
+        // A grandchild declared before its non-root parent is unresolved on the
+        // first pass. Re-resolve until parent names settle. Stop at the entity
+        // count so a cycle cannot spin.
+        for (var pass = 0; pass < drafts.Count; pass++) {
+            var changed = false;
+            foreach (var (name, isRoot) in drafts) {
+                if (isRoot) continue;
+                var next = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
+                var prev = resolved[name];
+                if (string.Equals(prev.AggregateParentName, next.AggregateParentName, StringComparison.Ordinal)
+                    && string.Equals(prev.ParentRelationshipName, next.ParentRelationshipName, StringComparison.Ordinal))
+                    continue;
+                resolved[name] = next;
+                changed = true;
+            }
+            if (!changed)
+                break;
+        }
+
         var ordered = drafts.Select(d => resolved[d.Name]).ToList();
         return new AggregateModel(domain.Name, ordered);
     }

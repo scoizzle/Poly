@@ -55,6 +55,33 @@ public class OwnershipAggregateAnalysisTests {
     }
 
     [Test]
+    public async Task Grandchild_DeclaredBeforeParent_NoOrphanWarning() {
+        var (domain, analysis) = Analyze("""
+            domain Test
+            OrderItem: entity {
+              Sku: Text
+              order: Order
+            }
+            Order: entity {
+              Total: Number
+              customer: Customer
+              items: many OrderItem
+            }
+            Customer: entity {
+              Name: Text
+              orders: many Order
+            }
+            """);
+
+        await Assert.That(Orphan(analysis, "OrderItem")).IsFalse();
+        await Assert.That(Orphan(analysis, "Order")).IsFalse();
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        var item = aggregate.Entities.First(e => e.Name == "OrderItem");
+        await Assert.That(item.AggregateParentName).IsEqualTo("Order");
+        await Assert.That(item.ParentRelationshipName).IsEqualTo("items");
+    }
+
+    [Test]
     public async Task NoIncomingRelationship_StillOrphanWarning() {
         var (_, analysis) = Analyze("""
             domain Test

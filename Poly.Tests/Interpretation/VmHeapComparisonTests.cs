@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Vm;
 
 namespace Poly.Tests.Interpretation;
 
@@ -35,5 +36,30 @@ public class VmHeapComparisonTests {
         await Assert.That(() => Interpreter.Compile(
             new LessThan(new Constant(new DateOnly(2026, 1, 1)), new Constant("x"))
         )).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Compare_BothNull_ReturnsZero() {
+        await Assert.That(VmHeapComparison.Compare(null, null)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Compare_LeftNull_OrdersBeforeNonNull() {
+        await Assert.That(VmHeapComparison.Compare(null, "x")).IsEqualTo(-1);
+    }
+
+    [Test]
+    public async Task Compare_RightNull_OrdersAfterNonNull() {
+        await Assert.That(VmHeapComparison.Compare("x", null)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Compare_MixedRuntimeTypes_Throws() {
+        await Assert.That(() => VmHeapComparison.Compare("x", 1)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Compare_SameTypeWithoutOrdering_Throws() {
+        await Assert.That(() => VmHeapComparison.Compare(new object(), new object())).Throws<InvalidOperationException>();
     }
 }

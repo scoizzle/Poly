@@ -37,6 +37,25 @@ public static class DomainInstanceHostJobs {
     public static DomainResult ProbeCreate(object? instance, string name, IReadOnlyDictionary<string, object?> values) =>
         Receiver(instance, nameof(ProbeCreate)).ProbeCreate(name, values);
 
+    /// <summary>
+    /// Static <c>Type.Create(typeName, values)</c> from the compiled tree. The
+    /// creating instance is the ambient interpreter subject; null values are
+    /// dropped so the store applies the same defaults as the omitted-argument path.
+    /// </summary>
+    public static DomainResult TypedCreate(string typeName, Dictionary<string, object?> values) =>
+        DomainEntityInstance.Ambient is { } host
+            ? host.Create(typeName, TrimNulls(values))
+            : DomainResult.Failure($"Create '{typeName}' has no ambient instance.");
+
+    static Dictionary<string, object?> TrimNulls(Dictionary<string, object?> values) {
+        var trimmed = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var kv in values) {
+            if (kv.Value is not null)
+                trimmed[kv.Key] = kv.Value;
+        }
+        return trimmed;
+    }
+
     /// <summary>An empty values bag. The name/value-pair create jobs start from it.</summary>
     public static Dictionary<string, object?> Values() => new(StringComparer.Ordinal);
 

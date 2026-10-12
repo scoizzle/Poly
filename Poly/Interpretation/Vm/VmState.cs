@@ -1,11 +1,14 @@
 namespace Poly.Interpretation.Vm;
 
+#pragma warning disable CS0618 // dead call-frame subsystem (Word/CallStackFrame/CallStack); slated for removal
+
 /// <summary>Represents a single word of data in the VM's call stack.
 /// A <see cref="Word"/> wraps a <see cref="long"/> value and provides
 /// implicit conversions to/from <c>int</c> and <c>long</c>.</summary>
 /// <remarks>Positive values may be heap handles
 /// (<see cref="IsHandle"/>). Handle 0 is the ABI null sentinel.
 /// This is the fundamental storage unit in the frame-based ABI.</remarks>
+[Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
 public record struct Word(long Value) {
     /// <summary>Implicitly converts an <c>int</c> to a <c>Word</c>.</summary>
     public static implicit operator Word(int value) => new(value);
@@ -45,6 +48,7 @@ public record struct Word(long Value) {
 /// -1 indicates the root (top-level) frame.</param>
 /// <param name="SavedStackPointer">The stack pointer value just before
 /// the two-word header was pushed, used to locate the argument area.</param>
+[Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
 public record struct CallStackFrame(Word PreviousFramePointer, Word SavedStackPointer) {
     /// <summary>Number of argument words in this frame.
     /// Set by the caller at compile time — not stored on the stack.</summary>
@@ -72,6 +76,7 @@ public record struct CallStackFrame(Word PreviousFramePointer, Word SavedStackPo
 ///   <item>Providing <see cref="Span{T}"/> views over frame locals</item>
 /// </list>
 /// </remarks>
+[Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
 public sealed class CallStack {
     private Word[] _storage;
     private int _sp;
@@ -251,6 +256,8 @@ public sealed class CallStack {
         callStack.DeallocateFrame(mainFrame);
     }
 }
+
+#pragma warning restore CS0618
 
 /// <summary>Per-execution state for the Poly VM: value stack, heap,
 /// registers, program counter, debug hooks, and loop iteration limits.

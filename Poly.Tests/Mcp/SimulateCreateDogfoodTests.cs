@@ -224,4 +224,117 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(store.GetRelatedInstances("waived", patron).Count).IsEqualTo(0);
         _ = fine; // registered but unlinked
     }
+
+    [Test]
+    public async Task ActionResultCreate_OmittedCollection_WithActionParameter_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedCollection");
+        var dsl = """
+            domain SimulateCreateOmittedCollection
+            uses storage
+
+            Clerk: entity {
+              Name: Text required
+              Active: stage {
+                Hire: action (name: Text) -> Patron {
+                  create Patron { Name: name }
+                }
+              }
+            }
+
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+            }
+
+            Fine: entity {
+              Amount: Number required
+              Reason: Text required
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
+        var invoke = RuntimeTool.InvokeAction(sessionId, clerkId, "Hire", """{"name":"Ada"}""");
+        await Assert.That(invoke.Success).IsTrue();
+        var patronId = ExtractReturnInstanceId(invoke);
+        await Assert.That(patronId).IsNotNull();
+        if (!McpSessionStore.TryGet(sessionId, out var state) || state?.InstanceStore is null)
+            throw new InvalidOperationException("session/store missing");
+        var patron = state.InstanceMap[patronId!];
+        await Assert.That(patron.GetProperty<string>("Name")).IsEqualTo("Ada");
+        await Assert.That(state.InstanceStore.GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ActionResultCreate_OmittedSingularNav_WithActionParameter_Succeeds() {
+        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedNav");
+        var dsl = """
+            domain SimulateCreateOmittedNav
+            uses storage
+
+            Desk: entity {
+              Name: Text required
+              Active: stage {
+                CheckOut: action (reason: Text) -> Fine {
+                  create Fine { Amount: 1 Reason: reason }
+                }
+              }
+            }
+
+            Fine: entity {
+              Amount: Number required
+              Reason: Text required
+              patron: Patron
+            }
+
+            Patron: entity {
+              Name: Text required
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var deskId = CreateAndId(sessionId, "Desk", """{"Name":"Front"}""");
+        var invoke = RuntimeTool.InvokeAction(sessionId, deskId, "CheckOut", """{"reason":"Overdue"}""");
+        await Assert.That(invoke.Success).IsTrue();
+        var fineId = ExtractReturnInstanceId(invoke);
+        await Assert.That(fineId).IsNotNull();
+        if (!McpSessionStore.TryGet(sessionId, out var state) || state?.InstanceStore is null)
+            throw new InvalidOperationException("session/store missing");
+        var fine = state.InstanceMap[fineId!];
+        await Assert.That(fine.GetProperty<string>("Reason")).IsEqualTo("Overdue");
+        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fine).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ActionResultCreate_OmittedRuntimeDefault_StoresClock() {
+        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedClock");
+        var dsl = """
+            domain SimulateCreateOmittedClock
+            uses temporal
+            uses storage
+
+            Clerk: entity {
+              Name: Text required
+              Active: stage {
+                Open: action (name: Text) -> Account {
+                  create Account { Name: name }
+                }
+              }
+            }
+
+            Account: entity {
+              Name: Text required
+              Opened: Date default(Today)
+            }
+            """;
+        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
+        var invoke = RuntimeTool.InvokeAction(sessionId, clerkId, "Open", """{"name":"Ada"}""");
+        await Assert.That(invoke.Success).IsTrue();
+        var accountId = ExtractReturnInstanceId(invoke);
+        await Assert.That(accountId).IsNotNull();
+        if (!McpSessionStore.TryGet(sessionId, out var state) || state is null)
+            throw new InvalidOperationException("session missing");
+        var account = state.InstanceMap[accountId!];
+        await Assert.That(account.GetProperty<DateOnly>("Opened"))
+            .IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+    }
 }

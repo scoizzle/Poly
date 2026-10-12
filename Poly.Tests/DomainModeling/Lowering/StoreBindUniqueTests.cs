@@ -50,13 +50,9 @@ public class StoreBindUniqueTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
-        var createdAt = create.IndexOf("var created = new Permit(", StringComparison.Ordinal);
-        var uniqueAt = create.IndexOf("created.EnsureUnique(\"Plate\", plate)", StringComparison.Ordinal);
-        await Assert.That(createdAt).IsGreaterThanOrEqualTo(0);
-        await Assert.That(uniqueAt).IsGreaterThan(createdAt);
-        await Assert.That(create).Contains("if (!uniqueCheck.IsSuccess)");
-        await Assert.That(create).Contains("uniqueCheck.ErrorMessage ?? \"\"");
-        await Assert.That(create).DoesNotContain("this.EnsureUnique");
+        await Assert.That(create).Contains("var created = new Permit(");
+        await Assert.That(create).DoesNotContain("EnsureUnique");
+        await Assert.That(cs).Contains("EnsureUnique(string propertyName");
     }
 
     [Test]

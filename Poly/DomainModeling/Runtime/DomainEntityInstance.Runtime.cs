@@ -487,6 +487,15 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Printed collection field <c>_permits</c>. Same nav as <c>Permits</c>.
+    /// </summary>
+    internal Relationship? MatchCollectionField(string key) {
+        if (key.Length < 2 || key[0] != '_')
+            return null;
+        return MatchCollectionNavigation(DomainToCSharpExporter.ToPascalCase(key[1..]));
+    }
+
+    /// <summary>
     /// IDictionary read of a collection nav (OneToMany / ManyToMany): the outbound
     /// linked targets of <paramref name="navigation"/> (empty list when unlinked, so
     /// a foreach sees zero items). Throws without a store or domain.

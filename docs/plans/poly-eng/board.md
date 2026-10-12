@@ -15,9 +15,7 @@ Updated 2026-10-10. Master: see GitHub (C7d #159 merged). Rules: [README](README
 
 ## In flight (open PRs; GitHub is the live state)
 
-| PR | Slice | Lane | Tip | CI | Next |
-|----|-------|------|-----|----|------|
-| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | branch head | green | Review SHIP. `Remove` detaches without the owned minimum; `Unlink` counts owners of the contract's source entity. |
+None. #157 merged.
 
 ## Next (in order; first unblocked row wins)
 
@@ -27,7 +25,8 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 |---|-------|----------------|-----------|
 | 1 | C6c | C6b (merged); review SHIP | [tasks/C6c.md](tasks/C6c.md) |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
-| 3 | C8-tc1 | C6a, C6b1 (merged) | [tasks/C8-tc1.md](tasks/C8-tc1.md) |
+| 3 | C8-tc1a | C6a, C6b1 (merged) | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
+| 3b | C8-tc1b | absorbed into tc1a (`this.Create{Nav}`, probes deleted). #164 superseded. Void-context linking is an open decision. | [tasks/C8-tc1b.md](tasks/C8-tc1b.md) |
 | 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
 | 6 | C8-vm | C8-tc2 | [tasks/C8-vm.md](tasks/C8-vm.md) |

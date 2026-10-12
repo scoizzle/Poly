@@ -49,6 +49,7 @@ public readonly record struct InterpreterResult {
     /// <summary>True when the result represents a control-flow signal
     /// (return, break, continue, throw, or suspend) rather than a value
     /// or void completion.</summary>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     public bool IsSignal => Kind is ResultKind.Return or ResultKind.Break or ResultKind.Continue or ResultKind.Throw or ResultKind.Suspend;
 
     private InterpreterResult(ResultKind kind, object? value, string? label = null) {
@@ -88,18 +89,22 @@ public readonly record struct InterpreterResult {
 
     /// <summary>Creates a return signal with an optional value.</summary>
     /// <param name="value">Optional return value (null by default).</param>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     public static InterpreterResult Return(object? value = null) => new(ResultKind.Return, value);
 
     /// <summary>Creates a break signal for loop exit.</summary>
     /// <param name="label">Optional target label for labeled breaks.</param>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     public static InterpreterResult Break(string? label = null) => new(ResultKind.Break, null, label);
 
     /// <summary>Creates a continue signal for loop iteration advancement.</summary>
     /// <param name="label">Optional target label for labeled continues.</param>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     public static InterpreterResult Continue(string? label = null) => new(ResultKind.Continue, null, label);
 
     /// <summary>Creates a throw signal carrying the exception.</summary>
     /// <param name="exception">The exception to propagate.</param>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     public static InterpreterResult Throw(Exception exception) => new(ResultKind.Throw, exception);
 
     /// <summary>Creates a suspend signal (breakpoint, await, or yield).</summary>

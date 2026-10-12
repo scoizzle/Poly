@@ -12,6 +12,7 @@ namespace Poly.Interpretation.Vm;
 /// Consolidates the repeated <c>GetPrimitiveType()?.IsStackValue()</c>
 /// dispatch pattern that previously lived inline in multiple locations.
 /// </summary>
+[Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
 internal static class VmValueMarshaller {
     /// <summary>
     /// Allocates an object on the VM heap and returns its handle as a <c>long</c>.

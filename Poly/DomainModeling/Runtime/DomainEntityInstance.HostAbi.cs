@@ -396,6 +396,10 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<object?> setArgs) {
         var compiled = CompileBody(
             tree, ModuleAwareTypeProvider(_typeDefAnalyzer), rootParameters);
+        // Static Type.Create records the child on the ambient subject. The
+        // subscriber is that subject for the handler, even when an outer
+        // action on the peer is already ambient.
+        PushAmbient(this);
         try {
             using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
@@ -404,6 +408,9 @@ public sealed partial record DomainEntityInstance {
         }
         catch (ConstraintFailureException ex) {
             return DomainResult.Failure(ex.Message);
+        }
+        finally {
+            PopAmbient();
         }
     }
 

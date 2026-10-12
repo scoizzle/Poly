@@ -524,10 +524,14 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++)
             fnCtx.DeclareCapture(captures[i].Binding, i);
 
-        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
+        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx]).
+        // Locals start after those slots. An instance frame also keeps slot 0
+        // for the receiver. Without the reserve, block-local zeros land on the
+        // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
         foreach (var param in parameters)
             fnCtx.DeclareParameter(param);
+        fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Enter the activation in the compile-time simulator.
         // Local count is 0 initially; DeclareVariable calls inside the body
@@ -712,7 +716,7 @@ public static partial class DirectVmAbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis);
+            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis, key);
             if (analysis.HasErrors) {
                 var text = string.Join("; ", analysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -794,7 +798,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static AnalysisResult AnalysisForAstBody(
-        Node body, ITypeDefinition declaring, AnalysisResult? caller) {
+        Node body, ITypeDefinition declaring, AnalysisResult? caller, Node member) {
         if (caller is not null && AstBodyMembersResolved(body, caller))
             return caller;
         if (declaring is not AstTypeDefinition astType)
@@ -805,7 +809,46 @@ public static partial class DirectVmAbiEmitter {
         var provider = astType.ResolutionProvider;
         if (provider is TypeDefinitionProviderCollection collection)
             provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
-        return Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
+        // Re-analyze the declaring type so members resolve. A typed Create
+        // forwarder shares that type with printed helpers the VM analyzer
+        // still flags (C8-vm). Diagnostics outside this method must not reject
+        // the forwarder. An error on the method, its signature, or its body
+        // still fails it. Every other member keeps the type-level result, so a
+        // dirty type still falls through to InvokeNamed.
+        var analysis = Interpreter.Analyzer.Analyze(
+            astType.Syntax,
+            typeDefinitions: provider,
+            setup: ctx => ctx.SetMetadata(astType.Syntax, new TypeDefinitionMetadata(astType)));
+        if (!analysis.HasErrors
+            || !ForwardsToClrStatic(body)
+            || ErrorsTouch(member, analysis))
+            return analysis;
+        return analysis with {
+            HasErrors = false,
+            Diagnostics = analysis.Diagnostics
+                .Where(d => d.Severity != DiagnosticSeverity.Error)
+                .ToArray()
+        };
+    }
+
+    private static bool ErrorsTouch(Node body, AnalysisResult analysis) {
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity != DiagnosticSeverity.Error)
+                continue;
+            if (ReferenceEquals(diagnostic.Node, body) || ContainsNode(body, diagnostic.Node))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsNode(Node root, Node target) {
+        foreach (var child in root.Children) {
+            if (child is null)
+                continue;
+            if (ReferenceEquals(child, target) || ContainsNode(child, target))
+                return true;
+        }
+        return false;
     }
 
     private static bool AstBodyMembersResolved(Node node, AnalysisResult analysis) {
@@ -980,6 +1023,10 @@ public static partial class DirectVmAbiEmitter {
             return 0L;
         }
         if (target.IsInstanceOfType(value))
+            return raw;
+        // Entity types publish IDictionary<string, object>. The instance is
+        // IDictionary<string, object?> (invariance blocks the CLR cast).
+        if (target == typeof(IDictionary<string, object>) && value is IDictionary<string, object?>)
             return raw;
         throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }

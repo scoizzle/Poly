@@ -70,8 +70,11 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
-        // Two DomainResult<T>.Success(value) calls remain: T is not substituted onto the open AST generic.
-        await Assert.That(errors.Count).IsEqualTo(2);
+        var messages = string.Join("\n", errors.Select(e => e.Message).OrderBy(m => m, StringComparer.Ordinal));
+        // V1/V3/V5 removed the constructor misses. DomainResult<T>.Success is typed.
+        // One non-generic Success call remains.
+        await Assert.That(messages).IsEqualTo(
+            "no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)");
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

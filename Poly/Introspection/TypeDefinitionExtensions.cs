@@ -1,3 +1,4 @@
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Introspection;
@@ -121,10 +122,17 @@ public static class TypeDefinitionExtensions {
                 // use RuntimeType.IsAssignableFrom below.
                 if (clrTypeDef.RuntimeType == typeof(object))
                     return true;
-                if (other is ClrTypeDefinition otherClrTypeDef
-                    && clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
-                    return true;
+                if (other is ClrTypeDefinition otherClrTypeDef) {
+                    if (clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
+                        return true;
+                    // C# lifts T to T?. CLR IsAssignableFrom does not.
+                    if (Nullable.GetUnderlyingType(clrTypeDef.RuntimeType) == otherClrTypeDef.RuntimeType)
+                        return true;
+                }
             }
+
+            if (SyntheticCollectionsMatch(typeDefinition, other))
+                return true;
 
             var current = other.BaseType;
             while (current != null) {
@@ -135,6 +143,18 @@ public static class TypeDefinitionExtensions {
             if (other.Interfaces.Any(i => typeDefinition == i)) return true;
 
             return typeDefinition.GetConversionFrom(other)?.Kind is ConversionOperatorKind.Implicit;
+
+            // List<Fine> and IEnumerable<Fine> both close as one synthetic
+            // collection. Each resolve builds a fresh instance, so reference
+            // equality never matches an omitted collection argument.
+            static bool SyntheticCollectionsMatch(ITypeDefinition to, ITypeDefinition from) {
+                if (to is not AstCollectionTypeDefinition left
+                    || from is not AstCollectionTypeDefinition right)
+                    return false;
+                return left.Kind == right.Kind
+                    && string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+                    && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
+            }
         }
 
         /// <summary>

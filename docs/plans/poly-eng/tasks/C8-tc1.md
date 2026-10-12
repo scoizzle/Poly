@@ -1,5 +1,10 @@
 # TASK C8-tc1 - Lowering emits typed create calls
-Status: planned (written for the local-agent handoff, 2026-10-10). Branch `slice/c8-tc1` (not created yet). Lane B. Review 2.
+Status: SPLIT 2026-10-10 into [C8-tc1a](C8-tc1a.md) (K0, by-type create) and
+[C8-tc1b](C8-tc1b.md) (G1, create-in): as written this slice needed
+`EffectLoweringPass` + the exporter helper surface + the interpreter
+static-factory bind (6 source files), past the ~3-file rule in
+[`LOCAL-AGENT.md`](../LOCAL-AGENT.md) §5. This file is the parent card; do not
+run it. Lane B. Review 2.
 Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md). C8-tc was split into tc1, tc2 and tc3 on 2026-10-10 after its run hung four times; this file is part 1 of 3.
 
 ## Scope

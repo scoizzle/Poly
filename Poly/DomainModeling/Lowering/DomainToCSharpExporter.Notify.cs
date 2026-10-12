@@ -157,8 +157,15 @@ public sealed partial class DomainToCSharpExporter {
             var propRef = parameter.IsNavigation
                 ? (Node)new OptionalTypeReference(mapped)
                 : mapped;
-            methodParams.Add(new Parameter(paramName, propRef));
-            createArgs.Add(new Parameter(paramName));
+            // Same node in the signature and the Create call. A second untyped
+            // Parameter does not resolve, so the VM cannot tell scalar from reference.
+            // A navigation the caller did not write is omitted. It needs a default
+            // so that omission is a legal trailing argument.
+            var param = parameter.IsNavigation
+                ? new Parameter(paramName, propRef, DefaultValue: new Constant(null))
+                : new Parameter(paramName, propRef);
+            methodParams.Add(param);
+            createArgs.Add(param);
         }
 
         // NOTE: properties with DefaultValueConstraint are NOT included in
@@ -183,16 +190,14 @@ public sealed partial class DomainToCSharpExporter {
                 new NamedTypeReference(prop.Type.TypeName),
                 RuntimeAnalysisCache.MeaningFor(domain),
                 RuntimeAnalysisCache.FormsFor(domain));
-            if (runtimeExpr is not null) {
-                methodParams.Add(new Parameter(paramName,
+            var trailing = runtimeExpr is not null
+                ? new Parameter(paramName,
                     new OptionalTypeReference(mapped),
-                    DefaultValue: new Constant(null)));
-            }
-            else {
-                methodParams.Add(new Parameter(paramName, mapped,
-                    DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata)));
-            }
-            createArgs.Add(new Parameter(paramName));
+                    DefaultValue: new Constant(null))
+                : new Parameter(paramName, mapped,
+                    DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata));
+            methodParams.Add(trailing);
+            createArgs.Add(trailing);
         }
 
         var bodyNodes = new List<Node>();
@@ -308,7 +313,29 @@ public sealed partial class DomainToCSharpExporter {
         ));
     }
 
-    private static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
+    /// <summary>
+    /// Public parameters of <c>Create{Nav}</c>: constructor slots the method
+    /// asks the caller for. Back-references, the auto-wired peer, and
+    /// collections are filled inside the method.
+    /// </summary>
+    internal static List<ConstructorParameterOrder> CreateNavParameters(
+        Entity source, Entity target, INodeMetadataProvider analysis) {
+        var slots = new List<ConstructorParameterOrder>();
+        var autoWire = FindAutoWireBackReference(target, source.Name);
+        foreach (var parameter in GetConstructorParameters(target, analysis)) {
+            if (parameter.IsNavigation && parameter.IsBackReference)
+                continue;
+            if (autoWire is not null
+                && string.Equals(parameter.Name, autoWire.Name, StringComparison.Ordinal))
+                continue;
+            if (parameter.IsCollection)
+                continue;
+            slots.Add(parameter);
+        }
+        return slots;
+    }
+
+    internal static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
         Entity targetEntity,
         INodeMetadataProvider analysis) {
         if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
@@ -317,6 +344,39 @@ public sealed partial class DomainToCSharpExporter {
         throw new InvalidOperationException(
             $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
     }
+
+    /// <summary>
+    /// Trailing optional Create/ctor parameters: defaulted properties that are
+    /// not entry-assigned, in the order the Create factory appends them.
+    /// </summary>
+    internal static List<Property> TrailingDefaultedProperties(
+        Entity entity,
+        INodeMetadataProvider metadata) {
+        var entryAssigned = metadata.GetStructure(entity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+        var list = new List<Property>();
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any())
+                continue;
+            if (entryAssigned.Contains(prop.Name))
+                continue;
+            list.Add(prop);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Null <c>IEnumerable&lt;T&gt;?</c> for an omitted collection create argument.
+    /// The printed constructor already coalesces that null into an empty list.
+    /// A synthetic <c>new List&lt;T&gt;()</c> is a different collection instance the
+    /// VM cannot assign or construct.
+    /// </summary>
+    internal static Node NullCollectionNode(string elementTypeName) =>
+        new TypeCast(
+            new Constant(null),
+            new OptionalTypeReference(
+                new NamedTypeReference("IEnumerable",
+                    TypeArguments: [new NamedTypeReference(elementTypeName)])));
 
     /// <summary>
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
@@ -471,40 +531,6 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        return checks;
-    }
-
-    /// <summary>
-    /// After <c>created = new</c>, one <c>created.EnsureUnique</c> / Failure
-    /// block per unique constructor-parameter property. Create is static, so
-    /// the call is on <paramref name="created"/>, not <c>this</c>.
-    /// </summary>
-    private static List<Node> BuildCreateUniqueChecks(
-        Entity entity,
-        IReadOnlySet<string> entryAssignedProps,
-        Node created,
-        NamedTypeReference resultType,
-        Variable uniqueCheck) {
-        var checks = new List<Node>();
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            if (entryAssignedProps.Contains(prop.Name)) continue;
-            if (!prop.Constraints.OfType<UniqueConstraint>().Any()) continue;
-
-            var paramRef = new Parameter(ToCamelCase(prop.Name));
-            checks.Add(new Assignment(uniqueCheck, new Invoke(
-                new Member(created, "EnsureUnique"),
-                new Constant(prop.Name),
-                paramRef)));
-            checks.Add(new IfStatement(
-                new Syntactic.Not(new Member(uniqueCheck, "IsSuccess")),
-                new Block([
-                    new Return(new Invoke(
-                        new Member(resultType, "Failure"),
-                        new Syntactic.Coalesce(
-                            new Member(uniqueCheck, "ErrorMessage"),
-                            new Constant(""))))
-                ])));
-        }
         return checks;
     }
 

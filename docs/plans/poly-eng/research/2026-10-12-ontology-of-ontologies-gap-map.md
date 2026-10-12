@@ -51,7 +51,7 @@ Each item: what, why, evidence/anchors, rough size (S/M/L).
 ### Tier 2 — interop emitters (LinkML parity)
 
 8. **SHACL shapes export** (M). Poly's constraints and policies map naturally to shapes; SHACL is what validation-heavy teams actually consume (LinkML's own guidance: OWL for vocabularies, SHACL for validation).
-9. **GraphQL + OpenAPI 3 emitters** (M). `docs/domain-modeling/first-principles.md:324,366` already frames OpenAPI/gRPC as host libraries, and [`docs/plans/parked/ef-and-api-codegen.md`](../../parked/ef-and-api-codegen.md) is the parked plan — un-park it as the emitter workstream.
+9. **OpenAPI 3 + GraphQL emitters** (M). EF `DbContext` and Minimal API codegen already ship (`src/Poly.DslCompiler/{DbContextGenerator,MinimalApiGenerator}.cs`), but OpenAPI/GraphQL do not: `docs/domain-modeling/first-principles.md:324,366` lists them as ideas and `Poly.Mcp/Docs/poly-dsl-guide.md:232` says an OpenAPI pack will emit the HTTP IR later. The parked [`docs/plans/parked/ef-and-api-codegen.md`](../../parked/ef-and-api-codegen.md) is a stale draft, not the workstream.
 10. **ProtoBuf/gRPC emitter** (M); **SQL DDL artifact** (S) for non-.NET consumers (storage packs exist, but a pure DDL artifact does not).
 11. **Importers**: JSON Schema → `.poly`, LinkML → `.poly`, partial OWL → `.poly` (M–L). Round-trip today is only Poly's own DSL; the meta-tool claim needs the inbound direction.
 12. **OWL export** (M) — class hierarchy + object properties. Only worthwhile once inheritance (item 13) exists.
@@ -59,7 +59,7 @@ Each item: what, why, evidence/anchors, rough size (S/M/L).
 ### Tier 3 — expressiveness real ontologies need (strategic; language change)
 
 13. **Entity inheritance / abstract entities / mixins** (L). TypeDB's core and LinkML's is-a + mixins. The single biggest "ontology" credibility gap; touches analyzer, lowering, and the sim together.
-14. **Many-to-many (N:N) / reified relationship entities** (L). The `.poly` DSL surface is N1-only (`Poly.Mcp/Docs/poly-dsl-guide.md` §4 "Navigation Properties (N1 Relationships Only)"), but the incremental `add relationship` tool already accepts `OneToOne` / `OneToMany` / `ManyToMany` / `ManyToOne` (§12) — so the gap is authoring/round-trip/emit for N:N, not the model. The repo flags the analyzer risk: "Ownership, many-to-many … need careful analyzer rules" (`docs/plans/archive/experiments/domain-modeling-dsl-tour-feedback.md:127`).
+14. **`.poly` nav syntax + round-trip for many-to-many / reified relationship entities** (L). The model already has `RelationshipCardinality.ManyToMany` (`Poly/DomainModeling/Ontology/Relationship.cs`), MCP `add` accepts it (`Poly.Mcp/Tools/DomainTools.cs:745`), and the runtime treats it as a collection nav (`Poly.Tests/DomainModeling/Lowering/ForEachInvokeHostAbiTests.cs`). Missing: the `.poly` spelling (§4 is N1-only), round-trip (the printer collapses ManyToMany to `many`), and cross-entity `invoke` on it (rejected by `EffectAnalyzer`). The repo flags the analyzer risk: "Ownership, many-to-many … need careful analyzer rules" (`docs/plans/archive/experiments/domain-modeling-dsl-tour-feedback.md:127`).
 15. **Cardinality annotations** on navigations (0..1, 1..\*, required) (M). Currently implied by the navigation kind.
 
 ### Tier 4 — ecosystem and governance moat
@@ -68,7 +68,7 @@ Each item: what, why, evidence/anchors, rough size (S/M/L).
 17. **Starter ontology pack** (M). Publish dogfood domains: a schema.org subset, retail/inventory, PII/FHIR-lite, temporal events. Content is the cheapest credibility.
 18. **Governance artifacts** (M). Productize "the ontology engineer as governor": provenance report (term → origin), constraint/shape report, parity/canary gate. The internals already exist (`VmAnalyzerReport`, golden parity, fleet-eval probes).
 19. **Playground** (L). A web REPL for `.poly` (TypeSpec and LinkML both have one). Biggest single adoption lever.
-20. **`.poly` LSP** (M) for human editing; **MCP hardening** (M) — session isolation for shared servers (flagged 🟠 in `docs/probes/findings/fleet-eval/`), plus resources/notifications so an agent can observe domain changes. MCP mut-safety is already on the board's THEN line.
+20. **`.poly` LSP** (M) for human editing; **MCP hardening** (M) — session isolation for shared servers (🟠 F10 in `docs/plans/archive/probes-2026-08/findings/fleet-eval/12-mcp.md`; `docs/probes/findings/` has no fleet-eval report), plus resources/notifications so an agent can observe domain changes. MCP mut-safety is already on the board's THEN line.
 
 ---
 
@@ -79,7 +79,7 @@ Positioning: **"LinkML's polyglot emitters + TypeDB's executable semantics + Pol
 Order:
 
 1. **Agent story first (Tier 1).** Ship the Poly Agent Skill, JSON Schema + JSON-LD/RDFS emitters, term annotations/IRIs, annotated enums, and domain docs. Small, visible, and it makes the existing MCP loop legible to other agents.
-2. **Un-park codegen (Tier 2).** SHACL, then OpenAPI/GraphQL, then ProtoBuf/SQL. This is the "30+ generators" bar and reuses the parked EF/API plan.
+2. **Un-park codegen (Tier 2).** SHACL, then OpenAPI/GraphQL, then ProtoBuf/SQL — the "30+ generators" bar. EF `DbContext` and Minimal API codegen already ship; the parked EF/API draft is stale, not the workstream.
 3. **Inbound interop (item 11)** — JSON Schema/LinkML import — the day a second tool wants to round-trip with Poly.
 4. **Admit expressiveness as its own slice chain (Tier 3).** Inheritance first, then N:N. These are language changes and deserve the same slice discipline as C8, not a rider on an emitter PR.
 5. **Ecosystem (Tier 4)** once there is something to distribute: registry, starter pack, playground.
@@ -106,6 +106,7 @@ Present today:
 | Executable sim + fail-closed analyze + Lower | `docs/CORE.md`, `docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md` |
 | Sim/print parity tests | `Poly.Tests/DomainModeling/Lowering/ParityTests.cs` |
 | C# emit | `Poly/DomainModeling/Lowering/DomainToCSharpExporter*.cs` |
+| EF Core `DbContext` + Minimal API + `.http` emit | `src/Poly.DslCompiler/{DbContextGenerator,MinimalApiGenerator,HttpFileGenerator}.cs`; goldens `Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/` |
 | Mermaid visualization | `Poly/Interpretation/Mermaid/MermaidAstGenerator.cs` |
 | MCP authoring/runtime tools | `Poly.Mcp/Tools/*.cs` |
 | Domain libraries + `uses` | `docs/decisions/2026-08-14-domain-libraries.md` |
@@ -116,12 +117,11 @@ Absent (verified 2026-10-12):
 
 | Missing | Evidence |
 |---|---|
-| JSON Schema / OpenAPI / GraphQL / Protobuf emitters | no matches in `Poly/`, `src/`, `Poly.Mcp/` |
+| JSON Schema / OpenAPI / GraphQL / Protobuf emitters | no emitter in `Poly/`, `src/`, `Poly.Mcp/` (an OpenAPI pack is promised at `Poly.Mcp/Docs/poly-dsl-guide.md:232`; GraphQL appears only in a comment at `Poly/DomainModeling/Analysis/AggregateModel.cs:10`) |
 | OWL / SHACL / RDF / JSON-LD / SPARQL | no matches in `Poly/`, `src/`, `Poly.Mcp/` |
 | Entity inheritance / mixins / abstract entities | DSL has no such construct |
-| Many-to-many in the `.poly` DSL (the `add relationship` tool accepts it) | `Poly.Mcp/Docs/poly-dsl-guide.md` §4 vs §12 |
+| `.poly` nav syntax + round-trip for ManyToMany / reified relationship entities | enum + MCP `add` + collection-nav runtime exist; the parser is N1-only and `DomainDslPrinter` collapses ManyToMany to `many`; cross-entity `invoke` on it is rejected |
 | Enum member → external term mapping | enums exist without term metadata |
-| EF Core / API codegen | parked: [`docs/plans/parked/ef-and-api-codegen.md`](../../parked/ef-and-api-codegen.md) |
 | Domain package registry / playground / `.poly` LSP | none |
 
 ---

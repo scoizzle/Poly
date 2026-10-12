@@ -819,13 +819,8 @@ public static partial class DirectVmAbiEmitter {
             astType.Syntax,
             typeDefinitions: provider,
             setup: ctx => ctx.SetMetadata(astType.Syntax, new TypeDefinitionMetadata(astType)));
-        // Sibling members (notify-depth throws, collection constructors) can
-        // be dirty. Create and Create{Nav} still have to run: their bodies are
-        // the factory, and a missed compile falls through to InvokeNamed.
-        var createDespiteSiblings = member is MethodDefinitionNode { Name: var methodName }
-            && methodName.StartsWith("Create", StringComparison.Ordinal);
         if (!analysis.HasErrors
-            || (!ForwardsToClrStatic(body) && !createDespiteSiblings)
+            || !ForwardsToClrStatic(body)
             || ErrorsTouch(member, analysis))
             return analysis;
         return analysis with {

@@ -71,14 +71,10 @@ public sealed class AnalysisReportArtifactTests {
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
         var messages = string.Join("\n", errors.Select(e => e.Message).OrderBy(m => m, StringComparer.Ordinal));
-        await Assert.That(messages).IsEqualTo("""
-            no matching constructor for 'DomainResult' with 2 argument(s)
-            no matching constructor for 'DomainResult' with 2 argument(s)
-            no matching constructor for 'DomainResult<T>' with 3 argument(s)
-            no matching constructor for 'DomainResult<T>' with 3 argument(s)
-            no matching constructor for 'Placeholder' with 1 argument(s)
-            no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)
-            """);
+        // V1/V3/V5 removed the constructor misses. DomainResult<T>.Success is typed.
+        // One non-generic Success call remains.
+        await Assert.That(messages).IsEqualTo(
+            "no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)");
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

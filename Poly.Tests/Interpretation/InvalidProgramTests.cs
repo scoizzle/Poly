@@ -404,6 +404,214 @@ public class InvalidProgramTests {
             .Throws<Exception>();
     }
 
+    [Test]
+    public async Task Invoke_CreateWithListNullAndOmittedOptional_NoMatchingMemberError() {
+        var item = new TypeDefinitionNode("Item");
+        var order = new TypeDefinitionNode(
+            "Order",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Create",
+                    new NamedTypeReference("Order"),
+                    Parameters: [
+                        new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
+                        new Parameter(
+                            "items",
+                            new OptionalTypeReference(new NamedTypeReference(
+                                "List", TypeArguments: [new NamedTypeReference("Item")])),
+                            new Constant(null)),
+                        new Parameter(
+                            "parent",
+                            new OptionalTypeReference(new NamedTypeReference("Order")),
+                            new Constant(null)),
+                        new Parameter(
+                            "count",
+                            new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.Int32)),
+                            new Constant(null))
+                    ],
+                    IsStatic: true)
+            ]);
+        var listCall = new Invoke(
+            new Member(new NamedTypeReference("Order"), "Create"),
+            new Constant("a"),
+            new New(new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Item")])),
+            new Constant(null),
+            new Constant(1));
+        var omitted = new Invoke(
+            new Member(new NamedTypeReference("Order"), "Create"),
+            new Constant("a"));
+        var nullableNull = new Invoke(
+            new Member(new NamedTypeReference("Order"), "Create"),
+            new Constant("a"),
+            new Constant(null),
+            new Constant(null),
+            new Constant(null));
+
+        await AssertNoVmMemberError(new Block([item, order, listCall, omitted, nullableNull]));
+    }
+
+    [Test]
+    public async Task Invoke_CreateOptionalEntityFromNullCoalesce_NoMatchingMemberError() {
+        var order = new TypeDefinitionNode(
+            "Order",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Create",
+                    new NamedTypeReference("Order"),
+                    Parameters: [
+                        new Parameter(
+                            "parent",
+                            new OptionalTypeReference(new NamedTypeReference("Order")),
+                            new Constant(null))
+                    ],
+                    IsStatic: true)
+            ]);
+        var fetched = new Conditional(
+            new Constant(true),
+            new Coalesce(
+                new TypeCast(new Constant(null), new OptionalTypeReference(new NamedTypeReference("Order"))),
+                new Constant(null)),
+            new Constant(null));
+        var call = new Invoke(new Member(new NamedTypeReference("Order"), "Create"), fetched);
+        await AssertNoVmMemberError(new Block([order, call]));
+    }
+
+    [Test]
+    public async Task Invoke_CreateWithUnrelatedArgument_ReportsNoMatchingMember() {
+        var item = new TypeDefinitionNode("Item");
+        var other = new TypeDefinitionNode("Other");
+        var order = new TypeDefinitionNode(
+            "Order",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Create",
+                    new NamedTypeReference("Order"),
+                    Parameters: [
+                        new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String)),
+                        new Parameter(
+                            "items",
+                            new OptionalTypeReference(new NamedTypeReference(
+                                "List", TypeArguments: [new NamedTypeReference("Item")])),
+                            new Constant(null))
+                    ],
+                    IsStatic: true)
+            ]);
+        await AssertAnalysisThenCompileRejects(
+            new Block([
+                item,
+                other,
+                order,
+                new Invoke(
+                    new Member(new NamedTypeReference("Order"), "Create"),
+                    new Constant(1L))
+            ]),
+            "no matching member",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+        await AssertAnalysisThenCompileRejects(
+            new Block([
+                item,
+                other,
+                order,
+                new Invoke(
+                    new Member(new NamedTypeReference("Order"), "Create"),
+                    new Constant("a"),
+                    new New(new NamedTypeReference("List", TypeArguments: [new NamedTypeReference("Other")])))
+            ]),
+            "no matching member",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task New_ExactSingleArgConstructor_UnresolvedArgument_ResolvesExactConstructor() {
+        var order = new TypeDefinitionNode(
+            "Order",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    AccessModifier: AccessModifier.Private)
+            ],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Create",
+                    new NamedTypeReference("Order"),
+                    Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    Body: new New(new NamedTypeReference("Order"), new Parameter("total")),
+                    IsStatic: true)
+            ]);
+        var analysis = Interpreter.Analyze(order);
+        var created = ((MethodDefinitionNode)order.Methods!.Single()).Body!;
+        await Assert.That(analysis.GetResolvedMember(created) as ITypeConstructor).IsNotNull();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("no matching constructor", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
+    [Test]
+    public async Task New_NullLiteralOnValueParameter_ReportsNoMatchingConstructor() {
+        var order = new TypeDefinitionNode(
+            "Order",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))])
+            ]);
+        await AssertAnalysisThenCompileRejects(
+            new Block([order, new New(new NamedTypeReference("Order"), new Constant(null))]),
+            "no matching constructor",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
+    public async Task New_DomainResultWithNullMessage_ResolvesPrivateConstructor() {
+        var plain = new TypeDefinitionNode(
+            "DomainResult",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [
+                        new Parameter("isSuccess", new PrimitiveTypeReference(PrimitiveType.Boolean)),
+                        new Parameter(
+                            "errorMessage",
+                            new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.String)))
+                    ],
+                    AccessModifier: AccessModifier.Private)
+            ]);
+        var generic = new TypeDefinitionNode(
+            "DomainResult",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [
+                        new Parameter("isSuccess", new PrimitiveTypeReference(PrimitiveType.Boolean)),
+                        new Parameter("value", new NamedTypeReference("T")),
+                        new Parameter(
+                            "errorMessage",
+                            new OptionalTypeReference(new PrimitiveTypeReference(PrimitiveType.String)))
+                    ],
+                    AccessModifier: AccessModifier.Private)
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var plainNew = new New(
+            new NamedTypeReference("DomainResult"),
+            new Constant(true),
+            new Constant(null));
+        var genericNew = new New(
+            new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("T")]),
+            new Constant(true),
+            new Parameter("value"),
+            new Constant(null));
+        var analysis = Interpreter.Analyze(new Block([plain, generic, plainNew, genericNew]));
+        await Assert.That(analysis.GetResolvedMember(plainNew) as ITypeConstructor).IsNotNull();
+        await Assert.That(analysis.GetResolvedMember(genericNew) as ITypeConstructor).IsNotNull();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("no matching constructor", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
+    private static async Task AssertNoVmMemberError(Node node) {
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("no matching member", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
     private static async Task AssertAnalysisThenCompileRejects(
         Node node, string messageNeedle, string? expectedCode) {
         var analysis = Interpreter.Analyze(node);

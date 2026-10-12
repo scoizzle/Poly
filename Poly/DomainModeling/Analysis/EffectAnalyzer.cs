@@ -411,11 +411,15 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 foreach (var e in ce.Effects) CollectFromEffect(e, referenced, paramNames);
                 break;
             case AssignEffect ae:
-                CollectFromExpression(ae.Target, referenced, paramNames);
+                CollectFromExpression(ae.Target, referenced, paramNames, valuePosition: false);
                 CollectFromExpression(ae.Value, referenced, paramNames);
                 break;
             case CreateEntityInstance cei:
                 foreach (var init in cei.Initializers)
+                    CollectFromExpression(init.Expression, referenced, paramNames);
+                break;
+            case CreateEntityInRelationshipEffect createIn:
+                foreach (var init in createIn.Initializers)
                     CollectFromExpression(init.Expression, referenced, paramNames);
                 break;
             case InvokeActionEffect iae:
@@ -427,22 +431,32 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 break;
             case StageTransitionEffect:
-            case CreateEntityInRelationshipEffect:
                 break;
         }
     }
 
-    private static void CollectFromExpression(DomainExpression expr, HashSet<string> referenced, HashSet<string> paramNames) {
+    private static void CollectFromExpression(
+        DomainExpression expr,
+        HashSet<string> referenced,
+        HashSet<string> paramNames,
+        bool valuePosition = true) {
         if (expr is ParameterAccess pa) {
             if (paramNames.Contains(pa.Name))
                 referenced.Add(pa.Name);
             return;
         }
-        // Recursively walk Children to find ParameterAccess nodes at any depth.
-        // Avoids a brittle switch over every DomainExpression subtype.
+        // Parsed idents are PropertyAccess (`Name: name`). A path root (`lead Name`) is
+        // the relationship name. An assign target is the property being written.
+        if (valuePosition && expr is PropertyAccess prop && paramNames.Contains(prop.Name)) {
+            referenced.Add(prop.Name);
+            return;
+        }
+        if (valuePosition && expr is RelationshipNavigation rn && paramNames.Contains(rn.RelationshipName))
+            referenced.Add(rn.RelationshipName);
+        // Recursively walk Children to find parameter uses at any depth.
         foreach (var child in expr.Children) {
             if (child is DomainExpression de)
-                CollectFromExpression(de, referenced, paramNames);
+                CollectFromExpression(de, referenced, paramNames, valuePosition);
         }
     }
 

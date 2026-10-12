@@ -33,4 +33,10 @@ public sealed record Relationship(
     /// </summary>
     public static string LinkViolationMessage(string relationshipName) =>
         $"Cannot add a second link on '{relationshipName}': the source already has a target.";
+
+    /// <summary>
+    /// Message when Unlink would drop the last owner of an owned target.
+    /// </summary>
+    public static string UnlinkViolationMessage(string relationshipName) =>
+        $"Cannot unlink '{relationshipName}': the owned target must keep its owner.";
 }

@@ -278,7 +278,7 @@ public class ExpressionTypeAnalysisTests {
             uses temporal
             Loan: entity {
               DueDate: DateTime
-              Stamp: action { assign DueDate to today }
+              Stamp: action { assign DueDate to Today }
             }
             """);
         await Assert.That(result.Succeeded).IsTrue();

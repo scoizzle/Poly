@@ -255,7 +255,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return false;
     }
 
-    private static bool CallFits(IParameter[] parameters, int argCount) {
+    internal static bool CallFits(IParameter[] parameters, int argCount) {
         if (argCount > parameters.Length)
             return false;
         for (var i = argCount; i < parameters.Length; i++) {
@@ -281,7 +281,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return OptionalNullBoxMatches(context, parameter, paramType, argType, arg);
     }
 
-    private static bool AcceptsNull(ITypeDefinition type) {
+    internal static bool AcceptsNull(ITypeDefinition type) {
         if (!type.TryGetRuntimeType(out var runtimeType))
             return true;
         if (!runtimeType.IsValueType)
@@ -306,10 +306,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (string.Equals(paramElement.FullName, argElement.FullName, StringComparison.Ordinal)
             && paramElement.GenericParameters.Count() == argElement.GenericParameters.Count())
             return true;
-        // object.IsAssignableFrom(everything) would pair unrelated lists.
-        if (IsUniversalObject(paramElement))
-            return false;
-        return paramElement.IsAssignableFrom(argElement);
+        // C# generic collections are invariant. Element assignability would
+        // accept IList<Derived> for IList<Base>.
+        return false;
     }
 
     private static ITypeDefinition? ElementOf(ITypeDefinition type) {

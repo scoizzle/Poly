@@ -621,12 +621,8 @@ internal static class ConstructorInvocationSemanticResolver {
         ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
         score = 0;
         var parameters = constructor.Parameters?.ToArray() ?? [];
-        if (argumentTypes.Length > parameters.Length)
+        if (!SyntaxTypeCompatibilityAnalyzer.CallFits(parameters, argumentTypes.Length))
             return false;
-        for (var i = argumentTypes.Length; i < parameters.Length; i++) {
-            if (!parameters[i].IsOptional)
-                return false;
-        }
 
         if (parameters.Length != argumentTypes.Length)
             score++;
@@ -634,13 +630,17 @@ internal static class ConstructorInvocationSemanticResolver {
         for (var i = 0; i < argumentTypes.Length; i++) {
             var paramType = parameters[i].ParameterTypeDefinition;
             if (@new.Arguments[i] is Constant { Value: null }) {
-                if (!ConstructorAcceptsNull(paramType))
+                if (!SyntaxTypeCompatibilityAnalyzer.AcceptsNull(paramType))
                     return false;
                 score++;
                 continue;
             }
 
             var argType = argumentTypes[i];
+            // A non-literal argument with no resolved type is incomplete, same as
+            // a member invoke. It does not reject the constructor and it does not
+            // change the score. Two constructors that both accept the known args
+            // still tie and bind nothing.
             if (argType is null)
                 continue;
             if (paramType == argType)
@@ -654,14 +654,6 @@ internal static class ConstructorInvocationSemanticResolver {
         }
 
         return true;
-    }
-
-    private static bool ConstructorAcceptsNull(ITypeDefinition type) {
-        if (!type.TryGetRuntimeType(out var runtimeType))
-            return true;
-        if (!runtimeType.IsValueType)
-            return true;
-        return Nullable.GetUnderlyingType(runtimeType) is not null;
     }
 }
 

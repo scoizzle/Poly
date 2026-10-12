@@ -522,7 +522,7 @@ public class InvalidProgramTests {
     }
 
     [Test]
-    public async Task New_ExactSingleArgConstructor_UnresolvedArgument_NoMatchingConstructorError() {
+    public async Task New_ExactSingleArgConstructor_UnresolvedArgument_ResolvesExactConstructor() {
         var order = new TypeDefinitionNode(
             "Order",
             Constructors: [

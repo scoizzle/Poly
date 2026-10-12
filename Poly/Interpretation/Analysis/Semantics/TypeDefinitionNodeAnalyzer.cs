@@ -373,15 +373,17 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     /// <summary>
     /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>
     /// using the indexer. Coerces the stored value to the property's target type.
-    /// Returns the property's <c>DefaultValue</c> (or <see cref="System.Reflection.Missing.Value"/>)
-    /// when the key is not present.
+    /// Returns the property's <c>DefaultValue</c> when the key is not present.
+    /// A value-type member with no default reads as that type's zero value.
+    /// A reference member with no default reads as <see cref="System.Reflection.Missing.Value"/>.
     /// </summary>
     public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
-        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var fallback = _node.DefaultValue is Constant c
+            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
+            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
         var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
         return Expression.Condition(
             Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
@@ -443,8 +445,9 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
         if (instance is null) return null;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
-        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var fallback = _node.DefaultValue is Constant c
+            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
+            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
         var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
         return Expression.Condition(
             Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
@@ -498,29 +501,35 @@ internal static class DictionaryBackedValue {
         Ref.Method((Expression<Func<object?, PrimitiveType, object>>)((raw, t) => GuardCompatible(raw, t)));
 
     /// <summary>
-    /// Emits an expression that coerces a dictionary value (typed <c>object?</c>)
-    /// to the target member's declared type. For primitive types this uses
-    /// <see cref="Convert"/> methods (e.g. <c>Convert.ToInt64</c>); for
-    /// reference types the value passes through unchanged.
+    /// Value used when a dictionary key is absent and the member has no constant
+    /// default. A converted value type uses that conversion's zero.
+    /// <see cref="System.Reflection.Missing"/> cannot be the other branch of a
+    /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
+    internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
+        var convert = ConvertMethod(targetType.PrimitiveType);
+        if (convert is null || !convert.ReturnType.IsValueType)
+            return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
+        var zero = Activator.CreateInstance(convert.ReturnType)!;
+        return Expression.Convert(Expression.Constant(zero), typeof(object));
+    }
+
+    private static MethodInfo? ConvertMethod(PrimitiveType? primitive) => primitive switch {
+        PrimitiveType.Int64 => ConvertToInt64,
+        PrimitiveType.Int32 => ConvertToInt32,
+        PrimitiveType.Int16 => ConvertToInt16,
+        PrimitiveType.Int8 => ConvertToSByte,
+        PrimitiveType.Float64 => ConvertToDouble,
+        PrimitiveType.Float32 => ConvertToSingle,
+        PrimitiveType.Decimal => ConvertToDecimal,
+        PrimitiveType.Boolean => ConvertToBoolean,
+        PrimitiveType.String => ConvertToString,
+        PrimitiveType.Char => ConvertToChar,
+        _ => null
+    };
+
     internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
-        var primitive = targetType.PrimitiveType;
-        if (primitive is null) return dictValue;
-
-        var convertMethod = primitive.Value switch {
-            PrimitiveType.Int64 => ConvertToInt64,
-            PrimitiveType.Int32 => ConvertToInt32,
-            PrimitiveType.Int16 => ConvertToInt16,
-            PrimitiveType.Int8 => ConvertToSByte,
-            PrimitiveType.Float64 => ConvertToDouble,
-            PrimitiveType.Float32 => ConvertToSingle,
-            PrimitiveType.Decimal => ConvertToDecimal,
-            PrimitiveType.Boolean => ConvertToBoolean,
-            PrimitiveType.String => ConvertToString,
-            PrimitiveType.Char => ConvertToChar,
-            _ => null
-        };
-
+        var convertMethod = ConvertMethod(targetType.PrimitiveType);
         if (convertMethod is not null) {
             // Fail loud on fundamentally wrong-typed raw values instead of silently
             // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
@@ -529,7 +538,7 @@ internal static class DictionaryBackedValue {
             var guarded = Expression.Call(
                 GuardCompatibleInfo,
                 Expression.Convert(dictValue, typeof(object)),
-                Expression.Constant(primitive.Value));
+                Expression.Constant(targetType.PrimitiveType!.Value));
             return Expression.Convert(
                 Expression.Call(null, convertMethod, guarded),
                 typeof(object));

@@ -322,7 +322,7 @@ public class TypeDefinitionNodeAnalyzerTests {
     }
 
     [Test]
-    public async Task AstProperty_EmitRead_ReturnsMissingValueWhenNoDefaultAndKeyMissing() {
+    public async Task AstProperty_EmitRead_MissingKeyWithoutDefault_ReadsZero() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
             Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
@@ -337,7 +337,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
         var result = lambda.Compile()();
 
-        await Assert.That(result).IsEqualTo(System.Reflection.Missing.Value);
+        await Assert.That(result).IsEqualTo(0L);
     }
 
     [Test]

@@ -507,13 +507,18 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
         var targetCategory = CategoryOf(context, targetTypeName, enumTypes);
-        // Bare non-member enum identifier on an enum-typed target: a PropertyAccess that is
-        // neither an enum member nor an entity property resolves to Unknown — reject at
-        // analysis (was a late CS1061 at compile time).
-        if (inferred.Category is TypeCategory.Unknown && targetCategory is TypeCategory.Enum
-            && value is PropertyAccess { Name: var name }
-            && ResolvePropertyType(name, props, parameters) is null) {
-            Report(context, value, $"'{name}' is not a member of enum '{targetTypeName}'");
+        // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
+        // `this.Bogus`). Enum targets keep the member diagnostic. `Guid` lowers to
+        // Guid.NewGuid, not a member access, and CheckDefault owns that keyword.
+        if (inferred.Category is TypeCategory.Unknown
+            && value is PropertyAccess { Name: var bare }
+            && ResolvePropertyType(bare, props, parameters) is null
+            && !string.Equals(bare, "Guid", StringComparison.Ordinal)) {
+            if (targetCategory is TypeCategory.Enum)
+                Report(context, value, $"'{bare}' is not a member of enum '{targetTypeName}'");
+            else
+                Report(context, value, $"'{bare}' is not a property, parameter, or enum member");
+            return;
         }
         if (inferred.Category is TypeCategory.Unknown || targetCategory is TypeCategory.Unknown)
             return;

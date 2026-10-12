@@ -76,4 +76,5 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-10 | planner | opencode/opencode-go/deepseek-v4.1-flash | 60089ef0 | planned | - |
+| 2026-10-11 | implementer | grok/grok-4.6 | 1d74665c | pushed | three analysis bugs only (unknown assign, create-in params, grandchild parents); tests 3541/3541; Today spelling; CRM host goldens regenerated |
 | 2026-10-11 | grok | grok | eb463ee8 | implemented | V1/V3/V5 only. V2, R1, R2, and the Emit gate remain. |

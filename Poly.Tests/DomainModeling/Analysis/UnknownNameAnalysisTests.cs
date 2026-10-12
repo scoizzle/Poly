@@ -139,4 +139,95 @@ public class UnknownNameAnalysisTests {
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
     }
+
+    // ── (d) unknown bare identifier in an assign value ─────────
+    // `now` / `Bogus` are not properties, parameters, or enum members.
+    // Lowering would emit `this.now` / `this.Bogus` (CS1061).
+
+    [Test]
+    public async Task Assign_UnknownBareIdentifierNow_ReportsError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            Booking: entity {
+              Name: Text
+              Stamp: action { assign Name to now }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("'now'", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_UnknownBareIdentifierBogus_ReportsError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            Item: entity {
+              Name: Text
+              Set: action { assign Name to Bogus }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("'Bogus'", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_KnownProperty_NoTypeError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            Item: entity {
+              Name: Text
+              Title: Text
+              Copy: action { assign Name to Title }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_ActionParameter_NoTypeError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            Item: entity {
+              Name: Text
+              Rename: action (name: Text) { assign Name to name }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_KnownEnumMember_NoTypeError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            Sev: enum { Low, High }
+            Item: entity {
+              Level: Sev
+              Set: action { assign Level to Low }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_TemporalNow_NoTypeError() {
+        var analysis = Analyze(Parse("""
+            domain Test
+            uses temporal
+            Loan: entity {
+              DueDate: Date
+              Stamp: action { assign DueDate to Now }
+            }
+            """));
+
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+    }
 }

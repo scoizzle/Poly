@@ -12,13 +12,12 @@ Updated 2026-10-10. Master: see GitHub (C7d #159 merged). Rules: [README](README
 
 1. C8d depends on T3, which the 2026-10-09 trim parked. Un-park T3 or drop it from C8d's Depends.
 2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them. Parking one means editing those Depends lines.
-3. PR 157 (C6c) review is NOT SHIP (R1 major: `Remove` → `Unlink` throws on create-in rollback). Fix on `slice/c6c-plan`, then re-review.
 
 ## In flight (open PRs; GitHub is the live state)
 
 | PR | Slice | Lane | Tip | CI | Next |
 |----|-------|------|-----|----|------|
-| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | `5cd51cd4` | green | Implemented; review NOT SHIP (R1 major, R2 nit). Fix, then re-review. |
+| [#157](https://github.com/scoizzle/Poly/pull/157) | C6c: Unlink cannot drop below a required minimum | B | branch head | green | Review SHIP. `Remove` detaches without the owned minimum; `Unlink` counts owners of the contract's source entity. |
 
 ## Next (in order; first unblocked row wins)
 
@@ -26,7 +25,7 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
-| 1 | C6c | C6b (merged) | PR 157 branch |
+| 1 | C6c | C6b (merged); review SHIP | [tasks/C6c.md](tasks/C6c.md) |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
 | 3 | C8-tc1 | C6a, C6b1 (merged) | [tasks/C8-tc1.md](tasks/C8-tc1.md) |
 | 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |

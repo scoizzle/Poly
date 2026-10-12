@@ -109,37 +109,37 @@ POST http://localhost:5201/api/leads/example-value/account/1/restore
 
 ### ──────────── Contacts ────────────
 
-### List contacts for opportunity
-GET http://localhost:5201/api/opportunitys/1/contact
+### List contacts for account
+GET http://localhost:5201/api/accounts/1/contacts
 
-### Get contact by id for opportunity
-GET http://localhost:5201/api/opportunitys/1/contact/example-value
+### Get contact by id for account
+GET http://localhost:5201/api/accounts/1/contacts/example-value
 
 ### Action: Retire
-POST http://localhost:5201/api/opportunitys/1/contact/example-value/retire
+POST http://localhost:5201/api/accounts/1/contacts/example-value/retire
 
 ### Action: Reactivate
-POST http://localhost:5201/api/opportunitys/1/contact/example-value/reactivate
+POST http://localhost:5201/api/accounts/1/contacts/example-value/reactivate
 
 ### ──────────── Opportunitys ────────────
 
-### List opportunitys for activity
-GET http://localhost:5201/api/activitys/1/opportunity
+### List opportunitys for account
+GET http://localhost:5201/api/accounts/1/opportunities
 
-### Get opportunity by id for activity
-GET http://localhost:5201/api/activitys/1/opportunity/1
+### Get opportunity by id for account
+GET http://localhost:5201/api/accounts/1/opportunities/1
 
 ### Action: CompleteOpenWork
-POST http://localhost:5201/api/activitys/1/opportunity/1/completeOpenWork
+POST http://localhost:5201/api/accounts/1/opportunities/1/completeOpenWork
 
 ### Action: Propose
-POST http://localhost:5201/api/activitys/1/opportunity/1/propose
+POST http://localhost:5201/api/accounts/1/opportunities/1/propose
 
 ### Action: Lose
-POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+POST http://localhost:5201/api/accounts/1/opportunities/1/lose
 
 ### Action: Log
-POST http://localhost:5201/api/activitys/1/opportunity/1/log
+POST http://localhost:5201/api/accounts/1/opportunities/1/log
 Content-Type: application/json
 
 {
@@ -147,7 +147,7 @@ Content-Type: application/json
 }
 
 ### Action: AddLine
-POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
@@ -156,16 +156,16 @@ Content-Type: application/json
 }
 
 ### Action: QuoteDeal
-POST http://localhost:5201/api/activitys/1/opportunity/1/quoteDeal
+POST http://localhost:5201/api/accounts/1/opportunities/1/quoteDeal
 
 ### Action: Commit
-POST http://localhost:5201/api/activitys/1/opportunity/1/commit
+POST http://localhost:5201/api/accounts/1/opportunities/1/commit
 
 ### Action: Lose
-POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+POST http://localhost:5201/api/accounts/1/opportunities/1/lose
 
 ### Action: Log
-POST http://localhost:5201/api/activitys/1/opportunity/1/log
+POST http://localhost:5201/api/accounts/1/opportunities/1/log
 Content-Type: application/json
 
 {
@@ -173,7 +173,7 @@ Content-Type: application/json
 }
 
 ### Action: AddLine
-POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
@@ -182,10 +182,10 @@ Content-Type: application/json
 }
 
 ### Action: Win
-POST http://localhost:5201/api/activitys/1/opportunity/1/win
+POST http://localhost:5201/api/accounts/1/opportunities/1/win
 
 ### Action: Capture
-POST http://localhost:5201/api/activitys/1/opportunity/1/capture
+POST http://localhost:5201/api/accounts/1/opportunities/1/capture
 Content-Type: application/json
 
 {
@@ -193,10 +193,10 @@ Content-Type: application/json
 }
 
 ### Action: Lose
-POST http://localhost:5201/api/activitys/1/opportunity/1/lose
+POST http://localhost:5201/api/accounts/1/opportunities/1/lose
 
 ### Action: Log
-POST http://localhost:5201/api/activitys/1/opportunity/1/log
+POST http://localhost:5201/api/accounts/1/opportunities/1/log
 Content-Type: application/json
 
 {
@@ -204,7 +204,7 @@ Content-Type: application/json
 }
 
 ### Action: AddLine
-POST http://localhost:5201/api/activitys/1/opportunity/1/addLine
+POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
@@ -228,14 +228,14 @@ POST http://localhost:5201/api/opportunitys/1/activities/1/complete
 
 ### ──────────── Quotes ────────────
 
-### List quotes for quoteLine
-GET http://localhost:5201/api/quoteLines/1/quote
+### List quotes for opportunity
+GET http://localhost:5201/api/opportunitys/1/quotes
 
-### Get quote by id for quoteLine
-GET http://localhost:5201/api/quoteLines/1/quote/1
+### Get quote by id for opportunity
+GET http://localhost:5201/api/opportunitys/1/quotes/1
 
 ### Action: AddLine
-POST http://localhost:5201/api/quoteLines/1/quote/1/addLine
+POST http://localhost:5201/api/opportunitys/1/quotes/1/addLine
 Content-Type: application/json
 
 {
@@ -244,13 +244,13 @@ Content-Type: application/json
 }
 
 ### Action: Present
-POST http://localhost:5201/api/quoteLines/1/quote/1/present
+POST http://localhost:5201/api/opportunitys/1/quotes/1/present
 
 ### Action: Accept
-POST http://localhost:5201/api/quoteLines/1/quote/1/accept
+POST http://localhost:5201/api/opportunitys/1/quotes/1/accept
 
 ### Action: Reject
-POST http://localhost:5201/api/quoteLines/1/quote/1/reject
+POST http://localhost:5201/api/opportunitys/1/quotes/1/reject
 
 ### ──────────── Campaigns ────────────
 
@@ -313,4 +313,10 @@ GET http://localhost:5201/api/opportunitys/1/lines
 GET http://localhost:5201/api/opportunitys/1/lines/1
 
 ### ──────────── QuoteLines ────────────
+
+### List quoteLines for quote
+GET http://localhost:5201/api/quotes/1/lines
+
+### Get quoteLine by id for quote
+GET http://localhost:5201/api/quotes/1/lines/1
 

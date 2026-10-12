@@ -73,6 +73,25 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
             resolved[name] = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
         }
 
+        // A grandchild declared before its non-root parent is unresolved on the
+        // first pass. Re-resolve until parent names settle. Stop at the entity
+        // count so a cycle cannot spin.
+        for (var pass = 0; pass < drafts.Count; pass++) {
+            var changed = false;
+            foreach (var (name, isRoot) in drafts) {
+                if (isRoot) continue;
+                var next = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
+                var prev = resolved[name];
+                if (string.Equals(prev.AggregateParentName, next.AggregateParentName, StringComparison.Ordinal)
+                    && string.Equals(prev.ParentRelationshipName, next.ParentRelationshipName, StringComparison.Ordinal))
+                    continue;
+                resolved[name] = next;
+                changed = true;
+            }
+            if (!changed)
+                break;
+        }
+
         var ordered = drafts.Select(d => resolved[d.Name]).ToList();
         return new AggregateModel(domain.Name, ordered);
     }
@@ -102,7 +121,10 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
             var parentEntity = entityLookup.GetValueOrDefault(rel.Source.TypeName);
             if (parentEntity is null) continue;
             var parentAgg = resolved.GetValueOrDefault(parentEntity.Name);
-            if (parentAgg is null || !parentAgg.IsRoot) continue;
+            // Root, or a non-root that is itself already aggregated (grandchild).
+            // An unresolved parent, or one with no aggregate parent, is not a parent.
+            if (parentAgg is null || (!parentAgg.IsRoot && parentAgg.AggregateParentName is null))
+                continue;
             var backRef = relationships.FirstOrDefault(r =>
                 string.Equals(r.Source.TypeName, name, StringComparison.Ordinal) &&
                 string.Equals(r.Target.TypeName, parentEntity.Name, StringComparison.Ordinal) &&

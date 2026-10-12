@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Analysis;
@@ -106,5 +107,107 @@ public class EffectAnalyzerFailClosedTests {
         var customer = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
         var createIn = customer.Actions.First().Effects.OfType<CreateEntityInRelationshipEffect>().First();
         await Assert.That(context.GetMetadata<ResolvedRelationshipTargetMetadata>(createIn)).IsNull();
+    }
+
+    // ── D1: create-in initializers are parameter uses ──────────
+
+    private static AnalysisResult AnalyzeDsl(string dsl) {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(dsl).Parse());
+        return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
+    }
+
+    private static bool UnusedHint(AnalysisResult analysis, string paramName) =>
+        analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnusedParameter
+            && d.Message.Contains($"'{paramName}'", StringComparison.Ordinal));
+
+    [Test]
+    public async Task CreateIn_ParameterInInitializer_NoUnusedHint() {
+        var analysis = AnalyzeDsl("""
+            domain Test
+            Contact: entity { Name: Text Email: Text }
+            Account: entity {
+              contacts: many Contact
+              AddContact: action (name: Text, email: Text) {
+                create in contacts { Name: name Email: email }
+              }
+            }
+            """);
+
+        await Assert.That(UnusedHint(analysis, "name")).IsFalse();
+        await Assert.That(UnusedHint(analysis, "email")).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateIn_ParameterAccessInitializer_NoUnusedHint() {
+        var contact = new Entity("Contact", [
+            new Property("Name", new DomainTypeReference("Text"), [])
+        ], [], [], []);
+        var action = new Poly.DomainModeling.Ontology.Action("AddContact", InvocationResult.Void, [
+            new Property("name", new DomainTypeReference("Text"), [])
+        ], [
+            new CreateEntityInRelationshipEffect("contacts", [
+                new PropertyBinding("Name", new ParameterAccess("name"))
+            ])
+        ], []);
+        var account = new Entity("Account", [], [action], [], []);
+        var rel = new Relationship("contacts",
+            new DomainTypeReference("Account"), new DomainTypeReference("Contact"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = DomainTestFactory.Create("Test", [account, contact], [rel]);
+        var context = CatalogContext(domain);
+
+        new EffectAnalyzer().Analyze(context, domain);
+
+        await Assert.That(AllDiagnostics(context).Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnusedParameter)).IsFalse();
+    }
+
+    [Test]
+    public async Task Assign_ParameterOnlyAsTarget_ReportsUnusedHint() {
+        var analysis = AnalyzeDsl("""
+            domain Test
+            Item: entity {
+              Title: Text
+              Set: action (name: Text) { assign name to Title }
+            }
+            """);
+
+        await Assert.That(UnusedHint(analysis, "name")).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateIn_UnusedParameter_ReportsHint() {
+        var analysis = AnalyzeDsl("""
+            domain Test
+            Contact: entity { Name: Text }
+            Account: entity {
+              contacts: many Contact
+              AddContact: action (name: Text, extra: Text) {
+                create in contacts { Name: name }
+              }
+            }
+            """);
+
+        await Assert.That(UnusedHint(analysis, "name")).IsFalse();
+        await Assert.That(UnusedHint(analysis, "extra")).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateIn_PathParameter_NoUnusedHint() {
+        var analysis = AnalyzeDsl("""
+            domain Test
+            Contact: entity { Name: Text Email: Text }
+            Lead: entity { Name: Text Email: Text }
+            Account: entity {
+              contacts: many Contact
+              ConvertLead: action (lead: Lead) {
+                create in contacts { Name: lead Name Email: lead Email }
+              }
+            }
+            """);
+
+        await Assert.That(UnusedHint(analysis, "lead")).IsFalse();
     }
 }

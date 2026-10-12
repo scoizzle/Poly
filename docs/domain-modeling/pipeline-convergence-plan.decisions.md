@@ -281,7 +281,7 @@ Order: the first three unlocked the first waves of work. The rest wait until the
 
 **Answer (Scot, 2026-10-10 18:03 CT):** an owned target must always keep its owner (minimum 1, unlinking it is rejected); non-owned links stay minimum 0.
 
-**What it is.** `RelationshipCardinality` is max-only, and navigations cannot be `required`. C6c's modelled minimum is ownership: when `SourceOwnsTarget` is true, `Unlink` refuses to drop the target's last inbound link on that relationship. Non-owned relationships may go to zero links. Delete remains out of scope (V9).
+**What it is.** `RelationshipCardinality` is max-only, and navigations cannot be `required`. C6c's modelled minimum is ownership: when `SourceOwnsTarget` is true, `Unlink` refuses to drop the target's last inbound link whose source entity is that contract's source entity. A second source entity that reuses the relationship name is not an owner. Two owners of the same source entity can still drop one edge. Non-owned relationships may go to zero links. `Remove` (delete and create-in rollback) does not apply the minimum. Delete remains out of scope (V9).
 
 **Blocks.** C6c (now unblocked).
 

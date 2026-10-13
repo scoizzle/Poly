@@ -1,7 +1,7 @@
 # TASK MCP1 - ModelContextProtocol 2.x upgrade
 
 Status: in review (proposal; not admitted - [`board.md`](../board.md) is the queue).
-Branch `slice/MCP1`. PR #<N>. Lane TBD. Review TBD. Implement mill: TBD (review on the opposite mill).
+Branch `slice/MCP1`. PR #171. Lane TBD. Review TBD. Implement mill: TBD (review on the opposite mill).
 Plan card: proposed from [`../research/2026-10-12-ontology-of-ontologies-gap-map.md`](../research/2026-10-12-ontology-of-ontologies-gap-map.md) (Tier 4, MCP hardening); not in [`pipeline-convergence-plan.md`](../../../domain-modeling/pipeline-convergence-plan.md).
 
 ## Scope

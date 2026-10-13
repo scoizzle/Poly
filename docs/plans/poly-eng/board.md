@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-10. Master: see GitHub (C7d #159 merged). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md).
+Updated 2026-10-13. Master: see GitHub (#168 merged). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -13,23 +13,28 @@ Updated 2026-10-10. Master: see GitHub (C7d #159 merged). Rules: [README](README
 1. C8d depends on T3, which the 2026-10-09 trim parked. Un-park T3 or drop it from C8d's Depends.
 2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them. Parking one means editing those Depends lines.
 
+## Demo
+
+The product demo is `scripts/live-demo.sh`: compile the warehouse domain and walk create, get, and register-truck. `scripts/serve-poly.sh` is the same host left in the foreground. Both pass `--http` (CompileMode.All does not seed `http`) and pin `SQLitePCLRaw.lib.e_sqlite3` 2.1.13 so the generated project clears NU1903. `demo/README.md` matches that.
+
+The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate routes, child GET ignores the id). It stays at row 10 because the crm-dslcompiler goldens also change with C8-num. Do not pull it forward unless Scot says the API lie matters more than that churn.
+
 ## In flight (open PRs; GitHub is the live state)
 
-None. #157 merged.
+None.
 
 ## Next (in order; first unblocked row wins)
 
-Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-AGENT.md) §3.
+Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-AGENT.md) §3. Rows 1–3b have merged; the first unblocked row is 4.
 
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
-| 1 | C6c | C6b (merged); review SHIP | [tasks/C6c.md](tasks/C6c.md) |
+| 1 | C6c | **merged** `2baec149` (#157) | [tasks/C6c.md](tasks/C6c.md) |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
-| 3 | C8-tc1a | C6a, C6b1 (merged) | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
-| 3b | C8-tc1b | absorbed into tc1a (`this.Create{Nav}`, probes deleted). #164 superseded. Void-context linking is an open decision. | [tasks/C8-tc1b.md](tasks/C8-tc1b.md) |
-| 4 | C8-tc2 | C8-tc1 | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
+| 3 | C8-tc1a | **merged** `86148036` (#162). Absorbed tc1b (`this.Create{Nav}`, probes deleted). #164 closed. Void-context linking stays an open decision. | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
+| 4 | C8-tc2 | C8-tc1 merged. **Narrowed:** real `EnsureUnique` only. Do not restore probes. `StoreBind.cs` is `StoreJobObjectType` and `TypedNull`. | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
-| 6 | C8-vm | C8-tc2 | [tasks/C8-vm.md](tasks/C8-vm.md) |
+| 6 | C8-vm | False positives and three real bugs merged (#165 `a0c68e64`, #163 `29411bd7`). Still open: `Emit` does not call `ThrowIfVmHasErrors`. Re-check the rest of the task before starting. After C8-tc2. | [tasks/C8-vm.md](tasks/C8-vm.md) |
 | 7 | C8-lc | C8-tc | [tasks/C8-lc.md](tasks/C8-lc.md) |
 | 8 | C8-clean (optional before C8d) | C8-lc | [tasks/C8-clean.md](tasks/C8-clean.md) |
 | 9 | C8-num | C8-clean | [tasks/C8-num.md](tasks/C8-num.md) |
@@ -81,6 +86,16 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-13 | #168 | docs: Poly Agent Skill | `89fa8eb5` | see PR |
+| 10-13 | #167 | docs: ontology-of-ontologies gap map | `e758d14c` | see PR |
+| 10-12 | #162 | C8-tc1a: typed by-type create lowering (absorbed tc1b) | `86148036` | see PR |
+| 10-12 | #165 | C8-vm: analyzer false positives V1 V3 V5 | `a0c68e64` | see PR |
+| 10-12 | #163 | C8-vm: unknown assign names, create-in params, grandchild parents | `29411bd7` | see PR |
+| 10-12 | #157 | C6c: Unlink cannot drop below a required minimum | `2baec149` | see PR |
+| 10-10 | #155 | C8-tc: typed create in the compiled tree (plan) | `a6203103` | see PR |
+| 10-10 | #158 | plan: C8-vm task file | `dafa6a72` | see PR |
+| 10-10 | #159 | C7d: One-offs and BehaviorMetadata | `ef8f267b` | see PR |
+| 10-10 | #160 | docs: local-agent handoff | `6665bf04` | see PR |
 | 10-10 | #156 | C7c: Entity and relationship lookups use index and navigation | `78231090` | see PR |
 | 10-10 | #152 | C5b: Multi-hop, depth and fan-out leave the store | `60089ef0` | see PR |
 | 10-10 | #153 | C7b: Three action-by-name lookups use the index | `67427b72` | see PR |

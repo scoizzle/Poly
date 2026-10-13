@@ -10,6 +10,7 @@ var inputPath = (string?)null;
 var outputDir = (string?)null;
 var mode = CompileMode.Entities;
 var dbms = DbmsPack.Generic;
+var loadHttp = false;
 
 try {
     for (int i = 0; i < args.Length; i++) {
@@ -22,6 +23,9 @@ try {
                 var other => throw new FormatException(
                     $"Unknown mode '{other}'. Valid values: entities, db, all")
             };
+        }
+        else if (args[i] == "--http") {
+            loadHttp = true;
         }
         else if ((args[i] == "--dbms" || args[i] == "--pack") && i + 1 < args.Length) {
             i++;
@@ -44,14 +48,15 @@ catch (FormatException ex) {
 }
 
 if (inputPath is null) {
-    Console.Error.WriteLine("Usage: poly-dsl-compiler [--mode entities|db|all] [--dbms generic|sqlite|sqlserver] <input.poly> [output-dir]");
+    Console.Error.WriteLine("Usage: poly-dsl-compiler [--mode entities|db|all] [--http] [--dbms generic|sqlite|sqlserver] <input.poly> [output-dir]");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Compiles a .poly DSL domain model into C# source files.");
     Console.Error.WriteLine("  File set follows uses (and CLI seeds): entity C# always;");
     Console.Error.WriteLine("  DbContext when sqlite/sqlserver/persistence; Program.cs when http.");
     Console.Error.WriteLine("  --mode entities    Seed language only (default)");
     Console.Error.WriteLine("  --mode db          Seed persistence (vendor from --dbms)");
-    Console.Error.WriteLine("  --mode all          Seed persistence (same as db); Program.cs only with uses http");
+    Console.Error.WriteLine("  --mode all          Seed persistence (same as db); does not seed http");
+    Console.Error.WriteLine("  --http             Load the http door so Program.cs and demo.http emit");
     Console.Error.WriteLine("  --dbms generic     Core generic SQL column types (default)");
     Console.Error.WriteLine("  --dbms sqlite      SQLite affinities (first shippable pack; no server required)");
     Console.Error.WriteLine("  --dbms sqlserver   SQL Server column types");
@@ -79,6 +84,8 @@ if (!File.Exists(inputPath)) {
 
 var polyText = await File.ReadAllTextAsync(inputPath);
 var compiler = new DslCompiler();
+if (loadHttp)
+    compiler.Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary());
 
 try {
     var result = compiler.Compile(polyText, mode, dbms);

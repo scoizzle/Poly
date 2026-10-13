@@ -1,6 +1,6 @@
 # TASK MCP1 - ModelContextProtocol 2.x upgrade
 
-Status: planned (proposal; not admitted - [`board.md`](../board.md) is the queue).
+Status: in review (proposal; not admitted - [`board.md`](../board.md) is the queue).
 Branch `slice/MCP1`. PR #<N>. Lane TBD. Review TBD. Implement mill: TBD (review on the opposite mill).
 Plan card: proposed from [`../research/2026-10-12-ontology-of-ontologies-gap-map.md`](../research/2026-10-12-ontology-of-ontologies-gap-map.md) (Tier 4, MCP hardening); not in [`pipeline-convergence-plan.md`](../../../domain-modeling/pipeline-convergence-plan.md).
 
@@ -52,3 +52,4 @@ MCP2 - the harness/session refactor from the 2026-10-13 review: DI (`ISessionSto
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-13 | agent | - | - | planned (spike) | 2.2.0 builds clean, 0 warnings; legacy `2025-11-25` handshake lists 24 tools; `2026-07-28` is discovery-first |
+| 2026-10-13 | agent | OpenCode (hand) | `b8f1ee7e` | pushed | bump `1.4.0` -> `2.2.0`; `Poly.Benchmarks` build succeeded; suite 3609/3609; stdio smoke `2025-11-25` -> 24 tools |

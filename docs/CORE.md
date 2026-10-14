@@ -77,7 +77,7 @@ TFM: `net10.0`, nullable on, zero external deps in core `Poly/`. Policy: [`docs/
 | **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
 | **Introspection** | Host-neutral type/member model (CLR = first provider) | Depending on Interpretation |
 | **DomainModeling** | Immutable `Domain`, evolution, DE→AST per op; contracts via `bind` | Domain opcodes; `Main`; growing `Comment` as meaning |
-| **Grammar** | Pattern-table engine (`Poly/Grammar/`) — decode / match / print | Product DSL tables (DomainModeling); parallel pattern engines |
+| **Grammar** | Pattern-table engine (`Poly/Grammar/`) — decode / match / print | Product tables inside the engine — DSL tables live in `DomainModeling`, C# tables in `Interpretation`; parallel pattern engines |
 | **DomainModeling (DSL)** | One closed `.poly`; session binds `uses` concepts | Dialects; per-library token kinds; `Domain.ResolveHost` |
 | **MCP** | Interactive harness + scratch store | Product doors; second evaluator; inferred `Main` |
 | **Validation** | **Deleted** — constraints live under DomainModeling | Reintroducing a dormant rule surface |

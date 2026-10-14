@@ -25,7 +25,7 @@ public sealed class DbContextArtifactContributor : IArtifactContributor {
         var fileName = $"{dbContextName}.cs";
         var unit = new DbContextGenerator(domain, storageModel).GenerateCompilationUnit();
         var tree = GeneratedTree.Create(domain, fileName, unit, nameof(DbContextArtifactContributor));
-        var source = new CSharpGenerator().Generate(unit);
+        var source = new CSharpWriter().Write(unit);
         return [
             tree,
             ContributedFile.Create(

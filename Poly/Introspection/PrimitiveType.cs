@@ -116,7 +116,7 @@ public static class PrimitiveTypeExtensions {
 
     /// <summary>
     /// Gets the C# keyword equivalent for a primitive type.
-    /// Used by <c>CSharpGenerator</c> to emit idiomatic C# types.
+    /// Used by <c>CSharpWriter</c> to emit idiomatic C# types.
     /// </summary>
     public static string GetCSharpKeyword(this PrimitiveType id) => id switch {
         PrimitiveType.Boolean => "bool",

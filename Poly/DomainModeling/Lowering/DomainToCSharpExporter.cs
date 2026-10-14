@@ -14,7 +14,7 @@ namespace Poly.DomainModeling.Lowering;
 /// <summary>
 /// Produces Syntax AST <see cref="TypeDefinitionNode"/> trees from a
 /// <see cref="Domain"/>, suitable for C# code generation via
-/// <see cref="Interpretation.CSharp.CSharpGenerator"/>.
+/// <see cref="Interpretation.CSharp.CSharpWriter"/>.
 ///
 /// Each entity becomes a class with properties, navigation properties (as
 /// <c>IReadOnlyList&lt;T&gt;</c> for collections), lifecycle stages (as enum +

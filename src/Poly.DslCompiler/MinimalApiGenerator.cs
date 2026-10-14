@@ -146,7 +146,7 @@ public sealed class MinimalApiGenerator {
 
     /// <summary>Generates the Minimal API Program.cs via Syntax IR.</summary>
     public string Generate(string dbContextName) =>
-        new CSharpGenerator().Generate(GenerateCompilationUnit(dbContextName));
+        new CSharpWriter().Write(GenerateCompilationUnit(dbContextName));
 
     private readonly string BuilderVar = "builder";
     private readonly string AppVar = "app";
@@ -1156,7 +1156,7 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
             ContributedFile.Create(
                 domain,
                 "Program.cs",
-                new CSharpGenerator().Generate(programUnit),
+                new CSharpWriter().Write(programUnit),
                 nameof(MinimalApiHostArtifactContributor),
                 [programTree.Descriptor.Id]),
             ContributedFile.Create(domain, "demo.http", httpGen.Generate(), nameof(MinimalApiHostArtifactContributor)),

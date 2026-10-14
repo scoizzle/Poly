@@ -83,6 +83,24 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
         }
     }
 
+    /// <summary>
+    /// Singular constructor slot. A one-to-one records the forward store link
+    /// and the bag value. It does not write the peer's back-reference;
+    /// <c>Attach*</c> owns inverse collections. Any other singular value is a
+    /// bag write.
+    /// </summary>
+    private void AssignConstructedSingular(string member, object? raw) {
+        if (MatchOneToOneNavigation(member) is { } nav && raw is DomainEntityInstance child) {
+            _values[member] = child;
+            var store = StoreOrDefault();
+            if (!ReferenceEquals(child.Store, store) && !store.TryAdd(child, out var error))
+                throw new InvalidOperationException(error ?? "Failed to register linked instance.");
+            store.Link(nav.Name, this, child);
+            return;
+        }
+        _values[member] = raw;
+    }
+
     private void LinkConstructedChild(Relationship navigation, DomainEntityInstance child) {
         var store = StoreOrDefault();
         if (!ReferenceEquals(child.Store, store) && !store.TryAdd(child, out var error))

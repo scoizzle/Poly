@@ -236,10 +236,11 @@ public class SameNameRelationshipSourceScopingTests {
         var machine = types.Single(t => t.Name == "Machine");
         var book = types.Single(t => t.Name == "Book");
 
-        // Same method name on different classes — no cross-entity collision.
-        await Assert.That(machine.Methods?.Any(m => m.Name == "CreateOrders")).IsTrue();
-        await Assert.That(book.Methods?.Any(m => m.Name == "CreateOrders")).IsTrue();
-        await Assert.That(machine.Methods!.Single(m => m.Name == "CreateOrders").Parameters?.Count).IsEqualTo(1);
-        await Assert.That(book.Methods!.Single(m => m.Name == "CreateOrders").Parameters?.Count).IsEqualTo(1);
+        // Create{Nav} exists only when this entity creates into the relationship.
+        // Attach stays source-scoped: same method name on each class.
+        await Assert.That(machine.Methods?.Any(m => m.Name == "CreateOrders")).IsFalse();
+        await Assert.That(book.Methods?.Any(m => m.Name == "CreateOrders")).IsFalse();
+        await Assert.That(machine.Methods!.Single(m => m.Name == "AttachOrders").Parameters?.Count).IsEqualTo(1);
+        await Assert.That(book.Methods!.Single(m => m.Name == "AttachOrders").Parameters?.Count).IsEqualTo(1);
     }
 }

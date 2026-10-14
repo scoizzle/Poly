@@ -790,7 +790,7 @@ public sealed partial class DomainToCSharpExporter {
             // Only entity properties (not navigations) are validated — navs
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(
-                entity, domain, esm.EntryAssignedPropertyNames, metadata);
+                entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
 
             // Construct, then Success. Create is the unique-inverse attach source
             // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when

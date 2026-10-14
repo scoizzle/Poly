@@ -374,7 +374,7 @@ public sealed partial record DomainEntityInstance {
                 if (slot.IsCollection)
                     instance.AdoptCollection(member, raw);
                 else
-                    ((IDictionary<string, object?>)instance)[member] = raw;
+                    instance.AssignConstructedSingular(member, raw);
             }
             ApplyInitialStageEntryEffects(instance);
         }
@@ -960,8 +960,10 @@ public sealed partial record DomainEntityInstance {
             }
             // When… stays an empty stub so InvokeNamed runs the cached
             // subscription body (TryGetSubscriptionBody), not the sibling
-            // module method inlined as an AST callable. A static Create is
-            // the printed factory; only its constructor call is bound.
+            // module method inlined as an AST callable. Register…Subscriber
+            // stays empty because Link already recorded that subscriber.
+            // A static Create is the printed factory; only its constructor
+            // call is bound.
             moduleTypes.Analyze(ctx, RewriteTypedFactories(StubWhenMethodBodies(td), td.Name, domain));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
@@ -1046,9 +1048,7 @@ public sealed partial record DomainEntityInstance {
     /// Keeps the printed static Create body. <c>new Entity(...)</c> becomes
     /// <see cref="DomainInstanceHostJobs.NewEntity"/> so simulate allocates a
     /// <see cref="DomainEntityInstance"/>. The packed values are the method's
-    /// signature parameters: the constructor-call copies have the same names and
-    /// no types, so <c>With</c> would bind <c>object</c> and read a number as a
-    /// heap handle. Checks and <c>Attach*</c> stay in the body.
+    /// typed signature parameters. Checks and <c>Attach*</c> stay in the body.
     /// </summary>
     private static MethodDefinitionNode BindConstructedNew(
         MethodDefinitionNode method, string typeName, Domain domain) {
@@ -1114,13 +1114,22 @@ public sealed partial record DomainEntityInstance {
         List<MethodDefinitionNode>? methods = null;
         for (var i = 0; i < td.Methods.Count; i++) {
             var method = td.Methods[i];
-            if (!method.Name.StartsWith("When", StringComparison.Ordinal))
+            if (!method.Name.StartsWith("When", StringComparison.Ordinal)
+                && !IsSubscriberRegister(method.Name))
                 continue;
             methods ??= [.. td.Methods];
             methods[i] = method with { Body = new Block([]) };
         }
         return methods is null ? td : td with { Methods = methods };
     }
+
+    /// <summary>
+    /// Printed <c>Register{Source}{Rel}{Stage}Subscriber</c>. Store.Link already
+    /// recorded the subscriber, so the list add must not run again.
+    /// </summary>
+    private static bool IsSubscriberRegister(string name) =>
+        name.StartsWith("Register", StringComparison.Ordinal)
+        && name.EndsWith("Subscriber", StringComparison.Ordinal);
 
     /// <summary>
     /// Compiles a module body that still contains <see cref="ThisReference"/>.

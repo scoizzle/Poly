@@ -392,7 +392,7 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
         Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps,
-        INodeMetadataProvider analysis) {
+        INodeMetadataProvider analysis, IReadOnlyList<Parameter> signature) {
 
         var checks = new List<Node>();
         var entityTypeRef = new NamedTypeReference(entity.Name);
@@ -406,7 +406,12 @@ public sealed partial class DomainToCSharpExporter {
             if (entryAssignedProps.Contains(prop.Name)) continue;
 
             var paramName = ToCamelCase(prop.Name);
-            var paramRef = new Parameter(paramName);
+            // The signature parameter, not a same-named copy. A copy has no
+            // type, so name.Length does not resolve and the VM rejects Create.
+            var paramRef = signature.FirstOrDefault(p =>
+                string.Equals(p.Name, paramName, StringComparison.Ordinal));
+            if (paramRef is null)
+                continue;
             var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)

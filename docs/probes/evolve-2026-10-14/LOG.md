@@ -28,3 +28,5 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 09:15 | shortener | | | next |
 | 09:35 | sessions | v1→v2 VM + gate + export | F31 DateTime initializer VM rejection; F32 create_instance no coercion; Guid ✓ default(Now) ✓ | ✅ done |
 | 09:35 | authoring | | | next |
+| 09:55 | authoring | §12 add/remove battery, introspection tools, M:N link, oracle_expression | F33 M:N export degradation; oracle arithmetic quirk (weirdness) | ✅ done |
+| 09:55 | negatives | | | next |

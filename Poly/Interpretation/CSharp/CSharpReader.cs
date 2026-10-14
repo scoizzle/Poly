@@ -283,6 +283,7 @@ public static class CSharpReader {
             var modifiers = FoldModifiers(MaybeChild(match, "modifiers"));
             PropertyGetterDefinitionNode? getter = null;
             PropertySetterDefinitionNode? setter = null;
+            var sawInit = false;
             foreach (var accessor in Children(Child(match, "property-body"), "accessor")) {
                 switch (accessor.PatternName) {
                     case "get-semi":
@@ -298,7 +299,8 @@ public static class CSharpReader {
                         setter = new PropertySetterDefinitionNode(null, FoldExpr(accessor.Children[0]));
                         break;
                     case "init-semi":
-                        break; // Re-derived from the initializer.
+                        sawInit = true;
+                        break;
                     case "set-mod-semi":
                         setter = new PropertySetterDefinitionNode(null, null, FoldAccessorModifier(accessor));
                         break;
@@ -311,7 +313,7 @@ public static class CSharpReader {
             }
             var initializer = MaybeChild(match, "property-init") is { } init
                 ? new PropertyInitializerDefinitionNode(FoldExpr(init.Children[0]))
-                : null;
+                : sawInit ? new PropertyInitializerDefinitionNode() : null;
             var property = new PropertyDefinitionNode(
                 Capture(match, "name"),
                 FoldType(Child(match, "type")),
@@ -694,6 +696,8 @@ public static class CSharpReader {
                         acc = new Member(acc, Capture(tail, "name"));
                         break;
                     case "invoke":
+                        if (acc is Variable { Name: "nameof" })
+                            acc = new TypeReference("nameof");
                         acc = new Invoke(acc, [.. FoldArgList(tail.Children[0])]);
                         break;
                     case "generic-invoke": {

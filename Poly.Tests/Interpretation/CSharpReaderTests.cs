@@ -73,6 +73,45 @@ public class CSharpReaderTests {
     }
 
     [Test]
+    public async Task Read_InitOnlyPropertyWithoutValue_RoundTripsAccessor() {
+        var text = "public class C {\n    public long ListPrice { get; init; }\n}\n";
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(again).Contains("get; init;");
+    }
+
+    [Test]
+    public async Task Read_NameofInvoke_RoundTripsAsNameof() {
+        var text = "class C { void M() { nameof(Account.Contacts); } }";
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(again).Contains("nameof(Account.Contacts)");
+        await Assert.That(again.Contains("@nameof")).IsFalse();
+    }
+
+    [Test]
+    public async Task Read_ApostropheChar_RoundTripsQuoted() {
+        var text = "class C { char M() => '\\''; }";
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(again).Contains("'\\''");
+    }
+
+    [Test]
+    public async Task Read_NamedCastOfUnaryMinus_RoundTripsParenthesized() {
+        var text = "class C { Customer M(Customer c) => (Customer)(-c); }";
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(again).Contains("(Customer)(-c)");
+    }
+
+    [Test]
+    public async Task Read_UntypedParenthesizedLambda_FoldsParameterNames() {
+        var unit = CSharpLanguage.Read("class C { void M() { F((x, y) => x); } }");
+        var method = unit.Types[0].Methods![0];
+        var body = (Block)method.Body!;
+        var call = (Invoke)body.Nodes[0];
+        var lambda = (Lambda)call.Arguments[0];
+        await Assert.That(lambda.Parameters.Select(p => p.Name)).IsEquivalentTo(["x", "y"]);
+    }
+
+    [Test]
     public async Task Read_UnsupportedConstruct_FailsClosed() {
         await Assert.That(() => CSharpLanguage.Read("class C { void M() { a?.B(); } }"))
             .Throws<FormatException>();

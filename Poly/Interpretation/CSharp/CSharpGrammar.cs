@@ -437,7 +437,8 @@ public static class CSharpGrammar {
         b.Define("async-kw")
             .Pattern("async").Kind(CSharpTokenKind.KwAsync).Commit();
         b.Define("lambda-param")
-            .Pattern("param").Optional(R("type")).Value(CSharpTokenKind.Identifier, "name").Optional(R("param-default")).Commit();
+            .Pattern("typed").Ref("type").Value(CSharpTokenKind.Identifier, "name").Optional(R("param-default")).Commit()
+            .Pattern("bare").Value(CSharpTokenKind.Identifier, "name").Optional(R("param-default")).Commit();
         b.Define("lambda-param-list")
             .Pattern("list").Ref("lambda-param").Repeat("lambda-param-tail").Commit();
         b.Define("lambda-param-tail")

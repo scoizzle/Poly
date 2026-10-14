@@ -921,7 +921,10 @@ public sealed class CSharpWriter {
             case New @new:
                 return Render("expr-primary", "new", TypeText(@new.Type), ArgsText(@new.Arguments));
             case TypeCast cast:
-                return "(" + TypeText(cast.TargetTypeReference) + ")" + Expr(cast.Operand);
+                var operand = Expr(cast.Operand);
+                if (operand.StartsWith('-') || operand.StartsWith('+'))
+                    operand = "(" + operand + ")";
+                return "(" + TypeText(cast.TargetTypeReference) + ")" + operand;
             case TypeIs typeIs:
                 return Expr(typeIs.Operand) + " is " + TypeText(typeIs.TargetTypeReference)
                     + (typeIs.VariableName != null ? " " + typeIs.VariableName : "");
@@ -1132,7 +1135,7 @@ public sealed class CSharpWriter {
 
     private static string CharLiteral(char value) => value switch {
         '\\' => "'\\\\'",
-        '\'' => "\\'",
+        '\'' => "'\\''",
         '\n' => "'\\n'",
         '\r' => "'\\r'",
         '\t' => "'\\t'",

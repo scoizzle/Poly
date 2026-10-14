@@ -76,15 +76,26 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
-        JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
-        JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-        JsonValueKind.Number => (long)je.GetDecimal(),
+        JsonValueKind.Number => JsonNumberToLong(je),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.String => je.GetString(),
         JsonValueKind.Null => null,
         _ => je.GetRawText()
     };
+
+    /// <summary>
+    /// Number is a long. Integral JSON (1, 1.0) is kept; a fraction is rejected
+    /// instead of truncating to 0. Values outside long still fail.
+    /// </summary>
+    private static long JsonNumberToLong(JsonElement je) {
+        if (je.TryGetInt64(out var integral))
+            return integral;
+        if (je.TryGetDecimal(out var dec) && dec != decimal.Truncate(dec))
+            throw new InvalidOperationException(
+                $"Number is integral; '{je.GetRawText()}' is not a valid Number.");
+        return (long)je.GetDecimal();
+    }
 
     private static InstanceSnapshotData BuildSnapshot(DomainEntityInstance instance) {
         var props = new List<PropertyValueData>();

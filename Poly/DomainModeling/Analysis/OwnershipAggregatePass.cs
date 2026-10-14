@@ -26,7 +26,7 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         foreach (var e in entities) {
             var agg = aggregate.Entities.FirstOrDefault(a => a.Name == e.Name);
             if (agg is null) continue;
-            if (!agg.IsRoot && agg.AggregateParentName is null) {
+            if (!agg.IsRoot && agg.AggregateParentName is null && !OnlyOutboundSingular(e, context, domain)) {
                 context.ReportWarning(e,
                     $"Entity '{e.Name}' is a non-root entity with no aggregate parent. " +
                     "It may be orphaned — verify the relationship hierarchy or add a parent relationship.",
@@ -164,6 +164,24 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
             parentRelationshipName: chosenRelName,
             backReferencePropertyName: chosenBackRef?.Name,
             aggregateParent: chosenParentName is not null ? resolved.GetValueOrDefault(chosenParentName) : null);
+    }
+
+    /// <summary>
+    /// Outbound singular navigations and no inbound collection are one owned
+    /// chain (Account → Subscription → Plan). That shape is not an orphan.
+    /// </summary>
+    private static bool OnlyOutboundSingular(Entity entity, AnalysisContext context, Domain domain) {
+        var relationships = context.GetAllRelationships(domain);
+        var outbound = relationships.Where(r =>
+            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)).ToList();
+        if (outbound.Count == 0)
+            return false;
+        if (outbound.Any(r =>
+                r.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
+            return false;
+        return !relationships.Any(r =>
+            string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)
+            && r.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany);
     }
 
     private static bool IsRootEntity(Entity entity, AnalysisContext? context,

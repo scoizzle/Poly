@@ -49,5 +49,5 @@ public class Doctor
         var created = new Doctor(licenseNo, name, schedule);
         return DomainResult<Doctor>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
 }

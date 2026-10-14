@@ -547,6 +547,13 @@ internal static class DictionaryBackedValue {
         return dictValue;
     }
 
+    private static bool IsIntegralNumber(object raw) => raw switch {
+        double d => d == Math.Truncate(d) && !double.IsNaN(d) && !double.IsInfinity(d),
+        float f => f == Math.Truncate(f) && !float.IsNaN(f) && !float.IsInfinity(f),
+        decimal m => m == decimal.Truncate(m),
+        _ => true
+    };
+
     /// <summary>
     /// Validates a raw bag value against the target primitive before coercion. Rejects
     /// values that Convert.* would silently mangle (bool/object → number, null → default),
@@ -563,6 +570,10 @@ internal static class DictionaryBackedValue {
                 if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
+                // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
+                if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
+                    throw new InvalidOperationException(
+                        $"Number is integral; '{raw}' is not a valid Number.");
                 return raw;
             case PrimitiveType.Boolean:
                 if (raw is not bool)

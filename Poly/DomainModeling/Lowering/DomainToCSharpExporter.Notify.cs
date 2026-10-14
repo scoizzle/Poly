@@ -154,7 +154,10 @@ public sealed partial class DomainToCSharpExporter {
             var mapped = MapDomainTypeRef(parameter.Type, domain, metadata);
             // Nav params are optional references (unbound initializers pass null) —
             // emit nullable to match the property/ctor and avoid CS8625.
-            var propRef = parameter.IsNavigation
+            // A non-required value type is the same: omitted create-in passes null.
+            var optionalValue = !parameter.IsNavigation
+                && IsUnrequiredDomainValue(domain, targetEntity, parameter.Name);
+            var propRef = parameter.IsNavigation || optionalValue
                 ? (Node)new OptionalTypeReference(mapped)
                 : mapped;
             // Same node in the signature and the Create call. A second untyped
@@ -433,7 +436,7 @@ public sealed partial class DomainToCSharpExporter {
                             checks.Add(new IfStatement(
                                 new Invoke(
                                     new Member(
-                                        new NamedTypeReference("string"),
+                                        new PrimitiveTypeReference(PrimType.String),
                                         "IsNullOrEmpty"),
                                     [paramRef]),
                                 new Block([Failure(

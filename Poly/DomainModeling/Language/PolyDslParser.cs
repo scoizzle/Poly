@@ -857,10 +857,23 @@ public sealed class PolyDslParser : DslCursor {
         return new ForEachInvokeEffect(relName, binderName, predicate, actionName, bindings);
     }
 
+    /// <summary>
+    /// A property name is an identifier or a primitive type keyword (<c>Text</c>,
+    /// <c>Number</c>, <c>Boolean</c>), the same words the entity declaration accepts.
+    /// </summary>
+    private string ExpectPropertyName() {
+        if (Current.Kind == TokenKind.Identifier || DslGrammar.IsPrimitiveTypeKind(Current.Kind)) {
+            var name = Current.Text;
+            Advance();
+            return name;
+        }
+        throw Error($"Expected property name, got '{Current.Text}'");
+    }
+
     private List<PropertyBinding> ParsePropertyInitializers() {
         var initializers = new List<PropertyBinding>();
         while (Current.Kind != TokenKind.RBrace) {
-            var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
+            var propName = ExpectPropertyName();
             Expect(TokenKind.Colon);
             // A bare-identifier value followed by the next initializer (`Name: newName
             // Content: ...`) must not be consumed as a path-prefix — the expression
@@ -1079,7 +1092,7 @@ public sealed class PolyDslParser : DslCursor {
         Expect(TokenKind.LBrace);
         var properties = new List<Property>();
         while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.EndOfFile) {
-            var propName = ExpectIdentifier(TokenKind.Identifier, "property name");
+            var propName = ExpectPropertyName();
             Expect(TokenKind.Colon);
             string typeName;
             if (IsPrimitiveType(Current.Kind)) {

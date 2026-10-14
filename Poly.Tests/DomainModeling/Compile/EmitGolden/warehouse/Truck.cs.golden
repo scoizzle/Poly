@@ -116,7 +116,7 @@ public class Truck
         }
         return DomainResult<Truck>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
     private void OnEntryEnRoute()
     {
         var assignValue0 = TruckStatus.EnRoute;

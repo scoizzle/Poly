@@ -573,11 +573,19 @@ public sealed record ActionInvocationResult {
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
     };
 
-    internal static ActionInvocationResult StageRequired(string entityName, string actionName, string stageName) => new() {
-        ActionName = actionName,
-        Succeeded = false,
-        ErrorMessage = $"Action '{actionName}' exists on entity '{entityName}' but is only available in stage '{stageName}'."
-    };
+    internal static ActionInvocationResult StageRequired(
+        string entityName, string actionName, IReadOnlyList<string> stageNames) {
+        var quoted = stageNames.Select(s => $"'{s}'").ToList();
+        var where = quoted.Count <= 1
+            ? $"stage {quoted.FirstOrDefault() ?? "'?'"}"
+            : $"stages {string.Join(", ", quoted)}";
+        return new() {
+            ActionName = actionName,
+            Succeeded = false,
+            ErrorMessage =
+                $"Action '{actionName}' exists on entity '{entityName}' but is only available in {where}."
+        };
+    }
 
     internal static ActionInvocationResult InvokeDepthExceeded(string actionName, int maxDepth) => new() {
         ActionName = actionName,

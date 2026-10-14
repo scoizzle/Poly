@@ -1145,6 +1145,49 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_KeywordProperty_EscapesBaseAndCompiles() {
+        const string dsl = """
+            domain Claims
+            Claim: entity {
+              base: Text
+              Open: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(
+            new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("public string @base");
+        await Assert.That(csharp).DoesNotContain("public string base");
+    }
+
+    [Test]
+    public async Task Export_UnrequiredValueProperty_CompilesNullableAndDefaultConstructs() {
+        const string dsl = """
+            domain Disputes
+            Money: value {
+              Amount: Number
+              Currency: Text
+            }
+            Dispute: entity {
+              Title: Text required
+              Disputed: Money
+            }
+            CaseFile: entity {
+              disputes: many Dispute
+              File: action { create in disputes { Title: "claim" } }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(
+            new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("Money?");
+        await Assert.That(csharp).Contains("new Money()");
+        await Assert.That(csharp).Contains("??");
+    }
+
+    [Test]
     public async Task Export_AssignDatePropToDateTimeProp_EmitsToDateTimeAndCompiles() {
         const string dsl = """
             domain DateWiden
@@ -1270,7 +1313,8 @@ public class DomainToCSharpExporterTests {
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("Guid.NewGuid().ToString()");
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
-        await Assert.That(csharp).Contains("DateTime.Today");
+        await Assert.That(csharp).Contains("DateTime.UtcNow");
+        await Assert.That(csharp).DoesNotContain("DateTime.Today");
     }
 
     [Test]
@@ -1292,8 +1336,9 @@ public class DomainToCSharpExporterTests {
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
-        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.Today)");
+        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.UtcNow");
+        await Assert.That(csharp).DoesNotContain("DateTime.Today");
         await Assert.That(csharp).Contains("??");
     }
 

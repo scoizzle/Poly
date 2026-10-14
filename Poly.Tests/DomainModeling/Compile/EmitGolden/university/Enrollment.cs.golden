@@ -21,8 +21,8 @@ public class Enrollment
     { }
     private Enrollment(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
     {
-        this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.Today);
-        this.EnrolledOn = enrolledOn ?? DateOnly.FromDateTime(DateTime.Today);
+        this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        this.EnrolledOn = enrolledOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Grade = grade;
         this.Section = section;
         this.Student = student;

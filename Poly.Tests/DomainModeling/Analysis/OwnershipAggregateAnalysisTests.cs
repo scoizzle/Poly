@@ -7,7 +7,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// D2: a grandchild whose parent is a non-root aggregate member is not an orphan.
-/// An entity with no incoming relationship still is.
+/// A chain of outbound singular navigations is one owned subgraph, not an orphan.
 /// </summary>
 public class OwnershipAggregateAnalysisTests {
     private static (Domain Domain, AnalysisResult Analysis) Analyze(string dsl) {
@@ -82,7 +82,7 @@ public class OwnershipAggregateAnalysisTests {
     }
 
     [Test]
-    public async Task NoIncomingRelationship_StillOrphanWarning() {
+    public async Task SingularOutbound_NoInboundCollection_NotOrphan() {
         var (_, analysis) = Analyze("""
             domain Test
             Account: entity { Name: Text }
@@ -92,7 +92,27 @@ public class OwnershipAggregateAnalysisTests {
             }
             """);
 
-        await Assert.That(Orphan(analysis, "Lead")).IsTrue();
+        await Assert.That(Orphan(analysis, "Lead")).IsFalse();
         await Assert.That(Orphan(analysis, "Account")).IsFalse();
+    }
+
+    [Test]
+    public async Task SingularChain_NoInboundCollection_NotOrphan() {
+        var (_, analysis) = Analyze("""
+            domain Test
+            Plan: entity { Name: Text }
+            Account: entity {
+              Name: Text
+              subscription: Subscription
+            }
+            Subscription: entity {
+              Name: Text
+              plan: Plan
+            }
+            """);
+
+        await Assert.That(Orphan(analysis, "Account")).IsFalse();
+        await Assert.That(Orphan(analysis, "Subscription")).IsFalse();
+        await Assert.That(Orphan(analysis, "Plan")).IsFalse();
     }
 }

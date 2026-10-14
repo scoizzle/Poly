@@ -115,6 +115,33 @@ public class AnnotationRoundTripTests {
     }
 
     [Test]
+    public async Task TableAndColumn_DefaultAuthoringSurface_AcceptsWithUsesTemporal() {
+        const string poly = """
+            domain Scenes
+            uses temporal
+            Scene: entity table("SCENES") {
+              Title: Text column("TITLE")
+            }
+            """;
+
+        var compiled = new Poly.DslCompiler.DslCompiler().Compile(poly, Poly.DslCompiler.CompileMode.Entities);
+        await Assert.That(compiled.Success).IsTrue();
+
+        var session = DomainSession.ForAuthoringSource(poly, ExtensionCatalog.ProductLanguage);
+        var changes = new PolyDslParser(poly, session).Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        await Assert.That(result.Succeeded).IsTrue();
+        var kept = session.WithDomain(result.Root!);
+        await Assert.That(kept.Annotations.CanAccept("table")).IsTrue();
+        await Assert.That(kept.Annotations.CanAccept("column")).IsTrue();
+        await Assert.That(kept.Extensions.Contains("storage")).IsFalse();
+        var scene = result.Root!.Types.OfType<Entity>().Single();
+        await Assert.That(((Annotation)scene.Facets[0]).Name).IsEqualTo("table");
+        await Assert.That(((AnnotationString)((Annotation)scene.Facets[0]).Arguments["0"]).Value)
+            .IsEqualTo("SCENES");
+    }
+
+    [Test]
     public async Task UnknownAnnotation_WithoutPack_Fails() {
         var poly = """
             domain Test

@@ -161,26 +161,6 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/quoteDeal
 ### Action: Commit
 POST http://localhost:5201/api/accounts/1/opportunities/1/commit
 
-### Action: Lose
-POST http://localhost:5201/api/accounts/1/opportunities/1/lose
-
-### Action: Log
-POST http://localhost:5201/api/accounts/1/opportunities/1/log
-Content-Type: application/json
-
-{
-    "subject": "sample"
-}
-
-### Action: AddLine
-POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
-Content-Type: application/json
-
-{
-    "skuId": "example-product-id",
-    "qty": 0
-}
-
 ### Action: Win
 POST http://localhost:5201/api/accounts/1/opportunities/1/win
 
@@ -189,27 +169,7 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/capture
 Content-Type: application/json
 
 {
-    "request": 0
-}
-
-### Action: Lose
-POST http://localhost:5201/api/accounts/1/opportunities/1/lose
-
-### Action: Log
-POST http://localhost:5201/api/accounts/1/opportunities/1/log
-Content-Type: application/json
-
-{
-    "subject": "sample"
-}
-
-### Action: AddLine
-POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
-Content-Type: application/json
-
-{
-    "skuId": "example-product-id",
-    "qty": 0
+    "request": { "amount": 0, "currency": "sample" }
 }
 
 ### ──────────── Activitys ────────────
@@ -297,9 +257,6 @@ GET http://localhost:5201/api/accounts/1/tickets/1
 
 ### Action: Work
 POST http://localhost:5201/api/accounts/1/tickets/1/work
-
-### Action: Close
-POST http://localhost:5201/api/accounts/1/tickets/1/close
 
 ### Action: Close
 POST http://localhost:5201/api/accounts/1/tickets/1/close

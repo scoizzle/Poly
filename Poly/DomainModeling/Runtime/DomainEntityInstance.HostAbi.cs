@@ -317,7 +317,7 @@ public sealed partial record DomainEntityInstance {
             else
                 setArgs.Add(null);
         }
-        ThrowIfEffectListFailed(
+        ThrowIfSubscriptionFailed(
             ExecuteCachedSubscriptionTree(tree, rootParameters, setArgs),
             "notify subscribers");
     }
@@ -379,7 +379,7 @@ public sealed partial record DomainEntityInstance {
                 peerBinding, new NamedTypeReference(peerInstance.Entity.Name)));
             setArgs.Add(peerInstance);
         }
-        ThrowIfEffectListFailed(
+        ThrowIfSubscriptionFailed(
             ExecuteCachedSubscriptionTree(cached, rootParameters, setArgs),
             "subscription");
     }

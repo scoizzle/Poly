@@ -80,4 +80,41 @@ public sealed class DomainDslPrinterTests {
 
         await Assert.That(printed).Contains("function Pi(): Number = 3");
     }
+
+    [Test]
+    public async Task Print_DefaultClock_PrintsNowAndToday() {
+        var created = new Property("CreatedAt", new DomainTypeReference("DateTime"),
+            [new DefaultValueConstraint(new Now())]);
+        var opened = new Property("OpenedOn", new DomainTypeReference("Date"),
+            [new DefaultValueConstraint(new Today())]);
+        var entity = new Entity("Account", [created, opened], [], [], []);
+        var domain = new Domain("T", [entity]);
+        var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
+        var printed = new DomainDslPrinter(session).Print(domain);
+
+        await Assert.That(printed).Contains("default(Now)");
+        await Assert.That(printed).Contains("default(Today)");
+        await Assert.That(printed).DoesNotContain("Children");
+
+        var reparsed = new PolyDslParser(printed, session).Parse();
+        await Assert.That(reparsed.Count > 0).IsTrue();
+    }
+
+    [Test]
+    public async Task Parse_CreateIn_AllowsPrimitiveKeywordPropertyName() {
+        const string poly = """
+            domain D
+            Note: entity { Text: Text }
+            Book: entity {
+              notes: many Note
+              Active: stage {
+                Mark: action {
+                  create in notes { Text: "high usage" }
+                }
+              }
+            }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        await Assert.That(changes.Count > 0).IsTrue();
+    }
 }

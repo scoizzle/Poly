@@ -806,7 +806,7 @@ public sealed class DomainDslPrinter {
         _ => "?",
     };
 
-    private static string PrintConstraint(Constraint constraint) => constraint switch {
+    private string PrintConstraint(Constraint constraint) => constraint switch {
         RequiredConstraint => "required",
         UniqueConstraint => "unique",
         RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
@@ -814,15 +814,9 @@ public sealed class DomainDslPrinter {
             ? $"length({l.MinLength})"
             : $"length({l.MinLength}, {l.MaxLength})",
         PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
-        DefaultValueConstraint dv => $"default({PrintDomainExpression(dv.Expression)})",
+        DefaultValueConstraint dv => $"default({PrintExpression(dv.Expression)})",
         EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
         _ => $"?{constraint.GetType().Name}",
-    };
-
-    private static string PrintDomainExpression(DomainExpression expr) => expr switch {
-        Literal l => PrintLiteralValue(l.Value),
-        PropertyAccess pa => pa.Name,
-        _ => expr.ToString() ?? "?",
     };
 
     private static string PrintLiteralValue(object? value) => value switch {

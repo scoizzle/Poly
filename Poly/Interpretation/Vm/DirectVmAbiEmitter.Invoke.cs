@@ -53,16 +53,19 @@ public static partial class DirectVmAbiEmitter {
 
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
-                    int baseIdx = isStatic ? 0 : 1;
                     if (TryPackEnumerableArgs(methodParams, invoke, argSlots, ctx, out var packed)) {
                         methodArgs[0] = packed;
                     }
                     else {
                         for (int i = 0; i < methodParams.Length; i++) {
-                            int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
-                            var ringVal = ctx.RingVar(slotIdx);
-                            var argNode = i < invoke.Arguments.Length ? invoke.Arguments[i] : null;
-                            methodArgs[i] = ConvertRingToClr(ringVal, methodParams[i].ParameterType, argNode, ctx);
+                            if (i >= invoke.Arguments.Length) {
+                                // Omitted optional: the default, not a ring slot (a scalar there is not a handle).
+                                methodArgs[i] = MissingClrArgument(methodParams[i]);
+                                continue;
+                            }
+                            var ringVal = ctx.RingVar(argSlots[i]);
+                            methodArgs[i] = ConvertRingToClr(
+                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i], ctx);
                         }
                     }
 
@@ -89,6 +92,13 @@ public static partial class DirectVmAbiEmitter {
                     if (instanceExpr is not null)
                         fullBody.Add(instanceExpr);
                     fullBody.AddRange(argExprs);
+
+                    // A null heap receiver (unset DateOnly/DateTime) must not NRE inside AddDays.
+                    if (!isStatic) {
+                        var unset = UnsetReceiverGuard(member.Value, ctx.RingVar(instanceSlot), ctx);
+                        if (unset is not null)
+                            fullBody.Add(unset);
+                    }
 
                     // Convert result to ABI (long-representable value types unboxed,
                     // reference + non-long value types heap-allocated)
@@ -169,8 +179,11 @@ public static partial class DirectVmAbiEmitter {
 
             int astSlot = ctx.AllocSlot();
             ctx.RingDepth = astSlot + 1;
-            var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
+            var astBody = new List<Expression>(astArgExprs.Count + 4) { astInstanceExpr };
             astBody.AddRange(astArgExprs);
+            var unsetReceiver = UnsetReceiverGuard(member.Value, ctx.RingVar(astInstanceSlot), ctx);
+            if (unsetReceiver is not null)
+                astBody.Add(unsetReceiver);
 
             var returnClr = method?.MemberTypeDefinition.GetRuntimeType();
             bool isVoid = method is not null
@@ -1008,6 +1021,38 @@ public static partial class DirectVmAbiEmitter {
             return enumerable.GetEnumerator();
         throw new InvalidOperationException(
             $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
+    }
+
+    /// <summary>
+    /// Instance call on a heap value whose handle is null. Names the member
+    /// (<c>'Expiry' is not set</c>) instead of a raw null dereference.
+    /// Scalars stay on the ring; only heap receivers are checked.
+    /// </summary>
+    private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, AbiCtx ctx) {
+        if (receiver is not Member member || IsTypeNameReceiver(member.Value))
+            return null;
+        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(receiver);
+        if (meta is null || meta.Kind != ValueRepresentationKind.HeapRef)
+            return null;
+        var ctor = typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)
+            .GetConstructor([typeof(string)]);
+        if (ctor is null)
+            return null;
+        return IfThen(
+            Equal(handle, Constant(0L)),
+            Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
+    }
+
+    private static Expression MissingClrArgument(ParameterInfo parameter) {
+        if (!parameter.HasDefaultValue)
+            throw new InvalidOperationException(
+                $"VM compile rejected: argument '{parameter.Name}' of '{parameter.Member.Name}' has no value.");
+        var value = parameter.DefaultValue;
+        if (value is null
+            && parameter.ParameterType.IsValueType
+            && Nullable.GetUnderlyingType(parameter.ParameterType) is null)
+            return Default(parameter.ParameterType);
+        return Constant(value, parameter.ParameterType);
     }
 
     private static long CastAbi(Heap heap, long raw, Type target) {

@@ -1,0 +1,48 @@
+domain SmartHome
+uses temporal
+
+Scene: entity {
+  Name: Text required
+  IsActive: Boolean default(false)
+  devices: many Device
+
+  Activate: action {
+    for devices as device invoke device.TurnOn()
+  }
+
+  Deactivate: action {
+    for devices as device where device in On invoke device.TurnOff()
+  }
+
+  DimIdle: action {
+    for devices as device where device in Off invoke device.SetLevel(level: device MaxLevel)
+  }
+
+  when any devices On {
+    assign IsActive to true
+  }
+  when all devices Off {
+    assign IsActive to false
+  }
+}
+
+Device: entity {
+  Name: Text required
+  Power: Number range(0, 3000)
+  MaxLevel: Number range(0, 100) default(100)
+  Draw: Number
+  Off: stage {
+    entry { assign Draw to 0 }
+    TurnOn: action {
+      assign Draw to Power
+      transition to On
+    }
+    SetLevel: action (level: Number) {
+      assign MaxLevel to level
+    }
+  }
+  On: stage {
+    entry { assign Draw to Power }
+    TurnOff: action { transition to Off }
+  }
+}

@@ -1,0 +1,60 @@
+domain Billing
+uses temporal
+
+Meter: entity {
+  Serial: Text unique
+  Rate: Number range(0, )
+  PeakRate: Number range(0, )
+  OffPeakRate: Number range(0, )
+  readings: many Reading
+
+  AddReading: action (usage: Number) -> Reading {
+    create in readings { Usage: usage RecordedAt: Now }
+  }
+
+  BillAll: action {
+    for readings as reading where reading Unbilled
+        invoke reading.Charge(rate: Rate, offPeak: OffPeakRate)
+  }
+}
+
+Reading: entity {
+  Usage: Number range(0, )
+  Amount: Number
+  RecordedAt: DateTime
+  CreatedAt: DateTime default(Now)
+  Status: Text default("new")
+  notes: many Note
+
+  Unbilled: policy { Status is "new" }
+
+  ApplyTax: action {
+    assign Amount to Amount * 110 / 100
+  }
+
+  FlagHigh: action {
+    if (Usage > 900) {
+      create in notes { Body: "high usage" }
+    }
+  }
+
+  New: stage {
+    Charge: action (rate: Number, offPeak: Number)
+      require Unbilled
+    {
+      if (Usage > 500) {
+        assign Amount to Usage * rate
+      } else {
+        assign Amount to Usage * offPeak
+      }
+      invoke ApplyTax
+      assign Status to "billed"
+      transition to Billed
+    }
+  }
+  Billed: stage { }
+}
+
+Note: entity {
+  Body: Text
+}

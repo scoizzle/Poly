@@ -1,0 +1,45 @@
+domain Disputes
+uses temporal
+
+Outcome: enum {
+  Pending
+  Won
+  Lost
+}
+
+Money: value {
+  Amount: Number
+  Currency: Text
+}
+
+Customer: entity {
+  Name: Text required
+  disputes: many Dispute
+
+  NoLost: policy { none disputes where Outcome == "Lost" }
+  FraudCount: policy { count disputes where Reason == "fraud" >= 1 }
+
+  OpenDispute: action (reason: Text, disputed: Money) -> Dispute {
+    create in disputes { Reason: reason Disputed: disputed Outcome: Pending }
+  }
+}
+
+Dispute: entity {
+  Reason: Text required
+  Disputed: Money
+  Outcome: Outcome default(Pending)
+
+  NotPending: policy { Outcome == "Won" or Outcome == "Lost" }
+
+  Open: stage {
+    Resolve: action (won: Boolean) {
+      if (won is true) {
+        assign Outcome to Won
+      } else {
+        assign Outcome to Lost
+      }
+      transition to Closed
+    }
+  }
+  Closed: stage { }
+}

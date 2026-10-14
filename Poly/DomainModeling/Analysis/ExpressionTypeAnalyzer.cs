@@ -480,7 +480,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             && ResolvePropertyType(leftName, props, parameters) is null)
             CheckEnumMember(context, cmp.Left, right.TypeName!, leftName, enumTypes);
 
-        if (!Compatible(context, left, right))
+        // Date (DateOnly) and DateTime do not compare. Now is DateTime; Today is Date.
+        // Assign still widens Date onto DateTime; this rejection is comparison only.
+        if (MixedDateGranularity(context, left, right) || !Compatible(context, left, right))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 
@@ -766,6 +768,22 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static bool HasFlag(Introspection.TypeCategory flags, Introspection.TypeCategory flag) =>
         (flags & flag) == flag;
+
+    private static bool MixedDateGranularity(AnalysisContext context, TypeInfo left, TypeInfo right) =>
+        IsDateOnlyOnly(context, left) && IsDateTimeOnly(context, right)
+        || IsDateTimeOnly(context, left) && IsDateOnlyOnly(context, right);
+
+    private static bool IsDateOnlyOnly(AnalysisContext context, TypeInfo type) {
+        var flags = FlagsOf(context, type.TypeName);
+        return HasFlag(flags, Introspection.TypeCategory.DateOnly)
+            && !HasFlag(flags, Introspection.TypeCategory.DateTime);
+    }
+
+    private static bool IsDateTimeOnly(AnalysisContext context, TypeInfo type) {
+        var flags = FlagsOf(context, type.TypeName);
+        return HasFlag(flags, Introspection.TypeCategory.DateTime)
+            && !HasFlag(flags, Introspection.TypeCategory.DateOnly);
+    }
 
     private static void Report(AnalysisContext context, Node where, string message) =>
         context.ReportError(where, message, DomainModelDiagnosticCodes.SemanticTypeCompatibility);

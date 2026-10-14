@@ -92,5 +92,5 @@ public class Customer
         var created = new Customer(email, name, orders, tier);
         return DomainResult<Customer>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
 }

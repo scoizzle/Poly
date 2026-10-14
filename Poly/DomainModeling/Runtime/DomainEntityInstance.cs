@@ -422,15 +422,16 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Action resolution missed. An action that exists on a different stage
-    /// is "only available in stage 'X'" via Entity.Stages; otherwise Missing.
+    /// is "only available in stage 'X'" (or "stages 'A', 'B'") via Entity.Stages; otherwise Missing.
     /// </summary>
     private ActionInvocationResult ReportUnresolvedAction(string actionName) {
-        var stageName = Entity.Stages
-            .FirstOrDefault(s => s.Actions.Any(a =>
+        var stageNames = Entity.Stages
+            .Where(s => s.Actions.Any(a =>
                 string.Equals(a.Name, actionName, StringComparison.Ordinal)))
-            ?.Name;
-        return stageName is not null
-            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageName)
+            .Select(s => s.Name)
+            .ToList();
+        return stageNames.Count > 0
+            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageNames)
             : ActionInvocationResult.Missing(Entity.Name, actionName);
     }
 
@@ -723,10 +724,10 @@ public sealed partial record DomainEntityInstance {
             : _typeDefAnalyzer;
         var previousBindingProvider = _bindingTypeProvider;
         _bindingTypeProvider = effectTypeProvider;
+        var createdBefore = _createdChildren.Count;
+        var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
+        var stageBefore = CurrentStage;
         try {
-            var createdBefore = _createdChildren.Count;
-            var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
-            var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, actionParameters: action.Parameters, actionArgs: args);
             if (failed is { IsSuccess: false }) {
@@ -751,6 +752,10 @@ public sealed partial record DomainEntityInstance {
             }
 
             return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
+        }
+        catch (ConstraintFailureException ex) {
+            RestoreActionState(bagBefore, stageBefore, createdBefore);
+            return ActionInvocationResult.InvalidArguments(actionName, ex.Message);
         }
         finally {
             _bindingTypeProvider = previousBindingProvider;
@@ -799,6 +804,18 @@ public sealed partial record DomainEntityInstance {
         if (failed is { IsSuccess: false })
             throw new ConstraintFailureException(
                 failed.ErrorMessage ?? $"{context} failed.");
+    }
+
+    // InvokeAction catches ConstraintFailureException and rolls the action back.
+    // A subscriber's failure has to keep escaping so the next notify still runs.
+    private static void ThrowIfSubscriptionFailed(DomainResult? failed, string context) {
+        if (failed is { IsSuccess: false })
+            throw new SubscriptionDispatchException(
+                failed.ErrorMessage ?? $"{context} failed.");
+    }
+
+    private sealed class SubscriptionDispatchException : Exception {
+        public SubscriptionDispatchException(string message) : base(message) { }
     }
 
     /// <summary>

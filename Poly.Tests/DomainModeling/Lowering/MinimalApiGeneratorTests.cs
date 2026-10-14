@@ -1,3 +1,6 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -259,7 +262,7 @@ public class MinimalApiGeneratorTests {
         var rendered = Render(d with { Types = types });
 
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string value { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string @value { get; init; }");
     }
 
     [Test]
@@ -465,5 +468,158 @@ public class MinimalApiGeneratorTests {
         var types = unit.Types.Select(t => t.Name).ToList();
         await Assert.That(types.Count(n => n == "OpportunityLogDto")).IsEqualTo(1);
         await Assert.That(types.Count(n => n == "OpportunityAddLineDto")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task StageScopedAction_EmitsOneRoute_AndChildGetUsesRouteId() {
+        var d = ParseDomain("""
+            domain T
+            Book: entity { Isbn: Text unique }
+            Patron: entity {
+              Email: Text unique
+              loans: many Loan
+            }
+            Loan: entity {
+              book: Book
+              Active: stage { Return: action { } }
+              Overdue: stage { Return: action { } }
+            }
+            """);
+        var rendered = Render(d);
+        const string route = "\"/api/patrons/{email}/loans/{id}/return\"";
+        await Assert.That(CountOf(rendered, route)).IsEqualTo(1);
+        await Assert.That(rendered).Contains("\"/api/patrons/{email}\"");
+        await Assert.That(rendered).Contains("\"/api/books/{isbn}\"");
+        await Assert.That(rendered).Contains("\"/api/patrons/{email}/loans/{id}\"");
+        await Assert.That(rendered.Contains("FirstOrDefault()")).IsFalse();
+        await Assert.That(rendered).Contains("FindAsync(id)");
+        await Assert.That(rendered.Contains("FindAsync(isbn)")).IsFalse();
+        await Assert.That(rendered.Contains("FindAsync(email)")).IsFalse();
+        await Assert.That(rendered).Contains("e.Isbn == isbn");
+        await Assert.That(rendered).Contains("e.Email == email");
+    }
+
+    [Test]
+    public async Task ChildGet_NaturalKey_FiltersTheParentsCollection() {
+        var d = ParseDomain("""
+            domain T
+            Book: entity { Isbn: Text unique }
+            Patron: entity {
+              Email: Text unique
+              fines: many Fine
+            }
+            Fine: entity {
+              Code: Text unique
+              book: Book
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("\"/api/patrons/{email}/fines/{code}\"");
+        await Assert.That(rendered).Contains("e.Code == code");
+        await Assert.That(rendered.Contains("Fines.FirstOrDefault()")).IsFalse();
+    }
+
+    [Test]
+    public async Task ProgramEntity_DbAndHttp_DoNotCollideWithHostProgram() {
+        const string poly = """
+            domain Registration
+            Program: entity {
+              Code: Text unique
+              Name: Text required
+            }
+            Student: entity {
+              Email: Text unique
+              program: Program
+            }
+            """;
+
+        var db = new Compiler().Compile(poly, CompileMode.Db, DbmsPack.Sqlite);
+        await Assert.That(db.Success).IsTrue();
+        await Assert.That(db.Files!.Any(f => f.FileName == "Program.cs")).IsFalse();
+        var entity = db.Files!.Single(f => f.FileName == "Program.Entity.cs").Source;
+        await Assert.That(entity).Contains("namespace Poly.Generated");
+        await Assert.That(entity).Contains("class Program");
+        await Assert.That(db.Files!.Single(f => f.FileName == "Student.cs").Source)
+            .Contains("namespace Poly.Generated");
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Count(f => f.FileName == "Program.cs")).IsEqualTo(1);
+        await Assert.That(http.Files!.Any(f => f.FileName == "Program.Entity.cs")).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("Poly.Generated.Program");
+
+        var errors = CompileHost(http.Files!);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    private static int CountOf(string text, string value) {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    private static string[] CompileHost(IReadOnlyList<(string FileName, string Source)> files) {
+        var implicitUsings = CSharpSyntaxTree.ParseText("""
+            global using System;
+            global using System.Linq;
+            global using System.Threading.Tasks;
+            global using System.Collections.Generic;
+            global using System.IO;
+            global using System.Net.Http;
+            global using Microsoft.AspNetCore.Builder;
+            global using Microsoft.AspNetCore.Hosting;
+            global using Microsoft.AspNetCore.Http;
+            global using Microsoft.AspNetCore.Routing;
+            global using Microsoft.Extensions.Configuration;
+            global using Microsoft.Extensions.DependencyInjection;
+            global using Microsoft.Extensions.Hosting;
+            global using Microsoft.Extensions.Logging;
+            """, path: "ImplicitUsings.cs");
+        var trees = files
+            .Where(f => f.FileName.EndsWith(".cs", StringComparison.Ordinal))
+            .Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName))
+            .Append(implicitUsings);
+        var compilation = CSharpCompilation.Create(
+            "ProgramEntityHost",
+            trees,
+            HostReferences(),
+            new CSharpCompilationOptions(OutputKind.ConsoleApplication));
+        return compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")
+            .ToArray();
+    }
+
+    private static List<MetadataReference> HostReferences() {
+        var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
+        void AddFrom(string path) {
+            var name = Path.GetFileName(path);
+            if (!byName.ContainsKey(name) && File.Exists(path))
+                byName[name] = MetadataReference.CreateFromFile(path);
+        }
+        var tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
+        if (tpa is not null)
+            foreach (var p in tpa.Split(Path.PathSeparator))
+                AddFrom(p);
+        var coreDir = Path.GetDirectoryName(typeof(object).Assembly.Location);
+        var sharedDir = coreDir is not null ? Path.GetDirectoryName(Path.GetDirectoryName(coreDir)) : null;
+        var aspNetRoot = sharedDir is not null ? Path.Combine(sharedDir, "Microsoft.AspNetCore.App") : null;
+        if (aspNetRoot is not null && Directory.Exists(aspNetRoot) && coreDir is not null) {
+            var version = Path.GetFileName(coreDir);
+            var aspNetDir = Directory.Exists(Path.Combine(aspNetRoot, version))
+                ? Path.Combine(aspNetRoot, version)
+                : Directory.GetDirectories(aspNetRoot).OrderByDescending(Path.GetFileName, StringComparer.Ordinal).FirstOrDefault();
+            if (aspNetDir is not null)
+                foreach (var p in Directory.GetFiles(aspNetDir, "*.dll"))
+                    AddFrom(p);
+        }
+        foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
+            AddFrom(p);
+        return byName.Values.ToList();
     }
 }

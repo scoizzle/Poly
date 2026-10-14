@@ -236,7 +236,7 @@ public class Student
             target.RegisterStudentEnrollmentsCompletedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
     private void OnEntrySuspended()
     {
         this.Holds = this.Holds + 1L;

@@ -38,6 +38,28 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateJointConstraintSatisfiability(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
         ValidateDefaultWithinConstraints(context, property, constraints);
+        NoteUnprojectedStorageConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// Storage emits HasMaxLength and unique indexes. A pattern and a length minimum
+    /// stay write-time checks; say so instead of dropping them quietly.
+    /// </summary>
+    private static void NoteUnprojectedStorageConstraints(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        if (constraints.OfType<PatternConstraint>().Any()) {
+            context.ReportHint(
+                property,
+                $"Property '{property.Name}' pattern is enforced when the value is written and is not projected to SQL.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
+        var length = constraints.OfType<LengthConstraint>().FirstOrDefault();
+        if (length is { MinLength: > 0 }) {
+            context.ReportHint(
+                property,
+                $"Property '{property.Name}' length minimum {length.MinLength} is enforced when the value is written. Storage projects only HasMaxLength({length.MaxLength}).",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
     }
 
     /// <summary>

@@ -1,0 +1,65 @@
+domain Claims
+uses temporal
+
+Claimant: entity {
+  Name: Text required
+  claims: many Claim
+
+  FileClaim: action (amount: Number) -> Claim {
+    create in claims { Amount: amount }
+  }
+}
+
+Claim: entity {
+  RefNo: Text unique
+  Amount: Number range(0, )
+  Status: Text
+  claimant: Claimant
+  assessor: Assessor
+  notes: many Note
+
+  TooLarge: policy { Amount > 100000 }
+  HasNotes: policy { notes exists }
+  NoNotes: policy { not notes exists }
+
+  Submitted: stage {
+    entry { assign Status to "submitted" }
+    Review: action {
+      transition to UnderReview
+    }
+  }
+  UnderReview: stage {
+    Approve: action
+      require HasNotes
+    {
+      invoke assessor.LogReview(note: "approved")
+      transition to Approved
+    }
+    Reject: action {
+      invoke assessor.LogReview(note: "rejected")
+      transition to Rejected
+    }
+  }
+  Approved: stage {
+    Pay: action { transition to Paid }
+  }
+  Rejected: stage { }
+  Paid: stage { }
+}
+
+Assessor: entity {
+  Name: Text required
+  notes: many Note
+
+  LogReview: action (note: Text) {
+    create in notes { Body: note }
+  }
+
+  AddNote: action (body: Text) {
+    create Note { Body: body }
+  }
+}
+
+Note: entity {
+  Body: Text
+}

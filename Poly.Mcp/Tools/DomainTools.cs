@@ -1370,6 +1370,23 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
+        // The shipped DSL has no ManyToMany syntax (the incremental add tool can
+        // author one in-session). Degrading the cardinality to `many` would silently
+        // change the domain on round-trip — fail closed and name the relationship.
+        var manyToMany = state.Domain.Types
+            .OfType<Entity>()
+            .SelectMany(e => e.Navigations)
+            .FirstOrDefault(n => n.Cardinality == RelationshipCardinality.ManyToMany);
+        if (manyToMany is not null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Cannot export: relationship '{manyToMany.Name}' is ManyToMany, " +
+                    "which the shipped DSL cannot express. Round-tripping would silently " +
+                    "degrade it to one-to-many.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Affordances: ["get_relationships", "get_domain_overview"]);
+
         var printer = new DomainDslPrinter(state.Modeling);
         var polyText = printer.Print(state.Domain);
 

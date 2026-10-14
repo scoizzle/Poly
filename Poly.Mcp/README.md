@@ -165,3 +165,13 @@ The **RuntimeTool** family closes the final feedback loop: agents can create ins
 - `invoke_action` runs the named action on the session instance (same path as the core library).
 - Successful `apply_dsl` / evolve replaces the domain root and **clears** prior runtime instances (they held the previous entity graph).
 - Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) evaluate on store instances via `create_instance` + `link_instances` + `evaluate_policy`. `oracle_expression` is bag-only and fail-closed for those reads.
+
+## Harness Runtime
+
+`Program.cs` composes the server through the host's DI container:
+
+- **Store:** `ISessionStore` is a singleton (`McpSessionStore`). Sessions live in memory only — a restart loses them (keep a model with `export_dsl`). Each session has its own lock, so a slow mutation in one session never blocks another.
+- **Eviction:** sessions idle longer than `Mcp:Sessions:IdleTimeout` (default 8h) are removed by `SessionEvictionService`; `SweepInterval` (default 15m) controls the sweep. Set `IdleTimeout` to zero to disable eviction.
+- **Boundary:** one `AddCallToolFilter` catches uncaught exceptions and returns a failed call that still carries the `DomainToolResponse` envelope (`success:false`), so an agent sees the same shape as a tool-level failure.
+
+Tool classes are instance classes resolved from DI with `ISessionStore` and `ILogger<T>`. Session identity stays the `sessionId` argument — this process is stdio and has no `Mcp-Session-Id` header.

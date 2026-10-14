@@ -2,6 +2,8 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Poly.Mcp;
+using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -11,9 +13,15 @@ builder.Logging.AddConsole(consoleLogOptions => {
     consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
+builder.Services.Configure<McpSessionOptions>(builder.Configuration.GetSection("Mcp:Sessions"));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<ISessionStore, McpSessionStore>();
+builder.Services.AddHostedService<SessionEvictionService>();
+
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
+    .WithRequestFilters(filters => filters.AddCallToolFilter(ToolExceptionBoundary.Filter))
     .WithTools<SessionTool>()
     .WithTools<QueryTool>()
     .WithTools<EvolveTool>()

@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Microsoft.Extensions.Logging;
+
 using ModelContextProtocol.Server;
 
 using Poly.DomainModeling.Analysis;
@@ -20,7 +22,7 @@ namespace Poly.Mcp.Tools;
 /// relationship/subscription support.
 /// </summary>
 [McpServerToolType]
-internal sealed class RuntimeTool {
+internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
     private static DomainToolResponse Failure_NotFound(string sessionId) =>
@@ -150,14 +152,15 @@ internal sealed class RuntimeTool {
 Starts in the first defined stage when the entity has stages. Returns an instance id and a snapshot of initial property values.
 
 Use invoke_action to run actions, evaluate_policy to check policies, link_instances to connect related instances, and get_instance / list_instances to inspect.")]
-    public static DomainToolResponse CreateInstance(
+    public DomainToolResponse CreateInstance(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
         [Description("Optional JSON object of initial property values, " +
             "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}")]
         string? propertiesJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
+        logger.LogDebug("create_instance {SessionId} {Entity}", sessionId, entityName);
 
         // Resolve entity
         var entity = state.Domain.Types.OfType<Entity>()
@@ -208,7 +211,7 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
         // tool failure (Support dogfood: duplicate Handle crashed the MCP call).
         bool registered;
         try {
-            registered = McpSessionStore.TryModifyInstances(sessionId, st => {
+            registered = store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore ??= new DomainInstanceStore();
                 st.InstanceStore.Add(instance);
                 st.InstanceMap[instanceId] = instance;
@@ -265,12 +268,12 @@ Use case — Collection quantifiers:
   2. create_instance for target entity (e.g. Order)
   3. link_instances with relationship name (e.g. ""orders"")
   4. evaluate_policy(entityName, policyName, instanceId=sourceId)")]
-    public static DomainToolResponse LinkInstances(
+    public DomainToolResponse LinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -335,7 +338,7 @@ Use case — Collection quantifiers:
         }
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Link(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -375,12 +378,12 @@ Fails if the link does not exist — use link_instances to create the link first
 Use case — reassign a child from one parent to another:
   1. unlink_instances(sessionId, oldParentId, ""relationshipName"", childId)
   2. link_instances(sessionId, newParentId, ""relationshipName"", childId)")]
-    public static DomainToolResponse UnlinkInstances(
+    public DomainToolResponse UnlinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -453,7 +456,7 @@ Use case — reassign a child from one parent to another:
                 Affordances: ["link_instances", "get_relationships"]);
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Unlink(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -481,10 +484,10 @@ Use case — reassign a child from one parent to another:
     /// deletion status, and count of child instances created by effects.
     /// </summary>
     [McpServerTool(Name = "get_instance"), Description("Returns a snapshot of a runtime instance: current stage, property values, deletion status, and created-child count.")]
-    public static DomainToolResponse GetInstance(
+    public DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -546,10 +549,10 @@ Use case — reassign a child from one parent to another:
     /// Returns summary data: instance ID, entity name, current stage, and property count.
     /// </summary>
     [McpServerTool(Name = "list_instances"), Description("Lists all runtime instances in the session, optionally filtered by entity name.")]
-    public static DomainToolResponse ListInstances(
+    public DomainToolResponse ListInstances(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only list instances of this entity type")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var summaries = new List<InstanceSummaryData>();
@@ -596,14 +599,14 @@ Resolves the action from the instance's current stage, then entity-level actions
 Entity-typed parameters take instance ids from create_instance. Actions that return an entity include returnTypeName and returnInstanceId.
 
 To link or unlink existing instances, use link_instances / unlink_instances — those are not action effects.")]
-    public static DomainToolResponse InvokeAction(
+    public DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,
         [Description("Name of the action to invoke")] string actionName,
         [Description("Optional JSON object of action parameter values, " +
             "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
         string? argsJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -670,7 +673,7 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
             }
 
             if (newChildren.Count > 0) {
-                McpSessionStore.TryModifyInstances(sessionId, st => {
+                store.TryModifyInstances(sessionId, st => {
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();
@@ -696,7 +699,7 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
 
         // Re-read map if modify succeeded but local returnInstanceId missed (modify is sync).
         if (returnInstanceId is null && result.ResultInstance is not null
-            && McpSessionStore.TryGet(sessionId, out var stateAfter)) {
+            && store.TryGet(sessionId, out var stateAfter)) {
             foreach (var (id, inst) in stateAfter.InstanceMap) {
                 if (ReferenceEquals(inst, result.ResultInstance)) {
                     returnInstanceId = id;

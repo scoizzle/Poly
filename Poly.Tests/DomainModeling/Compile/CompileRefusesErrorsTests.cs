@@ -76,10 +76,10 @@ public class CompileRefusesErrorsTests {
     [Test]
     public async Task CreateInstance_OnDomainWithErrors_ReportsFailure() {
         var (domain, analysis, first) = DomainWithUnknownType();
-        var (sessionId, state) = McpSessionStore.Create("Broken");
-        await Assert.That(McpSessionStore.Replace(sessionId, domain, analysis, state.Modeling)).IsTrue();
+        var (sessionId, state) = McpTestTools.Store.Create("Broken");
+        await Assert.That(McpTestTools.Store.Replace(sessionId, domain, analysis, state.Modeling)).IsTrue();
 
-        var response = RuntimeTool.CreateInstance(sessionId, "Order");
+        var response = McpTestTools.Runtime.CreateInstance(sessionId, "Order");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains(first);

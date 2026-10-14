@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
 using Poly.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.Packs.Product;
@@ -32,61 +35,79 @@ internal sealed record McpSessionState(
 }
 
 /// <summary>
-/// Thread-safe in-memory store for domain sessions.
-/// Sessions are identified by a string sessionId (typically a GUID).
-/// Bootstrap uses <see cref="DomainFactory.Create"/> from the DomainModeling API.
+/// Thread-safe in-memory store for domain sessions, registered as a singleton.
+/// One lock per session: a slow mutation in one session never blocks another.
+/// Sessions are identified by a string sessionId (typically a GUID); identity is
+/// that id, never a transport header.
 /// </summary>
-internal static class McpSessionStore {
-    private static readonly ConcurrentDictionary<string, McpSessionState> Sessions = new(StringComparer.Ordinal);
-    private static readonly Lock StoreLock = new();
+internal sealed class McpSessionStore(
+    TimeProvider time,
+    IOptions<McpSessionOptions> options,
+    ILogger<McpSessionStore> logger) : ISessionStore {
+
+    private sealed class Entry(McpSessionState state, long now) {
+        /// <summary>Per-session lock; never replaced, so concurrent mutators serialize.</summary>
+        public readonly Lock Sync = new();
+        public McpSessionState State = state;
+        public long LastUsedTicks = now;
+    }
+
+    private readonly ConcurrentDictionary<string, Entry> _sessions = new(StringComparer.Ordinal);
+    private readonly TimeSpan _idleTimeout = options.Value.IdleTimeout;
+
+    private long NowTicks => time.GetUtcNow().UtcTicks;
 
     /// <summary>
     /// Creates a new session with a bootstrapped domain and the product authoring
-    /// session (Temporal language + storage annotations).
+    /// session (Temporal language + storage annotations). Overwrites an existing id.
     /// </summary>
-    public static (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
-        lock (StoreLock) {
-            var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
-                ? Guid.NewGuid().ToString("N")
-                : preferredSessionId;
+    public (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
+        var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)
+            ? Guid.NewGuid().ToString("N")
+            : preferredSessionId;
 
-            var domain = DomainFactory.Create(domainName) with {
-                Extensions = [.. ExtensionCatalog.ProductAuthoring]
-            };
-            var modeling = DomainSession.Open(domain, ProductCatalog.Catalog);
-            var analysis = modeling.Analyze(domain);
-            var state = new McpSessionState(domain, analysis, Revision: 0, modeling);
-            Sessions[sessionId] = state;
-            return (sessionId, state);
-        }
+        var domain = DomainFactory.Create(domainName) with {
+            Extensions = [.. ExtensionCatalog.ProductAuthoring]
+        };
+        var modeling = DomainSession.Open(domain, ProductCatalog.Catalog);
+        var analysis = modeling.Analyze(domain);
+        var state = new McpSessionState(domain, analysis, Revision: 0, modeling);
+        _sessions[sessionId] = new Entry(state, NowTicks);
+        logger.LogInformation("MCP session {SessionId} created ({Domain})", sessionId, domainName);
+        return (sessionId, state);
     }
 
     /// <summary>
-    /// Gets an existing session by ID. Returns false if not found.
+    /// Gets an existing session by ID and marks it used. Returns false if not found.
     /// </summary>
-    public static bool TryGet(string sessionId, out McpSessionState session) {
-        if (string.IsNullOrWhiteSpace(sessionId)) {
-            session = null!;
+    public bool TryGet(string sessionId, out McpSessionState session) {
+        session = null!;
+        if (string.IsNullOrWhiteSpace(sessionId))
             return false;
-        }
-        return Sessions.TryGetValue(sessionId, out session!);
+        if (!_sessions.TryGetValue(sessionId, out var entry))
+            return false;
+        Interlocked.Exchange(ref entry.LastUsedTicks, NowTicks);
+        session = entry.State;
+        return true;
     }
 
     /// <summary>
-    /// Atomically reads, mutates, and writes a session. The entire read-modify-write
-    /// cycle holds <see cref="StoreLock"/>, preventing the lost-update race that occurs
-    /// when callers do an unprotected <see cref="TryGet"/> → evolve → <see cref="Update"/>.
+    /// Atomically reads, mutates, and writes a session under that session's lock,
+    /// preventing the lost-update race that occurs when callers do an unprotected
+    /// <see cref="TryGet"/> → evolve → write.
     /// </summary>
-    public static EvolutionResult? Evolve(
+    public EvolutionResult? Evolve(
         string sessionId,
         Func<Domain, DomainSession, EvolutionResult> mutate) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
-        lock (StoreLock) {
-            if (!Sessions.TryGetValue(sessionId, out var current))
-                return null;
+        if (!_sessions.TryGetValue(sessionId, out var entry))
+            return null;
 
+        lock (entry.Sync) {
+            Interlocked.Exchange(ref entry.LastUsedTicks, NowTicks);
+            var current = entry.State;
             // A rejected outcome leaves the session as it was: its analysis is of the
             // proposal, not of the domain the session keeps.
             var outcome = mutate(current.Domain, current.Modeling);
@@ -94,7 +115,7 @@ internal static class McpSessionStore {
                 return outcome;
 
             var modeling = current.Modeling.WithDomain(outcome.Root);
-            Sessions[sessionId] = new McpSessionState(
+            entry.State = new McpSessionState(
                 outcome.Root,
                 outcome.Analysis,
                 current.Revision + 1,
@@ -106,15 +127,20 @@ internal static class McpSessionStore {
     /// <summary>
     /// Returns a list of all active session IDs.
     /// </summary>
-    public static IReadOnlyList<string> ListSessions() {
-        return Sessions.Keys.ToList();
+    public IReadOnlyList<string> ListSessions() {
+        return _sessions.Keys.ToList();
     }
 
     /// <summary>
     /// Removes a session by ID. Returns true if it existed.
     /// </summary>
-    public static bool Remove(string sessionId) {
-        return Sessions.TryRemove(sessionId, out _);
+    public bool Remove(string sessionId) {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return false;
+        var removed = _sessions.TryRemove(sessionId, out _);
+        if (removed)
+            logger.LogInformation("MCP session {SessionId} removed", sessionId);
+        return removed;
     }
 
     /// <summary>
@@ -124,21 +150,23 @@ internal static class McpSessionStore {
     /// <paramref name="modeling"/> is the ForSource session; required so a <c>uses</c>
     /// change does not re-open against Core.
     /// </summary>
-    public static bool Replace(
+    public bool Replace(
         string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
         ArgumentNullException.ThrowIfNull(modeling);
 
-        lock (StoreLock) {
-            if (!Sessions.TryGetValue(sessionId, out var current))
-                return false;
-            var next = modeling.WithDomain(domain);
-            Sessions[sessionId] = new McpSessionState(
+        if (!_sessions.TryGetValue(sessionId, out var entry))
+            return false;
+
+        lock (entry.Sync) {
+            Interlocked.Exchange(ref entry.LastUsedTicks, NowTicks);
+            var current = entry.State;
+            entry.State = new McpSessionState(
                 domain,
                 analysis,
                 current.Revision + 1,
-                next);
+                modeling.WithDomain(domain));
             return true;
         }
     }
@@ -146,15 +174,47 @@ internal static class McpSessionStore {
     /// <summary>
     /// Provides locked access to a session's state for runtime instance operations.
     /// </summary>
-    public static bool TryModifyInstances(string sessionId, Action<McpSessionState> action) {
+    public bool TryModifyInstances(string sessionId, Action<McpSessionState> action) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
-        lock (StoreLock) {
-            if (!Sessions.TryGetValue(sessionId, out var current))
-                return false;
-            action(current);
+        if (!_sessions.TryGetValue(sessionId, out var entry))
+            return false;
+
+        lock (entry.Sync) {
+            Interlocked.Exchange(ref entry.LastUsedTicks, NowTicks);
+            action(entry.State);
             return true;
         }
+    }
+
+    /// <summary>
+    /// Removes sessions idle longer than the configured timeout. A session in use
+    /// is skipped and picked up by the next sweep.
+    /// </summary>
+    public int EvictIdle() {
+        if (_idleTimeout <= TimeSpan.Zero)
+            return 0;
+        var cutoff = NowTicks - _idleTimeout.Ticks;
+        var evicted = 0;
+        foreach (var (sessionId, entry) in _sessions) {
+            if (Interlocked.Read(ref entry.LastUsedTicks) > cutoff)
+                continue;
+            if (!entry.Sync.TryEnter())
+                continue;
+            try {
+                if (Interlocked.Read(ref entry.LastUsedTicks) > cutoff)
+                    continue;
+                if (_sessions.TryRemove(new KeyValuePair<string, Entry>(sessionId, entry))) {
+                    logger.LogInformation(
+                        "MCP session {SessionId} evicted after {IdleTimeout} idle", sessionId, _idleTimeout);
+                    evicted++;
+                }
+            }
+            finally {
+                entry.Sync.Exit();
+            }
+        }
+        return evicted;
     }
 }

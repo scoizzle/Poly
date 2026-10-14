@@ -7,12 +7,12 @@ namespace Poly.Tests.Mcp;
 public class UnifiedAddTests {
     [Test]
     public async Task Add_Entity_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
 
-        var response = EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Widget"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var overview = QueryTool.GetDomainOverview(sessionId);
+        var overview = McpTestTools.Query.GetDomainOverview(sessionId);
         await Assert.That(overview.Success).IsTrue();
         var data = (DomainOverviewData)overview.Data!;
         await Assert.That(data.EntityNames).Contains("Widget");
@@ -23,13 +23,13 @@ public class UnifiedAddTests {
     [Arguments("A/B")]
     [Arguments("A#B")]
     public async Task Add_Entity_WithNameTheDslRefuses_Fails(string name) {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
 
-        var response = EvolveTool.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "entity", $$"""{"name":"{{name}}"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("is not a valid name");
-        var data = (DomainOverviewData)QueryTool.GetDomainOverview(sessionId).Data!;
+        var data = (DomainOverviewData)McpTestTools.Query.GetDomainOverview(sessionId).Data!;
         await Assert.That(data.EntityNames).DoesNotContain(name);
     }
 
@@ -38,7 +38,7 @@ public class UnifiedAddTests {
     [Arguments("A/B")]
     [Arguments("A#B")]
     public async Task CreateDomainSession_WithNameTheDslRefuses_Fails(string name) {
-        var response = SessionTool.CreateDomainSession(name);
+        var response = McpTestTools.Session.CreateDomainSession(name);
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("is not a valid name");
@@ -47,14 +47,14 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Property_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Widget"}""");
 
-        var response = EvolveTool.Add(sessionId, "property",
+        var response = McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Widget","name":"Weight","typeName":"Number"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var detail = QueryTool.GetEntityDetail(sessionId, "Widget");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Widget");
         await Assert.That(detail.Success).IsTrue();
         var data = (EntityDetailData)detail.Data!;
         await Assert.That(data.Properties.Select(p => p.Name)).Contains("Weight");
@@ -62,43 +62,43 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Stage_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var response = EvolveTool.Add(sessionId, "stage",
+        var response = McpTestTools.Evolve.Add(sessionId, "stage",
             """{"entityName":"Order","name":"Active"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         var data = (EntityDetailData)detail.Data!;
         await Assert.That(data.Stages.Select(s => s.Name)).Contains("Active");
     }
 
     [Test]
     public async Task Add_Action_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var response = EvolveTool.Add(sessionId, "action",
+        var response = McpTestTools.Evolve.Add(sessionId, "action",
             """{"entityName":"Order","name":"Submit"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         var data = (EntityDetailData)detail.Data!;
         await Assert.That(data.Actions.Select(a => a.Name)).Contains("Submit");
     }
 
     [Test]
     public async Task Add_StageAction_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
 
-        var response = EvolveTool.Add(sessionId, "stage_action",
+        var response = McpTestTools.Evolve.Add(sessionId, "stage_action",
             """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         var data = (EntityDetailData)detail.Data!;
         var stage = data.Stages.Single(s => s.Name == "Draft");
         await Assert.That(stage.Actions).Contains("Submit");
@@ -106,15 +106,15 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Relationship_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Patron"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Loan"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Patron"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Loan"}""");
 
-        var response = EvolveTool.Add(sessionId, "relationship",
+        var response = McpTestTools.Evolve.Add(sessionId, "relationship",
             """{"name":"Loans","source":"Patron","target":"Loan","cardinality":"OneToMany"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var relationships = QueryTool.GetRelationships(sessionId);
+        var relationships = McpTestTools.Query.GetRelationships(sessionId);
         await Assert.That(relationships.Success).IsTrue();
         var json = System.Text.Json.JsonSerializer.Serialize(relationships.Data);
         await Assert.That(json).Contains("Loans");
@@ -122,9 +122,9 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_UnknownKind_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
 
-        var response = EvolveTool.Add(sessionId, "garbage", """{"name":"X"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "garbage", """{"name":"X"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("garbage");
@@ -132,9 +132,9 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Property_MissingEntityName_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
 
-        var response = EvolveTool.Add(sessionId, "property",
+        var response = McpTestTools.Evolve.Add(sessionId, "property",
             """{"name":"Weight","typeName":"Number"}""");
 
         await Assert.That(response.Success).IsFalse();
@@ -143,9 +143,9 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_InvalidPayloadJson_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
 
-        var response = EvolveTool.Add(sessionId, "entity", "not json");
+        var response = McpTestTools.Evolve.Add(sessionId, "entity", "not json");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("payload");
@@ -153,7 +153,7 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_MissingSession_Fails() {
-        var response = EvolveTool.Add("nonexistent", "entity", """{"name":"Widget"}""");
+        var response = McpTestTools.Evolve.Add("nonexistent", "entity", """{"name":"Widget"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
@@ -163,16 +163,16 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Constraint_Required_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property",
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Order","name":"Code","typeName":"Text"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Order","propertyName":"Code","type":"Required"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var constraints = EvolveTool.GetConstraints(sessionId, "Order", "Code");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Order", "Code");
         await Assert.That(constraints.Success).IsTrue();
         var json = System.Text.Json.JsonSerializer.Serialize(constraints.Data);
         await Assert.That(json).Contains("Required");
@@ -180,16 +180,16 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Policy_DslFragment_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property",
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        var response = EvolveTool.Add(sessionId, "policy",
+        var response = McpTestTools.Evolve.Add(sessionId, "policy",
             """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var expr = PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        var expr = McpTestTools.Policy.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(expr.Success).IsTrue();
         var json = System.Text.Json.JsonSerializer.Serialize(expr.Data);
         await Assert.That(json).DoesNotContain("property");
@@ -197,14 +197,14 @@ public class UnifiedAddTests {
 
     [Test]
     public async Task Add_Policy_InvalidDsl_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = EvolveTool.Add(sessionId, "policy",
+        var response = McpTestTools.Evolve.Add(sessionId, "policy",
             """{"entityName":"Person","name":"Broken","expression":"Age >="}""");
 
         await Assert.That(response.Success).IsFalse();
-        var detail = QueryTool.GetEntityDetail(sessionId, "Person");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Person");
         var data = (EntityDetailData)detail.Data!;
         await Assert.That(data.Policies).IsEmpty();
     }
@@ -213,10 +213,10 @@ public class UnifiedAddTests {
     public async Task Add_Policy_JsonBag_Fails() {
         // L5 fail-closed: the payload field named `expression` must be DSL text;
         // a JSON expression bag is rejected by the DSL fragment parser.
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = EvolveTool.Add(sessionId, "policy",
+        var response = McpTestTools.Evolve.Add(sessionId, "policy",
             """{"entityName":"Person","name":"Adult","expression":"{\"property\":\"Age\",\"op\":\">=\",\"value\":18}"}""");
 
         await Assert.That(response.Success).IsFalse();
@@ -228,48 +228,48 @@ public class UnifiedAddTests {
     [Test]
     public async Task Add_Constraint_Pattern_Succeeds() {
         // B1: the documented `pattern` key must work (BuildConstraint reads it).
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property",
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Order","name":"Zip","typeName":"Text"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Order","propertyName":"Zip","type":"Pattern","pattern":"^[a-z]+$"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var constraints = EvolveTool.GetConstraints(sessionId, "Order", "Zip");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Order", "Zip");
         var json = System.Text.Json.JsonSerializer.Serialize(constraints.Data);
         await Assert.That(json).Contains("Pattern");
     }
 
     [Test]
     public async Task Add_Constraint_Range_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property",
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Order","name":"Total","typeName":"Number"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Order","propertyName":"Total","type":"Range","min":0,"max":100}""");
 
         await Assert.That(response.Success).IsTrue();
-        var constraints = EvolveTool.GetConstraints(sessionId, "Order", "Total");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Order", "Total");
         var json = System.Text.Json.JsonSerializer.Serialize(constraints.Data);
         await Assert.That(json).Contains("Range");
     }
 
     [Test]
     public async Task Add_Constraint_Length_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property",
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Order","name":"Code","typeName":"Text"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Order","propertyName":"Code","type":"Length","min":2,"max":10}""");
 
         await Assert.That(response.Success).IsTrue();
-        var constraints = EvolveTool.GetConstraints(sessionId, "Order", "Code");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Order", "Code");
         var json = System.Text.Json.JsonSerializer.Serialize(constraints.Data);
         await Assert.That(json).Contains("Length");
     }
@@ -277,11 +277,11 @@ public class UnifiedAddTests {
     [Test]
     public async Task Add_Relationship_UnknownCardinality_Fails() {
         // S1: invalid cardinality fails closed with the allowed list.
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Patron"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Loan"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Patron"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Loan"}""");
 
-        var response = EvolveTool.Add(sessionId, "relationship",
+        var response = McpTestTools.Evolve.Add(sessionId, "relationship",
             """{"name":"Loans","source":"Patron","target":"Loan","cardinality":"OneToOnee"}""");
 
         await Assert.That(response.Success).IsFalse();
@@ -291,15 +291,15 @@ public class UnifiedAddTests {
     [Test]
     public async Task Add_Relationship_ManyToOne_Succeeds() {
         // S1: ManyToOne is a documented value and must be stored, not downgraded.
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
 
-        var response = EvolveTool.Add(sessionId, "relationship",
+        var response = McpTestTools.Evolve.Add(sessionId, "relationship",
             """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var rels = QueryTool.GetRelationships(sessionId);
+        var rels = McpTestTools.Query.GetRelationships(sessionId);
         var json = System.Text.Json.JsonSerializer.Serialize(rels.Data);
         await Assert.That(json).Contains("ManyToOne");
     }
@@ -307,10 +307,10 @@ public class UnifiedAddTests {
     [Test]
     public async Task Add_Property_NonStringField_Fails() {
         // S5: a non-string field value is treated as missing (fail closed).
-        var (sessionId, _) = McpSessionStore.Create("UnifiedAddTest");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var response = EvolveTool.Add(sessionId, "property",
+        var response = McpTestTools.Evolve.Add(sessionId, "property",
             """{"entityName":"Order","name":42,"typeName":"Number"}""");
 
         await Assert.That(response.Success).IsFalse();
@@ -320,7 +320,7 @@ public class UnifiedAddTests {
     [Test]
     public async Task Add_MissingSession_InvalidJson_ReportsSessionFirst() {
         // S6: session check precedes payload parse.
-        var response = EvolveTool.Add("nonexistent", "entity", "not json");
+        var response = McpTestTools.Evolve.Add("nonexistent", "entity", "not json");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");

@@ -24,36 +24,36 @@ public sealed class McpSqliteHttpHarnessTests {
 
     [Test]
     public async Task Apply_SellableShape_OpensAnalyzeSimulateAndExport() {
-        var (sessionId, _) = McpSessionStore.Create("Catalog");
+        var (sessionId, _) = McpTestTools.Store.Create("Catalog");
 
-        var applied = DslTool.ApplyDsl(sessionId, SellableShape);
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, SellableShape);
         await Assert.That(applied.Success).IsTrue();
-        await Assert.That(McpSessionStore.TryGet(sessionId, out var state)).IsTrue();
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
         await Assert.That(state.Domain.Extensions).Contains("sqlite");
         await Assert.That(state.Domain.Extensions).Contains("http");
         await Assert.That(state.Modeling.Extensions).Contains("sqlite");
         await Assert.That(state.Modeling.Extensions).Contains("http");
 
-        var analysis = QueryTool.GetDomainAnalysis(sessionId);
+        var analysis = McpTestTools.Query.GetDomainAnalysis(sessionId);
         await Assert.That(analysis.Success).IsTrue();
         await Assert.That(analysis.Data).IsTypeOf<AnalysisData>();
         await Assert.That(((AnalysisData)analysis.Data!).ErrorCount).IsEqualTo(0);
 
-        var created = RuntimeTool.CreateInstance(sessionId, "Item", """{"Name":"Widget","Qty":1}""");
+        var created = McpTestTools.Runtime.CreateInstance(sessionId, "Item", """{"Name":"Widget","Qty":1}""");
         await Assert.That(created.Success).IsTrue();
-        await Assert.That(McpSessionStore.TryGet(sessionId, out state)).IsTrue();
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out state)).IsTrue();
         var instanceId = state.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Item").Key;
-        var bumped = RuntimeTool.InvokeAction(sessionId, instanceId, "Bump");
+        var bumped = McpTestTools.Runtime.InvokeAction(sessionId, instanceId, "Bump");
         await Assert.That(bumped.Success).IsTrue();
 
-        var exported = DslTool.ExportDsl(sessionId);
+        var exported = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(exported.Success).IsTrue();
         var poly = exported.Data!.GetType().GetProperty("poly")?.GetValue(exported.Data) as string;
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!).Contains("uses sqlite");
         await Assert.That(poly).Contains("uses http");
 
-        var csharp = OracleTool.ExportDomainToCSharp(sessionId);
+        var csharp = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
         await Assert.That(csharp.Success).IsTrue();
         var fileCount = (int)csharp.Data!.GetType().GetProperty("fileCount")!.GetValue(csharp.Data)!;
         var files = (string[])csharp.Data.GetType().GetProperty("files")!.GetValue(csharp.Data)!;
@@ -65,9 +65,9 @@ public sealed class McpSqliteHttpHarnessTests {
 
     [Test]
     public async Task Apply_UnknownExtension_FailClosed() {
-        var (sessionId, _) = McpSessionStore.Create("Nope");
+        var (sessionId, _) = McpTestTools.Store.Create("Nope");
 
-        var applied = DslTool.ApplyDsl(sessionId, """
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Catalog
             uses nope
 

@@ -26,8 +26,8 @@ internal static class AnalysisResultMetadata {
     }
 
     public static void ReplaceSessionAnalysis(string sessionId, AnalysisResult analysis) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!McpTestTools.Store.TryGet(sessionId, out var state))
             throw new InvalidOperationException($"Session '{sessionId}' was not found.");
-        McpSessionStore.Replace(sessionId, state.Domain, analysis, state.Modeling);
+        McpTestTools.Store.Replace(sessionId, state.Domain, analysis, state.Modeling);
     }
 }

@@ -15,7 +15,7 @@ public sealed class McpPackSharedInputsTests {
         var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain D
             E: entity {
-              Due: Date
+              Due: DateTime
               P: policy { Due < Now }
             }
             """);

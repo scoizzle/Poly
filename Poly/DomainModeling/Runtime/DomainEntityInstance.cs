@@ -806,6 +806,18 @@ public sealed partial record DomainEntityInstance {
                 failed.ErrorMessage ?? $"{context} failed.");
     }
 
+    // InvokeAction catches ConstraintFailureException and rolls the action back.
+    // A subscriber's failure has to keep escaping so the next notify still runs.
+    private static void ThrowIfSubscriptionFailed(DomainResult? failed, string context) {
+        if (failed is { IsSuccess: false })
+            throw new SubscriptionDispatchException(
+                failed.ErrorMessage ?? $"{context} failed.");
+    }
+
+    private sealed class SubscriptionDispatchException : Exception {
+        public SubscriptionDispatchException(string message) : base(message) { }
+    }
+
     /// <summary>
     /// One operation AST through <see cref="Interpreter"/>. Named actions always
     /// bind <see cref="MethodDefinitionNode.Body"/> from the cached module — never

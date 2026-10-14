@@ -296,6 +296,7 @@ public sealed class DslCompiler {
             else
                 builder.Load(catalog.Resolve(id));
         }
+        StorageFacetLibrary.EnsureRegistered(builder);
         return builder.Build();
     }
 

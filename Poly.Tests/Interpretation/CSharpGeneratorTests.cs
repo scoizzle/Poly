@@ -743,6 +743,57 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
+    public async Task Generate_KeywordPropertyAndParameter_PrefixesAtSign() {
+        var node = new TypeDefinitionNode(
+            Name: "Claim",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "base",
+                    new PrimitiveTypeReference(PrimitiveType.String),
+                    Getter: new PropertyGetterDefinitionNode())
+            ],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Create",
+                    new TypeReference("void"),
+                    Parameters: [new Parameter("ref", new PrimitiveTypeReference(PrimitiveType.String))],
+                    Body: new Block([new Return()]))
+            ]);
+
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains("public string @base");
+        await Assert.That(result).Contains("Create(string @ref)");
+    }
+
+    [Test]
+    public async Task Generate_KeywordTypeName_EscapesDeclarationAndReference_LeavesVoidAndCallee() {
+        var node = new TypeDefinitionNode(
+            Name: "string",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Item",
+                    new TypeReference("string"),
+                    Getter: new PropertyGetterDefinitionNode())
+            ],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Run",
+                    new TypeReference("void"),
+                    Body: new Block([
+                        new Invoke(new Member(new TypeReference("string"), "Concat"))
+                    ]))
+            ]);
+
+        var result = new CSharpGenerator().Generate(node);
+        await Assert.That(result).Contains("class @string");
+        await Assert.That(result).Contains("@string Item");
+        await Assert.That(result).Contains("void Run");
+        await Assert.That(result).Contains("string.Concat");
+        await Assert.That(result.Contains("@void")).IsFalse();
+        await Assert.That(result.Contains("@string.Concat")).IsFalse();
+    }
+
+    [Test]
     public async Task Generate_PrimaryConstructorInitializerReferences_WritesParameterBackedInitializers() {
         var nameParameter = new Parameter("name", new PrimitiveTypeReference(PrimitiveType.String));
         var node = new TypeDefinitionNode(

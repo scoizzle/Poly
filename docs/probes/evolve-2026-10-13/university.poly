@@ -1,0 +1,58 @@
+domain Registration
+uses temporal
+
+Program: entity {
+  Code: Text unique length(2, 10)
+  Name: Text required
+}
+
+Student: entity {
+  StudentId: Text unique pattern("^[0-9]{8}$")
+  Email: Text unique
+  Name: Text required
+  program: Program
+  enrollments: many Enrollment
+
+  Overloaded: policy { count enrollments >= 5 }
+
+  Enroll: action (course: Course)
+    require not Overloaded
+  {
+    create in enrollments { course: course EnrolledOn: Today }
+  }
+}
+
+Course: entity {
+  Code: Text required pattern("^[A-Z]{2,4}[0-9]{3}$")
+  Title: Text required
+  Seats: Number range(0, 200)
+  Credits: Number range(1, 6)
+  enrollments: many Enrollment
+
+  HasSeats: policy { count enrollments < Seats }
+
+  AddStudent: action (student: Student)
+    require HasSeats
+  {
+    create in enrollments { student: student EnrolledOn: Today }
+  }
+}
+
+Enrollment: entity {
+  student: Student
+  course: Course
+  EnrolledOn: Date
+  Grade: Text
+
+  SeniorProgram: policy { student program Code is "CS" }
+
+  Enrolled: stage {
+    Drop: action { transition to Dropped }
+    Complete: action (grade: Text) {
+      assign Grade to grade
+      transition to Completed
+    }
+  }
+  Completed: stage { }
+  Dropped: stage { }
+}

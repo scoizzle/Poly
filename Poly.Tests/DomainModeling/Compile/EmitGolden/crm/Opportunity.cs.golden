@@ -29,7 +29,7 @@ public class Opportunity
     private Opportunity(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         this.Amount = amount;
-        this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.Today);
+        this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Title = title;
         this.Account = account;
         this.Contact = contact;

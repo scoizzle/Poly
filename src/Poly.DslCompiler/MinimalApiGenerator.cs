@@ -3,6 +3,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation.CSharp;
+using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DslCompiler;
 
@@ -53,8 +54,9 @@ public sealed class MinimalApiGenerator {
     /// with parameters emitted more than once (stage-scoped actions are listed once
     /// per declaring stage — CRM <c>Log</c>/<c>AddLine</c> on Opportunity's
     /// Qualify/Propose/Commit stages — or the same name on several entities) or
-    /// colliding with an emitted <c>{Entity}Dto</c>. Lazy: the entity-DTO side needs
-    /// constructor metadata, which missing-metadata callers fail on at Generate time.</summary>
+    /// colliding with an emitted <c>{Entity}Dto</c>. The route itself is registered
+    /// once per action name. Lazy: the entity-DTO side needs constructor metadata,
+    /// which missing-metadata callers fail on at Generate time.</summary>
     private readonly Lazy<HashSet<string>> _actionDtoCollisions;
 
     private HashSet<string> ComputeActionDtoCollisions() {
@@ -182,8 +184,18 @@ public sealed class MinimalApiGenerator {
     private static bool IsCollectionNavigation(StorageEntity parentStore, string pascalRel) =>
         parentStore.CollectionNavigations.Any(n =>
             string.Equals(n.PropertyName, pascalRel, StringComparison.Ordinal));
+    private const string GeneratedNamespace = "Poly.Generated";
+
+    /// <summary>Host top-level statements synthesize global <c>Program</c>. An entity
+    /// of that name is emitted in <see cref="GeneratedNamespace"/>, so host type
+    /// references must be qualified or they bind to the entry-point class.</summary>
+    private string VisibleType(string typeName) =>
+        typeName == "Program" && _entities.Exists(static e => e.Name == "Program")
+            ? GeneratedNamespace + ".Program"
+            : typeName;
+
     private string GetClrTypeName(string domainType) =>
-        RuntimeAnalysisCache.ClrTypeName(_domain, domainType);
+        VisibleType(RuntimeAnalysisCache.ClrTypeName(_domain, domainType));
 
     private static bool IsNumericClrType(string clrType) => clrType switch {
         "long" or "int" or "short" or "byte" or "double" or "float" or "decimal" => true,
@@ -348,7 +360,8 @@ public sealed class MinimalApiGenerator {
 
         // app.MapGet("/api/books/{key}", async (keyType key, dbContextName db) =>
         //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : Results.NotFound())
-        var keyParam = new Parameter(keyName, new TypeReference(keyType));
+        // A natural key compares the unique property; FindAsync is the shadow key.
+        var keyParam = new Parameter(keyName, ClrTypeNode(keyType));
         var camelName = ToCamelCase(entity.Name);
         statements.Add(new Invoke(
             new Member(new TypeReference(AppVar), "MapGet"),
@@ -356,13 +369,8 @@ public sealed class MinimalApiGenerator {
             new Lambda([keyParam, dbParam],
                 new Conditional(
                     new TypeIs(
-                        new Await(
-                            new Invoke(
-                                new Member(
-                                    new Member(new TypeReference("db"), Pluralize(entity.Name)),
-                                    "FindAsync"),
-                                new Variable(keyName))),
-                        new NamedTypeReference(entity.Name)) {
+                        LoadByRouteKey(Pluralize(entity.Name), store, new Variable(keyName)),
+                        new NamedTypeReference(VisibleType(entity.Name))) {
                         VariableName = camelName
                     },
                     new Invoke(new Member(new TypeReference("Results"), "Ok"),
@@ -400,14 +408,14 @@ public sealed class MinimalApiGenerator {
         foreach (var parameter in GetConstructorOrder(entity)) {
             if (parameter.IsCollection) {
                 createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
                 });
                 continue;
             }
             if (parameter.IsNavigation) {
                 if (parameter.IsBackReference) continue; // auto-wired, not from DTO
                 createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
                 });
                 continue;
             }
@@ -420,7 +428,7 @@ public sealed class MinimalApiGenerator {
 
         // var result = Entity.Create(...)
         bodyNodes.Add(Init(resultVarName,
-            new Invoke(new Member(new TypeReference(entity.Name), "Create"), [.. createArgs])));
+            new Invoke(new Member(new TypeReference(VisibleType(entity.Name)), "Create"), [.. createArgs])));
 
         // if (!result.IsSuccess) return Results.Conflict(new { error = result.ErrorMessage });
         bodyNodes.Add(new IfStatement(
@@ -491,8 +499,8 @@ public sealed class MinimalApiGenerator {
         var pluralParent = Pluralize(parentEntity.Name);
         var listRoute = $"/api/{Pluralize(parentEntity.Name).ToLowerInvariant()}/{{{parentKey}}}/{relName.ToLowerInvariant()}";
         var detailRoute = $"{listRoute}/{{{childKeyParam}}}";
-        var parentKeyP = new Parameter(parentKey, new TypeReference(parentKeyType));
-        var childKeyP = new Parameter(childKeyParam, new TypeReference(childKeyType));
+        var parentKeyP = new Parameter(parentKey, ClrTypeNode(parentKeyType));
+        var childKeyP = new Parameter(childKeyParam, ClrTypeNode(childKeyType));
         var dbP = new Parameter("db", new TypeReference(dbContextName));
 
         // List: Collection for many, Reference for to-one — use lambda param e, not parent
@@ -509,9 +517,7 @@ public sealed class MinimalApiGenerator {
             new Lambda([parentKeyP, dbP],
                 Stmts([
                     Init("parent",
-                        new Await(new Invoke(
-                            new Member(new Member(new TypeReference("db"), pluralParent), "FindAsync"),
-                            new Variable(parentKey)))),
+                        LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))),
                     new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
                         new Block(new Return(
                             new Invoke(new Member(new TypeReference("Results"), "NotFound"))))),
@@ -552,12 +558,12 @@ public sealed class MinimalApiGenerator {
                             new Equal(
                                 new Member(eParam2, childKeyPropName),
                                 new Variable(childKeyParam)))))));
+            detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
+                new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
         }
         else {
             detailBody.Add(Init("parent",
-                new Await(new Invoke(
-                    new Member(new Member(new TypeReference("db"), pluralParent), "FindAsync"),
-                    new Variable(parentKey)))));
+                LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))));
             detailBody.Add(new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
                 new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
             var colParam = new Parameter("e");
@@ -567,11 +573,35 @@ public sealed class MinimalApiGenerator {
                     "Collection"),
                 new Lambda([colParam], new Member(colParam, pascalRel)));
             detailBody.Add(new Await(new Invoke(new Member(detailCollCall, "LoadAsync"))));
-            detailBody.Add(Init("child",
-                new Invoke(new Member(new Member(new Variable("parent"), pascalRel), "FirstOrDefault"))));
+            if (childKeyPropName != null) {
+                var match = new Parameter("e");
+                detailBody.Add(Init("child",
+                    new Invoke(
+                        new Member(new Member(new Variable("parent"), pascalRel), "FirstOrDefault"),
+                        new Lambda([match],
+                            new Equal(
+                                new Member(match, childKeyPropName),
+                                new Variable(childKeyParam))))));
+                detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
+                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+            }
+            else {
+                // Shadow key: no CLR property to compare. The route id is that key.
+                detailBody.Add(Init("child",
+                    LoadByRouteKey(Pluralize(entity.Name), childStore, new Variable(childKeyParam))));
+                var match = new Parameter("e");
+                detailBody.Add(new IfStatement(
+                    new Ast.Nodes.Or(
+                        new Equal(new Variable("child"), new Constant(null!)),
+                        new Ast.Nodes.Not(
+                            new Invoke(
+                                new Member(new Member(new Variable("parent"), pascalRel), "Any"),
+                                new Lambda([match],
+                                    new Equal(new Variable("e"), new Variable("child")))))),
+                    new Block(new Return(
+                        new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+            }
         }
-        detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
-            new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
         detailBody.Add(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
             new Variable("child"))));
 
@@ -584,7 +614,12 @@ public sealed class MinimalApiGenerator {
 
     /// <summary>Builds Syntax IR for action endpoints with try/catch, result switch, and entity-ref lookups.</summary>
     private void AppendActionEndpointStatements(List<Node> statements, Entity entity, string dbContextName) {
+        var emittedActions = new HashSet<string>(StringComparer.Ordinal);
         foreach (var ia in GetBehaviorActions(entity)) {
+            // One route per action name. Stage copies share the entity method, which
+            // already rejects the wrong stage.
+            if (!emittedActions.Add(ia.Name))
+                continue;
             var store = GetStorageEntity(entity);
             var keyName = store.KeyName;
             var keyType = store.KeyClrType;
@@ -607,21 +642,21 @@ public sealed class MinimalApiGenerator {
                 actionRoute = isCollection
                     ? $"{parentRoute}/{{{childKeyParam}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}"
                     : $"{parentRoute}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
-                actionParams.Add(new Parameter(pKeyName, new TypeReference(pKeyType)));
+                actionParams.Add(new Parameter(pKeyName, ClrTypeNode(pKeyType)));
                 if (isCollection)
-                    actionParams.Add(new Parameter(childKeyParam, new TypeReference(keyType)));
+                    actionParams.Add(new Parameter(childKeyParam, ClrTypeNode(keyType)));
                 if (ia.Parameters.Count > 0)
                     actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 // Parent + entity lookup + membership check
                 preActionNodes.Add(Init("parentEntity",
-                    new Await(new Invoke(new Member(new Member(new TypeReference("db"), Pluralize(pEntity.Name)), "FindAsync"), new Variable(pKeyName)))));
+                    LoadByRouteKey(Pluralize(pEntity.Name), pStore, new Variable(pKeyName))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("parentEntity"), new Constant(null!)),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{pEntity.Name} not found"))))));
                 if (isCollection) {
                     preActionNodes.Add(Init("entity",
-                        new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(childKeyParam)))));
+                        LoadByRouteKey(pluralName, store, new Variable(childKeyParam))));
                     preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
                         new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
                     var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
@@ -646,13 +681,13 @@ public sealed class MinimalApiGenerator {
             else {
                 var baseRoute = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
                 actionRoute = $"{baseRoute}/{{{keyName}}}/{ToCamelCase(ia.Name).ToLowerInvariant()}";
-                actionParams.Add(new Parameter(keyName, new TypeReference(keyType)));
+                actionParams.Add(new Parameter(keyName, ClrTypeNode(keyType)));
                 if (ia.Parameters.Count > 0)
                     actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
 
                 preActionNodes.Add(Init("entity",
-                    new Await(new Invoke(new Member(new Member(new TypeReference("db"), pluralName), "FindAsync"), new Variable(keyName)))));
+                    LoadByRouteKey(pluralName, store, new Variable(keyName))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
             }
@@ -670,9 +705,10 @@ public sealed class MinimalApiGenerator {
             foreach (var param in ia.Parameters) {
                 if (param.IsEntityRef) {
                     var lv = ToCamelCase(param.DomainType);
-                    tryBody.Add(Init(lv, new Await(new Invoke(
-                        new Member(new Member(new TypeReference("db"), Pluralize(param.DomainType)), "FindAsync"),
-                        new Member(new Variable("dto"), $"{param.Name}Id")))));
+                    tryBody.Add(Init(lv, LoadByRouteKey(
+                        Pluralize(param.DomainType),
+                        _storageLookup[param.DomainType],
+                        new Member(new Variable("dto"), $"{param.Name}Id"))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
                         new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{param.DomainType} not found"))))));
                     invokeArgs.Add(new Variable(lv));
@@ -732,7 +768,7 @@ public sealed class MinimalApiGenerator {
                 if (param.IsEntityRef) {
                     props.Add(new PropertyDefinitionNode(
                         $"{param.Name}Id",
-                        new TypeReference("string"),
+                        ClrTypeNode("string"),
                         Getter: new PropertyGetterDefinitionNode(),
                         Initializer: new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))));
                     continue;
@@ -740,7 +776,7 @@ public sealed class MinimalApiGenerator {
                 var clrType = GetClrTypeName(param.DomainType);
                 var prop = new PropertyDefinitionNode(
                     param.Name,
-                    new TypeReference(clrType),
+                    ClrTypeNode(clrType),
                     Getter: new PropertyGetterDefinitionNode(),
                     Initializer: IsPrimitiveValueTypeClr(param.DomainType, clrType)
                         ? new PropertyInitializerDefinitionNode()
@@ -953,7 +989,7 @@ public sealed class MinimalApiGenerator {
             var clrType = GetClrTypeName(param.Type.TypeName);
             var prop = new PropertyDefinitionNode(
                 param.Name,
-                new TypeReference(clrType),
+                ClrTypeNode(clrType),
                 Getter: new PropertyGetterDefinitionNode(),
                 Initializer: IsPrimitiveValueTypeClr(param.Type.TypeName, clrType)
                     ? new PropertyInitializerDefinitionNode()
@@ -1019,7 +1055,7 @@ public sealed class MinimalApiGenerator {
                         if (parameter.IsBackReference) continue; // auto-wired
                         createArgs.Add(new Invoke(
                             new Member(new TypeReference("Enumerable"), "Empty")) {
-                            TypeArguments = [new TypeReference(parameter.Type.TypeName)]
+                            TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
                         });
                         continue;
                     }
@@ -1035,7 +1071,7 @@ public sealed class MinimalApiGenerator {
 
                 var dtoVar = ToCamelCase(entity.Name);
                 bodyNodes.Add(Init($"{dtoVar}Result",
-                    new Invoke(new Member(new TypeReference(entity.Name), "Create"), [.. createArgs])));
+                    new Invoke(new Member(new TypeReference(VisibleType(entity.Name)), "Create"), [.. createArgs])));
                 bodyNodes.Add(new IfStatement(
                     new Member(new Variable($"{dtoVar}Result"), "IsSuccess"),
                     new Block(
@@ -1097,6 +1133,42 @@ public sealed class MinimalApiGenerator {
             _ => new Constant("Sample"),
         };
     }
+
+    /// <summary>
+    /// A shadow key is the primary key, so <c>FindAsync</c> matches it. A natural
+    /// key is a unique index; the primary key is the synthetic int, so the lookup
+    /// compares that property.
+    /// </summary>
+    private static Node LoadByRouteKey(string setName, StorageEntity store, Node keyExpr) {
+        var set = new Member(new TypeReference("db"), setName);
+        if (store.KeyProperty is null)
+            return new Await(new Invoke(new Member(set, "FindAsync"), keyExpr));
+        var row = new Parameter("e");
+        return new Await(new Invoke(
+            new Member(set, "FirstOrDefaultAsync"),
+            new Lambda([row], new Equal(new Member(row, store.KeyProperty.Name), keyExpr))));
+    }
+
+    /// <summary>CLR keyword names stay <see cref="PrimitiveTypeReference"/> so a
+    /// domain type of the same name can print with <c>@</c> in type position.</summary>
+    private static Node ClrTypeNode(string clrType) => clrType switch {
+        "bool" => new PrimitiveTypeReference(ClrPrimitive.Boolean),
+        "byte" => new PrimitiveTypeReference(ClrPrimitive.UInt8),
+        "char" => new PrimitiveTypeReference(ClrPrimitive.Char),
+        "decimal" => new PrimitiveTypeReference(ClrPrimitive.Decimal),
+        "double" => new PrimitiveTypeReference(ClrPrimitive.Float64),
+        "float" => new PrimitiveTypeReference(ClrPrimitive.Float32),
+        "int" => new PrimitiveTypeReference(ClrPrimitive.Int32),
+        "long" => new PrimitiveTypeReference(ClrPrimitive.Int64),
+        "object" => new PrimitiveTypeReference(ClrPrimitive.Structure),
+        "sbyte" => new PrimitiveTypeReference(ClrPrimitive.Int8),
+        "short" => new PrimitiveTypeReference(ClrPrimitive.Int16),
+        "string" => new PrimitiveTypeReference(ClrPrimitive.String),
+        "uint" => new PrimitiveTypeReference(ClrPrimitive.UInt32),
+        "ulong" => new PrimitiveTypeReference(ClrPrimitive.UInt64),
+        "ushort" => new PrimitiveTypeReference(ClrPrimitive.UInt16),
+        _ => new TypeReference(clrType),
+    };
 }
 
 /// <summary>

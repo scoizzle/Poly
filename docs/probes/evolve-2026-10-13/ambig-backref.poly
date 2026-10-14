@@ -1,0 +1,17 @@
+domain AmbigBackref
+
+User: entity {
+  Name: Text required
+  tasks: many Task
+
+  MakeTask: action {
+    create in tasks { Title: "x" }
+  }
+}
+
+Task: entity {
+  Title: Text required
+  assignedTo: User
+  reviewedBy: User
+  New: stage { }
+}

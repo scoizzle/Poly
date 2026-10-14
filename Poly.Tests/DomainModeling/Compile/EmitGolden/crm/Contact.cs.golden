@@ -62,5 +62,5 @@ public class Contact
         }
         return DomainResult<Contact>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
 }

@@ -155,43 +155,31 @@ public sealed class DbContextGenerator {
             ));
         }
 
-        // Key configuration
-        if (!store.HasShadowKey && store.KeyProperty is not null) {
-            var keyProp = store.KeyProperty;
-            // b.HasKey(x => x.KeyPropName)
-            var xParam = new Parameter("x");
-            bodyNodes.Add(new Invoke(
-                new Member(bParam, "HasKey"),
-                new Lambda([xParam], new Member(xParam, keyProp.Name))
-            ));
-            // Emit column config for the key property once after HasKey (Issue 7)
-            var keyCol = store.Columns.FirstOrDefault(c =>
-                string.Equals(c.Name, keyProp.Name, StringComparison.Ordinal));
-            if (keyCol is not null)
-                bodyNodes.Add(BuildColumnConfigNode(bParam, keyCol));
-        }
-        else {
-            // Issue 6: Must emit both b.Property<int>("Id") and b.HasKey("Id")
-            bodyNodes.Add(new Invoke(
-                new Member(bParam, "Property"),
-                new Constant("Id")
-            ) {
-                TypeArguments = [new TypeReference("int")]
-            });
-            bodyNodes.Add(new Invoke(
-                new Member(bParam, "HasKey"),
-                new Constant("Id")
-            ));
-        }
+        // Synthetic int identity. A `unique` property is a unique index, not the primary key,
+        // so a second unique on the same entity is stored instead of dropped.
+        // PolyId when the entity already has a CLR property named Id.
+        var shadowKey = ShadowKeyName(entity, store);
+        bodyNodes.Add(new Invoke(
+            new Member(bParam, "Property"),
+            new Constant(shadowKey)
+        ) {
+            TypeArguments = [new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32)]
+        });
+        bodyNodes.Add(new Invoke(
+            new Member(bParam, "HasKey"),
+            new Constant(shadowKey)
+        ));
 
         // Column configurations
-        foreach (var col in store.Columns) {
-            if (!store.HasShadowKey
-                && store.KeyProperty is not null
-                && string.Equals(col.Name, store.KeyProperty.Name, StringComparison.Ordinal)) {
-                continue;
-            }
+        foreach (var col in store.Columns)
             bodyNodes.Add(BuildColumnConfigNode(bParam, col));
+
+        foreach (var col in store.Columns.Where(c => c.IsUnique)) {
+            var xParam = new Parameter("x");
+            var index = new Invoke(
+                new Member(bParam, "HasIndex"),
+                new Lambda([xParam], new Member(xParam, col.Name)));
+            bodyNodes.Add(new Invoke(new Member(index, "IsUnique")));
         }
 
         // Collection navigations: set backing field access mode
@@ -299,4 +287,10 @@ public sealed class DbContextGenerator {
     // ── Helpers ────────────────────────────────────────────────
 
     private static string Pluralize(string name) => name + "s";
+
+    private static string ShadowKeyName(Entity entity, StorageEntity store) {
+        var taken = entity.Properties.Any(p => p.Name == "Id")
+            || store.Columns.Any(c => c.Name == "Id");
+        return taken ? "PolyId" : "Id";
+    }
 }

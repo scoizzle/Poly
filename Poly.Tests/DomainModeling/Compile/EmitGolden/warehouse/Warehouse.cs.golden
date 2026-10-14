@@ -136,5 +136,5 @@ public class Warehouse
         var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
         return DomainResult<Warehouse>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
 }

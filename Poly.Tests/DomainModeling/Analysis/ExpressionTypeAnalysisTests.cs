@@ -315,6 +315,59 @@ public class ExpressionTypeAnalysisTests {
     }
 
     [Test]
+    public async Task Comparison_DatePropertyToNow_Rejected() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: Date
+              Bad: policy { Expiry < Now }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "comparison between incompatible types")).IsTrue();
+        await Assert.That(HasError(result, "does not exist")).IsFalse();
+    }
+
+    [Test]
+    public async Task Comparison_DatePropertyToToday_Succeeds() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: Date
+              Good: policy { Expiry < Today }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Comparison_DateTimePropertyToToday_Rejected() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: DateTime
+              Bad: policy { Expiry < Today }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "comparison between incompatible types")).IsTrue();
+    }
+
+    /// <summary>
+    /// Clock folds (<c>Now</c>/<c>Today</c>) are parse-time. The empty parser
+    /// leaves them as property names, which a policy then rejects.
+    /// </summary>
+    private static EvolutionResult ParseClock(string dsl) {
+        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var changes = new PolyDslParser(dsl, session).Parse();
+        return new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], []))
+            .Apply(changes, session: session);
+    }
+
+    [Test]
     public async Task Default_NowOnNumber_Rejected() {
         // Round-5 F2/F6: default(Now) on a non-Date target must fail at analysis, not codegen.
         var result = Parse("""

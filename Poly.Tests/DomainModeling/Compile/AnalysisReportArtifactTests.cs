@@ -12,13 +12,16 @@ namespace Poly.Tests.DomainModeling.Compile;
 /// H2: Emit also registers a vm-analysis-report; Lower does not.
 /// </summary>
 public sealed class AnalysisReportArtifactTests {
-    // Loan points at Patron with no inverse many → Loan is a non-root orphan (DMAGG001).
+    // Loan points at Patron and owns notes, with no inbound collection → non-root orphan (DMAGG001).
+    // A singular-only outbound nav is not this warning.
     private const string WarningsDomain = """
         domain Warehouse
         Patron: entity { Name: Text }
+        Note: entity { Body: Text }
         Loan: entity {
           Amount: Number
           borrower: Patron
+          notes: many Note
         }
         """;
 

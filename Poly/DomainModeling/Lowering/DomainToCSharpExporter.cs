@@ -235,9 +235,20 @@ public sealed partial class DomainToCSharpExporter {
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
             var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
+            var isDomainValue = IsDomainValueType(domain, prop.Type.TypeName);
             List<Node>? constraints = null;
             if (isRequired)
                 constraints = [new Constant("required")];
+
+            // CS8618: the parameterless materialization ctor does not assign
+            // reference properties. Text uses `default!`. A domain value record
+            // is default-constructed so a missing initializer is still non-null.
+            Syntactic.PropertyInitializerDefinitionNode? initializer = null;
+            if (IsNonNullableReferenceScalar(propRef))
+                initializer = new Syntactic.PropertyInitializerDefinitionNode(
+                    new Syntactic.NullForgiving(new Syntactic.Default()));
+            else if (isDomainValue)
+                initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(propRef));
 
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
@@ -246,13 +257,7 @@ public sealed partial class DomainToCSharpExporter {
                 // action effects (no same-assembly backdoor mutability).
                 Setter: new PropertySetterDefinitionNode(
                     AccessModifier: AccessModifier.Private),
-                // CS8618 hygiene: non-nullable reference-typed scalars (Text → string)
-                // are left unset by the EF-materialization parameterless ctor — emit
-                // `= default!;` so the generated code compiles warning-free.
-                Initializer: IsNonNullableReferenceScalar(propRef)
-                    ? new Syntactic.PropertyInitializerDefinitionNode(
-                        new Syntactic.NullForgiving(new Syntactic.Default()))
-                    : null,
+                Initializer: initializer,
                 Constraints: constraints
             ));
 
@@ -291,11 +296,20 @@ public sealed partial class DomainToCSharpExporter {
                 continue; // skip ctor param — handled as a trailing optional param
             }
 
-            // No default expression — full constructor param + assignment
-            ctorParams.Add(new Parameter(paramName, propRef));
-            ctorAssignments.Add(new Assignment(
-                new Member(new ThisReference(), prop.Name),
-                new Parameter(paramName)));
+            // No default expression — full constructor param + assignment.
+            // A non-required value record accepts null and becomes `new T()`.
+            if (isDomainValue && !isRequired) {
+                ctorParams.Add(new Parameter(paramName, new OptionalTypeReference(propRef)));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), prop.Name),
+                    new Syntactic.Coalesce(new Parameter(paramName), new New(propRef))));
+            }
+            else {
+                ctorParams.Add(new Parameter(paramName, propRef));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), prop.Name),
+                    new Parameter(paramName)));
+            }
         }
 
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──

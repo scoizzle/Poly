@@ -1,0 +1,91 @@
+domain Library
+uses temporal
+uses http
+
+Mailer: contract external mailer v1 {
+  Message: value {
+    To: Text
+    Subject: Text
+    Body: Text
+  }
+  Send: outbound operation Message
+}
+
+Book: entity {
+  Title: Text required
+  Isbn: Text unique
+}
+
+Patron: entity {
+  Name: Text required
+  Email: Text unique
+  Status: Text
+  LastOverdue: Date
+  loans: many Loan
+  fines: many Fine
+
+  AtLimit: policy { count loans >= 3 }
+  AllOverdue: policy { all loans where DueDate < Today }
+  HasLoans: policy { loans exists }
+
+  CheckOut: action (book: Book)
+    require not AtLimit
+  {
+    create in loans { book: book DueDate: Today + 14 Days }
+  }
+
+  RenewAllActive: action {
+    for loans as loan where loan in Active
+        invoke loan.Renew()
+  }
+
+  RenewAndTag: action {
+    for loans as loan where loan in Active
+        invoke loan.Renew()
+    assign Status to "renewed"
+  }
+
+  NotifyPatron: action (message: Message) {
+    assign Status to "notified"
+  }
+
+  when loans Overdue {
+    create in fines { Amount: 5 Reason: "Overdue" }
+  }
+  when loans Overdue as loan {
+    assign LastOverdue to loan DueDate
+  }
+  when all loans Returned {
+    assign Status to "allReturned"
+  }
+}
+
+Loan: entity {
+  book: Book
+  DueDate: Date
+  ReturnedOn: Date
+  Status: Text default("active")
+  Active: stage {
+    entry { assign Status to "active" }
+    MarkOverdue: action { transition to Overdue }
+    Return: action {
+      assign ReturnedOn to Today
+      transition to Returned
+    }
+    Renew: action { assign DueDate to DueDate + 7 Days }
+  }
+  Overdue: stage {
+    Return: action {
+      assign ReturnedOn to Today
+      transition to Returned
+    }
+  }
+  Returned: stage { }
+}
+
+Fine: entity {
+  Amount: Number range(0, )
+  Reason: Text
+}
+
+SendNotice: bind Mailer Send to NotifyPatron message

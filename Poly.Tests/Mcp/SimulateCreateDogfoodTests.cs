@@ -335,6 +335,6 @@ public class SimulateCreateDogfoodTests {
             throw new InvalidOperationException("session missing");
         var account = state.InstanceMap[accountId!];
         await Assert.That(account.GetProperty<DateOnly>("Opened"))
-            .IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+            .IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 }

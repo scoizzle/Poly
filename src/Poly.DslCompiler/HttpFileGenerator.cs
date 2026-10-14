@@ -128,8 +128,12 @@ public sealed class HttpFileGenerator {
             }
         }
 
-        foreach (var ia in GetBehaviorActions(entity))
+        var emittedActions = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var ia in GetBehaviorActions(entity)) {
+            if (!emittedActions.Add(ia.Name))
+                continue;
             AppendActionRequest(sb, entity, ia, keyExample);
+        }
     }
 
     private void AppendActionRequest(StringBuilder sb, Entity entity, BehaviorAction ia, string keyExample) {
@@ -182,7 +186,12 @@ public sealed class HttpFileGenerator {
         };
     }
 
-    private string GetExampleJsonValue(Property prop) {
+    private string GetExampleJsonValue(Property prop) =>
+        GetExampleJsonValue(prop, new HashSet<string>(StringComparer.Ordinal));
+
+    private string GetExampleJsonValue(Property prop, HashSet<string> stack) {
+        if (TryValueType(prop.Type.TypeName, out var valueType))
+            return FormatValueType(valueType, stack);
         if (prop.Constraints.Any(c => c is UniqueConstraint) &&
             (prop.Type.TypeName is "Text" or "String")) {
             var baseVal = ToCamelCase(prop.Name);
@@ -206,6 +215,9 @@ public sealed class HttpFileGenerator {
     }
 
     private string GetExampleJsonValueForTransportParam(BehaviorParameter param) {
+        if (TryValueType(param.DomainType, out var valueType))
+            return FormatValueType(valueType, new HashSet<string>(StringComparer.Ordinal));
+
         _enumLookup.TryGetValue(param.DomainType, out var enumType);
         if (enumType is not null && enumType.MemberNames.Count > 0)
             return $"\"{enumType.MemberNames[0]}\"";
@@ -222,5 +234,37 @@ public sealed class HttpFileGenerator {
             "Guid" or "Uuid" => "\"550e8400-e29b-41d4-a716-446655440000\"",
             _ => "0",
         };
+    }
+
+    private bool TryValueType(string name, out Poly.DomainModeling.Ontology.ValueType valueType) {
+        var found = _domain.Types.OfType<Poly.DomainModeling.Ontology.ValueType>()
+            .FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
+        if (found is null) {
+            foreach (var contract in _domain.ImportedContracts) {
+                found = contract.Types.FirstOrDefault(t =>
+                    string.Equals(t.Name, name, StringComparison.Ordinal));
+                if (found is not null)
+                    break;
+            }
+        }
+        valueType = found!;
+        return found is not null;
+    }
+
+    /// <summary>One JSON object. Keys are camelCase, matching action routes in this file.</summary>
+    private string FormatValueType(Poly.DomainModeling.Ontology.ValueType valueType, HashSet<string> stack) {
+        if (!stack.Add(valueType.Name))
+            return "{}";
+        if (valueType.Properties.Count == 0) {
+            stack.Remove(valueType.Name);
+            return "{}";
+        }
+        var parts = new string[valueType.Properties.Count];
+        for (var i = 0; i < valueType.Properties.Count; i++) {
+            var field = valueType.Properties[i];
+            parts[i] = $"\"{ToCamelCase(field.Name)}\": {GetExampleJsonValue(field, stack)}";
+        }
+        stack.Remove(valueType.Name);
+        return "{ " + string.Join(", ", parts) + " }";
     }
 }

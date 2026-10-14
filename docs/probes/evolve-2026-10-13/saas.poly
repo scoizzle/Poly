@@ -1,0 +1,42 @@
+domain Saas
+uses temporal
+
+Plan: entity {
+  Name: Text required
+  Price: Number range(0, )
+}
+
+Account: entity {
+  Name: Text required
+  subscription: Subscription
+}
+
+Subscription: entity {
+  plan: Plan
+  StartDate: Date default(Today)
+  Expiry: Date
+  Status: Text default("trial")
+
+  IsExpired: policy { Expiry < Today }
+
+  Trial: stage {
+    entry { assign Status to "trial" }
+    Activate: action {
+      assign Expiry to StartDate + 30 Days
+      transition to Active
+    }
+    Cancel: action { transition to Cancelled }
+  }
+  Active: stage {
+    Renew: action {
+      assign Expiry to Expiry + 30 Days
+    }
+    Suspend: action { transition to Suspended }
+    Cancel: action { transition to Cancelled }
+  }
+  Suspended: stage {
+    Reinstate: action { transition to Active }
+    Cancel: action { transition to Cancelled }
+  }
+  Cancelled: stage { }
+}

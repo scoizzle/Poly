@@ -480,7 +480,7 @@ public sealed class CSharpWriter {
     }
 
     private string ForEachText(ForEachLoop forEach, int indent) =>
-        RenderFills("statement", "foreach", Names(("name", forEach.LoopVariable.Name)),
+        RenderFills("statement", "foreach", Names(("name", EscapeIdent(forEach.LoopVariable.Name))),
             Expr(forEach.Collection), BodyText(forEach.Body, indent));
 
     private string SwitchText(SwitchStatement switchStmt, int indent) {
@@ -510,9 +510,9 @@ public sealed class CSharpWriter {
                 catches.Append(Pad(indent));
                 var decl = clause.ExceptionType != null
                     ? clause.VariableName != null
-                        ? RenderFills("catch-decl", "typed", Names(("name", clause.VariableName)), TypeText(clause.ExceptionType))
+                        ? RenderFills("catch-decl", "typed", Names(("name", EscapeIdent(clause.VariableName))), TypeText(clause.ExceptionType))
                         : Render("catch-decl", "typed-bare", TypeText(clause.ExceptionType))
-                    : clause.VariableName != null ? "Exception " + clause.VariableName : "";
+                    : clause.VariableName != null ? "Exception " + EscapeIdent(clause.VariableName) : "";
                 catches.Append(Render("catch", "catch", decl, "\n" + BlockOrWrappedText(clause.Body, indent)));
             }
         }
@@ -531,7 +531,7 @@ public sealed class CSharpWriter {
 
     private string UsingText(UsingStatement usingStmt, int indent) {
         if (usingStmt.Resource is Assignment { Destination: Variable v } a) {
-            var resource = RenderFills("using-resource", "declare", Names(("name", v.Name)), Expr(a.Value));
+            var resource = RenderFills("using-resource", "declare", Names(("name", EscapeIdent(v.Name))), Expr(a.Value));
             return Render("statement", "using", resource, BodyText(usingStmt.Body, indent));
         }
         return Render("statement", "using", Expr(usingStmt.Resource), BodyText(usingStmt.Body, indent));
@@ -551,7 +551,7 @@ public sealed class CSharpWriter {
                     members.Append('\n');
                     members.Append(Pad(indent + 1));
                     members.Append(RenderFills("enum-member", "member", Names(
-                        ("name", typeDef.Fields[i].Name),
+                        ("name", EscapeIdent(typeDef.Fields[i].Name)),
                         ("value", i.ToString(CultureInfo.InvariantCulture)))));
                     if (i < typeDef.Fields.Count - 1)
                         members.Append(',');
@@ -631,16 +631,16 @@ public sealed class CSharpWriter {
                 LineageText(typeDef), bodyText));
     }
 
-    private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", name));
+    private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", EscapeIdent(name)));
 
     private string InterfaceMethodText(MethodDefinitionNode method) =>
-        TypeText(method.ReturnType) + " " + method.Name + "(" + ParamListText(method.Parameters) + ");";
+        TypeText(method.ReturnType) + " " + EscapeIdent(method.Name) + "(" + ParamListText(method.Parameters) + ");";
 
     private string InterfacePropertyText(PropertyDefinitionNode prop) {
         var accessors = new StringBuilder();
         if (prop.Getter != null) accessors.Append("get; ");
         if (prop.Setter != null) accessors.Append("set; ");
-        return $"{TypeText(prop.MemberType)} {prop.Name} {{ {accessors.ToString().TrimEnd()} }}";
+        return $"{TypeText(prop.MemberType)} {EscapeIdent(prop.Name)} {{ {accessors.ToString().TrimEnd()} }}";
     }
 
     private static bool TypeDefinitionHasBody(TypeDefinitionNode typeDef) =>
@@ -690,7 +690,7 @@ public sealed class CSharpWriter {
             + (field.IsStatic ? "static " : "")
             + (mut.HasFlag(Mutability.CompileTimeConst) ? "const " : mut.HasFlag(Mutability.ReadOnlyAfterInit) ? "readonly " : "")
             + (mut.HasFlag(Mutability.VolatileAccess) ? "volatile " : "");
-        return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", field.Name)),
+        return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", EscapeIdent(field.Name))),
             null, mods.Trim(),
             TypeText(field.FieldType),
             field.DefaultValue != null ? " = " + Expr(field.DefaultValue) : null);
@@ -709,7 +709,7 @@ public sealed class CSharpWriter {
             null => Render("method-body", "semi"),
             _ => "\n" + BodyText(method.Body!, indent),
         };
-        return attrs + Pad(indent) + RenderFills("member", "method", Names(("name", method.Name)),
+        return attrs + Pad(indent) + RenderFills("member", "method", Names(("name", EscapeIdent(method.Name))),
             null, mods.Trim(),
             TypeText(method.ReturnType),
             GenericParamsText(method.GenericParameters),
@@ -724,7 +724,7 @@ public sealed class CSharpWriter {
             null => Render("method-body", "semi"),
             _ => "\n" + BodyText(method.Body, 0),
         };
-        sb.Append(RenderFills("member", "method", Names(("name", method.Name)),
+        sb.Append(RenderFills("member", "method", Names(("name", EscapeIdent(method.Name))),
             null, mods, TypeText(method.ReturnType), GenericParamsText(method.GenericParameters),
             ParamsText(method.Parameters), body));
         sb.AppendLine();
@@ -740,7 +740,7 @@ public sealed class CSharpWriter {
             null => " " + RenderFills("ctor-body", "empty", Names(("open", "{ "), ("close", "}"))),
             _ => "\n" + BodyText(ctor.Body, indent),
         };
-        return Pad(indent) + RenderFills("member", "ctor", Names(("name", className)),
+        return Pad(indent) + RenderFills("member", "ctor", Names(("name", EscapeIdent(className))),
             null, AccessModifierText(ctor.AccessModifier).Trim(),
             ParamsText(ctor.Parameters), baseText, body);
     }
@@ -793,17 +793,17 @@ public sealed class CSharpWriter {
                 block.Append(Pad(indent));
                 accessorsBody = "\n" + Pad(indent) + RenderFills("property-body", "body", Braces(), block.ToString());
             }
-            return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", prop.Name)),
+            return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", EscapeIdent(prop.Name))),
                 null, mods.Trim(), TypeText(prop.MemberType), accessorsBody, init);
         }
 
         if (init != null) {
             // No accessors, initializer only: syntactically a field.
-            return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", prop.Name)),
+            return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", EscapeIdent(prop.Name))),
                 null, mods.Trim(), TypeText(prop.MemberType), init);
         }
         var body = " " + RenderFills("property-body", "body", Braces(), " get; set; ");
-        return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", prop.Name)),
+        return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", EscapeIdent(prop.Name))),
             null, mods.Trim(), TypeText(prop.MemberType), body, null);
     }
 
@@ -829,6 +829,7 @@ public sealed class CSharpWriter {
             case ClrTypeReference clr when clr.RuntimeType.IsGenericType || clr.RuntimeType == typeof(object):
                 return ToCSharpTypeName(clr.RuntimeType);
             case TypeReference typeRef:
+                // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
             case PrimitiveTypeReference prim:
                 return prim.PrimitiveId.GetCSharpKeyword() + (prim.IsNullable ? "?" : "");
@@ -930,7 +931,7 @@ public sealed class CSharpWriter {
                 return "(" + type + ")" + operand;
             case TypeIs typeIs:
                 return Expr(typeIs.Operand) + " is " + TypeText(typeIs.TargetTypeReference)
-                    + (typeIs.VariableName != null ? " " + typeIs.VariableName : "");
+                    + (typeIs.VariableName != null ? " " + EscapeIdent(typeIs.VariableName) : "");
             case TypeAs typeAs:
                 return Expr(typeAs.Operand) + " as " + TypeText(typeAs.TargetTypeReference);
             case Lambda lambda:
@@ -972,7 +973,7 @@ public sealed class CSharpWriter {
         var value = Expr(member.Value);
         if (member.Value is TypeCast or TypeAs or Conditional or Coalesce)
             value = "(" + value + ")";
-        return value + RenderFills("postfix-tail", "member", Names(("name", member.MemberName)));
+        return value + RenderFills("postfix-tail", "member", Names(("name", EscapeIdent(member.MemberName))));
     }
 
     private string LambdaText(Lambda lambda) {
@@ -1152,16 +1153,16 @@ public sealed class CSharpWriter {
     private string TypeText(Node type) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
         ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) => ToCSharpTypeName(c.RuntimeType),
-        TypeDefinitionReference t => t.TypeName,
-        TypeReference t => t.TypeName,
-        NamedTypeReference n => n.FullName + (n.TypeArguments is { Count: > 0 }
+        TypeDefinitionReference t => EscapeTypeName(t.TypeName),
+        TypeReference t => EscapeTypeName(t.TypeName),
+        NamedTypeReference n => EscapeTypeName(n.FullName) + (n.TypeArguments is { Count: > 0 }
             ? "<" + string.Join(", ", n.TypeArguments.Select(TypeText)) + ">"
             : ""),
         OptionalTypeReference o => TypeText(o.InnerType) + "?",
         CollectionTypeReference { Kind: CollectionKind.Array } c => TypeText(c.ElementType) + "[]",
         CollectionTypeReference c => (c.Kind == CollectionKind.Set ? "ISet<" : "List<") + TypeText(c.ElementType) + ">",
         MapTypeReference m => "Dictionary<" + TypeText(m.KeyType) + ", " + TypeText(m.ValueType) + ">",
-        ResolvedTypeReference r => r.TypeDefinition.FullName,
+        ResolvedTypeReference r => EscapeTypeName(r.TypeDefinition.FullName),
         _ => type.ToString() ?? "object",
     };
 
@@ -1176,7 +1177,7 @@ public sealed class CSharpWriter {
 
     private string ParamText(Parameter param) =>
         (param.TypeReference != null ? TypeText(param.TypeReference) + " " : "")
-        + param.Name
+        + EscapeIdent(param.Name)
         + (param.DefaultValue != null ? " = " + Expr(param.DefaultValue) : "");
 
     private string ArgsText(IReadOnlyList<Node> arguments) =>
@@ -1188,7 +1189,7 @@ public sealed class CSharpWriter {
     private string GenericParamsText(IReadOnlyList<Parameter>? parameters) =>
         parameters is { Count: > 0 }
             ? RenderFills("generic-params", "list", Names(("open", "<"), ("close", ">")),
-                string.Join(", ", parameters.Select(p => p.Name)))
+                string.Join(", ", parameters.Select(p => EscapeIdent(p.Name))))
             : "";
 
     private string LineageText(TypeDefinitionNode typeDef) {
@@ -1239,6 +1240,18 @@ public sealed class CSharpWriter {
             return false;
         var head = type.Split('.')[0];
         return !CSharpKeywords.Contains(head);
+    }
+
+    /// <summary>Escapes a type name that is a keyword. <c>void</c> stays bare:
+    /// actions return <c>TypeReference("void")</c> and there is no void primitive.
+    /// A dotted name escapes only its last segment.</summary>
+    private static string EscapeTypeName(string name) {
+        if (name == "void")
+            return name;
+        var dot = name.LastIndexOf('.');
+        if (dot < 0)
+            return EscapeIdent(name);
+        return name[..(dot + 1)] + EscapeIdent(name[(dot + 1)..]);
     }
 
     private static string EscapeIdent(string name) =>

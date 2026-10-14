@@ -195,7 +195,7 @@ public class DomainEntityInstanceTests {
 
         var instance = DomainEntityInstance.Create(entity, domain: domain);
         await Assert.That(instance.GetProperty<object>("RecordedOn")).IsTypeOf<DateOnly>();
-        await Assert.That(instance.GetProperty<DateOnly>("RecordedOn")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+        await Assert.That(instance.GetProperty<DateOnly>("RecordedOn")).IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
         await Assert.That(instance.GetProperty<object>("OpenedAt")).IsTypeOf<DateTime>();
     }
 
@@ -215,7 +215,7 @@ public class DomainEntityInstanceTests {
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
-        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     [Test]
@@ -235,7 +235,7 @@ public class DomainEntityInstanceTests {
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
-        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.Today));
+        await Assert.That(instance.GetProperty<DateOnly>("Due")).IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 
     [Test]
@@ -3537,6 +3537,28 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
+    public async Task InvokeAction_UnsetDate_AddDays_NamesTheProperty() {
+        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
+        var extend = new Poly.DomainModeling.Ontology.Action("Extend", InvocationResult.Void, [], [
+            new AssignEffect(
+                DomainExpression.Property("DueDate"),
+                DomainExpression.Add(
+                    DomainExpression.Property("DueDate"),
+                    DomainExpression.Literal(14L)))
+        ], []);
+        var draft = new Stage("Draft", Actions: [extend], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Order", [dueDate], [extend], [], [draft]);
+
+        var instance = CreateWithDomain(entity, new Dictionary<string, object?>(),
+            extensions: [ExtensionCatalog.TemporalId]);
+
+        var result = instance.InvokeAction("Extend");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("'DueDate' is not set");
+        await Assert.That(instance.GetProperty<object?>("DueDate")).IsNull();
+    }
+
+    [Test]
     public async Task EvaluatePolicy_PathPrefix_MultipleLinkedTargets_Throws() {
         // Pre-ship: bare path-prefix must not silently pick targets[0] on many-links.
         var item = new Entity("Item", [
@@ -3870,6 +3892,22 @@ public class DomainEntityInstanceTests {
         await Assert.That(result.ErrorMessage).IsNotNull();
         await Assert.That(result.ErrorMessage!).Contains("only available in stage 'Paid'");
         await Assert.That(result.ErrorMessage!).DoesNotContain("not found on entity");
+    }
+
+    [Test]
+    public async Task InvokeAction_StageScopedOnTwoStages_ListsEveryDeclaringStage() {
+        var done = new Poly.DomainModeling.Ontology.Action("Return", InvocationResult.Void, [], [], []);
+        var active = new Stage("Active", Actions: [done], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var overdue = new Stage("Overdue", Actions: [done], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var returned = new Stage("Returned", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Loan", [], [], [], [returned, active, overdue]);
+        var domain = ValidDomain.Create("Test", [entity], []);
+
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var result = instance.InvokeAction("Return");
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage!).Contains("only available in stages 'Active', 'Overdue'");
     }
 
     [Test]

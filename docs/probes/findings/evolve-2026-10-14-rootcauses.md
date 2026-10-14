@@ -1,7 +1,7 @@
 # F26–F35 — Root causes and likely changes (research, not fixes)
 
 Prepared for the fix pass that follows the F1–25 work. Product code was **read, not modified**;
-every claim cites the current master (`bd416609`). Repro probes: `docs/probes/evolve-2026-10-14/`
+every claim cites the current master (`bd416609`). Repro probes: `docs/missions/evolve-2026-10-14/`
 (mission report: `docs/probes/findings/evolve-2026-10-14.md`, PR #175).
 
 ---

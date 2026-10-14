@@ -60,6 +60,13 @@ public class WaitOffer
         {
             this._sectionWaitlistOfferedSubscribers = new List<Section>();
         }
+        foreach (var existing in this._sectionWaitlistOfferedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._sectionWaitlistOfferedSubscribers.Add(subscriber);
     }
     internal void RegisterSectionWaitlistCancelledSubscriber(Section subscriber)
@@ -67,6 +74,13 @@ public class WaitOffer
         if (this._sectionWaitlistCancelledSubscribers == null)
         {
             this._sectionWaitlistCancelledSubscribers = new List<Section>();
+        }
+        foreach (var existing in this._sectionWaitlistCancelledSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._sectionWaitlistCancelledSubscribers.Add(subscriber);
     }

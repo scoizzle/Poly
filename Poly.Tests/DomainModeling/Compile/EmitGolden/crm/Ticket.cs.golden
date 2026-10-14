@@ -57,6 +57,13 @@ public class Ticket
         {
             this._accountTicketsClosedSubscribers = new List<Account>();
         }
+        foreach (var existing in this._accountTicketsClosedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._accountTicketsClosedSubscribers.Add(subscriber);
     }
     internal void NotifyClosedSubscribers(TicketStage previousStage)

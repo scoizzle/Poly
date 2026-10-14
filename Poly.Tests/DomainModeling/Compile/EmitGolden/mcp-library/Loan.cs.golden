@@ -60,6 +60,13 @@ public class Loan
         {
             this._patronLoansOverdueSubscribers = new List<Patron>();
         }
+        foreach (var existing in this._patronLoansOverdueSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._patronLoansOverdueSubscribers.Add(subscriber);
     }
     internal void NotifyOverdueSubscribers(LoanStage previousStage)

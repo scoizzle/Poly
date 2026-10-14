@@ -422,6 +422,13 @@ public class Opportunity
         {
             this._accountOpportunitiesWonSubscribers = new List<Account>();
         }
+        foreach (var existing in this._accountOpportunitiesWonSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._accountOpportunitiesWonSubscribers.Add(subscriber);
     }
     internal void RegisterAccountOpportunitiesProposeSubscriber(Account subscriber)
@@ -430,6 +437,13 @@ public class Opportunity
         {
             this._accountOpportunitiesProposeSubscribers = new List<Account>();
         }
+        foreach (var existing in this._accountOpportunitiesProposeSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._accountOpportunitiesProposeSubscribers.Add(subscriber);
     }
     internal void RegisterAccountOpportunitiesLostSubscriber(Account subscriber)
@@ -437,6 +451,13 @@ public class Opportunity
         if (this._accountOpportunitiesLostSubscribers == null)
         {
             this._accountOpportunitiesLostSubscribers = new List<Account>();
+        }
+        foreach (var existing in this._accountOpportunitiesLostSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._accountOpportunitiesLostSubscribers.Add(subscriber);
     }

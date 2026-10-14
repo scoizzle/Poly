@@ -195,6 +195,13 @@ public class Reservation
         {
             this._roomStaysInHouseSubscribers = new List<Room>();
         }
+        foreach (var existing in this._roomStaysInHouseSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._roomStaysInHouseSubscribers.Add(subscriber);
     }
     internal void RegisterRoomStaysDepartedSubscriber(Room subscriber)
@@ -202,6 +209,13 @@ public class Reservation
         if (this._roomStaysDepartedSubscribers == null)
         {
             this._roomStaysDepartedSubscribers = new List<Room>();
+        }
+        foreach (var existing in this._roomStaysDepartedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._roomStaysDepartedSubscribers.Add(subscriber);
     }
@@ -211,6 +225,13 @@ public class Reservation
         {
             this._roomStaysCancelledSubscribers = new List<Room>();
         }
+        foreach (var existing in this._roomStaysCancelledSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._roomStaysCancelledSubscribers.Add(subscriber);
     }
     internal void RegisterRoomStaysNoShowSubscriber(Room subscriber)
@@ -219,6 +240,13 @@ public class Reservation
         {
             this._roomStaysNoShowSubscribers = new List<Room>();
         }
+        foreach (var existing in this._roomStaysNoShowSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._roomStaysNoShowSubscribers.Add(subscriber);
     }
     internal void RegisterGuestReservationsDepartedSubscriber(Guest subscriber)
@@ -226,6 +254,13 @@ public class Reservation
         if (this._guestReservationsDepartedSubscribers == null)
         {
             this._guestReservationsDepartedSubscribers = new List<Guest>();
+        }
+        foreach (var existing in this._guestReservationsDepartedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._guestReservationsDepartedSubscribers.Add(subscriber);
     }

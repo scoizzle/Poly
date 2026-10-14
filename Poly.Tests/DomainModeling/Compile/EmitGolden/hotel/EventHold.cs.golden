@@ -184,6 +184,13 @@ public class EventHold
         {
             this._guestEventsReleasedSubscribers = new List<Guest>();
         }
+        foreach (var existing in this._guestEventsReleasedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._guestEventsReleasedSubscribers.Add(subscriber);
     }
     internal void NotifyReleasedSubscribers(EventHoldStage previousStage)

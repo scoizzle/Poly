@@ -23,3 +23,6 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 07:55 | notifications | | | next |
 | 08:40 | notifications | v1→v5 VM: stage-scoped placement ✓, create-in no-fire, double-fire matrix | F27 double-fire regression (create-in vs tool-link); F28 no-fire-on-create | ✅ done |
 | 08:40 | jobqueue | | | next |
+| 08:55 | jobqueue | v1 VM + gate + export naming | multi-stage lists ✓ binder ✓ retry guard ✓; F27 doubles all counters | ✅ done |
+| 09:15 | cart | v1 VM + gate + sum-gap probe + owned export check | F29 entity-level actions bypass stages; F30 no sum aggregate; owned = flag only | ✅ done |
+| 09:15 | shortener | | | next |

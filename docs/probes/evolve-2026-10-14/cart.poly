@@ -1,11 +1,6 @@
 domain Cart
 uses temporal
 
-Money: value {
-  Amount: Number
-  Currency: Text
-}
-
 Cart: entity {
   Name: Text required
   Total: Number default(0)
@@ -16,10 +11,6 @@ Cart: entity {
     create in lines { Sku: sku Price: price Qty: qty }
     assign Total to Total + price * qty
     assign ItemCount to ItemCount + 1
-  }
-
-  Checkout: action {
-    transition to CheckedOut
   }
 
   Active: stage {

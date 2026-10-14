@@ -30,7 +30,7 @@ public class SimulateCreateDogfoodTests {
     }
 
     private static string CreateAndId(string sessionId, string entity, string? props = null) {
-        var create = RuntimeTool.CreateInstance(sessionId, entity, props);
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
         if (!create.Success)
             throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
         var id = ExtractInstanceId(JsonSerializer.Serialize(create.Data));
@@ -60,7 +60,7 @@ public class SimulateCreateDogfoodTests {
     }
 
     private static int ListFineCount(string sessionId) {
-        var list = RuntimeTool.ListInstances(sessionId, entityName: "Fine");
+        var list = McpTestTools.Runtime.ListInstances(sessionId, entityName: "Fine");
         if (!list.Success)
             throw new InvalidOperationException(list.Message);
         var json = JsonSerializer.Serialize(list.Data);
@@ -70,7 +70,7 @@ public class SimulateCreateDogfoodTests {
 
     private static (DomainEntityInstance Patron, DomainEntityInstance? Fine, DomainInstanceStore Store)
         ResolvePatronFine(string sessionId, string patronId, string? fineId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state) || state is null)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
         if (state.InstanceStore is null)
             throw new InvalidOperationException("store missing");
@@ -81,15 +81,15 @@ public class SimulateCreateDogfoodTests {
 
     private static async Task AssertPolicies(
         string sessionId, string patronId, bool hasFines, bool noFines) {
-        var has = PolicyTool.EvaluatePolicy(sessionId, "Patron", "HasFines", patronId);
+        var has = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "HasFines", patronId);
         await Assert.That(has.Success).IsTrue();
         await Assert.That(has.Message).Contains(hasFines ? "true" : "false");
 
-        var count = PolicyTool.EvaluatePolicy(sessionId, "Patron", "HasFineCount", patronId);
+        var count = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "HasFineCount", patronId);
         await Assert.That(count.Success).IsTrue();
         await Assert.That(count.Message).Contains(hasFines ? "true" : "false");
 
-        var none = PolicyTool.EvaluatePolicy(sessionId, "Patron", "NoFines", patronId);
+        var none = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "NoFines", patronId);
         await Assert.That(none.Success).IsTrue();
         await Assert.That(none.Message).Contains(noFines ? "true" : "false");
     }
@@ -97,12 +97,12 @@ public class SimulateCreateDogfoodTests {
     [Test]
     public async Task TypeOnly_UnambiguousManyRel_ListsAndLinks() {
         // Bare create Type lists Fine; Patron.fines and Fine.patron stay unlinked.
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateType");
-        await Assert.That(DslTool.ApplyDsl(sessionId, ReadProbe("simulate-create-type.poly")).Success)
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateType");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-type.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Ada"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByType");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
         await Assert.That(invoke.Success).IsTrue();
         var fineId = ExtractReturnInstanceId(invoke);
         await Assert.That(fineId).IsNotNull();
@@ -117,12 +117,12 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task RelOnly_CreateIn_ListsAndLinksBothDirections() {
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateIn");
-        await Assert.That(DslTool.ApplyDsl(sessionId, ReadProbe("simulate-create-in.poly")).Success)
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateIn");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-in.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Bea"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByRel");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByRel");
         await Assert.That(invoke.Success).IsTrue();
         var fineId = ExtractReturnInstanceId(invoke);
         await Assert.That(fineId).IsNotNull();
@@ -138,13 +138,13 @@ public class SimulateCreateDogfoodTests {
     [Test]
     public async Task Combined_TypeThenRel_OnOnePatron_BothLinked() {
         // Type Fine unlinked; Rel Fine linked both ways. list=2, fines links=1.
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateCreateIn");
-        await Assert.That(DslTool.ApplyDsl(sessionId, ReadProbe("simulate-create-create-in.poly")).Success)
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateCreateIn");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-create-in.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Cara"}""");
 
-        var typeInvoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByType");
+        var typeInvoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
         await Assert.That(typeInvoke.Success).IsTrue();
         var fineTypeId = ExtractReturnInstanceId(typeInvoke);
         await Assert.That(fineTypeId).IsNotNull();
@@ -157,7 +157,7 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(afterType.Store.GetRelatedInstances("patron", afterType.Fine!).Count)
             .IsEqualTo(0);
 
-        var relInvoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByRel");
+        var relInvoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByRel");
         await Assert.That(relInvoke.Success).IsTrue();
         var fineRelId = ExtractReturnInstanceId(relInvoke);
         await Assert.That(fineRelId).IsNotNull();
@@ -166,7 +166,7 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(2);
         await AssertPolicies(sessionId, patronId, hasFines: true, noFines: false);
 
-        if (!McpSessionStore.TryGet(sessionId, out var state) || state?.InstanceStore is null)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
             throw new InvalidOperationException("session/store missing");
         var patron = state.InstanceMap[patronId];
         var fineType = state.InstanceMap[fineTypeId!];
@@ -181,7 +181,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task TypeOnly_AmbiguousManyRel_ListsButDoesNotLink() {
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateAmbiguous");
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateAmbiguous");
         var dsl = """
             domain SimulateCreateAmbiguous
             uses temporal
@@ -208,10 +208,10 @@ public class SimulateCreateDogfoodTests {
               patron: Patron
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Dana"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssessByType");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
         await Assert.That(invoke.Success).IsTrue();
         var fineId = ExtractReturnInstanceId(invoke);
         await Assert.That(fineId).IsNotNull();
@@ -227,7 +227,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task ActionResultCreate_OmittedCollection_WithActionParameter_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedCollection");
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedCollection");
         var dsl = """
             domain SimulateCreateOmittedCollection
             uses storage
@@ -251,13 +251,13 @@ public class SimulateCreateDogfoodTests {
               Reason: Text required
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, clerkId, "Hire", """{"name":"Ada"}""");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, clerkId, "Hire", """{"name":"Ada"}""");
         await Assert.That(invoke.Success).IsTrue();
         var patronId = ExtractReturnInstanceId(invoke);
         await Assert.That(patronId).IsNotNull();
-        if (!McpSessionStore.TryGet(sessionId, out var state) || state?.InstanceStore is null)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
             throw new InvalidOperationException("session/store missing");
         var patron = state.InstanceMap[patronId!];
         await Assert.That(patron.GetProperty<string>("Name")).IsEqualTo("Ada");
@@ -266,7 +266,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task ActionResultCreate_OmittedSingularNav_WithActionParameter_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedNav");
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedNav");
         var dsl = """
             domain SimulateCreateOmittedNav
             uses storage
@@ -290,13 +290,13 @@ public class SimulateCreateDogfoodTests {
               Name: Text required
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var deskId = CreateAndId(sessionId, "Desk", """{"Name":"Front"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, deskId, "CheckOut", """{"reason":"Overdue"}""");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, deskId, "CheckOut", """{"reason":"Overdue"}""");
         await Assert.That(invoke.Success).IsTrue();
         var fineId = ExtractReturnInstanceId(invoke);
         await Assert.That(fineId).IsNotNull();
-        if (!McpSessionStore.TryGet(sessionId, out var state) || state?.InstanceStore is null)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
             throw new InvalidOperationException("session/store missing");
         var fine = state.InstanceMap[fineId!];
         await Assert.That(fine.GetProperty<string>("Reason")).IsEqualTo("Overdue");
@@ -305,7 +305,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task ActionResultCreate_OmittedRuntimeDefault_StoresClock() {
-        var (sessionId, _) = McpSessionStore.Create("SimulateCreateOmittedClock");
+        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedClock");
         var dsl = """
             domain SimulateCreateOmittedClock
             uses temporal
@@ -325,13 +325,13 @@ public class SimulateCreateDogfoodTests {
               Opened: Date default(Today)
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
-        var invoke = RuntimeTool.InvokeAction(sessionId, clerkId, "Open", """{"name":"Ada"}""");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, clerkId, "Open", """{"name":"Ada"}""");
         await Assert.That(invoke.Success).IsTrue();
         var accountId = ExtractReturnInstanceId(invoke);
         await Assert.That(accountId).IsNotNull();
-        if (!McpSessionStore.TryGet(sessionId, out var state) || state is null)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
         var account = state.InstanceMap[accountId!];
         await Assert.That(account.GetProperty<DateOnly>("Opened"))

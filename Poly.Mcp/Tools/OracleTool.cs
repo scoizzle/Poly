@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Microsoft.Extensions.Logging;
+
 using ModelContextProtocol.Server;
 
 using Poly.Analysis;
@@ -21,7 +23,7 @@ namespace Poly.Mcp.Tools;
 /// and named-action simulate is <c>evaluate_policy</c> / <c>invoke_action</c>.
 /// </summary>
 [McpServerToolType]
-internal sealed class OracleTool {
+internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
     private static DomainToolResponse? TryParseDslExpression(string expressionDsl, out DomainExpression expr) {
@@ -117,10 +119,11 @@ internal sealed class OracleTool {
 
     // ── V0.6: export_domain_to_csharp ────────────────────────────
     [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source for the session domain: entities as types with properties, navigations, stages, and actions as methods. Useful for inspecting how the model maps to C#.")]
-    public static DomainToolResponse ExportDomainToCSharp(
+    public DomainToolResponse ExportDomainToCSharp(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("export_domain_to_csharp {SessionId}", sessionId);
         if (state.LatestAnalysis is null)
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "get_domain_overview"]);
         if (state.LatestAnalysis.HasErrors)
@@ -155,12 +158,12 @@ internal sealed class OracleTool {
     // ── V0.3: describe_domain_element ───────────────────────────
 
     [McpServerTool(Name = "describe_domain_element"), Description("Returns a structured description of a domain element (entity, stage, action, policy, or relationship) from the session domain. For stage/action/policy, specify entityName if the name is not unique across entities.")]
-    public static DomainToolResponse DescribeDomainElement(
+    public DomainToolResponse DescribeDomainElement(
         [Description("Session ID")] string sessionId,
         [Description("Element kind: 'entity', 'stage', 'action', 'policy', or 'relationship'")] string kind,
         [Description("Element name")] string name,
         [Description("Optional entity name to disambiguate stage/action/policy (recommended when multiple entities share the same element name)")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
 
         try {
@@ -369,7 +372,7 @@ internal sealed class OracleTool {
     // ── oracle_expression (fragment probe, not named-policy simulate)
 
     [McpServerTool(Name = "oracle_expression"), Description("Evaluates a DSL expression fragment against a JSON property bag. No session required. For a named policy on a real instance, use create_instance then evaluate_policy. Expressions that read relationships fail. Returns { result: true/false }.")]
-    public static DomainToolResponse OracleExpression(
+    public DomainToolResponse OracleExpression(
         [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {
         // Parse expression

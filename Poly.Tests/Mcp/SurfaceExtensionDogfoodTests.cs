@@ -63,11 +63,11 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_SurfaceExtensions_AnalyzesClean() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        var apply = DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain);
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain);
         await Assert.That(apply.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var state);
+        McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(state).IsNotNull();
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasErrors).IsFalse();
@@ -83,10 +83,10 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDsl_SurfaceExtensions_RoundTripsPeerEntityWhenAndOwned() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var poly = ExtractPoly(export);
         await Assert.That(poly).Contains("when orders Active as order");
@@ -95,9 +95,9 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(poly).Contains("orders exists");
         await Assert.That(poly).Contains("profile City is \"Metropolis\"");
 
-        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        var reapply = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
-        McpSessionStore.TryGet(sessionId, out var state);
+        McpTestTools.Store.TryGet(sessionId, out var state);
         var customer = state!.Domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         await Assert.That(customer.Subscriptions[0].PeerBinding).IsEqualTo("order");
     }
@@ -107,8 +107,8 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task EntityLevel_PeerWhen_CopiesPeerCode_RegardlessOfSubscriberStage() {
         // Entity-level: entity-level when fires in Idle (not Pending); peer binder copies order Code.
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alice","Status":"Quiet","LastOrderCode":"NONE"}""");
@@ -118,10 +118,10 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("Quiet");
         await Assert.That(GetStage(sessionId, custId)).IsEqualTo("Idle");
 
-        var link = RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId);
         await Assert.That(link.Success).IsTrue();
 
-        var activate = RuntimeTool.InvokeAction(sessionId, orderId, "Activate");
+        var activate = McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate");
         await Assert.That(activate.Success).IsTrue();
         await Assert.That(activate.Message).Contains("Active");
 
@@ -133,7 +133,7 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task StageScoped_When_FiresOnlyWhileSubscriberInPending() {
         // Contrast: move customer into Pending, then order Active → Status Notified + peer copy.
-        var (sessionId, _) = McpSessionStore.Create("StageScopedVsEntityLevel");
+        var (sessionId, _) = McpTestTools.Store.Create("StageScopedVsEntityLevel");
         var dsl = """
             domain StageScopedVsEntityLevel
             Customer: entity {
@@ -160,19 +160,19 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Status":"Quiet","LastOrderCode":"NONE"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"ORD-7"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId).Success)
             .IsTrue();
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "EnterPending").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, custId, "EnterPending").Success)
             .IsTrue();
         await Assert.That(GetStage(sessionId, custId)).IsEqualTo("Pending");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
 
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("Notified");
@@ -181,7 +181,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task StageScoped_PeerWhen_CopiesPeerCode_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("StageScopedPeerBinding");
+        var (sessionId, _) = McpTestTools.Store.Create("StageScopedPeerBinding");
         var dsl = """
             domain StageScopedPeerBinding
             Tracker: entity {
@@ -201,15 +201,15 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var trackerId = CreateAndId(sessionId, "Tracker", """{"Status":"UNSET"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"PEER-9"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, trackerId, "Tracks", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, trackerId, "Tracks", orderId).Success)
             .IsTrue();
         await Assert.That(GetStage(sessionId, trackerId)).IsEqualTo("Watching");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("PEER-9");
     }
@@ -218,8 +218,8 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task OwnedPolicy_CreateLinkEvaluate_TrueAndFalse() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var aliceId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alice","Status":"x","LastOrderCode":"n"}""");
@@ -228,16 +228,16 @@ public class SurfaceExtensionDogfoodTests {
         var urbanId = CreateAndId(sessionId, "Profile", """{"City":"Metropolis"}""");
         var ruralId = CreateAndId(sessionId, "Profile", """{"City":"Gotham"}""");
 
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, aliceId, "profile", urbanId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, aliceId, "profile", urbanId).Success)
             .IsTrue();
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, bobId, "profile", ruralId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, bobId, "profile", ruralId).Success)
             .IsTrue();
 
-        var urban = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: aliceId);
+        var urban = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: aliceId);
         await Assert.That(urban.Success).IsTrue();
         await Assert.That(urban.Message).Contains("true");
 
-        var rural = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: bobId);
+        var rural = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: bobId);
         await Assert.That(rural.Success).IsTrue();
         await Assert.That(rural.Message).Contains("false");
     }
@@ -246,13 +246,13 @@ public class SurfaceExtensionDogfoodTests {
     public async Task OwnedPolicy_Unlinked_FailsClosed() {
         // No vacuous true when path-prefix has no outbound link — soft false
         // (require FailedGuards path), not throw. MCP reports Success with result false.
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Alone","Status":"x","LastOrderCode":"n"}""");
 
-        var eval = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: custId);
+        var eval = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: custId);
         await Assert.That(eval.Success).IsTrue();
         await Assert.That(eval.Message).Contains("false");
     }
@@ -261,23 +261,23 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelExists_LinkedAndUnlinked_EvaluatesHonestly() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var withProfile = CreateAndId(sessionId, "Customer",
             """{"Name":"Has","Status":"x","LastOrderCode":"n"}""");
         var without = CreateAndId(sessionId, "Customer",
             """{"Name":"No","Status":"x","LastOrderCode":"n"}""");
         var profileId = CreateAndId(sessionId, "Profile", """{"City":"X"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, withProfile, "profile", profileId)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, withProfile, "profile", profileId)
             .Success).IsTrue();
 
-        var has = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasProfile",
+        var has = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasProfile",
             instanceId: withProfile);
         await Assert.That(has.Success).IsTrue();
         await Assert.That(has.Message).Contains("true");
 
-        var missing = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasProfile",
+        var missing = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasProfile",
             instanceId: without);
         await Assert.That(missing.Success).IsTrue();
         await Assert.That(missing.Message).Contains("false");
@@ -285,22 +285,22 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelExists_Many_OrdersLinked_True() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"C","Status":"x","LastOrderCode":"n"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"1"}""");
 
-        var before = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasOrders",
+        var before = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasOrders",
             instanceId: custId);
         await Assert.That(before.Success).IsTrue();
         await Assert.That(before.Message).Contains("false");
 
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId).Success)
             .IsTrue();
 
-        var after = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasOrders",
+        var after = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasOrders",
             instanceId: custId);
         await Assert.That(after.Success).IsTrue();
         await Assert.That(after.Message).Contains("true");
@@ -308,8 +308,8 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task EvaluatePolicy_WithoutInstanceId_FailsClosed() {
-        var (sessionId, _) = McpSessionStore.Create("NoBagEvaluate");
-        var apply = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("NoBagEvaluate");
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain NoBagEvaluate
 
             Customer: entity {
@@ -319,7 +319,7 @@ public class SurfaceExtensionDogfoodTests {
             """);
         await Assert.That(apply.Success).IsTrue();
 
-        var missing = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasName", "");
+        var missing = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasName", "");
         await Assert.That(missing.Success).IsFalse();
         await Assert.That(missing.Message).Contains("instanceId is required");
     }
@@ -328,7 +328,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_PeerDependentWhen_EmitsPeerParamAndNotify() {
-        var (sessionId, _) = McpSessionStore.Create("PeerExport");
+        var (sessionId, _) = McpTestTools.Store.Create("PeerExport");
         var dsl = """
             domain PeerExport
             Tracker: entity {
@@ -346,9 +346,9 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
-        var export = OracleTool.ExportDomainToCSharp(sessionId);
+        var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
         await Assert.That(export.Success).IsTrue();
         var csharp = ExtractCSharp(export);
         await Assert.That(csharp).IsNotNull().And.IsNotEmpty();
@@ -362,10 +362,10 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_EntityLevelPeerWhen_EmitsHandler() {
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
-        var export = OracleTool.ExportDomainToCSharp(sessionId);
+        var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
         await Assert.That(export.Success).IsTrue();
         var csharp = ExtractCSharp(export);
         await Assert.That(csharp!).Contains("WhenEachOrderActive");
@@ -377,36 +377,36 @@ public class SurfaceExtensionDogfoodTests {
     [Test]
     public async Task FullPath_CreateLinkActivate_PeerPolicyExistsExport() {
         // One session exercises L peer + O owned + exists + export honesty.
-        var (sessionId, _) = McpSessionStore.Create("SurfaceExtensionDogfood");
-        await Assert.That(DslTool.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("SurfaceExtensionDogfood");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, SharedSurfaceExtensionDomain).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer",
             """{"Name":"Full","Status":"Quiet","LastOrderCode":"NONE"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"FULL-1"}""");
         var profileId = CreateAndId(sessionId, "Profile", """{"City":"Metropolis"}""");
 
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId).Success)
             .IsTrue();
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "profile", profileId)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "profile", profileId)
             .Success).IsTrue();
 
         // Policies before transition
-        var hasOrders = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasOrders",
+        var hasOrders = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasOrders",
             instanceId: custId);
         await Assert.That(hasOrders.Message).Contains("true");
-        var isUrban = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban",
+        var isUrban = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban",
             instanceId: custId);
         await Assert.That(isUrban.Message).Contains("true");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, custId, "LastOrderCode")).IsEqualTo("FULL-1");
 
-        var exportCs = OracleTool.ExportDomainToCSharp(sessionId);
+        var exportCs = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
         await Assert.That(exportCs.Success).IsTrue();
         await Assert.That(ExtractCSharp(exportCs)!).Contains("WhenEachOrderActive");
 
-        var exportDsl = DslTool.ExportDsl(sessionId);
+        var exportDsl = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(exportDsl.Success).IsTrue();
         await Assert.That(ExtractPoly(exportDsl)).Contains("as order");
     }
@@ -415,7 +415,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnboundPeerPathPrefix_FailsAnalysis() {
-        var (sessionId, _) = McpSessionStore.Create("UnboundPeerPath");
+        var (sessionId, _) = McpTestTools.Store.Create("UnboundPeerPath");
         var bad = """
             domain UnboundPeerPath
             Tracker: entity {
@@ -433,11 +433,11 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        var apply = DslTool.ApplyDsl(sessionId, bad);
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, bad);
         // Apply may succeed evolve but analysis should report errors — or apply fails.
         // Product: SubscriptionAnalyzer fails closed on unbound peer-like root.
         if (apply.Success) {
-            McpSessionStore.TryGet(sessionId, out var state);
+            McpTestTools.Store.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors).IsTrue();
         }
@@ -450,7 +450,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task CreateIn_ThenActivate_EntityLevelPeer_CopiesCode_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("CreateInWithPeer");
+        var (sessionId, _) = McpTestTools.Store.Create("CreateInWithPeer");
         var dsl = """
             domain CreateInWithPeer
             Customer: entity {
@@ -473,17 +473,17 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer", """{"LastOrderCode":"NONE"}""");
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "PlaceOrder").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, custId, "PlaceOrder").Success)
             .IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var orderKvp = st!.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order");
         var orderId = orderKvp.Key;
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, custId, "LastOrderCode")).IsEqualTo("FROM-CREATE");
     }
@@ -492,7 +492,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Unlink_StopsPeerWhen_AndExistsFalse_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("UnlinkStopsPeer");
+        var (sessionId, _) = McpTestTools.Store.Create("UnlinkStopsPeer");
         var dsl = """
             domain UnlinkStopsPeer
             Tracker: entity {
@@ -515,34 +515,34 @@ public class SurfaceExtensionDogfoodTests {
               }
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var trackerId = CreateAndId(sessionId, "Tracker", """{"Status":"UNSET"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"U-1"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, trackerId, "Tracks", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, trackerId, "Tracks", orderId).Success)
             .IsTrue();
 
-        var hasBefore = PolicyTool.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
+        var hasBefore = McpTestTools.Policy.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
             instanceId: trackerId);
         await Assert.That(hasBefore.Message).Contains("true");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("U-1");
 
-        await Assert.That(RuntimeTool.UnlinkInstances(sessionId, trackerId, "Tracks", orderId)
+        await Assert.That(McpTestTools.Runtime.UnlinkInstances(sessionId, trackerId, "Tracks", orderId)
             .Success).IsTrue();
 
-        var hasAfter = PolicyTool.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
+        var hasAfter = McpTestTools.Policy.EvaluatePolicy(sessionId, "Tracker", "HasOrder",
             instanceId: trackerId);
         await Assert.That(hasAfter.Success).IsTrue();
         await Assert.That(hasAfter.Message).Contains("false");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
         // Direct prop write via store instance for isolation
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         st!.InstanceMap[trackerId].SetProperty("Status", "AFTER-UNLINK");
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("AFTER-UNLINK");
     }
@@ -551,7 +551,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task TwoTrackers_OneOrderActive_BothPeersFire_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("TwoSubscribersOneOrder");
+        var (sessionId, _) = McpTestTools.Store.Create("TwoSubscribersOneOrder");
         var dsl = """
             domain TwoSubscribersOneOrder
             Tracker: entity {
@@ -570,17 +570,17 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var t1 = CreateAndId(sessionId, "Tracker", """{"LastCode":"NONE"}""");
         var t2 = CreateAndId(sessionId, "Tracker", """{"LastCode":"NONE"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"SHARED"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, t1, "Tracks", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, t1, "Tracks", orderId).Success)
             .IsTrue();
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, t2, "Tracks", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, t2, "Tracks", orderId).Success)
             .IsTrue();
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, t1, "LastCode")).IsEqualTo("SHARED");
         await Assert.That(GetProp(sessionId, t2, "LastCode")).IsEqualTo("SHARED");
@@ -590,7 +590,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task RelNotExists_BeforeAndAfterLink_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("RelationshipNotExists");
+        var (sessionId, _) = McpTestTools.Store.Create("RelationshipNotExists");
         var dsl = """
             domain RelationshipNotExists
             Customer: entity {
@@ -602,19 +602,19 @@ public class SurfaceExtensionDogfoodTests {
               City: Text
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
 
         var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
-        var before = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoProfile",
+        var before = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "NoProfile",
             instanceId: custId);
         await Assert.That(before.Success).IsTrue();
         await Assert.That(before.Message).Contains("true");
 
         var profileId = CreateAndId(sessionId, "Profile", """{"City":"X"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "profile", profileId)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "profile", profileId)
             .Success).IsTrue();
 
-        var after = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoProfile",
+        var after = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "NoProfile",
             instanceId: custId);
         await Assert.That(after.Success).IsTrue();
         await Assert.That(after.Message).Contains("false");
@@ -624,7 +624,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task PathPrefix_MultipleLinks_EvaluateFailsClosed_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("MultiLinkPathPrefix");
+        var (sessionId, _) = McpTestTools.Store.Create("MultiLinkPathPrefix");
         // Use OneToOne profile but force two links if store allows — or many path-prefix.
         var dsl = """
             domain MultiLinkPathPrefix
@@ -637,14 +637,14 @@ public class SurfaceExtensionDogfoodTests {
               Code: Text
             }
             """;
-        var apply = DslTool.ApplyDsl(sessionId, dsl);
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, dsl);
         // Analysis may reject many path-prefix at apply/analyze; either way is fail-closed.
         if (!apply.Success) {
             await Assert.That(apply.Success).IsFalse();
             return;
         }
 
-        McpSessionStore.TryGet(sessionId, out var state);
+        McpTestTools.Store.TryGet(sessionId, out var state);
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         if (analysis.HasErrors) {
             await Assert.That(analysis.HasErrors).IsTrue();
@@ -654,12 +654,12 @@ public class SurfaceExtensionDogfoodTests {
         var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
         var o1 = CreateAndId(sessionId, "Order", """{"Code":"X"}""");
         var o2 = CreateAndId(sessionId, "Order", """{"Code":"Y"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", o1).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", o1).Success)
             .IsTrue();
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", o2).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", o2).Success)
             .IsTrue();
 
-        var eval = PolicyTool.EvaluatePolicy(sessionId, "Customer", "FirstCode",
+        var eval = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "FirstCode",
             instanceId: custId);
         await Assert.That(eval.Success).IsFalse();
         await Assert.That(
@@ -671,7 +671,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Quantifiers_EmptyLinks_Honesty_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("EmptyQuantifiers");
+        var (sessionId, _) = McpTestTools.Store.Create("EmptyQuantifiers");
         var dsl = """
             domain EmptyQuantifiers
             Customer: entity {
@@ -686,22 +686,22 @@ public class SurfaceExtensionDogfoodTests {
               Total: Number
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var custId = CreateAndId(sessionId, "Customer", """{"Name":"A"}""");
 
-        var any = PolicyTool.EvaluatePolicy(sessionId, "Customer", "AnyBig", instanceId: custId);
+        var any = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "AnyBig", instanceId: custId);
         await Assert.That(any.Success).IsTrue();
         await Assert.That(any.Message).Contains("false");
 
-        var all = PolicyTool.EvaluatePolicy(sessionId, "Customer", "AllBig", instanceId: custId);
+        var all = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "AllBig", instanceId: custId);
         await Assert.That(all.Success).IsTrue();
         await Assert.That(all.Message).Contains("false");
 
-        var none = PolicyTool.EvaluatePolicy(sessionId, "Customer", "NoneBig", instanceId: custId);
+        var none = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "NoneBig", instanceId: custId);
         await Assert.That(none.Success).IsTrue();
         await Assert.That(none.Message).Contains("true");
 
-        var count = PolicyTool.EvaluatePolicy(sessionId, "Customer", "OrderCountZero",
+        var count = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "OrderCountZero",
             instanceId: custId);
         await Assert.That(count.Success).IsTrue();
         await Assert.That(count.Message).Contains("true");
@@ -711,7 +711,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task Require_HasOrders_BlocksThenPasses_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("RequireRelationshipExists");
+        var (sessionId, _) = McpTestTools.Store.Create("RequireRelationshipExists");
         var dsl = """
             domain RequireRelationshipExists
             Customer: entity {
@@ -730,17 +730,17 @@ public class SurfaceExtensionDogfoodTests {
               Code: Text
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var custId = CreateAndId(sessionId, "Customer", """{"Status":"open"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"1"}""");
 
-        var blocked = RuntimeTool.InvokeAction(sessionId, custId, "Ship");
+        var blocked = McpTestTools.Runtime.InvokeAction(sessionId, custId, "Ship");
         await Assert.That(blocked.Success).IsFalse();
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("open");
 
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId).Success)
             .IsTrue();
-        var ok = RuntimeTool.InvokeAction(sessionId, custId, "Ship");
+        var ok = McpTestTools.Runtime.InvokeAction(sessionId, custId, "Ship");
         await Assert.That(ok.Success).IsTrue();
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("shipped");
     }
@@ -749,7 +749,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task If_RelExists_Branches_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("IfRelationshipExists");
+        var (sessionId, _) = McpTestTools.Store.Create("IfRelationshipExists");
         var dsl = """
             domain IfRelationshipExists
             Customer: entity {
@@ -767,16 +767,16 @@ public class SurfaceExtensionDogfoodTests {
               Code: Text
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var custId = CreateAndId(sessionId, "Customer", """{"Status":"?"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"1"}""");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("none");
 
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, custId, "orders", orderId).Success)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", orderId).Success)
             .IsTrue();
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, custId, "Mark").Success).IsTrue();
         await Assert.That(GetProp(sessionId, custId, "Status")).IsEqualTo("has");
     }
 
@@ -784,7 +784,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task MultiStageWhen_Peer_FiresOnCompleted_ViaMcp() {
-        var (sessionId, _) = McpSessionStore.Create("MultiStagePeerWhen");
+        var (sessionId, _) = McpTestTools.Store.Create("MultiStagePeerWhen");
         var dsl = """
             domain MultiStagePeerWhen
             Tracker: entity {
@@ -806,21 +806,21 @@ public class SurfaceExtensionDogfoodTests {
               Completed: stage {}
             }
             """;
-        await Assert.That(DslTool.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
         var trackerId = CreateAndId(sessionId, "Tracker", """{"Status":"UNSET"}""");
         var orderId = CreateAndId(sessionId, "Order", """{"Code":"A"}""");
-        await Assert.That(RuntimeTool.LinkInstances(sessionId, trackerId, "Tracks", orderId)
+        await Assert.That(McpTestTools.Runtime.LinkInstances(sessionId, trackerId, "Tracks", orderId)
             .Success).IsTrue();
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Activate").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("A");
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         st!.InstanceMap[orderId].SetProperty("Code", "B");
         st.InstanceMap[trackerId].SetProperty("Status", "CLEARED");
 
-        await Assert.That(RuntimeTool.InvokeAction(sessionId, orderId, "Complete").Success)
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Complete").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("B");
     }
@@ -829,7 +829,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ApplyDsl_UnknownWhenStage_FailsAnalysis() {
-        var (sessionId, _) = McpSessionStore.Create("UnknownWhenStage");
+        var (sessionId, _) = McpTestTools.Store.Create("UnknownWhenStage");
         var bad = """
             domain UnknownWhenStage
             Tracker: entity {
@@ -847,9 +847,9 @@ public class SurfaceExtensionDogfoodTests {
               Active: stage {}
             }
             """;
-        var apply = DslTool.ApplyDsl(sessionId, bad);
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, bad);
         if (apply.Success) {
-            McpSessionStore.TryGet(sessionId, out var state);
+            McpTestTools.Store.TryGet(sessionId, out var state);
             var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
             await Assert.That(analysis.HasErrors).IsTrue();
         }
@@ -860,7 +860,7 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_ErrorAnalysis_ReturnsDiagnostics() {
-        var (sessionId, _) = McpSessionStore.Create("ExportErrorAnalysis");
+        var (sessionId, _) = McpTestTools.Store.Create("ExportErrorAnalysis");
         var broken = ValidDomain.Create("Broken",
             [new Entity("Order", [new Property("Name", new DomainTypeReference("Nope"), [])], [], [], [])]);
         var analysis = DomainModelAnalyzer.Analyze(broken);
@@ -871,10 +871,10 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(errors).IsNotEmpty();
         // DomainEvolution rolls back an analysis with Errors, so build a successful
         // result by hand to put one in the session.
-        McpSessionStore.Evolve(sessionId, (_, _) =>
+        McpTestTools.Store.Evolve(sessionId, (_, _) =>
             EvolutionResult.Success(broken, analysis, new EvolutionTrace([], false, TimeSpan.Zero, errors.Count, 0)));
 
-        var export = OracleTool.ExportDomainToCSharp(sessionId);
+        var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
 
         await Assert.That(export.Success).IsFalse();
         await Assert.That(export.Data).IsNull();
@@ -883,14 +883,14 @@ public class SurfaceExtensionDogfoodTests {
 
     [Test]
     public async Task ExportDomainToCSharp_AfterRejectedEdit_ExportsTheKeptDomain() {
-        var (sessionId, _) = McpSessionStore.Create("ExportAfterRejectedEdit");
-        await Assert.That(EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""").Success).IsTrue();
-        await Assert.That(EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Label","typeName":"Text"}""").Success).IsTrue();
+        var (sessionId, _) = McpTestTools.Store.Create("ExportAfterRejectedEdit");
+        await Assert.That(McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Widget"}""").Success).IsTrue();
+        await Assert.That(McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Widget","name":"Label","typeName":"Text"}""").Success).IsTrue();
 
-        var rejected = EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Broken","typeName":"Nope"}""");
+        var rejected = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Widget","name":"Broken","typeName":"Nope"}""");
         await Assert.That(rejected.Success).IsFalse();
 
-        var export = OracleTool.ExportDomainToCSharp(sessionId);
+        var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
 
         await Assert.That(export.Success).IsTrue();
         var csharp = ExtractCSharp(export)!;
@@ -901,7 +901,7 @@ public class SurfaceExtensionDogfoodTests {
     // ── Helpers ────────────────────────────────────────────────
 
     private static string CreateAndId(string sessionId, string entity, string? props = null) {
-        var create = RuntimeTool.CreateInstance(sessionId, entity, props);
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
         if (!create.Success)
             throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
         var id = ExtractInstanceId(JsonSerializer.Serialize(create.Data));
@@ -919,13 +919,13 @@ public class SurfaceExtensionDogfoodTests {
     }
 
     private static string GetProp(string sessionId, string instanceId, string name) {
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var instance = st!.InstanceMap[instanceId];
         return instance.Snapshot().TryGetValue(name, out var v) ? v?.ToString() ?? "(null)" : "(missing)";
     }
 
     private static string? GetStage(string sessionId, string instanceId) {
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         return st!.InstanceMap[instanceId].CurrentStage;
     }
 

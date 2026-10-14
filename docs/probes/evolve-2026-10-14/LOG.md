@@ -26,3 +26,5 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 08:55 | jobqueue | v1 VM + gate + export naming | multi-stage lists ✓ binder ✓ retry guard ✓; F27 doubles all counters | ✅ done |
 | 09:15 | cart | v1 VM + gate + sum-gap probe + owned export check | F29 entity-level actions bypass stages; F30 no sum aggregate; owned = flag only | ✅ done |
 | 09:15 | shortener | | | next |
+| 09:35 | sessions | v1→v2 VM + gate + export | F31 DateTime initializer VM rejection; F32 create_instance no coercion; Guid ✓ default(Now) ✓ | ✅ done |
+| 09:35 | authoring | | | next |

@@ -1,0 +1,27 @@
+domain Cart
+uses temporal
+
+Cart: entity {
+  Name: Text required
+  Total: Number default(0)
+  ItemCount: Number default(0)
+  lines: many owned Line
+
+  AddItem: action (sku: Text, price: Number, qty: Number) {
+    create in lines { Sku: sku Price: price Qty: qty }
+    assign Total to Total + price * qty
+    assign ItemCount to ItemCount + 1
+  }
+
+  Active: stage {
+    Checkout: action { transition to CheckedOut }
+  }
+  CheckedOut: stage { }
+}
+
+Line: entity {
+  Sku: Text required
+  Price: Number range(0, )
+  Qty: Number range(1, )
+  New: stage { }
+}

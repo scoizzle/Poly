@@ -17,28 +17,6 @@ public class Line
     public long UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Opportunity? Opportunity { get; private set; }
-    private DomainResult<Product> CreateProduct(long listPrice, string name, string sku)
-    {
-        var productResult = Product.Create(listPrice, name, sku);
-        if (!productResult.IsSuccess)
-        {
-            return DomainResult<Product>.Failure(productResult.ErrorMessage ?? "");
-        }
-        var product = productResult.Value;
-        this.Product = product;
-        return DomainResult<Product>.Success(product);
-    }
-    private DomainResult<Opportunity> CreateOpportunity(long amount, string title, Account? account = null, Contact? contact = null, DateOnly? closeBy = null)
-    {
-        var opportunityResult = Opportunity.Create(amount, title, account, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
-        if (!opportunityResult.IsSuccess)
-        {
-            return DomainResult<Opportunity>.Failure(opportunityResult.ErrorMessage ?? "");
-        }
-        var opportunity = opportunityResult.Value;
-        this.Opportunity = opportunity;
-        return DomainResult<Opportunity>.Success(opportunity);
-    }
     public static DomainResult<Line> Create(long qty, long unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
         if (qty < 1L)

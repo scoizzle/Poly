@@ -17,28 +17,6 @@ public class QuoteLine
     public long UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Quote? Quote { get; private set; }
-    private DomainResult<Product> CreateProduct(long listPrice, string name, string sku)
-    {
-        var productResult = Product.Create(listPrice, name, sku);
-        if (!productResult.IsSuccess)
-        {
-            return DomainResult<Product>.Failure(productResult.ErrorMessage ?? "");
-        }
-        var product = productResult.Value;
-        this.Product = product;
-        return DomainResult<Product>.Success(product);
-    }
-    private DomainResult<Quote> CreateQuote(long amount, string title, Opportunity? opportunity = null)
-    {
-        var quoteResult = Quote.Create(amount, title, opportunity, new List<QuoteLine>());
-        if (!quoteResult.IsSuccess)
-        {
-            return DomainResult<Quote>.Failure(quoteResult.ErrorMessage ?? "");
-        }
-        var quote = quoteResult.Value;
-        this.Quote = quote;
-        return DomainResult<Quote>.Success(quote);
-    }
     public static DomainResult<QuoteLine> Create(long qty, long unitPrice, Product? product = null, Quote? quote = null)
     {
         if (qty < 1L)

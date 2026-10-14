@@ -23,16 +23,6 @@ public class Customer
     {
         get => this._orders;
     }
-    private DomainResult<Order> CreateOrders(string cancelReason, long discount, long total, OrderState state = OrderState.Pending)
-    {
-        var orderResult = Order.Create(cancelReason, discount, total, this, new List<OrderItem>(), state);
-        if (!orderResult.IsSuccess)
-        {
-            return DomainResult<Order>.Failure(orderResult.ErrorMessage ?? "");
-        }
-        var order = orderResult.Value;
-        return DomainResult<Order>.Success(order);
-    }
     internal void AttachOrders(Order child)
     {
         this._orders.Add(child);

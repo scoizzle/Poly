@@ -13,28 +13,6 @@ public class CampaignMember
     }
     public Contact? Contact { get; private set; }
     public Campaign? Campaign { get; private set; }
-    private DomainResult<Contact> CreateContact(string email, string name, Account? account = null)
-    {
-        var contactResult = Contact.Create(email, name, account);
-        if (!contactResult.IsSuccess)
-        {
-            return DomainResult<Contact>.Failure(contactResult.ErrorMessage ?? "");
-        }
-        var contact = contactResult.Value;
-        this.Contact = contact;
-        return DomainResult<Contact>.Success(contact);
-    }
-    private DomainResult<Campaign> CreateCampaign(string name)
-    {
-        var campaignResult = Campaign.Create(name, new List<CampaignMember>());
-        if (!campaignResult.IsSuccess)
-        {
-            return DomainResult<Campaign>.Failure(campaignResult.ErrorMessage ?? "");
-        }
-        var campaign = campaignResult.Value;
-        this.Campaign = campaign;
-        return DomainResult<Campaign>.Success(campaign);
-    }
     public static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
     {
         var created = new CampaignMember(contact, campaign);

@@ -38,27 +38,6 @@ public class Order
         get => this._items;
     }
     public OrderStage CurrentStage { get; private set; }
-    private DomainResult<Customer> CreateCustomer(string email, string name, string tier = "standard")
-    {
-        var customerResult = Customer.Create(email, name, new List<Order>(), tier);
-        if (!customerResult.IsSuccess)
-        {
-            return DomainResult<Customer>.Failure(customerResult.ErrorMessage ?? "");
-        }
-        var customer = customerResult.Value;
-        this.Customer = customer;
-        return DomainResult<Customer>.Success(customer);
-    }
-    private DomainResult<OrderItem> CreateItems(long qty, string sku)
-    {
-        var orderItemResult = OrderItem.Create(qty, sku, this);
-        if (!orderItemResult.IsSuccess)
-        {
-            return DomainResult<OrderItem>.Failure(orderItemResult.ErrorMessage ?? "");
-        }
-        var orderItem = orderItemResult.Value;
-        return DomainResult<OrderItem>.Success(orderItem);
-    }
     internal void AttachItems(OrderItem child)
     {
         this._items.Add(child);

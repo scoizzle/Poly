@@ -74,8 +74,10 @@ public class StageTransitionHostAbiTests {
         var pass = new EffectLoweringPass(entity, new LoweringContext(
             new Parameter("entity")));
 
-        await Assert.That(pass.TryLowerVmNode(
-            new CreateEntityInstance(new DomainTypeReference("Person")))).IsNotNull();
+        await Assert.That(() => pass.TryLowerVmNode(
+            new CreateEntityInstance(new DomainTypeReference("Person"))))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no dictionary create member");
         await Assert.That(pass.TryLowerVmNode(
             new InvokeActionEffect("Activate", [], TargetRelationship: "orders"))).IsNotNull();
         await Assert.That(pass.TryLowerVmNode(

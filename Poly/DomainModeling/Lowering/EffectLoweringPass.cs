@@ -883,7 +883,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
         var target = ResolveEntity(cei.Type.TypeName);
         // No structure bag: the positional factory signature is unknown.
-        // The string-named create still has to lower.
         if (target is null || _analysis is null || _analysis.GetStructure(target) is null)
             return LowerRuntimeFactoryCall(
                 "Create", cei.Type.TypeName, cei.Initializers, target, cei.RelationshipName);
@@ -1148,10 +1147,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
 
     /// <summary>
-    /// String-named <c>this.Create</c> / <c>this.CreateIn</c> used only when the
-    /// positional factory signature is unknown. Entity-typed values are cast to
-    /// object so the pair slot matches; primitives stay unboxed so the VM still
-    /// boxes them at the object-parameter invoke.
+    /// Dictionary <c>this.Create</c> is not a compiled member. A missing structure
+    /// bag cannot invent a positional factory, so lowering fails closed.
     /// </summary>
     private Node LowerRuntimeFactoryCall(
         string methodName,
@@ -1159,77 +1156,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         IReadOnlyList<PropertyBinding> initializers,
         Entity? targetEntity,
         string? linkRelationshipName = null) {
-        var args = new List<Node> { new Constant(nameArg) };
-        var loweredInitializers = new List<LoweredExpression>();
-        foreach (var init in initializers) {
-            args.Add(new Constant(init.PropertyName));
-            var prop = targetEntity?.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            LoweredExpression loweredValue;
-            if (prop is not null
-                && LowerDefault(init.Expression, new NamedTypeReference(prop.Type.TypeName)) is { } adapted) {
-                loweredValue = LoweredExpression.Of(adapted);
-            }
-            else if (prop is not null) {
-                loweredValue = LowerEnumAwareValue(init.Expression, prop.Type, Subject);
-            }
-            else {
-                loweredValue = _expressionPass.LowerExpression(init.Expression, Subject);
-            }
-            loweredInitializers.Add(loweredValue);
-            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, loweredValue.Value)
-                ? new TypeCast(loweredValue.Value, DomainToCSharpExporter.StoreJobObjectType())
-                : loweredValue.Value);
-        }
-
-        var resultVar = _names.Next("create");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
-        var locals = new List<Node> { resultVar };
-        Node failClosed = _context.ActionResultType is null
-            ? new ThrowStatement(new New(
-                new NamedTypeReference("ConstraintFailureException"),
-                new Syntactic.Coalesce(
-                    new Member(resultVar, "ErrorMessage"),
-                    new Constant(""))))
-            : new Return(
-                new Invoke(
-                    new Member(resultType, "Failure"),
-                    new Syntactic.Coalesce(
-                        new Member(resultVar, "ErrorMessage"),
-                        new Constant(""))));
-        var nodes = new List<Node> {
-            new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
-            new IfStatement(
-                new Syntactic.Not(new Member(resultVar, "IsSuccess")),
-                new Block([failClosed]))
-        };
-        if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
-            var valueVar = _names.Next("created");
-            locals.Add(valueVar);
-            nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
-            if (linkRelationshipName is not null) {
-                nodes.Add(new Invoke(
-                    new Member(Subject, "LinkRelated"),
-                    new Constant(linkRelationshipName),
-                    valueVar));
-            }
-        }
-        return LoweredExpression.Before(loweredInitializers, new Block(nodes, locals));
-    }
-
-    /// <summary>
-    /// Entity-typed create initializers (properties or singular navs) do not match
-    /// the dictionary object value slot. Cast those values to object. Do not cast
-    /// primitives: TypeCast-to-object is a VM no-op on scalars and skips boxing.
-    /// </summary>
-    private bool NeedsObjectSlotCast(
-        Entity? targetEntity, Property? prop, string initName, Node value) {
-        if (value is Constant)
-            return false;
-        if (IsDomainEntityType(prop?.Type))
-            return true;
-        return targetEntity?.Navigations.Any(n =>
-            string.Equals(n.Name, initName, StringComparison.Ordinal)) == true;
+        throw new InvalidOperationException(
+            $"Cannot lower {methodName}('{nameArg}')"
+            + (targetEntity is null ? "" : $" for '{targetEntity.Name}'")
+            + (linkRelationshipName is null ? "" : $" on '{linkRelationshipName}'")
+            + $" with {initializers.Count} initializer(s): "
+            + "the compiled entity has no dictionary create member.");
     }
 
     private bool IsDomainEntityType(DomainTypeReference? type) =>

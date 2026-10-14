@@ -44,38 +44,6 @@ public class Room
         get => this._stays;
     }
     public RoomStage CurrentStage { get; private set; }
-    private DomainResult<Property> CreateProperty(string city, string name)
-    {
-        var propertyResult = Property.Create(city, name, new List<Hall>(), new List<Room>());
-        if (!propertyResult.IsSuccess)
-        {
-            return DomainResult<Property>.Failure(propertyResult.ErrorMessage ?? "");
-        }
-        var property = propertyResult.Value;
-        this.Property = property;
-        return DomainResult<Property>.Success(property);
-    }
-    private DomainResult<RoomType> CreateRoomType(long maxOccupancy, string name, long nightlyRate)
-    {
-        var roomTypeResult = RoomType.Create(maxOccupancy, name, nightlyRate);
-        if (!roomTypeResult.IsSuccess)
-        {
-            return DomainResult<RoomType>.Failure(roomTypeResult.ErrorMessage ?? "");
-        }
-        var roomType = roomTypeResult.Value;
-        this.RoomType = roomType;
-        return DomainResult<RoomType>.Success(roomType);
-    }
-    private DomainResult<Reservation> CreateStays(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null)
-    {
-        var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, guest, this);
-        if (!reservationResult.IsSuccess)
-        {
-            return DomainResult<Reservation>.Failure(reservationResult.ErrorMessage ?? "");
-        }
-        var reservation = reservationResult.Value;
-        return DomainResult<Reservation>.Success(reservation);
-    }
     internal void AttachStays(Reservation child)
     {
         this._stays.Add(child);

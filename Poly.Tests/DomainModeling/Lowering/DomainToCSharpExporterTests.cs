@@ -274,7 +274,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task EffectLowering_Create_DoesNotRequireEntityStructureMetadata() {
+    public async Task EffectLowering_Create_WithoutStructureBag_Throws() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
 
@@ -291,12 +291,9 @@ public class DomainToCSharpExporterTests {
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
-        var lowered = pass.TryLowerVmNode(effect);
-        await Assert.That(lowered).IsNotNull();
-        var names = FlattenLowered(lowered!).OfType<Invoke>()
-            .Select(i => (i.Delegate as Member)?.MemberName)
-            .ToList();
-        await Assert.That(names.Contains("Create")).IsTrue();
+        await Assert.That(() => pass.TryLowerVmNode(effect))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no dictionary create member");
     }
 
     [Test]
@@ -534,6 +531,12 @@ public class DomainToCSharpExporterTests {
         var factoryCall = FindFirstInvoke(createOrders.Body);
         await Assert.That(factoryCall).IsNotNull();
         await Assert.That(factoryCall!.Arguments.Any(a => a is ThisReference)).IsTrue();
+
+        // Unique inverse: Order.Create AttachOrders adds. CreateOrders must not add again.
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var createOrdersCs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> CreateOrders(");
+        await Assert.That(createOrdersCs).Contains("Order.Create(");
+        await Assert.That(createOrdersCs).DoesNotContain("_orders.Add");
     }
 
     [Test]
@@ -1534,6 +1537,28 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_CreateNav_OmittedWhenNoCreateIn() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Note: entity { Body: Text }
+            Bin: entity {
+              tag: Note
+              notes: many Note
+              Drop: action {
+                create in notes { Body: "x" }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        await Assert.That(cs).Contains("CreateNotes(");
+        await Assert.That(cs).Contains("AttachNotes(");
+        await Assert.That(cs).DoesNotContain("CreateTag(");
+    }
+
+    [Test]
     public async Task EsmConstructorSignature_IncludesCollectionNavs() {
         // The shared constructor metadata (EntityStructureMetadata.ConstructorParameters)
         // is now the COMPLETE create signature — collection navs included with
@@ -2100,10 +2125,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(assessByType).DoesNotContain("(Fine)");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
 
-        // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createFines = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> CreateFines(");
-        await Assert.That(createFines).Contains("Fine.Create(");
-        await Assert.That(createFines).DoesNotContain("_fines.Add");
+        // By-type create does not publish a create-in factory.
+        await Assert.That(cs).DoesNotContain("CreateFines(");
     }
 
     [Test]
@@ -2839,9 +2862,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createBody).Contains("AttachReservations");
         await Assert.That(createBody).Contains("AttachStays");
 
-        var createReservations = ExportedCSharp.ExtractMethod(cs, "DomainResult<Reservation> CreateReservations(");
-        await Assert.That(createReservations).Contains("Reservation.Create(");
-        await Assert.That(createReservations).DoesNotContain("_reservations.Add");
+        // No create-in on reservations, so the collection factory is omitted.
+        await Assert.That(cs).DoesNotContain("CreateReservations(");
 
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();

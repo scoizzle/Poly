@@ -33,17 +33,6 @@ public class Quote
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    private DomainResult<Opportunity> CreateOpportunity(long amount, string title, Account? account = null, Contact? contact = null, DateOnly? closeBy = null)
-    {
-        var opportunityResult = Opportunity.Create(amount, title, account, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
-        if (!opportunityResult.IsSuccess)
-        {
-            return DomainResult<Opportunity>.Failure(opportunityResult.ErrorMessage ?? "");
-        }
-        var opportunity = opportunityResult.Value;
-        this.Opportunity = opportunity;
-        return DomainResult<Opportunity>.Success(opportunity);
-    }
     private DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);

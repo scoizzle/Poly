@@ -21,17 +21,6 @@ public class Folio
     public long Balance { get; private set; }
     public Reservation? Reservation { get; private set; }
     public FolioStage CurrentStage { get; private set; }
-    private DomainResult<Reservation> CreateReservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Guest? guest = null, Room? room = null)
-    {
-        var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, this, guest, room);
-        if (!reservationResult.IsSuccess)
-        {
-            return DomainResult<Reservation>.Failure(reservationResult.ErrorMessage ?? "");
-        }
-        var reservation = reservationResult.Value;
-        this.Reservation = reservation;
-        return DomainResult<Reservation>.Success(reservation);
-    }
     public DomainResult PostRoomNight(long amount)
     {
         if (this.CurrentStage != FolioStage.Open)

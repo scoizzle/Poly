@@ -15,17 +15,6 @@ public class OrderItem
     public long Qty { get; private set; }
     public string Sku { get; private set; } = default!;
     public Order? Order { get; private set; }
-    private DomainResult<Order> CreateOrder(string cancelReason, long discount, long total, Customer? customer = null, OrderState state = OrderState.Pending)
-    {
-        var orderResult = Order.Create(cancelReason, discount, total, customer, new List<OrderItem>(), state);
-        if (!orderResult.IsSuccess)
-        {
-            return DomainResult<Order>.Failure(orderResult.ErrorMessage ?? "");
-        }
-        var order = orderResult.Value;
-        this.Order = order;
-        return DomainResult<Order>.Success(order);
-    }
     public static DomainResult<OrderItem> Create(long qty, string sku, Order? order = null)
     {
         if (qty < 1L)

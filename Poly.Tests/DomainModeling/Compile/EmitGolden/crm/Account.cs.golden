@@ -54,17 +54,6 @@ public class Account
         get => this._tickets;
     }
     public AccountStage CurrentStage { get; private set; }
-    private DomainResult<Account> CreateParent(Industry industry, string name, Site? hq = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
-    {
-        var accountResult = Account.Create(industry, name, this, hq, new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), closedTickets, openPipeline, wonCount);
-        if (!accountResult.IsSuccess)
-        {
-            return DomainResult<Account>.Failure(accountResult.ErrorMessage ?? "");
-        }
-        var account = accountResult.Value;
-        this.Parent = account;
-        return DomainResult<Account>.Success(account);
-    }
     private DomainResult<Site> CreateHq(string city, string region)
     {
         var siteResult = Site.Create(city, region);

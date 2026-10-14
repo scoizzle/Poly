@@ -333,8 +333,10 @@ public sealed partial class DomainToCSharpExporter {
                     IsReadOnly: true
                 ));
 
-                // Generate CreateNavName(args) factory method on the source entity
-                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
+                // Create{Nav} is the typed create-in. A relationship with no create-in
+                // on this entity does not get a factory (Order.CreateCustomer).
+                if (CreatesIn(entity, rel.Name))
+                    AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
                 AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
             }
             else {
@@ -342,7 +344,8 @@ public sealed partial class DomainToCSharpExporter {
                 // Navs are optional references (set at link/create time, may be null
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
-                AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
+                if (CreatesIn(entity, rel.Name))
+                    AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
@@ -787,7 +790,7 @@ public sealed partial class DomainToCSharpExporter {
             // Only entity properties (not navigations) are validated — navs
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(
-                entity, domain, esm.EntryAssignedPropertyNames, metadata);
+                entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
 
             // Construct, then Success. Create is the unique-inverse attach source
             // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
@@ -802,13 +805,18 @@ public sealed partial class DomainToCSharpExporter {
                 createdLocal,
                 new New(
                     new NamedTypeReference(entity.Name),
-                    ctorParams.Select(p => new Parameter(p.Name)).ToArray())));
+                    ctorParams.ToArray())));
 
             var lookup = metadata.GetTypeLookup(domain);
             foreach (var navParam in esm.ConstructorParameters
                 .Where(p => p.IsNavigation && !p.IsCollection)) {
                 var paramName = ToCamelCase(navParam.Name);
-                var paramRef = new Parameter(paramName);
+                // The signature parameter, not a same-named copy. A copy has no
+                // type, so the VM reads an empty slot and skips Attach.
+                var paramRef = ctorParams.FirstOrDefault(p =>
+                    string.Equals(p.Name, paramName, StringComparison.Ordinal));
+                if (paramRef is null)
+                    continue;
                 var peerTypeName = navParam.Type.TypeName;
                 Entity? peerEntity = null;
                 if (lookup is not null
@@ -907,4 +915,30 @@ public sealed partial class DomainToCSharpExporter {
                 new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
             ]),
             AccessModifier: AccessModifier.Public);
+
+    /// <summary>
+    /// True when an action, entry, exit, or subscription on <paramref name="entity"/>
+    /// creates into <paramref name="relationshipName"/>. Nested <c>if</c> effects count.
+    /// </summary>
+    private static bool CreatesIn(Entity entity, string relationshipName) {
+        static bool Match(IEnumerable<Effect> effects, string name) =>
+            EffectHelpers.FlattenEffects(effects).Any(e =>
+                e is CreateEntityInRelationshipEffect create
+                && string.Equals(create.RelationshipName, name, StringComparison.Ordinal));
+
+        if (entity.Actions.Any(a => Match(a.Effects, relationshipName)))
+            return true;
+        if (entity.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
+            return true;
+        foreach (var stage in entity.Stages) {
+            if (Match(stage.OnEntryEffects, relationshipName)
+                || Match(stage.OnExitEffects, relationshipName))
+                return true;
+            if (stage.Actions.Any(a => Match(a.Effects, relationshipName)))
+                return true;
+            if (stage.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
+                return true;
+        }
+        return false;
+    }
 }

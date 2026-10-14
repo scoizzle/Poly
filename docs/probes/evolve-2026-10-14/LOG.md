@@ -32,3 +32,5 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 09:55 | negatives | | | next |
 | 10:15 | negatives | 13 fail-closed shapes | all reject correctly; reverse-invoke message nit only | ✅ done |
 | 10:15 | wrap | | | ranking, fix-watch, PR |
+| 10:25 | ownedunlink | C6c probe: owned last-owner unlink fails, non-owned ok | F34 guide drift (owned minimum undocumented) | ✅ done |
+| 10:30 | dur-time | Duration/Time authoring probes + export type check | F35 Duration/Time dead surface | ✅ done |

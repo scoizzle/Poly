@@ -922,9 +922,12 @@ public sealed class CSharpWriter {
                 return Render("expr-primary", "new", TypeText(@new.Type), ArgsText(@new.Arguments));
             case TypeCast cast:
                 var operand = Expr(cast.Operand);
-                if (operand.StartsWith('-') || operand.StartsWith('+'))
+                var type = TypeText(cast.TargetTypeReference);
+                // (int)-7 is a cast. (Customer)-c is subtraction to the C# compiler.
+                if ((operand.StartsWith('-') || operand.StartsWith('+'))
+                    && CastOfSignedOperandIsSubtraction(type))
                     operand = "(" + operand + ")";
-                return "(" + TypeText(cast.TargetTypeReference) + ")" + operand;
+                return "(" + type + ")" + operand;
             case TypeIs typeIs:
                 return Expr(typeIs.Operand) + " is " + TypeText(typeIs.TargetTypeReference)
                     + (typeIs.VariableName != null ? " " + typeIs.VariableName : "");
@@ -1225,6 +1228,18 @@ public sealed class CSharpWriter {
         AccessModifier.Protected => "protected ",
         _ => "",
     };
+
+    /// <summary>
+    /// A bare or dotted name before a signed operand is a binary operator:
+    /// <c>(Customer)-c</c>. Keyword and constructed types stay casts:
+    /// <c>(int)-7</c>, <c>(List&lt;int&gt;)-x</c>.
+    /// </summary>
+    private static bool CastOfSignedOperandIsSubtraction(string type) {
+        if (type.IndexOfAny(['<', '>', '?', '[', ']']) >= 0)
+            return false;
+        var head = type.Split('.')[0];
+        return !CSharpKeywords.Contains(head);
+    }
 
     private static string EscapeIdent(string name) =>
         CSharpKeywords.Contains(name) ? "@" + name : name;

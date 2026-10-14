@@ -102,6 +102,13 @@ public class CSharpReaderTests {
     }
 
     [Test]
+    public async Task Read_KeywordCastOfUnaryMinus_OmitsOperandParens() {
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(
+            "class C { long M() => (int)-7L; }"));
+        await Assert.That(again).Contains("(int)-7L");
+    }
+
+    [Test]
     public async Task Read_UntypedParenthesizedLambda_FoldsParameterNames() {
         var unit = CSharpLanguage.Read("class C { void M() { F((x, y) => x); } }");
         var method = unit.Types[0].Methods![0];

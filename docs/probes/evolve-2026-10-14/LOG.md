@@ -30,3 +30,5 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 09:35 | authoring | | | next |
 | 09:55 | authoring | §12 add/remove battery, introspection tools, M:N link, oracle_expression | F33 M:N export degradation; oracle arithmetic quirk (weirdness) | ✅ done |
 | 09:55 | negatives | | | next |
+| 10:15 | negatives | 13 fail-closed shapes | all reject correctly; reverse-invoke message nit only | ✅ done |
+| 10:15 | wrap | | | ranking, fix-watch, PR |

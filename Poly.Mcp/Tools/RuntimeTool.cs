@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -97,6 +98,78 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         return (long)je.GetDecimal();
     }
 
+    /// <summary>
+    /// Coerces raw JSON property values to the entity's declared property types
+    /// before the instance is built. ISO strings parse to the Date/DateTime/
+    /// Time/Duration values their properties declare; Guid strings parse to
+    /// Guids; Number and Boolean reject wrong-typed raw values instead of
+    /// silently mangling them. Un-mappable types (enums, value types) pass
+    /// through unchanged — enum members and value bags already store as
+    /// strings/dictionaries. (F32: un-coerced JSON strings used to reach the
+    /// store and break typed policy comparisons later.)
+    /// </summary>
+    private static Dictionary<string, object?> CoerceCreateValues(
+        Entity entity, Dictionary<string, object?> values) {
+        var coerced = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        foreach (var property in entity.Properties) {
+            if (!coerced.TryGetValue(property.Name, out var raw) || raw is null)
+                continue;
+            coerced[property.Name] = CoercePropertyValue(property.Name, property.Type.TypeName, raw);
+        }
+        return coerced;
+    }
+
+    private static object CoercePropertyValue(string propertyName, string typeName, object raw) =>
+        typeName switch {
+            "DateTime" or "Timestamp" => raw switch {
+                DateTime => raw,
+                string s when DateTime.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects DateTime; got '{raw}'.")
+            },
+            "Date" or "DateOnly" => raw switch {
+                DateOnly => raw,
+                DateTime dateTime => DateOnly.FromDateTime(dateTime),
+                string s when DateOnly.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Date; got '{raw}'.")
+            },
+            "Time" or "TimeOnly" => raw switch {
+                TimeOnly => raw,
+                string s when TimeOnly.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Time; got '{raw}'.")
+            },
+            "Duration" or "TimeSpan" => raw switch {
+                TimeSpan => raw,
+                string s when TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Duration; got '{raw}'.")
+            },
+            "Guid" or "Uuid" => raw switch {
+                Guid => raw,
+                string s when Guid.TryParse(s, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Guid; got '{raw}'.")
+            },
+            "Number" or "Int" or "Int64" or "Int32" => raw switch {
+                long or int => raw,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Number; got '{raw}'.")
+            },
+            "Boolean" or "Bool" => raw switch {
+                bool => raw,
+                0L => false,
+                1L => true,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Boolean; got '{raw}'.")
+            },
+            _ => raw
+        };
+
     private static InstanceSnapshotData BuildSnapshot(DomainEntityInstance instance) {
         var props = new List<PropertyValueData>();
         foreach (var (key, value) in instance.Snapshot())
@@ -167,7 +240,10 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
         [Description("Optional JSON object of initial property values, " +
-            "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}")]
+            "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}. Values are coerced to the " +
+            "declared property types: Date/DateTime/Time/Duration properties accept ISO strings " +
+            "(\"2026-01-01\", \"2026-01-01T00:00:00Z\", \"09:00:00\", \"00:30:00\"), Guid accepts " +
+            "guid strings, and wrong-typed values fail the call.")]
         string? propertiesJson = null) {
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
@@ -193,6 +269,7 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
                     propertyValues = new Dictionary<string, object?>(StringComparer.Ordinal);
                     foreach (var (key, je) in parsed)
                         propertyValues[key] = JsonElementToValue(je);
+                    propertyValues = CoerceCreateValues(entity, propertyValues);
                 }
             }
             catch (Exception ex) {

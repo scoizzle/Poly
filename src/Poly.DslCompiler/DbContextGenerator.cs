@@ -14,7 +14,7 @@ namespace Poly.DslCompiler;
 /// <c>IReadOnlyList&lt;T&gt;</c> collection navs, private setters, and
 /// <c>unique</c>/<c>required</c>/<c>length</c> constraints.
 ///
-/// Output is produced via <c>GenerateCompilationUnit</c> + <c>CSharpGenerator</c>
+/// Output is produced via <c>GenerateCompilationUnit</c> + <c>CSharpWriter</c>
 /// (Syntax IR path), not direct string building.
 ///
 /// Consumes <see cref="StorageModel"/> from the infrastructure analysis
@@ -43,7 +43,7 @@ public sealed class DbContextGenerator {
 
     /// <summary>Generates the complete DbContext C# source via IR.</summary>
     public string Generate(string @namespace = "Poly.Generated") =>
-        new CSharpGenerator().Generate(GenerateCompilationUnit(@namespace));
+        new CSharpWriter().Write(GenerateCompilationUnit(@namespace));
 
     /// <summary>Generates the DbContext as a Syntax IR compilation unit.</summary>
     public CompilationUnitNode GenerateCompilationUnit(string @namespace = "Poly.Generated") {

@@ -275,12 +275,12 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
-        // whole module, because the generator resolves types across entities from one analysis.
+        // whole module, because the writer resolves types across entities from one analysis.
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
         RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
-        var generator = new CSharpGenerator(interpAnalysis);
+        var writer = new CSharpWriter(interpAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
         var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
@@ -290,11 +290,11 @@ public sealed class DomainSession {
                 domain,
                 files,
                 $"{tree.Descriptor.Id.Segments[^1]}.cs",
-                generator.Generate(TypesOf(tree)),
+                writer.Write(TypesOf(tree)),
                 tree);
         }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
-        AddPrintedFile(catalog, domain, files, "Poly.Types.cs", generator.Generate(TypesOf(scaffolding)), scaffolding);
+        AddPrintedFile(catalog, domain, files, "Poly.Types.cs", writer.Write(TypesOf(scaffolding)), scaffolding);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
     }

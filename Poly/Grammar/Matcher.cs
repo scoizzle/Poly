@@ -37,9 +37,25 @@ public sealed class Matcher<TToken, TTokenKind>
     /// priority keeps the first winner. Nested <see cref="Ref{TToken,TTokenKind}"/>,
     /// LeftAssoc operands, and <see cref="Repeat{TToken,TTokenKind}"/> items use
     /// the same rule.
+    ///
+    /// Rule/offset results are memoized for the duration of one attempt (a packrat
+    /// table): recursive expression grammars retry the same subrule at the same
+    /// position while branching, and recognition is pure while the reader position
+    /// is unchanged. The table is scoped to this call because offsets are relative
+    /// to the reader's committed position.
     /// </summary>
-    public MatchResult<TToken, TTokenKind>? TryMatch(string ruleName) =>
-        TryMatchRuleAt(ruleName, offset: 0);
+    public MatchResult<TToken, TTokenKind>? TryMatch(string ruleName) {
+        var previous = _memo;
+        _memo = new Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>();
+        try {
+            return TryMatchRuleAt(ruleName, offset: 0);
+        }
+        finally {
+            _memo = previous;
+        }
+    }
+
+    private Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>? _memo;
 
     private void EnsureKnownRule(string ruleName) {
         if (!_grammar.HasRule(ruleName))
@@ -48,6 +64,10 @@ public sealed class Matcher<TToken, TTokenKind>
 
     private MatchResult<TToken, TTokenKind>? TryMatchRuleAt(string ruleName, int offset) {
         EnsureKnownRule(ruleName);
+        var key = (ruleName, offset);
+        if (_memo is not null && _memo.TryGetValue(key, out var cached))
+            return cached;
+
         MatchResult<TToken, TTokenKind>? best = null;
         var bestPriority = int.MinValue;
         foreach (var pattern in _grammar.GetPatterns(ruleName)) {
@@ -60,6 +80,7 @@ public sealed class Matcher<TToken, TTokenKind>
                 bestPriority = pattern.Priority;
             }
         }
+        _memo?[key] = best;
         return best;
     }
 

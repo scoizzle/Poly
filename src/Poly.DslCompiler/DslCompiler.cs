@@ -44,7 +44,7 @@ public enum DbmsPack {
 /// Compiles .poly DSL text into C# type definitions.
 ///
 /// Uses <see cref="DomainSession.Emit"/> which projects the analyzed domain
-/// through <see cref="DomainProgramProjection"/> and <see cref="CSharpGenerator"/>,
+/// through <see cref="DomainProgramProjection"/> and <see cref="CSharpWriter"/>,
 /// the same pipeline behind the MCP <c>export_domain_to_csharp</c> tool.
 /// </summary>
 public sealed class DslCompiler {

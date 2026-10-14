@@ -11,8 +11,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(options => {
     options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-}
-);
+});
 
 builder.Services.AddDbContext<CrmDbContext>(options => options.UseSqlite("Data Source=crm.db"));
 
@@ -38,8 +37,7 @@ app.MapPost("/api/sites", async (SiteDto dto, CrmDbContext db) => {
     db.Sites.Add(siteResult.Value);
     await db.SaveChangesAsync();
     return Results.Ok(siteResult.Value);
-}
-);
+});
 
 app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListAsync());
 
@@ -54,8 +52,7 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     db.Products.Add(productResult.Value);
     await db.SaveChangesAsync();
     return Results.Created(string.Concat("/api/products/", productResult.Value.Sku.ToString()), productResult.Value);
-}
-);
+});
 
 app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
 
@@ -70,8 +67,7 @@ app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     db.Campaigns.Add(campaignResult.Value);
     await db.SaveChangesAsync();
     return Results.Ok(campaignResult.Value);
-}
-);
+});
 
 app.MapGet("/api/leads/{email}/account", async (string email, CrmDbContext db) => {
     var parent = await db.Leads.FindAsync(email);
@@ -81,8 +77,7 @@ app.MapGet("/api/leads/{email}/account", async (string email, CrmDbContext db) =
     }
     await db.Entry(parent).Reference(e => e.Account).LoadAsync();
     return Results.Ok(parent.Account);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -92,8 +87,7 @@ app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Contacts).LoadAsync();
     return Results.Ok(parent.Contacts);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/contacts/{email}", async (int id, string email, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -108,8 +102,7 @@ app.MapGet("/api/accounts/{id}/contacts/{email}", async (int id, string email, C
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/opportunities", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -119,8 +112,7 @@ app.MapGet("/api/accounts/{id}/opportunities", async (int id, CrmDbContext db) =
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
     return Results.Ok(parent.Opportunities);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, int opportunityId, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -135,8 +127,7 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/activities", async (int id, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -146,8 +137,7 @@ app.MapGet("/api/opportunitys/{id}/activities", async (int id, CrmDbContext db) 
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
     return Results.Ok(parent.Activities);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/activities/{activityId}", async (int id, int activityId, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -162,8 +152,7 @@ app.MapGet("/api/opportunitys/{id}/activities/{activityId}", async (int id, int 
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/quotes", async (int id, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -173,8 +162,7 @@ app.MapGet("/api/opportunitys/{id}/quotes", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Quotes).LoadAsync();
     return Results.Ok(parent.Quotes);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/quotes/{quoteId}", async (int id, int quoteId, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -189,8 +177,7 @@ app.MapGet("/api/opportunitys/{id}/quotes/{quoteId}", async (int id, int quoteId
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/campaigns/{id}/members", async (int id, CrmDbContext db) => {
     var parent = await db.Campaigns.FindAsync(id);
@@ -200,8 +187,7 @@ app.MapGet("/api/campaigns/{id}/members", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Members).LoadAsync();
     return Results.Ok(parent.Members);
-}
-);
+});
 
 app.MapGet("/api/campaigns/{id}/members/{campaignMemberId}", async (int id, int campaignMemberId, CrmDbContext db) => {
     var parent = await db.Campaigns.FindAsync(id);
@@ -216,8 +202,7 @@ app.MapGet("/api/campaigns/{id}/members/{campaignMemberId}", async (int id, int 
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/tickets", async (int id, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -227,8 +212,7 @@ app.MapGet("/api/accounts/{id}/tickets", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Tickets).LoadAsync();
     return Results.Ok(parent.Tickets);
-}
-);
+});
 
 app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId, CrmDbContext db) => {
     var parent = await db.Accounts.FindAsync(id);
@@ -243,8 +227,7 @@ app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId,
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/lines", async (int id, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -254,8 +237,7 @@ app.MapGet("/api/opportunitys/{id}/lines", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     return Results.Ok(parent.Lines);
-}
-);
+});
 
 app.MapGet("/api/opportunitys/{id}/lines/{lineId}", async (int id, int lineId, CrmDbContext db) => {
     var parent = await db.Opportunitys.FindAsync(id);
@@ -270,8 +252,7 @@ app.MapGet("/api/opportunitys/{id}/lines/{lineId}", async (int id, int lineId, C
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapGet("/api/quotes/{id}/lines", async (int id, CrmDbContext db) => {
     var parent = await db.Quotes.FindAsync(id);
@@ -281,8 +262,7 @@ app.MapGet("/api/quotes/{id}/lines", async (int id, CrmDbContext db) => {
     }
     await db.Entry(parent).Collection(e => e.Lines).LoadAsync();
     return Results.Ok(parent.Lines);
-}
-);
+});
 
 app.MapGet("/api/quotes/{id}/lines/{quoteLineId}", async (int id, int quoteLineId, CrmDbContext db) => {
     var parent = await db.Quotes.FindAsync(id);
@@ -297,8 +277,7 @@ app.MapGet("/api/quotes/{id}/lines/{quoteLineId}", async (int id, int quoteLineI
         return Results.NotFound();
     }
     return Results.Ok(child);
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) => {
     var entity = await db.Leads.FindAsync(email);
@@ -323,8 +302,7 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext db) => {
     var entity = await db.Leads.FindAsync(email);
@@ -349,8 +327,7 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/placehq", async (string email, PlaceHqDto dto, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -384,8 +361,7 @@ app.MapPost("/api/leads/{email}/account/placehq", async (string email, PlaceHqDt
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/addcontact", async (string email, AddContactDto dto, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -419,8 +395,7 @@ app.MapPost("/api/leads/{email}/account/addcontact", async (string email, AddCon
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/convertlead", async (string email, ConvertLeadDto dto, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -459,8 +434,7 @@ app.MapPost("/api/leads/{email}/account/convertlead", async (string email, Conve
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/opendeal", async (string email, OpenDealDto dto, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -494,8 +468,7 @@ app.MapPost("/api/leads/{email}/account/opendeal", async (string email, OpenDeal
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/archive", async (string email, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -529,8 +502,7 @@ app.MapPost("/api/leads/{email}/account/archive", async (string email, CrmDbCont
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/openticket", async (string email, OpenTicketDto dto, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -564,8 +536,7 @@ app.MapPost("/api/leads/{email}/account/openticket", async (string email, OpenTi
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/leads/{email}/account/restore", async (string email, CrmDbContext db) => {
     var parentEntity = await db.Leads.FindAsync(email);
@@ -599,8 +570,7 @@ app.MapPost("/api/leads/{email}/account/restore", async (string email, CrmDbCont
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string email, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -635,8 +605,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, string email, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -671,8 +640,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -710,8 +678,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -749,8 +716,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -788,8 +754,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int id, int opportunityId, OpportunityLogDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -827,8 +792,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (int id, int opportunityId, OpportunityAddLineDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -871,8 +835,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -910,8 +873,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -949,8 +911,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -988,8 +949,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int id, int opportunityId, OpportunityLogDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1027,8 +987,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (int id, int opportunityId, OpportunityAddLineDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1071,8 +1030,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1110,8 +1068,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (int id, int opportunityId, CaptureDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1149,8 +1106,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int id, int opportunityId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1188,8 +1144,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int id, int opportunityId, OpportunityLogDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1227,8 +1182,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (int id, int opportunityId, OpportunityAddLineDto dto, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1271,8 +1225,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/activities/{activityId}/snooze", async (int id, int activityId, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1307,8 +1260,7 @@ app.MapPost("/api/opportunitys/{id}/activities/{activityId}/snooze", async (int 
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/activities/{activityId}/complete", async (int id, int activityId, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1343,8 +1295,7 @@ app.MapPost("/api/opportunitys/{id}/activities/{activityId}/complete", async (in
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/addline", async (int id, int quoteId, QuoteAddLineDto dto, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1385,8 +1336,7 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/addline", async (int id, in
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/present", async (int id, int quoteId, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1422,8 +1372,7 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/present", async (int id, in
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/accept", async (int id, int quoteId, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1459,8 +1408,7 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/accept", async (int id, int
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/reject", async (int id, int quoteId, CrmDbContext db) => {
     var parentEntity = await db.Opportunitys.FindAsync(id);
@@ -1496,8 +1444,7 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/reject", async (int id, int
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbContext db) => {
     var entity = await db.Campaigns.FindAsync(id);
@@ -1528,8 +1475,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
     var entity = await db.Campaigns.FindAsync(id);
@@ -1555,8 +1501,7 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int ticketId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1591,8 +1536,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ticketId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1627,8 +1571,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ticketId, CrmDbContext db) => {
     var parentEntity = await db.Accounts.FindAsync(id);
@@ -1663,8 +1606,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     {
         return Results.StatusCode(500);
     }
-}
-);
+});
 
 static async Task SeedAsync(CrmDbContext db)
 {

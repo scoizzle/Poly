@@ -1,7 +1,7 @@
 # F26–F35 — Root causes, fix status, and likely changes
 
 Root-cause research prepared before the fix pass; **fix status** reflects work on
-`fix/evolve-2026-10-14` (stacked on PR #173, which carries the F1–25 fixes).
+`fix/evolve-2026-10-14`, rebased onto master after #173.
 
 ---
 
@@ -18,7 +18,7 @@ Root-cause research prepared before the fix pass; **fix status** reflects work o
 | F28 | ⏳ not started | Shared-lowering notify-on-create (below). |
 | F29/F30/F35 | ⏳ feature-sized, deferred | Below. |
 
-**Suite state:** 8 pre-existing failures on the merge base (F1–25 branch + MCP2): 3× `PrintedCSharpCompiles(docs/probes/evolve-2026-10-13/…)` and `ListedSamples_HaveVmErrors_…` (mission-1 probe files scanned by repo-wide tests), `ParseNow_WithTemporal_…` (Date/DateTime compare), `ExecuteSubscriptionEffects_Exception_AllowsLaterNotify`, `DslCompiler_Dtos_PropagateStringConstraints`, `ApplyAndExportDsl_RoundTripDomainExtensions`. Verified pre-existing at the pre-F27 commit; none caused by the fixes here.
+**Suite state:** The eight failures recorded against the F1–25 branch (the evolve-2026-10-13 probe census, `ParseNow_WithTemporal`, `ExecuteSubscriptionEffects_Exception_AllowsLaterNotify`, `DslCompiler_Dtos_PropagateStringConstraints`, and `ApplyAndExportDsl_RoundTripDomainExtensions`) were fixed on master in #173. They are not open on this branch.
 
 ---
 

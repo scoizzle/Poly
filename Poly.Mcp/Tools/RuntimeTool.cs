@@ -99,14 +99,8 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     }
 
     /// <summary>
-    /// Coerces raw JSON property values to the entity's declared property types
-    /// before the instance is built. ISO strings parse to the Date/DateTime/
-    /// Time/Duration values their properties declare; Guid strings parse to
-    /// Guids; Number and Boolean reject wrong-typed raw values instead of
-    /// silently mangling them. Un-mappable types (enums, value types) pass
-    /// through unchanged — enum members and value bags already store as
-    /// strings/dictionaries. (F32: un-coerced JSON strings used to reach the
-    /// store and break typed policy comparisons later.)
+    /// JSON values become the declared property types before the instance is built.
+    /// DateTime offsets are stored as UTC so they match <c>Now</c>.
     /// </summary>
     private static Dictionary<string, object?> CoerceCreateValues(
         Entity entity, Dictionary<string, object?> values) {
@@ -124,7 +118,8 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
             "DateTime" or "Timestamp" => raw switch {
                 DateTime => raw,
                 string s when DateTime.TryParse(s, CultureInfo.InvariantCulture,
-                    DateTimeStyles.RoundtripKind, out var parsed) => parsed,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                    out var parsed) => parsed,
                 _ => throw new InvalidOperationException(
                     $"Property '{propertyName}' expects DateTime; got '{raw}'.")
             },

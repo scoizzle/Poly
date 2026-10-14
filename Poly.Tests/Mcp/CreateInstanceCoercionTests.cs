@@ -24,6 +24,24 @@ public class CreateInstanceCoercionTests {
         }
         """;
 
+    private static string Property(DomainToolResponse response, string name) {
+        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        foreach (var property in doc.RootElement.GetProperty("instance").GetProperty("properties").EnumerateArray()) {
+            if (property.GetProperty("name").GetString() == name)
+                return property.GetProperty("value").GetString()
+                    ?? throw new InvalidOperationException($"null {name}");
+        }
+        throw new InvalidOperationException($"missing property {name}");
+    }
+
+    private static string InstanceId(DomainToolResponse response) {
+        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("instance").GetProperty("instanceId").GetString()
+            ?? throw new InvalidOperationException("missing instanceId");
+    }
+
     private static string CreateAndId(string sessionId, string entity, string props) {
         var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
         if (!create.Success)
@@ -52,6 +70,28 @@ public class CreateInstanceCoercionTests {
         var policy = McpTestTools.Policy.EvaluatePolicy(sessionId, "Job", "IsExpired", jobId);
         await Assert.That(policy.Success).IsTrue();
         await Assert.That(policy.Message).Contains("true");
+    }
+
+    [Test]
+    public async Task DateTimeOffset_AndZulu_StoreTheSameUtcInstant() {
+        var (sessionId, _) = McpTestTools.Store.Create("CoerceOffset");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, CoercionDomain).Success).IsTrue();
+
+        var zulu = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+            """{"Name":"Z","ExpiresAt":"2026-01-01T00:00:00Z"}""");
+        var offset = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+            """{"Name":"O","ExpiresAt":"2026-01-01T00:00:00+00:00"}""");
+        await Assert.That(zulu.Success).IsTrue();
+        await Assert.That(offset.Success).IsTrue();
+        await Assert.That(Property(offset, "ExpiresAt")).IsEqualTo(Property(zulu, "ExpiresAt"));
+
+        var zuluPolicy = McpTestTools.Policy.EvaluatePolicy(
+            sessionId, "Job", "IsExpired", InstanceId(zulu));
+        var offsetPolicy = McpTestTools.Policy.EvaluatePolicy(
+            sessionId, "Job", "IsExpired", InstanceId(offset));
+        await Assert.That(zuluPolicy.Success).IsTrue();
+        await Assert.That(offsetPolicy.Success).IsTrue();
+        await Assert.That(offsetPolicy.Message).IsEqualTo(zuluPolicy.Message);
     }
 
     [Test]

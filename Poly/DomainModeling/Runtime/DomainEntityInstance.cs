@@ -333,6 +333,63 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Allocates the instance the printed constructor would build. Scalar slots
+    /// are bag writes. Collection slots link through the store view so a later
+    /// <c>Attach*</c> still sees the relationship, not a shadowed list. Entry
+    /// effects run once, the same call <see cref="Create"/> makes.
+    /// </summary>
+    internal DomainEntityInstance MaterializeNew(
+        string typeName, IReadOnlyDictionary<string, object?> args) {
+        if (Domain is null)
+            throw new InvalidOperationException($"Create '{typeName}' has no domain.");
+        var entity = Domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, typeName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Entity type '{typeName}' not found in domain '{Domain.Name}'.");
+
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            args.TryGetValue(prop.Name, out var supplied);
+            if (supplied is not null)
+                values[prop.Name] = CoerceBooleanBagValue(prop.Type.TypeName, supplied);
+            else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } dflt)
+                values[prop.Name] = EvaluateDefaultValue(dflt.Expression, prop.Type.TypeName, Domain);
+            else
+                values[prop.Name] = supplied;
+        }
+
+        var store = Store ?? StoreOrDefault();
+        var instance = new DomainEntityInstance(
+            entity, values, BuildTypeDefAnalyzer(entity, domain: Domain),
+            entity.Stages.FirstOrDefault()?.Name, Domain);
+        if (!store.TryAdd(instance, out var addError))
+            throw new InvalidOperationException(addError ?? "Unique constraint violated.");
+
+        try {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            foreach (var slot in DomainToCSharpExporter.GetConstructorParameters(entity, analysis)) {
+                if (!slot.IsNavigation || !args.TryGetValue(slot.Name, out var raw) || raw is null)
+                    continue;
+                var member = DomainToCSharpExporter.ToPascalCase(slot.Name);
+                if (slot.IsCollection)
+                    instance.AdoptCollection(member, raw);
+                else
+                    ((IDictionary<string, object?>)instance)[member] = raw;
+            }
+            ApplyInitialStageEntryEffects(instance);
+        }
+        catch {
+            foreach (var child in instance.CreatedChildren.ToArray())
+                store.Remove(child);
+            store.Remove(instance);
+            throw;
+        }
+
+        TrackCreatedChild(instance);
+        return instance;
+    }
+
+    /// <summary>
     /// Evaluates a DSL default expression to a concrete runtime value, adapted to
     /// the target property's CLR type when known (discovery round5 F1–F3).
     /// The runtime stores enum-typed properties as strings, so an enum member name
@@ -858,6 +915,13 @@ public sealed partial record DomainEntityInstance {
                 return failed;
             return null;
         }
+        catch (InvalidOperationException ex) when (
+            actionName is not null
+            && ex.Message.StartsWith("Unique constraint violated", StringComparison.Ordinal)) {
+            // The printed factory does not check unique. Simulate TryAdd throws.
+            // A named action reports that as Failure so earlier effects roll back.
+            return DomainResult.Failure(ex.Message);
+        }
         catch (ConstraintFailureException ex) when (actionName is null) {
             // Named action trees return Failure. A nested void throw
             // (subscription / leftover TransitionStage) must still escape.
@@ -897,8 +961,7 @@ public sealed partial record DomainEntityInstance {
             // When… stays an empty stub so InvokeNamed runs the cached
             // subscription body (TryGetSubscriptionBody), not the sibling
             // module method inlined as an AST callable. A static Create is
-            // rebound onto the dictionary store so the typed factory the
-            // lowering emits runs under simulate.
+            // the printed factory; only its constructor call is bound.
             moduleTypes.Analyze(ctx, RewriteTypedFactories(StubWhenMethodBodies(td), td.Name, domain));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
@@ -912,7 +975,7 @@ public sealed partial record DomainEntityInstance {
                 foreach (var m in moduleMethods) {
                     if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
                         extras ??= [];
-                        extras.Add(BindStaticFactory(m, entity.Name, domain));
+                        extras.Add(BindConstructedNew(m, entity.Name, domain));
                         continue;
                     }
                     if (!names.Add(m.Name))
@@ -974,104 +1037,75 @@ public sealed partial record DomainEntityInstance {
             if (!method.IsStatic || !string.Equals(method.Name, "Create", StringComparison.Ordinal))
                 continue;
             methods ??= [.. td.Methods];
-            methods[i] = BindStaticFactory(method, typeName, domain);
+            methods[i] = BindConstructedNew(method, typeName, domain);
         }
         return methods is null ? td : td with { Methods = methods };
     }
 
     /// <summary>
-    /// Replaces a static factory body with the dictionary-backed host job
-    /// <c>DomainInstanceHostJobs.TypedCreate(typeName, values)</c>, where values
-    /// carries the non-collection factory parameters by name. Printed
-    /// <c>Attach*</c> calls stay, so a create-in that skipped its own
-    /// <c>_field.Add</c> still links under simulate.
+    /// Keeps the printed static Create body. <c>new Entity(...)</c> becomes
+    /// <see cref="DomainInstanceHostJobs.NewEntity"/> so simulate allocates a
+    /// <see cref="DomainEntityInstance"/>. The packed values are the method's
+    /// signature parameters: the constructor-call copies have the same names and
+    /// no types, so <c>With</c> would bind <c>object</c> and read a number as a
+    /// heap handle. Checks and <c>Attach*</c> stay in the body.
     /// </summary>
-    private static MethodDefinitionNode BindStaticFactory(
+    private static MethodDefinitionNode BindConstructedNew(
         MethodDefinitionNode method, string typeName, Domain domain) {
+        if (method.Body is not Block block)
+            throw new InvalidOperationException(
+                $"Static Create on '{typeName}' has no body.");
+        var slots = FactorySlots(typeName, domain);
+        var parameters = method.Parameters ?? [];
+        var replaced = false;
+        var nodes = new List<Node>(block.Nodes.Count);
+        foreach (var node in block.Nodes) {
+            if (node is Assignment { Destination: Variable { Name: "created" }, Value: New ctor } assign) {
+                nodes.Add(assign with {
+                    Value = ConstructedInstance(typeName, parameters, ctor.Arguments.Length, slots)
+                });
+                replaced = true;
+                continue;
+            }
+            nodes.Add(node);
+        }
+        if (!replaced)
+            throw new InvalidOperationException(
+                $"Static Create on '{typeName}' has no constructor call to bind.");
+        return method with { Body = new Block(nodes, block.Variables) };
+    }
+
+    private static Node ConstructedInstance(
+        string typeName, IReadOnlyList<Parameter> parameters, int argumentCount, IReadOnlyList<string> slots) {
+        if (parameters.Count != slots.Count || argumentCount != slots.Count)
+            throw new InvalidOperationException(
+                $"Create '{typeName}' passes {argumentCount} constructor argument(s); "
+                + $"the structure has {parameters.Count} parameter(s) and {slots.Count} slot(s).");
         var host = new ClrTypeReference(typeof(DomainInstanceHostJobs));
         Node values = new Invoke(new Member(host, nameof(DomainInstanceHostJobs.Values)));
-        var keys = FactoryDictKeys(typeName, domain);
-        var parameters = method.Parameters ?? [];
         for (var i = 0; i < parameters.Count; i++) {
-            if (IsEnumerableParam(parameters[i]))
-                continue;
-            var key = i < keys.Count ? keys[i] : parameters[i].Name;
             values = new Invoke(
                 new Member(host, nameof(DomainInstanceHostJobs.With)),
-                values, new Constant(key), parameters[i]);
+                values, new Constant(slots[i]), parameters[i]);
         }
-
-        var result = new Variable("typed");
-        var nodes = new List<Node> {
-            new Assignment(result, new Invoke(
-                new Member(host, nameof(DomainInstanceHostJobs.TypedCreate)),
-                new Constant(typeName), values)),
-            new IfStatement(
-                new Ast.Nodes.Not(new Member(result, "IsSuccess")),
-                new Block([new Return(result)]))
-        };
-        var locals = new List<Node> { result };
-        var attaches = AttachCalls(method.Body);
-        if (attaches.Count > 0 && CreatedLocal(method.Body) is { } created) {
-            nodes.Add(new Assignment(
-                created,
-                new TypeCast(
-                    new Member(result, "Value"),
-                    new NamedTypeReference(typeName))));
-            nodes.AddRange(attaches);
-            locals.Add(created);
-        }
-        nodes.Add(new Return(result));
-        return method with { Body = new Block(nodes, locals) };
+        var call = new Invoke(
+            new Member(host, nameof(DomainInstanceHostJobs.NewEntity)),
+            new Constant(typeName), values);
+        return new TypeCast(call, new NamedTypeReference(typeName));
     }
 
-    private static Variable? CreatedLocal(Node? body) {
-        if (body is not Block block)
-            return null;
-        foreach (var variable in block.Variables) {
-            if (variable is Variable created && created.Name == "created")
-                return created;
-        }
-        return null;
-    }
-
-    private static List<Node> AttachCalls(Node? body) {
-        var found = new List<Node>();
-        if (body is not Block block)
-            return found;
-        foreach (var node in block.Nodes) {
-            if (node is IfStatement { ThenBranch: Block then } && CallsAttach(then))
-                found.Add(node);
-        }
-        return found;
-    }
-
-    private static bool CallsAttach(Block block) {
-        foreach (var node in block.Nodes) {
-            if (node is Invoke { Delegate: Member { MemberName: var name } }
-                && name.StartsWith("Attach", StringComparison.Ordinal))
-                return true;
-        }
-        return false;
-    }
-
-    private static List<string> FactoryDictKeys(string typeName, Domain domain) {
-        var keys = new List<string>();
+    private static List<string> FactorySlots(string typeName, Domain domain) {
         var entity = domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, typeName, StringComparison.Ordinal));
-        if (entity is null)
-            return keys;
+            string.Equals(e.Name, typeName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Entity type '{typeName}' not found in domain '{domain.Name}'.");
         var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var slots = new List<string>();
         foreach (var p in DomainToCSharpExporter.GetConstructorParameters(entity, analysis))
-            keys.Add(p.Name);
+            slots.Add(p.Name);
         foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(entity, analysis))
-            keys.Add(prop.Name);
-        return keys;
-    }
-
-    private static bool IsEnumerableParam(Parameter p) {
-        var t = p.TypeReference is OptionalTypeReference opt ? opt.InnerType : p.TypeReference;
-        return t is NamedTypeReference { TypeName: "IEnumerable" or "List" };
+            slots.Add(prop.Name);
+        return slots;
     }
 
     private static TypeDefinitionNode StubWhenMethodBodies(TypeDefinitionNode td) {

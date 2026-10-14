@@ -15,17 +15,6 @@ public class Doctor
     public string LicenseNo { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public Schedule? Schedule { get; private set; }
-    private DomainResult<Schedule> CreateSchedule(string day, string state)
-    {
-        var scheduleResult = Schedule.Create(day, state);
-        if (!scheduleResult.IsSuccess)
-        {
-            return DomainResult<Schedule>.Failure(scheduleResult.ErrorMessage ?? "");
-        }
-        var schedule = scheduleResult.Value;
-        this.Schedule = schedule;
-        return DomainResult<Schedule>.Success(schedule);
-    }
     public DomainResult StartShift()
     {
         if (this.Schedule == null)

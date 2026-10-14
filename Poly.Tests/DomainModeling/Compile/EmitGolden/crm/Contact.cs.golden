@@ -23,17 +23,6 @@ public class Contact
     public string Name { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
-    private DomainResult<Account> CreateAccount(Industry industry, string name, Site? hq = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
-    {
-        var accountResult = Account.Create(industry, name, (Account?)null, hq, new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), closedTickets, openPipeline, wonCount);
-        if (!accountResult.IsSuccess)
-        {
-            return DomainResult<Account>.Failure(accountResult.ErrorMessage ?? "");
-        }
-        var account = accountResult.Value;
-        this.Account = account;
-        return DomainResult<Account>.Success(account);
-    }
     public DomainResult Retire()
     {
         if (this.CurrentStage != ContactStage.Active)

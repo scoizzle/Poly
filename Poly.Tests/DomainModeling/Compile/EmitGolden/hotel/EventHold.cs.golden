@@ -38,39 +38,6 @@ public class EventHold
     public Hall? Hall { get; private set; }
     public Section? Section { get; private set; }
     public EventHoldStage CurrentStage { get; private set; }
-    private DomainResult<Guest> CreateGuest(string email, string name, string phone, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
-    {
-        var guestResult = Guest.Create(email, name, phone, new List<EventHold>(), new List<Reservation>(), eventCount, nightCount, stayCount);
-        if (!guestResult.IsSuccess)
-        {
-            return DomainResult<Guest>.Failure(guestResult.ErrorMessage ?? "");
-        }
-        var guest = guestResult.Value;
-        this.Guest = guest;
-        return DomainResult<Guest>.Success(guest);
-    }
-    private DomainResult<Hall> CreateHall(long capacity, long dayRate, string name, Property? property = null, long busySections = 0L, bool occupied = false, bool offline = false)
-    {
-        var hallResult = Hall.Create(capacity, dayRate, name, property, new List<Section>(), busySections, occupied, offline);
-        if (!hallResult.IsSuccess)
-        {
-            return DomainResult<Hall>.Failure(hallResult.ErrorMessage ?? "");
-        }
-        var hall = hallResult.Value;
-        this.Hall = hall;
-        return DomainResult<Hall>.Success(hall);
-    }
-    private DomainResult<Section> CreateSection(long capacity, long dayRate, string name, Hall? hall = null, bool occupied = false)
-    {
-        var sectionResult = Section.Create(capacity, dayRate, name, hall, occupied);
-        if (!sectionResult.IsSuccess)
-        {
-            return DomainResult<Section>.Failure(sectionResult.ErrorMessage ?? "");
-        }
-        var section = sectionResult.Value;
-        this.Section = section;
-        return DomainResult<Section>.Success(section);
-    }
     public DomainResult Confirm()
     {
         if (this.CurrentStage != EventHoldStage.Requested)

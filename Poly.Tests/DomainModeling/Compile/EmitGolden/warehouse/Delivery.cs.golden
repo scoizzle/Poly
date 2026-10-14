@@ -17,17 +17,6 @@ public class Delivery
     public string Reference { get; private set; } = default!;
     public long Weight { get; private set; }
     public Truck? Truck { get; private set; }
-    private DomainResult<Truck> CreateTruck(long maxLoad, string vin, Warehouse? warehouse = null, long currentLoad = 0L)
-    {
-        var truckResult = Truck.Create(maxLoad, vin, warehouse, new List<Delivery>(), currentLoad);
-        if (!truckResult.IsSuccess)
-        {
-            return DomainResult<Truck>.Failure(truckResult.ErrorMessage ?? "");
-        }
-        var truck = truckResult.Value;
-        this.Truck = truck;
-        return DomainResult<Truck>.Success(truck);
-    }
     public DomainResult Confirm(string notes)
     {
         this.Notes = notes;

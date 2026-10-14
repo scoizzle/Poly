@@ -39,27 +39,6 @@ public class Hall
         get => this._sections;
     }
     public HallStage CurrentStage { get; private set; }
-    private DomainResult<Property> CreateProperty(string city, string name)
-    {
-        var propertyResult = Property.Create(city, name, new List<Hall>(), new List<Room>());
-        if (!propertyResult.IsSuccess)
-        {
-            return DomainResult<Property>.Failure(propertyResult.ErrorMessage ?? "");
-        }
-        var property = propertyResult.Value;
-        this.Property = property;
-        return DomainResult<Property>.Success(property);
-    }
-    private DomainResult<Section> CreateSections(long capacity, long dayRate, string name, bool occupied = false)
-    {
-        var sectionResult = Section.Create(capacity, dayRate, name, this, occupied);
-        if (!sectionResult.IsSuccess)
-        {
-            return DomainResult<Section>.Failure(sectionResult.ErrorMessage ?? "");
-        }
-        var section = sectionResult.Value;
-        return DomainResult<Section>.Success(section);
-    }
     internal void AttachSections(Section child)
     {
         this._sections.Add(child);

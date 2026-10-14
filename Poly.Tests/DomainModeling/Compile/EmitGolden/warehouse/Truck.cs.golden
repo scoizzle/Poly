@@ -43,27 +43,6 @@ public class Truck
         get => this._deliveries;
     }
     public TruckStage CurrentStage { get; private set; }
-    private DomainResult<Warehouse> CreateWarehouse(long capacity, string code, string name, string zip, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
-    {
-        var warehouseResult = Warehouse.Create(capacity, code, name, zip, new List<Truck>(), safetyStock, status);
-        if (!warehouseResult.IsSuccess)
-        {
-            return DomainResult<Warehouse>.Failure(warehouseResult.ErrorMessage ?? "");
-        }
-        var warehouse = warehouseResult.Value;
-        this.Warehouse = warehouse;
-        return DomainResult<Warehouse>.Success(warehouse);
-    }
-    private DomainResult<Delivery> CreateDeliveries(string notes, string reference, long weight)
-    {
-        var deliveryResult = Delivery.Create(notes, reference, weight, this);
-        if (!deliveryResult.IsSuccess)
-        {
-            return DomainResult<Delivery>.Failure(deliveryResult.ErrorMessage ?? "");
-        }
-        var delivery = deliveryResult.Value;
-        return DomainResult<Delivery>.Success(delivery);
-    }
     internal void AttachDeliveries(Delivery child)
     {
         this._deliveries.Add(child);

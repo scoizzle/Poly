@@ -23,17 +23,6 @@ public class Activity
     public string Subject { get; private set; } = default!;
     public Opportunity? Opportunity { get; private set; }
     public ActivityStage CurrentStage { get; private set; }
-    private DomainResult<Opportunity> CreateOpportunity(long amount, string title, Account? account = null, Contact? contact = null, DateOnly? closeBy = null)
-    {
-        var opportunityResult = Opportunity.Create(amount, title, account, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
-        if (!opportunityResult.IsSuccess)
-        {
-            return DomainResult<Opportunity>.Failure(opportunityResult.ErrorMessage ?? "");
-        }
-        var opportunity = opportunityResult.Value;
-        this.Opportunity = opportunity;
-        return DomainResult<Opportunity>.Success(opportunity);
-    }
     public DomainResult Snooze()
     {
         if (this.CurrentStage != ActivityStage.Open)

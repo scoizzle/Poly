@@ -26,16 +26,6 @@ public class Patron
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    private DomainResult<Fine> CreateFines(long amount, string reason)
-    {
-        var fineResult = Fine.Create(amount, reason, this);
-        if (!fineResult.IsSuccess)
-        {
-            return DomainResult<Fine>.Failure(fineResult.ErrorMessage ?? "");
-        }
-        var fine = fineResult.Value;
-        return DomainResult<Fine>.Success(fine);
-    }
     internal void AttachFines(Fine child)
     {
         this._fines.Add(child);

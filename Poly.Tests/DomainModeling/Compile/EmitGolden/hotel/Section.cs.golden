@@ -26,17 +26,6 @@ public class Section
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
     public SectionStage CurrentStage { get; private set; }
-    private DomainResult<Hall> CreateHall(long capacity, long dayRate, string name, Property? property = null, long busySections = 0L, bool occupied = false, bool offline = false)
-    {
-        var hallResult = Hall.Create(capacity, dayRate, name, property, new List<Section>(), busySections, occupied, offline);
-        if (!hallResult.IsSuccess)
-        {
-            return DomainResult<Hall>.Failure(hallResult.ErrorMessage ?? "");
-        }
-        var hall = hallResult.Value;
-        this.Hall = hall;
-        return DomainResult<Hall>.Success(hall);
-    }
     public DomainResult Occupy()
     {
         if (this.CurrentStage != SectionStage.InService)

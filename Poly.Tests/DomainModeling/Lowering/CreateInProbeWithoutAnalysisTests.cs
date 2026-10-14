@@ -7,8 +7,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// Create-in lowers without a constraint probe. A missing domain still fails closed.
-/// A missing analysis falls through to the string-named create; it does not throw
-/// from a probe that would have discarded its result.
+/// A missing analysis fails closed: the compiled entity has no dictionary create.
 /// </summary>
 public class CreateInProbeWithoutAnalysisTests {
     const string Dsl = """
@@ -40,8 +39,10 @@ public class CreateInProbeWithoutAnalysisTests {
         await Assert.That(() => LowerAddKid(withDomain, withAnalysis)).Throws<InvalidOperationException>();
 
     [Test]
-    public async Task LowerActionBody_CreateInWithoutAnalysis_Lowers() =>
-        await Assert.That(() => LowerAddKid(withDomain: true, withAnalysis: false)).ThrowsNothing();
+    public async Task LowerActionBody_CreateInWithoutAnalysis_Throws() =>
+        await Assert.That(() => LowerAddKid(withDomain: true, withAnalysis: false))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no dictionary create member");
 
     [Test]
     public async Task LowerActionBody_CreateInWithDomainAndAnalysis_Lowers() =>

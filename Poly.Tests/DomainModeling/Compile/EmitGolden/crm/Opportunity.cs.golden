@@ -69,28 +69,6 @@ public class Opportunity
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
-    private DomainResult<Account> CreateAccount(Industry industry, string name, Site? hq = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
-    {
-        var accountResult = Account.Create(industry, name, (Account?)null, hq, new List<Contact>(), new List<Opportunity>(), new List<Ticket>(), closedTickets, openPipeline, wonCount);
-        if (!accountResult.IsSuccess)
-        {
-            return DomainResult<Account>.Failure(accountResult.ErrorMessage ?? "");
-        }
-        var account = accountResult.Value;
-        this.Account = account;
-        return DomainResult<Account>.Success(account);
-    }
-    private DomainResult<Contact> CreateContact(string email, string name, Account? account = null)
-    {
-        var contactResult = Contact.Create(email, name, account);
-        if (!contactResult.IsSuccess)
-        {
-            return DomainResult<Contact>.Failure(contactResult.ErrorMessage ?? "");
-        }
-        var contact = contactResult.Value;
-        this.Contact = contact;
-        return DomainResult<Contact>.Success(contact);
-    }
     private DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
     {
         var activityResult = Activity.Create(subject, this, dueOn);

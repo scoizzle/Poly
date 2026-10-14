@@ -56,28 +56,6 @@ public class Reservation
         this.Folio = folio;
         return DomainResult<Folio>.Success(folio);
     }
-    private DomainResult<Guest> CreateGuest(string email, string name, string phone, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
-    {
-        var guestResult = Guest.Create(email, name, phone, new List<EventHold>(), new List<Reservation>(), eventCount, nightCount, stayCount);
-        if (!guestResult.IsSuccess)
-        {
-            return DomainResult<Guest>.Failure(guestResult.ErrorMessage ?? "");
-        }
-        var guest = guestResult.Value;
-        this.Guest = guest;
-        return DomainResult<Guest>.Success(guest);
-    }
-    private DomainResult<Room> CreateRoom(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, bool dirty = false, bool occupied = false, bool offline = false)
-    {
-        var roomResult = Room.Create(floor, maxOccupancy, nightlyRate, number, property, roomType, new List<Reservation>(), dirty, occupied, offline);
-        if (!roomResult.IsSuccess)
-        {
-            return DomainResult<Room>.Failure(roomResult.ErrorMessage ?? "");
-        }
-        var room = roomResult.Value;
-        this.Room = room;
-        return DomainResult<Room>.Success(room);
-    }
     public DomainResult Confirm()
     {
         if (this.CurrentStage != ReservationStage.Requested)

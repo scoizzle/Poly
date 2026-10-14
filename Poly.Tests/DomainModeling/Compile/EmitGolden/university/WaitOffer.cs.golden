@@ -25,28 +25,6 @@ public class WaitOffer
     public Student? Student { get; private set; }
     public Section? Section { get; private set; }
     public WaitOfferStage CurrentStage { get; private set; }
-    private DomainResult<Student> CreateStudent(string email, string name, long completions = 0L, long holds = 0L, long lastGrade = 0L, long maxCredits = 18L, long openCredits = 0L)
-    {
-        var studentResult = Student.Create(email, name, new List<Enrollment>(), completions, holds, lastGrade, maxCredits, openCredits);
-        if (!studentResult.IsSuccess)
-        {
-            return DomainResult<Student>.Failure(studentResult.ErrorMessage ?? "");
-        }
-        var student = studentResult.Value;
-        this.Student = student;
-        return DomainResult<Student>.Success(student);
-    }
-    private DomainResult<Section> CreateSection(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
-    {
-        var sectionResult = Section.Create(cap, offeringTerm, course, instructor, new List<Enrollment>(), new List<WaitOffer>(), offeredSeats, seatsTaken, waitCleared);
-        if (!sectionResult.IsSuccess)
-        {
-            return DomainResult<Section>.Failure(sectionResult.ErrorMessage ?? "");
-        }
-        var section = sectionResult.Value;
-        this.Section = section;
-        return DomainResult<Section>.Success(section);
-    }
     public DomainResult Seat()
     {
         if (this.CurrentStage != WaitOfferStage.Queued)

@@ -24,17 +24,6 @@ public class Loan
     public long Amount { get; private set; }
     public Book? Book { get; private set; }
     public LoanStage CurrentStage { get; private set; }
-    private DomainResult<Book> CreateBook(string isbn, string title, long copies = 1L)
-    {
-        var bookResult = Book.Create(isbn, title, copies);
-        if (!bookResult.IsSuccess)
-        {
-            return DomainResult<Book>.Failure(bookResult.ErrorMessage ?? "");
-        }
-        var book = bookResult.Value;
-        this.Book = book;
-        return DomainResult<Book>.Success(book);
-    }
     public DomainResult MarkOverdue()
     {
         if (this.CurrentStage != LoanStage.Active)

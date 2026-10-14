@@ -110,28 +110,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// <c>factory(name, p0, v0, p1, v1, …)</c>, the call the lowered create effect makes.
-    /// The body packs the pairs into a values bag
-    /// (<c>With(With(Values(), p0, v0), p1, v1)</c>) and calls the one host job that
-    /// takes the bag.
-    /// </summary>
-    private static MethodDefinitionNode PairsHostJob(
-        string factory, Node returnType, IReadOnlyList<Node> valueTypes) {
-        var str = TypeReference.To<string>();
-        var name = new Parameter("name", str);
-        var parameters = new List<Parameter> { name };
-        Node values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.Values)));
-        for (var i = 0; i < valueTypes.Count; i++) {
-            var key = new Parameter($"p{i}", str);
-            var value = new Parameter($"v{i}", valueTypes[i]);
-            parameters.Add(key);
-            parameters.Add(value);
-            values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.With)), values, key, value);
-        }
-        return HostJob(factory, returnType, parameters, [name, values]);
-    }
-
-    /// <summary>
     /// The store jobs of every runtime entity type, built once. Their bodies call
     /// <see cref="DomainInstanceHostJobs"/> and the receiver is <c>this</c>, so nothing
     /// in them depends on the entity. The VM caches a compiled AST method by its
@@ -165,18 +143,6 @@ public sealed partial record DomainEntityInstance {
                 new Parameter("propertyName", str),
                 new Parameter("value", vt)
             ]));
-        }
-        // One pair keeps its value's type; two or more pairs pass objects.
-        foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
-            jobs.Add(HostJob(factory, resultType, [
-                new Parameter("name", str),
-                new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
-            ]));
-            jobs.Add(PairsHostJob(factory, resultType, []));
-            foreach (var vt in valueTypes)
-                jobs.Add(PairsHostJob(factory, resultType, [vt]));
-            for (var pairs = 2; pairs <= 16; pairs++)
-                jobs.Add(PairsHostJob(factory, resultType, Enumerable.Repeat<Node>(obj, pairs).ToList()));
         }
         return jobs;
     }

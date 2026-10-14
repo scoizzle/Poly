@@ -46,17 +46,6 @@ public class Patron
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
-    private DomainResult<Fine> CreateFines(string reason, long amount = 0L)
-    {
-        var fineResult = Fine.Create(reason, amount);
-        if (!fineResult.IsSuccess)
-        {
-            return DomainResult<Fine>.Failure(fineResult.ErrorMessage ?? "");
-        }
-        var fine = fineResult.Value;
-        this._fines.Add(fine);
-        return DomainResult<Fine>.Success(fine);
-    }
     internal void AttachFines(Fine child)
     {
         this._fines.Add(child);

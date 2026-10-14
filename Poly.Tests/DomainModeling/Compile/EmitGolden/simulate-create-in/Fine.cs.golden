@@ -15,17 +15,6 @@ public class Fine
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
-    private DomainResult<Patron> CreatePatron(string name)
-    {
-        var patronResult = Patron.Create(name, new List<Fine>());
-        if (!patronResult.IsSuccess)
-        {
-            return DomainResult<Patron>.Failure(patronResult.ErrorMessage ?? "");
-        }
-        var patron = patronResult.Value;
-        this.Patron = patron;
-        return DomainResult<Patron>.Success(patron);
-    }
     public static DomainResult<Fine> Create(long amount, string reason, Patron? patron = null)
     {
         if (amount < 0L)

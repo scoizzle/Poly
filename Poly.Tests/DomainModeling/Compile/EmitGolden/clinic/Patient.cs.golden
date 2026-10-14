@@ -19,16 +19,6 @@ public class Patient
     {
         get => this._visits;
     }
-    private DomainResult<Visit> CreateVisits(string reason, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
-    {
-        var visitResult = Visit.Create(reason, this, primaryDoctor, state);
-        if (!visitResult.IsSuccess)
-        {
-            return DomainResult<Visit>.Failure(visitResult.ErrorMessage ?? "");
-        }
-        var visit = visitResult.Value;
-        return DomainResult<Visit>.Success(visit);
-    }
     internal void AttachVisits(Visit child)
     {
         this._visits.Add(child);

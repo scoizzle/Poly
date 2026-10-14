@@ -47,38 +47,6 @@ public class Section
         get => this._waitlist;
     }
     public SectionStage CurrentStage { get; private set; }
-    private DomainResult<Course> CreateCourse(string code, string title)
-    {
-        var courseResult = Course.Create(code, title);
-        if (!courseResult.IsSuccess)
-        {
-            return DomainResult<Course>.Failure(courseResult.ErrorMessage ?? "");
-        }
-        var course = courseResult.Value;
-        this.Course = course;
-        return DomainResult<Course>.Success(course);
-    }
-    private DomainResult<Instructor> CreateInstructor(string email, string name)
-    {
-        var instructorResult = Instructor.Create(email, name);
-        if (!instructorResult.IsSuccess)
-        {
-            return DomainResult<Instructor>.Failure(instructorResult.ErrorMessage ?? "");
-        }
-        var instructor = instructorResult.Value;
-        this.Instructor = instructor;
-        return DomainResult<Instructor>.Success(instructor);
-    }
-    private DomainResult<Enrollment> CreateEnrollments(Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
-    {
-        var enrollmentResult = Enrollment.Create(this, student, dueDate, enrolledOn, grade);
-        if (!enrollmentResult.IsSuccess)
-        {
-            return DomainResult<Enrollment>.Failure(enrollmentResult.ErrorMessage ?? "");
-        }
-        var enrollment = enrollmentResult.Value;
-        return DomainResult<Enrollment>.Success(enrollment);
-    }
     internal void AttachEnrollments(Enrollment child)
     {
         this._enrollments.Add(child);

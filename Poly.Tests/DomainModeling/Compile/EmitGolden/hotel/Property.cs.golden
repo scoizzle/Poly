@@ -50,16 +50,6 @@ public class Property
     {
         this._halls.Add(child);
     }
-    private DomainResult<Room> CreateRooms(long floor, long maxOccupancy, long nightlyRate, string number, RoomType? roomType = null, bool dirty = false, bool occupied = false, bool offline = false)
-    {
-        var roomResult = Room.Create(floor, maxOccupancy, nightlyRate, number, this, roomType, new List<Reservation>(), dirty, occupied, offline);
-        if (!roomResult.IsSuccess)
-        {
-            return DomainResult<Room>.Failure(roomResult.ErrorMessage ?? "");
-        }
-        var room = roomResult.Value;
-        return DomainResult<Room>.Success(room);
-    }
     internal void AttachRooms(Room child)
     {
         this._rooms.Add(child);

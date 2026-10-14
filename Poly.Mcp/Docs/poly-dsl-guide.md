@@ -358,6 +358,11 @@ Customer: entity {
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
 
+**Owned targets keep their owner.** `unlink_instances` refuses to drop the last
+inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
+owned target must keep its owner." Non-owned links stay minimum zero, and removing
+the owner instance entirely is not an unlink, so it is exempt from the minimum.
+
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
 parent with a nav named `order` — but never twice on the same entity, and never
@@ -996,7 +1001,7 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

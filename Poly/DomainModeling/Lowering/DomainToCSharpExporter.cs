@@ -488,6 +488,10 @@ public sealed partial class DomainToCSharpExporter {
                 ));
 
                 var fieldAcc = new Member(new ThisReference(), fieldName);
+                // Idempotent registration: a create-in child is already linked by
+                // the store under simulate, and printed hosts may attach twice.
+                // ReferenceEquals keeps distinct-but-equal records from deduping.
+                var existing = new Variable("existing");
                 var registerBody = new Block([
                     new IfStatement(
                         new Equal(fieldAcc, new Constant(null)),
@@ -497,6 +501,14 @@ public sealed partial class DomainToCSharpExporter {
                                     new NamedTypeReference("List",
                                         TypeArguments: [srcType])))
                         ])),
+                    new ForEachLoop(
+                        existing,
+                        fieldAcc,
+                        new IfStatement(
+                            new Invoke(
+                                new Member(new NamedTypeReference("object"), "ReferenceEquals"),
+                                [existing, new Parameter(paramName)]),
+                            new Block([new Return(null)]))),
                     new Invoke(
                         new Member(fieldAcc, "Add"),
                         [new Parameter(paramName)])

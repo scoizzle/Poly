@@ -129,6 +129,13 @@ public class Enrollment
         {
             this._studentEnrollmentsDroppedSubscribers = new List<Student>();
         }
+        foreach (var existing in this._studentEnrollmentsDroppedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._studentEnrollmentsDroppedSubscribers.Add(subscriber);
     }
     internal void RegisterStudentEnrollmentsCompletedSubscriber(Student subscriber)
@@ -136,6 +143,13 @@ public class Enrollment
         if (this._studentEnrollmentsCompletedSubscribers == null)
         {
             this._studentEnrollmentsCompletedSubscribers = new List<Student>();
+        }
+        foreach (var existing in this._studentEnrollmentsCompletedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._studentEnrollmentsCompletedSubscribers.Add(subscriber);
     }
@@ -145,6 +159,13 @@ public class Enrollment
         {
             this._sectionEnrollmentsRegisteredSubscribers = new List<Section>();
         }
+        foreach (var existing in this._sectionEnrollmentsRegisteredSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
+        }
         this._sectionEnrollmentsRegisteredSubscribers.Add(subscriber);
     }
     internal void RegisterSectionEnrollmentsDroppedSubscriber(Section subscriber)
@@ -152,6 +173,13 @@ public class Enrollment
         if (this._sectionEnrollmentsDroppedSubscribers == null)
         {
             this._sectionEnrollmentsDroppedSubscribers = new List<Section>();
+        }
+        foreach (var existing in this._sectionEnrollmentsDroppedSubscribers)
+        {
+            if (object.ReferenceEquals(existing, subscriber))
+            {
+                return;
+            }
         }
         this._sectionEnrollmentsDroppedSubscribers.Add(subscriber);
     }

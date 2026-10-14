@@ -1,0 +1,8 @@
+domain DurType
+uses temporal
+
+Job: entity {
+  Name: Text required
+  Elapsed: Duration
+  OpensAt: Time
+}

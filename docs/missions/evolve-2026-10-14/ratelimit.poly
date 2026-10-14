@@ -1,0 +1,23 @@
+domain RateLimit
+uses temporal
+
+ApiKey: entity {
+  Key: Text unique
+  Limit: Number range(0, ) default(100)
+  Enabled: Boolean default(true)
+  requests: many Request
+
+  EnabledPolicy: policy { Enabled is true }
+  OverLimit: policy { count requests where SeenAt > Now - 60 Minutes >= Limit }
+
+  Allow: action
+    require EnabledPolicy
+    require not OverLimit
+  {
+    create in requests { SeenAt: Now }
+  }
+}
+
+Request: entity {
+  SeenAt: DateTime
+}

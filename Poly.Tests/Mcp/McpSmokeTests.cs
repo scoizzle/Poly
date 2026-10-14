@@ -17,7 +17,7 @@ namespace Poly.Tests.Mcp;
 public class McpSmokeTests {
     [Test]
     public async Task CreateSession_ReturnsSessionIdAndBuiltins() {
-        var response = SessionTool.CreateDomainSession("Orders");
+        var response = McpTestTools.Session.CreateDomainSession("Orders");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.SessionId).IsNotNull();
@@ -25,7 +25,7 @@ public class McpSmokeTests {
         await Assert.That(response.Message).Contains("Orders");
 
         // Verify the session actually exists
-        var exists = McpSessionStore.TryGet(response.SessionId!, out var state);
+        var exists = McpTestTools.Store.TryGet(response.SessionId!, out var state);
         await Assert.That(exists).IsTrue();
         await Assert.That(state.Domain.Name).IsEqualTo("Orders");
 
@@ -35,9 +35,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetDomainOverview_AfterCreate_ShowsEmptyDomain() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = QueryTool.GetDomainOverview(sessionId);
+        var response = McpTestTools.Query.GetDomainOverview(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
         await Assert.That(response.Data).IsTypeOf<DomainOverviewData>();
@@ -50,13 +50,13 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetDomainAnalysis_ReportsNoErrors_ForValidDomain() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Evolve a domain with valid structure
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
-        var response = QueryTool.GetDomainAnalysis(sessionId);
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsTypeOf<AnalysisData>();
 
@@ -67,16 +67,16 @@ public class McpSmokeTests {
     [Test]
     public async Task GetDomainAnalysis_WithEntityAndRelationship_IncludesStructuredFacts() {
         // D3.4b: MCP structured facts from LatestAnalysis metadata.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Create a parent entity, child entity, and relationship
-        EvolveTool.Add(sessionId, "entity", """{"name":"Patron"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Patron","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Loan"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Loan","name":"Amount","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"Loans","source":"Patron","target":"Loan","cardinality":"OneToMany"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Patron"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Patron","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Loan"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Loan","name":"Amount","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Loans","source":"Patron","target":"Loan","cardinality":"OneToMany"}""");
 
-        var response = QueryTool.GetDomainAnalysis(sessionId);
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsTypeOf<AnalysisData>();
 
@@ -94,9 +94,9 @@ public class McpSmokeTests {
     [Test]
     public async Task GetDomainAnalysis_WithStageSubscriptions_IncludesSubscriptionPlans() {
         // amu-w4: stages/entities with non-empty subscription dispatch plans surface as facts.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Demo
 
             Patron: entity {
@@ -118,7 +118,7 @@ public class McpSmokeTests {
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var response = QueryTool.GetDomainAnalysis(sessionId);
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsTypeOf<AnalysisData>();
 
@@ -142,14 +142,14 @@ public class McpSmokeTests {
 
     [Test]
     public async Task Add_Entity_CreatesEntity() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Revision).IsEqualTo(1);
 
         // Verify through query tool
-        var overviewResponse = QueryTool.GetDomainOverview(sessionId);
+        var overviewResponse = McpTestTools.Query.GetDomainOverview(sessionId);
         var data = (DomainOverviewData)overviewResponse.Data!;
         await Assert.That(data.EntityCount).IsEqualTo(1);
         await Assert.That(data.EntityNames).Contains("Order");
@@ -157,14 +157,14 @@ public class McpSmokeTests {
 
     [Test]
     public async Task Add_Entity_DuplicateName_RollsBack() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // First add succeeds
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Second add with same name rolls back
-        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r2.Success).IsFalse();
         await Assert.That(r2.Diagnostics).IsNotNull();
         await Assert.That(r2.Diagnostics!.Count).IsGreaterThan(0);
@@ -175,15 +175,15 @@ public class McpSmokeTests {
 
     [Test]
     public async Task Add_Property_AddsPropertyToEntity() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        var response = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
         await Assert.That(response.Success).IsTrue();
 
         // Verify through entity detail
-        var detailResponse = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detailResponse = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         await Assert.That(detailResponse.Data).IsTypeOf<EntityDetailData>();
         var detail = (EntityDetailData)detailResponse.Data!;
         await Assert.That(detail.Properties.Count).IsEqualTo(1);
@@ -194,37 +194,37 @@ public class McpSmokeTests {
     [Test]
     public async Task FullAgentPath_CreateToEntityDetail() {
         // Simulate an agent workflow: create → add entity → add property → add stage → add action → get detail
-        var (sessionId, _) = McpSessionStore.Create("Orders");
+        var (sessionId, _) = McpTestTools.Store.Create("Orders");
 
         // Add entity
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Add properties
-        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
         await Assert.That(r2.Success).IsTrue();
         await Assert.That(r2.Revision).IsEqualTo(2);
 
-        var r3 = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Add stages
-        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var r4 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r4.Success).IsTrue();
 
-        var r5 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Submitted"}""");
+        var r5 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Submitted"}""");
         await Assert.That(r5.Success).IsTrue();
 
         // Add action
-        var r6 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        var r6 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r6.Success).IsTrue();
         await Assert.That(r6.Revision).IsEqualTo(6);
 
-        var r7 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
+        var r7 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
         await Assert.That(r7.Success).IsTrue();
 
         // Get entity detail
-        var detailResponse = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detailResponse = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         await Assert.That(detailResponse.Data).IsTypeOf<EntityDetailData>();
         var detail = (EntityDetailData)detailResponse.Data!;
 
@@ -240,10 +240,10 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ListSessions_ReturnsActiveSessions() {
-        var (id1, _) = McpSessionStore.Create("A");
-        var (id2, _) = McpSessionStore.Create("B");
+        var (id1, _) = McpTestTools.Store.Create("A");
+        var (id2, _) = McpTestTools.Store.Create("B");
 
-        var response = SessionTool.ListSessions();
+        var response = McpTestTools.Session.ListSessions();
         await Assert.That(response.Success).IsTrue();
 
         // Should include both session IDs in the message or data
@@ -253,9 +253,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetEntityDetail_MissingEntity_ReturnsFailureWithAffordances() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = QueryTool.GetEntityDetail(sessionId, "NonExistent");
+        var response = McpTestTools.Query.GetEntityDetail(sessionId, "NonExistent");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
         await Assert.That(response.Affordances).IsNotNull();
@@ -264,7 +264,7 @@ public class McpSmokeTests {
 
     [Test]
     public async Task InvalidSession_ReturnsHelpfulAffordances() {
-        var response = QueryTool.GetDomainOverview("nonexistent-session");
+        var response = McpTestTools.Query.GetDomainOverview("nonexistent-session");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Affordances).IsNotNull();
         await Assert.That(response.Affordances).Contains("create_domain_session");
@@ -272,10 +272,10 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddPropertyToMissingEntity_ReportsFailure_WithoutBumpingRevision() {
-        var (sessionId, state) = McpSessionStore.Create("Test");
+        var (sessionId, state) = McpTestTools.Store.Create("Test");
         var originalRevision = state.Revision;
 
-        var response = EvolveTool.Add(sessionId, "property", """{"entityName":"NonExistent","name":"Status","typeName":"Text"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"NonExistent","name":"Status","typeName":"Text"}""");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
         await Assert.That(response.Revision).IsEqualTo(originalRevision); // not bumped
@@ -284,11 +284,11 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddStageToMissingEntity_ReportsFailure() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Add entity, then try adding a stage to a different entity that doesn't exist
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        var response = EvolveTool.Add(sessionId, "stage", """{"entityName":"NonExistent","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"NonExistent","name":"Draft"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
@@ -296,10 +296,10 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddActionToMissingEntity_ReportsFailure() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        var response = EvolveTool.Add(sessionId, "action", """{"entityName":"NonExistent","name":"Submit"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"NonExistent","name":"Submit"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Evolution rolled back");
@@ -307,15 +307,15 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetPolicyExpression_FindsPolicyOnEntity() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Build a domain with a policy
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}"""); // no-op duplicate handled
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}"""); // no-op duplicate handled
 
         // Add policy via direct evolve — uses atomic Evolve for concurrency safety
-        McpSessionStore.Evolve(sessionId, (domain, session) =>
+        McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToEntity("Person", "Adult",
                     DomainExpression.GreaterThanOrEqual(
@@ -323,26 +323,26 @@ public class McpSmokeTests {
                         DomainExpression.Literal(18)))
                 .Apply(session: session));
 
-        var response = PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        var response = McpTestTools.Policy.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
     }
 
     [Test]
     public async Task GetPolicyExpression_MissingPolicy_ReturnsNotFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = PolicyTool.GetPolicyExpression(sessionId, "Person", "NonExistent");
+        var response = McpTestTools.Policy.GetPolicyExpression(sessionId, "Person", "NonExistent");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
 
     [Test]
     public async Task GetPolicyExpression_MissingEntity_ReturnsNotFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = PolicyTool.GetPolicyExpression(sessionId, "NonExistent", "Any");
+        var response = McpTestTools.Policy.GetPolicyExpression(sessionId, "NonExistent", "Any");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
@@ -351,77 +351,77 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddPolicy_SimplePropertyComparison_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("Adult");
         await Assert.That(response.Affordances).Contains("evaluate_policy");
 
         // Verify via get_policy_expression
-        var expr = PolicyTool.GetPolicyExpression(sessionId, "Person", "Adult");
+        var expr = McpTestTools.Policy.GetPolicyExpression(sessionId, "Person", "Adult");
         await Assert.That(expr.Success).IsTrue();
     }
 
     [Test]
     public async Task AddPolicy_ToMissingEntity_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"NonExistent","name":"Any","expression":"Age >= 18"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"NonExistent","name":"Any","expression":"Age >= 18"}""");
 
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task AddPolicy_InvalidExpression_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Bad","expression":"Age >="}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Bad","expression":"Age >="}""");
 
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task EvaluatePolicy_AgeGuard_ReturnsTrueForAdult() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
         var adultId = RequireInstance(sessionId, "Person", "{\"Age\":25}");
-        var adult = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", adultId);
+        var adult = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult", adultId);
         await Assert.That(adult.Success).IsTrue();
         await Assert.That(adult.Message).Contains("true");
 
         var minorId = RequireInstance(sessionId, "Person", "{\"Age\":15}");
-        var minor = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", minorId);
+        var minor = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult", minorId);
         await Assert.That(minor.Success).IsTrue();
         await Assert.That(minor.Message).Contains("false");
     }
 
     [Test]
     public async Task EvaluatePolicy_MissingPolicy_ReturnsNotFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
 
-        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "NonExistent", "unused");
+        var response = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "NonExistent", "unused");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
 
     [Test]
     public async Task EvaluatePolicy_MissingInstanceId_FailsClosed() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
-        var response = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult", "");
+        var response = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult", "");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("instanceId is required");
     }
@@ -429,24 +429,24 @@ public class McpSmokeTests {
     [Test]
     public async Task EvaluatePolicy_MultiProperty_OrderTotalStatus_EvaluatesCorrectly() {
         // Proves evaluate_policy works with non-Age properties via JSON properties arg
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Total","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Status","typeName":"Text"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"LargeActive","expression":"(Total > 100) and (Status == \"Active\")"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Order","name":"LargeActive","expression":"(Total > 100) and (Status == \"Active\")"}""");
 
-        var pass = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Order", "LargeActive",
             RequireInstance(sessionId, "Order", "{\"Total\":200,\"Status\":\"Active\"}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var failTotal = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var failTotal = McpTestTools.Policy.EvaluatePolicy(sessionId, "Order", "LargeActive",
             RequireInstance(sessionId, "Order", "{\"Total\":50,\"Status\":\"Active\"}"));
         await Assert.That(failTotal.Success).IsTrue();
         await Assert.That(failTotal.Message).Contains("false");
 
-        var failStatus = PolicyTool.EvaluatePolicy(sessionId, "Order", "LargeActive",
+        var failStatus = McpTestTools.Policy.EvaluatePolicy(sessionId, "Order", "LargeActive",
             RequireInstance(sessionId, "Order", "{\"Total\":200,\"Status\":\"Cancelled\"}"));
         await Assert.That(failStatus.Success).IsTrue();
         await Assert.That(failStatus.Message).Contains("false");
@@ -454,18 +454,18 @@ public class McpSmokeTests {
 
     [Test]
     public async Task EvaluatePolicy_MultiProperty_ProductStock_EvaluatesCorrectly() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Stock","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"Stock","typeName":"Number"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Product","name":"PositiveStock","expression":"Stock >= 0"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Product","name":"PositiveStock","expression":"Stock >= 0"}""");
 
-        var pass = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+        var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             RequireInstance(sessionId, "Product", "{\"Stock\":10}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = PolicyTool.EvaluatePolicy(sessionId, "Product", "PositiveStock",
+        var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Product", "PositiveStock",
             RequireInstance(sessionId, "Product", "{\"Stock\":-1}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
@@ -473,13 +473,13 @@ public class McpSmokeTests {
 
     [Test]
     public async Task EvaluatePolicy_InvalidProperty_ReturnsClearError() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
 
-        var response = RuntimeTool.CreateInstance(sessionId, "Person",
+        var response = McpTestTools.Runtime.CreateInstance(sessionId, "Person",
             "{\"NonExistent\":42}");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("does not exist on entity");
@@ -489,18 +489,18 @@ public class McpSmokeTests {
 
     [Test]
     public async Task EvaluatePolicy_BooleanGuard_EqualsTrue_ReturnsTrue() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Flag"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Flag","name":"Enabled","typeName":"Boolean"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Flag"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Flag","name":"Enabled","typeName":"Boolean"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Flag","name":"IsEnabled","expression":"Enabled == true"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Flag","name":"IsEnabled","expression":"Enabled == true"}""");
 
-        var pass = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+        var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             RequireInstance(sessionId, "Flag", "{\"Enabled\":true}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = PolicyTool.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
+        var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Flag", "IsEnabled",
             RequireInstance(sessionId, "Flag", "{\"Enabled\":false}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
@@ -510,18 +510,18 @@ public class McpSmokeTests {
 
     [Test]
     public async Task EvaluatePolicy_GreaterThanOrEqual_MatchNumeric_ReturnsTrue() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Item"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
 
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
 
-        var pass = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+        var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Item", "HighScore",
             RequireInstance(sessionId, "Item", "{\"Score\":100}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var fail = PolicyTool.EvaluatePolicy(sessionId, "Item", "HighScore",
+        var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Item", "HighScore",
             RequireInstance(sessionId, "Item", "{\"Score\":99}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
@@ -533,72 +533,72 @@ public class McpSmokeTests {
     /// </summary>
     [Test]
     public async Task AddPolicy_AllDslExpressionShapes_EvaluateCorrectly() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Active","typeName":"Boolean"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Active","typeName":"Boolean"}""");
 
         // Comparison (>= operator)
-        var r1 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Boolean equality
-        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"IsActive","expression":"Active == true"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"IsActive","expression":"Active == true"}""");
         await Assert.That(r2.Success).IsTrue();
 
         // Composite AND
-        var r3 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"ActiveAdult","expression":"(Age >= 18) and (Active == true)"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"ActiveAdult","expression":"(Age >= 18) and (Active == true)"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Composite NOT
-        var r4 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"NotAdult","expression":"not (Age >= 18)"}""");
+        var r4 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"NotAdult","expression":"not (Age >= 18)"}""");
         await Assert.That(r4.Success).IsTrue();
 
         // Literal
-        var r5 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Person","name":"Always","expression":"true"}""");
+        var r5 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Always","expression":"true"}""");
         await Assert.That(r5.Success).IsTrue();
 
-        var pass = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
             RequireInstance(sessionId, "Person", "{\"Age\":25}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
-        var edge = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var edge = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
             RequireInstance(sessionId, "Person", "{\"Age\":18}"));
         await Assert.That(edge.Success).IsTrue();
         await Assert.That(edge.Message).Contains("true");
 
-        var fail = PolicyTool.EvaluatePolicy(sessionId, "Person", "Adult",
+        var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
             RequireInstance(sessionId, "Person", "{\"Age\":15}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
 
-        var activePass = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
+        var activePass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "IsActive",
             RequireInstance(sessionId, "Person", "{\"Active\":true, \"Age\":25}"));
         await Assert.That(activePass.Success).IsTrue();
         await Assert.That(activePass.Message).Contains("true");
 
-        var activeFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "IsActive",
+        var activeFail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "IsActive",
             RequireInstance(sessionId, "Person", "{\"Active\":false, \"Age\":25}"));
         await Assert.That(activeFail.Success).IsTrue();
         await Assert.That(activeFail.Message).Contains("false");
 
-        var andPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
+        var andPass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
             RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":true}"));
         await Assert.That(andPass.Success).IsTrue();
         await Assert.That(andPass.Message).Contains("true");
 
-        var andFail = PolicyTool.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
+        var andFail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "ActiveAdult",
             RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":false}"));
         await Assert.That(andFail.Success).IsTrue();
         await Assert.That(andFail.Message).Contains("false");
 
-        var notPass = PolicyTool.EvaluatePolicy(sessionId, "Person", "NotAdult",
+        var notPass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "NotAdult",
             RequireInstance(sessionId, "Person", "{\"Age\":15}"));
         await Assert.That(notPass.Success).IsTrue();
         await Assert.That(notPass.Message).Contains("true");
 
-        var always = PolicyTool.EvaluatePolicy(sessionId, "Person", "Always",
+        var always = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Always",
             RequireInstance(sessionId, "Person", "{\"Age\":0}"));
         await Assert.That(always.Success).IsTrue();
         await Assert.That(always.Message).Contains("true");
@@ -608,17 +608,17 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddProperties_MultipleAddCalls_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
 
-        var r1 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
-        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
-        var r3 = EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"InStock","typeName":"Boolean"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"InStock","typeName":"Boolean"}""");
         await Assert.That(r1.Success).IsTrue();
         await Assert.That(r2.Success).IsTrue();
         await Assert.That(r3.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Product");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Product");
         await Assert.That(detail.Data).IsTypeOf<EntityDetailData>();
         var d = (EntityDetailData)detail.Data!;
         await Assert.That(d.Properties.Count).IsEqualTo(3);
@@ -626,19 +626,19 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddStages_MultipleAddCalls_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var r1 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
-        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
-        var r3 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Shipped"}""");
-        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Delivered"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Shipped"}""");
+        var r4 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Delivered"}""");
         await Assert.That(r1.Success).IsTrue();
         await Assert.That(r2.Success).IsTrue();
         await Assert.That(r3.Success).IsTrue();
         await Assert.That(r4.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         var d = (EntityDetailData)detail.Data!;
         await Assert.That(d.Stages.Count).IsEqualTo(4);
         await Assert.That(d.Stages[0].Name).IsEqualTo("Draft");
@@ -646,19 +646,19 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddActionsToStages_MultipleAddCalls_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
-        EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
-        EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Cancel"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Confirmed"}""");
+        McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Cancel"}""");
 
-        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
-        var r2 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Cancel"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Submit"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Order","stageName":"Draft","name":"Cancel"}""");
         await Assert.That(r1.Success).IsTrue();
         await Assert.That(r2.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Order");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Order");
         var d = (EntityDetailData)detail.Data!;
         var draftStage = d.Stages.First(s => s.Name == "Draft");
         await Assert.That(draftStage.Actions).Contains("Submit");
@@ -669,25 +669,25 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetRelationships_All_ReturnsAllEdges() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
 
-        var response = QueryTool.GetRelationships(sessionId);
+        var response = McpTestTools.Query.GetRelationships(sessionId);
         await Assert.That(response.Success).IsTrue();
     }
 
     [Test]
     public async Task GetRelationships_FilteredByEntity_ReturnsOnlyMatching() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"OrderProduct","source":"Order","target":"Product"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"OrderCustomer","source":"Order","target":"Customer","cardinality":"ManyToOne"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"OrderProduct","source":"Order","target":"Product"}""");
 
-        var response = QueryTool.GetRelationships(sessionId, entityName: "Customer");
+        var response = McpTestTools.Query.GetRelationships(sessionId, entityName: "Customer");
         await Assert.That(response.Success).IsTrue();
     }
 
@@ -695,49 +695,49 @@ public class McpSmokeTests {
 
     [Test]
     public async Task AddConstraint_Range_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Product","propertyName":"Price","type":"Range","min":0}""");
 
         await Assert.That(response.Success).IsTrue();
 
-        var constraints = EvolveTool.GetConstraints(sessionId, "Product");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Product");
         await Assert.That(constraints.Success).IsTrue();
     }
 
     [Test]
     public async Task AddConstraint_Required_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Customer","name":"Name","typeName":"Text"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Customer","name":"Name","typeName":"Text"}""");
 
-        var response = EvolveTool.Add(sessionId, "constraint",
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
             """{"entityName":"Customer","propertyName":"Name","type":"Required"}""");
 
         await Assert.That(response.Success).IsTrue();
 
-        var constraints = EvolveTool.GetConstraints(sessionId, "Customer");
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Customer");
         await Assert.That(constraints.Success).IsTrue();
     }
 
     [Test]
     public async Task GetConstraints_FiltersByProperty() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"Price","type":"Range","min":0}""");
-        EvolveTool.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"SKU","type":"Required"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"Price","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"SKU","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"Price","type":"Range","min":0}""");
+        McpTestTools.Evolve.Add(sessionId, "constraint", """{"entityName":"Product","propertyName":"SKU","type":"Required"}""");
 
         // All constraints
-        var all = EvolveTool.GetConstraints(sessionId, "Product");
+        var all = McpTestTools.Evolve.GetConstraints(sessionId, "Product");
         await Assert.That(all.Success).IsTrue();
 
         // Filtered by property
-        var filtered = EvolveTool.GetConstraints(sessionId, "Product", propertyName: "Price");
+        var filtered = McpTestTools.Evolve.GetConstraints(sessionId, "Product", propertyName: "Price");
         await Assert.That(filtered.Success).IsTrue();
     }
 
@@ -745,9 +745,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_MinimalEntity_ReplacesSession() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Orders
 
             Product: entity {
@@ -761,7 +761,7 @@ public class McpSmokeTests {
         await Assert.That(response.Data).IsNotNull();
 
         // Session should now have the new domain (replaced); revision carries over
-        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
         await Assert.That(state!.Domain.Name).IsEqualTo("Orders");
         await Assert.That(state.Revision).IsEqualTo(1);
@@ -780,9 +780,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_WithRelationship_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Orders
 
             Customer: entity {
@@ -805,16 +805,16 @@ public class McpSmokeTests {
         await Assert.That(response.Message).Contains("2 entities");
         await Assert.That(response.Message).Contains("1 relationships");
 
-        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
         await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
     }
 
     [Test]
     public async Task ApplyDsl_MissingRequire_FailsWithParseError() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
 
             Item: entity {
@@ -835,9 +835,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_MalformedPoly_FailsWithParseError() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, "domain Test\nItem: entity { Name: Text");
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, "domain Test\nItem: entity { Name: Text");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("Parse error");
@@ -845,9 +845,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ExportDsl_AfterApply_RoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        DslTool.ApplyDsl(sessionId, """
+        McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
 
             Item: entity {
@@ -856,7 +856,7 @@ public class McpSmokeTests {
             }
             """);
 
-        var response = DslTool.ExportDsl(sessionId);
+        var response = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
 
@@ -868,13 +868,13 @@ public class McpSmokeTests {
         await Assert.That(poly).Contains("SKU: Text required unique");
 
         // Round-trip it: re-apply and verify
-        var response2 = DslTool.ApplyDsl(sessionId, poly!);
+        var response2 = McpTestTools.Dsl.ApplyDsl(sessionId, poly!);
         await Assert.That(response2.Success).IsTrue();
     }
 
     [Test]
     public async Task ApplyDsl_ToNonexistentSession_Fails() {
-        var response = DslTool.ApplyDsl("nonexistent", "domain Test\nItem: entity {}");
+        var response = McpTestTools.Dsl.ApplyDsl("nonexistent", "domain Test\nItem: entity {}");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
@@ -882,9 +882,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_EmptyPolyText_FailsWithClearMessage() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, "");
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, "");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("empty");
@@ -892,10 +892,10 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_WithRequire_BlocksInvokeActionWhenPolicyFails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Step 1: verify entity-with-policy DSL applies
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
 
             Item: entity {
@@ -913,7 +913,7 @@ public class McpSmokeTests {
         await Assert.That(response.Success).IsTrue();
 
         // Get the entity from the session domain
-        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
         var entity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Item");
 
@@ -942,9 +942,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_WithN1NavAndSubscription_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
 
             Tracker: entity {
@@ -971,7 +971,7 @@ public class McpSmokeTests {
         await Assert.That(response.Message).Contains("2 entities");
         await Assert.That(response.Message).Contains("1 relationships");
 
-        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
         await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
         await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("Tracks");
@@ -986,7 +986,7 @@ public class McpSmokeTests {
         await Assert.That(analysis.HasErrors).IsFalse();
 
         // BR.4.2: Subscription visibility via MCP get_entity_detail
-        var detail = QueryTool.GetEntityDetail(sessionId, "Tracker");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Tracker");
         await Assert.That(detail.Success).IsTrue();
         await Assert.That(detail.Data).IsTypeOf<EntityDetailData>();
         var detailData = (EntityDetailData)detail.Data!;
@@ -1001,15 +1001,15 @@ public class McpSmokeTests {
     [Test]
     public async Task ExportDsl_AfterAddRelationship_PrintsN1() {
         // Build domain via micro-tools, then export
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Tracker"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Tracker","name":"Status","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"Tracks","source":"Tracker","target":"Order","cardinality":"OneToOne"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Tracker"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Tracker","name":"Status","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Tracks","source":"Tracker","target":"Order","cardinality":"OneToOne"}""");
 
-        var response = DslTool.ExportDsl(sessionId);
+        var response = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Data).IsNotNull();
 
@@ -1036,67 +1036,67 @@ public class McpSmokeTests {
 
     [Test]
     public async Task RemoveRelationship_RemovesAndUpdatesOverview() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Build: two entities + relationship
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
 
-        var before = QueryTool.GetDomainOverview(sessionId);
+        var before = McpTestTools.Query.GetDomainOverview(sessionId);
         await Assert.That(before.Message).Contains("1 relationships");
 
         // Remove
-        var response = EvolveTool.Remove(sessionId, "relationship", """{"name":"Places"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "relationship", """{"name":"Places"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var after = QueryTool.GetDomainOverview(sessionId);
+        var after = McpTestTools.Query.GetDomainOverview(sessionId);
         await Assert.That(after.Message).Contains("0 relationships");
     }
 
     [Test]
     public async Task RemoveRelationship_UnknownName_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = EvolveTool.Remove(sessionId, "relationship", """{"name":"NonExistent"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "relationship", """{"name":"NonExistent"}""");
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task RemoveEntity_RemovesAndUpdatesOverview() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Product"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Product","name":"Name","typeName":"Text"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Product"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Product","name":"Name","typeName":"Text"}""");
 
-        var response = EvolveTool.Remove(sessionId, "entity", """{"name":"Product"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "entity", """{"name":"Product"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var overview = QueryTool.GetDomainOverview(sessionId);
+        var overview = McpTestTools.Query.GetDomainOverview(sessionId);
         await Assert.That(overview.Message).Contains("0 entities");
     }
 
     [Test]
     public async Task RemoveEntity_WithRelationship_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Customer"}""");
-        EvolveTool.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Customer"}""");
+        McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Places","source":"Customer","target":"Order","cardinality":"OneToMany"}""");
 
-        var response = EvolveTool.Remove(sessionId, "entity", """{"name":"Order"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(response.Success).IsFalse();
     }
 
     [Test]
     public async Task RemoveProperty_RemovesAndUpdatesDetail() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Price","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Item"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Price","typeName":"Number"}""");
 
-        var response = EvolveTool.Remove(sessionId, "property", """{"entityName":"Item","name":"Price"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "property", """{"entityName":"Item","name":"Price"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Item");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Item");
         await Assert.That(detail.Success).IsTrue();
         var d = (EntityDetailData)detail.Data!;
         await Assert.That(d.Properties.Count).IsEqualTo(1);
@@ -1105,15 +1105,15 @@ public class McpSmokeTests {
 
     [Test]
     public async Task RemoveStage_RemovesAndUpdatesDetail() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Process"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
 
-        var response = EvolveTool.Remove(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Process");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Process");
         await Assert.That(detail.Success).IsTrue();
         var d = (EntityDetailData)detail.Data!;
         await Assert.That(d.Stages.Count).IsEqualTo(1);
@@ -1122,15 +1122,15 @@ public class McpSmokeTests {
 
     [Test]
     public async Task RemoveAction_RemovesAndUpdatesDetail() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
-        EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"DoIt"}""");
-        EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
+        McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Task","name":"DoIt"}""");
+        McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
 
-        var response = EvolveTool.Remove(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "action", """{"entityName":"Task","name":"Undo"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Task");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Task");
         await Assert.That(detail.Success).IsTrue();
         var d = (EntityDetailData)detail.Data!;
         await Assert.That(d.Actions.Count).IsEqualTo(1);
@@ -1139,26 +1139,26 @@ public class McpSmokeTests {
 
     [Test]
     public async Task RemovePolicy_EntityScope_Removes() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Item"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Score","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Item","name":"HighScore","expression":"Score >= 100"}""");
 
-        var response = EvolveTool.Remove(sessionId, "policy", """{"entityName":"Item","name":"HighScore"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "policy", """{"entityName":"Item","name":"HighScore"}""");
         await Assert.That(response.Success).IsTrue();
     }
 
     [Test]
     public async Task RemoveActionFromStage_Removes() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
-        EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Process"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
 
-        var response = EvolveTool.Remove(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
+        var response = McpTestTools.Evolve.Remove(sessionId, "stage_action", """{"entityName":"Process","stageName":"Active","name":"DoIt"}""");
         await Assert.That(response.Success).IsTrue();
 
-        var detail = QueryTool.GetEntityDetail(sessionId, "Process");
+        var detail = McpTestTools.Query.GetEntityDetail(sessionId, "Process");
         await Assert.That(detail.Success).IsTrue();
         var d = (EntityDetailData)detail.Data!;
         var activeStage = d.Stages.First(s => s.Name == "Active");
@@ -1169,9 +1169,9 @@ public class McpSmokeTests {
 
     [Test]
     public async Task ApplyDsl_WithCreateInAndSubscription_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
 
             Customer: entity {
@@ -1202,7 +1202,7 @@ public class McpSmokeTests {
         await Assert.That(response.Message).Contains("2 entities");
         await Assert.That(response.Message).Contains("1 relationships");
 
-        var exists = McpSessionStore.TryGet(sessionId, out var state);
+        var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
         await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
         await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("orders");
@@ -1223,7 +1223,7 @@ public class McpSmokeTests {
         await Assert.That(analysis.HasErrors).IsFalse();
 
         // Export DSL should still be honest
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportedPoly = export.Data!.GetType().GetProperty("poly")?.GetValue(export.Data) as string;
         await Assert.That(exportedPoly).IsNotNull();
@@ -1232,7 +1232,7 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetDslGuide_ReturnsProductSurface() {
-        var response = DslTool.GetDslGuide();
+        var response = McpTestTools.Dsl.GetDslGuide();
 
         await Assert.That(response.Success).IsTrue();
         var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
@@ -1249,21 +1249,21 @@ public class McpSmokeTests {
         await Assert.That(guideBody!.Contains("## 13.")).IsFalse();
         await Assert.That(guideBody.Split('\n').Length).IsLessThan(240);
 
-        var section = DslTool.GetDslGuide("10");
+        var section = McpTestTools.Dsl.GetDslGuide("10");
         await Assert.That(section.Success).IsTrue();
         var sectionBody = section.Data!.GetType().GetProperty("guide")!.GetValue(section.Data) as string;
         await Assert.That(sectionBody).Contains("actor");
         await Assert.That(sectionBody!.Contains("Golden workflow")).IsFalse();
 
-        var unknown = DslTool.GetDslGuide("no-such-section");
+        var unknown = McpTestTools.Dsl.GetDslGuide("no-such-section");
         await Assert.That(unknown.Success).IsFalse();
 
         // A number names a heading number only: there is no section 1, and "1" must not
         // match the "N1" in section 4's title.
-        await Assert.That(DslTool.GetDslGuide("1").Success).IsFalse();
+        await Assert.That(McpTestTools.Dsl.GetDslGuide("1").Success).IsFalse();
 
         // add/remove point here for their payloads, so section 12 must carry them.
-        var shapes = DslTool.GetDslGuide("12");
+        var shapes = McpTestTools.Dsl.GetDslGuide("12");
         var shapesBody = shapes.Data!.GetType().GetProperty("guide")!.GetValue(shapes.Data) as string;
         await Assert.That(shapesBody).StartsWith("## 12.");
         foreach (var field in new[] { "entityName", "typeName", "cardinality", "stageName", "actionName", "propertyName", "expression", "parameter" })
@@ -1276,7 +1276,7 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetDslGuide_GoldenWorkflow_NamesNamedStoreHarness() {
-        var response = DslTool.GetDslGuide();
+        var response = McpTestTools.Dsl.GetDslGuide();
         await Assert.That(response.Success).IsTrue();
 
         var guideProp = response.Data!.GetType().GetProperty("guide");
@@ -1305,7 +1305,7 @@ public class McpSmokeTests {
     public async Task GetDslGuide_GoldenExample_AppliesCleanly() {
         // G2.2 / G′.5 / G′′.2: The guide's golden example must parse and analyze clean.
         // Extract it from the guide text to keep in sync (extract between the ```poly fences).
-        var guide = DslTool.GetDslGuide("all");
+        var guide = McpTestTools.Dsl.GetDslGuide("all");
         await Assert.That(guide.Success).IsTrue();
 
         // Extract the golden poly block from the raw guide body (not from serialized JSON)
@@ -1318,18 +1318,18 @@ public class McpSmokeTests {
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!.Length).IsGreaterThan(50);
 
-        var (sessionId, _) = McpSessionStore.Create("GuideTest");
-        var response = DslTool.ApplyDsl(sessionId, poly);
+        var (sessionId, _) = McpTestTools.Store.Create("GuideTest");
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
         await Assert.That(response.Success).IsTrue();
 
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
 
         var analysis = DomainModelAnalyzer.Analyze(state!.Domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
         // G′′.3: export_dsl round-trip assertion
-        var exportResponse = DslTool.ExportDsl(sessionId);
+        var exportResponse = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(exportResponse.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(exportResponse.Data);
         await Assert.That(exportJson.ToLowerInvariant()).Contains("domain orders");
@@ -1369,12 +1369,12 @@ public class McpSmokeTests {
 
     [Test]
     public async Task CreateInstance_SimpleEntity_ReturnsSnapshot() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Widget"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Widget","name":"Price","typeName":"Number"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Widget"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Widget","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Widget","name":"Price","typeName":"Number"}""");
 
-        var response = RuntimeTool.CreateInstance(sessionId, "Widget",
+        var response = McpTestTools.Runtime.CreateInstance(sessionId, "Widget",
             """{"Name":"Gadget","Price":2999}""");
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("Widget");
@@ -1388,8 +1388,8 @@ public class McpSmokeTests {
 
     [Test]
     public async Task CreateInstance_DuplicateUnique_FailsLoud() {
-        var (sessionId, _) = McpSessionStore.Create("Support");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Support");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Support
             Agent: entity {
               Handle: Text unique required
@@ -1397,10 +1397,10 @@ public class McpSmokeTests {
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var first = RuntimeTool.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
         await Assert.That(first.Success).IsTrue();
 
-        var dup = RuntimeTool.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        var dup = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
         await Assert.That(dup.Success).IsFalse();
         await Assert.That(dup.Message).Contains("Unique constraint");
         await Assert.That(dup.Message).Contains("Handle");
@@ -1408,8 +1408,8 @@ public class McpSmokeTests {
 
     [Test]
     public async Task InvokeAction_RequireRelExists_Unlinked_Blocks() {
-        var (sessionId, _) = McpSessionStore.Create("Billing");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Billing");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Billing
             Customer: entity { Name: Text required }
             Line: entity {
@@ -1437,12 +1437,12 @@ public class McpSmokeTests {
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Invoice");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Invoice");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Submit");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("HasCustomer");
         await Assert.That(call.Message).DoesNotContain("same key");
@@ -1450,20 +1450,20 @@ public class McpSmokeTests {
 
     [Test]
     public async Task CreateInstance_UnknownEntity_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = RuntimeTool.CreateInstance(sessionId, "NonExistent");
+        var response = McpTestTools.Runtime.CreateInstance(sessionId, "NonExistent");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
 
     [Test]
     public async Task GetInstance_AfterCreate_ReturnsFullSnapshot() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Item"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Label":"Test Item"}""");
         await Assert.That(create.Success).IsTrue();
         var dataJson = System.Text.Json.JsonSerializer.Serialize(create.Data);
@@ -1471,7 +1471,7 @@ public class McpSmokeTests {
         var instanceId = ExtractInstanceId(dataJson);
         await Assert.That(instanceId).IsNotNull();
 
-        var response = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var response = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains(instanceId!);
         await Assert.That(response.Message).Contains("Item");
@@ -1479,49 +1479,49 @@ public class McpSmokeTests {
 
     [Test]
     public async Task GetInstance_UnknownId_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = RuntimeTool.GetInstance(sessionId, "nonexistent-id");
+        var response = McpTestTools.Runtime.GetInstance(sessionId, "nonexistent-id");
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("not found");
     }
 
     [Test]
     public async Task ListInstances_AfterCreate_ReturnsCount() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Item"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Item"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Item","name":"Label","typeName":"Text"}""");
 
-        var r1 = RuntimeTool.CreateInstance(sessionId, "Item", """{"Label":"A"}""");
+        var r1 = McpTestTools.Runtime.CreateInstance(sessionId, "Item", """{"Label":"A"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = RuntimeTool.CreateInstance(sessionId, "Item", """{"Label":"B"}""");
+        var r2 = McpTestTools.Runtime.CreateInstance(sessionId, "Item", """{"Label":"B"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var response = RuntimeTool.ListInstances(sessionId);
+        var response = McpTestTools.Runtime.ListInstances(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("2");
 
         // Filter by entity
-        var filtered = RuntimeTool.ListInstances(sessionId, entityName: "Item");
+        var filtered = McpTestTools.Runtime.ListInstances(sessionId, entityName: "Item");
         await Assert.That(filtered.Success).IsTrue();
         await Assert.That(filtered.Message).Contains("2");
     }
 
     [Test]
     public async Task ListInstances_EmptySession_ReturnsZero() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = RuntimeTool.ListInstances(sessionId);
+        var response = McpTestTools.Runtime.ListInstances(sessionId);
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("0");
     }
 
     [Test]
     public async Task InvokeAction_WithStageTransition_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Use apply_dsl to create a domain with actions + transition effects
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Task: entity {
               Status: Text
@@ -1539,7 +1539,7 @@ public class McpSmokeTests {
         await Assert.That(dsl.Success).IsTrue();
 
         // Create an instance via runtime tool
-        var create = RuntimeTool.CreateInstance(sessionId, "Task",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task",
             """{"Status":"idle"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft"); // first stage
@@ -1548,21 +1548,21 @@ public class McpSmokeTests {
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
         // Call the Start action
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Start");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Start");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
         // Verify transition via get_instance
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(get.Success).IsTrue();
         await Assert.That(get.Message).Contains("Active");
     }
 
     [Test]
     public async Task InvokeAction_WithRequireGuard_BlocksWhenPolicyFails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Score: Number
@@ -1580,49 +1580,49 @@ public class McpSmokeTests {
         await Assert.That(dsl.Success).IsTrue();
 
         // Create instance with low score — policy should block
-        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Score":5}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Submit");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("HighScore");
         await Assert.That(call.Message).Contains("blocked");
 
         // Create instance with high score — should pass
-        var create2 = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create2 = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Score":15}""");
         await Assert.That(create2.Success).IsTrue();
         var instanceId2 = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create2.Data));
 
-        var call2 = RuntimeTool.InvokeAction(sessionId, instanceId2!, "Submit");
+        var call2 = McpTestTools.Runtime.InvokeAction(sessionId, instanceId2!, "Submit");
         await Assert.That(call2.Success).IsTrue();
         await Assert.That(call2.Message).Contains("Active");
     }
 
     [Test]
     public async Task InvokeAction_ActionNotFound_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "NonExistent");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "NonExistent");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("not found");
     }
 
     [Test]
     public async Task InvokeAction_UnknownEntityInstanceId_FailsClosed() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Lib
             Book: entity { Title: Text }
             Patron: entity {
@@ -1630,12 +1630,12 @@ public class McpSmokeTests {
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
-        var patron = RuntimeTool.CreateInstance(sessionId, "Patron");
+        var patron = McpTestTools.Runtime.CreateInstance(sessionId, "Patron");
         await Assert.That(patron.Success).IsTrue();
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
 
-        var call = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut",
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "CheckOut",
             """{"book":"missing-id"}""");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("missing-id");
@@ -1645,8 +1645,8 @@ public class McpSmokeTests {
 
     [Test]
     public async Task InvokeAction_EntityInstanceId_BindsToInstance() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Lib
             Book: entity { Title: Text }
             Patron: entity {
@@ -1658,30 +1658,30 @@ public class McpSmokeTests {
             Loan: entity { book: Book }
             """);
         await Assert.That(dsl.Success).IsTrue();
-        var book = RuntimeTool.CreateInstance(sessionId, "Book", """{"Title":"Dune"}""");
+        var book = McpTestTools.Runtime.CreateInstance(sessionId, "Book", """{"Title":"Dune"}""");
         await Assert.That(book.Success).IsTrue();
-        var patron = RuntimeTool.CreateInstance(sessionId, "Patron");
+        var patron = McpTestTools.Runtime.CreateInstance(sessionId, "Patron");
         await Assert.That(patron.Success).IsTrue();
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var bookId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Book").Key;
         var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
 
-        var call = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut",
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "CheckOut",
             $$"""{"book":"{{bookId}}"}""");
         await Assert.That(call.Success).IsTrue();
-        var loans = RuntimeTool.ListInstances(sessionId, "Loan");
+        var loans = McpTestTools.Runtime.ListInstances(sessionId, "Loan");
         await Assert.That(loans.Success).IsTrue();
         await Assert.That(loans.Message).Contains("1 instance");
     }
 
     [Test]
     public async Task CreateInstance_WitStages_SetsInitialStage() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Process"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Process"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Process","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Process","name":"Active"}""");
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Process");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Process");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
     }
@@ -1690,7 +1690,7 @@ public class McpSmokeTests {
     /// Extracts the instanceId from a JSON response containing an "instance" object.
     /// </summary>
     private static string RequireInstance(string sessionId, string entityName, string? propertiesJson = null) {
-        var create = RuntimeTool.CreateInstance(sessionId, entityName, propertiesJson);
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, entityName, propertiesJson);
         if (!create.Success)
             throw new InvalidOperationException(create.Message);
         var id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(create.Data));
@@ -1716,26 +1716,26 @@ public class McpSmokeTests {
     public async Task AddActionToStage_CopiesEntityActionEffects() {
         // SA.2: AddActionToStage should copy effects/policies from entity-level
         // action when one exists with the same name.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Build: entity action with transition effect, then add to stage
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
         await Assert.That(r3.Success).IsTrue();
-        var r4 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
+        var r4 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
         await Assert.That(r4.Success).IsTrue();
 
         // Add entity-level action with transition effect
-        var r5 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Start"}""");
+        var r5 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Task","name":"Start"}""");
         await Assert.That(r5.Success).IsTrue();
 
         // Manually add stage transition effect via evolution
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
-        var evolveResult = McpSessionStore.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Start", "Active")
                 .Apply(session: session));
@@ -1743,22 +1743,22 @@ public class McpSmokeTests {
         await Assert.That(evolveResult!.Succeeded).IsTrue();
 
         // Now add action to stage — should copy the transition effect
-        var r6 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Start"}""");
+        var r6 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Start"}""");
         await Assert.That(r6.Success).IsTrue();
 
         // Verify via MCP: create instance and call action from Draft stage
-        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Start");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Start");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(get.Success).IsTrue();
         await Assert.That(get.Message).Contains("Active");
     }
@@ -1767,23 +1767,23 @@ public class McpSmokeTests {
     public async Task AddActionToStage_WithoutEntityAction_CreatesNew() {
         // SA.2: When no entity-level action exists, AddActionToStage creates
         // a fresh action (no effects, no policies) — same behavior as before.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Add action only to stage — no entity-level action
-        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"DoSomething"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"DoSomething"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Create instance and call the action — should succeed (no effects)
-        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "DoSomething");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "DoSomething");
         // Should succeed with no effects (no transition — still in Draft)
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Draft");
@@ -1797,14 +1797,14 @@ public class McpSmokeTests {
     public async Task GetDomainAnalysis_WithHints_SuggestsSuggestions() {
         // RT′.1: GetDomainAnalysis should include hint count and affordance
         // pointing to get_domain_suggestions.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // Create entity with properties but no stages — triggers DMAS001 hints
-        EvolveTool.Add(sessionId, "entity", """{"name":"Person"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Person","name":"Age","typeName":"Number"}""");
 
-        var response = QueryTool.GetDomainAnalysis(sessionId);
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
         await Assert.That(response.Success).IsTrue();
 
         // Message should mention hints
@@ -1823,23 +1823,23 @@ public class McpSmokeTests {
     public async Task AddActionToStage_Order_StageBeforeEntityEffects_StillTransitions() {
         // SA′.6: If stage is placed first, then entity-level effects added later,
         // InvokeAction should still use the fallthrough path (empty stage + entity twin).
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Step 1: Add action to stage FIRST (before entity-level action exists)
-        var r1 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Go"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Go"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Step 2: Now add entity-level action with transition effect
-        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Go"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Task","name":"Go"}""");
         await Assert.That(r2.Success).IsTrue();
 
         // Step 3: Add stage transition effect to entity-level action
-        var evolveResult = McpSessionStore.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Go", "Active")
                 .Apply(session: session));
@@ -1847,18 +1847,18 @@ public class McpSmokeTests {
         await Assert.That(evolveResult!.Succeeded).IsTrue();
 
         // Verify via MCP: create instance and call action — should transition
-        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Go");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Go");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(get.Success).IsTrue();
         await Assert.That(get.Message).Contains("Active");
     }
@@ -1870,19 +1870,19 @@ public class McpSmokeTests {
         // must NOT include a Parameters.Count check — otherwise a params-carrying
         // stage copy with no effects silently no-ops instead of falling through to
         // the entity action that carries the transition effect.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        EvolveTool.Add(sessionId, "entity", """{"name":"Task"}""");
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Task"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Task","name":"Name","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Draft"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Task","name":"Active"}""");
 
         // Step 1: entity-level action (empty shell)
-        var r1 = EvolveTool.Add(sessionId, "action", """{"entityName":"Task","name":"Submit"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Task","name":"Submit"}""");
         await Assert.That(r1.Success).IsTrue();
 
         // Step 2: add a parameter to the entity action (entity-first)
-        var paramResult = McpSessionStore.Evolve(sessionId, (domain, session) =>
+        var paramResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddParameterToAction("Task", "Submit",
                     new Property("Note", new DomainTypeReference("Text"), []))
@@ -1892,11 +1892,11 @@ public class McpSmokeTests {
 
         // Step 3: add action to stage — the stage copy carries the parameter
         // but no effects (the entity action has none yet at copy time).
-        var r3 = EvolveTool.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Submit"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "stage_action", """{"entityName":"Task","stageName":"Draft","name":"Submit"}""");
         await Assert.That(r3.Success).IsTrue();
 
         // Step 4: add the transition effect entity-only — the stage copy stays effect-less.
-        var evolveResult = McpSessionStore.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Submit", "Active")
                 .Apply(session: session));
@@ -1905,18 +1905,18 @@ public class McpSmokeTests {
 
         // Runtime: InvokeAction must fall through to the entity action and transition,
         // not silently no-op on the params-carrying stage copy.
-        var create = RuntimeTool.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit", """{"Note":"ok"}""");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Submit", """{"Note":"ok"}""");
         await Assert.That(call.Success).IsTrue();
         await Assert.That(call.Message).Contains("Active");
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(get.Success).IsTrue();
         await Assert.That(get.Message).Contains("Active");
     }
@@ -2114,9 +2114,9 @@ E: entity {{
         // exports correctly. This verifies the authoring/parse/print path, not
         // full RT evaluation (which requires VM-level store graph traversal
         // as a future enhancement).
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2131,14 +2131,14 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Verify export contains the path-prefix policy expression
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("assignee Active");
         await Assert.That(exportJson).Contains("Active: policy");
 
         // Verify the parsed expression shape
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var activePolicy = ticketEntity.Policies.First(p => p.Name == "Active");
@@ -2148,9 +2148,9 @@ E: entity {{
     [Test]
     public async Task Parser_PathPrefix_RelPropCompare_Authoring_ExportsCorrectly() {
         // Q1′′′′.1: Authoring-only — path-prefix compare parse/apply/export test.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity {
               Total: Number
@@ -2164,13 +2164,13 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("customer Tier");
         await Assert.That(exportJson).Contains("VipCustomer");
 
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var orderEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var vipPolicy = orderEntity.Policies.First(p => p.Name == "VipCustomer");
@@ -2181,9 +2181,9 @@ E: entity {{
     public async Task Parser_RelExists_Authoring_ExportsCorrectly() {
         // Q1′′′′.1: Authoring-only — `Rel exists` on a regular property.
         // Use a nullable property on the same entity to test the exists keyword.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Name: Text
@@ -2193,12 +2193,12 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("Flag exists");
 
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var itemEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Item");
         var isSetPolicy = itemEntity.Policies.First(p => p.Name == "IsSet");
@@ -2212,9 +2212,9 @@ E: entity {{
         // The N1 nav creates a relationship; the policy expression references
         // it as RelationshipNavigation. The analysis accepts this when the
         // relationship name is known.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2229,14 +2229,14 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         // The exported poly should contain the relationship name
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("customer");
         await Assert.That(exportJson).Contains("ActiveVip");
 
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var activeVipPolicy = ticketEntity.Policies.First(p => p.Name == "ActiveVip");
@@ -2247,9 +2247,9 @@ E: entity {{
     public async Task AssignLHS_MultiToken_Rejected() {
         // Q1′′′.3: assign customer Status to "X" is rejected (cross-entity write banned)
         // The parser consumes "customer" as the target prop name, then expects "to" but finds "Status".
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Name: Text
@@ -2267,9 +2267,9 @@ E: entity {{
     [Test]
     public async Task AssignRHS_ScalarRelatedRead_Parses() {
         // Q1′′′.3: assign Label to customer Tier is OK (scalar related read on RHS)
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2288,7 +2288,7 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Verify export contains the path-prefix expression
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("customer Tier");
@@ -2304,8 +2304,8 @@ E: entity {{
         await Assert.That(nav.RelationshipName).IsEqualTo("orders");
 
         // Verify analysis rejection via apply_dsl on a domain with a many relationship
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity {
               Status: Text
@@ -2324,8 +2324,8 @@ E: entity {{
     [Test]
     public async Task Parser_NestedWhere_Rejected() {
         // Q1'''''.2: Nested `where` inside a where body is rejected with a clear error.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2354,8 +2354,8 @@ E: entity {{
     [Test]
     public async Task ApplyDsl_RelExists_OnNavRelationship_Succeeds() {
         // Q1''''''.1: `Rel exists` on a real N1 nav relationship must apply cleanly.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2369,14 +2369,14 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Verify export contains the exists expression
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("assignee exists");
         await Assert.That(exportJson).Contains("HasAssignee");
 
         // Verify the parsed expression shape
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var ticketEntity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var policy = ticketEntity.Policies.First(p => p.Name == "HasAssignee");
@@ -2386,8 +2386,8 @@ E: entity {{
     [Test]
     public async Task ApplyDsl_RelNotExists_OnNavRelationship_Succeeds() {
         // Q1''''''.1: `not Rel exists` on a real N1 nav must apply cleanly.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2400,7 +2400,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("certificate exists");
@@ -2410,8 +2410,8 @@ E: entity {{
     [Test]
     public async Task Analysis_BodyValidation_ValidPropOnTarget_Succeeds() {
         // Q1''''''.4: Happy-path test — body property exists on target entity.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Ticket: entity {
               Label: Text
@@ -2425,7 +2425,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("customer Tier");
@@ -2433,8 +2433,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithArithmetic_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Total: Number
@@ -2445,7 +2445,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("-");
@@ -2453,8 +2453,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithInvokeEffect_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity {
               Draft: stage {
@@ -2472,7 +2472,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("invoke Validate");
@@ -2480,8 +2480,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithConditionalEffect_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Status: Text
@@ -2501,7 +2501,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("if (");
@@ -2510,8 +2510,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithEqualsConstraint_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Status: Text default("Active")
@@ -2520,7 +2520,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("default(");
@@ -2528,8 +2528,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithEnumType_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Color: enum {
               Red,
@@ -2550,8 +2550,8 @@ E: entity {{
         // NamedTypeReference) — the enum RHS was lowered to `Status.On`, which is valid C#
         // for the exporter but not a compilable VM node. The runtime stores enum values as
         // strings, so the lowered RHS must be a string constant (export keeps Status.On).
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Status: enum { Off, On }
             Item: entity {
@@ -2564,22 +2564,22 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Status":"Off"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var bare = RuntimeTool.InvokeAction(sessionId, instanceId!, "Bare");
+        var bare = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Bare");
         await Assert.That(bare.Success).IsTrue();
         var get1 = System.Text.Json.JsonSerializer.Serialize(
-            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+            McpTestTools.Runtime.GetInstance(sessionId, instanceId!).Data);
         await Assert.That(get1).Contains("\"On\"");
 
-        var literal = RuntimeTool.InvokeAction(sessionId, instanceId!, "Literal");
+        var literal = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Literal");
         await Assert.That(literal.Success).IsTrue();
         var get2 = System.Text.Json.JsonSerializer.Serialize(
-            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+            McpTestTools.Runtime.GetInstance(sessionId, instanceId!).Data);
         await Assert.That(get2).Contains("\"On\"");
     }
 
@@ -2589,8 +2589,8 @@ E: entity {{
         // applying DefaultValueConstraint — the C# export applied them as optional ctor
         // params (runtime/export divergence: Rack.LastPing was null at runtime, "none" in
         // the export). Literal, enum-member, and number defaults must all land on the instance.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Status: enum { Off, On }
             Rack: entity {
@@ -2602,12 +2602,12 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Rack", """{"Name":"rack1"}""");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Rack", """{"Name":"rack1"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
         var get = System.Text.Json.JsonSerializer.Serialize(
-            RuntimeTool.GetInstance(sessionId, instanceId!).Data);
+            McpTestTools.Runtime.GetInstance(sessionId, instanceId!).Data);
 
         await Assert.That(get).Contains("\"none\"");
         await Assert.That(get).Contains("\"10\"");
@@ -2620,8 +2620,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_InvokeEffect_RuntimeSelfInvoke_RunsNestedAction() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity {
               Status: Text
@@ -2639,16 +2639,16 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Order",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Order",
             """{"Status":"new"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Submit");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Submit");
         await Assert.That(call.Success).IsTrue();
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         await Assert.That(get.Success).IsTrue();
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         await Assert.That(getJson).Contains("Active");
@@ -2657,8 +2657,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_ConditionalEffect_RuntimeBranchTaken() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Status: Text
@@ -2678,34 +2678,34 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var createOk = RuntimeTool.CreateInstance(sessionId, "Item",
+        var createOk = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Status":"pending","Count":3}""");
         await Assert.That(createOk.Success).IsTrue();
         var idOk = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(createOk.Data));
-        var callOk = RuntimeTool.InvokeAction(sessionId, idOk!, "Process");
+        var callOk = McpTestTools.Runtime.InvokeAction(sessionId, idOk!, "Process");
         await Assert.That(callOk.Success).IsTrue();
-        var getOk = RuntimeTool.GetInstance(sessionId, idOk!);
+        var getOk = McpTestTools.Runtime.GetInstance(sessionId, idOk!);
         var okJson = System.Text.Json.JsonSerializer.Serialize(getOk.Data);
         await Assert.That(okJson).Contains("\"ok\"");
         await Assert.That(okJson).Contains("Done");
 
-        var createEmpty = RuntimeTool.CreateInstance(sessionId, "Item",
+        var createEmpty = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Status":"pending","Count":0}""");
         await Assert.That(createEmpty.Success).IsTrue();
         var idEmpty = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(createEmpty.Data));
-        var callEmpty = RuntimeTool.InvokeAction(sessionId, idEmpty!, "Process");
+        var callEmpty = McpTestTools.Runtime.InvokeAction(sessionId, idEmpty!, "Process");
         await Assert.That(callEmpty.Success).IsTrue();
-        var getEmpty = RuntimeTool.GetInstance(sessionId, idEmpty!);
+        var getEmpty = McpTestTools.Runtime.GetInstance(sessionId, idEmpty!);
         var emptyJson = System.Text.Json.JsonSerializer.Serialize(getEmpty.Data);
         await Assert.That(emptyJson).Contains("empty");
     }
 
     [Test]
     public async Task ApplyDsl_ActionParameter_RuntimeBindingVisible() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Label: Text
@@ -2720,17 +2720,17 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Label":"unset"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Tag",
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Tag",
             """{"value":"tagged"}""");
         await Assert.That(call.Success).IsTrue();
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         await Assert.That(getJson).Contains("tagged");
         await Assert.That(getJson).Contains("Done");
@@ -2738,8 +2738,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_InvokeNestedWithArgs_RuntimePassesBindings() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Label: Text
@@ -2757,16 +2757,16 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Item",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Item",
             """{"Label":"before"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Go");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Go");
         await Assert.That(call.Success).IsTrue();
 
-        var get = RuntimeTool.GetInstance(sessionId, instanceId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         await Assert.That(getJson).Contains("from-invoke");
     }
@@ -2775,8 +2775,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_RecursiveInvoke_ExceedsDepth_FailsLoud() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Loop: entity {
               Status: Text
@@ -2789,21 +2789,21 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var create = RuntimeTool.CreateInstance(sessionId, "Loop",
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Loop",
             """{"Status":"x"}""");
         await Assert.That(create.Success).IsTrue();
         var instanceId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(create.Data));
 
-        var call = RuntimeTool.InvokeAction(sessionId, instanceId!, "Bounce");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, instanceId!, "Bounce");
         await Assert.That(call.Success).IsFalse();
         await Assert.That(call.Message).Contains("depth exceeded");
     }
 
     [Test]
     public async Task ApplyDsl_ElseIf_ParsesAndRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Status: Text
@@ -2823,7 +2823,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("else if");
@@ -2833,8 +2833,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_CrossEntityInvoke_RuntimePasses() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Service: entity {
               Status: Text
@@ -2852,20 +2852,20 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Create the target instance first
-        var createSvc = RuntimeTool.CreateInstance(sessionId, "Service",
+        var createSvc = McpTestTools.Runtime.CreateInstance(sessionId, "Service",
             """{"Status":"idle"}""");
         await Assert.That(createSvc.Success).IsTrue();
         var svcId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(createSvc.Data));
 
         // Create the orchestrator
-        var createOrch = RuntimeTool.CreateInstance(sessionId, "Orchestrator");
+        var createOrch = McpTestTools.Runtime.CreateInstance(sessionId, "Orchestrator");
         await Assert.That(createOrch.Success).IsTrue();
         var orchId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(createOrch.Data));
 
         // Link orchestrator → service via the InstanceStore
-        McpSessionStore.TryModifyInstances(sessionId, state => {
+        McpTestTools.Store.TryModifyInstances(sessionId, state => {
             if (state.InstanceMap.TryGetValue(orchId!, out var orch)
                 && state.InstanceMap.TryGetValue(svcId!, out var svc)
                 && state.InstanceStore is not null) {
@@ -2874,11 +2874,11 @@ E: entity {{
         });
 
         // Now invoke Run on orchestrator
-        var call = RuntimeTool.InvokeAction(sessionId, orchId!, "Run");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, orchId!, "Run");
         await Assert.That(call.Success).IsTrue();
 
         // Verify the service instance was modified via cross-entity invoke
-        var get = RuntimeTool.GetInstance(sessionId, svcId!);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, svcId!);
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         await Assert.That(getJson).Contains("processed");
     }
@@ -2887,8 +2887,8 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_ForEachInvoke_InvokesEveryTarget() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Target: entity {
               Status: Text
@@ -2905,11 +2905,11 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var createT1 = RuntimeTool.CreateInstance(sessionId, "Target",
+        var createT1 = McpTestTools.Runtime.CreateInstance(sessionId, "Target",
             """{"Status":"a"}""");
-        var createT2 = RuntimeTool.CreateInstance(sessionId, "Target",
+        var createT2 = McpTestTools.Runtime.CreateInstance(sessionId, "Target",
             """{"Status":"b"}""");
-        var createS = RuntimeTool.CreateInstance(sessionId, "Source");
+        var createS = McpTestTools.Runtime.CreateInstance(sessionId, "Source");
         await Assert.That(createT1.Success).IsTrue();
         await Assert.That(createT2.Success).IsTrue();
         await Assert.That(createS.Success).IsTrue();
@@ -2917,7 +2917,7 @@ E: entity {{
         var t1id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT1.Data));
         var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
 
-        McpSessionStore.TryModifyInstances(sessionId, state => {
+        McpTestTools.Store.TryModifyInstances(sessionId, state => {
             DomainEntityInstance? src = null;
             foreach (var (id, inst) in state.InstanceMap)
                 if (id == sid) src = inst;
@@ -2926,22 +2926,22 @@ E: entity {{
                     if (id != sid) state.InstanceStore.Link("items", src, inst);
         });
 
-        var call = RuntimeTool.InvokeAction(sessionId, sid!, "RunAll");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, sid!, "RunAll");
         await Assert.That(call.Success).IsTrue();
 
-        var g1 = RuntimeTool.GetInstance(sessionId, t1id!);
+        var g1 = McpTestTools.Runtime.GetInstance(sessionId, t1id!);
         var g1s = System.Text.Json.JsonSerializer.Serialize(g1.Data);
         await Assert.That(g1s.Contains("done")).IsTrue();
 
-        var g2 = RuntimeTool.GetInstance(sessionId, t2id!);
+        var g2 = McpTestTools.Runtime.GetInstance(sessionId, t2id!);
         var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
         await Assert.That(g2s.Contains("done")).IsTrue();
     }
 
     [Test]
     public async Task ApplyDsl_ForEachInvoke_PolicyPredicate_OnlyMatchesTarget() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Target: entity {
               Status: Text
@@ -2960,11 +2960,11 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var createT1 = RuntimeTool.CreateInstance(sessionId, "Target",
+        var createT1 = McpTestTools.Runtime.CreateInstance(sessionId, "Target",
             """{"Status":"x","Size":5}""");
-        var createT2 = RuntimeTool.CreateInstance(sessionId, "Target",
+        var createT2 = McpTestTools.Runtime.CreateInstance(sessionId, "Target",
             """{"Status":"x","Size":20}""");
-        var createS = RuntimeTool.CreateInstance(sessionId, "Source");
+        var createS = McpTestTools.Runtime.CreateInstance(sessionId, "Source");
         await Assert.That(createT1.Success).IsTrue();
         await Assert.That(createT2.Success).IsTrue();
         await Assert.That(createS.Success).IsTrue();
@@ -2972,7 +2972,7 @@ E: entity {{
         var t1id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT1.Data));
         var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
 
-        McpSessionStore.TryModifyInstances(sessionId, state => {
+        McpTestTools.Store.TryModifyInstances(sessionId, state => {
             DomainEntityInstance? src = null;
             foreach (var (id, inst) in state.InstanceMap)
                 if (id == sid) src = inst;
@@ -2981,16 +2981,16 @@ E: entity {{
                     if (id != sid) state.InstanceStore.Link("items", src, inst);
         });
 
-        var call = RuntimeTool.InvokeAction(sessionId, sid!, "RunTag");
+        var call = McpTestTools.Runtime.InvokeAction(sessionId, sid!, "RunTag");
         await Assert.That(call.Success).IsTrue();
 
         // t1 (Size=5) does NOT match IsBig — Status must not be "tagged"
-        var g1 = RuntimeTool.GetInstance(sessionId, t1id!);
+        var g1 = McpTestTools.Runtime.GetInstance(sessionId, t1id!);
         var g1s = System.Text.Json.JsonSerializer.Serialize(g1.Data);
         await Assert.That(g1s.Contains("tagged")).IsFalse();
 
         // t2 (Size=20) matches IsBig — should be tagged
-        var g2 = RuntimeTool.GetInstance(sessionId, t2id!);
+        var g2 = McpTestTools.Runtime.GetInstance(sessionId, t2id!);
         var g2s = System.Text.Json.JsonSerializer.Serialize(g2.Data);
         await Assert.That(g2s.Contains("tagged")).IsTrue();
     }
@@ -3120,8 +3120,8 @@ E: entity {{
     [Test]
     public async Task ApplyDsl_QuantifierAuthoring_ApplyAndExport() {
         // Collection quantifier MCP golden: DSL apply + export with quantifier
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity {
               Status: Text
@@ -3139,7 +3139,7 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var exportJson = System.Text.Json.JsonSerializer.Serialize(export.Data);
         await Assert.That(exportJson).Contains("any orders where");
@@ -3156,9 +3156,9 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithColumnAnnotation_CreatesFacetedProperty() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var response = DslTool.ApplyDsl(sessionId, """
+        var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               ProductName: Text column("PROD_NAME")
@@ -3166,7 +3166,7 @@ E: entity {{
             """);
         await Assert.That(response.Success).IsTrue();
 
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var item = state!.Domain.Types.OfType<Entity>().Single();
         var prop = item.Properties.Single();
@@ -3179,9 +3179,9 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithColumnAnnotation_ExportRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var apply = DslTool.ApplyDsl(sessionId, """
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Code: Text unique column("CODE", "VARCHAR2(20)")
@@ -3190,16 +3190,16 @@ E: entity {{
             """);
         await Assert.That(apply.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var poly = extractPolyFromExport(export);
         await Assert.That(poly).Contains("column(\"CODE\", \"VARCHAR2(20)\")");
         await Assert.That(poly).Contains("column(\"NAME\")");
 
         // Re-import the export to confirm idempotent round-trip
-        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        var reapply = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
-        var state = McpSessionStore.TryGet(sessionId, out var s) ? s : null;
+        var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
         var item = state!.Domain.Types.OfType<Entity>().Single();
         var code = item.Properties.Single(p => p.Name == "Code");
@@ -3209,9 +3209,9 @@ E: entity {{
 
     [Test]
     public async Task ApplyDsl_WithTableAnnotation_ExportRoundTrips() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var apply = DslTool.ApplyDsl(sessionId, """
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Order: entity table("ORDER_RECORDS") {
               Total: Number
@@ -3219,15 +3219,15 @@ E: entity {{
             """);
         await Assert.That(apply.Success).IsTrue();
 
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var poly = extractPolyFromExport(export);
         await Assert.That(poly).Contains("table(\"ORDER_RECORDS\")");
 
         // Re-import to confirm round-trip
-        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        var reapply = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
-        var order = McpSessionStore
+        var order = McpTestTools.Store
             .TryGet(sessionId, out var s) ? s.Domain.Types.OfType<Entity>().Single() : null;
         await Assert.That(order).IsNotNull();
         await Assert.That(order!.Facets.Count).IsEqualTo(1);
@@ -3238,9 +3238,9 @@ E: entity {{
     public async Task ApplyDsl_ColumnAfterConstraint_Parses() {
         // Annotation after constraint in property tail — printer emits constraints
         // before facets (canonical order), but parsing accepts any interleaving.
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var apply = DslTool.ApplyDsl(sessionId, """
+        var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Item: entity {
               Code: Text unique column("C")
@@ -3252,7 +3252,7 @@ E: entity {{
         await Assert.That(apply.Success).IsTrue();
 
         // Printer canonical order: constraints before facets
-        var export = DslTool.ExportDsl(sessionId);
+        var export = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(export.Success).IsTrue();
         var poly = extractPolyFromExport(export);
         await Assert.That(poly).Contains("unique column(\"C\")");
@@ -3261,7 +3261,7 @@ E: entity {{
         await Assert.That(poly).Contains("unique column(\"F\")");
 
         // Re-import confirms idempotent round-trip under canonical order
-        var reapply = DslTool.ApplyDsl(sessionId, poly);
+        var reapply = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
         await Assert.That(reapply.Success).IsTrue();
     }
 
@@ -3274,10 +3274,10 @@ E: entity {{
     [Test]
     public async Task EvaluatePolicy_AnyQuantifier_WithLinkedInstances() {
         // Collection quantifier MCP end-to-end: apply_dsl → create instance with links → evaluate_policy with instanceId
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
         // 1. Apply DSL with collection quantifier policy
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Customer: entity {
               Name: Text
@@ -3293,20 +3293,20 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // 2. Create instances
-        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
+        var custResult = McpTestTools.Runtime.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
         await Assert.That(custResult.Success).IsTrue();
         await Assert.That(custResult.Message).Contains("created");
         var custDataJson = System.Text.Json.JsonSerializer.Serialize(custResult.Data);
         await Assert.That(custDataJson).Contains("instanceId");
 
-        var order1Result = RuntimeTool.CreateInstance(sessionId, "Order", """{"Total":50}""");
+        var order1Result = McpTestTools.Runtime.CreateInstance(sessionId, "Order", """{"Total":50}""");
         await Assert.That(order1Result.Success).IsTrue();
 
-        var order2Result = RuntimeTool.CreateInstance(sessionId, "Order", """{"Total":200}""");
+        var order2Result = McpTestTools.Runtime.CreateInstance(sessionId, "Order", """{"Total":200}""");
         await Assert.That(order2Result.Success).IsTrue();
 
         // 3. Resolve instance IDs and link via the public MCP tool
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var custInstance = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Customer");
         var order1 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv) && tv?.Equals(50L) == true);
         var order2 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv2) && tv2?.Equals(200L) == true);
@@ -3318,22 +3318,22 @@ E: entity {{
         var order1Id = st.InstanceMap.First(kvp => kvp.Value == order1!).Key;
         var order2Id = st.InstanceMap.First(kvp => kvp.Value == order2!).Key;
 
-        var link1 = RuntimeTool.LinkInstances(sessionId, custId, "orders", order1Id);
+        var link1 = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", order1Id);
         await Assert.That(link1.Success).IsTrue();
         await Assert.That(link1.Message).Contains("Linked");
 
-        var link2 = RuntimeTool.LinkInstances(sessionId, custId, "orders", order2Id);
+        var link2 = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", order2Id);
         await Assert.That(link2.Success).IsTrue();
         await Assert.That(link2.Message).Contains("Linked");
 
         // 4. Evaluate HasBigOrder policy — should be true (order2 has Total 200 > 100)
-        var evalTrue = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasBigOrder",
+        var evalTrue = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasBigOrder",
             instanceId: custId);
         await Assert.That(evalTrue.Success).IsTrue();
         await Assert.That(evalTrue.Message).Contains("true");
 
         // 5. Evaluate HasNoBigOrder policy — should be false (order2 matches > 100)
-        var evalFalse = PolicyTool.EvaluatePolicy(sessionId, "Customer", "HasNoBigOrder",
+        var evalFalse = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "HasNoBigOrder",
             instanceId: custId);
         await Assert.That(evalFalse.Success).IsTrue();
         await Assert.That(evalFalse.Message).Contains("false");
@@ -3342,9 +3342,9 @@ E: entity {{
     [Test]
     public async Task EvaluatePolicy_OwnedToOnePathPrefix_CreateLink_TrueAndFalse() {
         // Owned path-prefix golden: owned to-one path-prefix → create/link → evaluate_policy true + false
-        var (sessionId, _) = McpSessionStore.Create("OwnedPolicyGolden");
+        var (sessionId, _) = McpTestTools.Store.Create("OwnedPolicyGolden");
 
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain OwnedPolicyGolden
             Customer: entity {
               Name: Text
@@ -3357,16 +3357,16 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var alice = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
+        var alice = McpTestTools.Runtime.CreateInstance(sessionId, "Customer", """{"Name":"Alice"}""");
         await Assert.That(alice.Success).IsTrue();
-        var bob = RuntimeTool.CreateInstance(sessionId, "Customer", """{"Name":"Bob"}""");
+        var bob = McpTestTools.Runtime.CreateInstance(sessionId, "Customer", """{"Name":"Bob"}""");
         await Assert.That(bob.Success).IsTrue();
-        var urbanProfile = RuntimeTool.CreateInstance(sessionId, "Profile", """{"City":"Metropolis"}""");
+        var urbanProfile = McpTestTools.Runtime.CreateInstance(sessionId, "Profile", """{"City":"Metropolis"}""");
         await Assert.That(urbanProfile.Success).IsTrue();
-        var ruralProfile = RuntimeTool.CreateInstance(sessionId, "Profile", """{"City":"Gotham"}""");
+        var ruralProfile = McpTestTools.Runtime.CreateInstance(sessionId, "Profile", """{"City":"Gotham"}""");
         await Assert.That(ruralProfile.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aliceId = st.InstanceMap.First(kvp =>
             kvp.Value.Entity.Name == "Customer"
             && kvp.Value.Snapshot().TryGetValue("Name", out var n)
@@ -3384,48 +3384,48 @@ E: entity {{
             && kvp.Value.Snapshot().TryGetValue("City", out var c2)
             && c2?.Equals("Gotham") == true).Key;
 
-        var linkUrban = RuntimeTool.LinkInstances(sessionId, aliceId, "profile", urbanId);
+        var linkUrban = McpTestTools.Runtime.LinkInstances(sessionId, aliceId, "profile", urbanId);
         await Assert.That(linkUrban.Success).IsTrue();
-        var linkRural = RuntimeTool.LinkInstances(sessionId, bobId, "profile", ruralId);
+        var linkRural = McpTestTools.Runtime.LinkInstances(sessionId, bobId, "profile", ruralId);
         await Assert.That(linkRural.Success).IsTrue();
 
-        var evalTrue = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: aliceId);
+        var evalTrue = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: aliceId);
         await Assert.That(evalTrue.Success).IsTrue();
         await Assert.That(evalTrue.Message).Contains("true");
 
-        var evalFalse = PolicyTool.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: bobId);
+        var evalFalse = McpTestTools.Policy.EvaluatePolicy(sessionId, "Customer", "IsUrban", instanceId: bobId);
         await Assert.That(evalFalse.Success).IsTrue();
         await Assert.That(evalFalse.Message).Contains("false");
     }
 
     [Test]
     public async Task LinkInstances_UnknownRelationship_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             A: entity { b: many B }
             B: entity { a: A }
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
-        var link = RuntimeTool.LinkInstances(sessionId, aId, "nonexistent_rel", bId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, aId, "nonexistent_rel", bId);
         await Assert.That(link.Success).IsFalse();
         await Assert.That(link.Message).Contains("not found");
     }
 
     [Test]
     public async Task LinkInstances_WrongEntityTypes_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Customer: entity { orders: many Order }
             Order: entity { customer: Customer }
@@ -3433,57 +3433,57 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", "{}");
+        var custResult = McpTestTools.Runtime.CreateInstance(sessionId, "Customer", "{}");
         await Assert.That(custResult.Success).IsTrue();
-        var invResult = RuntimeTool.CreateInstance(sessionId, "Invoice", "{}");
+        var invResult = McpTestTools.Runtime.CreateInstance(sessionId, "Invoice", "{}");
         await Assert.That(invResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
         var invId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Invoice").Key;
 
         // Customer → Invoice via "orders" (Invoice is not Order)
-        var link = RuntimeTool.LinkInstances(sessionId, custId, "orders", invId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", invId);
         await Assert.That(link.Success).IsFalse();
         await Assert.That(link.Message).Contains("connects");
     }
 
     [Test]
     public async Task LinkInstances_ReversedEnds_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Customer: entity { orders: many Order }
             Order: entity { customer: Customer }
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var custResult = RuntimeTool.CreateInstance(sessionId, "Customer", "{}");
+        var custResult = McpTestTools.Runtime.CreateInstance(sessionId, "Customer", "{}");
         await Assert.That(custResult.Success).IsTrue();
-        var orderResult = RuntimeTool.CreateInstance(sessionId, "Order", "{}");
+        var orderResult = McpTestTools.Runtime.CreateInstance(sessionId, "Order", "{}");
         await Assert.That(orderResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
         var orderId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order").Key;
 
         // Pass order as source, customer as target — reversed for directed "orders" link
-        var link = RuntimeTool.LinkInstances(sessionId, orderId, "orders", custId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, orderId, "orders", custId);
         await Assert.That(link.Success).IsFalse();
         await Assert.That(link.Message).Contains("reversed");
     }
 
     [Test]
     public async Task LinkInstances_MissingSource_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
-        var link = RuntimeTool.LinkInstances(sessionId, "nonexistent-id", "bs", bId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, "nonexistent-id", "bs", bId);
         await Assert.That(link.Success).IsFalse();
         await Assert.That(link.Message).Contains("not found");
     }
@@ -3492,24 +3492,24 @@ E: entity {{
 
     [Test]
     public async Task UnlinkInstances_LinkThenUnlink_Succeeds() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
 
-        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
         // Link first
-        var link = RuntimeTool.LinkInstances(sessionId, aId, "bs", bId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, aId, "bs", bId);
         await Assert.That(link.Success).IsTrue();
 
         // Then unlink
-        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "bs", bId);
+        var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, aId, "bs", bId);
         await Assert.That(unlink.Success).IsTrue();
         await Assert.That(unlink.Message).Contains("Unlinked");
 
@@ -3519,26 +3519,26 @@ E: entity {{
 
     [Test]
     public async Task UnlinkInstances_OwnedTarget_LastOwner_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain T
             Parent: entity { kid: owned Child }
             Child: entity { }
             """);
 
-        var parentResult = RuntimeTool.CreateInstance(sessionId, "Parent", "{}");
+        var parentResult = McpTestTools.Runtime.CreateInstance(sessionId, "Parent", "{}");
         await Assert.That(parentResult.Success).IsTrue();
-        var childResult = RuntimeTool.CreateInstance(sessionId, "Child", "{}");
+        var childResult = McpTestTools.Runtime.CreateInstance(sessionId, "Child", "{}");
         await Assert.That(childResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var parentId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Parent").Key;
         var childId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Child").Key;
 
-        var link = RuntimeTool.LinkInstances(sessionId, parentId, "kid", childId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, parentId, "kid", childId);
         await Assert.That(link.Success).IsTrue();
 
-        var unlink = RuntimeTool.UnlinkInstances(sessionId, parentId, "kid", childId);
+        var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, parentId, "kid", childId);
         await Assert.That(unlink.Success).IsFalse();
         await Assert.That(unlink.Message).Contains(Relationship.UnlinkViolationMessage("kid"));
         await Assert.That(st.InstanceStore!.IsLinked("kid", st.InstanceMap[parentId], st.InstanceMap[childId])).IsTrue();
@@ -3546,53 +3546,53 @@ E: entity {{
 
     [Test]
     public async Task UnlinkInstances_NoExistingLink_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
 
-        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
         // Unlink without linking first — should fail
-        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "bs", bId);
+        var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, aId, "bs", bId);
         await Assert.That(unlink.Success).IsFalse();
         await Assert.That(unlink.Message).Contains("No link found");
     }
 
     [Test]
     public async Task UnlinkInstances_UnknownRelationship_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { } B: entity { }");
-        var aResult = RuntimeTool.CreateInstance(sessionId, "A", "{}");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { } B: entity { }");
+        var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
-        var unlink = RuntimeTool.UnlinkInstances(sessionId, aId, "nonexistent_rel", bId);
+        var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, aId, "nonexistent_rel", bId);
         await Assert.That(unlink.Success).IsFalse();
         await Assert.That(unlink.Message).Contains("not found");
     }
 
     [Test]
     public async Task UnlinkInstances_MissingSource_Fails() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
-        var bResult = RuntimeTool.CreateInstance(sessionId, "B", "{}");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
 
-        var unlink = RuntimeTool.UnlinkInstances(sessionId, "nonexistent-id", "bs", bId);
+        var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, "nonexistent-id", "bs", bId);
         await Assert.That(unlink.Success).IsFalse();
         await Assert.That(unlink.Message).Contains("not found");
     }
@@ -3603,8 +3603,8 @@ E: entity {{
     public async Task InvokeAction_WithCreateIn_RegistersChildInInstanceMap() {
         // link-2: After create in Relationship { ... } executes via invoke_action,
         // the created child must appear in list_instances.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Patron: entity {
               Name: Text
@@ -3622,23 +3622,23 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var createResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        var createResult = McpTestTools.Runtime.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
         await Assert.That(createResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
 
         // Before invoke, list_instances for Loan should be empty
-        var before = RuntimeTool.ListInstances(sessionId, "Loan");
+        var before = McpTestTools.Runtime.ListInstances(sessionId, "Loan");
         await Assert.That(before.Success).IsTrue();
         await Assert.That(before.Message).Contains("0 instance");
 
         // Invoke CheckOut with create in
-        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "CheckOut", """{"amount":100}""");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "CheckOut", """{"amount":100}""");
         await Assert.That(invoke.Success).IsTrue();
 
         // After invoke, list_instances for Loan should find the child (1 instance)
-        var after = RuntimeTool.ListInstances(sessionId, "Loan");
+        var after = McpTestTools.Runtime.ListInstances(sessionId, "Loan");
         await Assert.That(after.Success).IsTrue();
         await Assert.That(after.Message).Contains("1 instance");
     }
@@ -3646,8 +3646,8 @@ E: entity {{
     [Test]
     public async Task InvokeAction_WithCreateIn_ChildIsGetInstanceAble() {
         // link-2: Child created by create-in should be accessible via get_instance.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Patron: entity {
               Name: Text
@@ -3665,14 +3665,14 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var createResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        var createResult = McpTestTools.Runtime.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
         await Assert.That(createResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
 
         // Invoke AssignTask to create child via create in
-        var invoke = RuntimeTool.InvokeAction(sessionId, patronId, "AssignTask", """{"desc":"Write report"}""");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssignTask", """{"desc":"Write report"}""");
         await Assert.That(invoke.Success).IsTrue();
 
         // Find the child in the InstanceMap by entity name
@@ -3680,7 +3680,7 @@ E: entity {{
         await Assert.That(childEntry.Value).IsNotNull();
 
         // Verify get_instance works for the child
-        var getChild = RuntimeTool.GetInstance(sessionId, childEntry.Key);
+        var getChild = McpTestTools.Runtime.GetInstance(sessionId, childEntry.Key);
         await Assert.That(getChild.Success).IsTrue();
         var getJson = System.Text.Json.JsonSerializer.Serialize(getChild.Data);
         await Assert.That(getJson).Contains("Task");
@@ -3690,8 +3690,8 @@ E: entity {{
 
     [Test]
     public async Task GetInstance_AfterLink_ShowsNavLink() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Patron: entity {
               Name: Text
@@ -3704,21 +3704,21 @@ E: entity {{
             """);
         await Assert.That(dsl.Success).IsTrue();
 
-        var patronResult = RuntimeTool.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
+        var patronResult = McpTestTools.Runtime.CreateInstance(sessionId, "Patron", """{"Name":"Alice"}""");
         await Assert.That(patronResult.Success).IsTrue();
-        var loanResult = RuntimeTool.CreateInstance(sessionId, "Loan", """{"Amount":100}""");
+        var loanResult = McpTestTools.Runtime.CreateInstance(sessionId, "Loan", """{"Amount":100}""");
         await Assert.That(loanResult.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
         var loanId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Loan").Key;
 
         // Link and verify
-        var link = RuntimeTool.LinkInstances(sessionId, patronId, "loans", loanId);
+        var link = McpTestTools.Runtime.LinkInstances(sessionId, patronId, "loans", loanId);
         await Assert.That(link.Success).IsTrue();
 
         // get_instance for Patron should show a nav link to Loan via "loans"
-        var patronGet = RuntimeTool.GetInstance(sessionId, patronId);
+        var patronGet = McpTestTools.Runtime.GetInstance(sessionId, patronId);
         await Assert.That(patronGet.Success).IsTrue();
         var patronJson = System.Text.Json.JsonSerializer.Serialize(patronGet.Data);
         await Assert.That(patronJson).Contains("loans");
@@ -3727,7 +3727,7 @@ E: entity {{
 
         // get_instance for Loan should also show a nav link back to Patron
         // (it appears via the same "loans" relationship, from the target side)
-        var loanGet = RuntimeTool.GetInstance(sessionId, loanId);
+        var loanGet = McpTestTools.Runtime.GetInstance(sessionId, loanId);
         await Assert.That(loanGet.Success).IsTrue();
         var loanJson = System.Text.Json.JsonSerializer.Serialize(loanGet.Data);
         await Assert.That(loanJson).Contains("loans");
@@ -3736,15 +3736,15 @@ E: entity {{
 
     [Test]
     public async Task GetInstance_WithoutLinks_NavsEmpty() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        DslTool.ApplyDsl(sessionId, "domain T A: entity { Name: Text }");
-        var result = RuntimeTool.CreateInstance(sessionId, "A", """{"Name":"x"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { Name: Text }");
+        var result = McpTestTools.Runtime.CreateInstance(sessionId, "A", """{"Name":"x"}""");
         await Assert.That(result.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
 
-        var get = RuntimeTool.GetInstance(sessionId, aId);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, aId);
         await Assert.That(get.Success).IsTrue();
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         // Should have navigationLinks field — and it should be empty
@@ -3756,8 +3756,8 @@ E: entity {{
     [Test]
     public async Task InvokeAction_RequireNotPolicy_WhenPolicyFalse_Succeeds() {
         // require not PolicyName must ALLOW the action when Policy evaluates to false.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Counter: entity {
               Value: Number default(0)
@@ -3775,18 +3775,18 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Create instance where AtLimit is false (0 >= 5 is false)
-        var create = RuntimeTool.CreateInstance(sessionId, "Counter", """{"Value":0,"Max":5}""");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Counter", """{"Value":0,"Max":5}""");
         await Assert.That(create.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
 
         // require not AtLimit should succeed — AtLimit is false
-        var invoke = RuntimeTool.InvokeAction(sessionId, counterId, "Increment");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, counterId, "Increment");
         await Assert.That(invoke.Success).IsTrue();
 
         // Verify Value was incremented
-        var get = RuntimeTool.GetInstance(sessionId, counterId);
+        var get = McpTestTools.Runtime.GetInstance(sessionId, counterId);
         var getJson = System.Text.Json.JsonSerializer.Serialize(get.Data);
         await Assert.That(getJson).Contains("\"value\":\"1\"");
     }
@@ -3794,8 +3794,8 @@ E: entity {{
     [Test]
     public async Task InvokeAction_RequireNotPolicy_WhenPolicyTrue_Fails() {
         // require not PolicyName must DENY the action when Policy evaluates to true.
-        var (sessionId, _) = McpSessionStore.Create("Test");
-        var dsl = DslTool.ApplyDsl(sessionId, """
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Counter: entity {
               Value: Number default(0)
@@ -3813,14 +3813,14 @@ E: entity {{
         await Assert.That(dsl.Success).IsTrue();
 
         // Create instance where AtLimit is true (5 >= 5 is true)
-        var create = RuntimeTool.CreateInstance(sessionId, "Counter", """{"Value":5,"Max":5}""");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Counter", """{"Value":5,"Max":5}""");
         await Assert.That(create.Success).IsTrue();
 
-        McpSessionStore.TryGet(sessionId, out var st);
+        McpTestTools.Store.TryGet(sessionId, out var st);
         var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
 
         // require not AtLimit should fail — AtLimit is true, so not AtLimit is false
-        var invoke = RuntimeTool.InvokeAction(sessionId, counterId, "Increment");
+        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, counterId, "Increment");
         await Assert.That(invoke.Success).IsFalse();
         await Assert.That(invoke.Message).Contains("AtLimit");
     }
@@ -3828,7 +3828,7 @@ E: entity {{
     [Test]
     public async Task InvokeAction_Description_ListsOnlyShippedEffects() {
         // Live MCP simulate text: list shipped action effects, not store link/unlink.
-        var method = typeof(RuntimeTool).GetMethod(nameof(RuntimeTool.InvokeAction));
+        var method = typeof(RuntimeTool).GetMethod(nameof(McpTestTools.Runtime.InvokeAction));
         await Assert.That(method).IsNotNull();
 
         var toolName = method!.GetCustomAttributes(inherit: false)

@@ -1,7 +1,7 @@
 # TASK MCP2 - MCP harness: DI, session locking, eviction, one exception boundary
 
 Status: in review (proposal; not admitted - [`board.md`](../board.md) is the queue).
-Branch `slice/MCP2`. PR #<N>. Lane TBD. Review TBD. Implement mill: OpenCode (hand).
+Branch `slice/MCP2`. PR #174. Lane TBD. Review TBD. Implement mill: OpenCode (hand).
 Plan card: [`MCP1.md`](MCP1.md) Follow-on (MCP2).
 
 ## Scope

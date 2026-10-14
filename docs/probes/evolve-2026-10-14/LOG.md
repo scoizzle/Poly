@@ -34,3 +34,4 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 | 10:15 | wrap | | | ranking, fix-watch, PR |
 | 10:25 | ownedunlink | C6c probe: owned last-owner unlink fails, non-owned ok | F34 guide drift (owned minimum undocumented) | ✅ done |
 | 10:30 | dur-time | Duration/Time authoring probes + export type check | F35 Duration/Time dead surface | ✅ done |
+| 10:35 | wrap | ranking, fix-watch (master unchanged), PR | 8 concepts, F26–F35, 0 abandonments | ✅ |

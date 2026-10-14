@@ -1,0 +1,21 @@
+domain OwnedUnlink
+uses temporal
+
+Cart: entity {
+  Name: Text required
+  lines: many owned Line
+  notes: many Note
+
+  AddLine: action (sku: Text) {
+    create in lines { Sku: sku }
+  }
+}
+
+Line: entity {
+  Sku: Text required
+  New: stage { }
+}
+
+Note: entity {
+  Body: Text
+}

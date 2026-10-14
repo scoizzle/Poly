@@ -1,0 +1,50 @@
+domain JobQueue
+uses temporal
+
+Queue: entity {
+  Name: Text required
+  FinishedCount: Number default(0)
+  FailedCount: Number default(0)
+  LastJob: Text
+  jobs: many Job
+
+  when jobs Done, Failed as job {
+    assign FinishedCount to FinishedCount + 1
+    assign LastJob to job Title
+  }
+
+  when jobs Failed {
+    assign FailedCount to FailedCount + 1
+  }
+
+  Enqueue: action (title: Text) {
+    create in jobs { Title: title }
+  }
+}
+
+Job: entity {
+  Title: Text required
+  Retries: Number default(0)
+  MaxRetries: Number default(3)
+
+  CanRetry: policy { Retries < MaxRetries }
+
+  Queued: stage {
+    Start: action { transition to Running }
+  }
+  Running: stage {
+    Complete: action { transition to Done }
+    Fail: action {
+      assign Retries to Retries + 1
+      transition to Failed
+    }
+  }
+  Failed: stage {
+    Retry: action
+      require CanRetry
+    {
+      transition to Running
+    }
+  }
+  Done: stage { }
+}

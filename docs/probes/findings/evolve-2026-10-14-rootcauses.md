@@ -1,8 +1,24 @@
-# F26–F35 — Root causes and likely changes (research, not fixes)
+# F26–F35 — Root causes, fix status, and likely changes
 
-Prepared for the fix pass that follows the F1–25 work. Product code was **read, not modified**;
-every claim cites the current master (`bd416609`). Repro probes: `docs/missions/evolve-2026-10-14/`
-(mission report: `docs/probes/findings/evolve-2026-10-14.md`, PR #175).
+Root-cause research prepared before the fix pass; **fix status** reflects work on
+`fix/evolve-2026-10-14` (stacked on PR #173, which carries the F1–25 fixes).
+
+---
+
+## Fix status
+
+| # | Status | Notes |
+|---|--------|-------|
+| F32 | ✅ fixed + tests | `RuntimeTool.CreateInstance` coerces JSON values to declared property types (ISO strings → Date/DateTime/Time/Duration, Guid, fail-loud mismatches). `Poly.Tests/Mcp/CreateInstanceCoercionTests.cs`. |
+| F27 | ✅ fixed + tests | Generated `Register…Subscriber` bodies are idempotent (`ReferenceEquals` foreach guard) — create-in children fire handlers once. `Poly.Tests/Mcp/SubscriptionSingleFireTests.cs` + 7 updated goldens. Root cause confirmed by trace: the kept printed register body ran its raw `List.Add` under simulate on top of `Store.Link`'s deduped `AddSubscriber`. |
+| F34 | ✅ fixed | Guide §4/§9 document the owned-target unlink minimum (C6c). |
+| F33 | ✅ fixed + tests | `export_dsl` fails closed on ManyToMany ("Cannot export: relationship 'X' is ManyToMany…"). `Poly.Tests/Mcp/ManyToManyExportTests.cs`. |
+| F31 | ⚠️ investigated, not fixed | Fixed the first VM error ("cannot tell whether argument … is a scalar or a reference") with a resolved-member + reflection fallback in `ArgumentIsStackScalar`, which surfaced a second compile gap: "Member 'IsSuccess' is not resolved" in the C8 typed-create AST path (`this.Create{Nav}` kept body compiled as an AST callable; `DomainResult<T>` member resolution fails when a DateTime-typed initializer is present). Reverted. Needs the C8 typed-create AST analysis work. Repro: sessions-shaped `create in sessions { Token: Guid ExpiresAt: Now + 30 Minutes }`. |
+| F26 | ⚠️ investigated, not fixed | **Still reproduces on the fix branch.** Constant-false for `SeenAt > Now - 60 Minutes` regardless of SeenAt age. Eliminated: the cached policy tree (correct — `Constant(-60L)` Int64, `DateTime.UtcNow.AddMinutes(-60)`); ConstantFoldingPass (lambdas only); `EmitConstant`; `ConvertRingToClr`; `MarshalFromClr`/`MarshalToClr`; `AddMinutes` overload resolution; `UtcNow` static-member emission; the F1–25 temporal changes. Behavior (all-false; `+` offsets fine; `<` fine; bare `Now` fine) is consistent with the negative offset acting like +60 during VM execution. Next step: dump the emitted LINQ delegate for the policy program (or add a VM trace) — the fault is in the emitted expression, not the lowered tree. |
+| F28 | ⏳ not started | Shared-lowering notify-on-create (below). |
+| F29/F30/F35 | ⏳ feature-sized, deferred | Below. |
+
+**Suite state:** 8 pre-existing failures on the merge base (F1–25 branch + MCP2): 3× `PrintedCSharpCompiles(docs/probes/evolve-2026-10-13/…)` and `ListedSamples_HaveVmErrors_…` (mission-1 probe files scanned by repo-wide tests), `ParseNow_WithTemporal_…` (Date/DateTime compare), `ExecuteSubscriptionEffects_Exception_AllowsLaterNotify`, `DslCompiler_Dtos_PropagateStringConstraints`, `ApplyAndExportDsl_RoundTripDomainExtensions`. Verified pre-existing at the pre-F27 commit; none caused by the fixes here.
 
 ---
 

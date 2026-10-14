@@ -21,3 +21,5 @@ Fix watch: master was bd416609 at start; re-run quick repros at wrap if master m
 |------|---------|----------------|----------|------|
 | 07:55 | ratelimit | v1→v4 VM + gate + round-trip + lowering source read | F26 policy-eval drops DateOperation fold (rate limiter no-op); multi-require ✓, Boolean default ✓, ISO DateTime create ✓ | ✅ done |
 | 07:55 | notifications | | | next |
+| 08:40 | notifications | v1→v5 VM: stage-scoped placement ✓, create-in no-fire, double-fire matrix | F27 double-fire regression (create-in vs tool-link); F28 no-fire-on-create | ✅ done |
+| 08:40 | jobqueue | | | next |

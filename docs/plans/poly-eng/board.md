@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-13. Master: see GitHub (#168 merged). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
+Updated 2026-10-15. Master: `06844e39` (#176). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -25,7 +25,7 @@ None.
 
 ## Next (in order; first unblocked row wins)
 
-Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-AGENT.md) §3. Rows 1–3b have merged; the first unblocked row is 4.
+Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-AGENT.md) §3. Rows 1–3b have merged; the first unblocked DEI row is 4. The swarm lane below is a separate queue. It does not move row 4.
 
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
@@ -48,6 +48,28 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 | 17 | C8c2 | C8c1 | plan card |
 | 18 | C8d (runs alone) | C8c2, T3 (parked; see Needs Scot), C8-lc/web/num/clean | plan card |
 | 19 | C10 | C8d | plan card |
+
+## Swarm (probe findings; one card per agent)
+
+Offload queue for the open items in [`docs/probes/findings/evolve-2026-10-14.md`](../../probes/findings/evolve-2026-10-14.md). F27, F32, F33, and F34 are already on master (`06844e39`). U1 and U2 (printed `EnsureUnique`) stay on row 4. Rows 5–19 and THEN are unchanged.
+
+Branch each card from current origin/master. One branch `slice/<id>`, one PR, leave it open. Scot merges. Take one start-now card whose files no other open PR is editing. A sequenced card starts only after every predecessor in its Depends line has merged.
+
+Each task file has the edit, the test, the Leave list, and the stop condition. Stop and report when the card says stop.
+
+| When | Card | Edit | Test class | Task |
+|------|------|------|------------|------|
+| now | F29 | one hint `DMAS002` | `EntityLevelActionHintTests` | [tasks/F29.md](tasks/F29.md) |
+| now | F26 | `ClassifyInvoke` only | `PolicyNegativeOffsetTests` | [tasks/F26.md](tasks/F26.md) |
+| now | F35a-check | Subtract arm of `WalkExpression` | `DateDifferenceDurationTests` | [tasks/F35a-check.md](tasks/F35a-check.md) |
+| now | F30a | `sum Rel Prop` parse and print | `SumParseTests` | [tasks/F30a.md](tasks/F30a.md) |
+| now | F28 | one Notify call in `AddCreateNavMethod` | `CreateInWatchedStageTests` | [tasks/F28.md](tasks/F28.md) |
+| blocked | F35b | assign target is not on the check scope | — | [tasks/F35b.md](tasks/F35b.md) |
+| after F26 | F31 | test only | `CreateInitializerDateTimeOffsetTests` | [tasks/F31.md](tasks/F31.md) |
+| after F35a-check | F35a-lower | `DateAddDaysLowering` subtract of two dates | `DateDifferenceDurationTests` | [tasks/F35a-lower.md](tasks/F35a-lower.md) |
+| after F30a and F35a-check | F30b | policy check plus `InferType` | `SumAnalysisTests` | [tasks/F30b.md](tasks/F30b.md) |
+| after F30b | F30c | lower `sum Rel Prop` | `SumEvalTests` | [tasks/F30c.md](tasks/F30c.md) |
+| after F30c | F30d | guide section 8 | guide text | [tasks/F30d.md](tasks/F30d.md) |
 
 ## Later (parked; not work until Scot admits it)
 

@@ -25,4 +25,13 @@
     <PackageVersion Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
   </ItemGroup>
 
+  <ItemGroup Label="Demo UI">
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.FluentUI.AspNetCore.Components" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.FluentUI.AspNetCore.Components.Icons" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.8" />
+  </ItemGroup>
+
 </Project>

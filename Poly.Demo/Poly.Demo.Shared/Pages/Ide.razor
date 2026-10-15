@@ -1,0 +1,262 @@
+@page "/"
+@using Poly.DslCompiler
+@using Poly.Demo.Shared.Services
+@inject PolyIdeCompiler Compiler
+@implements IDisposable
+
+<PageTitle>Poly IDE</PageTitle>
+
+<div class="ide">
+    <div class="ide-toolbar">
+        <label class="field">
+            Sample
+            <select class="picker" @bind="_sampleIndex" @bind:after="LoadSample" title="Sample domain">
+                @for (var i = 0; i < PolyIdeSamples.All.Count; i++)
+                {
+                    var index = i;
+                    <option value="@index">@PolyIdeSamples.All[index].Name</option>
+                }
+            </select>
+        </label>
+
+        <label class="field">
+            Mode
+            <select class="picker" @bind="_mode" @bind:after="CompileNow">
+                @foreach (var mode in Modes)
+                {
+                    <option value="@mode">@mode</option>
+                }
+            </select>
+        </label>
+
+        <label class="field">
+            DBMS
+            <select class="picker" @bind="_dbms" @bind:after="CompileNow">
+                @foreach (var pack in Packs)
+                {
+                    <option value="@pack">@pack</option>
+                }
+            </select>
+        </label>
+
+        <FluentButton Appearance="ButtonAppearance.Primary" OnClick="CompileNow">Compile</FluentButton>
+        <span class="muted hint">Ctrl/⌘ + Enter</span>
+        <FluentSpinner Size="SpinnerSize.Tiny" Visible="@_isCompiling" Tooltip="Compiling…" />
+
+        @if (_result is not null)
+        {
+            if (_result.Success)
+            {
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Success">@FileCount files · @_result.Artifacts.Count artifacts · @_result.ElapsedMs.ToString("F0") ms</FluentBadge>
+            }
+            else
+            {
+                <FluentBadge Appearance="BadgeAppearance.Filled" Color="BadgeColor.Danger">@_result.Errors.Count error(s)</FluentBadge>
+            }
+        }
+    </div>
+
+    <FluentMultiSplitter Class="ide-body" BarSize="6" Orientation="Orientation.Vertical">
+        <FluentMultiSplitterPane Size="72%" Min="180px" Style="min-height: 180px;">
+            <FluentMultiSplitter BarSize="6" Style="height: 100%;" Orientation="@MainOrientation">
+                <FluentMultiSplitterPane Class="pane" Size="46%" Min="180px" Max="75%">
+                    <textarea class="editor" wrap="off" spellcheck="false"
+                              @bind="_source" @bind:event="oninput" @bind:after="ScheduleCompile"
+                              @onkeydown="OnEditorKeyDown"></textarea>
+                </FluentMultiSplitterPane>
+
+                <FluentMultiSplitterPane Class="pane" Size="54%" Min="200px">
+                    @if (_result is null)
+                    {
+                        <p class="muted">Compiling…</p>
+                    }
+                    else if (!_result.Success)
+                    {
+                        <div class="errors">
+                            <h3>Compilation failed</h3>
+                            <ul>
+                                @foreach (var error in _result.Errors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <FluentMultiSplitter BarSize="6" Style="height: 100%;" Orientation="@MainOrientation">
+                            <FluentMultiSplitterPane Size="38%" Min="140px" Max="70%">
+                                <div class="artifact-list">
+                                    @foreach (var group in _groups)
+                                    {
+                                        <div class="group">@group.Name</div>
+                                        @foreach (var artifact in group.Items)
+                                        {
+                                            <button class="artifact @(ReferenceEquals(artifact, _selected) ? "selected" : null)"
+                                                    @onclick="() => Select(artifact)">
+                                                <span class="artifact-type">@artifact.Type</span>
+                                                <span class="artifact-path">@artifact.Path</span>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            </FluentMultiSplitterPane>
+                            <FluentMultiSplitterPane Size="62%" Min="160px">
+                                <div class="artifact-detail">
+                                    @if (_selected is not null)
+                                    {
+                                        <div class="detail-head">
+                                            <span class="artifact-type">@_selected.Type</span>
+                                            <strong>@_selected.Path</strong>
+                                            <span class="muted">producer: @_selected.Producer</span>
+                                            @if (_selected.References.Count > 0)
+                                            {
+                                                <span class="muted">refs: @string.Join(", ", _selected.References)</span>
+                                            }
+                                        </div>
+                                        <pre class="code">@_selected.Text</pre>
+                                    }
+                                </div>
+                            </FluentMultiSplitterPane>
+                        </FluentMultiSplitter>
+                    }
+                </FluentMultiSplitterPane>
+            </FluentMultiSplitter>
+        </FluentMultiSplitterPane>
+
+        @if (_reports.Count > 0)
+        {
+            <FluentMultiSplitterPane Class="bottom-panel" Size="28%" Min="80px" Style="min-height: 80px;">
+                <div class="report-panel">
+                    <div class="report-tabs" role="tablist">
+                        <span class="group">@ReportsGroupName</span>
+                        @foreach (var artifact in _reports)
+                        {
+                            <button class="artifact report-tab @(ReferenceEquals(artifact, _selected) ? "selected" : null)"
+                                    role="tab"
+                                    aria-selected="@(ReferenceEquals(artifact, _selected) ? "true" : "false")"
+                                    @onclick="() => Select(artifact)">
+                                <span class="artifact-type">@artifact.Type</span>
+                                <span class="artifact-path">@artifact.Path</span>
+                            </button>
+                        }
+                    </div>
+                    @if (SelectedReport is not null)
+                    {
+                        <pre class="code">@SelectedReport.Text</pre>
+                    }
+                    else
+                    {
+                        <p class="muted panel-hint">Select a report above to preview it here.</p>
+                    }
+                </div>
+            </FluentMultiSplitterPane>
+        }
+    </FluentMultiSplitter>
+</div>
+
+@code {
+    [CascadingParameter]
+    private bool _isMobile { get; set; }
+
+    private const string ReportsGroupName = "Reports";
+    private const int AutoCompileDelayMs = 250;
+
+    private static readonly CompileMode[] Modes = [CompileMode.Entities, CompileMode.Db, CompileMode.All];
+    private static readonly DbmsPack[] Packs = [DbmsPack.Generic, DbmsPack.Sqlite, DbmsPack.SqlServer];
+    private static readonly string[] GroupOrder = ["Files", "Lowered module", "Source model", ReportsGroupName, "Catalog", "Other"];
+
+    private sealed record ArtifactGroup(string Name, IReadOnlyList<IdeArtifact> Items);
+
+    private string _source = PolyIdeSamples.All[0].Source;
+    private int _sampleIndex;
+    private CompileMode _mode = CompileMode.Entities;
+    private DbmsPack _dbms = DbmsPack.Sqlite;
+    private IdeCompileResult? _result;
+    private IReadOnlyList<ArtifactGroup> _groups = [];
+    private IReadOnlyList<IdeArtifact> _reports = [];
+    private IdeArtifact? _selected;
+    private CancellationTokenSource? _pending;
+    private bool _isCompiling;
+
+    private int FileCount => _result?.Artifacts.Count(artifact => artifact.Type == "file") ?? 0;
+
+    private Orientation MainOrientation => _isMobile ? Orientation.Vertical : Orientation.Horizontal;
+
+    private IdeArtifact? SelectedReport =>
+        _reports.FirstOrDefault(report => ReferenceEquals(report, _selected));
+
+    protected override void OnInitialized() => CompileNow();
+
+    public void Dispose() => CancelPendingCompile();
+
+    private void LoadSample() {
+        if (_sampleIndex >= 0 && _sampleIndex < PolyIdeSamples.All.Count)
+            _source = PolyIdeSamples.All[_sampleIndex].Source;
+        CompileNow();
+    }
+
+    private void ScheduleCompile() {
+        CancelPendingCompile();
+        _pending = new CancellationTokenSource();
+        _isCompiling = true;
+        _ = CompileAfterDelayAsync(_pending.Token);
+    }
+
+    private void CancelPendingCompile() {
+        _pending?.Cancel();
+        _pending?.Dispose();
+        _pending = null;
+    }
+
+    private async Task CompileAfterDelayAsync(CancellationToken token) {
+        try {
+            await Task.Delay(AutoCompileDelayMs, token);
+        }
+        catch (TaskCanceledException) {
+            return;
+        }
+        if (token.IsCancellationRequested)
+            return;
+        CompileNow();
+    }
+
+    private void OnEditorKeyDown(KeyboardEventArgs args) {
+        if (args.Key == "Enter" && (args.CtrlKey || args.MetaKey)) {
+            CancelPendingCompile();
+            CompileNow();
+        }
+    }
+
+    private void CompileNow() {
+        var result = Compiler.Compile(_source, _mode, _dbms);
+        _result = result;
+        _isCompiling = false;
+        var groups = BuildGroups(result.Artifacts);
+        _reports = groups.FirstOrDefault(group => group.Name == ReportsGroupName)?.Items ?? [];
+        _groups = groups.Where(group => group.Name != ReportsGroupName).ToList();
+        var selectable = _groups.SelectMany(group => group.Items).Concat(_reports).ToList();
+        _selected = selectable.FirstOrDefault(artifact => artifact.Type == "file")
+            ?? selectable.FirstOrDefault();
+        StateHasChanged();
+    }
+
+    private void Select(IdeArtifact artifact) => _selected = artifact;
+
+    private static IReadOnlyList<ArtifactGroup> BuildGroups(IReadOnlyList<IdeArtifact> artifacts) =>
+        GroupOrder
+            .Select(name => new ArtifactGroup(
+                name,
+                artifacts.Where(artifact => GroupOf(artifact.Type) == name).ToList()))
+            .Where(group => group.Items.Count > 0)
+            .ToList();
+
+    private static string GroupOf(string type) => type switch {
+        "file" or "tree" => "Files",
+        "entity" or "scaffolding" => "Lowered module",
+        "source-domain" or "source-entity" => "Source model",
+        "catalog-index" => "Catalog",
+        _ when type.EndsWith("report", StringComparison.Ordinal) => ReportsGroupName,
+        _ => "Other",
+    };
+}

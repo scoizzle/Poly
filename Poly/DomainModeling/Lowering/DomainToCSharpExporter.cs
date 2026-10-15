@@ -527,9 +527,12 @@ public sealed partial class DomainToCSharpExporter {
             // target stage (Student + Section on Enrollment.Dropped) used to emit
             // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
+                // Nullable: a create-in lands the child in its first stage with no prior
+                // stage, so the caller passes null. `when all` guards read it as
+                // "transitioned from" and a fresh entry must not match.
                 var notifyPrevious = new Parameter(
                     "previousStage",
-                    new NamedTypeReference(stageEnumTypeName));
+                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName)));
                 var notifyNodes = new List<Node>();
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
@@ -578,7 +581,8 @@ public sealed partial class DomainToCSharpExporter {
                 var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
                     ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
                 Parameter? previousStageParam = NeedsAllPreviousStage(info)
-                    ? new Parameter("previousStage", new NamedTypeReference(targetStageEnumName))
+                    ? new Parameter("previousStage",
+                        new OptionalTypeReference(new NamedTypeReference(targetStageEnumName)))
                     : null;
                 var handlerParamList = new List<Parameter>();
                 if (HasPeerBinding(info))

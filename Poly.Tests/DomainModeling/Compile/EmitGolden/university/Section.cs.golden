@@ -155,7 +155,7 @@ public class Section
             this.OfferedSeats = this.OfferedSeats + 1L;
         }
     }
-    internal void WhenAllWaitOfferCancelled(WaitOfferStage previousStage)
+    internal void WhenAllWaitOfferCancelled(WaitOfferStage? previousStage)
     {
         var linkedMatched = false;
         foreach (var linkedTarget in this.Waitlist)

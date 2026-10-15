@@ -69,7 +69,7 @@ public class Loan
         }
         this._patronLoansOverdueSubscribers.Add(subscriber);
     }
-    internal void NotifyOverdueSubscribers(LoanStage previousStage)
+    internal void NotifyOverdueSubscribers(LoanStage? previousStage)
     {
         this.EnterNotifyCascade("Overdue");
         try

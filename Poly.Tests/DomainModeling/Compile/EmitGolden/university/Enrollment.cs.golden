@@ -183,7 +183,7 @@ public class Enrollment
         }
         this._sectionEnrollmentsDroppedSubscribers.Add(subscriber);
     }
-    internal void NotifyDroppedSubscribers(EnrollmentStage previousStage)
+    internal void NotifyDroppedSubscribers(EnrollmentStage? previousStage)
     {
         this.EnterNotifyCascade("Dropped");
         try
@@ -208,7 +208,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCompletedSubscribers(EnrollmentStage previousStage)
+    internal void NotifyCompletedSubscribers(EnrollmentStage? previousStage)
     {
         this.EnterNotifyCascade("Completed");
         try
@@ -227,7 +227,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyRegisteredSubscribers(EnrollmentStage previousStage)
+    internal void NotifyRegisteredSubscribers(EnrollmentStage? previousStage)
     {
         this.EnterNotifyCascade("Registered");
         try

@@ -301,6 +301,18 @@ Item: entity {
 }
 ```
 
+### What makes a property optional at create
+
+Every property **without** `default(...)` is a **required parameter of the generated
+`Create` factory** (and of the entity's create DTO), so a `create` / `create in` /
+`create_instance` must supply it. **Only `default(...)` makes a property optional** — the
+default is applied when the value is omitted.
+
+`required` is a *value* rule (the value must not be empty when it is written); it is not
+what decides creatability. So an enum property, a `value`-typed (nested document) property,
+or a plain `Text` property with no `default(...)` all block create when omitted, while a
+`required` property *with* a `default(...)` does not.
+
 ### Annotations (Portable Storage Hints)
 
 Annotations are metadata attached to entities (`table`) or properties (`column`)

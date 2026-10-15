@@ -23,6 +23,8 @@ A Poly domain can name one persistence library. `SqliteLibrary`, `SqlServerLibra
 
 The three product cases (an entity aimed at one DBMS, the same entity stored in two and switchable in the host, SQLite for a demo and another DBMS for production) are one compile shape: one `DomainSession`, one `Analyze`, N persistence units. Each unit is a profile contributed by a loaded library. One `StoragePass` projects N `StorageModel`s into the one metadata record, keyed by the library id. Host emit writes one `DbContext` file per unit. A single loaded unit keeps today's file name, type name, and bytes.
 
+A program that links several domains is the same shape repeated, then a host above the compiler. Each domain keeps its own session and its own units, so one domain can sit on SQLite while another sits on a different subsystem. Those sessions are not merged into one analyze.
+
 ---
 
 ## Background and motivation
@@ -146,6 +148,8 @@ Sites that read the `.Storage` property, and therefore break when that property 
 - Extracting a C# pack, or moving `DbContextGenerator` onto Syntax as the pack API (parent steps 8–10).
 - Data migration, subdirectory layout under `Persistence/Sqlite/`, and editing `board.md`.
 - A second analyze, a second interpreter, a consumer-specific lowering flag, a host-escape keyword, or N CLR metadata types.
+- Merging several domains into one `DomainSession`, one `StorageMappingMetadata`, or one `DbmsPack`.
+- Building the multi-domain composition root, and non-relational bags (blob, document, event log). The registration shape below is what lets those producers appear later.
 
 ---
 
@@ -363,6 +367,33 @@ Both context files are written on the success path before `Program.cs` is writte
 
 `DbContextGenerator` keeps iterating domain entities in slice 1. Slice 2 switches it, `MinimalApiGenerator`, and `HttpFileGenerator` to the active unit's entity list so a targeted-away entity is absent from that context and from the routes bound to it.
 
+### Several domains, one program
+
+The owner also wants several domains linked into one piece of software, each free to target a different storage subsystem. That link sits above this spike. It does not change the multiplicity key inside a domain.
+
+`DslCompiler.Compile` takes one poly text and one `DbmsPack` (`DslCompiler.cs:102-119`). `CompileCore` parses that text into one `Domain` (`DslCompiler.cs:140-142`). `RuntimeAnalysisCache` stores the session, the analysis, and the Syntax module on a holder per `Domain` instance (`RuntimeAnalysisCache.cs:13-27`, `507-509`). Hotel's sqlite overrides and Ledger's sqlserver overrides never share a `TypeMappingRegistry`, because they never share a `SessionBuilder`.
+
+Parent §8 is N units over one entity forest (`2026-07-22` lines 396-403). It is the in-domain case this spike implements. It is not a license to union two domains' entities into one forest before `StoragePass`.
+
+| | One domain, N units | Several domains, one program |
+|--|---------------------|------------------------------|
+| Analyze | One, on that domain | One per domain. No merged analyze. |
+| Storage key | Library id inside that session | `(domain, library id)`. The domain is the session boundary, not a second field on `StorageProfile`. |
+| Maps | Per profile, as above | Isolated by the session. A sqlite domain and a sqlserver domain do not merge. |
+| Module | One Syntax module | One module per domain. The host calls each module. |
+| Context types | `{Domain}DbContext` or `{Domain}{Title}DbContext` | Already distinct when domain names differ. `HotelDbContext` and `LedgerSqlServerDbContext` are different types. |
+| Provider | One `DbmsPack` selects that domain's `Program.cs` | Each domain keeps the binding from its own compile. The process does not have one pack. |
+
+Artifact identity already starts with the domain name (`ArtifactId.Create([domain.Name, fileName], type)`, `ContributedFile.cs:31-46`). `Hotel/HotelDbContext.cs#file` and `Ledger/LedgerDbContext.cs#file` are different ids. The leaf is the collision. `MinimalApiHostArtifactContributor` writes the literals `Program.cs` and `demo.http` (`MinimalApiGenerator.cs:1220-1230`). `CompileCore` skips a catalog file whose leaf is already in the emit set (`DslCompiler.cs:184-191`). Two successful compiles copied into one directory drop the second `Program.cs` and the second `demo.http` even though the artifact ids differ.
+
+The composition root is a later host. It takes compile results. It does not call `Analyze` again and it does not build a `StorageProfile`.
+
+- One domain in the link: the entry file stays `Program.cs`. The golden stays.
+- Two or more domains: each domain's host file is `{Domain}Program.cs` and `{Domain}.http`. The leaf `Program.cs` belongs to the composition root, which constructs each domain's context and calls each domain's module. Slice 1 and slice 2 do not emit that root.
+- Same domain name twice fails closed at the link. The domain name is the prefix that keeps context types and artifact ids apart.
+
+A subsystem that is not a relational projection (a blob store, a document store, an event log) is another library id and another bag on that domain's node. It uses the same registration rule this spike fixes for vendors: one pass name for the concern, keyed by library id, published on that domain. It is not a `StorageProfile`, not a `StorageModel`, and not a `DbContext`. Putting its payload into `ColumnType` would redesign the bag. The producer itself stays out of scope. The key and the per-domain session are the parts that have to be right before that producer exists.
+
 ### What stays frozen
 
 | Frozen rule (`docs/CORE.md` §0, `2026-09-04`) | How this layout sits on it |
@@ -370,7 +401,7 @@ Both context files are written on the success path before `Program.cs` is writte
 | Nodes are the symbolic primary. No product-path primitive IR. | `StorageModel` stays an analysis bag. The operation module is still `session.Lower`. |
 | Analysis owns facts and rewrite. Bags on nodes. Semantic consume needs `AnalysisResult`. | N models are one bag on the domain node. `SetMetadata` is called once. |
 | Libraries extend the session. `uses` ids. Unknown and duplicate ids fail closed. | The unit id is the library id. Duplicate id still throws at `Load`. |
-| One analyze, then `session.Lower`, then the artifact set. | Profiles are inputs to the one `StoragePass`. The parent said re-run the storage projection per unit on the same `AnalysisResult`. That loop is inside the pass. |
+| One analyze, then `session.Lower`, then the artifact set. | Profiles are inputs to the one `StoragePass`. The parent said re-run the storage projection per unit on the same `AnalysisResult`. That loop is inside the pass. Several domains are several sessions. The host links them after `Lower`. |
 | Syntax module is privileged for meaning and the Interpreter sim. Other artifacts are delivery. | DbContext files are host artifacts. They call the module. They do not define operations. |
 | The operation tree has no bag types and no vendor types (`2026-09-03`). | Lowering reads `IsUnique` and relationship targets through the agreement helper and emits the same `EnsureUnique` / `CreateIn` invokes. `ColumnType` stays in the host file. |
 | No consumer-specific lowering flag. No second interpreter. No `Main` in core. | `Program.cs` remains an opt-in `uses http` artifact. Vendor choice in that file is a provider invocation, not a lowering flag. |
@@ -410,6 +441,7 @@ sequenceDiagram
 | Medium | `DbContextGenerator` looks up every domain entity. Slice 2 omission throws `KeyNotFoundException` inside emit. | Slice 2 changes the iteration. Slice 1 does not omit entities. |
 | Low | `SqlServerIdentifierConvention` still throws `InvalidOperationException` rather than a diagnostic, so a too-long name aborts the pass with an exception instead of `StoragePass.*` codes. | Leave the convention's contract. The per-profile test shows the sqlite profile does not throw on the same name. |
 | Low | Mixing `persistence` with `sqlite` currently throws on `PassName` and will throw on the new mix check instead. | Message names both ids. `SwapPersistence` still prevents the mix on the Db/All sugar path. |
+| Medium | A linker copies two domains' `Program.cs` and `demo.http` into one directory. The leaves match, so one domain's host file is dropped. | Multi-domain link uses `{Domain}Program.cs` and `{Domain}.http`. One-domain compiles keep `Program.cs`. The composition root is the only `Program.cs` when several domains are linked. |
 
 ---
 
@@ -585,6 +617,7 @@ Filter while iterating slice 1: `/*/*/SliceCProducerLoopCatalogTests/*`, `/*/*/E
 5. One-unit file names stay `{Domain}DbContext` so `CrmDbContext.cs.golden` does not move. The parent's illustrative name includes the pack title even for one unit. Confirm the golden wins.
 6. Flat file names, because artifact id segments cannot contain `/`. Confirm subdirectory layout stays deferred.
 7. Agreement excludes `TableName` and `ColumnName` so a later qualified facet can differ per unit without failing lowering. Confirm that exclusion.
+8. Several domains in one program are linked after `Lower`, each with its own session and its own units. Confirm that slice 1 and slice 2 stay single-domain, that `{Domain}Program.cs` is the multi-domain host leaf, and that a non-relational subsystem is a later library and bag rather than another `StorageModel`.
 
 Anything not determined: this spike did not execute the duplicate-`PassName` throw or the test suite. The throw text is cited from `SessionBuilder.cs:67-69`. No product file was modified.
 
@@ -608,7 +641,7 @@ Anything not determined: this spike did not execute the duplicate-`PassName` thr
 - `Poly/DomainModeling/Analysis/StoragePass.cs:18-66`. `StorageMappingMetadata.cs:7`. `PersistenceSurfaceMetadata.cs:5-16`. `StorageAnalyzer.cs:74-87`, `:98-157`, `:226-308`, `:313-319`, `:385-414`. `StorageModel.cs:213-223`.
 - `Poly/Analysis/NodeMetadataStore.cs:10`, `:38-40`, `:102-113`. `AnalysisContext.cs:75-110`. `AnalyzerBuilder.cs:16-22`.
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs:272-285`.
-- `Poly/DomainModeling/Runtime/DomainInstanceStore.cs:93-116`. `RuntimeAnalysisCache.cs:56-59`.
+- `Poly/DomainModeling/Runtime/DomainInstanceStore.cs:93-116`. `RuntimeAnalysisCache.cs:13-27`, `:56-59`, `:507-509`.
 - `Poly/DomainModeling/Meaning/SqlAnnotationSyntax.cs:14-63`. `IAnnotationSyntax.cs:11-19`. `AnnotationRegistry.cs:27-34`. `IStorageConvention.cs:16-21`.
 - `Poly/DomainModeling/Language/PolyDslParser.cs:180-188`, `:399-437`. `DslGrammar.cs:198-210`. `DslTokenKind.cs:6-8`. `DomainDslPrinter.cs:436-444`.
 - `src/Poly.Packs.Sqlite/SqlitePack.cs:18-27`. `SqliteDefaults.cs:24-34`.
@@ -642,7 +675,8 @@ Anything not determined: this spike did not execute the duplicate-`PassName` thr
 10. `mysql` needs no enum value to be a unit. The compiler does not grow an `id == "mysql"` arm and does not gain a project reference in slice 1. Today `mysql` falls through to `catalog.Resolve` and the product catalog throws.
 11. Generic `persistence` is one in-memory profile. It does not stay loaded beside a vendor. `SwapPersistence` remains the single-vendor sugar.
 12. Default membership is every loaded unit. Slice 1 adds no DSL. Unscoped TYPE sets that column's `ColumnType` only. With N units the diagnostic is reported, the bag is still published, and `Lower` fails closed. Slice 2 adds library annotation `store`, with no tokenizer change. A unit omits the navigation, the FK, and the `StorageRelationship` when either end is absent, starting from the list at `StorageAnalyzer.cs:86`. That omission is not an analyze error. `CreateIn` still lowers from the domain fact.
-13. This document is Proposed. It is not admitted to `board.md`.
+13. Several domains in one program are several sessions linked after `Lower`. Each keeps its own units, so the domains can target different subsystems without a merged map. One domain still emits `Program.cs`. Two or more emit `{Domain}Program.cs`, and the composition root owns the leaf `Program.cs`. A non-relational subsystem is another library and another bag, not a `StorageModel`.
+14. This document is Proposed. It is not admitted to `board.md`.
 
 ---
 
@@ -719,3 +753,15 @@ These rows are future implementation PRs. This document is not one of the rows. 
 **Defers:** qualified `column` / `table`, schema facets, two units of one pack, oracle, C# pack extraction, `board.md`.
 
 **Does not change:** tokenizer, `DslTokenKind`, `DslGrammar`, `PolyDslParser`. The annotation rule and the registry already accept a registered identifier.
+
+### PR 4 — Link compiled domains
+
+**Title:** Compose per-domain compile results into one host.
+
+**Depends:** PR 2. Can land after PR 3. Does not change `StoragePass`.
+
+**Files:** a host above `DslCompiler` (not named here; it does not exist). It reads compile results. It renames a domain's `Program.cs` and `demo.http` to `{Domain}Program.cs` and `{Domain}.http` when the link has more than one domain. One domain keeps `Program.cs`.
+
+**Does:** one process, N modules, N context types, each domain's provider taken from that domain's compile. Same domain name twice fails closed.
+
+**Defers:** non-relational bags, a generated switch inside one domain, `board.md`.

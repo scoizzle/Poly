@@ -70,3 +70,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-15 | queue | plan | — | planned | none |
+| 2026-10-15 | swarm | F35a-check | 4488d5e1 | shipped, PR open | Subtract arm early-returns same-family date-minus-date (reuses MixedDateGranularity); DateDifferenceDurationTests 5/5; full suite 3846/3846 |

@@ -62,3 +62,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-15 | queue | plan | — | planned, after F35a-check | none |
+| 2026-10-15 | swarm | F35a-lower | 7f65e6a6 | shipped, PR open | Subtract arm early-returns `Invoke(Member(left, "Subtract"), [right])` when both sides are same-family date properties; otherwise the AddDays path stands. DateDifferenceDurationTests 8/8; EmitGoldenTests 21/21 (no golden changed); full suite 3882/3882. An earlier full-suite block (ParityTests CS1503 on the `insurance`/`payroll` probes) was the #187 `Notify{Stage}Subscribers(null)` regression, fixed on master as 17d6f212. |

@@ -505,6 +505,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         return LowerFilteredQuantifier(c.RelationshipName, c.Body, QuantifierKind.Count);
     }
 
+    protected override LoweredExpression SumExpr(SumExpr s) {
+        var collection = new Member(_currentSubject, ResolveNavName(s.RelationshipName));
+        var item = _names.Next("item");
+        var result = _names.Next("result");
+        return new LoweredExpression(
+            [
+                new Assignment(result, new Constant(0L)),
+                new ForEachLoop(item, collection,
+                    new Block([
+                        new Assignment(result, new SN.Add(result, new Member(item, s.PropertyName))),
+                    ])),
+            ],
+            [result],
+            result);
+    }
+
     private enum QuantifierKind { Any, All, None, Count }
 
     /// <summary>

@@ -1,6 +1,10 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -18,6 +22,13 @@ public class DateDifferenceDurationTests {
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(changes, session: session);
+    }
+
+    private static string PrintTemporal(string dsl) {
+        var result = ParseTemporal(dsl);
+        var analysis = DomainModelAnalyzer.Analyze(result.Root!);
+        var types = new DomainToCSharpExporter().Export(result.Root!, analysis);
+        return new CSharpGenerator().Generate(types);
     }
 
     private static List<string> Errors(EvolutionResult result) =>
@@ -98,5 +109,63 @@ public class DateDifferenceDurationTests {
             }
             """);
         await Assert.That(Errors(result)).IsEmpty();
+    }
+
+    [Test]
+    public async Task Close_Elapsed_IsTheDifference() {
+        var result = ParseTemporal("""
+            domain Span
+            uses temporal
+            Job: entity {
+              Started: DateTime
+              Finished: DateTime
+              Elapsed: Duration
+              Close: action { assign Elapsed to Finished - Started }
+            }
+            """);
+        var domain = result.Root!;
+        var started = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
+        var job = DomainEntityInstance.Create(
+            domain.Types.OfType<Entity>().Single(e => e.Name == "Job"),
+            new Dictionary<string, object?> {
+                ["Started"] = started,
+                ["Finished"] = started.AddHours(1)
+            },
+            domain);
+
+        var close = job.InvokeAction("Close");
+
+        await Assert.That(close.Succeeded).IsTrue();
+        await Assert.That(job.GetProperty<object>("Elapsed")).IsEqualTo(TimeSpan.FromHours(1));
+    }
+
+    [Test]
+    public async Task Close_PrintsSubtract() {
+        var csharp = PrintTemporal("""
+            domain Span
+            uses temporal
+            Job: entity {
+              Started: DateTime
+              Finished: DateTime
+              Elapsed: Duration
+              Close: action { assign Elapsed to Finished - Started }
+            }
+            """);
+
+        await Assert.That(csharp).Contains(".Subtract(");
+    }
+
+    [Test]
+    public async Task PlusDay_StillAddDays() {
+        var csharp = PrintTemporal("""
+            domain Span
+            uses temporal
+            Job: entity {
+              Finished: DateTime
+              Extend: action { assign Finished to Finished + 1 Days }
+            }
+            """);
+
+        await Assert.That(csharp).Contains(".AddDays(");
     }
 }

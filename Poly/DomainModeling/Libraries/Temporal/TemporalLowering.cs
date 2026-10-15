@@ -128,6 +128,13 @@ internal static class TemporalLowering {
             var family = FamilyFromTypeName(typeName);
             if (family is not DateClrFamily.DateOnly and not DateClrFamily.DateTime)
                 return false;
+            if (_subtract
+                && rightExpr is PropertyAccess rightPa
+                && propertyTypeResolver?.Invoke(rightPa.Name) is { } rightTypeName
+                && FamilyFromTypeName(rightTypeName) == family) {
+                result = new Invoke(new Member(route(leftExpr), "Subtract"), [route(rightExpr)]);
+                return true;
+            }
             var left = route(leftExpr);
             var right = route(rightExpr);
             var rawArg = _subtract ? (Node)new SN.UnaryMinus(right) : right;

@@ -1,0 +1,96 @@
+domain Insurance
+uses temporal
+
+ClaimStatus: enum { Filed, UnderReview, Approved, Rejected, Settled }
+
+Payments: contract external paygate v1 {
+  PayoutRequest: value {
+    Amount: Number
+    Reference: Text
+  }
+  Disburse: outbound operation PayoutRequest
+}
+
+Policyholder: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  SettledCount: Number default(0)
+  claims: many Claim
+  Active: stage {
+    File: action (number: Text, amount: Number) -> Claim {
+      create in claims {
+        ClaimNumber: number
+        Amount: amount
+      }
+    }
+  }
+  when claims Settled {
+    assign SettledCount to SettledCount + 1
+  }
+}
+
+Policy: entity {
+  Number: Text unique required length(4, 16)
+  Coverage: Number range(0, 1000000) required
+  holder: Policyholder
+  claims: many Claim
+  ReviewAll: action {
+    for claims as claim where claim in Filed
+      invoke claim.StartReview
+  }
+}
+
+Adjuster: entity {
+  Name: Text required
+  Specialty: Text
+  claims: many Claim
+}
+
+Claim: entity {
+  ClaimNumber: Text unique required
+  Amount: Number range(0, 1000000) required
+  Reviewed: Number default(0)
+  holder: Policyholder
+  cover: Policy
+  adjuster: Adjuster
+  documents: many Document
+  WithinCoverage: policy { Amount <= cover Coverage }
+  HasDocuments: policy { count documents > 0 }
+  Filed: stage {
+    Attach: action (kind: Text) -> Document {
+      create in documents { Kind: kind }
+    }
+    StartReview: action
+      require HasDocuments
+    {
+      transition to UnderReview
+    }
+    Withdraw: action { transition to Rejected }
+  }
+  UnderReview: stage {
+    Approve: action
+      require WithinCoverage
+    {
+      transition to Approved
+    }
+    Reject: action { transition to Rejected }
+  }
+  Approved: stage {
+    Disburse: action (request: PayoutRequest) {
+      transition to Settled
+    }
+  }
+  Settled: stage { }
+  Rejected: stage { }
+  when documents Attached {
+    assign Reviewed to Reviewed + 1
+  }
+}
+
+Document: entity {
+  Kind: Text required
+  claim: Claim
+  Attached: stage { }
+}
+
+PayoutClaim: bind Payments Disburse to Disburse request

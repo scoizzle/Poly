@@ -1,0 +1,68 @@
+domain Logistics
+uses temporal
+uses http
+
+Address: entity {
+  Line1: Text required
+  City: Text required
+  Zip: Text pattern("^\d{5}$")
+}
+
+Courier: entity {
+  Name: Text required
+  Capacity: Number range(1, 200) required
+  stops: many Stop
+  Available: stage {
+    Assign: action (order: Order) -> Stop {
+      create in stops { order: order }
+    }
+    Suspend: action { transition to Suspended }
+  }
+  Suspended: stage {
+    Reinstate: action { transition to Available }
+  }
+}
+
+Customer: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Status: Text default("open")
+  address: owned Address
+  orders: many Order
+  Active: stage {
+    Place: action (total: Number) -> Order {
+      create in orders { Total: total }
+    }
+    SetAddress: action (line1: Text, city: Text, zip: Text) -> Address {
+      create in address { Line1: line1 City: city Zip: zip }
+    }
+  }
+  when all orders Delivered {
+    assign Status to "settled"
+  }
+}
+
+Order: entity {
+  Total: Number range(0, 100000) required
+  customer: Customer
+  stops: many Stop
+  Placed: stage {
+    Ship: action { transition to Shipped }
+    Cancel: action { transition to Cancelled }
+  }
+  Shipped: stage {
+    Deliver: action { transition to Delivered }
+    Cancel: action { transition to Cancelled }
+  }
+  Delivered: stage { }
+  Cancelled: stage { }
+}
+
+Stop: entity {
+  courier: Courier
+  order: Order
+  Planned: stage {
+    Complete: action { transition to Done }
+  }
+  Done: stage { }
+}

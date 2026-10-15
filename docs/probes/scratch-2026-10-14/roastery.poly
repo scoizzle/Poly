@@ -1,0 +1,62 @@
+domain Roastery
+uses temporal
+uses http
+
+RoastLevel: enum { Light, Medium, Dark }
+
+Bean: entity {
+  Name: Text unique required length(2, 40)
+  Roast: RoastLevel default(Medium)
+  Stock: Number range(0, 100000) default(0)
+  batches: many Batch
+  Open: stage {
+    Plan: action (kg: Number, code: Text) -> Batch {
+      create in batches {
+        Kg: kg
+        Code: code
+      }
+    }
+    Retire: action { transition to Retired }
+  }
+  Retired: stage { }
+  when batches Roasted as batch {
+    assign Stock to Stock + batch Kg
+  }
+}
+
+Batch: entity {
+  Code: Text unique required
+  Kg: Number range(1, 100) required
+  bean: Bean
+  Planned: stage {
+    Roast: action { transition to Roasted }
+    Discard: action { transition to Discarded }
+  }
+  Roasted: stage { }
+  Discarded: stage { }
+}
+
+Order: entity {
+  Reference: Text unique required
+  lines: many Line
+  Open: stage {
+    AddLine: action (bean: Bean, kg: Number) -> Line {
+      create in lines {
+        Kg: kg
+        bean: bean
+      }
+    }
+    Confirm: action { transition to Confirmed }
+  }
+  Confirmed: stage {
+    Fulfill: action { transition to Fulfilled }
+  }
+  Fulfilled: stage { }
+}
+
+Line: entity {
+  Kg: Number range(1, 1000) required
+  order: Order
+  bean: Bean
+  Added: stage { }
+}

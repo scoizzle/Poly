@@ -1,0 +1,75 @@
+domain Payroll
+uses temporal
+
+PayKind: enum { Salaried, Hourly }
+RunStatus: enum { Draft, Open, Approved, Paid }
+SheetStatus: enum { Draft, Submitted, Approved, Rejected }
+
+Employee: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Kind: PayKind default(Salaried)
+  Rate: Number range(0, 1000) required
+  Gross: Number default(0)
+  Net: Number default(0)
+  timesheets: many Timesheet
+  Active: stage {
+    Log: action (hours: Number, day: Date) -> Timesheet {
+      create in timesheets {
+        Hours: hours
+        Day: day
+      }
+    }
+    Terminate: action { transition to Terminated }
+  }
+  Terminated: stage { }
+  when all timesheets Approved as sheet {
+    assign Gross to Gross + sheet Hours * Rate
+  }
+}
+
+Timesheet: entity {
+  Hours: Number range(0, 400) required
+  Day: Date default(Today)
+  employee: Employee
+  Draft: stage {
+    Submit: action { transition to Submitted }
+  }
+  Submitted: stage {
+    Approve: action { transition to Approved }
+    Reject: action { transition to Rejected }
+  }
+  Approved: stage { }
+  Rejected: stage { }
+}
+
+PayRun: entity {
+  PeriodStart: Date default(Today)
+  PeriodEnd: Date
+  Total: Number range(0, 10000000) default(0)
+  slips: many Payslip
+  Draft: stage {
+    entry { assign Total to 0 }
+    AddSlip: action (amount: Number) -> Payslip {
+      create in slips { Amount: amount }
+    }
+    Advance: action {
+      assign PeriodEnd to PeriodStart + 14 Days
+    }
+    Approve: action { transition to Approved }
+  }
+  Approved: stage {
+    exit { assign Total to Total }
+    Pay: action { transition to Paid }
+  }
+  Paid: stage { }
+  when slips Added {
+    assign Total to Total + 1
+  }
+}
+
+Payslip: entity {
+  Amount: Number range(0, 1000000) required
+  run: PayRun
+  Added: stage { }
+}

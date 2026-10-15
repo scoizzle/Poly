@@ -26,6 +26,7 @@ public sealed class VmAnalyzerReportTests {
     private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
 
     // H1 @ 0ba89d58: 15 VM Errors, 1 domain Errors, 0 clean.
+    // 17 VM Errors after the 2026-10-14 from-scratch probes (gym, restaurant).
     private static readonly string[] VmErrorSamples = [
         "demo/live/checkout.poly",
         "demo/live/domain.poly",
@@ -41,6 +42,8 @@ public sealed class VmAnalyzerReportTests {
         "docs/probes/fleet-eval/09-transport/orders.poly",
         "docs/probes/fleet-eval/09-transport/warehouse.poly",
         "docs/probes/fleet-eval/12-mcp/mcp-library.poly",
+        "docs/probes/scratch-2026-10-14/gym.poly",
+        "docs/probes/scratch-2026-10-14/restaurant.poly",
         "docs/probes/smoke/smoke.poly",
     ];
 

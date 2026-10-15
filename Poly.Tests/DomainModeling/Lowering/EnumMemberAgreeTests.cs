@@ -43,6 +43,39 @@ public class EnumMemberAgreeTests {
     }
 
     [Test]
+    public async Task DomainEnumMemberBareInPolicy_AgreesOnSimulateAndPrintedCsharp() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Shop
+            PatronStatus: enum { Active, Suspended }
+            Patron: entity {
+              Status: PatronStatus default(Active)
+              IsActive: policy { Status is Active }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
+        var policy = entity.Policies.First(p => p.Name == "IsActive");
+        var store = new DomainInstanceStore();
+        var active = DomainEntityInstance.Create(entity, domain: domain);
+        var suspended = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "Suspended" }, domain);
+        store.Add(active);
+        store.Add(suspended);
+
+        var asm = ExportedCSharp.CompileAndLoad(
+            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var printedActive = ExportedCSharp.CreateEntity(asm, "Patron");
+        var printedSuspended = ExportedCSharp.CreateEntity(asm, "Patron",
+            ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
+
+        await Assert.That(active.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That((bool)printedActive.GetType().GetMethod("IsActive")!.Invoke(printedActive, null)!)
+            .IsTrue();
+        await Assert.That(suspended.EvaluatePolicy(policy)).IsFalse();
+        await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive")!.Invoke(printedSuspended, null)!)
+            .IsFalse();
+    }
+
+    [Test]
     public async Task AssignEnumMemberFromParameter_AgreesOnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop

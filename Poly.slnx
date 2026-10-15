@@ -7,11 +7,6 @@
   <Folder Name="/demo/">
     <Project Path="demo/Poly.RestApi/Poly.RestApi.csproj" />
   </Folder>
-  <Folder Name="/Poly.Demo/">
-    <Project Path="Poly.Demo/Poly.Demo.Shared/Poly.Demo.Shared.csproj" />
-    <Project Path="Poly.Demo/Poly.Demo.Web/Poly.Demo.Web.csproj" />
-    <Project Path="Poly.Demo/Poly.Demo/Poly.Demo.csproj" />
-  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Poly.DslCompiler/Poly.DslCompiler.csproj" />
     <Project Path="src/Poly.Packs.MySql/Poly.Packs.MySql.csproj" />

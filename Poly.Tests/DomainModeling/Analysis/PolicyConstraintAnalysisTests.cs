@@ -47,6 +47,42 @@ public class PolicyConstraintAnalysisTests {
     }
 
     [Test]
+    public async Task EntityPolicy_EnumMemberComparison_IsNotMissingProperty() {
+        var result = Parse("""
+            domain Test
+            Outcome: enum { Pending, Won }
+            Dispute: entity {
+              Outcome: Outcome
+              Open: policy { Outcome == Pending }
+              Same: policy { Outcome is Pending }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var messages = string.Join("\n", result.Analysis.Diagnostics.Select(d => d.Message));
+        await Assert.That(messages).DoesNotContain("does not exist");
+    }
+
+    [Test]
+    public async Task EntityPolicy_ValueSubField_NamesTheValueType() {
+        var result = Parse("""
+            domain Test
+            Money: value { Amount: Number }
+            Dispute: entity {
+              Disputed: Money
+              Big: policy { Disputed Amount >= 1000 }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        var messages = string.Join("\n", result.Analysis.Diagnostics.Select(d => d.Message));
+        await Assert.That(messages).Contains(
+            "'Disputed' is a Money value and has no readable sub-field here.");
+        await Assert.That(messages).DoesNotContain("Relationship name 'Disputed'");
+    }
+
+    private static EvolutionResult Parse(string dsl) =>
+        new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(dsl).Parse());
+
+    [Test]
     public async Task EntityPolicy_OwnedAccess_NestedProperty_NotValidatedAgainstEntity() {
         // OwnedAccess("BirthCertificate", Property("Time")) — "Time" is on BirthCertificate,
         // not on Person. This should NOT cause a validation error.

@@ -1,0 +1,28 @@
+domain Sessions
+uses temporal
+
+User: entity {
+  Name: Text required
+  sessions: many Session
+
+  Login: action -> Session {
+    create in sessions { Token: Guid ExpiresAt: Now + 30 Minutes }
+  }
+}
+
+Session: entity {
+  Token: Text unique
+  ExpiresAt: DateTime
+  RefreshedAt: DateTime default(Now)
+
+  IsExpired: policy { ExpiresAt < Now }
+
+  Active: stage {
+    Refresh: action {
+      assign ExpiresAt to Now + 30 Minutes
+      assign RefreshedAt to Now
+    }
+    Logout: action { transition to Ended }
+  }
+  Ended: stage { }
+}

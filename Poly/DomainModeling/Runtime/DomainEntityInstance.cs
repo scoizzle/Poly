@@ -333,6 +333,63 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Allocates the instance the printed constructor would build. Scalar slots
+    /// are bag writes. Collection slots link through the store view so a later
+    /// <c>Attach*</c> still sees the relationship, not a shadowed list. Entry
+    /// effects run once, the same call <see cref="Create"/> makes.
+    /// </summary>
+    internal DomainEntityInstance MaterializeNew(
+        string typeName, IReadOnlyDictionary<string, object?> args) {
+        if (Domain is null)
+            throw new InvalidOperationException($"Create '{typeName}' has no domain.");
+        var entity = Domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, typeName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Entity type '{typeName}' not found in domain '{Domain.Name}'.");
+
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            args.TryGetValue(prop.Name, out var supplied);
+            if (supplied is not null)
+                values[prop.Name] = CoerceBooleanBagValue(prop.Type.TypeName, supplied);
+            else if (prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault() is { } dflt)
+                values[prop.Name] = EvaluateDefaultValue(dflt.Expression, prop.Type.TypeName, Domain);
+            else
+                values[prop.Name] = supplied;
+        }
+
+        var store = Store ?? StoreOrDefault();
+        var instance = new DomainEntityInstance(
+            entity, values, BuildTypeDefAnalyzer(entity, domain: Domain),
+            entity.Stages.FirstOrDefault()?.Name, Domain);
+        if (!store.TryAdd(instance, out var addError))
+            throw new InvalidOperationException(addError ?? "Unique constraint violated.");
+
+        try {
+            var analysis = RuntimeAnalysisCache.GetOrAnalyze(Domain);
+            foreach (var slot in DomainToCSharpExporter.GetConstructorParameters(entity, analysis)) {
+                if (!slot.IsNavigation || !args.TryGetValue(slot.Name, out var raw) || raw is null)
+                    continue;
+                var member = DomainToCSharpExporter.ToPascalCase(slot.Name);
+                if (slot.IsCollection)
+                    instance.AdoptCollection(member, raw);
+                else
+                    instance.AssignConstructedSingular(member, raw);
+            }
+            ApplyInitialStageEntryEffects(instance);
+        }
+        catch {
+            foreach (var child in instance.CreatedChildren.ToArray())
+                store.Remove(child);
+            store.Remove(instance);
+            throw;
+        }
+
+        TrackCreatedChild(instance);
+        return instance;
+    }
+
+    /// <summary>
     /// Evaluates a DSL default expression to a concrete runtime value, adapted to
     /// the target property's CLR type when known (discovery round5 F1–F3).
     /// The runtime stores enum-typed properties as strings, so an enum member name
@@ -365,15 +422,16 @@ public sealed partial record DomainEntityInstance {
 
     /// <summary>
     /// Action resolution missed. An action that exists on a different stage
-    /// is "only available in stage 'X'" via Entity.Stages; otherwise Missing.
+    /// is "only available in stage 'X'" (or "stages 'A', 'B'") via Entity.Stages; otherwise Missing.
     /// </summary>
     private ActionInvocationResult ReportUnresolvedAction(string actionName) {
-        var stageName = Entity.Stages
-            .FirstOrDefault(s => s.Actions.Any(a =>
+        var stageNames = Entity.Stages
+            .Where(s => s.Actions.Any(a =>
                 string.Equals(a.Name, actionName, StringComparison.Ordinal)))
-            ?.Name;
-        return stageName is not null
-            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageName)
+            .Select(s => s.Name)
+            .ToList();
+        return stageNames.Count > 0
+            ? ActionInvocationResult.StageRequired(Entity.Name, actionName, stageNames)
             : ActionInvocationResult.Missing(Entity.Name, actionName);
     }
 
@@ -666,17 +724,14 @@ public sealed partial record DomainEntityInstance {
             : _typeDefAnalyzer;
         var previousBindingProvider = _bindingTypeProvider;
         _bindingTypeProvider = effectTypeProvider;
+        var createdBefore = _createdChildren.Count;
+        var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
+        var stageBefore = CurrentStage;
         try {
-            var createdBefore = _createdChildren.Count;
-            var bagBefore = new Dictionary<string, object?>(_values, StringComparer.Ordinal);
-            var stageBefore = CurrentStage;
             var failed = ExecuteEffectList(action.Effects, effectTypeProvider,
                 actionName: action.Name, actionParameters: action.Parameters, actionArgs: args);
             if (failed is { IsSuccess: false }) {
-                // Unique-before-mutate restore (PR 44 F2). Other constraint Failures
-                // keep prior assigns — PR 43 documented miss IfOnMutatedProperty.
-                if (failed.ErrorMessage is string msg && msg.Contains("Unique", StringComparison.Ordinal))
-                    RestoreActionState(bagBefore, stageBefore, createdBefore);
+                RestoreActionState(bagBefore, stageBefore, createdBefore);
                 return MapModuleRequireFailure(actionName, action, failed.ErrorMessage);
             }
 
@@ -698,6 +753,10 @@ public sealed partial record DomainEntityInstance {
 
             return ActionInvocationResult.Ok(actionName, CurrentStage, resultInstance, resultTypeName);
         }
+        catch (ConstraintFailureException ex) {
+            RestoreActionState(bagBefore, stageBefore, createdBefore);
+            return ActionInvocationResult.InvalidArguments(actionName, ex.Message);
+        }
         finally {
             _bindingTypeProvider = previousBindingProvider;
         }
@@ -714,7 +773,11 @@ public sealed partial record DomainEntityInstance {
         message ??= "invoke failed.";
         const string blockedPrefix = "blocked by policy '";
         var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
-        if (blockedIdx >= 0) {
+        // "'StartHall' blocked by policy 'HasSection'." is this action's gate.
+        // "'Occupy' blocked by policy 'CanBook'." is a nested invoke; keep the
+        // text so the caller can see which policy failed.
+        if (blockedIdx >= 0
+            && message.StartsWith($"'{actionName}'", StringComparison.Ordinal)) {
             var start = blockedIdx + blockedPrefix.Length;
             var end = message.IndexOf('\'', start);
             if (end > start) {
@@ -741,6 +804,18 @@ public sealed partial record DomainEntityInstance {
         if (failed is { IsSuccess: false })
             throw new ConstraintFailureException(
                 failed.ErrorMessage ?? $"{context} failed.");
+    }
+
+    // InvokeAction catches ConstraintFailureException and rolls the action back.
+    // A subscriber's failure has to keep escaping so the next notify still runs.
+    private static void ThrowIfSubscriptionFailed(DomainResult? failed, string context) {
+        if (failed is { IsSuccess: false })
+            throw new SubscriptionDispatchException(
+                failed.ErrorMessage ?? $"{context} failed.");
+    }
+
+    private sealed class SubscriptionDispatchException : Exception {
+        public SubscriptionDispatchException(string message) : base(message) { }
     }
 
     /// <summary>
@@ -850,16 +925,27 @@ public sealed partial record DomainEntityInstance {
                 throw new InvalidOperationException(
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
         }
+        PushAmbient(this);
         try {
             using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
             if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
                 return failed;
             return null;
         }
+        catch (InvalidOperationException ex) when (
+            actionName is not null
+            && ex.Message.StartsWith("Unique constraint violated", StringComparison.Ordinal)) {
+            // The printed factory does not check unique. Simulate TryAdd throws.
+            // A named action reports that as Failure so earlier effects roll back.
+            return DomainResult.Failure(ex.Message);
+        }
         catch (ConstraintFailureException ex) when (actionName is null) {
             // Named action trees return Failure. A nested void throw
             // (subscription / leftover TransitionStage) must still escape.
             return DomainResult.Failure(ex.Message);
+        }
+        finally {
+            PopAmbient();
         }
     }
 
@@ -891,29 +977,152 @@ public sealed partial record DomainEntityInstance {
             }
             // When… stays an empty stub so InvokeNamed runs the cached
             // subscription body (TryGetSubscriptionBody), not the sibling
-            // module method inlined as an AST callable.
-            moduleTypes.Analyze(ctx, StubWhenMethodBodies(td));
+            // module method inlined as an AST callable. Register…Subscriber
+            // stays empty because Link already recorded that subscriber.
+            // A static Create is the printed factory; only its constructor
+            // call is bound.
+            moduleTypes.Analyze(ctx, RewriteTypedFactories(StubWhenMethodBodies(td), td.Name, domain));
         }
         // Runtime-shaped entity (string CurrentStage + bag action params) plus
         // module method stubs (Notify*Subscribers, etc.).
         var runtimeEntity = BuildTypeDefNode(entity, actionParameters, domain);
-        if (moduleEntity?.Methods is { Count: > 0 } moduleMethods) {
-            var names = new HashSet<string>(
-                (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+        if (moduleEntity is not null) {
             List<MethodDefinitionNode>? extras = null;
-            foreach (var m in moduleMethods) {
-                if (!names.Add(m.Name))
-                    continue;
-                extras ??= [];
-                extras.Add(m with { Body = new Block([]) });
+            if (moduleEntity.Methods is { Count: > 0 } moduleMethods) {
+                var names = new HashSet<string>(
+                    (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+                foreach (var m in moduleMethods) {
+                    if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
+                        extras ??= [];
+                        extras.Add(BindConstructedNew(m, entity.Name, domain));
+                        continue;
+                    }
+                    if (!names.Add(m.Name))
+                        continue;
+                    extras ??= [];
+                    // Create{Nav} and Attach{Nav} are the printed methods. The
+                    // rest stay empty so InvokeNamed still owns actions and policies.
+                    var keepBody = m.Name.StartsWith("Create", StringComparison.Ordinal)
+                        || m.Name.StartsWith("Attach", StringComparison.Ordinal);
+                    extras.Add(keepBody ? m : m with { Body = new Block([]) });
+                }
             }
-            if (extras is not null)
+            // Printed Create/Attach bodies use the class fields (`_fines`).
+            // The interpreted instance is this dictionary, so those fields
+            // have to be members or the body does not analyze.
+            var fields = new List<FieldDefinitionNode>(runtimeEntity.Fields ?? []);
+            var fieldNames = new HashSet<string>(fields.Select(f => f.Name), StringComparer.Ordinal);
+            if (moduleEntity.Fields is not null) {
+                foreach (var field in moduleEntity.Fields) {
+                    if (fieldNames.Add(field.Name))
+                        fields.Add(field);
+                }
+            }
+            if (extras is not null || fields.Count != (runtimeEntity.Fields?.Count ?? 0))
                 runtimeEntity = runtimeEntity with {
-                    Methods = [.. runtimeEntity.Methods ?? [], .. extras]
+                    Methods = extras is null
+                        ? runtimeEntity.Methods
+                        : [.. runtimeEntity.Methods ?? [], .. extras],
+                    Fields = fields.Count == 0 ? null : fields
                 };
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
         return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+    }
+
+    [ThreadStatic]
+    static Stack<DomainEntityInstance>? t_ambient;
+
+    /// <summary>The instance whose compiled tree is running on this thread.</summary>
+    internal static DomainEntityInstance? Ambient =>
+        t_ambient is { Count: > 0 } ? t_ambient.Peek() : null;
+
+    internal static void PushAmbient(DomainEntityInstance instance) =>
+        (t_ambient ??= new Stack<DomainEntityInstance>()).Push(instance);
+
+    internal static void PopAmbient() => t_ambient?.Pop();
+
+    /// <summary>
+    /// Rebinds a module entity's static <c>Create</c> onto the dictionary store so
+    /// the typed factory call the lowering emits runs under simulate.
+    /// </summary>
+    private static TypeDefinitionNode RewriteTypedFactories(
+        TypeDefinitionNode td, string typeName, Domain domain) {
+        if (td.Methods is null || td.Methods.Count == 0)
+            return td;
+        List<MethodDefinitionNode>? methods = null;
+        for (var i = 0; i < td.Methods.Count; i++) {
+            var method = td.Methods[i];
+            if (!method.IsStatic || !string.Equals(method.Name, "Create", StringComparison.Ordinal))
+                continue;
+            methods ??= [.. td.Methods];
+            methods[i] = BindConstructedNew(method, typeName, domain);
+        }
+        return methods is null ? td : td with { Methods = methods };
+    }
+
+    /// <summary>
+    /// Keeps the printed static Create body. <c>new Entity(...)</c> becomes
+    /// <see cref="DomainInstanceHostJobs.NewEntity"/> so simulate allocates a
+    /// <see cref="DomainEntityInstance"/>. The packed values are the method's
+    /// typed signature parameters. Checks and <c>Attach*</c> stay in the body.
+    /// </summary>
+    private static MethodDefinitionNode BindConstructedNew(
+        MethodDefinitionNode method, string typeName, Domain domain) {
+        if (method.Body is not Block block)
+            throw new InvalidOperationException(
+                $"Static Create on '{typeName}' has no body.");
+        var slots = FactorySlots(typeName, domain);
+        var parameters = method.Parameters ?? [];
+        var replaced = false;
+        var nodes = new List<Node>(block.Nodes.Count);
+        foreach (var node in block.Nodes) {
+            if (node is Assignment { Destination: Variable { Name: "created" }, Value: New ctor } assign) {
+                nodes.Add(assign with {
+                    Value = ConstructedInstance(typeName, parameters, ctor.Arguments.Length, slots)
+                });
+                replaced = true;
+                continue;
+            }
+            nodes.Add(node);
+        }
+        if (!replaced)
+            throw new InvalidOperationException(
+                $"Static Create on '{typeName}' has no constructor call to bind.");
+        return method with { Body = new Block(nodes, block.Variables) };
+    }
+
+    private static Node ConstructedInstance(
+        string typeName, IReadOnlyList<Parameter> parameters, int argumentCount, IReadOnlyList<string> slots) {
+        if (parameters.Count != slots.Count || argumentCount != slots.Count)
+            throw new InvalidOperationException(
+                $"Create '{typeName}' passes {argumentCount} constructor argument(s); "
+                + $"the structure has {parameters.Count} parameter(s) and {slots.Count} slot(s).");
+        var host = new ClrTypeReference(typeof(DomainInstanceHostJobs));
+        Node values = new Invoke(new Member(host, nameof(DomainInstanceHostJobs.Values)));
+        for (var i = 0; i < parameters.Count; i++) {
+            values = new Invoke(
+                new Member(host, nameof(DomainInstanceHostJobs.With)),
+                values, new Constant(slots[i]), parameters[i]);
+        }
+        var call = new Invoke(
+            new Member(host, nameof(DomainInstanceHostJobs.NewEntity)),
+            new Constant(typeName), values);
+        return new TypeCast(call, new NamedTypeReference(typeName));
+    }
+
+    private static List<string> FactorySlots(string typeName, Domain domain) {
+        var entity = domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, typeName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Entity type '{typeName}' not found in domain '{domain.Name}'.");
+        var analysis = RuntimeAnalysisCache.GetOrAnalyze(domain);
+        var slots = new List<string>();
+        foreach (var p in DomainToCSharpExporter.GetConstructorParameters(entity, analysis))
+            slots.Add(p.Name);
+        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(entity, analysis))
+            slots.Add(prop.Name);
+        return slots;
     }
 
     private static TypeDefinitionNode StubWhenMethodBodies(TypeDefinitionNode td) {
@@ -922,13 +1131,22 @@ public sealed partial record DomainEntityInstance {
         List<MethodDefinitionNode>? methods = null;
         for (var i = 0; i < td.Methods.Count; i++) {
             var method = td.Methods[i];
-            if (!method.Name.StartsWith("When", StringComparison.Ordinal))
+            if (!method.Name.StartsWith("When", StringComparison.Ordinal)
+                && !IsSubscriberRegister(method.Name))
                 continue;
             methods ??= [.. td.Methods];
             methods[i] = method with { Body = new Block([]) };
         }
         return methods is null ? td : td with { Methods = methods };
     }
+
+    /// <summary>
+    /// Printed <c>Register{Source}{Rel}{Stage}Subscriber</c>. Store.Link already
+    /// recorded the subscriber, so the list add must not run again.
+    /// </summary>
+    private static bool IsSubscriberRegister(string name) =>
+        name.StartsWith("Register", StringComparison.Ordinal)
+        && name.EndsWith("Subscriber", StringComparison.Ordinal);
 
     /// <summary>
     /// Compiles a module body that still contains <see cref="ThisReference"/>.
@@ -1039,7 +1257,8 @@ public sealed partial record DomainEntityInstance {
                 Parameter p when typed.TryGetValue(p.Name, out var bound) => bound,
                 ThisReference or Parameter or Variable or Constant
                     or NamedTypeReference or TypeReference
-                    or PrimitiveTypeReference or ClrTypeReference => node,
+                    or PrimitiveTypeReference or ClrTypeReference
+                    or OptionalTypeReference => node,
                 _ => throw new InvalidOperationException(
                     $"Cannot bind typed parameters on {node.GetType().Name}.")
             };

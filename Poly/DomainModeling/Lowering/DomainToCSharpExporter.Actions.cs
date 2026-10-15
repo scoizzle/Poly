@@ -365,13 +365,12 @@ public sealed partial class DomainToCSharpExporter {
                         // Already wrapped — leave as-is.
                     }
                     else if (last is Syntactic.Assignment a) {
-                        Node produced = a.Destination;
-                        if (!isVoid)
-                            produced = new TypeCast(produced, resultTypeRef);
+                        // `var created = Fine.Create(...).Value` is already T.
+                        // A cast would print `(Fine)created` over a typed Value.
                         nodes.Add(new Return(
                             new Invoke(
                                 new Member(actionResultType, "Success"),
-                                [produced])));
+                                [a.Destination])));
                     }
                     else if (last is Syntactic.Invoke
                              or Syntactic.Member or Syntactic.Constant
@@ -890,6 +889,22 @@ public sealed partial class DomainToCSharpExporter {
     private static bool IsNonNullableReferenceScalar(Node propRef) =>
         propRef is PrimitiveTypeReference { PrimitiveId: PrimType.String };
 
+    private static bool IsDomainValueType(Domain domain, string typeName) =>
+        domain.Types.OfType<ValueType>().Any(v =>
+            string.Equals(v.Name, typeName, StringComparison.Ordinal));
+
+    /// <summary>
+    /// A domain value property with no <c>required</c> constraint. Create and
+    /// CreateNav take <c>T?</c> so an omitted initializer can pass null.
+    /// </summary>
+    internal static bool IsUnrequiredDomainValue(Domain domain, Entity entity, string propertyName) {
+        var prop = entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        if (prop is null || prop.Constraints.Any(c => c is RequiredConstraint))
+            return false;
+        return IsDomainValueType(domain, prop.Type.TypeName);
+    }
+
     /// <summary>
     /// Lowers a <see cref="DefaultValueConstraint"/> to its C# constant/enum node,
     /// used as an optional-parameter default on the Create/CreateNav/ctor signatures.
@@ -1083,7 +1098,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(new NamedTypeReference("string"), "Concat"),
+                            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
                             new Constant($"Automatic stage transition loop on entity '{entity.Name}': stage '"),
                             new Parameter("stageName"),
                             new Constant("' was already entered in this chain.")))))
@@ -1122,7 +1137,7 @@ public sealed partial class DomainToCSharpExporter {
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
-                            new Member(new NamedTypeReference("string"), "Concat"),
+                            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
                             new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({DomainEntityInstance.MaxNotifyDepth}) while notifying '"),
                             new Parameter("stageName"),
                             new Constant("'."))))),

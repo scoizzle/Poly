@@ -94,6 +94,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
                 AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
+            OptionalTypeReference optional => ResolveNodeType(context, optional.InnerType),
             PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
                 ? context.TypeDefinitions.GetTypeDefinition(clr)
                 : null,
@@ -323,10 +324,43 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         return instanceType.GetElementType();
     }
 
+    /// <summary>
+    /// An assignment from <c>Method</c> whose declared return type is
+    /// <c>DomainResult&lt;T&gt;</c> remembers <c>T</c> on the result variable.
+    /// </summary>
+    private static void NoteDomainResultValue(AnalysisContext context, Assignment assignment) {
+        if (assignment.Destination is not Variable variable)
+            return;
+        if (assignment.Value is not Invoke invoke)
+            return;
+        if (context.GetResolvedMember(invoke) is not AstMethodDefinition method)
+            return;
+        if (method.DefinitionNode.ReturnType is not NamedTypeReference {
+            TypeName: "DomainResult",
+            TypeArguments: [var typeArgument]
+        })
+            return;
+        var closed = ResolveNodeType(context, typeArgument);
+        if (closed is not null)
+            context.SetMetadata(variable, new DomainResultValueMetadata(closed));
+    }
+
+    /// <summary>
+    /// <c>result.Value</c> after a <c>DomainResult&lt;T&gt;</c> call is <c>T</c>,
+    /// so members of <c>T</c> resolve. The CLR property stays <c>object</c>.
+    /// </summary>
+    private static ITypeDefinition? DomainResultValueType(AnalysisContext context, Node value) {
+        if (value is not Member { MemberName: "Value", Value: Variable result })
+            return null;
+        return context.GetMetadata<DomainResultValueMetadata>(result)?.Type;
+    }
+
     private static ITypeDefinition? ResolveAssignmentType(
         AnalysisContext context,
         Assignment assignment) {
         var valueType = ResolveNodeType(context, assignment.Value);
+        NoteDomainResultValue(context, assignment);
+        valueType = DomainResultValueType(context, assignment.Value) ?? valueType;
 
         if (assignment.Destination is Variable variable) {
             if (valueType != null)
@@ -354,6 +388,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             for (int i = 0; i < n; i++) {
                 if (nodes[i] is Assignment a && ReferenceEquals(a.Destination, v)) {
                     resolved = ResolveNodeType(context, a.Value);
+                    NoteDomainResultValue(context, a);
+                    resolved = DomainResultValueType(context, a.Value) ?? resolved;
                     if (a.Value is Lambda assignedLambda)
                         context.SetMetadata(v, new StoredLambdaMetadata(assignedLambda));
                     else if (context.GetMetadata<StoredLambdaMetadata>(a.Value) is { } produced)
@@ -502,6 +538,13 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 /// Invoke uses the lambda body type; the binding itself is a heap ref.</summary>
 internal sealed record StoredLambdaMetadata(Lambda Lambda) : IAnalysisMetadata;
 
+/// <summary>
+/// <c>DomainResult&lt;T&gt;</c> declared on an AST method. Closing that name
+/// hits the non-generic CLR result, whose <c>Value</c> is object. The
+/// variable that received the call still carries <c>T</c>.
+/// </summary>
+internal sealed record DomainResultValueMetadata(ITypeDefinition Type) : IAnalysisMetadata;
+
 public static class TypeResolutionMetadataExtensions {
     private sealed record TypeResolutionMetadata : IAnalysisMetadata {
         public ITypeDefinition? ResolvedTypeDefinition { get; set; }
@@ -551,10 +594,23 @@ internal static class MethodInvocationSemanticResolver {
             argumentTypes[i] = argumentType;
         }
 
-        return targetType
+        var matches = targetType
             .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
-            .FirstOrDefault();
+            .ToList();
+        // A type-name receiver (`Person.Create(name)`) binds the static factory.
+        // An instance host job of the same arity stays for `this.Create(...)`.
+        // When no static overload matches, the instance method remains so the
+        // VM still rejects an instance call on a type name.
+        if (matches.Count > 1 && IsTypeName(memberAccess.Value)) {
+            var staticMatch = matches.FirstOrDefault(static method => method.IsStatic);
+            if (staticMatch is not null)
+                return staticMatch;
+        }
+        return matches.FirstOrDefault();
     }
+
+    private static bool IsTypeName(Node node) => node is
+        NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
 }
 
 internal static class ConstructorInvocationSemanticResolver {
@@ -566,18 +622,94 @@ internal static class ConstructorInvocationSemanticResolver {
         if (targetType == null)
             return null;
 
-        var argumentTypes = new ITypeDefinition[@new.Arguments.Length];
+        var argumentTypes = new ITypeDefinition?[@new.Arguments.Length];
+        var incomplete = false;
         for (var i = 0; i < @new.Arguments.Length; i++) {
-            var argumentType = context.GetResolvedType(@new.Arguments[i]);
-            if (argumentType == null)
-                return null;
+            // A null literal's resolved type is object, which rejects string? / entity?.
+            if (@new.Arguments[i] is Constant { Value: null }) {
+                argumentTypes[i] = null;
+                incomplete = true;
+                continue;
+            }
 
-            argumentTypes[i] = argumentType;
+            argumentTypes[i] = context.GetResolvedType(@new.Arguments[i]);
+            if (argumentTypes[i] is null)
+                incomplete = true;
         }
 
-        return targetType
-            .FindMatchingConstructors(argumentTypes)
-            .FirstOrDefault();
+        if (!incomplete) {
+            var complete = new ITypeDefinition[argumentTypes.Length];
+            for (var i = 0; i < argumentTypes.Length; i++)
+                complete[i] = argumentTypes[i]!;
+            return targetType.FindMatchingConstructors(complete).FirstOrDefault();
+        }
+
+        return MatchIncompleteConstructor(targetType, @new, argumentTypes);
+    }
+
+    /// <summary>
+    /// Member invoke already treats a null argument type as incomplete and skips the error.
+    /// Constructors still have to bind: an exact-arity ctor whose known args are assignable,
+    /// and whose null literals fit a reference or <c>Nullable&lt;T&gt;</c> parameter.
+    /// </summary>
+    private static ITypeConstructor? MatchIncompleteConstructor(
+        ITypeDefinition targetType, New @new, ITypeDefinition?[] argumentTypes) {
+        ITypeConstructor? best = null;
+        var bestScore = int.MaxValue;
+        var ties = 0;
+        foreach (var constructor in targetType.Constructors) {
+            if (!TryScoreConstructor(constructor, @new, argumentTypes, out var score))
+                continue;
+            if (score < bestScore) {
+                bestScore = score;
+                best = constructor;
+                ties = 1;
+            }
+            else if (score == bestScore) {
+                ties++;
+            }
+        }
+
+        return ties == 1 ? best : null;
+    }
+
+    private static bool TryScoreConstructor(
+        ITypeConstructor constructor, New @new, ITypeDefinition?[] argumentTypes, out int score) {
+        score = 0;
+        var parameters = constructor.Parameters?.ToArray() ?? [];
+        if (!SyntaxTypeCompatibilityAnalyzer.CallFits(parameters, argumentTypes.Length))
+            return false;
+
+        if (parameters.Length != argumentTypes.Length)
+            score++;
+
+        for (var i = 0; i < argumentTypes.Length; i++) {
+            var paramType = parameters[i].ParameterTypeDefinition;
+            if (@new.Arguments[i] is Constant { Value: null }) {
+                if (!SyntaxTypeCompatibilityAnalyzer.AcceptsNull(paramType))
+                    return false;
+                score++;
+                continue;
+            }
+
+            var argType = argumentTypes[i];
+            // A non-literal argument with no resolved type is incomplete, same as
+            // a member invoke. It does not reject the constructor and it does not
+            // change the score. Two constructors that both accept the known args
+            // still tie and bind nothing.
+            if (argType is null)
+                continue;
+            if (paramType == argType)
+                continue;
+            if (paramType.IsAssignableFrom(argType)) {
+                score++;
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 }
 

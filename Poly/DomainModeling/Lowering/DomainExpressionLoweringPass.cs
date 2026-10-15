@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
@@ -19,7 +20,7 @@ namespace Poly.DomainModeling.Lowering;
 /// <summary>
 /// Lowers a DomainExpression tree into the shared Syntax AST
 /// (<see cref="Syntax.Nodes"/>), making it compilable through
-/// the existing LinqExpressionGenerator and CSharpGenerator.
+/// the existing LinqExpressionGenerator and CSharpWriter.
 /// </summary>
 /// <remarks>
 /// Domain-specific nodes (OwnedAccess, RelationshipNavigation)

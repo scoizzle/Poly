@@ -4,3 +4,5 @@ global using Poly.DomainModeling.Meaning;
 global using Poly.DomainModeling.Ontology;
 global using Poly.DomainModeling.Ontology.Constraints;
 global using Poly.DomainModeling.Ontology.Effects;
+
+global using ValueType = Poly.DomainModeling.Ontology.ValueType;

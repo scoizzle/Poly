@@ -278,7 +278,7 @@ public class ExpressionTypeAnalysisTests {
             uses temporal
             Loan: entity {
               DueDate: DateTime
-              Stamp: action { assign DueDate to today }
+              Stamp: action { assign DueDate to Today }
             }
             """);
         await Assert.That(result.Succeeded).IsTrue();
@@ -312,6 +312,59 @@ public class ExpressionTypeAnalysisTests {
             }
             """);
         await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Comparison_DatePropertyToNow_Rejected() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: Date
+              Bad: policy { Expiry < Now }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "comparison between incompatible types")).IsTrue();
+        await Assert.That(HasError(result, "does not exist")).IsFalse();
+    }
+
+    [Test]
+    public async Task Comparison_DatePropertyToToday_Succeeds() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: Date
+              Good: policy { Expiry < Today }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    [Test]
+    public async Task Comparison_DateTimePropertyToToday_Rejected() {
+        var result = ParseClock("""
+            domain Test
+            uses temporal
+            Sub: entity {
+              Expiry: DateTime
+              Bad: policy { Expiry < Today }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, "comparison between incompatible types")).IsTrue();
+    }
+
+    /// <summary>
+    /// Clock folds (<c>Now</c>/<c>Today</c>) are parse-time. The empty parser
+    /// leaves them as property names, which a policy then rejects.
+    /// </summary>
+    private static EvolutionResult ParseClock(string dsl) {
+        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var changes = new PolyDslParser(dsl, session).Parse();
+        return new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], []))
+            .Apply(changes, session: session);
     }
 
     [Test]

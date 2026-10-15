@@ -113,8 +113,25 @@ public class PipelineMergeMetadataTests {
 
     [Test]
     public async Task DomainAnalysis_OrphanEntity_EmitsDMAGG001() {
-        // DMAGG001: non-root entity with no aggregate parent
-        // Loan has borrower→Patron but Patron has no loans: many → only incoming rel means Loan is non-root
+        // Singular outbound plus an outbound collection, and no inbound collection,
+        // is still a non-root with no parent (DMAGG001).
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity { Name: Text }
+            Note: entity { Body: Text }
+            Loan: entity {
+              Amount: Number
+              borrower: Patron
+              notes: many Note
+            }
+            """);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsTrue();
+    }
+
+    [Test]
+    public async Task DomainAnalysis_SingularOutboundOnly_NoDMAGG001() {
         var domain = ParseDomain("""
             domain Test
             Patron: entity { Name: Text }
@@ -125,7 +142,7 @@ public class PipelineMergeMetadataTests {
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsFalse();
     }
 
     [Test]

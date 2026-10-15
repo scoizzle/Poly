@@ -269,12 +269,17 @@ public static class DomainQueries {
             .Where(d => d.Severity == DiagnosticSeverity.Information)
             .ToList();
 
+        var hints = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Hint)
+            .ToList();
+
         return new AnalysisSummary(
             ErrorCount: errors.Count,
             WarningCount: warnings.Count,
             InfoCount: infos.Count,
             Messages: errors.Concat(warnings)
                 .Take(10)
+                .Concat(hints)
                 .Select(d => $"[{d.Severity}] {d.Message}")
                 .ToList()
         );

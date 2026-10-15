@@ -1,6 +1,7 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
@@ -139,6 +140,34 @@ public sealed class DomainSession {
         return ForExtensions(ids, catalog);
     }
 
+    /// <summary>
+    /// <see cref="ForSource"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
+    /// The pack is not added to <see cref="Extensions"/> when the source <c>uses</c>
+    /// list omitted it, so <see cref="WithDomain"/> keeps the handlers.
+    /// </summary>
+    public static DomainSession ForAuthoringSource(
+        string poly,
+        IReadOnlyList<string> seed,
+        ExtensionCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(seed);
+        var ids = DomainCompilation.PeekExtensions(poly);
+        if (ids.Count == 0)
+            ids = seed;
+        var resolved = catalog ?? ExtensionCatalog.Core;
+        var builder = SessionBuilder.CreateEmpty();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in ids) {
+            if (string.IsNullOrWhiteSpace(id))
+                throw new InvalidOperationException("Domain extension id must be non-empty.");
+            if (!seen.Add(id))
+                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
+            builder.Load(resolved.Resolve(id));
+        }
+        StorageFacetLibrary.EnsureRegistered(builder);
+        return builder.Build();
+    }
+
     /// <summary>Keeps tables when <c>uses</c> is unchanged; reloads when it changes.</summary>
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -275,26 +304,37 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(analysis);
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
-        // whole module, because the generator resolves types across entities from one analysis.
+        // whole module, because the writer resolves types across entities from one analysis.
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
         var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
         RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
-        var generator = new CSharpGenerator(interpAnalysis);
+        var writer = new CSharpWriter(interpAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
+        // Host top-level statements are global Program. An entity of that name stays
+        // class Program, but in Poly.Generated (with the DbContext) and not in Program.cs,
+        // so the file and the fully-qualified type both differ from the entry point.
+        var nestProgram = domain.Types.OfType<Entity>().Any(e => e.Name == "Program");
         var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
         foreach (var tree in entityTrees) {
+            var entityName = tree.Descriptor.Id.Segments[^1];
+            var source = writer.Write(TypesOf(tree));
+            if (nestProgram)
+                source = InGeneratedNamespace(source);
             AddPrintedFile(
                 catalog,
                 domain,
                 files,
-                $"{tree.Descriptor.Id.Segments[^1]}.cs",
-                generator.Generate(TypesOf(tree)),
+                entityName == "Program" ? "Program.Entity.cs" : $"{entityName}.cs",
+                source,
                 tree);
         }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
-        AddPrintedFile(catalog, domain, files, "Poly.Types.cs", generator.Generate(TypesOf(scaffolding)), scaffolding);
+        var scaffoldingSource = writer.Write(TypesOf(scaffolding));
+        if (nestProgram)
+            scaffoldingSource = InGeneratedNamespace(scaffoldingSource);
+        AddPrintedFile(catalog, domain, files, "Poly.Types.cs", scaffoldingSource, scaffolding);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
     }
@@ -308,6 +348,39 @@ public sealed class DomainSession {
         Artifact tree) {
         files.Add((fileName, source));
         catalog.Register(ContributedFile.Create(domain, fileName, source, EmitProducer, [tree.Descriptor.Id]));
+    }
+
+    /// <summary>Moves printed types into <c>Poly.Generated</c>. Usings stay file-scoped
+    /// so they still apply. DbContext already lives in that namespace.</summary>
+    private static string InGeneratedNamespace(string source) {
+        const string ns = "Poly.Generated";
+        var lines = source.Replace("\r\n", "\n").Split('\n');
+        var headerCount = 0;
+        while (headerCount < lines.Length) {
+            var trim = lines[headerCount].Trim();
+            if (trim is "" or "#nullable enable" or "#nullable disable" or "#nullable restore"
+                || trim.StartsWith("using ", StringComparison.Ordinal)) {
+                headerCount++;
+                continue;
+            }
+            break;
+        }
+        while (headerCount > 0 && lines[headerCount - 1].Trim().Length == 0)
+            headerCount--;
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < headerCount; i++)
+            sb.AppendLine(lines[i]);
+        sb.AppendLine();
+        sb.Append("namespace ").Append(ns).AppendLine(" {");
+        for (var i = headerCount; i < lines.Length; i++) {
+            if (lines[i].Length == 0)
+                sb.AppendLine();
+            else
+                sb.Append("    ").AppendLine(lines[i]);
+        }
+        sb.Append('}');
+        return sb.ToString().TrimEnd();
     }
 
     /// <summary>

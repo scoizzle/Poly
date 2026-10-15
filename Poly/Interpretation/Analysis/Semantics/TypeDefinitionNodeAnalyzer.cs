@@ -26,9 +26,16 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         }
 
         if (node is TypeDefinitionNode typeDef) {
-            var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
-            registry.Add(definition);
-            context.SetMetadata(node, new TypeDefinitionMetadata(definition));
+            // A re-analysis of a type the caller already built must keep that
+            // instance. A second Patron is not assignable to the first, so
+            // this fails to match a Patron parameter.
+            if (context.GetMetadata<TypeDefinitionMetadata>(typeDef)?.TypeDefinition is AstTypeDefinition existing)
+                registry.Add(existing);
+            else {
+                var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
+                registry.Add(definition);
+                context.SetMetadata(node, new TypeDefinitionMetadata(definition));
+            }
         }
 
         this.AnalyzeChildren(context, node);
@@ -52,8 +59,12 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetadata {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
+    /// <summary>CLR arity suffix so <c>DomainResult</c> and <c>DomainResult&lt;T&gt;</c> both stay registered.</summary>
+    internal static string Key(string fullName, int arity) =>
+        arity <= 0 ? fullName : $"{fullName}`{arity}";
+
     public void Add(AstTypeDefinition definition) {
-        _types[definition.FullName] = definition;
+        _types[Key(definition.FullName, definition.GenericParameters.Count())] = definition;
     }
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
@@ -62,15 +73,32 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetada
         if (_types.TryGetValue(typeName, out var def))
             return def;
 
+        var arity = TryReadArity(typeName, out var bareName);
         AstTypeDefinition? match = null;
         foreach (var type in _types.Values) {
-            if (!string.Equals(type.Name, typeName, StringComparison.Ordinal))
+            if (!string.Equals(type.Name, bareName, StringComparison.Ordinal)
+                && !string.Equals(type.FullName, bareName, StringComparison.Ordinal))
+                continue;
+            if (arity is int required && type.GenericParameters.Count() != required)
                 continue;
             if (match is not null)
                 return null;
             match = type;
         }
         return match;
+    }
+
+    private static int? TryReadArity(string typeName, out string bareName) {
+        var tick = typeName.LastIndexOf('`');
+        if (tick > 0
+            && int.TryParse(typeName.AsSpan(tick + 1), out var parsed)
+            && parsed >= 0) {
+            bareName = typeName[..tick];
+            return parsed;
+        }
+
+        bareName = typeName;
+        return null;
     }
 
     public ITypeDefinition? GetTypeDefinition(Type type) =>
@@ -345,15 +373,17 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     /// <summary>
     /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>
     /// using the indexer. Coerces the stored value to the property's target type.
-    /// Returns the property's <c>DefaultValue</c> (or <see cref="System.Reflection.Missing.Value"/>)
-    /// when the key is not present.
+    /// Returns the property's <c>DefaultValue</c> when the key is not present.
+    /// A value-type member with no default reads as that type's zero value.
+    /// A reference member with no default reads as <see cref="System.Reflection.Missing.Value"/>.
     /// </summary>
     public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
-        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var fallback = _node.DefaultValue is Constant c
+            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
+            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
         var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
         return Expression.Condition(
             Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
@@ -415,8 +445,9 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
         if (instance is null) return null;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        object? def = _node.DefaultValue is Constant c ? c.Value : System.Reflection.Missing.Value;
-        var fallback = Expression.Convert(Expression.Constant(def), typeof(object));
+        var fallback = _node.DefaultValue is Constant c
+            ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
+            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
         var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
         return Expression.Condition(
             Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
@@ -470,29 +501,35 @@ internal static class DictionaryBackedValue {
         Ref.Method((Expression<Func<object?, PrimitiveType, object>>)((raw, t) => GuardCompatible(raw, t)));
 
     /// <summary>
-    /// Emits an expression that coerces a dictionary value (typed <c>object?</c>)
-    /// to the target member's declared type. For primitive types this uses
-    /// <see cref="Convert"/> methods (e.g. <c>Convert.ToInt64</c>); for
-    /// reference types the value passes through unchanged.
+    /// Value used when a dictionary key is absent and the member has no constant
+    /// default. A converted value type uses that conversion's zero.
+    /// <see cref="System.Reflection.Missing"/> cannot be the other branch of a
+    /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
+    internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
+        var convert = ConvertMethod(targetType.PrimitiveType);
+        if (convert is null || !convert.ReturnType.IsValueType)
+            return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));
+        var zero = Activator.CreateInstance(convert.ReturnType)!;
+        return Expression.Convert(Expression.Constant(zero), typeof(object));
+    }
+
+    private static MethodInfo? ConvertMethod(PrimitiveType? primitive) => primitive switch {
+        PrimitiveType.Int64 => ConvertToInt64,
+        PrimitiveType.Int32 => ConvertToInt32,
+        PrimitiveType.Int16 => ConvertToInt16,
+        PrimitiveType.Int8 => ConvertToSByte,
+        PrimitiveType.Float64 => ConvertToDouble,
+        PrimitiveType.Float32 => ConvertToSingle,
+        PrimitiveType.Decimal => ConvertToDecimal,
+        PrimitiveType.Boolean => ConvertToBoolean,
+        PrimitiveType.String => ConvertToString,
+        PrimitiveType.Char => ConvertToChar,
+        _ => null
+    };
+
     internal static Expression CoerceRead(Expression dictValue, ITypeDefinition targetType) {
-        var primitive = targetType.PrimitiveType;
-        if (primitive is null) return dictValue;
-
-        var convertMethod = primitive.Value switch {
-            PrimitiveType.Int64 => ConvertToInt64,
-            PrimitiveType.Int32 => ConvertToInt32,
-            PrimitiveType.Int16 => ConvertToInt16,
-            PrimitiveType.Int8 => ConvertToSByte,
-            PrimitiveType.Float64 => ConvertToDouble,
-            PrimitiveType.Float32 => ConvertToSingle,
-            PrimitiveType.Decimal => ConvertToDecimal,
-            PrimitiveType.Boolean => ConvertToBoolean,
-            PrimitiveType.String => ConvertToString,
-            PrimitiveType.Char => ConvertToChar,
-            _ => null
-        };
-
+        var convertMethod = ConvertMethod(targetType.PrimitiveType);
         if (convertMethod is not null) {
             // Fail loud on fundamentally wrong-typed raw values instead of silently
             // coercing (Convert.ToInt64(true) → 1, Convert.ToString(null) → "", etc.):
@@ -501,7 +538,7 @@ internal static class DictionaryBackedValue {
             var guarded = Expression.Call(
                 GuardCompatibleInfo,
                 Expression.Convert(dictValue, typeof(object)),
-                Expression.Constant(primitive.Value));
+                Expression.Constant(targetType.PrimitiveType!.Value));
             return Expression.Convert(
                 Expression.Call(null, convertMethod, guarded),
                 typeof(object));
@@ -509,6 +546,13 @@ internal static class DictionaryBackedValue {
 
         return dictValue;
     }
+
+    private static bool IsIntegralNumber(object raw) => raw switch {
+        double d => d == Math.Truncate(d) && !double.IsNaN(d) && !double.IsInfinity(d),
+        float f => f == Math.Truncate(f) && !float.IsNaN(f) && !float.IsInfinity(f),
+        decimal m => m == decimal.Truncate(m),
+        _ => true
+    };
 
     /// <summary>
     /// Validates a raw bag value against the target primitive before coercion. Rejects
@@ -526,6 +570,10 @@ internal static class DictionaryBackedValue {
                 if (raw is not (long or int or short or byte or sbyte or ushort or uint or ulong or double or float or decimal))
                     throw new InvalidOperationException(
                         $"Cannot store a value of type '{raw.GetType().Name}' in a numeric property.");
+                // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
+                if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
+                    throw new InvalidOperationException(
+                        $"Number is integral; '{raw}' is not a valid Number.");
                 return raw;
             case PrimitiveType.Boolean:
                 if (raw is not bool)
@@ -650,8 +698,15 @@ internal static class AstTypeReferenceResolver {
         ITypeDefinition? enclosing) {
         if (named.TypeArguments is { Count: > 0 } args) {
             var resolvedArgs = new ITypeDefinition[args.Count];
+            ITypeDefinition? open = null;
             for (var i = 0; i < args.Count; i++) {
                 var resolved = TryResolve(args[i], provider, enclosing);
+                if (resolved is null && !TryCollectionKind(named.TypeName, out _)) {
+                    // DomainResult<T> inside the open definition: T is that definition's parameter,
+                    // not a separate type. An unknown name still fails.
+                    open ??= LookupOpenGeneric(named, args.Count, provider);
+                    resolved = open is null ? null : TypeParameterOf(open, args[i]);
+                }
                 if (resolved is null)
                     return null;
                 resolvedArgs[i] = resolved;
@@ -694,10 +749,40 @@ internal static class AstTypeReferenceResolver {
         if (args.Length == 1 && TryCollectionKind(named.TypeName, out var kind))
             return CloseCollection(args[0], kind, clr);
 
-        var open = LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
+        var open = LookupOpenGeneric(named, args.Length, provider)
+            ?? LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
         if (open is null)
             return null;
         return CloseGeneric(open, args, clr);
+    }
+
+    private static ITypeDefinition? TypeParameterOf(ITypeDefinition open, Node argument) {
+        if (argument is not NamedTypeReference named || named.Namespace is not null || named.TypeArguments is { Count: > 0 })
+            return null;
+        foreach (var parameter in open.GenericParameters) {
+            if (string.Equals(parameter.Name, named.TypeName, StringComparison.Ordinal))
+                return new AstGenericParameterTypeDefinition(parameter, open);
+        }
+        return null;
+    }
+
+    private static ITypeDefinition? LookupOpenGeneric(
+        NamedTypeReference named,
+        int arity,
+        ITypeDefinitionProvider provider) {
+        if (arity <= 0)
+            return null;
+
+        // Arity keys are an AST-registry fact. A CLR hit on `Name`1` (a loaded
+        // DomainResult<T>) must not steal the call from the non-generic runtime type.
+        var fullKey = AstTypeRegistry.Key(named.FullName, arity);
+        if (provider.GetTypeDefinition(fullKey) is AstTypeDefinition full)
+            return full;
+        if (named.FullName == named.TypeName)
+            return null;
+
+        var shortKey = AstTypeRegistry.Key(named.TypeName, arity);
+        return provider.GetTypeDefinition(shortKey) as AstTypeDefinition;
     }
 
     private static bool TryCollectionKind(string typeName, out CollectionKind kind) {
@@ -824,6 +909,9 @@ internal static class AstTypeReferenceResolver {
 internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly AstCollectionItemProperty _item;
     private readonly ITypeProperty? _count;
+    private readonly ITypeConstructor _ctor;
+    private readonly ITypeConstructor _copy;
+    private readonly ITypeMethod _add;
 
     public AstCollectionTypeDefinition(ITypeDefinition element, CollectionKind kind) {
         ElementType = element;
@@ -832,6 +920,12 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
         _count = ClrTypeDefinitionRegistry.Shared
             .GetTypeDefinition(typeof(System.Collections.IList))
             ?.Properties.FirstOrDefault(p => string.Equals(p.Name, "Count", StringComparison.Ordinal));
+        _ctor = new AstCollectionParameterlessConstructor(this);
+        // new List<T>(items ?? new List<T>()) on a printed entity constructor.
+        _copy = new AstCollectionCopyConstructor(this);
+        // DomainResult.Value is object. Add still has to accept the entity.
+        var addArg = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition<object>();
+        _add = new AstCollectionAddMethod(this, addArg);
     }
 
     public ITypeDefinition ElementType { get; }
@@ -842,14 +936,68 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public ITypeDefinition? BaseType => null;
     public IEnumerable<ITypeDefinition> Interfaces => [];
     public IEnumerable<IParameter> GenericParameters => [];
-    public IEnumerable<ITypeMember> Members => _count is null ? [_item] : [_item, _count];
+    public IEnumerable<ITypeMember> Members => _count is null
+        ? [_item, _ctor, _copy, _add]
+        : [_item, _count, _ctor, _copy, _add];
     public IEnumerable<ITypeField> Fields => [];
     public IEnumerable<ITypeProperty> Properties => _count is null ? [_item] : [_item, _count];
-    public IEnumerable<ITypeMethod> Methods => [];
-    public IEnumerable<ITypeConstructor> Constructors => [];
+    public IEnumerable<ITypeMethod> Methods => [_add];
+    public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public PrimitiveType? PrimitiveType => null;
     public TypeCategory TypeCategory => TypeCategory.Collection;
     public Type RuntimeType => typeof(System.Collections.IList);
+}
+
+/// <summary>Parameterless constructor for a synthetic collection type.</summary>
+internal sealed class AstCollectionParameterlessConstructor(AstCollectionTypeDefinition declaring) : ITypeConstructor {
+    public string Name => declaring.Name;
+    public ITypeDefinition MemberTypeDefinition => declaring;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary><c>new List&lt;T&gt;(items)</c> for a synthetic collection type.</summary>
+internal sealed class AstCollectionCopyConstructor(AstCollectionTypeDefinition declaring) : ITypeConstructor {
+    public string Name => declaring.Name;
+    public ITypeDefinition MemberTypeDefinition => declaring;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [new AstCollectionSourceParameter(declaring)];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary>The source sequence of <c>new List&lt;T&gt;(items)</c>.</summary>
+internal sealed class AstCollectionSourceParameter(AstCollectionTypeDefinition source) : IParameter {
+    public int Position => 0;
+    public string Name => "collection";
+    public ITypeDefinition ParameterTypeDefinition => source;
+    public bool IsOptional => false;
+    public object? DefaultValue => null;
+}
+
+/// <summary><c>Add(X)</c> on a synthetic collection type.</summary>
+internal sealed class AstCollectionAddMethod(AstCollectionTypeDefinition declaring, ITypeDefinition element) : ITypeMethod {
+    public string Name => "Add";
+    public ITypeDefinition MemberTypeDefinition => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(void))!;
+    public ITypeDefinition DeclaringTypeDefinition => declaring;
+    public IEnumerable<IParameter> Parameters => [new AstCollectionElementParameter(element)];
+    public AccessModifier AccessModifier => AccessModifier.Public;
+    public LifetimeModifier LifetimeModifier => LifetimeModifier.Instance;
+    public bool IsStatic => false;
+    public Mutability Mutability => Mutability.Mutable;
+}
+
+/// <summary>The element parameter of <c>Add(X)</c>.</summary>
+internal sealed class AstCollectionElementParameter(ITypeDefinition element) : IParameter {
+    public int Position => 0;
+    public string Name => "item";
+    public ITypeDefinition ParameterTypeDefinition => element;
+    public bool IsOptional => false;
+    public object? DefaultValue => null;
 }
 
 internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrTypeDefinition {

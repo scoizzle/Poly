@@ -274,7 +274,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task EffectLowering_Create_DoesNotRequireEntityStructureMetadata() {
+    public async Task EffectLowering_Create_WithoutStructureBag_Throws() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
 
@@ -291,12 +291,9 @@ public class DomainToCSharpExporterTests {
             Domain: domain);
         var pass = new EffectLoweringPass(entity, context);
 
-        var lowered = pass.TryLowerVmNode(effect);
-        await Assert.That(lowered).IsNotNull();
-        var names = FlattenLowered(lowered!).OfType<Invoke>()
-            .Select(i => (i.Delegate as Member)?.MemberName)
-            .ToList();
-        await Assert.That(names.Contains("Create")).IsTrue();
+        await Assert.That(() => pass.TryLowerVmNode(effect))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no dictionary create member");
     }
 
     [Test]
@@ -498,13 +495,7 @@ public class DomainToCSharpExporterTests {
         // Collection navs (lines, notes) are not CreateNav params; the back-ref
         // (customer) is auto-wired with `this`. Repro shape: title, total → 2.
         await Assert.That(paramCount).IsEqualTo(2);
-
-        var bind = customer.Methods?.FirstOrDefault(m => m.Name == "BindCreateIn");
-        await Assert.That(bind).IsNotNull();
-        var call = FindAllInvokes(bind!.Body!).FirstOrDefault(i =>
-            i.Delegate is Member { MemberName: "CreateOrders" });
-        await Assert.That(call).IsNotNull();
-        await Assert.That(call!.Arguments.Length).IsEqualTo(paramCount);
+        await Assert.That(customer.Methods?.Any(m => m.Name == "BindCreateIn")).IsFalse();
     }
 
     [Test]
@@ -540,6 +531,12 @@ public class DomainToCSharpExporterTests {
         var factoryCall = FindFirstInvoke(createOrders.Body);
         await Assert.That(factoryCall).IsNotNull();
         await Assert.That(factoryCall!.Arguments.Any(a => a is ThisReference)).IsTrue();
+
+        // Unique inverse: Order.Create AttachOrders adds. CreateOrders must not add again.
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var createOrdersCs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> CreateOrders(");
+        await Assert.That(createOrdersCs).Contains("Order.Create(");
+        await Assert.That(createOrdersCs).DoesNotContain("_orders.Add");
     }
 
     [Test]
@@ -1148,6 +1145,49 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_KeywordProperty_EscapesBaseAndCompiles() {
+        const string dsl = """
+            domain Claims
+            Claim: entity {
+              base: Text
+              Open: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(
+            new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("public string @base");
+        await Assert.That(csharp).DoesNotContain("public string base");
+    }
+
+    [Test]
+    public async Task Export_UnrequiredValueProperty_CompilesNullableAndDefaultConstructs() {
+        const string dsl = """
+            domain Disputes
+            Money: value {
+              Amount: Number
+              Currency: Text
+            }
+            Dispute: entity {
+              Title: Text required
+              Disputed: Money
+            }
+            CaseFile: entity {
+              disputes: many Dispute
+              File: action { create in disputes { Title: "claim" } }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await AssertExportCompiles(domain, analysis);
+        var csharp = new CSharpGenerator().Generate(
+            new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(csharp).Contains("Money?");
+        await Assert.That(csharp).Contains("new Money()");
+        await Assert.That(csharp).Contains("??");
+    }
+
+    [Test]
     public async Task Export_AssignDatePropToDateTimeProp_EmitsToDateTimeAndCompiles() {
         const string dsl = """
             domain DateWiden
@@ -1273,7 +1313,8 @@ public class DomainToCSharpExporterTests {
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("Guid.NewGuid().ToString()");
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
-        await Assert.That(csharp).Contains("DateTime.Today");
+        await Assert.That(csharp).Contains("DateTime.UtcNow");
+        await Assert.That(csharp).DoesNotContain("DateTime.Today");
     }
 
     [Test]
@@ -1295,8 +1336,9 @@ public class DomainToCSharpExporterTests {
 
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
-        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.Today)");
+        await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.UtcNow");
+        await Assert.That(csharp).DoesNotContain("DateTime.Today");
         await Assert.That(csharp).Contains("??");
     }
 
@@ -1410,7 +1452,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("\"Kind\", TokenKind.Numeric");
+        await Assert.That(cs).Contains("this.CreateTokens(TokenKind.Numeric)");
         await Assert.That(cs).DoesNotContain("this.Numeric");
     }
 
@@ -1540,6 +1582,28 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_CreateNav_OmittedWhenNoCreateIn() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Demo
+
+            Note: entity { Body: Text }
+            Bin: entity {
+              tag: Note
+              notes: many Note
+              Drop: action {
+                create in notes { Body: "x" }
+              }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        await Assert.That(cs).Contains("CreateNotes(");
+        await Assert.That(cs).Contains("AttachNotes(");
+        await Assert.That(cs).DoesNotContain("CreateTag(");
+    }
+
+    [Test]
     public async Task EsmConstructorSignature_IncludesCollectionNavs() {
         // The shared constructor metadata (EntityStructureMetadata.ConstructorParameters)
         // is now the COMPLETE create signature — collection navs included with
@@ -1640,10 +1704,9 @@ public class DomainToCSharpExporterTests {
 
         // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
         await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
-        // Action names the Store job; host bind forwards the override through the factory.
-        await Assert.That(cs).Contains("CreateIn(");
-        await Assert.That(cs).Contains("\"Severity\"");
+        await Assert.That(cs).Contains("this.CreateDiagnostics(");
         await Assert.That(cs).Contains("Severity.Hint");
+        await Assert.That(cs).DoesNotContain("CreateIn(");
         // No post-create assignment (the ctor's own `this.Severity = severity;` is fine).
         await Assert.That(cs).DoesNotContain("diagnostic.Severity = ");
     }
@@ -1875,10 +1938,12 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var createIdx = cs.IndexOf("this.CreateStays(", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2065,10 +2130,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("this.Create(");
-        await Assert.That(cs).Contains("\"Tier\"");
-        await Assert.That(cs).Contains("Tier.Plus");
         await Assert.That(cs).Contains("Product.Create(");
+        await Assert.That(cs).Contains("Tier.Plus");
+        await Assert.That(cs).DoesNotContain("this.Create(");
         await Assert.That(cs).DoesNotContain("product.Tier =");
     }
 
@@ -2076,7 +2140,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_CreateType_UnambiguousManyRel_CreateAttaches_BindCreateDoesNotDoubleAdd() {
         // Fine.Create still AttachFines when a patron is passed. BindCreate
         // Type-create takes patron from values / null, not this, and does not
-        // _fines.Add. AssessByType still hosts via this.Create.
+        // _fines.Add. AssessByType now hosts via the typed Fine.Create.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
@@ -2094,35 +2158,47 @@ public class DomainToCSharpExporterTests {
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        await Assert.That(cs).Contains("this.Create(");
+        await Assert.That(cs).Contains("Fine.Create(");
 
         var fineCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Fine> Create(");
         await Assert.That(fineCreate).Contains("AttachFines");
-
-        var bindStart = cs.IndexOf("BindCreate(string typeName", StringComparison.Ordinal);
-        await Assert.That(bindStart).IsGreaterThanOrEqualTo(0);
-        var bindEnd = cs.IndexOf("BindCreateIn(string", bindStart + 1, StringComparison.Ordinal);
-        if (bindEnd < 0)
-            bindEnd = cs.IndexOf("BindProbeCreate(string", bindStart + 1, StringComparison.Ordinal);
-        await Assert.That(bindEnd).IsGreaterThan(bindStart);
-        var bindCreate = cs[bindStart..bindEnd];
-        await Assert.That(bindCreate).DoesNotContain("_fines.Add");
-        var fineCreateIdx = bindCreate.IndexOf("Fine.Create(", StringComparison.Ordinal);
-        await Assert.That(fineCreateIdx).IsGreaterThanOrEqualTo(0);
-        var fineCreateCallEnd = bindCreate.IndexOf(';', fineCreateIdx);
-        var fineCreateCall = bindCreate[fineCreateIdx..fineCreateCallEnd];
-        await Assert.That(fineCreateCall).DoesNotContain("this");
-        await Assert.That(fineCreateCall).Contains("ContainsKey(\"patron\")");
-        await Assert.That(fineCreateCall).Contains("null");
+        await Assert.That(cs).DoesNotContain("BindCreate");
 
         var assessByType = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> AssessByType(");
-        await Assert.That(assessByType).Contains("this.Create(");
+        await Assert.That(assessByType).Contains("Fine.Create(5L, \"TypeCreate\")");
+        await Assert.That(assessByType).DoesNotContain("(Patron?)null");
+        await Assert.That(assessByType).DoesNotContain("(Fine)");
         await Assert.That(assessByType).DoesNotContain("_fines.Add");
 
-        // F4: unique-path CreateNav defers Add when Create already Attached.
-        var createFines = ExportedCSharp.ExtractMethod(cs, "DomainResult<Fine> CreateFines(");
-        await Assert.That(createFines).Contains("Fine.Create(");
-        await Assert.That(createFines).DoesNotContain("_fines.Add");
+        // By-type create does not publish a create-in factory.
+        await Assert.That(cs).DoesNotContain("CreateFines(");
+    }
+
+    [Test]
+    public async Task Export_OmittedCollectionArgument_IsNullNotSyntheticList() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Test
+            Clerk: entity {
+              Name: Text required
+              Hire: action (name: Text) -> Patron {
+                create Patron { Name: name }
+              }
+            }
+            Patron: entity {
+              Name: Text required
+              fines: many Fine
+            }
+            Fine: entity {
+              Amount: Number required
+              Reason: Text required
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var hire = ExportedCSharp.ExtractMethod(cs, "DomainResult<Patron> Hire(");
+        await Assert.That(hire).Contains("Patron.Create(name)");
+        await Assert.That(hire).DoesNotContain("(IEnumerable<Fine>?)null");
+        await Assert.That(hire).DoesNotContain("new List<Fine>()");
     }
 
     [Test]
@@ -2147,8 +2223,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateIn(");
-        await Assert.That(cs).Contains("\"Kind\", TokenKind.Keyword");
+        await Assert.That(cs).Contains("this.CreateTokens(");
+        await Assert.That(cs).Contains("TokenKind.Keyword");
+        await Assert.That(cs).DoesNotContain("\"Kind\"");
     }
 
     [Test]
@@ -2291,7 +2368,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("CreateIn(");
+        await Assert.That(cs).Contains("this.CreateFiles(");
+        await Assert.That(cs).DoesNotContain("CreateIn(");
         await Assert.That(cs).Contains("srcContent");
         await Assert.That(cs).Contains("srcMode");
         await Assert.That(cs).Contains("newName");
@@ -2344,13 +2422,11 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var createIdx = cs.IndexOf("this.CreateStays(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
-        // Probe of the then-branch create-in must not run before the if (or at all
-        // at method scope). Stay.Create inside CreateStays is after Book.
-        if (probeIdx >= 0)
-            await Assert.That(probeIdx).IsGreaterThan(assignIdx);
+        await Assert.That(createIdx).IsGreaterThan(bookIdx);
+        await Assert.That(assignIdx).IsGreaterThan(createIdx);
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
     }
 
     [Test]
@@ -2373,10 +2449,12 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2403,12 +2481,12 @@ public class DomainToCSharpExporterTests {
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(bookPrefix.Contains("if (", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("if (", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2434,12 +2512,13 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(bookPrefix.Contains("if (", StringComparison.Ordinal)).IsTrue();
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("if (", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2466,12 +2545,13 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(bookPrefix.Contains("wait", StringComparison.Ordinal)).IsTrue();
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
+        await Assert.That(bookIdx).IsGreaterThan(-1);
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("wait", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2499,16 +2579,15 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(
-            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
-            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        var between = cs[assignIdx..createIdx];
+        await Assert.That(between.Contains("OpenStays", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(between.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2539,13 +2618,14 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var issueIdx = cs.IndexOf("public DomainResult Issue(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Permit\"", issueIdx);
         var assignIdx = cs.IndexOf("this.Create = false", issueIdx);
+        var createIdx = cs.IndexOf("this.CreatePermits(", issueIdx);
         await Assert.That(issueIdx).IsGreaterThan(-1);
-        await Assert.That(probeIdx).IsGreaterThan(issueIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var issuePrefix = cs[issueIdx..probeIdx];
-        await Assert.That(issuePrefix.Contains("if (false)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(assignIdx).IsGreaterThan(issueIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("if (this.Create)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
+        await Assert.That(cs).DoesNotContain("if (false)");
     }
 
     [Test]
@@ -2572,16 +2652,13 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(
-            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
-            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("if (confirm)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
     }
 
     [Test]
@@ -2607,16 +2684,13 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
-        await Assert.That(probeIdx).IsGreaterThan(bookIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
-        var bookPrefix = cs[bookIdx..probeIdx];
-        await Assert.That(
-            bookPrefix.Contains("OpenStays + 1", StringComparison.Ordinal)
-            || bookPrefix.Contains("OpenStays + 1L", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(bookPrefix.Contains(">= 1", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(assignIdx).IsGreaterThan(bookIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs[assignIdx..createIdx].Contains("OpenStays", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
     }
 
     [Test]
@@ -2648,13 +2722,14 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
-        var probeIdx = cs.IndexOf("this.ProbeCreate(\"Stay\"", openItIdx);
         var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
+        var createIdx = cs.IndexOf("Stay.Create(", openItIdx);
         await Assert.That(openItIdx).IsGreaterThan(-1);
-        await Assert.That(probeIdx).IsGreaterThan(openItIdx);
-        await Assert.That(stageIdx).IsGreaterThan(probeIdx);
-        await Assert.That(assignIdx).IsGreaterThan(probeIdx);
+        await Assert.That(stageIdx).IsGreaterThan(openItIdx);
+        await Assert.That(assignIdx).IsGreaterThan(stageIdx);
+        await Assert.That(createIdx).IsGreaterThan(assignIdx);
+        await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("throw new InvalidOperationException(stayResult.ErrorMessage)");
     }
 
@@ -2832,9 +2907,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createBody).Contains("AttachReservations");
         await Assert.That(createBody).Contains("AttachStays");
 
-        var createReservations = ExportedCSharp.ExtractMethod(cs, "DomainResult<Reservation> CreateReservations(");
-        await Assert.That(createReservations).Contains("Reservation.Create(");
-        await Assert.That(createReservations).DoesNotContain("_reservations.Add");
+        // No create-in on reservations, so the collection factory is omitted.
+        await Assert.That(cs).DoesNotContain("CreateReservations(");
 
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();

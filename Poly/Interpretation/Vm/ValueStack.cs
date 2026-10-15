@@ -67,6 +67,7 @@ public sealed class ValueStack(int initialSlots = 256) : IDisposable {
     /// <summary>Reserves <paramref name="count"/> slots on the stack without
     /// writing to them. Grows the backing array if needed.</summary>
     /// <param name="count">Number of slots to reserve.</param>
+    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Reserve(int count) {
         var sp = StackPointer + count;

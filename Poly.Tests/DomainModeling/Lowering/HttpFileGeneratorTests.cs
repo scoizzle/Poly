@@ -1,0 +1,82 @@
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
+using Poly.DslCompiler;
+using Poly.Tests.TestHelpers;
+
+namespace Poly.Tests.DomainModeling.Lowering;
+
+public class HttpFileGeneratorTests {
+    private static Domain ParseDomain(string poly) {
+        if (!poly.Contains("uses persistence", StringComparison.Ordinal)) {
+            var nl = poly.IndexOf('\n');
+            poly = nl < 0 ? poly : poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
+        }
+        var parser = new PolyDslParser(poly, ExtensionCatalog.Core.Authoring);
+        var changes = parser.Parse();
+        var result = new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).Apply(changes);
+        if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
+        return result.Root!;
+    }
+
+    private static string Render(Domain domain) {
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage
+            ?? throw new InvalidOperationException("Domain analysis did not produce StorageMappingMetadata.");
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)?.Aggregate
+            ?? throw new InvalidOperationException("Domain analysis did not produce OwnershipAggregateMetadata.");
+        return new HttpFileGenerator(domain, analysis, storage, behavior, aggregate).Generate();
+    }
+
+    [Test]
+    public async Task ValueTypeParam_EmitsJsonObject() {
+        var http = Render(ParseDomain("""
+            domain Library
+            Mailer: contract external mailer v1 {
+              Message: value {
+                To: Text
+                Subject: Text
+                Body: Text
+              }
+              Send: outbound operation Message
+            }
+            Patron: entity {
+              Email: Text unique
+              NotifyPatron: action (message: Message) { }
+            }
+            """));
+        await Assert.That(http).Contains(
+            "\"message\": { \"to\": \"sample\", \"subject\": \"sample\", \"body\": \"sample\" }");
+        await Assert.That(http.Contains("\"message\": 0")).IsFalse();
+    }
+
+    [Test]
+    public async Task StageScopedAction_ListedOnce() {
+        var http = Render(ParseDomain("""
+            domain T
+            Book: entity { Isbn: Text unique }
+            Patron: entity {
+              Email: Text unique
+              loans: many Loan
+            }
+            Loan: entity {
+              book: Book
+              Active: stage { Return: action { } }
+              Overdue: stage { Return: action { } }
+            }
+            """));
+        await Assert.That(CountOf(http, "### Action: Return")).IsEqualTo(1);
+        await Assert.That(CountOf(http, "/loans/1/return")).IsEqualTo(1);
+    }
+
+    private static int CountOf(string text, string value) {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+}

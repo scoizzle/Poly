@@ -377,9 +377,9 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeStage_EffectiveCounts_MatchHelpers() {
-        var (sessionId, _) = McpSessionStore.Create("W2Effective");
+        var (sessionId, _) = McpTestTools.Store.Create("W2Effective");
 
-        var outcome = McpSessionStore.Evolve(sessionId, (domain, session) =>
+        var outcome = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
             new DomainEvolution(domain).Evolve()
                 .AddEntity("Order")
                 .AddPropertyToEntity("Order", new Property("Age", new DomainTypeReference("Number"), []))
@@ -418,7 +418,7 @@ public class DomainSemanticLookupFailClosedTests {
         await Assert.That(cap!.View.EffectivePolicies.Count).IsEqualTo(helperPolicies);
         await Assert.That(cap.View.EffectiveActions.Count).IsEqualTo(helperActions);
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
         await Assert.That(desc.Success).IsTrue();
         await Assert.That(desc.Message).Contains($"{helperActions} effective actions");
         await Assert.That(desc.Message).Contains($"{helperPolicies} effective policies");
@@ -499,17 +499,17 @@ public class DomainSemanticLookupFailClosedTests {
     // ── F4 / MCP describe not-found vs missing metadata ──
 
     private static McpSessionState? GetFreshState(string sessionId) {
-        McpSessionStore.TryGet(sessionId, out var state);
+        McpTestTools.Store.TryGet(sessionId, out var state);
         return state;
     }
 
     [Test]
     public async Task DescribeStage_ReturnsMissingMetadata_WhenEsmMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -518,7 +518,7 @@ public class DomainSemanticLookupFailClosedTests {
         AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
             state.LatestAnalysis!.WithoutMetadata<EntityStructureMetadata>(order));
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "stage", "Draft", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("missing EntityStructureMetadata");
         await Assert.That(desc.Message).DoesNotContain("not found");
@@ -526,14 +526,14 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeStage_ReturnsNotFound_WhenStageAbsentAndEsmPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "stage", "NoSuchStage", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "stage", "NoSuchStage", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("not found");
         await Assert.That(desc.Message).DoesNotContain("missing EntityStructureMetadata");
@@ -541,18 +541,18 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
         AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
             state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
         await Assert.That(desc.Message).DoesNotContain("not found");
@@ -560,14 +560,14 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsNotFound_WhenActionAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "NoSuchAction", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "action", "NoSuchAction", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("not found");
         await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
@@ -575,11 +575,11 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_UsesCatalog_WithoutEntityKeyedArm() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
@@ -587,27 +587,27 @@ public class DomainSemanticLookupFailClosedTests {
             .First(e => string.Equals(e.Name, "Order", StringComparison.Ordinal));
         await Assert.That(state.LatestAnalysis!.GetMetadata<ActionResolutionMetadata>(order)).IsNull();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
         await Assert.That(desc.Success).IsTrue();
         await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Submit");
     }
 
     [Test]
     public async Task DescribePolicy_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
+        var r1b = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
         AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
             state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
         await Assert.That(desc.Message).DoesNotContain("not found");
@@ -615,16 +615,16 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribePolicy_ReturnsNotFound_WhenPolicyAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
+        var r1b = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "NoSuchPolicy", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "NoSuchPolicy", entityName: "Order");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("not found");
         await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
@@ -632,39 +632,39 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribePolicy_UsesCatalog_WithoutDomainKeyedMti() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r1b = EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
+        var r1b = McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Age","typeName":"Number"}""");
         await Assert.That(r1b.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Order","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
         await Assert.That(state.LatestAnalysis!.GetMetadata<MutationTargetIndexMetadata>(state.Domain)).IsNull();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "Adult", entityName: "Order");
         await Assert.That(desc.Success).IsTrue();
         await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Adult");
     }
 
     [Test]
     public async Task DescribeRelationship_ReturnsMissingMetadata_WhenCatalogMissing() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
         AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
             state.LatestAnalysis!.WithoutMetadata<DomainCatalogMetadata>(state.Domain));
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "relationship", "Owns");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("missing DomainCatalogMetadata");
         await Assert.That(desc.Message).DoesNotContain("not found");
@@ -672,16 +672,16 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_ReturnsNotFound_WhenRelationshipAbsentAndCatalogPresent() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "NoSuchRel");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "relationship", "NoSuchRel");
         await Assert.That(desc.Success).IsFalse();
         await Assert.That(desc.Message).Contains("not found");
         await Assert.That(desc.Message).DoesNotContain("missing DomainCatalogMetadata");
@@ -689,20 +689,20 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_UsesCatalog_WhenRawRlmStripped() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
         var state = GetFreshState(sessionId)!;
         AnalysisResultMetadata.ReplaceSessionAnalysis(sessionId,
             state.LatestAnalysis!.WithoutMetadata<RelationshipLookupMetadata>(null));
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "relationship", "Owns");
         await Assert.That(desc.Success).IsTrue();
         await Assert.That(System.Text.Json.JsonSerializer.Serialize(desc.Data)).Contains("Owns");
     }
@@ -711,14 +711,14 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeAction_ReturnsSuccess_WhenFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "action", "Submit", entityName: "Order");
         await Assert.That(desc.Success).IsTrue();
         var json = System.Text.Json.JsonSerializer.Serialize(desc.Data);
         await Assert.That(json).Contains("Submit");
@@ -726,16 +726,16 @@ public class DomainSemanticLookupFailClosedTests {
 
     [Test]
     public async Task DescribeRelationship_ReturnsSuccess_WhenFound() {
-        var (sessionId, _) = McpSessionStore.Create("Test");
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
 
-        var r1 = EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var r1 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
         await Assert.That(r1.Success).IsTrue();
-        var r2 = EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
+        var r2 = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Line"}""");
         await Assert.That(r2.Success).IsTrue();
-        var r3 = EvolveTool.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
+        var r3 = McpTestTools.Evolve.Add(sessionId, "relationship", """{"name":"Owns","source":"Order","target":"Line","cardinality":"OneToMany"}""");
         await Assert.That(r3.Success).IsTrue();
 
-        var desc = OracleTool.DescribeDomainElement(sessionId, "relationship", "Owns");
+        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "relationship", "Owns");
         await Assert.That(desc.Success).IsTrue();
         var json = System.Text.Json.JsonSerializer.Serialize(desc.Data);
         await Assert.That(json).Contains("Owns");

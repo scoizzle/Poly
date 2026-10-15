@@ -8,12 +8,10 @@ namespace Poly.Tests.DomainModeling.Runtime;
 
 /// <summary>
 /// The runtime entity type forwards its store jobs to <see cref="DomainInstanceHostJobs"/>.
-/// Every job needs a domain instance, and the name/value-pair create calls the lowering
-/// makes (one typed pair, or up to 16 object pairs) reach the same values bag.
+/// Every job needs a domain instance. Create stores the printed factory's values.
 /// </summary>
 public sealed class DomainInstanceHostJobsTests {
     private static readonly Dictionary<string, object?> NotAnInstance = new();
-    private static readonly Dictionary<string, object?> NoValues = new();
 
     public static IEnumerable<Func<(string Job, System.Action Call)>> EveryJob() {
         yield return () => ("EnsureUnique", () => DomainInstanceHostJobs.EnsureUnique(NotAnInstance, "Name", (object?)"x"));
@@ -21,9 +19,6 @@ public sealed class DomainInstanceHostJobsTests {
         yield return () => ("Notify", () => DomainInstanceHostJobs.Notify(NotAnInstance, "Open"));
         yield return () => ("Notify", () => DomainInstanceHostJobs.Notify(NotAnInstance, "Open", "Draft"));
         yield return () => ("LinkRelated", () => DomainInstanceHostJobs.LinkRelated(NotAnInstance, "lines", null));
-        yield return () => ("Create", () => DomainInstanceHostJobs.Create(NotAnInstance, "Line", NoValues));
-        yield return () => ("CreateIn", () => DomainInstanceHostJobs.CreateIn(NotAnInstance, "lines", NoValues));
-        yield return () => ("ProbeCreate", () => DomainInstanceHostJobs.ProbeCreate(NotAnInstance, "Line", NoValues));
     }
 
     [Test]

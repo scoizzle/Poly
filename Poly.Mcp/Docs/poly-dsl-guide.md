@@ -209,10 +209,15 @@ MemberStatus: enum {
 }
 ```
 
+A policy compares an enum property to a member name: `Outcome == Pending` and
+`Outcome is Pending`. `Outcome == "Pending"` is the same comparison.
+
 ### Value types
 
 Named records without identity or lifecycle. Declare before entities that use them.
 A property typed as the value type is a nested document, not a relationship.
+Policies and path-prefix expressions cannot read its fields (`Disputed Amount`).
+The diagnostic names the value type and does not call that name a relationship.
 
 ```poly
 Money: value {
@@ -280,6 +285,8 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
+
+`Number` is a 64-bit integer. A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted.
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:
@@ -350,6 +357,11 @@ Customer: entity {
 
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
+
+**Owned targets keep their owner.** `unlink_instances` refuses to drop the last
+inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
+owned target must keep its owner." Non-owned links stay minimum zero, and removing
+the owner instance entirely is not an unlink, so it is exempt from the minimum.
 
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
@@ -540,10 +552,9 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   (`where line in Active`) on the **target entity** (the iterated record) — never an inline
   expression. The invariant analysis reasons about the policy like a `require` gate.
 - **Fail-fast:** the first record whose invoke fails fails the whole `for` (the action
-  returns `Failure`) — no silent swallow.
+  returns `Failure`) — no silent swallow. Records already invoked stay mutated, and their
+  subscriptions have already fired. There is no transaction around the fan-out.
 - **Zero matches fail** (no vacuous success).
-- Rollback of already-invoked records is a documented gap (fail-fast guarantees the caller
-  always sees the failure; atomic undo is not shipped).
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
   path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
   but the export dereferences null. One that tests `exists` on a property (not a
@@ -810,7 +821,7 @@ Renew: action {
   assign RenewedAt to Today - 3 Months
 }
 
-IsExpired: policy { ExpiryDate < Now }
+IsExpired: policy { ExpiryDate < Today }
 Replenished: policy { DueDate + 14 Days > ExpiryDate }
 ```
 
@@ -837,9 +848,14 @@ list Temporal does not get clock meaning or temporal primitives.
 
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
-invoke (C# export emits a `??` coalesce). Policy/VM reads of `Now`/`Today` lower to
-`DateTime.UtcNow` / `DateOnly.FromDateTime(DateTime.UtcNow)` and execute on the VM.
+invoke (C# export emits a `??` coalesce). `Now` and `Today` share one UTC clock on every
+path: `default(...)`, bare assign, offsets, and policy reads all lower to `DateTime.UtcNow`
+(`Now`, and `Today` on a DateTime/Timestamp property) or `DateOnly.FromDateTime(DateTime.UtcNow)`
+(`Today` on a Date property). They do not use the machine-local `DateTime.Today`.
 Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock value.
+Adding a duration to a Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance.
+Compare a `Date` with `Today` and a `DateTime` with `Now`. A mixed comparison (`Date < Now`,
+`DateTime < Today`) is rejected at analysis.
 
 **Explicitly NOT shipped:** `schedule at` / `at <time>`, business days, and timezone (TZ)
 handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ conversion.
@@ -874,8 +890,10 @@ diverging:
 - **`unique` is enforced at the runtime instance store** (`DomainInstanceStore.Add` /
   property write) and projected to storage. The C# export's `Create` factory emits a
   stub `EnsureUnique` call that still returns Success — export uniqueness is the
-  generated unique index, not a constructor guard. Duplicate values fail loud at the
-  in-memory store.
+  generated unique index, not a constructor guard and not the primary key. The EF model
+  uses a synthetic integer `Id` key. Every `unique` property, including a second one on
+  the same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the
+  in-memory store and at the database.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
@@ -891,9 +909,11 @@ diverging:
   inside a quantifier body whose relationship resolves) is still **rejected at analysis**; a relationship `exists` or
   quantifier predicate is allowed and runs as the target's bool method.
   Fail closed without a store on the simulate path.
-- **Relative date ordering is shipped.** Comparing a date property to `Now`/`Today`
-  (e.g. `ExpiryDate < Now`) parses, analyzes, round-trips, and evaluates on the VM
-  via `evaluate_policy` / `invoke_action`.
+- **Relative date ordering is shipped** for the same clock family. A `Date` property
+  compares with `Today` (e.g. `ExpiryDate < Today`); a `DateTime` property compares with
+  `Now`. Mixed `Date`/`DateTime` comparisons are an analysis error. Same-family
+  comparisons parse, analyze, round-trip, and evaluate on the VM via `evaluate_policy` /
+  `invoke_action`.
 - **Expressions are type-checked at analysis.** Wrong-typed comparisons, assigns,
   arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(Today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
@@ -981,7 +1001,7 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 
@@ -1035,6 +1055,17 @@ See §3 for the full syntax reference.
 | `table` | Entity header | `Item: entity table("INVENTORY") { … }` |
 
 ### Constraint propagation into transport contracts
+
+Storage projection (EF `OnModelCreating`) is not the same map as the transport DTO
+attributes below. What reaches the database:
+
+| Constraint | Database projection |
+|------------|---------------------|
+| `unique` | `HasIndex(x => x.Prop).IsUnique()` on every unique property. The primary key is a synthetic `int` `Id`, not the unique column. |
+| `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
+| `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
+| `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
+| `required` | `IsRequired()` for reference-typed columns. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport projects them onto DTO validation attributes, so the API boundary
@@ -1119,6 +1150,8 @@ JSON object. An unknown kind, a missing field, or an unknown enum value fails cl
 
 A new name is a letter or `_`, then letters, digits, or `_`, and not a DSL keyword. A
 property may also be named `Text`, `Number`, or `Boolean` when its type is a primitive.
+A name that is a C# keyword (`ref`, `event`, `value`) is legal. The C# export writes
+it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they are the type.
 
 **Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
 `create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.

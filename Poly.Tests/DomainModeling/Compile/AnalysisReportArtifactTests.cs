@@ -12,13 +12,16 @@ namespace Poly.Tests.DomainModeling.Compile;
 /// H2: Emit also registers a vm-analysis-report; Lower does not.
 /// </summary>
 public sealed class AnalysisReportArtifactTests {
-    // Loan points at Patron with no inverse many → Loan is a non-root orphan (DMAGG001).
+    // Loan points at Patron and owns notes, with no inbound collection → non-root orphan (DMAGG001).
+    // A singular-only outbound nav is not this warning.
     private const string WarningsDomain = """
         domain Warehouse
         Patron: entity { Name: Text }
+        Note: entity { Body: Text }
         Loan: entity {
           Amount: Number
           borrower: Patron
+          notes: many Note
         }
         """;
 
@@ -70,7 +73,11 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
-        await Assert.That(errors.Count).IsEqualTo(9);
+        var messages = string.Join("\n", errors.Select(e => e.Message).OrderBy(m => m, StringComparer.Ordinal));
+        // V1/V3/V5 removed the constructor misses. DomainResult<T>.Success is typed.
+        // One non-generic Success call remains.
+        await Assert.That(messages).IsEqualTo(
+            "no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)");
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

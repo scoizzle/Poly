@@ -156,6 +156,21 @@ public class DbContextGeneratorTests {
     }
 
     [Test]
+    public async Task ShadowKey_RenamesWhenClrIdExists() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity { Id: Text unique }
+            """);
+        var omc = OnModelCreating(domain);
+        await Assert.That(omc.FindInvocations("Property")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "PolyId")).IsTrue();
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "PolyId")).IsTrue();
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "Id")).IsFalse();
+    }
+
+    [Test]
     public async Task NaturalKey_SkipsDuplicateColumnConfig() {
         var domain = ParseDomain("""
             domain Test
@@ -164,11 +179,12 @@ public class DbContextGeneratorTests {
             }
             """);
         var omc = OnModelCreating(domain);
-        // Natural key HasKey on SKU
+        // unique is an index; identity is the synthetic int key
         await Assert.That(omc.FindInvocations("HasKey")
-            .Any(i => i.Arguments[0] is Lambda l
-                && l.Body is Member m
-                && m.MemberName == "SKU")).IsTrue();
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "Id")).IsTrue();
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Lambda)).IsFalse();
+        await Assert.That(omc.FindInvocations("IsUnique").Count).IsEqualTo(1);
         // Column config for SKU_NBR appears exactly once
         var skuCols = omc.FindInvocations("HasColumnName")
             .Where(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "SKU_NBR")
@@ -194,6 +210,9 @@ public class DbContextGeneratorTests {
         await Assert.That(colNames.Contains("SKU_NBR")).IsTrue();
         await Assert.That(colNames.Contains("BARCODE")).IsTrue();
         await Assert.That(colNames.Contains("name")).IsTrue();
+        await Assert.That(omc.FindInvocations("IsUnique").Count).IsEqualTo(2);
+        await Assert.That(omc.FindInvocations("HasKey")
+            .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "Id")).IsTrue();
     }
 
     [Test]

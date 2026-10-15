@@ -1,0 +1,139 @@
+# TASK C8-tc1a - Lowering emits typed by-type create calls (K0)
+
+Status: implemented. Suite green (3529/0). Branch `slice/c8-tc1a`. Lane B. Review 2.
+Split from C8-tc1 on 2026-10-10 by the local agent, because C8-tc1 needed
+[`EffectLoweringPass`] + the exporter helper surface + the interpreter
+static-factory bind (6 source files, well past the ~3-file rule in
+[`LOCAL-AGENT.md`](../LOCAL-AGENT.md) §5). C8-tc1b is `create in`.
+
+Parent: [`tasks/C8-tc1.md`](C8-tc1.md). Plan card: [`pipeline-convergence-plan.md` **C8-tc**](../../../domain-modeling/pipeline-convergence-plan.md).
+
+## Shipped scope (2026-10-12)
+
+This branch absorbed the create-in and probe work that the split below reserved for C8-tc1b and C8-tc2. The review on PR 162 records that expansion instead of splitting the PR again.
+
+- By-type create in every context lowers to `Type.Create(...)`.
+- `create in` lowers to `this.Create{Nav}(...)`. Printed `CreateIn(` and `ProbeCreate(` are gone.
+- The probe prefix is deleted. `LowerCreateInProbe` no longer throws and then returns null.
+- `BuildCreateUniqueChecks` (a no-op) and the uncalled `AddStoreBindMethods` are deleted. `EnsureUnique` on a unique property is still the printed `DomainResult.Success()` stub. A real uniqueness check stays C8-tc2.
+- `DomainToCSharpExporter.StoreBind.cs` remains only for `StoreJobObjectType` and `TypedNull`.
+
+## Scope
+Finding K0 (lowering half) from [`research/2026-10-10-codegen-review.md`](../research/2026-10-10-codegen-review.md).
+Lowering still emits a string-named store job for by-type create:
+`CreateEntityInstance` (`Poly/DomainModeling/Lowering/EffectLoweringPass.cs:897`)
+calls `LowerRuntimeFactoryCall` (`:1136`), which prints
+`this.Create("Fine", "Amount", 5L, …)` with a `DomainResult<object>` cast.
+This slice makes *by-type* create lower to the typed static factory
+`Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` with no object cast,
+**in an action-result context** (the enclosing action returns `DomainResult<T>`,
+as in `simulate-create-type` / `simulate-create-create-in`). Probes and
+`EnsureUnique` stay as they are until C8-tc2.
+
+**Boundary (corrected 2026-10-10).** The finding-based split (K0 = "by-type",
+G1 = "create-in") is *not* clean: a by-type create in a **void / subscription**
+context lowers to `this.Create{Nav}(...)`, i.e. create-in machinery.
+`mcp-library/Patron.cs.golden:86` is exactly that (`internal void
+WhenEachLoanOverdue(Loan loan)` creates a `Fine` onto `Patron.Fines`). So the
+honest seam is **context**, not finding: tc1a takes the action-result context
+(`Type.Create`), and tc1b takes `create in` **plus** the void-context by-type
+create (`this.Create{Nav}`).
+
+The typed factory already exists in the printed C#: static `Entity.Create(…)`
+(`DomainToCSharpExporter.cs`, near `:805`; params `GetConstructorParameters`
+plus `TrailingDefaultedProperties`). Under simulate the same lowered tree runs
+in the interpreter, so `Fine.Create` must bind onto the dictionary-backed
+instance: static `Create`/`ProbeCreate` bodies are rewritten to
+`DomainInstanceHostJobs.TypedCreate(typeName, values)` using the ambient subject
+(the interpreter thread's current instance).
+
+## Blocker (2026-10-10)
+Implemented and verified for the **printer**: build clean, `StoreBindCreateTests` 16/16,
+`DomainToCSharpExporterTests` 100/100, `ParityTests` 66/66, goldens regenerated (2 files,
+one line each: `this.Create("Fine", …)` → `Fine.Create(5L, "TypeCreate", (Patron?)null)`),
+and only the void-context `mcp-library` create stays string-named.
+
+But the **interpreter** cannot run the typed call yet. Full suite: 3 fails
+(`SimulateCreateDogfoodTests`: `TypeOnly_UnambiguousManyRel_ListsAndLinks`,
+`TypeOnly_AmbiguousManyRel_ListsButDoesNotLink`, `Combined_TypeThenRel_OnOnePatron_BothLinked`),
+all `VM compile rejected: AST method 'Create' forwards to a CLR static method and could
+not be compiled`, with inner errors:
+- `no matching member 'Create' on 'Fine' for invoke with 3 argument(s)`
+- `no matching member 'Create' on 'Patron' for invoke with 2 argument(s)`
+- `no matching constructor for 'List<Fine>' with 0 argument(s)`
+
+These are the C8-vm analyzer items ("`List<T>` with no ctor/`Add`", "create-arg
+assignability", "exact ctor match"). So **C8-tc1 depends on the C8-vm analyzer fixes**;
+the plan's order (C8-vm after C8-tc2, LOCAL-AGENT §3 row 6) is wrong for the lowerable
+path. The code on this branch is the reference: it is the `c8-tc-wip.patch` lowering,
+done for the value-returning context with `RewriteTypedFactories` / `BindStaticFactory`
+/ `TypedCreate`.
+
+Superseded by the blocker update below. The forwarder compiles without folding V1/V3/V5.
+
+## Blocker update (2026-10-11) — cleared for this slice
+`AnalysisForAstBody` re-analyzes the whole declaring type, so compiling the rebound
+static `Create` forwarder was rejected by sibling helpers (`BindCreate`'s
+`Fine.Create` / `Patron.Create(name, new List<Fine>())`). The forwarder body itself
+is one CLR call. Sibling diagnostics are ignored only when the body forwards to a
+CLR static method. Every other member still sees the type-level result and falls
+through to `InvokeNamed`. `(Patron?)null` is an `OptionalTypeReference`; the VM
+resolves that cast as the inner reference type.
+
+C8-vm V1/V3/V5 stay in C8-vm. They are no longer a merge hold on tc1a. V2 (synthetic
+`List<T>` ctor and `Add`) stays on this branch.
+
+## Files
+- `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` (`CreateEntityInstance` lowers to a typed `Type.Create` call via a new `LowerTypedCreateCall` / `BuildFullCreateArgs` / `ArgumentFor` / `LowerInitializerValue` / `BindingsByName` / `TypeDefaultNode`. `LowerRuntimeFactoryCall` stays for `create in` and probes.)
+- `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` (`GetConstructorParameters` private → internal; add `internal static TrailingDefaultedProperties(Entity, INodeMetadataProvider)` and `internal static NullCollectionNode(string)`.)
+- `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` (`TypedNull` private → internal.)
+- `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` (push/pop an ambient subject around `ExecuteCachedSubscriptionTree` / the action-body execute; in `ModuleAwareTypeProvider` wrap the module so static `Create`/`ProbeCreate` are rebound by `BindStaticFactory`; add `BindStaticFactory`, `RewriteTypedFactories`, `FactoryDictKeys`, `IsEnumerableParam`.)
+- `Poly/DomainModeling/Runtime/DomainInstanceHostJobs.cs` (add `TypedCreate(string typeName, Dictionary<string, object?> values)` routing to `Receiver(DomainEntityInstance.Ambient, nameof(Create)).Create(...)`, trimming nulls; `Values()`/`With(...)` already exist.)
+- Tests: `Poly.Tests/DomainModeling/Lowering/StoreBindCreateTests.cs`, `DomainToCSharpExporterTests.cs`, `ParityTests.cs`; goldens regenerated under `Poly.Tests/DomainModeling/Compile/EmitGolden/`.
+- Reference: [`research/c8-tc-wip.patch`](../research/c8-tc-wip.patch) has the working draft (`LowerTypedFactoryCall`, `BuildFullCreateArgs`, `BindStaticFactory`). It applies at `931b1461`, not on master; copy the hunks for by-type create only.
+
+## Shape matrix
+| Input kind | Before | After | Test that proves it |
+|---|---|---|---|
+| `create Fine { Amount: 5 }` | `this.Create("Fine", "Amount", 5L)`, `DomainResult<object>`, cast | `Fine.Create(5L, …defaults)` returning `DomainResult<Fine>` | `StoreBindCreateTests`; golden `simulate-create-type/*.golden` |
+| same scenario simulated vs printed | agree | still agree | `ParityTests` |
+| `create in …` (G1) | `this.CreateIn("…")` | `this.Create{Nav}(...)` | goldens have no `CreateIn(` |
+| by-type create in a void context (`mcp-library` `WhenEachLoanOverdue`) | `this.Create("Fine", …)` | `Fine.Create(...)` | `mcp-library/Patron.cs.golden` |
+| probe (`ProbeCreate`) | `this.ProbeCreate("…")` | not emitted | goldens have no `ProbeCreate(` |
+
+## Done when
+- No golden contains a string-named `this.Create("`, `CreateIn(`, or `ProbeCreate(`. By-type create is `Type.Create(...)`. Create-in is `this.Create{Nav}(...)`.
+- The interpreter runs the typed static `Create`; `ParityTests` green.
+- Goldens regenerated, not hand-edited. Full suite green.
+- `EnsureUnique` on assign is still `DomainResult.Success()`. `BuildCreateUniqueChecks` is gone.
+
+## SHIP if / NOT SHIP if
+SHIP if by-type create lowers to `Type.Create(...)`, create-in lowers to `this.Create{Nav}(...)`, probes are not emitted, parity holds, and the dead probe / unique-check / store-bind shells are gone.
+
+NOT SHIP if a golden was hand-edited, a string-named `Create` / `CreateIn` / `ProbeCreate` remains under `EmitGolden/`, or `EnsureUnique` grew a real check in this slice.
+
+## Tests
+```
+dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/StoreBindCreateTests/*'
+dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/DomainToCSharpExporterTests/*'
+dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/ParityTests/*'
+POLY_UPDATE_GOLDEN=1 dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/EmitGoldenTests/*'
+dotnet run --project Poly.Tests/Poly.Tests.csproj
+```
+
+## Hand-edit
+One lowering path for by-type create, and one name map in the interpreter type provider; Scot can open both cold.
+
+## Needs Scot
+none. The context seam (tc1a = action-result `Type.Create`) is the one this branch implements.
+
+## Depends
+C6a, C6b1 (merged).
+
+## Log
+| Date | Who | Mill | SHA | Verdict / event | Findings |
+|------|-----|------|-----|-----------------|----------|
+| 2026-10-10 | handoff | - | - | split from C8-tc1 | K0 |
+| 2026-10-10 | implementer | opencode/opencode-go/deepseek-v4.1-flash | (this branch) | implemented; **BLOCKED**: printer green (goldens, 16/16, 100/100, 66/66), 3 `SimulateCreateDogfoodTests` fail on VM analyzer errors — needs the C8-vm analyzer fixes | K0 |
+| 2026-10-11 | implementer | grok | (this branch) | unblocked: CLR forwarder ignores sibling VM diagnostics; `OptionalTypeReference` resolves to its inner type. Full suite 3529/0 | K0 |
+| 2026-10-11 | implementer | grok | (this branch) | review bugs: omitted collection is `(IEnumerable<T>?)null`; `T` assigns to `T?`; `BindModuleMethodBody` keeps `OptionalTypeReference`. Sibling-error strip is the forwarder method, not only its body. Value-type optional unwrap stays | K0 |

@@ -17,13 +17,10 @@ namespace Poly.DomainModeling.Lowering;
 /// <see cref="DomainExpressionLoweringPass"/> for expression-heavy effects
 /// like <see cref="AssignEffect"/> and <see cref="ConditionalEffect"/>.
 ///
-/// <para>Create / create-in / unique lower to Store jobs
-/// (<c>Create</c> / <c>CreateIn</c> / <c>ProbeCreate</c> / <c>EnsureUnique</c>)
-/// on the one operation tree. C# print of those jobs is ordinary methods;
-/// generated <c>Create</c> factories may still call <c>Stay.Create</c> as the
-/// host bind of the job. Persistence unique indexes stay a host-artifact concern.
-/// Mixed if+create is the same guarded-probe + body tree.
-/// StageTransition and invoke are handwritten IR on both paths.</para>
+/// <para>By-type create lowers to <c>Type.Create(args…)</c>. Create-in lowers
+/// to <c>this.Create{Nav}(args…)</c>, which links the child. A failed create
+/// returns the caller's <c>DomainResult</c>. StageTransition and invoke are
+/// the same Syntax on both paths.</para>
 ///
 /// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
 /// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
@@ -491,11 +488,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Route(effect);
 
     /// <summary>Inline a stage's exit at most once per lowering (no self-re-entry).</summary>
-    private void InlineExitOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+    private void InlineExitOnce(Stage stage, List<Node> bodySink) {
         if (!_exitsInlining.Add(stage.Name))
             return;
         try {
-            AppendInlinedStageEffects(stage.OnExitEffects, probeSink, bodySink);
+            AppendInlinedStageEffects(stage.OnExitEffects, bodySink);
         }
         finally {
             _exitsInlining.Remove(stage.Name);
@@ -503,11 +500,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>Inline a stage's entry at most once per lowering (no self-re-entry).</summary>
-    private void InlineEntryOnce(Stage stage, List<Node> probeSink, List<Node> bodySink) {
+    private void InlineEntryOnce(Stage stage, List<Node> bodySink) {
         if (!_entriesInlining.Add(stage.Name))
             return;
         try {
-            AppendInlinedStageEffects(stage.OnEntryEffects, probeSink, bodySink);
+            AppendInlinedStageEffects(stage.OnEntryEffects, bodySink);
         }
         finally {
             _entriesInlining.Remove(stage.Name);
@@ -515,20 +512,13 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Mixed if+create in OnEntry/OnExit uses the same guarded-probe walk as
-    /// <see cref="LowerActionBodyCore"/>. Probes go to <paramref name="probeSink"/>
-    /// (before CurrentStage for entry); the body goes to <paramref name="bodySink"/>.
+    /// OnEntry/OnExit effects lower into <paramref name="bodySink"/>. Create
+    /// effects lower as one composite so nested structure stays intact.
     /// </summary>
-    private void AppendInlinedStageEffects(
-        IReadOnlyList<Effect> effects, List<Node> probeSink, List<Node> bodySink) {
+    private void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
         if (effects.Count == 0)
             return;
-        // CurrentStage is a prior mutation for inlined entry: probe if-only and
-        // unconditional create before the stage flip (runtime and C# export).
         if (HasCreate(effects)) {
-            var probes = LowerCreateInConstraintProbes(effects, priorMutation: true);
-            if (probes.Count > 0)
-                probeSink.Add(FlattenProbeBlocks(probes));
             var body = TryLowerVmNode(new CompositeEffect(effects));
             if (body is not null)
                 bodySink.Add(body);
@@ -600,7 +590,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 sourceStage = _entity.Stages.FirstOrDefault(s =>
                     string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
             if (sourceStage is not null)
-                InlineExitOnce(sourceStage, nodes, nodes);
+                InlineExitOnce(sourceStage, nodes);
         }
         else {
             // Entity-level transition: source stage is CurrentStage at run time.
@@ -609,7 +599,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 if (stage.OnExitEffects.Count == 0)
                     continue;
                 var exitNodes = new List<Node>();
-                InlineExitOnce(stage, exitNodes, exitNodes);
+                InlineExitOnce(stage, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
                 Node stageMatch = new Member(
@@ -621,9 +611,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
-        // Entry probes run BEFORE CurrentStage so a taken illegal create fails
-        // closed without flipping the stage. Entry body still runs after the
-        // assign (nested entry transition must end at Y).
+        // Entry effects run after the stage assign (a nested entry transition
+        // must end at Y). Constraint probes are not emitted.
         var tryNodes = new List<Node>();
         Stage? targetStage = null;
         if (_analysis is not null)
@@ -631,10 +620,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         else
             targetStage = _entity.Stages.FirstOrDefault(s =>
                 string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
-        var entryProbes = new List<Node>();
         if (targetStage is not null)
-            InlineEntryOnce(targetStage, entryProbes, tryNodes);
-        nodes.AddRange(entryProbes);
+            InlineEntryOnce(targetStage, tryNodes);
 
         // Loop-guard backstop shared with printed C#: each stage once per trigger.
         if (Subject is ThisReference && _emitAutomaticStageGuard) {
@@ -891,20 +878,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Lowers CreateEntityInstance to <c>this.Create(type, prop, value, …)</c>
-    /// with Failure unwrap. Same tree for simulate and emit.
+    /// Lowers a by-type create to <c>Type.Create(args…)</c> and unwraps Failure.
     /// </summary>
-    protected override Node? CreateEntityInstance(CreateEntityInstance cei) =>
-        LowerRuntimeFactoryCall(
-            "Create", cei.Type.TypeName, cei.Initializers,
-            ResolveEntity(cei.Type.TypeName),
-            cei.RelationshipName);
+    protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
+        var target = ResolveEntity(cei.Type.TypeName);
+        // No structure bag: the positional factory signature is unknown.
+        if (target is null || _analysis is null || _analysis.GetStructure(target) is null)
+            return LowerRuntimeFactoryCall(
+                "Create", cei.Type.TypeName, cei.Initializers, target, cei.RelationshipName);
+        return LowerTypedCreateCall(target, cei.Initializers, cei.RelationshipName);
+    }
 
 
     /// <summary>
-    /// Lowers create-in to <c>this.CreateIn(relationship, prop, value, …)</c>
-    /// with Failure unwrap. Same tree for simulate and emit. OneToOne / ManyToOne
-    /// prepend <c>if (this.Rel != null) return Failure(…)</c> before <c>CreateIn</c>.
+    /// Lowers create-in to <c>this.Create{Nav}(args…)</c>. That method links the
+    /// child, so this call does not. OneToOne / ManyToOne prepend
+    /// <c>if (this.Rel != null) return Failure(…)</c> before the call.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
         if (_domain is null)
@@ -914,8 +903,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
         var runtimeEntity = runtimeTarget?.TargetEntity
             ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
-        var create = LowerRuntimeFactoryCall(
-            "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity);
+        var create = runtimeEntity is null || _analysis is null
+            ? LowerRuntimeFactoryCall(
+                "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity)
+            : LowerCreateNavCall(runtimeRel?.Name ?? cr.RelationshipName, runtimeEntity, cr.Initializers);
         if (runtimeRel is null
             || runtimeRel.Cardinality is RelationshipCardinality.OneToMany
                 or RelationshipCardinality.ManyToMany)
@@ -930,260 +921,84 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         return new Block([guard, create]);
     }
 
-    internal List<Node> LowerCreateInConstraintProbes(
-        IReadOnlyList<Effect> effects, bool priorMutation = false) {
-        var nodes = new List<Node>();
-        var assignedRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        CollectCreateInProbes(effects, nodes, ref priorMutation, assignedRhs);
-        return nodes;
-    }
-
     /// <summary>
-    /// Guarded create probes (before prior assigns) plus the action body.
-    /// Same tree for simulate and emit (Item 4 fail-before-mutate).
+    /// <c>this.Create{Nav}(args…)</c> with the same Failure unwrap as
+    /// <see cref="LowerTypedCreateCall"/>. Arguments are the public slots of
+    /// that method: constructor parameters the caller supplies, then trailing
+    /// defaulted properties. The method fills back-references and collections
+    /// and links the child.
     /// </summary>
-    internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
-        LowerActionBodyCore(effects);
-
-    private Node? LowerActionBodyCore(IReadOnlyList<Effect> effects) {
-        var probes = LowerCreateInConstraintProbes(effects);
-        var lowered = TryLowerVmNode(new CompositeEffect(effects));
-        if (probes.Count == 0)
-            return lowered;
-        var nodes = new List<Node>();
-        var locals = new List<Node>();
-        foreach (var probe in probes) {
-            if (probe is Block pb) {
-                nodes.AddRange(pb.Nodes);
-                locals.AddRange(pb.Variables);
-            }
-            else {
-                nodes.Add(probe);
-            }
-        }
-        if (lowered is Block block) {
-            nodes.AddRange(block.Nodes);
-            locals.AddRange(block.Variables);
-        }
-        else if (lowered is not null) {
-            nodes.Add(lowered);
-        }
-        return new Block(nodes, locals);
-    }
-
-    private void CollectCreateInProbes(
-        IReadOnlyList<Effect> effects,
-        List<Node> nodes,
-        ref bool priorMutation,
-        Dictionary<string, DomainExpression> assignedRhs) {
-        // Unconditional create / create-in (and composites of them) probe at method
-        // start — same set as runtime PrevalidateUnconditionalCreates.
-        // ConditionalEffect is not probed unguarded (illegal then-branch on an
-        // untaken if must not fail the action). When a prior sibling already
-        // mutates (assign / create / invoke / transition), emit a condition-guarded
-        // probe so a taken illegal create returns Failure before those assigns
-        // (Item 4 fail-before-mutate). Probe if-conditions are lowered as after
-        // prior sibling AssignEffects (property→RHS substitution for probe only)
-        // so Occupy-shaped OpenStays+1 then if (OpenStays>=1) probes taken, and
-        // AssignFalse ConditionDrift probes constant false (not taken).
-        foreach (var effect in effects) {
-            switch (effect) {
-                case CompositeEffect composite:
-                    CollectCreateInProbes(composite.Effects, nodes, ref priorMutation, assignedRhs);
-                    break;
-                case CreateEntityInRelationshipEffect cr:
-                    if (LowerCreateInProbe(cr) is { } probe)
-                        nodes.Add(probe);
-                    priorMutation = true;
-                    break;
-                case CreateEntityInstance cei:
-                    if (LowerCreateEntityInstanceProbe(cei) is { } createProbe)
-                        nodes.Add(createProbe);
-                    priorMutation = true;
-                    break;
-                case ConditionalEffect cond:
-                    if (priorMutation)
-                        CollectGuardedBranchProbes(cond, nodes, assignedRhs);
-                    priorMutation = true;
-                    break;
-                case AssignEffect a:
-                    priorMutation = true;
-                    // Probe subst tracks PropertyAccess targets only (owned / other
-                    // assign targets leave conditions unsubstituted — pre-assign bag).
-                    if (a.Target is PropertyAccess pa)
-                        assignedRhs[pa.Name] = SubstituteAssignedProperties(a.Value, assignedRhs);
-                    break;
-                case StageTransitionEffect or InvokeActionEffect or ForEachInvokeEffect:
-                    priorMutation = true;
-                    break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// For probe-prefix conditions only: replace PropertyAccess with prior sibling
-    /// assign RHS so taken-ness matches post-assign bag without mutating yet.
-    /// </summary>
-    private static DomainExpression SubstituteAssignedProperties(
-        DomainExpression expr,
-        IReadOnlyDictionary<string, DomainExpression> assignedRhs) {
-        if (assignedRhs.Count == 0)
-            return expr;
-        return new SubstituteAssignedPropertiesRewrite(assignedRhs).Route(expr);
-    }
-
-    private sealed class SubstituteAssignedPropertiesRewrite(
-        IReadOnlyDictionary<string, DomainExpression> assignedRhs)
-        : DomainExpressionRewriteBase {
-        protected override DomainExpression PropertyAccess(PropertyAccess e) =>
-            assignedRhs.TryGetValue(e.Name, out var rhs) ? rhs : e;
-
-        // Subject-rooted PropertyAccess only: related-entity props inside
-        // quantifier bodies / RelationshipNavigation.TargetProperty must not
-        // inherit subject assign RHS (those bodies rebind the subject to the
-        // loop variable over the navigation collection).
-        protected override DomainExpression AnyExpr(AnyExpr e) => e;
-        protected override DomainExpression AllExpr(AllExpr e) => e;
-        protected override DomainExpression NoneExpr(NoneExpr e) => e;
-        protected override DomainExpression CountExpr(CountExpr e) => e;
-        protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) => e;
-    }
-
-    private void CollectGuardedBranchProbes(
-        ConditionalEffect cond,
-        List<Node> nodes,
-        IReadOnlyDictionary<string, DomainExpression> priorAssignRhs) {
-        var thenProbes = new List<Node>();
-        // Nested else-if is a ConditionalEffect in ElseEffects. Runtime
-        // PrevalidateUnconditionalCreates recurses regardless of nested
-        // priorMutation; start then/else as already-mutating so those probes
-        // are collected (this walk is only entered after a prior mutation).
-        // Inner then/else walks inherit ancestor sibling assigns (copy of
-        // priorAssignRhs) so nested if (OpenStays>=1) / else-if see OpenStays+1;
-        // separate dictionaries so else does not see then-branch assigns.
-        var thenPrior = true;
-        var thenRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var (k, v) in priorAssignRhs) thenRhs[k] = v;
-        CollectCreateInProbes(cond.ThenEffects, thenProbes, ref thenPrior, thenRhs);
-        if (thenProbes.Count > 0) {
-            var conditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-            var condition = _expressionPass.LowerExpression(conditionExpr, Subject);
-            nodes.Add(condition.Before(new IfStatement(condition.Value, FlattenProbeBlocks(thenProbes))));
-        }
-
-        if (cond.ElseEffects is not { Count: > 0 })
-            return;
-        var elseProbes = new List<Node>();
-        var elsePrior = true;
-        var elseRhs = new Dictionary<string, DomainExpression>(StringComparer.Ordinal);
-        foreach (var (k, v) in priorAssignRhs) elseRhs[k] = v;
-        CollectCreateInProbes(cond.ElseEffects, elseProbes, ref elsePrior, elseRhs);
-        if (elseProbes.Count == 0)
-            return;
-        var elseConditionExpr = SubstituteAssignedProperties(cond.Condition, priorAssignRhs);
-        var elseCondition = _expressionPass.LowerExpression(elseConditionExpr, Subject);
-        nodes.Add(elseCondition.Before(new IfStatement(
-            new Syntactic.Not(elseCondition.Value), FlattenProbeBlocks(elseProbes))));
-    }
-
-    private static Block FlattenProbeBlocks(List<Node> probes) {
-        var nodes = new List<Node>();
-        var locals = new List<Node>();
-        foreach (var probe in probes) {
-            if (probe is Block b) {
-                nodes.AddRange(b.Nodes);
-                locals.AddRange(b.Variables);
-            }
-            else {
-                nodes.Add(probe);
-            }
-        }
-        return new Block(nodes, locals);
-    }
-
-    private Block? LowerCreateInProbe(CreateEntityInRelationshipEffect cr) {
-        if (_domain is null || _analysis is null)
+    private Node LowerCreateNavCall(
+        string relationshipName,
+        Entity targetEntity,
+        IReadOnlyList<PropertyBinding> initializers) {
+        if (_analysis is null)
             throw new InvalidOperationException(
-                "Cannot probe 'create in' without a domain and analysis; dropping the probe would skip the constraint check.");
+                $"Cannot lower create-in '{relationshipName}' without analysis.");
 
-        var resolvedTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
-        var relationship = resolvedTarget?.Relationship
-            ?? ResolveRelationship(cr.RelationshipName);
-        if (relationship is null) return null;
-        var targetEntity = resolvedTarget?.TargetEntity
-            ?? ResolveEntity(relationship.Target.TypeName);
-        if (targetEntity is null) return null;
-
-        var probe = LowerRuntimeFactoryCall(
-            "ProbeCreate", targetEntity.Name, cr.Initializers, targetEntity);
-        return probe as Block ?? new Block([probe]);
-    }
-
-    private Block? LowerCreateEntityInstanceProbe(CreateEntityInstance cei) {
-        var targetEntity = ResolveEntity(cei.Type.TypeName);
-        if (targetEntity is null) return null;
-        var probe = LowerRuntimeFactoryCall(
-            "ProbeCreate", targetEntity.Name, cei.Initializers, targetEntity);
-        return probe as Block ?? new Block([probe]);
-    }
-
-    /// <summary>
-    /// Runtime create / probe: <c>this.Create/CreateIn/ProbeCreate(name, prop, value, ...)</c>
-    /// with Failure unwrap. Entity-typed values are cast to object so the 1-pair
-    /// object slot matches; primitives stay unboxed so the VM still boxes them at
-    /// the object-parameter invoke (a TypeCast to object is a no-op on scalars).
-    /// </summary>
-    private Node LowerRuntimeFactoryCall(
-        string methodName,
-        string nameArg,
-        IReadOnlyList<PropertyBinding> initializers,
-        Entity? targetEntity,
-        string? linkRelationshipName = null) {
-        var args = new List<Node> { new Constant(nameArg) };
         var loweredInitializers = new List<LoweredExpression>();
-        foreach (var init in initializers) {
-            args.Add(new Constant(init.PropertyName));
-            var prop = targetEntity?.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, init.PropertyName, StringComparison.Ordinal));
-            LoweredExpression loweredValue;
-            if (prop is not null
-                && LowerDefault(init.Expression, new NamedTypeReference(prop.Type.TypeName)) is { } adapted) {
-                loweredValue = LoweredExpression.Of(adapted);
-            }
-            else if (prop is not null) {
-                loweredValue = LowerEnumAwareValue(init.Expression, prop.Type, Subject);
-            }
-            else {
-                loweredValue = _expressionPass.LowerExpression(init.Expression, Subject);
-            }
-            loweredInitializers.Add(loweredValue);
-            args.Add(NeedsObjectSlotCast(targetEntity, prop, init.PropertyName, loweredValue.Value)
-                ? new TypeCast(loweredValue.Value, DomainToCSharpExporter.StoreJobObjectType())
-                : loweredValue.Value);
-        }
+        var inits = BindingsByName(initializers);
+        var slots = new List<(Node Node, bool OmitWhenTrailing)>();
+        foreach (var parameter in DomainToCSharpExporter.CreateNavParameters(
+                     _entity, targetEntity, _analysis))
+            slots.Add(ArgumentFor(
+                targetEntity, parameter.Name, parameter.Type, parameter.IsNavigation,
+                parameter.IsCollection, inits, loweredInitializers));
+        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(
+                     targetEntity, _analysis))
+            slots.Add(ArgumentFor(
+                targetEntity, prop.Name, prop.Type, isNavigation: false, isCollection: false,
+                inits, loweredInitializers));
+        var args = KeepThroughLastWritten(slots);
 
+        var methodName = $"Create{DomainToCSharpExporter.ToPascalCase(relationshipName)}";
         var resultVar = _names.Next("create");
         var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
-        Node failClosed = _context.ActionResultType is null
-            ? new ThrowStatement(new New(
-                new NamedTypeReference("ConstraintFailureException"),
-                new Syntactic.Coalesce(
-                    new Member(resultVar, "ErrorMessage"),
-                    new Constant(""))))
-            : new Return(
-                new Invoke(
-                    new Member(resultType, "Failure"),
-                    new Syntactic.Coalesce(
-                        new Member(resultVar, "ErrorMessage"),
-                        new Constant(""))));
         var nodes = new List<Node> {
             new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
             new IfStatement(
                 new Syntactic.Not(new Member(resultVar, "IsSuccess")),
-                new Block([failClosed]))
+                new Block([FailCreate(resultVar)]))
         };
-        if (!methodName.StartsWith("Probe", StringComparison.Ordinal)) {
+        if (_context.ActionResultType is NamedTypeReference { TypeArguments.Count: > 0 }) {
+            var valueVar = _names.Next("created");
+            locals.Add(valueVar);
+            nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
+        }
+        return LoweredExpression.Before(loweredInitializers, new Block(nodes, locals));
+    }
+
+    /// <summary>
+    /// Typed by-type create in an action-result context: <c>Type.Create(args…)</c>
+    /// returning <c>DomainResult&lt;Type&gt;</c> with no object cast. Arguments are
+    /// positional against the printed static factory: constructor parameters, then
+    /// trailing defaulted properties. Omitted optional properties pass their
+    /// default; the interpreter trims nulls so the store applies the same defaults.
+    /// </summary>
+    private Node LowerTypedCreateCall(
+        Entity targetEntity,
+        IReadOnlyList<PropertyBinding> initializers,
+        string? linkRelationshipName) {
+        if (_analysis is null)
+            throw new InvalidOperationException(
+                $"Cannot lower typed create of '{targetEntity.Name}' without analysis.");
+
+        var loweredInitializers = new List<LoweredExpression>();
+        var args = BuildFullCreateArgs(targetEntity, initializers, loweredInitializers);
+
+        var resultVar = _names.Next("create");
+        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var locals = new List<Node> { resultVar };
+        var nodes = new List<Node> {
+            new Assignment(resultVar, new Invoke(
+                new Member(new NamedTypeReference(targetEntity.Name), "Create"), [.. args])),
+            new IfStatement(
+                new Syntactic.Not(new Member(resultVar, "IsSuccess")),
+                new Block([FailCreate(resultVar)]))
+        };
+        if (resultType is NamedTypeReference { TypeArguments.Count: > 0 }
+            || linkRelationshipName is not null) {
             var valueVar = _names.Next("created");
             locals.Add(valueVar);
             nodes.Add(new Assignment(valueVar, new Member(resultVar, "Value")));
@@ -1198,18 +1013,155 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>
-    /// Entity-typed create initializers (properties or singular navs) do not match
-    /// the dictionary object value slot. Cast those values to object. Do not cast
-    /// primitives: TypeCast-to-object is a VM no-op on scalars and skips boxing.
+    /// A failed create returns the caller's <c>DomainResult</c>. A context with
+    /// no result type (a direct lowering test, a constructor) throws.
     /// </summary>
-    private bool NeedsObjectSlotCast(
-        Entity? targetEntity, Property? prop, string initName, Node value) {
-        if (value is Constant)
-            return false;
-        if (IsDomainEntityType(prop?.Type))
-            return true;
-        return targetEntity?.Navigations.Any(n =>
-            string.Equals(n.Name, initName, StringComparison.Ordinal)) == true;
+    private Node FailCreate(Node resultVar) {
+        var message = new Syntactic.Coalesce(
+            new Member(resultVar, "ErrorMessage"),
+            new Constant(""));
+        if (_context.ActionResultType is null) {
+            return new ThrowStatement(new New(
+                new NamedTypeReference("ConstraintFailureException"),
+                message));
+        }
+        return new Return(new Invoke(
+            new Member(_context.ActionResultType, "Failure"),
+            message));
+    }
+
+    /// <summary>
+    /// Positional arguments for the printed <c>Type.Create</c> factory: constructor
+    /// parameters, then trailing defaulted properties. A slot the caller did not
+    /// write (collection, navigation, or a property that already has a default)
+    /// is left off the call when every slot after it is the same. The factory
+    /// parameter default fills it. A hole before a written argument stays, so
+    /// the call remains positional.
+    /// </summary>
+    private List<Node> BuildFullCreateArgs(
+        Entity target,
+        IReadOnlyList<PropertyBinding> initializers,
+        List<LoweredExpression> loweredInitializers) {
+        var inits = BindingsByName(initializers);
+        var slots = new List<(Node Node, bool OmitWhenTrailing)>();
+        foreach (var parameter in DomainToCSharpExporter.GetConstructorParameters(target, _analysis!))
+            slots.Add(ArgumentFor(
+                target, parameter.Name, parameter.Type, parameter.IsNavigation,
+                parameter.IsCollection, inits, loweredInitializers));
+        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(target, _analysis!))
+            slots.Add(ArgumentFor(
+                target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
+                inits, loweredInitializers));
+        return KeepThroughLastWritten(slots);
+    }
+
+    /// <summary>
+    /// Drops a trailing run of arguments the caller did not write.
+    /// </summary>
+    private static List<Node> KeepThroughLastWritten(
+        List<(Node Node, bool OmitWhenTrailing)> slots) {
+        var last = slots.Count - 1;
+        while (last >= 0 && slots[last].OmitWhenTrailing)
+            last--;
+        var args = new List<Node>(last + 1);
+        for (var i = 0; i <= last; i++)
+            args.Add(slots[i].Node);
+        return args;
+    }
+
+    private (Node Node, bool OmitWhenTrailing) ArgumentFor(
+        Entity target,
+        string name,
+        DomainTypeReference type,
+        bool isNavigation,
+        bool isCollection,
+        Dictionary<string, PropertyBinding> inits,
+        List<LoweredExpression> loweredInitializers) {
+        if (inits.TryGetValue(name, out var binding)) {
+            var lowered = LowerInitializerValue(target, name, binding.Expression);
+            loweredInitializers.Add(lowered);
+            return (lowered.Value, false);
+        }
+        if (isCollection)
+            return (DomainToCSharpExporter.NullCollectionNode(type.TypeName), true);
+        if (isNavigation)
+            return (DomainToCSharpExporter.TypedNull(type.TypeName), true);
+        var prop = target.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
+        if (prop is not null) {
+            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            if (defaultConstraint is not null) {
+                if (LowerDefault(defaultConstraint.Expression,
+                        new NamedTypeReference(prop.Type.TypeName)) is { } runtime)
+                    return (runtime, true);
+                if (DomainToCSharpExporter.LowerDefaultConstantNode(
+                        defaultConstraint, prop, _domain, _analysis) is { } constant)
+                    return (constant, true);
+            }
+        }
+        return (TypeDefaultNode(type), false);
+    }
+
+    private LoweredExpression LowerInitializerValue(
+        Entity target, string name, DomainExpression expr) {
+        var prop = target.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal));
+        if (prop is not null
+            && LowerDefault(expr, new NamedTypeReference(prop.Type.TypeName)) is { } adapted)
+            return LoweredExpression.Of(adapted);
+        if (prop is not null)
+            return LowerEnumAwareValue(expr, prop.Type, Subject);
+        return _expressionPass.LowerExpression(expr, Subject);
+    }
+
+    private static Dictionary<string, PropertyBinding> BindingsByName(
+        IReadOnlyList<PropertyBinding> initializers) {
+        var inits = new Dictionary<string, PropertyBinding>(StringComparer.Ordinal);
+        foreach (var init in initializers)
+            inits[init.PropertyName] = init;
+        return inits;
+    }
+
+    private Node TypeDefaultNode(DomainTypeReference type) {
+        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, type.TypeName, out var enumType)
+            && enumType is { MemberNames.Count: > 0 })
+            return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
+        var clr = RuntimeAnalysisCache.ClrTypeName(_domain, type.TypeName);
+        if (clr is "string") return new Constant("");
+        if (clr is "long") return new Constant(0L);
+        if (clr is "int") return new Constant(0);
+        if (clr is "bool") return new Constant(false);
+        if (DomainTypeMapping.TryDefaultMember(clr, out var defaultType, out var member))
+            return new Member(new NamedTypeReference(defaultType), member);
+        if (IsDomainEntityType(type))
+            return DomainToCSharpExporter.TypedNull(type.TypeName);
+        return new Constant(null);
+    }
+
+    /// <summary>
+    /// The action body. Create-in is <c>this.Create{Nav}</c>. Constraint probes
+    /// are not prefixed.
+    /// </summary>
+    internal Node? LowerActionBody(IReadOnlyList<Effect> effects) =>
+        TryLowerVmNode(new CompositeEffect(effects));
+
+
+    /// <summary>
+    /// Dictionary <c>this.Create</c> is not a compiled member. A missing structure
+    /// bag cannot invent a positional factory, so lowering fails closed.
+    /// </summary>
+    private Node LowerRuntimeFactoryCall(
+        string methodName,
+        string nameArg,
+        IReadOnlyList<PropertyBinding> initializers,
+        Entity? targetEntity,
+        string? linkRelationshipName = null) {
+        throw new InvalidOperationException(
+            $"Cannot lower {methodName}('{nameArg}')"
+            + (targetEntity is null ? "" : $" for '{targetEntity.Name}'")
+            + (linkRelationshipName is null ? "" : $" on '{linkRelationshipName}'")
+            + $" with {initializers.Count} initializer(s): "
+            + "the compiled entity has no dictionary create member.");
     }
 
     private bool IsDomainEntityType(DomainTypeReference? type) =>

@@ -161,12 +161,8 @@ internal static class TemporalLowering {
             out object? runtimeValue,
             out Node exportNode) {
             var dateTime = propTypeName is "DateTime" or "Timestamp";
-            runtimeValue = dateTime ? DateTime.Today : DateOnly.FromDateTime(DateTime.Today);
-            exportNode = dateTime
-                ? new Member(new NamedTypeReference("DateTime"), "Today")
-                : new Invoke(
-                    new Member(new NamedTypeReference("DateOnly"), "FromDateTime"),
-                    new Member(new NamedTypeReference("DateTime"), "Today"));
+            runtimeValue = dateTime ? DateTime.UtcNow : DateOnly.FromDateTime(DateTime.UtcNow);
+            exportNode = dateTime ? UtcNowMember() : DateOnlyFromUtcNow();
             return true;
         }
     }

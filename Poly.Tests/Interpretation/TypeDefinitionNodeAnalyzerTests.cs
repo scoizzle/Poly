@@ -322,7 +322,7 @@ public class TypeDefinitionNodeAnalyzerTests {
     }
 
     [Test]
-    public async Task AstProperty_EmitRead_ReturnsMissingValueWhenNoDefaultAndKeyMissing() {
+    public async Task AstProperty_EmitRead_MissingKeyWithoutDefault_ReadsZero() {
         var typeNode = new TypeDefinitionNode(
             "Item", "Sample",
             Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
@@ -337,7 +337,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
         var result = lambda.Compile()();
 
-        await Assert.That(result).IsEqualTo(System.Reflection.Missing.Value);
+        await Assert.That(result).IsEqualTo(0L);
     }
 
     [Test]
@@ -456,5 +456,56 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
         await Assert.That(analyzer.GetTypeDefinition("PatronStatus")!.TypeCategory)
             .IsEqualTo(TypeCategory.Enumeration);
+    }
+
+    [Test]
+    public async Task Analyze_DomainResultAndDomainResultOfT_BothResolveByNameAndArity() {
+        var plain = new TypeDefinitionNode(
+            "DomainResult",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Success",
+                    new NamedTypeReference("DomainResult"),
+                    IsStatic: true)
+            ]);
+        var generic = new TypeDefinitionNode(
+            "DomainResult",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Success",
+                    new NamedTypeReference("DomainResult", TypeArguments: [new NamedTypeReference("T")]),
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))],
+                    IsStatic: true)
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            Properties: [
+                new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
+                new PropertyDefinitionNode(
+                    "Closed",
+                    new NamedTypeReference("DomainResult", TypeArguments: [new PrimitiveTypeReference(PrimitiveType.String)]))
+            ]);
+
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, new Block([plain, generic, holder]));
+
+        var plainDef = analyzer.GetTypeDefinition("DomainResult");
+        var genericDef = analyzer.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
+        await Assert.That(plainDef).IsNotNull();
+        await Assert.That(genericDef).IsNotNull();
+        await Assert.That(plainDef).IsNotSameReferenceAs(genericDef);
+        await Assert.That(plainDef!.GenericParameters.Any()).IsFalse();
+        await Assert.That(genericDef!.GenericParameters.Count()).IsEqualTo(1);
+        await Assert.That(plainDef.Methods.Single().Parameters.Any()).IsFalse();
+        await Assert.That(genericDef.Methods.Single().Parameters.Count()).IsEqualTo(1);
+
+        var resolvedHolder = ctx.GetMetadata<TypeDefinitionMetadata>(holder)?.TypeDefinition;
+        await Assert.That(resolvedHolder).IsNotNull();
+        var plainProp = resolvedHolder!.Properties.Single(p => p.Name == "Plain").MemberTypeDefinition;
+        var closedProp = resolvedHolder.Properties.Single(p => p.Name == "Closed").MemberTypeDefinition;
+        await Assert.That(plainProp).IsSameReferenceAs(plainDef);
+        await Assert.That(closedProp).IsSameReferenceAs(genericDef);
     }
 }

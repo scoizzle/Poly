@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Microsoft.Extensions.Logging;
+
 using ModelContextProtocol.Server;
 
 using Poly.Analysis;
@@ -140,7 +142,7 @@ internal sealed record SubscriptionPlanFact(
 /// Tools for managing V3 domain sessions.
 /// </summary>
 [McpServerToolType]
-internal sealed class SessionTool {
+internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logger) {
     /// <summary>
     /// Creates a new domain session with the canonical built-in primitive types.
     /// The bootstrapped domain includes canonical primitives (Boolean, Number, Text, Uuid, Binary)
@@ -148,14 +150,15 @@ internal sealed class SessionTool {
     /// Returns a sessionId that must be passed to other tools.
     /// </summary>
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
-    public static DomainToolResponse CreateDomainSession(
+    public DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
         if (!DslTokenReader.IsIdentifier(domainName))
             return new DomainToolResponse(
                 Success: false,
                 Message: EvolveTool.InvalidNameMessage(domainName),
                 Affordances: ["create_domain_session"]);
-        var (sessionId, state) = McpSessionStore.Create(domainName);
+        var (sessionId, state) = store.Create(domainName);
+        logger.LogInformation("create_domain_session {Domain} -> {SessionId}", domainName, sessionId);
         return new DomainToolResponse(
             Success: true,
             Message: $"Domain '{domainName}' created with built-in types.",
@@ -169,8 +172,8 @@ internal sealed class SessionTool {
     /// Lists all active domain sessions.
     /// </summary>
     [McpServerTool(Name = "list_sessions"), Description("Lists all active domain sessions.")]
-    public static DomainToolResponse ListSessions() {
-        var sessions = McpSessionStore.ListSessions();
+    public DomainToolResponse ListSessions() {
+        var sessions = store.ListSessions();
         if (sessions.Count == 0)
             return new DomainToolResponse(Success: true, Message: "No active sessions.", Affordances: ["create_domain_session"]);
 
@@ -189,15 +192,16 @@ internal sealed class SessionTool {
 /// Tools for querying V3 domain state.
 /// </summary>
 [McpServerToolType]
-internal sealed class QueryTool {
+internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) {
     /// <summary>
     /// Returns a high-level overview of the domain: entity/primitive/relationship counts and entity names.
     /// </summary>
     [McpServerTool(Name = "get_domain_overview"), Description("Returns a high-level overview of the domain model (entity/primitive/relationship counts and entity names).")]
-    public static DomainToolResponse GetDomainOverview(
+    public DomainToolResponse GetDomainOverview(
         [Description("Session ID returned by create_domain_session")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
+        logger.LogDebug("get_domain_overview {SessionId}", sessionId);
 
         var overview = DomainQueries.Overview(state.Domain);
         var entityNames = DomainQueries.ListEntities(state.Domain);
@@ -223,10 +227,10 @@ internal sealed class QueryTool {
     /// Returns details about a specific entity: properties, stages, actions, and policies.
     /// </summary>
     [McpServerTool(Name = "get_entity_detail"), Description("Returns detailed information about a specific entity (properties, stages, actions, policies).")]
-    public static DomainToolResponse GetEntityDetail(
+    public DomainToolResponse GetEntityDetail(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to inspect")] string entityName) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var detail = DomainQueries.GetEntity(state.Domain, entityName, state.LatestAnalysis);
@@ -267,9 +271,9 @@ internal sealed class QueryTool {
     /// derived from LatestAnalysis metadata.
     /// </summary>
     [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, aggregates, topology, actions, subscription plans) for the current domain state.")]
-    public static DomainToolResponse GetDomainAnalysis(
+    public DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (state.LatestAnalysis is null)
@@ -404,9 +408,9 @@ internal sealed class QueryTool {
     /// Suggestions identify common gaps like missing stages, actions, or policies.
     /// </summary>
     [McpServerTool(Name = "get_domain_suggestions"), Description("Returns authoring suggestions (advisory hints) for the current domain. Suggestions identify common gaps like missing stages, actions, or policies — they are advisory and do not block evolution.")]
-    public static DomainToolResponse GetDomainSuggestions(
+    public DomainToolResponse GetDomainSuggestions(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (state.LatestAnalysis is null)
@@ -445,10 +449,10 @@ internal sealed class QueryTool {
     /// Lists all relationships in the domain, optionally filtered by entity name.
     /// </summary>
     [McpServerTool(Name = "get_relationships"), Description("Lists all relationships in the domain. Optionally filter by entity name to show relationships where that entity is source or target.")]
-    public static DomainToolResponse GetRelationships(
+    public DomainToolResponse GetRelationships(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only show relationships involving this entity")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var all = DomainQueries.ListRelationships(state.Domain);
@@ -479,7 +483,7 @@ internal sealed class QueryTool {
 /// On rollback, the response includes diagnostics and affordances.
 /// </summary>
 [McpServerToolType]
-internal sealed class EvolveTool {
+internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger) {
 
     // ── Unified add (kind + payload) ────────────────────────────
 
@@ -489,11 +493,11 @@ internal sealed class EvolveTool {
     /// through <c>apply_dsl</c>. Expression bodies are product DSL text, never JSON IR.
     /// </summary>
     [McpServerTool(Name = "add"), Description("Creates one domain element. kind is case-sensitive. Payload shapes are in get_dsl_guide section 12. Unknown kind, a missing field, or a name the DSL would reject fails closed. Bulk structure uses apply_dsl.")]
-    public static DomainToolResponse Add(
+    public DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding")] string kind,
         [Description("JSON object of kind-specific fields. Shapes are in get_dsl_guide section 12.")] string payload) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -678,7 +682,7 @@ internal sealed class EvolveTool {
         }
     }
 
-    private static DomainToolResponse AddConstraintCore(
+    private DomainToolResponse AddConstraintCore(
         string sessionId, string entityName, string propertyName, string type, string payloadJson) {
         Constraint constraint;
         try {
@@ -696,11 +700,11 @@ internal sealed class EvolveTool {
             successAffordances: ["add", "apply_dsl", "get_entity_detail", "get_domain_analysis"]);
     }
 
-    internal static DomainToolResponse AddPolicyCore(
+    internal DomainToolResponse AddPolicyCore(
         string sessionId, string entityName, string policyName, string expressionDsl) {
         // Session-first (consistent with other tools); parse with the session's
         // Same session tables as apply_dsl so concept folds (Now, durations) agree.
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -787,11 +791,11 @@ internal sealed class EvolveTool {
     /// <c>kind</c> + <c>payload</c>. Identity fields only — no expression bodies.
     /// </summary>
     [McpServerTool(Name = "remove"), Description("Removes one domain element by kind and identity payload. Shapes are in get_dsl_guide section 12. Constraint removal is not supported; use apply_dsl.")]
-    public static DomainToolResponse Remove(
+    public DomainToolResponse Remove(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, policy")] string kind,
         [Description("JSON object of identity fields. Shapes are in get_dsl_guide section 12.")] string payload) {
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!store.TryGet(sessionId, out _))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -857,7 +861,7 @@ internal sealed class EvolveTool {
                     // Relationship identity is (source entity, name). Optional 'source'
                     // disambiguates when the name is declared on multiple entities.
                     var source = Field(root, "source", "sourceEntityName");
-                    if (source is null && McpSessionStore.TryGet(sessionId, out var state) && state.Domain is not null) {
+                    if (source is null && store.TryGet(sessionId, out var state) && state.Domain is not null) {
                         var sources = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
                             .Where(r => string.Equals(r.Name, name, StringComparison.Ordinal))
                             .Select(r => r.Source.TypeName)
@@ -946,22 +950,23 @@ internal sealed class EvolveTool {
             : typeCounts;
     }
 
-    private static DomainToolResponse Evolve(
+    private DomainToolResponse Evolve(
         string sessionId,
         Func<EvolutionBuilder, EvolutionBuilder> mutate,
         IReadOnlyList<string>? successAffordances = null) {
         // Snapshot read for session-not-found check and fingerprint.
-        // The actual mutation happens atomically inside McpSessionStore.Evolve.
-        if (!McpSessionStore.TryGet(sessionId, out var snapshot))
+        // The actual mutation happens atomically inside store.Evolve.
+        if (!store.TryGet(sessionId, out var snapshot))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("evolve {SessionId}", sessionId);
 
         var before = GetFingerprint(snapshot.Domain);
         var preRevision = snapshot.Revision;
 
-        var outcome = McpSessionStore.Evolve(sessionId, (domain, modeling) => {
+        var outcome = store.Evolve(sessionId, (domain, modeling) => {
             var result = new DomainEvolution(domain).Evolve();
             result = mutate(result);
             return result.Apply(session: modeling);
@@ -1008,7 +1013,7 @@ internal sealed class EvolveTool {
             );
         }
 
-        // McpSessionStore.Evolve already committed the update atomically.
+        // store.Evolve already committed the update atomically.
         return new DomainToolResponse(
             Success: true,
             Message: "Change applied successfully.",
@@ -1024,11 +1029,11 @@ internal sealed class EvolveTool {
     /// Lists all constraints on an entity's properties.
     /// </summary>
     [McpServerTool(Name = "get_constraints"), Description("Lists all constraints on an entity's properties. Optionally filter by property name.")]
-    public static DomainToolResponse GetConstraints(
+    public DomainToolResponse GetConstraints(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
         [Description("Optional property name filter")] string? propertyName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -1111,17 +1116,17 @@ internal sealed class EvolveTool {
 /// against an instance from <c>create_instance</c>.
 /// </summary>
 [McpServerToolType]
-internal sealed class PolicyTool {
+internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger) {
     /// <summary>
     /// Returns the guard expression text of a named policy on an entity.
     /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").
     /// </summary>
     [McpServerTool(Name = "get_policy_expression"), Description("Returns the guard expression text of a named policy on an entity for inspection.")]
-    public static DomainToolResponse GetPolicyExpression(
+    public DomainToolResponse GetPolicyExpression(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to inspect")] string policyName) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
@@ -1159,16 +1164,17 @@ internal sealed class PolicyTool {
     /// Evaluates a named policy on a store instance from <c>create_instance</c>.
     /// </summary>
     [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on an instance from create_instance. For policies that read related entities, link those instances first with link_instances. instanceId is required — do not pass a property bag. Returns true if the policy passes, false otherwise.")]
-    public static DomainToolResponse EvaluatePolicy(
+    public DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
         [Description("Name of the policy to evaluate")] string policyName,
         [Description("Instance ID from create_instance. Required.")] string instanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",
                 Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("evaluate_policy {SessionId} {Entity}.{Policy}", sessionId, entityName, policyName);
 
         var entity = state.Domain.Types.OfType<Entity>()
             .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
@@ -1239,19 +1245,20 @@ internal sealed class PolicyTool {
 /// These provide bulk authoring alongside the unified add/remove incremental tools.
 /// </summary>
 [McpServerToolType]
-internal sealed class DslTool {
+internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// <summary>
     /// Applies a Phase 1a/1b .poly DSL text to the session, replacing the current domain.
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
     /// session domain with the result. On failure, returns diagnostics with line/column info.
     /// </summary>
     [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared.")]
-    public static DomainToolResponse ApplyDsl(
+    public DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
         // ── 0. Fail fast on missing session or empty text ─────
-        if (!McpSessionStore.TryGet(sessionId, out _))
+        if (!store.TryGet(sessionId, out _))
             return Failure_NotFound(sessionId);
+        logger.LogDebug("apply_dsl {SessionId}", sessionId);
 
         if (string.IsNullOrWhiteSpace(polyText))
             return new DomainToolResponse(
@@ -1264,13 +1271,13 @@ internal sealed class DslTool {
         List<DomainChange> changes;
         DomainSession parseSession;
         try {
-            if (!McpSessionStore.TryGet(sessionId, out var parseState))
+            if (!store.TryGet(sessionId, out var parseState))
                 return Failure_NotFound(sessionId);
 
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            parseSession = DomainSession.ForSource(polyText, seed, ProductCatalog.Catalog);
+            parseSession = DomainSession.ForAuthoringSource(polyText, seed, ProductCatalog.Catalog);
             var parser = new PolyDslParser(polyText, parseSession);
             changes = parser.Parse();
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
@@ -1325,7 +1332,7 @@ internal sealed class DslTool {
         }
 
         // ── 3. Atomically replace the session domain ─────────────
-        var replaced = McpSessionStore.Replace(sessionId, outcome.Root, outcome.Analysis, parseSession);
+        var replaced = store.Replace(sessionId, outcome.Root, outcome.Analysis, parseSession);
         if (!replaced) {
             return new DomainToolResponse(
                 Success: false,
@@ -1333,7 +1340,7 @@ internal sealed class DslTool {
                 Affordances: ["create_domain_session", "list_sessions"]);
         }
 
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var entityCount = outcome.Root.Types.OfType<Entity>().Count();
@@ -1358,10 +1365,27 @@ internal sealed class DslTool {
     /// Exports the current session domain as .poly DSL text.
     /// </summary>
     [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text.")]
-    public static DomainToolResponse ExportDsl(
+    public DomainToolResponse ExportDsl(
         [Description("Session ID")] string sessionId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
+
+        // The shipped DSL has no ManyToMany syntax (the incremental add tool can
+        // author one in-session). Degrading the cardinality to `many` would silently
+        // change the domain on round-trip — fail closed and name the relationship.
+        var manyToMany = state.Domain.Types
+            .OfType<Entity>()
+            .SelectMany(e => e.Navigations)
+            .FirstOrDefault(n => n.Cardinality == RelationshipCardinality.ManyToMany);
+        if (manyToMany is not null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Cannot export: relationship '{manyToMany.Name}' is ManyToMany, " +
+                    "which the shipped DSL cannot express. Round-tripping would silently " +
+                    "degrade it to one-to-many.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Affordances: ["get_relationships", "get_domain_overview"]);
 
         var printer = new DomainDslPrinter(state.Modeling);
         var polyText = printer.Print(state.Domain);
@@ -1381,7 +1405,7 @@ internal sealed class DslTool {
     /// No session required.
     /// </summary>
     [McpServerTool(Name = "get_dsl_guide"), Description("Returns the short DSL guide: principles, unsupported constructs, the golden workflow, and a section index. Pass section as a heading number or title, or \"all\" for the full guide. No session required.")]
-    public static DomainToolResponse GetDslGuide(
+    public DomainToolResponse GetDslGuide(
         [Description("Omit for the short guide. A heading number or title returns that section. \"all\" returns the full guide.")] string? section = null) {
         var assembly = typeof(DslTool).Assembly;
         string guideText;

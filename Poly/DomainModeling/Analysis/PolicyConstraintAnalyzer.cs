@@ -112,6 +112,12 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 // Bare count Rel (no body) — just validate relationship existence.
                 ValidateQuantifierRelationship(context, lookup, expr, entity);
                 return;
+            case Comparison cmp:
+                // `Outcome == Pending` / `Outcome is Pending`: the bare name is an
+                // enum member, not a property of the entity.
+                ValidateComparisonOperand(context, lookup, cmp.Left, cmp.Right, entity, entityPropMap);
+                ValidateComparisonOperand(context, lookup, cmp.Right, cmp.Left, entity, entityPropMap);
+                return;
         }
 
         // Recurse into children for composite expressions (And, Or, Not, Comparison, etc.)
@@ -248,11 +254,22 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.SemanticReferenceResolution);
             }
             else {
-                context.ReportError(rn,
-                    $"Relationship name '{rn.RelationshipName}' is not defined on entity " +
-                    $"'{entity.Name}'. Declare a navigation property (e.g. '{rn.RelationshipName}: TargetEntity') " +
-                    "on this entity first.",
-                    DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                var valueProp = entity.Properties.FirstOrDefault(p =>
+                    string.Equals(p.Name, rn.RelationshipName, StringComparison.Ordinal));
+                if (valueProp is not null
+                    && lookup.Types.TryGetValue(valueProp.Type.TypeName, out var resolved)
+                    && resolved is ValueType valueType) {
+                    context.ReportError(rn,
+                        $"'{rn.RelationshipName}' is a {valueType.Name} value and has no readable sub-field here.",
+                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                }
+                else {
+                    context.ReportError(rn,
+                        $"Relationship name '{rn.RelationshipName}' is not defined on entity " +
+                        $"'{entity.Name}'. Declare a navigation property (e.g. '{rn.RelationshipName}: TargetEntity') " +
+                        "on this entity first.",
+                        DomainModelDiagnosticCodes.SemanticReferenceResolution);
+                }
             }
             return;
         }
@@ -358,6 +375,34 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
     /// </summary>
     private static RelationshipLookupMetadata? ResolveRelationshipLookup(AnalysisContext context, Domain domain) =>
         context.GetRelationshipLookup(domain) ?? context.GetRelationshipLookup();
+
+    private static void ValidateComparisonOperand(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        DomainExpression side,
+        DomainExpression other,
+        Entity entity,
+        Dictionary<string, Property> entityPropMap) {
+        if (side is PropertyAccess pa
+            && !entityPropMap.ContainsKey(pa.Name)
+            && IsEnumMemberReference(lookup, other, entityPropMap, pa.Name))
+            return;
+        ValidatePolicyPropertyReferences(context, lookup, side, entity, entityPropMap);
+    }
+
+    private static bool IsEnumMemberReference(
+        DomainTypeLookupMetadata? lookup,
+        DomainExpression enumSide,
+        Dictionary<string, Property> entityPropMap,
+        string memberName) {
+        if (lookup is null || enumSide is not PropertyAccess prop)
+            return false;
+        if (!entityPropMap.TryGetValue(prop.Name, out var property))
+            return false;
+        if (!lookup.Types.TryGetValue(property.Type.TypeName, out var type) || type is not EnumType enumType)
+            return false;
+        return enumType.MemberNames.Contains(memberName, StringComparer.Ordinal);
+    }
 
     private static void ValidateOwnedAccessName(
         AnalysisContext context,

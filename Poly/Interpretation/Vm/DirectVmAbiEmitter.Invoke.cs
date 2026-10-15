@@ -53,16 +53,19 @@ public static partial class DirectVmAbiEmitter {
 
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
-                    int baseIdx = isStatic ? 0 : 1;
                     if (TryPackEnumerableArgs(methodParams, invoke, argSlots, ctx, out var packed)) {
                         methodArgs[0] = packed;
                     }
                     else {
                         for (int i = 0; i < methodParams.Length; i++) {
-                            int slotIdx = i < invoke.Arguments.Length ? argSlots[i] : d + baseIdx + i;
-                            var ringVal = ctx.RingVar(slotIdx);
-                            var argNode = i < invoke.Arguments.Length ? invoke.Arguments[i] : null;
-                            methodArgs[i] = ConvertRingToClr(ringVal, methodParams[i].ParameterType, argNode, ctx);
+                            if (i >= invoke.Arguments.Length) {
+                                // Omitted optional: the default, not a ring slot (a scalar there is not a handle).
+                                methodArgs[i] = MissingClrArgument(methodParams[i]);
+                                continue;
+                            }
+                            var ringVal = ctx.RingVar(argSlots[i]);
+                            methodArgs[i] = ConvertRingToClr(
+                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i], ctx);
                         }
                     }
 
@@ -89,6 +92,13 @@ public static partial class DirectVmAbiEmitter {
                     if (instanceExpr is not null)
                         fullBody.Add(instanceExpr);
                     fullBody.AddRange(argExprs);
+
+                    // A null heap receiver (unset DateOnly/DateTime) must not NRE inside AddDays.
+                    if (!isStatic) {
+                        var unset = UnsetReceiverGuard(member.Value, ctx.RingVar(instanceSlot), ctx);
+                        if (unset is not null)
+                            fullBody.Add(unset);
+                    }
 
                     // Convert result to ABI (long-representable value types unboxed,
                     // reference + non-long value types heap-allocated)
@@ -169,8 +179,11 @@ public static partial class DirectVmAbiEmitter {
 
             int astSlot = ctx.AllocSlot();
             ctx.RingDepth = astSlot + 1;
-            var astBody = new List<Expression>(astArgExprs.Count + 3) { astInstanceExpr };
+            var astBody = new List<Expression>(astArgExprs.Count + 4) { astInstanceExpr };
             astBody.AddRange(astArgExprs);
+            var unsetReceiver = UnsetReceiverGuard(member.Value, ctx.RingVar(astInstanceSlot), ctx);
+            if (unsetReceiver is not null)
+                astBody.Add(unsetReceiver);
 
             var returnClr = method?.MemberTypeDefinition.GetRuntimeType();
             bool isVoid = method is not null
@@ -524,10 +537,14 @@ public static partial class DirectVmAbiEmitter {
         for (int i = 0; i < captures.Count; i++)
             fnCtx.DeclareCapture(captures[i].Binding, i);
 
-        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx])
+        // Declare parameters as value-stack variables (mapped to _slots[_fp + idx]).
+        // Locals start after those slots. An instance frame also keeps slot 0
+        // for the receiver. Without the reserve, block-local zeros land on the
+        // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
         foreach (var param in parameters)
             fnCtx.DeclareParameter(param);
+        fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Enter the activation in the compile-time simulator.
         // Local count is 0 initially; DeclareVariable calls inside the body
@@ -712,7 +729,7 @@ public static partial class DirectVmAbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis);
+            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis, key);
             if (analysis.HasErrors) {
                 var text = string.Join("; ", analysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -794,7 +811,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static AnalysisResult AnalysisForAstBody(
-        Node body, ITypeDefinition declaring, AnalysisResult? caller) {
+        Node body, ITypeDefinition declaring, AnalysisResult? caller, Node member) {
         if (caller is not null && AstBodyMembersResolved(body, caller))
             return caller;
         if (declaring is not AstTypeDefinition astType)
@@ -805,7 +822,46 @@ public static partial class DirectVmAbiEmitter {
         var provider = astType.ResolutionProvider;
         if (provider is TypeDefinitionProviderCollection collection)
             provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
-        return Interpreter.Analyzer.Analyze(astType.Syntax, typeDefinitions: provider);
+        // Re-analyze the declaring type so members resolve. A typed Create
+        // forwarder shares that type with printed helpers the VM analyzer
+        // still flags (C8-vm). Diagnostics outside this method must not reject
+        // the forwarder. An error on the method, its signature, or its body
+        // still fails it. Every other member keeps the type-level result, so a
+        // dirty type still falls through to InvokeNamed.
+        var analysis = Interpreter.Analyzer.Analyze(
+            astType.Syntax,
+            typeDefinitions: provider,
+            setup: ctx => ctx.SetMetadata(astType.Syntax, new TypeDefinitionMetadata(astType)));
+        if (!analysis.HasErrors
+            || !ForwardsToClrStatic(body)
+            || ErrorsTouch(member, analysis))
+            return analysis;
+        return analysis with {
+            HasErrors = false,
+            Diagnostics = analysis.Diagnostics
+                .Where(d => d.Severity != DiagnosticSeverity.Error)
+                .ToArray()
+        };
+    }
+
+    private static bool ErrorsTouch(Node body, AnalysisResult analysis) {
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity != DiagnosticSeverity.Error)
+                continue;
+            if (ReferenceEquals(diagnostic.Node, body) || ContainsNode(body, diagnostic.Node))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsNode(Node root, Node target) {
+        foreach (var child in root.Children) {
+            if (child is null)
+                continue;
+            if (ReferenceEquals(child, target) || ContainsNode(child, target))
+                return true;
+        }
+        return false;
     }
 
     private static bool AstBodyMembersResolved(Node node, AnalysisResult analysis) {
@@ -967,6 +1023,38 @@ public static partial class DirectVmAbiEmitter {
             $"foreach collection type '{collection.GetType().Name}' is not IEnumerable.");
     }
 
+    /// <summary>
+    /// Instance call on a heap value whose handle is null. Names the member
+    /// (<c>'Expiry' is not set</c>) instead of a raw null dereference.
+    /// Scalars stay on the ring; only heap receivers are checked.
+    /// </summary>
+    private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, AbiCtx ctx) {
+        if (receiver is not Member member || IsTypeNameReceiver(member.Value))
+            return null;
+        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(receiver);
+        if (meta is null || meta.Kind != ValueRepresentationKind.HeapRef)
+            return null;
+        var ctor = typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)
+            .GetConstructor([typeof(string)]);
+        if (ctor is null)
+            return null;
+        return IfThen(
+            Equal(handle, Constant(0L)),
+            Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
+    }
+
+    private static Expression MissingClrArgument(ParameterInfo parameter) {
+        if (!parameter.HasDefaultValue)
+            throw new InvalidOperationException(
+                $"VM compile rejected: argument '{parameter.Name}' of '{parameter.Member.Name}' has no value.");
+        var value = parameter.DefaultValue;
+        if (value is null
+            && parameter.ParameterType.IsValueType
+            && Nullable.GetUnderlyingType(parameter.ParameterType) is null)
+            return Default(parameter.ParameterType);
+        return Constant(value, parameter.ParameterType);
+    }
+
     private static long CastAbi(Heap heap, long raw, Type target) {
         if (raw == 0L) {
             if (target.IsValueType)
@@ -980,6 +1068,10 @@ public static partial class DirectVmAbiEmitter {
             return 0L;
         }
         if (target.IsInstanceOfType(value))
+            return raw;
+        // Entity types publish IDictionary<string, object>. The instance is
+        // IDictionary<string, object?> (invariance blocks the CLR cast).
+        if (target == typeof(IDictionary<string, object>) && value is IDictionary<string, object?>)
             return raw;
         throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }

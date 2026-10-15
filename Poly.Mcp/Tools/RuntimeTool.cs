@@ -1,6 +1,9 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+
+using Microsoft.Extensions.Logging;
 
 using ModelContextProtocol.Server;
 
@@ -20,7 +23,7 @@ namespace Poly.Mcp.Tools;
 /// relationship/subscription support.
 /// </summary>
 [McpServerToolType]
-internal sealed class RuntimeTool {
+internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
     private static DomainToolResponse Failure_NotFound(string sessionId) =>
@@ -74,15 +77,93 @@ internal sealed class RuntimeTool {
     }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
-        JsonValueKind.Number when je.TryGetInt32(out var i) => (long)i,
-        JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-        JsonValueKind.Number => (long)je.GetDecimal(),
+        JsonValueKind.Number => JsonNumberToLong(je),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.String => je.GetString(),
         JsonValueKind.Null => null,
         _ => je.GetRawText()
     };
+
+    /// <summary>
+    /// Number is a long. Integral JSON (1, 1.0) is kept; a fraction is rejected
+    /// instead of truncating to 0. Values outside long still fail.
+    /// </summary>
+    private static long JsonNumberToLong(JsonElement je) {
+        if (je.TryGetInt64(out var integral))
+            return integral;
+        if (je.TryGetDecimal(out var dec) && dec != decimal.Truncate(dec))
+            throw new InvalidOperationException(
+                $"Number is integral; '{je.GetRawText()}' is not a valid Number.");
+        return (long)je.GetDecimal();
+    }
+
+    /// <summary>
+    /// JSON values become the declared property types before the instance is built.
+    /// DateTime offsets are stored as UTC so they match <c>Now</c>.
+    /// </summary>
+    private static Dictionary<string, object?> CoerceCreateValues(
+        Entity entity, Dictionary<string, object?> values) {
+        var coerced = new Dictionary<string, object?>(values, StringComparer.Ordinal);
+        foreach (var property in entity.Properties) {
+            if (!coerced.TryGetValue(property.Name, out var raw) || raw is null)
+                continue;
+            coerced[property.Name] = CoercePropertyValue(property.Name, property.Type.TypeName, raw);
+        }
+        return coerced;
+    }
+
+    private static object CoercePropertyValue(string propertyName, string typeName, object raw) =>
+        typeName switch {
+            "DateTime" or "Timestamp" => raw switch {
+                DateTime => raw,
+                string s when DateTime.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
+                    out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects DateTime; got '{raw}'.")
+            },
+            "Date" or "DateOnly" => raw switch {
+                DateOnly => raw,
+                DateTime dateTime => DateOnly.FromDateTime(dateTime),
+                string s when DateOnly.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Date; got '{raw}'.")
+            },
+            "Time" or "TimeOnly" => raw switch {
+                TimeOnly => raw,
+                string s when TimeOnly.TryParse(s, CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Time; got '{raw}'.")
+            },
+            "Duration" or "TimeSpan" => raw switch {
+                TimeSpan => raw,
+                string s when TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Duration; got '{raw}'.")
+            },
+            "Guid" or "Uuid" => raw switch {
+                Guid => raw,
+                string s when Guid.TryParse(s, out var parsed) => parsed,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Guid; got '{raw}'.")
+            },
+            "Number" or "Int" or "Int64" or "Int32" => raw switch {
+                long or int => raw,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Number; got '{raw}'.")
+            },
+            "Boolean" or "Bool" => raw switch {
+                bool => raw,
+                0L => false,
+                1L => true,
+                _ => throw new InvalidOperationException(
+                    $"Property '{propertyName}' expects Boolean; got '{raw}'.")
+            },
+            _ => raw
+        };
 
     private static InstanceSnapshotData BuildSnapshot(DomainEntityInstance instance) {
         var props = new List<PropertyValueData>();
@@ -150,14 +231,18 @@ internal sealed class RuntimeTool {
 Starts in the first defined stage when the entity has stages. Returns an instance id and a snapshot of initial property values.
 
 Use invoke_action to run actions, evaluate_policy to check policies, link_instances to connect related instances, and get_instance / list_instances to inspect.")]
-    public static DomainToolResponse CreateInstance(
+    public DomainToolResponse CreateInstance(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
         [Description("Optional JSON object of initial property values, " +
-            "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}")]
+            "e.g. {\"Name\":\"Alice\",\"Age\":30,\"Status\":\"Active\"}. Values are coerced to the " +
+            "declared property types: Date/DateTime/Time/Duration properties accept ISO strings " +
+            "(\"2026-01-01\", \"2026-01-01T00:00:00Z\", \"09:00:00\", \"00:30:00\"), Guid accepts " +
+            "guid strings, and wrong-typed values fail the call.")]
         string? propertiesJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
+        logger.LogDebug("create_instance {SessionId} {Entity}", sessionId, entityName);
 
         // Resolve entity
         var entity = state.Domain.Types.OfType<Entity>()
@@ -179,6 +264,7 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
                     propertyValues = new Dictionary<string, object?>(StringComparer.Ordinal);
                     foreach (var (key, je) in parsed)
                         propertyValues[key] = JsonElementToValue(je);
+                    propertyValues = CoerceCreateValues(entity, propertyValues);
                 }
             }
             catch (Exception ex) {
@@ -208,7 +294,7 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
         // tool failure (Support dogfood: duplicate Handle crashed the MCP call).
         bool registered;
         try {
-            registered = McpSessionStore.TryModifyInstances(sessionId, st => {
+            registered = store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore ??= new DomainInstanceStore();
                 st.InstanceStore.Add(instance);
                 st.InstanceMap[instanceId] = instance;
@@ -265,12 +351,12 @@ Use case — Collection quantifiers:
   2. create_instance for target entity (e.g. Order)
   3. link_instances with relationship name (e.g. ""orders"")
   4. evaluate_policy(entityName, policyName, instanceId=sourceId)")]
-    public static DomainToolResponse LinkInstances(
+    public DomainToolResponse LinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -335,7 +421,7 @@ Use case — Collection quantifiers:
         }
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Link(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -375,12 +461,12 @@ Fails if the link does not exist — use link_instances to create the link first
 Use case — reassign a child from one parent to another:
   1. unlink_instances(sessionId, oldParentId, ""relationshipName"", childId)
   2. link_instances(sessionId, newParentId, ""relationshipName"", childId)")]
-    public static DomainToolResponse UnlinkInstances(
+    public DomainToolResponse UnlinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
         [Description("Relationship name as defined in the domain (e.g. 'orders', 'loans')")] string relationshipName,
         [Description("Instance ID of the target (owned) instance")] string targetInstanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
@@ -453,7 +539,7 @@ Use case — reassign a child from one parent to another:
                 Affordances: ["link_instances", "get_relationships"]);
 
         try {
-            if (!McpSessionStore.TryModifyInstances(sessionId, st => {
+            if (!store.TryModifyInstances(sessionId, st => {
                 st.InstanceStore!.Unlink(relationshipName, source, target);
             }))
                 return Failure_NotFound(sessionId);
@@ -481,10 +567,10 @@ Use case — reassign a child from one parent to another:
     /// deletion status, and count of child instances created by effects.
     /// </summary>
     [McpServerTool(Name = "get_instance"), Description("Returns a snapshot of a runtime instance: current stage, property values, deletion status, and created-child count.")]
-    public static DomainToolResponse GetInstance(
+    public DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -546,10 +632,10 @@ Use case — reassign a child from one parent to another:
     /// Returns summary data: instance ID, entity name, current stage, and property count.
     /// </summary>
     [McpServerTool(Name = "list_instances"), Description("Lists all runtime instances in the session, optionally filtered by entity name.")]
-    public static DomainToolResponse ListInstances(
+    public DomainToolResponse ListInstances(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only list instances of this entity type")] string? entityName = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         var summaries = new List<InstanceSummaryData>();
@@ -596,14 +682,14 @@ Resolves the action from the instance's current stage, then entity-level actions
 Entity-typed parameters take instance ids from create_instance. Actions that return an entity include returnTypeName and returnInstanceId.
 
 To link or unlink existing instances, use link_instances / unlink_instances — those are not action effects.")]
-    public static DomainToolResponse InvokeAction(
+    public DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,
         [Description("Name of the action to invoke")] string actionName,
         [Description("Optional JSON object of action parameter values, " +
             "e.g. {\"amount\":100,\"reason\":\"urgent\"}")]
         string? argsJson = null) {
-        if (!McpSessionStore.TryGet(sessionId, out var state))
+        if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
         if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
@@ -670,7 +756,7 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
             }
 
             if (newChildren.Count > 0) {
-                McpSessionStore.TryModifyInstances(sessionId, st => {
+                store.TryModifyInstances(sessionId, st => {
                     foreach (var child in newChildren) {
                         var childId = NewInstanceId();
                         st.InstanceStore ??= new DomainInstanceStore();
@@ -696,7 +782,7 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
 
         // Re-read map if modify succeeded but local returnInstanceId missed (modify is sync).
         if (returnInstanceId is null && result.ResultInstance is not null
-            && McpSessionStore.TryGet(sessionId, out var stateAfter)) {
+            && store.TryGet(sessionId, out var stateAfter)) {
             foreach (var (id, inst) in stateAfter.InstanceMap) {
                 if (ReferenceEquals(inst, result.ResultInstance)) {
                     returnInstanceId = id;

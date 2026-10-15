@@ -65,7 +65,7 @@ public sealed class EmitSessionContractTests {
         uses temporal
 
         Item: entity {
-          Expiry: Date
+          Expiry: DateTime
           Due: policy { Expiry < Now }
         }
         """;

@@ -28,16 +28,18 @@ public static class DomainInstanceHostJobs {
     public static void LinkRelated(object? instance, string relationshipName, object? target) =>
         Receiver(instance, nameof(LinkRelated)).LinkRelated(relationshipName, target);
 
-    public static DomainResult Create(object? instance, string name, IReadOnlyDictionary<string, object?> values) =>
-        Receiver(instance, nameof(Create)).Create(name, values);
+    /// <summary>
+    /// Interpreter bind for <c>new Entity(...)</c> inside the printed static Create.
+    /// The creating instance is the ambient interpreter subject. The dictionary is
+    /// packed here, not as a member of the compiled entity.
+    /// </summary>
+    public static object NewEntity(string typeName, Dictionary<string, object?> values) =>
+        DomainEntityInstance.Ambient is { } host
+            ? host.MaterializeNew(typeName, values)
+            : throw new InvalidOperationException(
+                $"Create '{typeName}' has no ambient instance.");
 
-    public static DomainResult CreateIn(object? instance, string name, IReadOnlyDictionary<string, object?> values) =>
-        Receiver(instance, nameof(CreateIn)).CreateIn(name, values);
-
-    public static DomainResult ProbeCreate(object? instance, string name, IReadOnlyDictionary<string, object?> values) =>
-        Receiver(instance, nameof(ProbeCreate)).ProbeCreate(name, values);
-
-    /// <summary>An empty values bag. The name/value-pair create jobs start from it.</summary>
+    /// <summary>An empty values bag. <see cref="NewEntity"/> is filled from it.</summary>
     public static Dictionary<string, object?> Values() => new(StringComparer.Ordinal);
 
     /// <summary>Sets one value in <paramref name="values"/> and returns the same bag.</summary>

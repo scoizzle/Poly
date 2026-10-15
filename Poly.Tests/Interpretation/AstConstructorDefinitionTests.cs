@@ -90,4 +90,31 @@ public class AstConstructorDefinitionTests {
         await Assert.That(bag!.Count).IsEqualTo(0);
         await Assert.That(bag.Comparer).IsEqualTo(StringComparer.Ordinal);
     }
+
+    [Test]
+    public async Task AnalyzeNode_New_ResolvesExactConstructorWhenArgumentTypeIsNull() {
+        var typeNode = new TypeDefinitionNode(
+            "Order",
+            "Sample",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [new Parameter("total", new PrimitiveTypeReference(PrimitiveType.Int64))],
+                    AccessModifier: AccessModifier.Private)
+            ]);
+        var newNode = new New(new TypeReference("Sample.Order"), new Parameter("total"));
+        var root = new Block([typeNode, newNode]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .Build()
+            .Analyze(root);
+        var resolvedConstructor = analysis.GetResolvedMember(newNode) as ITypeConstructor;
+
+        await Assert.That(resolvedConstructor).IsNotNull();
+        await Assert.That(resolvedConstructor!.DeclaringTypeDefinition.FullName).IsEqualTo("Sample.Order");
+        await Assert.That(resolvedConstructor.Parameters.Single().Name).IsEqualTo("total");
+        await Assert.That(analysis.GetResolvedType(newNode)!.FullName).IsEqualTo("Sample.Order");
+    }
 }

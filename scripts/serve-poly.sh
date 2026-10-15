@@ -27,7 +27,7 @@ mkdir -p "$OUT"
 
 echo "== compile $POLY → $OUT =="
 dotnet run --project src/Poly.DslCompiler/Poly.DslCompiler.csproj -c Release -- \
-  --mode all --dbms sqlite "$POLY" "$OUT"
+  --mode all --http --dbms sqlite "$POLY" "$OUT"
 
 cat > "$OUT/Demo.csproj" <<'EOF'
 <Project Sdk="Microsoft.NET.Sdk.Web">
@@ -40,6 +40,8 @@ cat > "$OUT/Demo.csproj" <<'EOF'
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.10" />
+    <!-- NU1903 GHSA-2m69-gcr7-jv3q: transitive 2.1.11 is vulnerable; pin past audit. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.13" />
   </ItemGroup>
 </Project>
 EOF

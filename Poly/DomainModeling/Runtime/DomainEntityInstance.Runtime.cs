@@ -110,28 +110,6 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
-    /// <c>factory(name, p0, v0, p1, v1, …)</c>, the call the lowered create effect makes.
-    /// The body packs the pairs into a values bag
-    /// (<c>With(With(Values(), p0, v0), p1, v1)</c>) and calls the one host job that
-    /// takes the bag.
-    /// </summary>
-    private static MethodDefinitionNode PairsHostJob(
-        string factory, Node returnType, IReadOnlyList<Node> valueTypes) {
-        var str = TypeReference.To<string>();
-        var name = new Parameter("name", str);
-        var parameters = new List<Parameter> { name };
-        Node values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.Values)));
-        for (var i = 0; i < valueTypes.Count; i++) {
-            var key = new Parameter($"p{i}", str);
-            var value = new Parameter($"v{i}", valueTypes[i]);
-            parameters.Add(key);
-            parameters.Add(value);
-            values = new Invoke(new Member(HostJobsType, nameof(DomainInstanceHostJobs.With)), values, key, value);
-        }
-        return HostJob(factory, returnType, parameters, [name, values]);
-    }
-
-    /// <summary>
     /// The store jobs of every runtime entity type, built once. Their bodies call
     /// <see cref="DomainInstanceHostJobs"/> and the receiver is <c>this</c>, so nothing
     /// in them depends on the entity. The VM caches a compiled AST method by its
@@ -165,18 +143,6 @@ public sealed partial record DomainEntityInstance {
                 new Parameter("propertyName", str),
                 new Parameter("value", vt)
             ]));
-        }
-        // One pair keeps its value's type; two or more pairs pass objects.
-        foreach (var factory in new[] { "Create", "CreateIn", "ProbeCreate" }) {
-            jobs.Add(HostJob(factory, resultType, [
-                new Parameter("name", str),
-                new Parameter("values", TypeReference.To<Dictionary<string, object?>>())
-            ]));
-            jobs.Add(PairsHostJob(factory, resultType, []));
-            foreach (var vt in valueTypes)
-                jobs.Add(PairsHostJob(factory, resultType, [vt]));
-            for (var pairs = 2; pairs <= 16; pairs++)
-                jobs.Add(PairsHostJob(factory, resultType, Enumerable.Repeat<Node>(obj, pairs).ToList()));
         }
         return jobs;
     }
@@ -487,6 +453,15 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// Printed collection field <c>_permits</c>. Same nav as <c>Permits</c>.
+    /// </summary>
+    internal Relationship? MatchCollectionField(string key) {
+        if (key.Length < 2 || key[0] != '_')
+            return null;
+        return MatchCollectionNavigation(DomainToCSharpExporter.ToPascalCase(key[1..]));
+    }
+
+    /// <summary>
     /// IDictionary read of a collection nav (OneToMany / ManyToMany): the outbound
     /// linked targets of <paramref name="navigation"/> (empty list when unlinked, so
     /// a foreach sees zero items). Throws without a store or domain.
@@ -598,11 +573,19 @@ public sealed record ActionInvocationResult {
         ErrorMessage = $"Action '{actionName}' not found on entity '{entityName}'."
     };
 
-    internal static ActionInvocationResult StageRequired(string entityName, string actionName, string stageName) => new() {
-        ActionName = actionName,
-        Succeeded = false,
-        ErrorMessage = $"Action '{actionName}' exists on entity '{entityName}' but is only available in stage '{stageName}'."
-    };
+    internal static ActionInvocationResult StageRequired(
+        string entityName, string actionName, IReadOnlyList<string> stageNames) {
+        var quoted = stageNames.Select(s => $"'{s}'").ToList();
+        var where = quoted.Count <= 1
+            ? $"stage {quoted.FirstOrDefault() ?? "'?'"}"
+            : $"stages {string.Join(", ", quoted)}";
+        return new() {
+            ActionName = actionName,
+            Succeeded = false,
+            ErrorMessage =
+                $"Action '{actionName}' exists on entity '{entityName}' but is only available in {where}."
+        };
+    }
 
     internal static ActionInvocationResult InvokeDepthExceeded(string actionName, int maxDepth) => new() {
         ActionName = actionName,

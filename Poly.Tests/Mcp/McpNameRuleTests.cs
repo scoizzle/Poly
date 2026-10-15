@@ -25,8 +25,8 @@ public class McpNameRuleTests {
     private static readonly string[] PrimitiveKeywords = ["Text", "Number", "Boolean"];
 
     private static bool Parses(string template, string name) {
-        var sessionId = SessionTool.CreateDomainSession("Probe").SessionId!;
-        return DslTool.ApplyDsl(sessionId, template.Replace("NAME", name)).Success;
+        var sessionId = McpTestTools.Session.CreateDomainSession("Probe").SessionId!;
+        return McpTestTools.Dsl.ApplyDsl(sessionId, template.Replace("NAME", name)).Success;
     }
 
     [Test]
@@ -45,11 +45,11 @@ public class McpNameRuleTests {
     [Test]
     [MethodDataSource(nameof(PropertyNameCases))]
     public async Task IsPropertyName_AgreesWithTheDslParser(string name, string typeName) {
-        var sessionId = SessionTool.CreateDomainSession("Probe").SessionId!;
-        McpSessionStore.TryGet(sessionId, out var state);
+        var sessionId = McpTestTools.Session.CreateDomainSession("Probe").SessionId!;
+        McpTestTools.Store.TryGet(sessionId, out var state);
         var primitives = state.Domain.Types.OfType<PrimitiveType>().Select(t => t.Name).ToHashSet();
 
-        var parsed = DslTool.ApplyDsl(sessionId, PropertyTemplate.Replace("NAME", name).Replace("TYPE", typeName)).Success;
+        var parsed = McpTestTools.Dsl.ApplyDsl(sessionId, PropertyTemplate.Replace("NAME", name).Replace("TYPE", typeName)).Success;
 
         await Assert.That(DslTokenReader.IsPropertyName(name, typeName, primitives.Contains)).IsEqualTo(parsed);
     }
@@ -65,14 +65,14 @@ public class McpNameRuleTests {
     [Arguments("My-Domain")]
     [Arguments("stage")]
     public async Task CreateDomainSession_WithNameTheDslRefuses_CreatesNoSession(string name) {
-        var response = SessionTool.CreateDomainSession(name);
+        var response = McpTestTools.Session.CreateDomainSession(name);
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("is not a valid name");
         await Assert.That(response.SessionId).IsNull();
         // Other tests create sessions in parallel, so look for this name rather than count sessions.
-        var created = McpSessionStore.ListSessions()
-            .Any(id => McpSessionStore.TryGet(id, out var state) && state.Domain.Name == name);
+        var created = McpTestTools.Store.ListSessions()
+            .Any(id => McpTestTools.Store.TryGet(id, out var state) && state.Domain.Name == name);
         await Assert.That(created).IsFalse();
     }
 
@@ -91,16 +91,16 @@ public class McpNameRuleTests {
     [Arguments("contract_binding", """{"name":"BAD","contractName":"C","endpointName":"E","actionName":"A","parameter":"p"}""")]
     public async Task Add_WithNameTheDslRefuses_ChangesNothing(string kind, string payloadTemplate) {
         foreach (var bad in new[] { "1st", "Order-Item", "A B", "stage" }) {
-            var (sessionId, _) = McpSessionStore.Create("NameRule");
-            EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-            EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
-            McpSessionStore.TryGet(sessionId, out var before);
+            var (sessionId, _) = McpTestTools.Store.Create("NameRule");
+            McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+            McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Draft"}""");
+            McpTestTools.Store.TryGet(sessionId, out var before);
 
-            var response = EvolveTool.Add(sessionId, kind, payloadTemplate.Replace("BAD", bad));
+            var response = McpTestTools.Evolve.Add(sessionId, kind, payloadTemplate.Replace("BAD", bad));
 
             await Assert.That(response.Success).IsFalse();
             await Assert.That(response.Message).Contains("is not a valid name").And.Contains(bad);
-            McpSessionStore.TryGet(sessionId, out var after);
+            McpTestTools.Store.TryGet(sessionId, out var after);
             await Assert.That(after.Revision).IsEqualTo(before.Revision);
             await Assert.That(ReferenceEquals(after.Domain, before.Domain)).IsTrue();
         }
@@ -108,13 +108,13 @@ public class McpNameRuleTests {
 
     [Test]
     public async Task Add_PropertyAndStage_WithNameTheDslRefuses_LeaveTheEntityAsItWas() {
-        var (sessionId, _) = McpSessionStore.Create("NameRule");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("NameRule");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        EvolveTool.Add(sessionId, "property", """{"entityName":"Order","name":"Total-Price","typeName":"Number"}""");
-        EvolveTool.Add(sessionId, "stage", """{"entityName":"Order","name":"1st"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Total-Price","typeName":"Number"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"1st"}""");
 
-        var data = (EntityDetailData)QueryTool.GetEntityDetail(sessionId, "Order").Data!;
+        var data = (EntityDetailData)McpTestTools.Query.GetEntityDetail(sessionId, "Order").Data!;
         await Assert.That(data.Properties).IsEmpty();
         await Assert.That(data.Stages).IsEmpty();
     }
@@ -125,15 +125,15 @@ public class McpNameRuleTests {
     [Arguments("Boolean", "Boolean")]
     [Arguments("Text", "Date")]
     public async Task Add_Property_NamedAfterAPrimitiveKeyword_WithAPrimitiveType_SucceedsAndReapplies(string name, string typeName) {
-        var (sessionId, _) = McpSessionStore.Create("NameRule");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
+        var (sessionId, _) = McpTestTools.Store.Create("NameRule");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
 
-        var response = EvolveTool.Add(sessionId, "property", $$"""{"entityName":"Order","name":"{{name}}","typeName":"{{typeName}}"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "property", $$"""{"entityName":"Order","name":"{{name}}","typeName":"{{typeName}}"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var exported = DslTool.ExportDsl(sessionId).Data!;
+        var exported = McpTestTools.Dsl.ExportDsl(sessionId).Data!;
         var poly = (string)exported.GetType().GetProperty("poly")!.GetValue(exported)!;
-        var reapplied = DslTool.ApplyDsl(SessionTool.CreateDomainSession("Reapply").SessionId!, poly);
+        var reapplied = McpTestTools.Dsl.ApplyDsl(McpTestTools.Session.CreateDomainSession("Reapply").SessionId!, poly);
         await Assert.That(reapplied.Success).IsTrue();
     }
 
@@ -141,25 +141,25 @@ public class McpNameRuleTests {
     [Arguments("Text", "Money")]
     [Arguments("Number", "Line")]
     public async Task Add_Property_NamedAfterAPrimitiveKeyword_WithAValueTypeOrEntity_IsRefused(string name, string typeName) {
-        var (sessionId, _) = McpSessionStore.Create("NameRule");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Order"}""");
-        EvolveTool.Add(sessionId, "entity", """{"name":"Line"}""");
-        EvolveTool.Add(sessionId, "value_type", """{"name":"Money"}""");
-        McpSessionStore.TryGet(sessionId, out var before);
+        var (sessionId, _) = McpTestTools.Store.Create("NameRule");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Line"}""");
+        McpTestTools.Evolve.Add(sessionId, "value_type", """{"name":"Money"}""");
+        McpTestTools.Store.TryGet(sessionId, out var before);
 
-        var response = EvolveTool.Add(sessionId, "property", $$"""{"entityName":"Order","name":"{{name}}","typeName":"{{typeName}}"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "property", $$"""{"entityName":"Order","name":"{{name}}","typeName":"{{typeName}}"}""");
 
         await Assert.That(response.Success).IsFalse();
         await Assert.That(response.Message).Contains("is not a valid name");
-        McpSessionStore.TryGet(sessionId, out var after);
+        McpTestTools.Store.TryGet(sessionId, out var after);
         await Assert.That(after.Revision).IsEqualTo(before.Revision);
     }
 
     [Test]
     public async Task NameStartingWithUnderscore_IsAcceptedByAddAndByTheDsl() {
-        var (sessionId, _) = McpSessionStore.Create("NameRule");
+        var (sessionId, _) = McpTestTools.Store.Create("NameRule");
 
-        var response = EvolveTool.Add(sessionId, "entity", """{"name":"_Draft"}""");
+        var response = McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"_Draft"}""");
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(Parses(EntityTemplate, "_Draft")).IsTrue();

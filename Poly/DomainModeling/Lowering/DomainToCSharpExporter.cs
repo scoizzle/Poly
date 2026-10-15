@@ -14,7 +14,7 @@ namespace Poly.DomainModeling.Lowering;
 /// <summary>
 /// Produces Syntax AST <see cref="TypeDefinitionNode"/> trees from a
 /// <see cref="Domain"/>, suitable for C# code generation via
-/// <see cref="Interpretation.CSharp.CSharpGenerator"/>.
+/// <see cref="Interpretation.CSharp.CSharpWriter"/>.
 ///
 /// Each entity becomes a class with properties, navigation properties (as
 /// <c>IReadOnlyList&lt;T&gt;</c> for collections), lifecycle stages (as enum +
@@ -235,9 +235,20 @@ public sealed partial class DomainToCSharpExporter {
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
             var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
+            var isDomainValue = IsDomainValueType(domain, prop.Type.TypeName);
             List<Node>? constraints = null;
             if (isRequired)
                 constraints = [new Constant("required")];
+
+            // CS8618: the parameterless materialization ctor does not assign
+            // reference properties. Text uses `default!`. A domain value record
+            // is default-constructed so a missing initializer is still non-null.
+            Syntactic.PropertyInitializerDefinitionNode? initializer = null;
+            if (IsNonNullableReferenceScalar(propRef))
+                initializer = new Syntactic.PropertyInitializerDefinitionNode(
+                    new Syntactic.NullForgiving(new Syntactic.Default()));
+            else if (isDomainValue)
+                initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(propRef));
 
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
@@ -246,13 +257,7 @@ public sealed partial class DomainToCSharpExporter {
                 // action effects (no same-assembly backdoor mutability).
                 Setter: new PropertySetterDefinitionNode(
                     AccessModifier: AccessModifier.Private),
-                // CS8618 hygiene: non-nullable reference-typed scalars (Text → string)
-                // are left unset by the EF-materialization parameterless ctor — emit
-                // `= default!;` so the generated code compiles warning-free.
-                Initializer: IsNonNullableReferenceScalar(propRef)
-                    ? new Syntactic.PropertyInitializerDefinitionNode(
-                        new Syntactic.NullForgiving(new Syntactic.Default()))
-                    : null,
+                Initializer: initializer,
                 Constraints: constraints
             ));
 
@@ -291,11 +296,20 @@ public sealed partial class DomainToCSharpExporter {
                 continue; // skip ctor param — handled as a trailing optional param
             }
 
-            // No default expression — full constructor param + assignment
-            ctorParams.Add(new Parameter(paramName, propRef));
-            ctorAssignments.Add(new Assignment(
-                new Member(new ThisReference(), prop.Name),
-                new Parameter(paramName)));
+            // No default expression — full constructor param + assignment.
+            // A non-required value record accepts null and becomes `new T()`.
+            if (isDomainValue && !isRequired) {
+                ctorParams.Add(new Parameter(paramName, new OptionalTypeReference(propRef)));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), prop.Name),
+                    new Syntactic.Coalesce(new Parameter(paramName), new New(propRef))));
+            }
+            else {
+                ctorParams.Add(new Parameter(paramName, propRef));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), prop.Name),
+                    new Parameter(paramName)));
+            }
         }
 
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
@@ -333,8 +347,10 @@ public sealed partial class DomainToCSharpExporter {
                     IsReadOnly: true
                 ));
 
-                // Generate CreateNavName(args) factory method on the source entity
-                AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
+                // Create{Nav} is the typed create-in. A relationship with no create-in
+                // on this entity does not get a factory (Order.CreateCustomer).
+                if (CreatesIn(entity, rel.Name))
+                    AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
                 AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
             }
             else {
@@ -342,7 +358,8 @@ public sealed partial class DomainToCSharpExporter {
                 // Navs are optional references (set at link/create time, may be null
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
-                AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
+                if (CreatesIn(entity, rel.Name))
+                    AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
@@ -471,6 +488,10 @@ public sealed partial class DomainToCSharpExporter {
                 ));
 
                 var fieldAcc = new Member(new ThisReference(), fieldName);
+                // Idempotent registration: a create-in child is already linked by
+                // the store under simulate, and printed hosts may attach twice.
+                // ReferenceEquals keeps distinct-but-equal records from deduping.
+                var existing = new Variable("existing");
                 var registerBody = new Block([
                     new IfStatement(
                         new Equal(fieldAcc, new Constant(null)),
@@ -480,6 +501,14 @@ public sealed partial class DomainToCSharpExporter {
                                     new NamedTypeReference("List",
                                         TypeArguments: [srcType])))
                         ])),
+                    new ForEachLoop(
+                        existing,
+                        fieldAcc,
+                        new IfStatement(
+                            new Invoke(
+                                new Member(new NamedTypeReference("object"), "ReferenceEquals"),
+                                [existing, new Parameter(paramName)]),
+                            new Block([new Return(null)]))),
                     new Invoke(
                         new Member(fieldAcc, "Add"),
                         [new Parameter(paramName)])
@@ -705,8 +734,11 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Private constructor + public static Create factory ─────
+        // Every entity publishes Create, including one with no slots, so
+        // a type-name call resolves. No slots and no stages still emit a
+        // single private parameterless constructor (CS0111).
         List<ConstructorDefinitionNode>? ctors = null;
-        if (ctorParams.Count > 0 || entity.Stages.Count > 0) {
+        {
             var bodyNodes = new List<Node>();
             bodyNodes.AddRange(ctorAssignments);
 
@@ -784,7 +816,7 @@ public sealed partial class DomainToCSharpExporter {
             // Only entity properties (not navigations) are validated — navs
             // don't carry constraints in the current model.
             var constraintChecks = BuildCreateConstraintChecks(
-                entity, domain, esm.EntryAssignedPropertyNames, metadata);
+                entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
 
             // Construct, then Success. Create is the unique-inverse attach source
             // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
@@ -799,18 +831,18 @@ public sealed partial class DomainToCSharpExporter {
                 createdLocal,
                 new New(
                     new NamedTypeReference(entity.Name),
-                    ctorParams.Select(p => new Parameter(p.Name)).ToArray())));
-
-            var uniqueCheck = new Variable("uniqueCheck");
-            var uniqueChecks = BuildCreateUniqueChecks(
-                entity, esm.EntryAssignedPropertyNames, createdLocal, createResultType, uniqueCheck);
-            createSuccessNodes.AddRange(uniqueChecks);
+                    ctorParams.ToArray())));
 
             var lookup = metadata.GetTypeLookup(domain);
             foreach (var navParam in esm.ConstructorParameters
                 .Where(p => p.IsNavigation && !p.IsCollection)) {
                 var paramName = ToCamelCase(navParam.Name);
-                var paramRef = new Parameter(paramName);
+                // The signature parameter, not a same-named copy. A copy has no
+                // type, so the VM reads an empty slot and skips Attach.
+                var paramRef = ctorParams.FirstOrDefault(p =>
+                    string.Equals(p.Name, paramName, StringComparison.Ordinal));
+                if (paramRef is null)
+                    continue;
                 var peerTypeName = navParam.Type.TypeName;
                 Entity? peerEntity = null;
                 if (lookup is not null
@@ -850,8 +882,7 @@ public sealed partial class DomainToCSharpExporter {
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Block(createSuccessNodes,
-                    uniqueChecks.Count > 0 ? [createdLocal, uniqueCheck] : [createdLocal]),
+                Body: new Block(createSuccessNodes, [createdLocal]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));
@@ -875,7 +906,9 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        AddStoreBindMethods(entity, domain, metadata, methods);
+        if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any()))
+            methods.Add(EnsureUniqueAssignMethod());
+
         AddAutomaticTransitionLoopGuard(entity, fields, methods);
         if (targetSubs is { Count: > 0 })
             AddNotifyCascadeDepthGuard(entity, fields, methods);
@@ -890,5 +923,48 @@ public sealed partial class DomainToCSharpExporter {
         ));
 
         return typeDefs;
+    }
+
+    /// <summary>
+    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The session
+    /// index replaces this method. It is not part of the factory.
+    /// </summary>
+    private static MethodDefinitionNode EnsureUniqueAssignMethod() =>
+        new(
+            "EnsureUnique",
+            new NamedTypeReference("DomainResult"),
+            Parameters: [
+                new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String)),
+                new Parameter("value", StoreJobObjectType())
+            ],
+            Body: new Block([
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
+            ]),
+            AccessModifier: AccessModifier.Public);
+
+    /// <summary>
+    /// True when an action, entry, exit, or subscription on <paramref name="entity"/>
+    /// creates into <paramref name="relationshipName"/>. Nested <c>if</c> effects count.
+    /// </summary>
+    private static bool CreatesIn(Entity entity, string relationshipName) {
+        static bool Match(IEnumerable<Effect> effects, string name) =>
+            EffectHelpers.FlattenEffects(effects).Any(e =>
+                e is CreateEntityInRelationshipEffect create
+                && string.Equals(create.RelationshipName, name, StringComparison.Ordinal));
+
+        if (entity.Actions.Any(a => Match(a.Effects, relationshipName)))
+            return true;
+        if (entity.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
+            return true;
+        foreach (var stage in entity.Stages) {
+            if (Match(stage.OnEntryEffects, relationshipName)
+                || Match(stage.OnExitEffects, relationshipName))
+                return true;
+            if (stage.Actions.Any(a => Match(a.Effects, relationshipName)))
+                return true;
+            if (stage.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
+                return true;
+        }
+        return false;
     }
 }

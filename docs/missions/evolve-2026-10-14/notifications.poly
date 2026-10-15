@@ -1,0 +1,44 @@
+domain Notifications
+uses temporal
+
+User: entity {
+  Name: Text required
+  UnreadBadge: Number default(0)
+  SeenCount: Number default(0)
+  LastBody: Text
+  notifications: many Notification
+
+  Active: stage {
+    when notifications Unread {
+      assign UnreadBadge to UnreadBadge + 1
+    }
+    when notifications Unread as n {
+      assign LastBody to n Body
+    }
+    GoAway: action { transition to Away }
+  }
+  Away: stage {
+    ComeBack: action { transition to Active }
+  }
+
+  when notifications Read {
+    assign SeenCount to SeenCount + 1
+  }
+
+  Notify: action (body: Text) {
+    create in notifications { Body: body }
+  }
+}
+
+Notification: entity {
+  Body: Text required
+  Status: Text default("unread")
+  Unread: stage {
+    entry { assign Status to "unread" }
+    MarkRead: action {
+      assign Status to "read"
+      transition to Read
+    }
+  }
+  Read: stage { }
+}

@@ -10,18 +10,18 @@ namespace Poly.Tests.Mcp;
 public sealed class McpPackSharedInputsTests {
     [Test]
     public async Task ApplyAndExportDsl_RoundTripDomainExtensions() {
-        var (sessionId, _) = McpSessionStore.Create("PackShared");
+        var (sessionId, _) = McpTestTools.Store.Create("PackShared");
 
-        var applied = DslTool.ApplyDsl(sessionId, """
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain D
             E: entity {
-              Due: Date
+              Due: DateTime
               P: policy { Due < Now }
             }
             """);
         await Assert.That(applied.Success).IsTrue();
 
-        var exported = DslTool.ExportDsl(sessionId);
+        var exported = McpTestTools.Dsl.ExportDsl(sessionId);
         await Assert.That(exported.Success).IsTrue();
         var poly = exported.Data!.GetType().GetProperty("poly")?.GetValue(exported.Data) as string;
         await Assert.That(poly).IsNotNull();

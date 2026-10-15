@@ -371,6 +371,17 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckArithmetic(context, add.Left, add.Right, props, parameters, enumTypes, allowTextConcat: true);
                 return;
             case Subtract sub:
+                if (sub.Left is PropertyAccess && sub.Right is PropertyAccess) {
+                    var leftType = InferType(context, sub.Left, props, parameters, enumTypes);
+                    var rightType = InferType(context, sub.Right, props, parameters, enumTypes);
+                    // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
+                    if (leftType.Category is TypeCategory.Date && rightType.Category is TypeCategory.Date
+                        && !MixedDateGranularity(context, leftType, rightType)) {
+                        WalkExpression(context, sub.Left, props, parameters, enumTypes);
+                        WalkExpression(context, sub.Right, props, parameters, enumTypes);
+                        return;
+                    }
+                }
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
                 return;
             case Multiply mul:

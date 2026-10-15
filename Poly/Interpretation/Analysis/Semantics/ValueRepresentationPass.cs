@@ -245,6 +245,22 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             return PropagateChild(context, lambda.Body);
         if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored)
             return PropagateChild(context, stored.Lambda.Body);
+        if (invoke.Delegate is Member member
+            && context.GetResolvedType(member.Value) is IClrTypeDefinition receiver) {
+            var returns = receiver.Methods
+                .Where(m => string.Equals(m.Name, member.MemberName, StringComparison.Ordinal)
+                    && m.Parameters.Count() == invoke.Arguments.Length)
+                .Select(m => m.MemberTypeDefinition)
+                .Distinct()
+                .ToList();
+            if (returns.Count == 1) {
+                var (kind, clrType) = ClassifyTypeDefinition(returns[0]);
+                if (kind == ValueRepresentationKind.HeapRef
+                    && clrType is { IsValueType: true }
+                    && !AbiValueTypes.IsLongRepresentable(clrType))
+                    return (kind, clrType);
+            }
+        }
         return resolved;
     }
 

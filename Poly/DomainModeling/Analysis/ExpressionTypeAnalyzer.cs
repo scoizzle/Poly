@@ -660,6 +660,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: long or int or double or float or decimal or short or byte } => new(TypeCategory.Number),
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => new(TypeCategory.Boolean),
             CountExpr => new(TypeCategory.Number),
+            SumExpr => new(TypeCategory.Number),
             _ => new(TypeCategory.Unknown),
         };
     }

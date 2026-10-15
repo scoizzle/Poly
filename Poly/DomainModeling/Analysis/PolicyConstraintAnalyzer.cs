@@ -112,6 +112,9 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 // Bare count Rel (no body) — just validate relationship existence.
                 ValidateQuantifierRelationship(context, lookup, expr, entity);
                 return;
+            case SumExpr s:
+                ValidateSumExpression(context, lookup, s, entity);
+                return;
             case Comparison cmp:
                 // `Outcome == Pending` / `Outcome is Pending`: the bare name is an
                 // enum member, not a property of the entity.
@@ -144,6 +147,40 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         var targetPropMap = BuildPropertyMap(targetEntity);
         ValidateRelatedPropertyAccess(context, body, targetEntity, targetPropMap);
     }
+
+    /// <summary>
+    /// Validates a bare sum: relationship existence via the quantifier rules, then a
+    /// numeric property named by the sum on the target entity.
+    /// </summary>
+    private static void ValidateSumExpression(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        SumExpr sum,
+        Entity entity) {
+        var (targetEntity, _) = ValidateQuantifierRelationship(
+            context, lookup, sum, entity, sum.RelationshipName);
+        if (targetEntity is null) return;
+
+        var property = targetEntity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal));
+        if (property is null) {
+            context.ReportError(sum,
+                $"Sum references property '{sum.PropertyName}' which does not exist " +
+                $"on entity '{targetEntity.Name}'.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+            return;
+        }
+
+        if (!IsNumericTypeName(property.Type.TypeName)) {
+            context.ReportError(sum,
+                $"Sum property '{sum.PropertyName}' on entity '{targetEntity.Name}' has type " +
+                $"'{property.Type.TypeName}', which is not numeric.",
+                DomainModelDiagnosticCodes.SemanticReferenceResolution);
+        }
+    }
+
+    private static bool IsNumericTypeName(string typeName) =>
+        typeName is "Number" or "Int" or "Int64" or "Int32" or "Decimal" or "Float" or "Double";
 
     /// <summary>
     /// Validates that a quantifier relationship exists, is OneToMany from the source,

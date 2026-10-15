@@ -328,12 +328,18 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
                 // Transitive members: entities whose parent chain leads to this root.
                 var members = new List<string>();
                 foreach (var candidate in aggregate.Entities.Where(e => !e.IsRoot)) {
+                    // Visited guard: a parent chain that never settles (a cycle in the
+                    // aggregate) must not spin here; such members are simply not
+                    // reachable from this root.
+                    var visited = new HashSet<string>(StringComparer.Ordinal) { candidate.Name };
                     var cursor = candidate;
                     while (cursor?.AggregateParentName is not null) {
                         if (string.Equals(cursor.AggregateParentName, root.Name, StringComparison.Ordinal)) {
                             members.Add(candidate.Name);
                             break;
                         }
+                        if (!visited.Add(cursor.AggregateParentName))
+                            break;
                         cursor = aggregateByName.GetValueOrDefault(cursor.AggregateParentName);
                     }
                 }

@@ -18,6 +18,12 @@ namespace Poly.DomainModeling.Analysis;
 /// baseline column name, column type, and entity table name.
 /// </summary>
 public sealed class StorageAnalyzer {
+    /// <summary>
+    /// Domain type name whose pack mapping answers for an enum column: the generated CLR
+    /// enum is int-backed, so the column type is the pack's integer type.
+    /// </summary>
+    private const string EnumColumnBackingDomainType = "Int32";
+
     private readonly Domain _domain;
     private readonly List<Entity> _entities;
     private readonly List<Relationship> _relationships;
@@ -264,8 +270,12 @@ public sealed class StorageAnalyzer {
             var isEnum = enumTypes.Contains(prop.Type.TypeName);
 
             // P2: Default column type from registry, then apply column annotation override
+            // An enum property's CLR type is the generated (int-backed) enum, so the column
+            // type is the pack's mapping for that backing type. Using the enum's own name
+            // leaks a type no provider recognises (SQL Server rejects the DDL; SQLite
+            // silently accepts it).
             var baseColumnType = isEnum
-                ? prop.Type.TypeName
+                ? _typeMaps.ToSqlColumnType(EnumColumnBackingDomainType)
                 : _typeMaps.ToSqlColumnType(prop.Type.TypeName);
             var baseClrType = isEnum
                 ? prop.Type.TypeName

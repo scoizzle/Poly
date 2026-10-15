@@ -30,6 +30,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
             SuggestMissingActions(context, entity);
             SuggestMissingPolicies(context, entity);
             SuggestUnconditionalActions(context, entity);
+            SuggestEntityLevelAction(context, entity);
         }
     }
 
@@ -126,5 +127,24 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
             "(boolean or range-constrained properties) but no policies defined. " +
             "Policies enforce business rules. Use `add(kind: policy)` or `apply_dsl` to define guards.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
+    }
+
+    /// <summary>
+    /// Suggests scoping an entity-level action to a stage when the entity also has stages.
+    /// (DMAS002 — hint only, never blocks evolution.)
+    /// </summary>
+    private static void SuggestEntityLevelAction(AnalysisContext context, Entity entity) {
+        if (entity.Stages.Count == 0)
+            return;
+        if (entity.Actions.Count == 0)
+            return;
+
+        foreach (var action in entity.Actions) {
+            context.ReportHint(action,
+                $"Action '{entity.Name}.{action.Name}' is declared on the entity, but " +
+                $"'{entity.Name}' has {entity.Stages.Count} stage(s). Stage-scoped actions make " +
+                "the legal state explicit — consider moving it onto the stage where it applies.",
+                DomainModelDiagnosticCodes.EntityLevelAction);
+        }
     }
 }

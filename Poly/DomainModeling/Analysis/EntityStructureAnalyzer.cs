@@ -51,7 +51,10 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             : "int";
 
         // ── Root detection ────────────────────────────────────
-        var isRoot = !HasRequiredEntityRef(entity, lookup);
+        // An entity is a root unless something owns it: a required reference to
+        // another entity (a singular nav to its owner, or an entity-typed property),
+        // or another entity's `owned` nav (which makes that target a child).
+        var isRoot = !HasRequiredEntityRef(entity, lookup) && !IsOwnedTarget(entity, domain);
 
         // ── Stage tracking ────────────────────────────────────
         var hasStages = entity.Stages.Count > 0;
@@ -145,11 +148,32 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         foreach (var rel in entity.Navigations) {
             if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
                 continue;
+            // An `owned` nav declares this entity as the owner of the target, so it is
+            // not a reference to an owner of this entity.
+            if (rel.SourceOwnsTarget)
+                continue;
             if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal))
                 continue;
             return true;
         }
 
+        return false;
+    }
+
+    /// <summary>
+    /// True when another entity declares an <c>owned</c> nav to this one — the target
+    /// of an owned relationship is a child, never a root.
+    /// </summary>
+    private static bool IsOwnedTarget(Entity entity, Domain domain) {
+        foreach (var other in domain.Types.OfType<Entity>()) {
+            if (string.Equals(other.Name, entity.Name, StringComparison.Ordinal))
+                continue;
+            foreach (var rel in other.Navigations) {
+                if (rel.SourceOwnsTarget
+                    && string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
         return false;
     }
 }

@@ -3,6 +3,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.Interpretation.CSharp;
+
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DslCompiler;
@@ -131,6 +132,39 @@ public sealed class MinimalApiGenerator {
         }
 
         return metadata.ConstructorParameters;
+    }
+
+    /// <summary>
+    /// One argument per constructor parameter, in ESM order: a collection nav is empty, a
+    /// singular nav (including an auto-wired back-reference) is <c>null</c>, and a scalar comes
+    /// from <paramref name="scalar"/>. Emitting an argument for <em>every</em> parameter is what
+    /// keeps this positional call aligned with the printed <c>Create</c> signature — skipping a
+    /// back-reference (or filling a singular nav with an empty enumerable) shifts every later
+    /// argument and the emitted host fails to compile.
+    /// </summary>
+    private List<Node> BuildCreateArgs(
+        Entity entity,
+        IReadOnlyList<ConstructorParameterOrder> order,
+        Func<Property, Node> scalar) {
+        var args = new List<Node>(order.Count);
+        foreach (var parameter in order) {
+            if (parameter.IsCollection) {
+                args.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
+                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
+                });
+                continue;
+            }
+            if (parameter.IsNavigation) {
+                args.Add(new Constant(null!));
+                continue;
+            }
+            var prop = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, parameter.Name, StringComparison.Ordinal))
+                ?? throw new InvalidOperationException(
+                    $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
+            args.Add(scalar(prop));
+        }
+        return args;
     }
 
     /// <summary>
@@ -401,27 +435,8 @@ public sealed class MinimalApiGenerator {
             return;
         }
 
-        var createArgs = new List<Node>();
-        // Scalar constructor params (ESM order) come from the DTO; collection navs
-        // are ctor params (IEnumerable<T>) that start empty. ESM now carries the
-        // COMPLETE signature — no re-scan of domain.Relationships here.
-        foreach (var parameter in GetConstructorOrder(entity)) {
-            if (parameter.IsCollection) {
-                createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
-                });
-                continue;
-            }
-            if (parameter.IsNavigation) {
-                if (parameter.IsBackReference) continue; // auto-wired, not from DTO
-                createArgs.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
-                });
-                continue;
-            }
-
-            createArgs.Add(new Member(new Variable("dto"), parameter.Name));
-        }
+        var createArgs = BuildCreateArgs(entity, GetConstructorOrder(entity),
+            prop => new Member(new Variable("dto"), prop.Name));
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
         var bodyNodes = new List<Node>();
@@ -1046,28 +1061,7 @@ public sealed class MinimalApiGenerator {
                 new Block(new Return(null))));
 
             foreach (var entity in seedableEntities) {
-                var createArgs = new List<Node>();
-
-                // Complete constructor signature from ESM (now includes collection
-                // navs) — scalar props get sample values, navs start empty.
-                foreach (var parameter in GetConstructorOrder(entity)) {
-                    if (parameter.IsNavigation) {
-                        if (parameter.IsBackReference) continue; // auto-wired
-                        createArgs.Add(new Invoke(
-                            new Member(new TypeReference("Enumerable"), "Empty")) {
-                            TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
-                        });
-                        continue;
-                    }
-
-                    var prop = entity.Properties.FirstOrDefault(p =>
-                        string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
-                    if (prop is null) {
-                        throw new InvalidOperationException(
-                            $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
-                    }
-                    createArgs.Add(MakeSampleValue(prop));
-                }
+                var createArgs = BuildCreateArgs(entity, GetConstructorOrder(entity), MakeSampleValue);
 
                 var dtoVar = ToCamelCase(entity.Name);
                 bodyNodes.Add(Init($"{dtoVar}Result",
@@ -1085,7 +1079,9 @@ public sealed class MinimalApiGenerator {
 
         statements.Add(new MethodDefinitionNode(
             "SeedAsync",
-            new TypeReference("Task"),
+            // Fully qualified: a domain entity named `Task` would otherwise shadow the BCL
+            // type in the emitted file and `async Task SeedAsync(…)` stops compiling (S26).
+            new TypeReference("System.Threading.Tasks.Task"),
             Parameters: [new Parameter("db", new TypeReference(dbContextName))],
             Body: Stmts(bodyNodes),
             IsStatic: true,

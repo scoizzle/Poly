@@ -24,21 +24,6 @@ using (var scope = app.Services.CreateScope())
     await SeedAsync(db);
 }
 
-app.MapGet("/api/sites", async (CrmDbContext db) => await db.Sites.ToListAsync());
-
-app.MapGet("/api/sites/{id}", async (int id, CrmDbContext db) => (await db.Sites.FindAsync(id) is Site site ? Results.Ok(site) : Results.NotFound()));
-
-app.MapPost("/api/sites", async (SiteDto dto, CrmDbContext db) => {
-    var siteResult = Site.Create(dto.City, dto.Region);
-    if (!siteResult.IsSuccess)
-    {
-        return Results.Conflict(siteResult.ErrorMessage);
-    }
-    db.Sites.Add(siteResult.Value);
-    await db.SaveChangesAsync();
-    return Results.Ok(siteResult.Value);
-});
-
 app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListAsync());
 
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Product product ? Results.Ok(product) : Results.NotFound()));
@@ -52,6 +37,21 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     db.Products.Add(productResult.Value);
     await db.SaveChangesAsync();
     return Results.Created(string.Concat("/api/products/", productResult.Value.Sku.ToString()), productResult.Value);
+});
+
+app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
+
+app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
+
+app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
+    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
+    if (!accountResult.IsSuccess)
+    {
+        return Results.Conflict(accountResult.ErrorMessage);
+    }
+    db.Accounts.Add(accountResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Ok(accountResult.Value);
 });
 
 app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToListAsync());
@@ -69,14 +69,14 @@ app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     return Results.Ok(campaignResult.Value);
 });
 
-app.MapGet("/api/leads/{email}/account", async (string email, CrmDbContext db) => {
-    var parent = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
+app.MapGet("/api/accounts/{id}/hq", async (int id, CrmDbContext db) => {
+    var parent = await db.Accounts.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
     }
-    await db.Entry(parent).Reference(e => e.Account).LoadAsync();
-    return Results.Ok(parent.Account);
+    await db.Entry(parent).Reference(e => e.Hq).LoadAsync();
+    return Results.Ok(parent.Hq);
 });
 
 app.MapGet("/api/accounts/{id}/contacts", async (int id, CrmDbContext db) => {
@@ -329,14 +329,8 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
     }
 });
 
-app.MapPost("/api/leads/{email}/account/placehq", async (string email, PlaceHqDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -363,14 +357,8 @@ app.MapPost("/api/leads/{email}/account/placehq", async (string email, PlaceHqDt
     }
 });
 
-app.MapPost("/api/leads/{email}/account/addcontact", async (string email, AddContactDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -397,14 +385,8 @@ app.MapPost("/api/leads/{email}/account/addcontact", async (string email, AddCon
     }
 });
 
-app.MapPost("/api/leads/{email}/account/convertlead", async (string email, ConvertLeadDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -436,14 +418,8 @@ app.MapPost("/api/leads/{email}/account/convertlead", async (string email, Conve
     }
 });
 
-app.MapPost("/api/leads/{email}/account/opendeal", async (string email, OpenDealDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -470,14 +446,8 @@ app.MapPost("/api/leads/{email}/account/opendeal", async (string email, OpenDeal
     }
 });
 
-app.MapPost("/api/leads/{email}/account/archive", async (string email, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -504,14 +474,8 @@ app.MapPost("/api/leads/{email}/account/archive", async (string email, CrmDbCont
     }
 });
 
-app.MapPost("/api/leads/{email}/account/openticket", async (string email, OpenTicketDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -538,14 +502,8 @@ app.MapPost("/api/leads/{email}/account/openticket", async (string email, OpenTi
     }
 });
 
-app.MapPost("/api/leads/{email}/account/restore", async (string email, CrmDbContext db) => {
-    var parentEntity = await db.Leads.FirstOrDefaultAsync(e => e.Email == email);
-    if (parentEntity == null)
-    {
-        return Results.NotFound("Lead not found");
-    }
-    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
-    var entity = parentEntity.Account;
+app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
+    var entity = await db.Accounts.FindAsync(id);
     if (entity == null)
     {
         return Results.NotFound("Account not found");
@@ -1335,25 +1293,25 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     }
 });
 
-static async Task SeedAsync(CrmDbContext db)
+static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
 {
     if (db == null)
     {
         return;
     }
-    if (await db.Sites.AnyAsync())
+    if (await db.Products.AnyAsync())
     {
         return;
-    }
-    var siteResult = Site.Create("Sample", "Sample");
-    if (siteResult.IsSuccess)
-    {
-        db.Add(siteResult.Value);
     }
     var productResult = Product.Create(1, "Sample", "XXXXXXXX");
     if (productResult.IsSuccess)
     {
         db.Add(productResult.Value);
+    }
+    var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
+    if (accountResult.IsSuccess)
+    {
+        db.Add(accountResult.Value);
     }
     var campaignResult = Campaign.Create("Sample", Enumerable.Empty<CampaignMember>());
     if (campaignResult.IsSuccess)
@@ -1367,13 +1325,6 @@ static async Task SeedAsync(CrmDbContext db)
 app.Run();
 
 
-public record SiteDto
-{
-    [Required]
-    public string City { get; init; } = default!;
-    public string Region { get; init; } = default!;
-}
-
 public record ProductDto
 {
     [Range(0, 100000000)]
@@ -1384,6 +1335,14 @@ public record ProductDto
     [MinLength(3)]
     [MaxLength(32)]
     public string Sku { get; init; } = default!;
+}
+
+public record AccountDto
+{
+    [EnumDataType(typeof(Industry))]
+    public Industry Industry { get; init; }
+    [Required]
+    public string Name { get; init; } = default!;
 }
 
 public record CampaignDto

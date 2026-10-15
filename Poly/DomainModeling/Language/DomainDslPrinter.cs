@@ -760,6 +760,9 @@ public sealed class DomainDslPrinter {
             c.Body is not null
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
+
+        protected override string SumExpr(SumExpr s) =>
+            $"sum {s.RelationshipName} {s.PropertyName}";
     }
 
     /// <summary>

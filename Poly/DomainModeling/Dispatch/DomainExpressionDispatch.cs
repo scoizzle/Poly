@@ -44,6 +44,7 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult AllExpr(AllExpr e) => Default();
     protected virtual TResult NoneExpr(NoneExpr e) => Default();
     protected virtual TResult CountExpr(CountExpr e) => Default();
+    protected virtual TResult SumExpr(SumExpr e) => Default();
     protected virtual TResult Comparison(Comparison e) => Default();
     protected virtual TResult And(And e) => Default();
     protected virtual TResult Or(Or e) => Default();
@@ -77,6 +78,7 @@ public abstract class DomainExpressionDispatch<TResult> {
         AllExpr e => AllExpr(e),
         NoneExpr e => NoneExpr(e),
         CountExpr e => CountExpr(e),
+        SumExpr e => SumExpr(e),
         Comparison e => Comparison(e),
         And e => And(e),
         Or e => Or(e),

@@ -241,6 +241,11 @@ public static class DslGrammar {
                 .Predicate(IsWhereIdent, "where").Ref("expr-and").Commit()
             .Pattern("count-bare", priority: 2)
                 .Predicate(IsCountToken, "quant").Value(DslTokenKind.Identifier, "rel").Commit()
+            .Pattern("sum-prop", priority: 2)
+                .Predicate(IsSumToken, "quant")
+                .Value(DslTokenKind.Identifier, "rel")
+                .Predicate(IsPathHopIdent, "prop")
+                .Commit()
             .Pattern("exists", priority: 1)
                 .Value(DslTokenKind.Identifier, "rel").Predicate(IsExistsIdent, "exists").Commit()
             .Pattern("where-nav", priority: 1)
@@ -307,6 +312,11 @@ public static class DslGrammar {
                 .Predicate(IsWhereIdent, "where").Ref("expr-live-and").Commit()
             .Pattern("count-bare", priority: 2)
                 .Predicate(IsCountToken, "quant").Value(DslTokenKind.Identifier, "rel").Commit()
+            .Pattern("sum-prop", priority: 2)
+                .Predicate(IsSumToken, "quant")
+                .Value(DslTokenKind.Identifier, "rel")
+                .Predicate(IsPathHopIdent, "prop")
+                .Commit()
             .Pattern("exists", priority: 1)
                 .Value(DslTokenKind.Identifier, "rel").Predicate(IsExistsIdent, "exists").Commit()
             .Pattern("where-nav", priority: 1)
@@ -348,6 +358,10 @@ public static class DslGrammar {
         t.Kind == DslTokenKind.Identifier
         && string.Equals(t.Text, "count", StringComparison.OrdinalIgnoreCase);
 
+    internal static bool IsSumToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "sum", StringComparison.OrdinalIgnoreCase);
+
     internal static bool IsPathHopIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
         && !IsExistsIdent(t)
@@ -358,5 +372,6 @@ public static class DslGrammar {
         string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
         || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase);
+        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(text, "sum", StringComparison.OrdinalIgnoreCase);
 }

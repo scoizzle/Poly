@@ -47,6 +47,7 @@ public static class CoreExpressionPrintBinders {
         registry.Register(new FallbackBinding(typeof(AllExpr)));
         registry.Register(new FallbackBinding(typeof(NoneExpr)));
         registry.Register(new FallbackBinding(typeof(CountExpr)));
+        registry.Register(new FallbackBinding(typeof(SumExpr)));
     }
 
     /// <summary>Binds one concrete expression type to a fixed (rule, pattern).</summary>

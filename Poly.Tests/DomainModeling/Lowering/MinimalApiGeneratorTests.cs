@@ -133,7 +133,7 @@ public class MinimalApiGeneratorTests {
     [Test]
     public async Task Post_HasCreate_NotInSeed() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
-        var parts = Render(d).Split("static async Task SeedAsync");
+        var parts = Render(d).Split("System.Threading.Tasks.Task SeedAsync");
         await Assert.That(parts.Length).IsGreaterThanOrEqualTo(2);
         await Assert.That(parts[0].Contains(".Create(")).IsTrue();
     }
@@ -234,6 +234,20 @@ public class MinimalApiGeneratorTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => gen.GenerateCompilationUnit("TDbCtx"));
         await Assert.That(ex!.Message).Contains("EntityStructureMetadata is required");
+    }
+
+    [Test]
+    public async Task Seed_AsyncReturnType_IsFullyQualified() {
+        // S26: a domain entity named `Task` shadows System.Threading.Tasks.Task in the
+        // emitted host unless the seed's return type is qualified.
+        var d = ParseDomain("""
+            domain T
+            Task: entity {
+              Label: Text
+            }
+            """);
+
+        await Assert.That(Render(d)).Contains("System.Threading.Tasks.Task SeedAsync");
     }
 
     [Test]

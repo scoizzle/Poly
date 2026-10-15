@@ -1,0 +1,46 @@
+domain Banking
+uses temporal
+uses http
+
+AccountKind: enum { Checking, Savings, Credit }
+TxnKind: enum { Deposit, Withdrawal, Transfer }
+
+Account: entity {
+  Number: Text unique required length(6, 12)
+  Kind: AccountKind default(Checking)
+  Currency: Text equals("USD")
+  Balance: Number range(0, 100000000) default(0)
+  Flags: Number default(0)
+  parent: Account
+  txns: many Transaction
+  HasFunds: policy { Balance > 0 }
+  Open: stage {
+    Deposit: action (amount: Number) {
+      assign Balance to Balance + amount
+    }
+    Withdraw: action (amount: Number)
+      require HasFunds
+    {
+      assign Balance to Balance - amount
+    }
+    Freeze: action { transition to Frozen }
+  }
+  Frozen: stage {
+    Unfreeze: action { transition to Open }
+  }
+  when any txns Flagged {
+    assign Flags to Flags + 1
+  }
+}
+
+Transaction: entity {
+  Amount: Number range(1, 10000000) required
+  Kind: TxnKind default(Deposit)
+  account: Account
+  Pending: stage {
+    Post: action { transition to Posted }
+    Flag: action { transition to Flagged }
+  }
+  Posted: stage { }
+  Flagged: stage { }
+}

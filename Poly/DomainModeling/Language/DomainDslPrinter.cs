@@ -627,6 +627,15 @@ public sealed class DomainDslPrinter {
         _sb.AppendLine();
     }
 
+    /// <summary>
+    /// Prints a single expression as DSL text (e.g. <c>Height &gt; 100</c>) — the same spelling
+    /// the parser accepts. Readers must not surface the AST record shape.
+    /// </summary>
+    public string PrintExpressionText(DomainExpression expression) {
+        ArgumentNullException.ThrowIfNull(expression);
+        return PrintExpression(expression);
+    }
+
     private string PrintExpression(DomainExpression expr) {
         return ExpressionPrinter.Run(this, expr);
     }

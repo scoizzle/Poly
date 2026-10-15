@@ -1,0 +1,67 @@
+domain Fleet
+uses temporal
+uses http
+
+TaskState: enum { Todo, Done, Skipped }
+
+Vehicle: entity {
+  Vin: Text unique required length(11, 17)
+  Odometer: Number range(0, 2000000) default(0)
+  LastServiceAt: Number range(0, 2000000) default(0)
+  workOrders: many WorkOrder
+  DueForService: policy { Odometer - LastServiceAt > 5000 }
+  Active: stage {
+    Open: action (note: Text) -> WorkOrder {
+      create in workOrders { Note: note }
+    }
+    Drive: action (km: Number) {
+      assign Odometer to Odometer + km
+    }
+    Serviced: action {
+      assign LastServiceAt to Odometer
+    }
+  }
+}
+
+WorkOrder: entity {
+  Note: Text required
+  DoneCount: Number default(0)
+  AnyCount: Number default(0)
+  AllCount: Number default(0)
+  vehicle: Vehicle
+  jobs: many Job
+  Open: stage {
+    entry { assign DoneCount to 0 }
+    AddJob: action (label: Text) -> Job {
+      create in jobs { Label: label }
+    }
+    CompleteAll: action {
+      for jobs as t where t in Todo
+        invoke t.Complete
+    }
+    Close: action { transition to Closed }
+  }
+  Closed: stage {
+    exit { assign DoneCount to DoneCount }
+  }
+  when jobs Done {
+    assign DoneCount to DoneCount + 1
+  }
+  when any jobs Done {
+    assign AnyCount to AnyCount + 1
+  }
+  when all jobs Done {
+    assign AllCount to AllCount + 1
+  }
+}
+
+Job: entity {
+  Label: Text required
+  workOrder: WorkOrder
+  Todo: stage {
+    Complete: action { transition to Done }
+    Skip: action { transition to Skipped }
+  }
+  Done: stage { }
+  Skipped: stage { }
+}

@@ -1,0 +1,111 @@
+domain Restaurant
+uses temporal
+
+Zone: enum { Patio, Main, Bar }
+Course: enum { Starter, Main, Dessert }
+
+Money: value {
+  Amount: Number
+  Currency: Text
+}
+
+MenuItem: entity {
+  Code: Text unique required length(2, 12)
+  Name: Text required
+  Price: Number range(0, 500) required
+  Course: Course default(Main)
+}
+
+DiningTable: entity {
+  Code: Text unique required
+  Zone: Zone default(Main)
+  Seats: Number range(1, 12) required
+  reservations: many Reservation
+}
+
+Guest: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Visits: Number default(0)
+  reservations: many Reservation
+  Active: stage {
+    Book: action (table: DiningTable, size: Number, day: Date) -> Reservation {
+      create in reservations {
+        PartySize: size
+        Day: day
+        table: table
+      }
+    }
+  }
+  when reservations Seated {
+    assign Visits to Visits + 1
+  }
+}
+
+Reservation: entity {
+  PartySize: Number range(1, 20) required
+  Day: Date default(Today)
+  ClosedAt: Date
+  guest: Guest
+  table: DiningTable
+  orders: many Order
+  FitsTable: policy { PartySize <= table Seats }
+  Booked: stage {
+    Seat: action
+      require FitsTable
+    {
+      transition to Seated
+    }
+    Cancel: action { transition to Cancelled }
+    NoShow: action { transition to NoShow }
+  }
+  Seated: stage {
+    StartOrder: action -> Order {
+      create in orders { }
+    }
+    Finish: action { transition to Completed }
+  }
+  Completed: stage {
+    entry { assign ClosedAt to Today }
+  }
+  NoShow: stage { }
+  Cancelled: stage { }
+}
+
+Order: entity {
+  Total: Number range(0, 100000) default(0)
+  PlacedAt: Date default(Today)
+  Bill: Money
+  reservation: Reservation
+  lines: many OrderLine
+  Placed: stage {
+    AddLine: action (item: MenuItem, qty: Number) -> OrderLine {
+      create in lines {
+        Qty: qty
+        UnitPrice: item Price
+        menuItem: item
+      }
+    }
+    ServeAll: action {
+      for lines as line where line in Placed
+        invoke line.Serve
+    }
+  }
+  Served: stage { }
+  when lines Served {
+    assign Total to Total + 1
+  }
+}
+
+OrderLine: entity {
+  Qty: Number range(1, 20) required
+  UnitPrice: Number range(0, 500) required
+  menuItem: MenuItem
+  order: Order
+  Placed: stage {
+    Serve: action { transition to Served }
+    Void: action { transition to Voided }
+  }
+  Served: stage { }
+  Voided: stage { }
+}

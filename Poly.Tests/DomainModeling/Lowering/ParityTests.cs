@@ -1,10 +1,13 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Packs.Sqlite;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -1036,6 +1039,14 @@ public class ParityTests {
     // Probes that are not expected to print compilable C#.
     static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
 
+    // Probes declare `uses`; parse them with the product authoring seed and the
+    // shipped library catalog (the same construction VmAnalyzerReportTests uses),
+    // so a probe that reaches for temporal/storage/http loads here too.
+    static readonly ExtensionCatalog ProbeCatalog = ExtensionCatalog.Core
+        .With(new SqliteLibrary())
+        .With(new HttpLibrary());
+    static readonly string[] ProbeSeed = [.. ExtensionCatalog.ProductAuthoring, "sqlite"];
+
     public static IEnumerable<string> PrintableProbes() {
         var root = FindRepoRoot();
         return Directory.EnumerateFiles(Path.Combine(root, "docs/probes"), "*.poly", SearchOption.AllDirectories)
@@ -1062,9 +1073,21 @@ public class ParityTests {
     // CompileAndLoad throws with the compiler errors when the printed code does not compile.
     static async Task<System.Reflection.Assembly> Print(string relativePath, string assemblyName) {
         var poly = await File.ReadAllTextAsync(Path.Combine(FindRepoRoot(), relativePath));
-        var (domain, analysis) = EvolvedDomain.FromDsl(poly);
+        var (domain, analysis) = LoadProbe(poly);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         return ExportedCSharp.CompileAndLoad(cs, assemblyName);
+    }
+
+    static (Domain Domain, AnalysisResult Analysis) LoadProbe(string poly) {
+        var session = DomainSession.ForSource(poly, ProbeSeed, ProbeCatalog);
+        var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProbeSeed);
+        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        if (!outcome.Succeeded)
+            throw new InvalidOperationException(string.Join("; ",
+                outcome.Analysis.Diagnostics
+                    .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+                    .Select(d => d.Message)));
+        return (outcome.Root!, outcome.Analysis);
     }
 
     static string FindRepoRoot() {

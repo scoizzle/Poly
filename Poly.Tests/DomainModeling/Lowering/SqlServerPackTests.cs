@@ -57,6 +57,26 @@ public class SqlServerPackTests {
     }
 
     [Test]
+    public async Task AddPack_SqlServer_EnumColumnMapsToBackingType_NotTheEnumName() {
+        // S28: `CREATE TABLE … "kind" Kind NOT NULL` is not valid SQL Server; the column
+        // type must be the pack's integer type for the enum's CLR backing type.
+        var domain = ParseDomain("""
+            domain Test
+            Kind: enum { Alpha, Beta }
+
+            Item: entity {
+              Name: Text
+              Kind: Kind
+            }
+            """);
+        var ctx = SessionBuilder.CreateEmpty().Load(new StorageFacetLibrary()).Load(new SqlServerLibrary()).Build();
+        var storage = AnalyzeStorage(domain, ctx);
+        var col = storage.Entities.Single().Columns.Single(c => c.Name == "Kind");
+        await Assert.That(col.IsEnum).IsTrue();
+        await Assert.That(col.ColumnType).IsEqualTo("int");
+    }
+
+    [Test]
     public async Task AddPack_SqlServer_AppliesIdentifierConvention() {
         var longName = new string('A', 129);
         var domain = ParseDomain("""

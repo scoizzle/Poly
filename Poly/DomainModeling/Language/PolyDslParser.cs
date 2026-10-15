@@ -1308,7 +1308,14 @@ public sealed class PolyDslParser : DslCursor {
                 throw Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.");
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
-                throw Error($"Navigation property '{nav.PropertyName}' references unknown entity '{nav.TargetTypeName}'. No entity with that name was found in the domain.");
+                // A bare type name here is a nav target, but the author may have meant a
+                // value type or a value keyword (`Ref: Guid`). Name both possibilities.
+                var known = string.Join(", ", _primitiveTypeNames.OrderBy(n => n, StringComparer.Ordinal));
+                throw Error(
+                    $"Property '{nav.PropertyName}' is declared with type '{nav.TargetTypeName}', which is "
+                    + $"neither an entity in this domain nor a value type ({known}). "
+                    + $"A value keyword such as 'Guid' or 'Now' is only valid inside an expression "
+                    + $"(e.g. `default(Guid)`). To reference another domain, declare that entity.");
             }
 
             // Check property name collision

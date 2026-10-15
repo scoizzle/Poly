@@ -255,9 +255,13 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
                 n.RelationshipName, n.RelatedEntityName, n.Role, n.Cardinality, n.SourceOwnsTarget)).ToList()
         );
 
+        // Stage actions live under Stages[].ActionNames; reporting only the entity-level
+        // count reads as "0 actions" for an entity whose actions are all stage actions.
+        var stageActionCount = detail.Stages.Sum(s => s.ActionNames.Count);
         return new DomainToolResponse(
             Success: true,
-            Message: $"Entity '{entityName}': {detail.Properties.Count} properties, {detail.Stages.Count} stages, {detail.Actions.Count} actions.",
+            Message: $"Entity '{entityName}': {detail.Properties.Count} properties, {detail.Stages.Count} stages, "
+                + $"{detail.Actions.Count} entity-level actions, {stageActionCount} stage actions.",
             SessionId: sessionId,
             Revision: state.Revision,
             Data: data,
@@ -328,12 +332,18 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
                 // Transitive members: entities whose parent chain leads to this root.
                 var members = new List<string>();
                 foreach (var candidate in aggregate.Entities.Where(e => !e.IsRoot)) {
+                    // Visited guard: a parent chain that never settles (a cycle in the
+                    // aggregate) must not spin here; such members are simply not
+                    // reachable from this root.
+                    var visited = new HashSet<string>(StringComparer.Ordinal) { candidate.Name };
                     var cursor = candidate;
                     while (cursor?.AggregateParentName is not null) {
                         if (string.Equals(cursor.AggregateParentName, root.Name, StringComparison.Ordinal)) {
                             members.Add(candidate.Name);
                             break;
                         }
+                        if (!visited.Add(cursor.AggregateParentName))
+                            break;
                         cursor = aggregateByName.GetValueOrDefault(cursor.AggregateParentName);
                     }
                 }
@@ -1150,12 +1160,13 @@ internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
 
+        var expressionText = new DomainDslPrinter(state.Modeling).PrintExpressionText(policy.Expression);
         return new DomainToolResponse(
             Success: true,
-            Message: $"Policy '{policyName}' on '{entityName}': {policy.Expression}",
+            Message: $"Policy '{policyName}' on '{entityName}': {expressionText}",
             SessionId: sessionId,
             Revision: state.Revision,
-            Data: new { policyName = policy.Name, entityName = entity.Name, expression = policy.Expression.ToString() },
+            Data: new { policyName = policy.Name, entityName = entity.Name, expression = expressionText },
             Affordances: ["get_entity_detail", "get_domain_overview"]
         );
     }

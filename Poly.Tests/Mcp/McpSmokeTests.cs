@@ -92,6 +92,81 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task GetDomainAnalysis_WithParentChildBackReference_TerminatesAndAggregates() {
+        // A parent/child back-reference (Patron.loans + Loan.patron) makes the
+        // aggregate parent chain cyclic; the facts walk must terminate and still
+        // report the owned child.
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Demo
+
+            Patron: entity {
+              Name: Text
+              loans: many Loan
+            }
+
+            Loan: entity {
+              Amount: Number
+              patron: Patron
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Data).IsTypeOf<AnalysisData>();
+
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.Aggregates).IsNotNull();
+        await Assert.That(data.Aggregates!.Any(a =>
+            a.RootName == "Patron" && a.MemberNames.Contains("Loan"))).IsTrue();
+    }
+
+    [Test]
+    public async Task GetEntityDetail_StageActions_AreReportedSeparately() {
+        // S30: an entity whose actions all live in stages must not read as "0 actions".
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Demo
+
+            Item: entity {
+              Name: Text
+              Draft: stage {
+                Submit: action { transition to Placed }
+              }
+              Placed: stage { }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetEntityDetail(sessionId, "Item");
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("0 entity-level actions");
+        await Assert.That(response.Message).Contains("1 stage actions");
+    }
+
+    [Test]
+    public async Task GetPolicyExpression_ReturnsDslText_NotTheAst() {
+        // S31: the tool's contract is the expression text; the AST record shape must not leak.
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Demo
+
+            Tower: entity {
+              Height: Number default(0)
+              Tall: policy { Height > 100 }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = McpTestTools.Policy.GetPolicyExpression(sessionId, "Tower", "Tall");
+        await Assert.That(response.Success).IsTrue();
+        await Assert.That(response.Message).Contains("Height > 100");
+        await Assert.That(response.Message).DoesNotContain("Comparison {");
+    }
+
+    [Test]
     public async Task GetDomainAnalysis_WithStageSubscriptions_IncludesSubscriptionPlans() {
         // amu-w4: stages/entities with non-empty subscription dispatch plans surface as facts.
         var (sessionId, _) = McpTestTools.Store.Create("Test");

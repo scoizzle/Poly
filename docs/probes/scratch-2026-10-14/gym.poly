@@ -1,0 +1,93 @@
+domain Gym
+uses temporal
+uses http
+
+Tier: enum { Basic, Plus, Elite }
+
+Plan: entity {
+  Code: Text unique required length(2, 16)
+  Name: Text required
+  Price: Number range(0, 5000) required
+  Tier: Tier
+}
+
+Trainer: entity {
+  Name: Text required
+  Specialty: Text
+  sessions: many ClassSession
+}
+
+Member: entity {
+  Name: Text required
+  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  JoinedOn: Date default(Today)
+  ExpiresOn: Date default(Today)
+  Visits: Number default(0)
+  Tier: Tier
+  plan: Plan
+  bookings: many Booking
+  HasPlan: policy { plan exists }
+  IsElite: policy { Tier is Elite }
+  Active: stage {
+    Enroll: action (plan: Plan) {
+      assign Tier to plan Tier
+    }
+    Advance: action {
+      assign ExpiresOn to Today + 365 Days
+    }
+    Freeze: action { transition to Frozen }
+    Cancel: action { transition to Cancelled }
+    ClearBookings: action {
+      for bookings as b where b in Booked
+        invoke b.Drop
+    }
+  }
+  Frozen: stage {
+    Reinstate: action { transition to Active }
+    Cancel: action { transition to Cancelled }
+  }
+  Cancelled: stage { }
+  when bookings Attended {
+    assign Visits to Visits + 1
+  }
+}
+
+ClassSession: entity {
+  Name: Text required
+  StartsAt: Date default(Today)
+  Capacity: Number range(1, 50) required
+  AttendedCount: Number default(0)
+  trainer: Trainer
+  bookings: many Booking
+  HasRoom: policy { count bookings < Capacity }
+  Scheduled: stage {
+    Reserve: action (who: Member) -> Booking
+      require HasRoom
+    {
+      create in bookings { member: who }
+    }
+    Postpone: action (days: Number) {
+      assign StartsAt to StartsAt + days
+    }
+    Cancel: action { transition to Cancelled }
+    Complete: action { transition to Completed }
+  }
+  Cancelled: stage { }
+  Completed: stage { }
+  when bookings Attended {
+    assign AttendedCount to AttendedCount + 1
+  }
+}
+
+Booking: entity {
+  member: Member
+  session: ClassSession
+  Booked: stage {
+    Attend: action { transition to Attended }
+    Drop: action { transition to Dropped }
+    Skip: action { transition to NoShow }
+  }
+  Attended: stage { }
+  NoShow: stage { }
+  Dropped: stage { }
+}

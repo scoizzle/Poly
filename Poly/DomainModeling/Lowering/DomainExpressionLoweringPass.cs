@@ -456,14 +456,30 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// Returns null if no substitution is needed.
     /// </summary>
     private Node? FixEnumLiteral(DomainExpression valueExpr, DomainExpression otherSide, Node otherSideNode) {
+        if (otherSide is not PropertyAccess prop
+            || _enumPropertyNames is null
+            || !_enumPropertyNames.TryGetValue(prop.Name, out var enumTypeName))
+            return null;
+
+        // String form: Status == "Active" → PatronStatus.Active
         if (valueExpr is Literal { Value: string strVal }
             && !string.IsNullOrEmpty(strVal)
             && strVal is not "true" and not "false" and not "null"
-            && !char.IsDigit(strVal[0])
-            && otherSide is PropertyAccess prop
-            && _enumPropertyNames!.TryGetValue(prop.Name, out var enumTypeName)) {
+            && !char.IsDigit(strVal[0])) {
             return new Member(new NamedTypeReference(enumTypeName), strVal);
         }
+
+        // Bare member form: Status is Active → PatronStatus.Active. A bare name that
+        // is itself a property stays an instance read (an enum-to-enum comparison).
+        if (valueExpr is PropertyAccess memberAccess
+            && !_enumPropertyNames.ContainsKey(memberAccess.Name)
+            && _propertyTypeResolver?.Invoke(memberAccess.Name) is null
+            && _domain?.Types.OfType<EnumType>().Any(e =>
+                string.Equals(e.Name, enumTypeName, StringComparison.Ordinal)
+                && e.MemberNames.Contains(memberAccess.Name, StringComparer.Ordinal)) == true) {
+            return new Member(new NamedTypeReference(enumTypeName), memberAccess.Name);
+        }
+
         return null;
     }
 

@@ -206,7 +206,33 @@ public class N1NavigationTests {
             parser.Parse();
         }
         catch (FormatException ex) {
-            await Assert.That(ex.Message.Contains("references unknown entity")).IsTrue();
+            await Assert.That(ex.Message.Contains("neither an entity in this domain nor a value type")).IsTrue();
+            threw = true;
+        }
+        await Assert.That(threw).IsTrue();
+    }
+
+    [Test]
+    public async Task Parse_PropertyTypeGuideKeyword_NamesTheValueKeywordCase() {
+        // S27: `Ref: Guid` is a plausible property; the diagnostic must say it is not a
+        // property type rather than blaming an unknown navigation.
+        var poly = """
+            domain Test
+
+            Item: entity {
+              Name: Text
+              Ref: Guid
+            }
+            """;
+
+        var parser = new PolyDslParser(poly);
+        var threw = false;
+        try {
+            parser.Parse();
+        }
+        catch (FormatException ex) {
+            await Assert.That(ex.Message.Contains("neither an entity in this domain nor a value type")).IsTrue();
+            await Assert.That(ex.Message.Contains("default(Guid)")).IsTrue();
             threw = true;
         }
         await Assert.That(threw).IsTrue();

@@ -93,7 +93,7 @@ public class CrmDbContext : DbContext
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("Industry");
+    b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("INTEGER");
     b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
     b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("INTEGER");
     b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER");

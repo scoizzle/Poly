@@ -82,6 +82,39 @@ public class OwnershipAggregateAnalysisTests {
     }
 
     [Test]
+    public async Task OwnedTarget_IsNotRoot_OwnerStaysRoot() {
+        // S17/S18: `address: owned Address` is composition — Address is a child of
+        // Customer, and Customer must stay a root (it was mis-parented off the
+        // reverse edge and lost its HTTP endpoints).
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              address: owned Address
+              orders: many Order
+            }
+            Address: entity {
+              Line1: Text
+            }
+            Order: entity {
+              Total: Number
+              customer: Customer
+            }
+            """);
+
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        var customer = aggregate.Entities.First(e => e.Name == "Customer");
+        var address = aggregate.Entities.First(e => e.Name == "Address");
+        var order = aggregate.Entities.First(e => e.Name == "Order");
+
+        await Assert.That(customer.IsRoot).IsTrue();
+        await Assert.That(address.IsRoot).IsFalse();
+        await Assert.That(address.AggregateParentName).IsEqualTo("Customer");
+        await Assert.That(order.AggregateParentName).IsEqualTo("Customer");
+        await Assert.That(Orphan(analysis, "Customer")).IsFalse();
+    }
+
+    [Test]
     public async Task SingularOutbound_NoInboundCollection_NotOrphan() {
         var (_, analysis) = Analyze("""
             domain Test

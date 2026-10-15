@@ -57,6 +57,26 @@ public class SqlitePackTests {
     }
 
     [Test]
+    public async Task SqliteDefaults_EnumColumnMapsToBackingType_NotTheEnumName() {
+        // S28: the column type must come from the pack's mapping for the enum's CLR
+        // backing type — the enum's own name is not a SQL type (SQL Server rejects it).
+        var domain = ParseDomain("""
+            domain Test
+            Kind: enum { Alpha, Beta }
+
+            Item: entity {
+              Name: Text
+              Kind: Kind
+            }
+            """);
+        var ctx = SessionBuilder.CreateEmpty().Load(new StorageFacetLibrary()).Load(new SqliteLibrary()).Build();
+        var storage = new StorageAnalyzer(domain, typeMaps: ctx.TypeMaps, conventions: ctx.StorageConventions).Analyze();
+        var col = storage.Entities.Single().Columns.Single(c => c.Name == "Kind");
+        await Assert.That(col.IsEnum).IsTrue();
+        await Assert.That(col.ColumnType).IsEqualTo("INTEGER");
+    }
+
+    [Test]
     public async Task SameDomain_GenericVsSqlite_DifferentDefaults() {
         var domain = ParseDomain(SampleDomain);
 

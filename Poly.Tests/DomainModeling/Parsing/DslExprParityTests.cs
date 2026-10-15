@@ -46,6 +46,7 @@ public sealed class DslExprParityTests {
         AllExpr a => $"All({a.RelationshipName},{Canonical(a.Body)})",
         NoneExpr n => $"None({n.RelationshipName},{Canonical(n.Body)})",
         CountExpr c => $"Count({c.RelationshipName},{(c.Body is null ? "-" : Canonical(c.Body))})",
+        SumExpr s => $"Sum({s.RelationshipName},{s.PropertyName})",
         Comparison c => $"Cmp({Canonical(c.Left)},{c.Kind},{Canonical(c.Right)})",
         And a => $"And({Canonical(a.Left)},{Canonical(a.Right)})",
         Or o => $"Or({Canonical(o.Left)},{Canonical(o.Right)})",
@@ -220,6 +221,11 @@ public sealed class DslExprParityTests {
         await AssertCanonical("any Line where Total > 0", "Any(Line,Cmp(Prop(Total),GreaterThan,Lit(0)))");
         await AssertCanonical("all Line where Total > 0", "All(Line,Cmp(Prop(Total),GreaterThan,Lit(0)))");
         await AssertCanonical("count Line where Total > 0", "Count(Line,Cmp(Prop(Total),GreaterThan,Lit(0)))");
+    }
+
+    [Test]
+    public async Task Ir_Sum() {
+        await AssertCanonical("sum lines Price", "Sum(lines,Price)");
     }
 
     [Test]

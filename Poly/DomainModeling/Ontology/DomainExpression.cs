@@ -62,6 +62,13 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Count(string relationshipName, DomainExpression? body) =>
         new CountExpr(Guard.ThrowIfNullOrEmpty(relationshipName), body);
 
+    /// <summary>
+    /// Sum of a related property across the relationship.
+    /// Produces a numeric value usable in comparisons.
+    /// </summary>
+    public static DomainExpression Sum(string relationshipName, string propertyName) =>
+        new SumExpr(Guard.ThrowIfNullOrEmpty(relationshipName), Guard.ThrowIfNullOrEmpty(propertyName));
+
     public static DomainExpression And(DomainExpression left, DomainExpression right) =>
         new And(left, right);
 
@@ -224,6 +231,17 @@ public sealed record CountExpr(
     DomainExpression? Body
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => Body is not null ? [Body] : [];
+}
+
+/// <summary>
+/// Collection aggregate: sum of <see cref="PropertyName"/> across related entities.
+/// Produces a numeric value usable in comparisons.
+/// </summary>
+public sealed record SumExpr(
+    string RelationshipName,
+    string PropertyName
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [];
 }
 
 public enum ComparisonKind { Equal, NotEqual, LessThan, LessThanOrEqual, GreaterThan, GreaterThanOrEqual }

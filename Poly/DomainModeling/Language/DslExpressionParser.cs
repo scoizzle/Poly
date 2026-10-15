@@ -130,6 +130,7 @@ public sealed class DslExpressionParser {
             "where-nav" => FoldWhereNav(match, inWhere),
             "quant-where" => FoldQuantWhere(match, inWhere),
             "count-bare" => DomainExpression.Count(CaptureText(match, "rel"), null),
+            "sum-prop" => DomainExpression.Sum(CaptureText(match, "rel"), CaptureText(match, "prop")),
             "path-is-not" => FoldPathCmp(match, notEqual: true, inWhere),
             "path-cmp" => FoldPathCmp(match, notEqual: false, inWhere),
             "path" => FoldPath(match),
@@ -178,6 +179,7 @@ public sealed class DslExpressionParser {
             "all" => DomainExpression.All(rel, body),
             "none" => DomainExpression.None(rel, body),
             "count" => DomainExpression.Count(rel, body),
+            "sum" => throw _c.Error("sum does not take where; write sum Rel Prop"),
             _ => throw _c.Error($"Unknown quantifier '{q}'"),
         };
     }

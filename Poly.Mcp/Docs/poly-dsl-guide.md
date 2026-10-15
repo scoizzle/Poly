@@ -797,8 +797,12 @@ and a property of the related entity binds to the **parameter**.
 | `all Rel where body` | ∀ related match body | `all items where Reserved is true` |
 | `none Rel where body` | ¬∃ related matching body | `none notes where NeedsFollowUp is true` |
 | `count Rel` / `count Rel where body` | Number of related (optionally filtered) | `count orders > 5` / `count orders where Status is "Open" > 0` |
+| `sum Rel Prop` | Sum of a Number property over related | `sum lines Price == 150` |
 
-`count` produces a numeric value for use in comparisons. `any`/`all`/`none` produce booleans.
+`count` produces a numeric value for use in comparisons. `sum Rel Prop` produces the numeric sum
+of `Prop`, a **Number** property on the related entity, over the related set; `sum Rel where …` and
+`sum Rel (expression)` are **not** forms — only a bare property name follows the relationship.
+`any`/`all`/`none` produce booleans.
 
 **Empty collection semantics:**
 
@@ -808,6 +812,7 @@ and a property of the related entity binds to the **parameter**.
 | `all Rel where ...` | `false` (no vacuous true) |
 | `none Rel where ...` | `true` (¬any) |
 | `count Rel` | `0` |
+| `sum Rel Prop` | `0` |
 
 ```poly
 HasPriorityOrder: policy { any orders where Priority > 5 }
@@ -815,6 +820,7 @@ AllHighValue: policy { all orders where Total > 100 }
 NoRush: policy { none notes where NeedsFollowUp is true }
 OpenOrderCount: policy { count orders where Status is "Open" > 0 }
 TotalOrderCount: policy { count orders > 5 }
+OrderTotal: policy { sum lines Price == 150 }
 ```
 
 **Analysis rules:** relationship must be OneToMany from the source; body properties validated

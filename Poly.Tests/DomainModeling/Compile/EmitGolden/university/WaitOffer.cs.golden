@@ -84,7 +84,7 @@ public class WaitOffer
         }
         this._sectionWaitlistCancelledSubscribers.Add(subscriber);
     }
-    internal void NotifyOfferedSubscribers(WaitOfferStage previousStage)
+    internal void NotifyOfferedSubscribers(WaitOfferStage? previousStage)
     {
         this.EnterNotifyCascade("Offered");
         try
@@ -102,7 +102,7 @@ public class WaitOffer
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCancelledSubscribers(WaitOfferStage previousStage)
+    internal void NotifyCancelledSubscribers(WaitOfferStage? previousStage)
     {
         this.EnterNotifyCascade("Cancelled");
         try

@@ -73,6 +73,15 @@ public class CreateInWatchedStageTests {
         await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers(null)")).IsEqualTo(0);
     }
 
+    [Test]
+    public async Task Create_InWatchedStage_NotifyParameterIsNullable() {
+        // A create-in has no previous stage, so the printed call passes null. The
+        // parameter must be nullable or the generated C# fails to compile (CS1503).
+        var (domain, analysis) = Evolve(Positive);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("NotifyOpenSubscribers(JobStage? previousStage)");
+    }
+
     private static DomainEntityInstance CreateUser(Domain domain) {
         var userEntity = domain.Types.OfType<Entity>().First(e => e.Name == "User");
         return DomainEntityInstance.Create(userEntity, domain: domain);

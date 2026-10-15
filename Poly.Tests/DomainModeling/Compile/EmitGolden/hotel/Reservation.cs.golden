@@ -264,7 +264,7 @@ public class Reservation
         }
         this._guestReservationsDepartedSubscribers.Add(subscriber);
     }
-    internal void NotifyInHouseSubscribers(ReservationStage previousStage)
+    internal void NotifyInHouseSubscribers(ReservationStage? previousStage)
     {
         this.EnterNotifyCascade("InHouse");
         try
@@ -282,7 +282,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyDepartedSubscribers(ReservationStage previousStage)
+    internal void NotifyDepartedSubscribers(ReservationStage? previousStage)
     {
         this.EnterNotifyCascade("Departed");
         try
@@ -308,7 +308,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCancelledSubscribers(ReservationStage previousStage)
+    internal void NotifyCancelledSubscribers(ReservationStage? previousStage)
     {
         this.EnterNotifyCascade("Cancelled");
         try
@@ -326,7 +326,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyNoShowSubscribers(ReservationStage previousStage)
+    internal void NotifyNoShowSubscribers(ReservationStage? previousStage)
     {
         this.EnterNotifyCascade("NoShow");
         try

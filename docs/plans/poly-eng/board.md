@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-15. Master: `06844e39` (#176). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
+Updated 2026-10-16. Master: `ff83c598` (#191). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -12,6 +12,7 @@ Updated 2026-10-15. Master: `06844e39` (#176). Rules: [README](README.md). Old b
 
 1. C8d depends on T3, which the 2026-10-09 trim parked. Un-park T3 or drop it from C8d's Depends.
 2. C8-web and C8-clean are parkable, but C8d (and C8-num, for C8-clean) depend on them. Parking one means editing those Depends lines.
+3. **F31 stopped NOT SHIP (`slice/F31`, `27d49b79`, no PR).** The card's DSL is reproduced exactly; F26 clears the first stop, but a typed `create in` with a computed value still dies on `Member 'IsSuccess' is not resolved.` at `DirectVmAbiEmitter.EmitMember` (`Poly/Interpretation/Vm/DirectVmAbiEmitter.Expressions.cs:401`), compiling the `if (!create.IsSuccess)` guard from `LowerCreateNavCall` (`Poly/DomainModeling/Lowering/EffectLoweringPass.cs:961`). Isolation: `create in sessions { }` and `{ ExpiresAt: Now }` run; only `ExpiresAt: Now + 30 Minutes` fails. The scalar-vs-reference question (card) is open, and the S8 row of `docs/probes/findings/scratch-2026-10-14.md` fails the same way from a different trigger (a target entity with a `value`-typed property). Decide: fix `LowerCreateNavCall`'s result guard as its own slice, or park F31.
 
 ## Demo
 
@@ -21,7 +22,11 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 
 ## In flight (open PRs; GitHub is the live state)
 
-None.
+| PR | Slice | Branch |
+|----|-------|--------|
+| #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
+| #193 | docs: propose async/await semantics for the interpreter | `docs/async-await-interpreter` |
+| — (no PR yet) | C8-tc2: typed probe + real `EnsureUnique`; this slice holds the board plan commit | `slice/c8-tc2` |
 
 ## Next (in order; first unblocked row wins)
 
@@ -32,7 +37,7 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 | 1 | C6c | **merged** `2baec149` (#157) | [tasks/C6c.md](tasks/C6c.md) |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
 | 3 | C8-tc1a | **merged** `86148036` (#162). Absorbed tc1b (`this.Create{Nav}`, probes deleted). #164 closed. Void-context linking stays an open decision. | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
-| 4 | C8-tc2 | C8-tc1 merged. **Narrowed:** real `EnsureUnique` only. Do not restore probes. `StoreBind.cs` is `StoreJobObjectType` and `TypedNull`. | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
+| 4 | C8-tc2 | C8-tc1 merged. **In flight** on `slice/c8-tc2` (this board update is its plan commit). **Narrowed:** real `EnsureUnique` only. Do not restore probes. `StoreBind.cs` is `StoreJobObjectType` and `TypedNull`. | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
 | 6 | C8-vm | False positives and three real bugs merged (#165 `a0c68e64`, #163 `29411bd7`). Still open: `Emit` does not call `ThrowIfVmHasErrors`. Re-check the rest of the task before starting. After C8-tc2. | [tasks/C8-vm.md](tasks/C8-vm.md) |
 | 7 | C8-lc | C8-tc | [tasks/C8-lc.md](tasks/C8-lc.md) |
@@ -51,7 +56,9 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 
 ## Swarm (probe findings; one card per agent)
 
-Offload queue for the open items in [`docs/probes/findings/evolve-2026-10-14.md`](../../probes/findings/evolve-2026-10-14.md). F27, F32, F33, and F34 are already on master (`06844e39`). U1 and U2 (printed `EnsureUnique`) stay on row 4. Rows 5–19 and THEN are unchanged.
+Offload queue for the open items in [`docs/probes/findings/evolve-2026-10-14.md`](../../probes/findings/evolve-2026-10-14.md). F27, F32, F33, and F34 are already on master (`06844e39`). **Nine of the eleven cards merged (`#182`–`#191`); F31 stopped NOT SHIP (Needs Scot 3) and F35b is blocked, so this queue is drained — no card here is startable.** U1 and U2 (printed `EnsureUnique`) stay on row 4. Rows 5–19 and THEN are unchanged.
+
+[`docs/probes/findings/scratch-2026-10-14.md`](../../probes/findings/scratch-2026-10-14.md) (`#179`, the Oct-14 from-scratch probe) holds S1–S31: ten are fixed on master, S14 is covered by F28 (`#183`), and the rest are **evidence, not cards**, until Scot admits them.
 
 Branch each card from current origin/master. One branch `slice/<id>`, one PR, leave it open. Scot merges. Take one start-now card whose files no other open PR is editing. A sequenced card starts only after every predecessor in its Depends line has merged.
 
@@ -59,17 +66,17 @@ Each task file has the edit, the test, the Leave list, and the stop condition. S
 
 | When | Card | Edit | Test class | Task |
 |------|------|------|------------|------|
-| now | F29 | one hint `DMAS002` | `EntityLevelActionHintTests` | [tasks/F29.md](tasks/F29.md) |
-| now | F26 | `ClassifyInvoke` only | `PolicyNegativeOffsetTests` | [tasks/F26.md](tasks/F26.md) |
-| now | F35a-check | Subtract arm of `WalkExpression` | `DateDifferenceDurationTests` | [tasks/F35a-check.md](tasks/F35a-check.md) |
-| now | F30a | `sum Rel Prop` parse and print | `SumParseTests` | [tasks/F30a.md](tasks/F30a.md) |
-| now | F28 | one Notify call in `AddCreateNavMethod` | `CreateInWatchedStageTests` | [tasks/F28.md](tasks/F28.md) |
+| merged | F29 | **merged** `efcbf53a` (#182) | `EntityLevelActionHintTests` | [tasks/F29.md](tasks/F29.md) |
+| merged | F26 | **merged** `86ec8ba9` (#184) | `PolicyNegativeOffsetTests` | [tasks/F26.md](tasks/F26.md) |
+| merged | F35a-check | **merged** `09fe6fc8` (#185) | `DateDifferenceDurationTests` | [tasks/F35a-check.md](tasks/F35a-check.md) |
+| merged | F30a | **merged** `bdfbe1dd` (#186) | `SumParseTests` | [tasks/F30a.md](tasks/F30a.md) |
+| merged | F28 | **merged** `0d7c1b13` (#183) | `CreateInWatchedStageTests` | [tasks/F28.md](tasks/F28.md) |
 | blocked | F35b | assign target is not on the check scope | — | [tasks/F35b.md](tasks/F35b.md) |
-| after F26 | F31 | test only | `CreateInitializerDateTimeOffsetTests` | [tasks/F31.md](tasks/F31.md) |
-| after F35a-check | F35a-lower | `DateAddDaysLowering` subtract of two dates | `DateDifferenceDurationTests` | [tasks/F35a-lower.md](tasks/F35a-lower.md) |
-| after F30a and F35a-check | F30b | policy check plus `InferType` | `SumAnalysisTests` | [tasks/F30b.md](tasks/F30b.md) |
-| after F30b | F30c | lower `sum Rel Prop` | `SumEvalTests` | [tasks/F30c.md](tasks/F30c.md) |
-| after F30c | F30d | guide section 8 | guide text | [tasks/F30d.md](tasks/F30d.md) |
+| **NOT SHIP** | F31 | F26 cleared the card's first stop; the typed `create in` still dies on the result guard. Reproducer pinned on `slice/F31` (`27d49b79`), no PR. See Needs Scot 3. | `CreateInitializerDateTimeOffsetTests` | [tasks/F31.md](tasks/F31.md) |
+| merged | F35a-lower | **merged** `6142ae58` (#188) | `DateDifferenceDurationTests` | [tasks/F35a-lower.md](tasks/F35a-lower.md) |
+| merged | F30b | **merged** `9e3bd77c` (#189) | `SumAnalysisTests` | [tasks/F30b.md](tasks/F30b.md) |
+| merged | F30c | **merged** `e38edcba` (#190) | `SumEvalTests` | [tasks/F30c.md](tasks/F30c.md) |
+| merged | F30d | **merged** `ff83c598` (#191) | guide text | [tasks/F30d.md](tasks/F30d.md) |
 
 ## Later (parked; not work until Scot admits it)
 
@@ -108,6 +115,28 @@ Each task file has the edit, the test, the Leave list, and the stop condition. S
 
 | Date (CDT) | PR | Slice | Merge SHA | Reviewed |
 |------------|----|-------|-----------|----------|
+| 10-15 | #191 | F30d: document `sum Rel Prop` in the DSL guide | `ff83c598` | see PR |
+| 10-15 | #190 | F30c: evaluate `sum Rel Prop` | `e38edcba` | see PR |
+| 10-15 | #189 | F30b: analyze `sum Rel Prop` | `9e3bd77c` | see PR |
+| 10-15 | #188 | F35a-lower: lower date-minus-date to Subtract | `6142ae58` | see PR |
+| 10-15 | #186 | F30a: parse and print `sum Rel Prop` | `bdfbe1dd` | see PR |
+| 10-15 | #187 | fix: a subscribed create-in has no previous stage | `17d6f212` | see PR |
+| 10-15 | #181 | demo: Poly IDE UI (MAUI Blazor Hybrid + Blazor Server) | `9e8b3207` | see PR |
+| 10-15 | #179 | probe: from-scratch discovery 2026-10-14 (S1-S31) + two fixes | `a5eaedfb` | see PR |
+| 10-15 | #185 | F35a-check: allow a date property minus a date property | `09fe6fc8` | see PR |
+| 10-15 | #184 | F26: classify an unresolved temporal method as a heap value | `86ec8ba9` | see PR |
+| 10-15 | #183 | F28: notify once when create-in lands in the watched stage | `0d7c1b13` | see PR |
+| 10-15 | #182 | F29: hint when an entity-level action sits beside stages | `efcbf53a` | see PR |
+| 10-15 | #180 | docs: queue the probe-finding swarm | `ddc90e52` | see PR |
+| 10-14 | #178 | grammar: C# language surface over Poly.Grammar (read + write) | `ef5ad9f0` | see PR |
+| 10-14 | #177 | fix: run the printed Create factory in the interpreter | `6c1bede3` | see PR |
+| 10-14 | #176 | F26-F35 fixes: F32 coercion, F27 single-fire, F33 M:N export, F34 guide | `06844e39` | see PR |
+| 10-14 | #175 | mission: real-app core utilities 2026-10-14 | `14849ff1` | see PR |
+| 10-14 | #174 | MCP2: harness DI, per-session locks, idle eviction, one tool boundary | `d84995d6` | see PR |
+| 10-14 | #173 | mission: evolutionary fact-finding 2026-10-13 | `929a2080` | see PR |
+| 10-14 | #172 | CPM1: central package management via Directory.Packages.props | `bd416609` | see PR |
+| 10-14 | #171 | MCP1: upgrade ModelContextProtocol to 2.2.0 | `d47cab42` | see PR |
+| 10-13 | #169 | demo: serve the warehouse host | `485c3cac` | see PR |
 | 10-13 | #168 | docs: Poly Agent Skill | `89fa8eb5` | see PR |
 | 10-13 | #167 | docs: ontology-of-ontologies gap map | `e758d14c` | see PR |
 | 10-12 | #162 | C8-tc1a: typed by-type create lowering (absorbed tc1b) | `86148036` | see PR |

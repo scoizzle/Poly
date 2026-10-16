@@ -299,11 +299,17 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
         var entityCount = state.Domain.Types.OfType<Entity>().Count();
         var relationshipCount = state.LatestAnalysis.GetAllRelationships(state.Domain).Count;
 
-        // Root entities from EntityStructureMetadata only (aggregate copies that bit).
-        var rootEntityNames = state.Domain.Types.OfType<Entity>()
-            .Where(e => state.LatestAnalysis.GetStructure(e)?.IsRoot == true)
-            .Select(e => e.Name)
-            .ToList();
+        // Root entities from the resolved ownership aggregate: a parentless entity is a
+        // root there. The structure bag alone only knows "declares a required reference",
+        // which is a different question and reads as non-root for reference-only shapes
+        // (Lead.account) that the aggregate resolves as roots.
+        var aggregate = state.LatestAnalysis.GetMetadata<OwnershipAggregateMetadata>(state.Domain)?.Aggregate;
+        var rootEntityNames = aggregate is not null
+            ? aggregate.Entities.Where(e => e.IsRoot).Select(e => e.Name).ToList()
+            : state.Domain.Types.OfType<Entity>()
+                .Where(e => state.LatestAnalysis.GetStructure(e)?.IsRoot == true)
+                .Select(e => e.Name)
+                .ToList();
 
         // Topology summary from EffectTopologyMetadata
         var topology = state.LatestAnalysis.GetMetadata<EffectTopologyMetadata>(state.Domain)?.Topology;
@@ -324,7 +330,7 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
         var hasStorage = state.LatestAnalysis.GetMetadata<StorageMappingMetadata>(state.Domain) is not null;
 
         // Aggregate ownership from OwnershipAggregateMetadata (OwnershipAggregatePass)
-        var aggregate = state.LatestAnalysis.GetMetadata<OwnershipAggregateMetadata>(state.Domain)?.Aggregate;
+        // Aggregate ownership (OwnershipAggregateMetadata) — `aggregate` is read above for roots.
         var aggregates = new List<AggregateFact>();
         if (aggregate is not null) {
             var aggregateByName = aggregate.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);

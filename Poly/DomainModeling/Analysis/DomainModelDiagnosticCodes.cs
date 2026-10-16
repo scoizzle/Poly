@@ -81,8 +81,9 @@ internal static class DomainModelDiagnosticCodes {
 
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
-    /// Non-root entity has no aggregate parent — potentially orphaned.
-    public const string AggregateOrphan = "DMAGG001";
+    // DMAGG001 removed — the aggregate now promotes a parentless entity to a root, so
+    // "non-root with no aggregate parent" cannot exist. It was a false-positive machine
+    // (fixed for grandchildren, then for singular-only chains: research/2026-10-10-analysis-review.md D2).
 
     // DMAGG002 removed — AggregateAnalyzer reads IsRoot from EntityStructureMetadata,
     // so the two can never conflict in the pipeline. Add back if a real conflict signal

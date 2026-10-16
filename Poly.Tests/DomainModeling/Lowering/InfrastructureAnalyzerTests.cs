@@ -78,7 +78,10 @@ public class InfrastructureAnalyzerTests {
     }
 
     [Test]
-    public async Task EntityWithEntityRefs_IsNotRoot() {
+    public async Task EntityWithEntityRefsOnly_IsRoot() {
+        // Refs to catalogs are references, not ownership: nothing owns Loan, so it is a
+        // root with a synthetic key. (The storage bag used to report non-root here and
+        // the emitter then gave Loan no endpoints at all.)
         var infra = AnalyzeFull("""
             domain Test
             Book: entity { Title: Text }
@@ -91,9 +94,10 @@ public class InfrastructureAnalyzerTests {
         var model = infra.Storage;
 
         var loan = model.Entities.First(e => e.Name == "Loan");
-        await Assert.That(loan.IsRoot).IsFalse();
+        await Assert.That(loan.IsRoot).IsTrue();
         await Assert.That(loan.KeyName).IsEqualTo("id");
         await Assert.That(loan.KeyClrType).IsEqualTo("int");
+        await Assert.That(loan.ForeignKeys).IsEmpty();
     }
 
     [Test]

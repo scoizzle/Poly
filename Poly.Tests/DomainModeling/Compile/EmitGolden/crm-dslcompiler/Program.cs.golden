@@ -39,6 +39,21 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     return Results.Created(string.Concat("/api/products/", productResult.Value.Sku.ToString()), productResult.Value);
 });
 
+app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
+
+app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Lead lead ? Results.Ok(lead) : Results.NotFound()));
+
+app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
+    var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, null);
+    if (!leadResult.IsSuccess)
+    {
+        return Results.Conflict(leadResult.ErrorMessage);
+    }
+    db.Leads.Add(leadResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Created(string.Concat("/api/leads/", leadResult.Value.Email.ToString()), leadResult.Value);
+});
+
 app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
 
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
@@ -1308,6 +1323,11 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         db.Add(productResult.Value);
     }
+    var leadResult = Lead.Create("Sample", "user@test.com", "Sample", null);
+    if (leadResult.IsSuccess)
+    {
+        db.Add(leadResult.Value);
+    }
     var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (accountResult.IsSuccess)
     {
@@ -1335,6 +1355,17 @@ public record ProductDto
     [MinLength(3)]
     [MaxLength(32)]
     public string Sku { get; init; } = default!;
+}
+
+public record LeadDto
+{
+    [Required]
+    public string Company { get; init; } = default!;
+    [Required]
+    [RegularExpression("^[^@]+@[^@]+$")]
+    public string Email { get; init; } = default!;
+    [Required]
+    public string Name { get; init; } = default!;
 }
 
 public record AccountDto

@@ -34,3 +34,7 @@ dotnet run --project docs/probes/produced-di/slice/Probe.csproj -p:NuGetAudit=fa
 Observed on 2026-10-15: stdout `resolved 2500 USD`, exit 0. The empty host's `GetService<IBillingCharge>()` was null. After `AddSingleton<IBillingCharge, RecordingCharge>()`, `GetRequiredService` returned that instance, `Order.Pay` called it once with amount 2500 and currency USD, and `BillingAdapters.Charge` still failed with `no in-process adapter`.
 
 Calling `BuildServiceProvider` directly failed the web SDK analyzer ASP0000 under warnings-as-errors. The slice uses `WebApplication.CreateBuilder` / `Build`, the same pair `Program.cs` already emits.
+
+## What the slice does not show
+
+The decision's storage shape is not in this directory. The compiler still emits `Order.Create(string)` and `EnsureUnique => DomainResult.Success()`. The target is a static `ExistsWith{Property}` on the entity, taking the `{Domain}DbContext` the pack already emits, with `Create` calling it before `new`. The interpreter runs that method against a Sqlite memory context. This slice only shows a host resolving one billing port and passing it into `Pay`.

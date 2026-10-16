@@ -16,7 +16,9 @@ The interpreter executes that produced method. It does not keep a second uniquen
 
 `DomainInstanceStore` stops being the persistence runtime. Its instance list, unique scan, and relationship side table duplicate the context. Its subscription metadata walk duplicates `Notify{Stage}Subscribers`, which the module already lowers and the printer already emits. Stage and subscription behavior is that produced method. The interpreter runs it.
 
-No new `uses` id. No new port interface in the domain file. The storage library writes the helper and the `Create` parameter from the bag it already publishes, and the host file passes the context the route already has.
+An action is the same rule. When its body creates, checks uniqueness, or calls an outbound port, that dependency is a parameter of the action. The host already has the object — minimal APIs inject `DbContext` into the route lambda — and the route passes it into the call. The action does not look the object up. The interpreter passes the same argument when it runs the body.
+
+No new `uses` id. No new port interface in the domain file. The storage library writes the helper, the `Create` parameter, and the action parameter from the bag it already publishes. The host file passes the value the route already has.
 
 ## Target shape
 
@@ -45,6 +47,24 @@ The failure string is the one `DomainInstanceStore.UniqueCollisionForProperty` a
 A nested create is the same helper on the child type. `Permit.ExistsWithPlate(db, plate)` is a static method because `Plate` is unique. The parent passes the context it was given. The parent sees `Failure` and does not link the child. That is the outcome `ActionEntityReturnTests.InvokeAction_CreateInUniqueCollision_DoesNotApplyPriorAssigns` records for plate `ABC123`.
 
 Another storage subsystem supplies another parameter type and another body for the same method. The call site stays `Widget.ExistsWithCode(db, code)`. SQLite and SQL Server differ in the host fragment that builds the context (`UseSqlite` versus `UseSqlServer`, `MinimalApiGenerator.BuildProviderRegistration`, `MinimalApiGenerator.cs:109-122`), not in the call.
+
+## Actions receive the same value
+
+The route already takes the context. The action call does not. The capture endpoint is `async (int id, int opportunityId, CaptureDto dto, CrmDbContext db)` and then `entity.Capture(dto.request)` (`EmitGolden/crm-dslcompiler/Program.cs.golden:912` and `:933`). The Shop pay route is the same: the lambda has `ShopDbContext db`, and the call is `entity.Pay(dto.request)` (`docs/probes/produced-di/baseline/Program.cs:42` and `:50`). `AppendActionEndpointStatements` adds `db` to the lambda (`MinimalApiGenerator.cs:702`) and invokes the action with the DTO fields only (`:733-736`).
+
+When the body needs the context, `Capture` and `Pay` gain that parameter and the route passes `db`:
+
+```csharp
+app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture",
+    async (int id, int opportunityId, CaptureDto dto, CrmDbContext db) =>
+{
+    // load entity...
+    var result = entity.Capture(dto.request, db);
+    await db.SaveChangesAsync();
+});
+```
+
+`Capture` forwards `db` into `Permit.Create` or `Widget.ExistsWithCode` the way `CreatePermits` does. An action whose body does not touch storage does not gain the parameter. An outbound port is the same shape when the body calls it: the host resolves the implementation into the lambda, and `Capture` takes that value next to `db`. The Shop slice did this by hand for `IBillingCharge`. The container's work ends at the lambda. The module lists the parameters and calls them.
 
 ## Why the context has to be on Create
 

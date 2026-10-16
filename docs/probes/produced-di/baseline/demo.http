@@ -1,0 +1,33 @@
+### ═══════════════════════════════════════════════════════════
+###  Shop REST API — Generated
+###
+###  Start the server:
+###    dotnet run --project path/to/project --urls "http://localhost:5201"
+###
+###  Then click "Send Request" above any request below.
+### ═══════════════════════════════════════════════════════════
+
+### ──────────── Orders ────────────
+
+### List all orders
+GET http://localhost:5201/api/orders
+
+### Get order by Number
+GET http://localhost:5201/api/orders/example-value
+
+### Create a new order
+POST http://localhost:5201/api/orders
+Content-Type: application/json
+
+{
+    "Number": "example-number"
+}
+
+### Action: Pay
+POST http://localhost:5201/api/orders/example-value/pay
+Content-Type: application/json
+
+{
+    "request": { "amount": 0, "currency": "sample" }
+}
+

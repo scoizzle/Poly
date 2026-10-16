@@ -1,0 +1,18 @@
+domain Shop
+uses http
+
+Billing: contract internal billing v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+Order: entity {
+  Number: Text unique
+  Pay: action (request: ChargeRequest) {
+  }
+}
+
+ChargeOrder: bind Billing Charge to Pay request

@@ -1107,11 +1107,12 @@ public sealed partial record DomainEntityInstance {
 
     private static Node ConstructedInstance(
         string typeName, IReadOnlyList<Parameter> parameters, int argumentCount, IReadOnlyList<string> slots, Domain domain) {
-        // A trailing contributed suffix is not a factory slot. With no contributions
-        // the counts still have to match, so an accidental extra parameter still fails.
+        // A trailing implied-parameter suffix is not a factory slot. With no
+        // constraint compilers the counts still have to match, so an accidental
+        // extra parameter still fails.
         var suffix = parameters.Count - slots.Count;
         var allowSuffix = suffix > 0
-            && RuntimeAnalysisCache.Session(domain).MethodContributions.Count > 0;
+            && RuntimeAnalysisCache.Session(domain).ConstraintCompilers.Count > 0;
         if (argumentCount != slots.Count || suffix < 0 || (suffix > 0 && !allowSuffix))
             throw new InvalidOperationException(
                 $"Create '{typeName}' passes {argumentCount} constructor argument(s); "

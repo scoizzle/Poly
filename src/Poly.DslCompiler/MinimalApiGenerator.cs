@@ -770,17 +770,17 @@ public sealed class MinimalApiGenerator {
     }
 
     /// <summary>
-    /// When a library contributed parameters, the lowered action lists them after
-    /// the DSL parameters. The lambda already has a matching name (the host's
-    /// <c>db</c>) or gains one. The entity call passes the same suffix. No
-    /// contributions leaves this path unused.
+    /// When a compiled constraint injected parameters, the lowered action lists
+    /// them after the DSL parameters. The lambda already has a matching name
+    /// (the host's <c>db</c>) or gains one. The entity call passes the same
+    /// suffix. No constraint compilers leaves this path unused.
     /// </summary>
     private void AppendContributedArguments(
         Entity entity,
         BehaviorAction ia,
         List<Parameter> actionParams,
         List<Node> invokeArgs) {
-        if (RuntimeAnalysisCache.Session(_domain).MethodContributions.Count == 0)
+        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
             return;
         RuntimeAnalysisCache.GetOrLower(_domain);
         if (!RuntimeAnalysisCache.TryGetModuleMethod(_domain, entity.Name, ia.Name, out var method)

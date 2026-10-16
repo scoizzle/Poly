@@ -3,8 +3,8 @@ using Poly.Ast.Nodes;
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// Splices <see cref="MethodContribution"/> stubs onto the lowered module and
-/// threads their parameters through callers. An empty contribution list returns
+/// Injects parameters and statements produced by compiling a constraint, then
+/// threads those parameters through callers. An empty contribution list returns
 /// the same module instance.
 /// </summary>
 internal static class ContributedMethods {
@@ -106,7 +106,7 @@ internal static class ContributedMethods {
                         $"Library '{contribution.LibraryId}' contributed new method {contribution.TargetTypeName}.{contribution.MethodName}, which already exists.");
                 method = contribution.NewMethod;
                 method = AppendDeclared(method, contribution);
-                method = Prepend(method, contribution.PrependStatements);
+                method = Place(method, contribution);
                 list.Add(method);
             }
             else {
@@ -115,7 +115,7 @@ internal static class ContributedMethods {
                         $"Library '{contribution.LibraryId}' contributed to {contribution.TargetTypeName}.{contribution.MethodName}, which is not in the module.");
                 var previous = list[index];
                 method = AppendDeclared(previous, contribution);
-                method = Prepend(method, contribution.PrependStatements);
+                method = Place(method, contribution);
                 list[index] = method;
                 if (previous.Body is not null && method.Body is not null)
                     Remember(replaced, previous.Body, method.Body);
@@ -138,9 +138,14 @@ internal static class ContributedMethods {
         var current = method.Parameters ?? [];
         List<Parameter>? added = null;
         foreach (var parameter in contribution.Parameters) {
-            if (current.Any(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal))
-                || added?.Any(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal)) == true)
+            var existing = current.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal))
+                ?? added?.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+            if (existing is not null) {
+                if (!string.Equals(existing.TypeReference?.ToString(), parameter.Type.ToString(), StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"Implied parameter '{parameter.Name}' on {contribution.TargetTypeName}.{method.Name} is required as two types.");
                 continue;
+            }
             if (current.Any(p => p.DefaultValue is not null) || added?.Any(p => p.DefaultValue is not null) == true)
                 throw new InvalidOperationException(
                     $"Cannot append contributed parameter '{parameter.Name}' to {contribution.TargetTypeName}.{method.Name}: a parameter already has a default.");
@@ -150,6 +155,47 @@ internal static class ContributedMethods {
         if (added is null)
             return method;
         return method with { Parameters = [.. current, .. added] };
+    }
+
+    private static MethodDefinitionNode Place(MethodDefinitionNode method, MethodContribution contribution) =>
+        contribution.BeforeConstruction
+            ? InsertBeforeConstruction(method, contribution.Statements)
+            : Prepend(method, contribution.Statements);
+
+    /// <summary>
+    /// Constraint guards run with the checks already in the method, before the
+    /// value is constructed. A method that does not construct receives them at
+    /// the start, so the constraint fails before the method continues.
+    /// </summary>
+    private static MethodDefinitionNode InsertBeforeConstruction(
+        MethodDefinitionNode method, IReadOnlyList<Node>? statements) {
+        if (statements is null || statements.Count == 0)
+            return method;
+        if (method.Body is not Block block)
+            return Prepend(method, statements);
+        var nodes = block.Nodes.ToList();
+        var index = -1;
+        for (var i = 0; i < nodes.Count; i++) {
+            if (ContainsNew(nodes[i])) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0)
+            nodes.InsertRange(0, statements);
+        else
+            nodes.InsertRange(index, statements);
+        return method with { Body = new Block(nodes, block.Variables) };
+    }
+
+    private static bool ContainsNew(Node node) {
+        if (node is New)
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && ContainsNew(child))
+                return true;
+        }
+        return false;
     }
 
     private static MethodDefinitionNode Prepend(MethodDefinitionNode method, IReadOnlyList<Node>? statements) {

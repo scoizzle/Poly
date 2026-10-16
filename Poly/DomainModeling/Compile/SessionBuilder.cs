@@ -15,8 +15,7 @@ public sealed class SessionBuilder {
     private readonly List<IArtifactContributor> _artifacts = [];
     private readonly List<INodeAnalyzer> _analyzers = [];
     private readonly HashSet<string> _analyzerPassNames = new(StringComparer.Ordinal);
-    private readonly List<MethodContribution> _methodContributions = [];
-    private readonly HashSet<(string LibraryId, string TypeName, string MethodName)> _contributionKeys = [];
+    private readonly List<IConstraintCompiler> _constraintCompilers = [];
     private readonly List<string> _loadedIds = [];
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
 
@@ -74,47 +73,20 @@ public sealed class SessionBuilder {
     }
 
     /// <summary>
-    /// Records a stub or statement prefix a library wants on a produced method,
-    /// plus the parameters that stub requires. Core threads
-    /// <see cref="ContributedParameter.ThreadToCallers"/> parameters through
-    /// callers after lowering. The library does not name those callers.
+    /// Records a compiler for constraints that produce AST and implied
+    /// parameters. Two compilers from the same library and CLR type fail closed.
+    /// Which constraint they own is decided by <see cref="IConstraintCompiler.Applies"/>.
     /// </summary>
-    public SessionBuilder AddMethodContribution(MethodContribution contribution) {
-        ArgumentNullException.ThrowIfNull(contribution);
-        if (string.IsNullOrWhiteSpace(contribution.LibraryId))
-            throw new ArgumentException("Library id must be non-empty.", nameof(contribution));
-        if (string.IsNullOrWhiteSpace(contribution.TargetTypeName))
-            throw new ArgumentException("Target type name must be non-empty.", nameof(contribution));
-        if (string.IsNullOrWhiteSpace(contribution.MethodName))
-            throw new ArgumentException("Method name must be non-empty.", nameof(contribution));
-        if (contribution.NewMethod is null
-            && (contribution.PrependStatements is null || contribution.PrependStatements.Count == 0)
-            && contribution.Parameters.Count == 0)
-            throw new ArgumentException(
-                "A method contribution must add a method, statements, or parameters.",
-                nameof(contribution));
-        if (contribution.NewMethod is not null
-            && !string.Equals(contribution.NewMethod.Name, contribution.MethodName, StringComparison.Ordinal))
-            throw new ArgumentException(
-                $"Contribution method name '{contribution.MethodName}' does not match '{contribution.NewMethod.Name}'.",
-                nameof(contribution));
-
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var parameter in contribution.Parameters) {
-            if (string.IsNullOrWhiteSpace(parameter.Name))
-                throw new ArgumentException("Contributed parameter name must be non-empty.", nameof(contribution));
-            if (parameter.Type is null)
-                throw new ArgumentException(
-                    $"Contributed parameter '{parameter.Name}' requires a type.", nameof(contribution));
-            if (!names.Add(parameter.Name))
-                throw new InvalidOperationException(
-                    $"Library '{contribution.LibraryId}' repeats parameter '{parameter.Name}' on {contribution.TargetTypeName}.{contribution.MethodName}.");
-        }
-
-        if (!_contributionKeys.Add((contribution.LibraryId, contribution.TargetTypeName, contribution.MethodName)))
+    public SessionBuilder AddConstraintCompiler(IConstraintCompiler compiler) {
+        ArgumentNullException.ThrowIfNull(compiler);
+        if (string.IsNullOrWhiteSpace(compiler.LibraryId))
+            throw new ArgumentException("Library id must be non-empty.", nameof(compiler));
+        if (_constraintCompilers.Any(existing =>
+                string.Equals(existing.LibraryId, compiler.LibraryId, StringComparison.Ordinal)
+                && existing.GetType() == compiler.GetType()))
             throw new InvalidOperationException(
-                $"Library '{contribution.LibraryId}' already contributed {contribution.TargetTypeName}.{contribution.MethodName}.");
-        _methodContributions.Add(contribution);
+                $"Library '{compiler.LibraryId}' already registered constraint compiler '{compiler.GetType().Name}'.");
+        _constraintCompilers.Add(compiler);
         return this;
     }
 
@@ -136,6 +108,6 @@ public sealed class SessionBuilder {
             _artifacts,
             _analyzers,
             _primitiveSeeds,
-            _methodContributions.ToArray());
+            _constraintCompilers.ToArray());
     }
 }

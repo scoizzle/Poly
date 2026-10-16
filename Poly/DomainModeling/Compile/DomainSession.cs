@@ -42,11 +42,11 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
 
     /// <summary>
-    /// Stubs and parameters libraries added at <see cref="SessionBuilder.AddMethodContribution"/>.
-    /// Empty when no loaded library contributed a method. Core applies them once,
-    /// inside lowering, so print and the interpreter share the result.
+    /// Compilers libraries added at <see cref="SessionBuilder.AddConstraintCompiler"/>.
+    /// Empty when no loaded library compiles a constraint into the produced method.
+    /// Core applies them once, inside lowering, so print and the interpreter share the result.
     /// </summary>
-    public IReadOnlyList<MethodContribution> MethodContributions { get; }
+    public IReadOnlyList<IConstraintCompiler> ConstraintCompilers { get; }
 
     /// <summary>
     /// Empty before the first Lower or Emit. Each <see cref="Lower"/> or <see cref="Emit"/> replaces
@@ -96,7 +96,7 @@ public sealed class DomainSession {
         IReadOnlyList<IArtifactContributor>? artifacts = null,
         IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null,
         IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)>? primitiveSeeds = null,
-        IReadOnlyList<MethodContribution>? methodContributions = null) {
+        IReadOnlyList<IConstraintCompiler>? constraintCompilers = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -109,7 +109,7 @@ public sealed class DomainSession {
         Artifacts = artifacts ?? [];
         ExtraAnalyzers = extraAnalyzers ?? [];
         PrimitiveSeeds = primitiveSeeds ?? [];
-        MethodContributions = methodContributions ?? [];
+        ConstraintCompilers = constraintCompilers ?? [];
     }
 
     /// <summary>Loads libraries for an existing domain's extension ids. Unknown id throws.</summary>
@@ -181,7 +181,7 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers, PrimitiveSeeds, MethodContributions);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers, PrimitiveSeeds, ConstraintCompilers);
         return Open(domain);
     }
 

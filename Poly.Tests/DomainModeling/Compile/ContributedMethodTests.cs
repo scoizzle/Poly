@@ -5,15 +5,18 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 using Poly.DslCompiler;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
-/// A library contributes ExistsWithCode and the db parameter on Widget.Create.
-/// Core threads db through create-in to Issue. Touch never calls them, so it
-/// keeps its own parameter. The interpreter runs that same body.
+/// Compiling <c>unique</c> produces ExistsWithCode and injects <c>db</c> into
+/// Widget.Create. A second compiler, for range, matches nothing on this domain
+/// and injects nothing. Core threads <c>db</c> through create-in to Issue.
+/// Touch never calls them, so it keeps its own parameter. The interpreter runs
+/// that same body.
 /// </summary>
 public class ContributedMethodTests {
     private const string Poly = """
@@ -43,6 +46,11 @@ public class ContributedMethodTests {
         var create = Method(module, "Widget", "Create");
         await Assert.That(Names(create)).IsEqualTo("code,db");
         await Assert.That(Calls(create, "ExistsWithCode")).IsTrue();
+        var requiredAt = TopIndex(create, n => n is Invoke invoke && invoke.Delegate is Member { MemberName: "IsNullOrEmpty" });
+        var uniqueAt = TopIndex(create, n => n is Invoke invoke && invoke.Delegate is Member { MemberName: "ExistsWithCode" });
+        var newAt = TopIndex(create, n => n is New);
+        await Assert.That(requiredAt).IsLessThan(uniqueAt);
+        await Assert.That(uniqueAt).IsLessThan(newAt);
 
         var createWidgets = Method(module, "Lot", "CreateWidgets");
         await Assert.That(Names(createWidgets)).IsEqualTo("code,db");
@@ -115,6 +123,25 @@ public class ContributedMethodTests {
         IReadOnlyList<TypeDefinitionNode> module, string type, string name) =>
         module.First(t => t.Name == type).Methods!.First(m => m.Name == name);
 
+    private static int TopIndex(MethodDefinitionNode method, Func<Node, bool> match) {
+        var block = (Block)method.Body!;
+        for (var i = 0; i < block.Nodes.Count; i++) {
+            if (Matches(block.Nodes[i], match))
+                return i;
+        }
+        return -1;
+    }
+
+    private static bool Matches(Node node, Func<Node, bool> match) {
+        if (match(node))
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && Matches(child, match))
+                return true;
+        }
+        return false;
+    }
+
     private static string Names(MethodDefinitionNode method) =>
         string.Join(",", (method.Parameters ?? []).Select(p => p.Name));
 
@@ -181,49 +208,83 @@ public class ContributedMethodTests {
         public string Id => "probe-store";
 
         public void Register(SessionBuilder builder) {
+            builder.AddConstraintCompiler(new UniqueCompiler(Id));
+            // Present so a second constraint kind can imply its own parameter.
+            // This domain has no range, so Compile is not called.
+            builder.AddConstraintCompiler(new RangeCompiler(Id));
+        }
+    }
+
+    /// <summary>
+    /// Compiles <c>unique</c> into <c>ExistsWith{Property}</c> and the guard
+    /// Create runs before <c>new</c>. The storage context is an implied parameter.
+    /// </summary>
+    private sealed class UniqueCompiler : IConstraintCompiler {
+        public UniqueCompiler(string libraryId) => LibraryId = libraryId;
+
+        public string LibraryId { get; }
+
+        public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        public CompiledConstraint Compile(ConstraintCompileRequest request) {
             var dbType = new ClrTypeReference(typeof(SeenCodes));
             var text = new ClrTypeReference(typeof(string));
-            var db = new Parameter("db", dbType);
-            var code = new Parameter("code", text);
+            var existsDb = new Parameter("db", dbType);
+            var existsCode = new Parameter("code", text);
+            var methodName = "ExistsWith" + request.Property.Name;
             var exists = new MethodDefinitionNode(
-                "ExistsWithCode",
+                methodName,
                 new ClrTypeReference(typeof(bool)),
-                Parameters: [db, code],
+                Parameters: [existsDb, existsCode],
                 Body: new Block([
-                    new Return(new Invoke(new Member(db, "Contains"), code))
+                    new Return(new Invoke(new Member(existsDb, "Contains"), existsCode))
                 ]),
                 IsStatic: true);
-            builder.AddMethodContribution(new MethodContribution(
-                Id,
-                "Widget",
-                "ExistsWithCode",
-                [new ContributedParameter("db", dbType, ThreadToCallers: true)],
-                NewMethod: exists));
 
+            var code = request.ParameterOn("Create") ?? new Parameter("code", text);
+            var db = new Parameter("db", dbType);
             var failureType = new NamedTypeReference(
-                "DomainResult", TypeArguments: [new NamedTypeReference("Widget")]);
-            Node[] prefix = [
+                "DomainResult", TypeArguments: [new NamedTypeReference(request.Entity.Name)]);
+            Node[] statements = [
                 new IfStatement(
                     new Invoke(
-                        new Member(new NamedTypeReference("Widget"), "ExistsWithCode"),
-                        new Parameter("db", dbType),
-                        new Parameter("code", text)),
+                        new Member(new NamedTypeReference(request.Entity.Name), methodName),
+                        db,
+                        code),
                     new Block([
                         new Return(new Invoke(
                             new Member(failureType, "Failure"),
                             new Constant(
-                                "Unique constraint violated: 'Code' value is already used on another 'Widget'.")))
+                                $"Unique constraint violated: '{request.Property.Name}' value is already used on another '{request.Entity.Name}'.")))
                     ])),
-                new Invoke(
-                    new Member(new Parameter("db", dbType), "Add"),
-                    new Parameter("code", text))
+                new Invoke(new Member(db, "Add"), code)
             ];
-            builder.AddMethodContribution(new MethodContribution(
-                Id,
-                "Widget",
+            return new CompiledConstraint(
                 "Create",
-                [new ContributedParameter("db", dbType, ThreadToCallers: true)],
-                PrependStatements: prefix));
+                statements,
+                [new ImpliedParameter("db", dbType, ThreadToCallers: true)],
+                [exists]);
+        }
+    }
+
+    /// <summary>
+    /// A different constraint implies a different parameter. Nothing in the
+    /// proof domain carries <c>range</c>, so this compiler contributes no AST.
+    /// </summary>
+    private sealed class RangeCompiler : IConstraintCompiler {
+        public RangeCompiler(string libraryId) => LibraryId = libraryId;
+
+        public string LibraryId { get; }
+
+        public bool Applies(Constraint constraint) => constraint is RangeConstraint;
+
+        public CompiledConstraint Compile(ConstraintCompileRequest request) {
+            var scale = new ClrTypeReference(typeof(int));
+            var parameter = new Parameter("scale", scale);
+            return new CompiledConstraint(
+                "Create",
+                [new Invoke(new Member(parameter, "GetHashCode"))],
+                [new ImpliedParameter("scale", scale, ThreadToCallers: true)]);
         }
     }
 }

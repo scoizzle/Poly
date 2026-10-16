@@ -10,11 +10,12 @@ namespace Poly.DomainModeling.Compile;
 public sealed record ContributedParameter(string Name, Node Type, bool ThreadToCallers);
 
 /// <summary>
-/// A stub, a statement prefix, or both, contributed by one library onto one
-/// produced method. <see cref="NewMethod"/> is added when the type does not
-/// already define <see cref="MethodName"/>. <see cref="PrependStatements"/> are
-/// inserted at the start of an existing (or just added) body. Parameters are
-/// appended after the method's own parameters.
+/// Splice built from one <see cref="CompiledConstraint"/>. Not a library door.
+/// <see cref="NewMethod"/> is added when the type does not already define
+/// <see cref="MethodName"/>. <see cref="Statements"/> go at the start of the
+/// body, or immediately before the first construction when
+/// <see cref="BeforeConstruction"/> is set. Parameters are appended after the
+/// method's own parameters.
 /// </summary>
 public sealed record MethodContribution(
     string LibraryId,
@@ -22,4 +23,5 @@ public sealed record MethodContribution(
     string MethodName,
     IReadOnlyList<ContributedParameter> Parameters,
     MethodDefinitionNode? NewMethod = null,
-    IReadOnlyList<Node>? PrependStatements = null);
+    IReadOnlyList<Node>? Statements = null,
+    bool BeforeConstruction = false);

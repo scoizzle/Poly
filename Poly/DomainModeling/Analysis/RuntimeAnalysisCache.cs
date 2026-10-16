@@ -149,7 +149,7 @@ internal static class RuntimeAnalysisCache {
             var module = DomainProgramProjection.ToSyntax(
                 domain, analysis, policyBodies, subscriptionBodies);
             var (module2, entryExit, entryExitSegments) = PopulateEntryExitMethods(domain, analysis, module);
-            var contributed = ContributedMethods.Apply(module2, session.MethodContributions);
+            var contributed = ConstraintCompilation.Apply(module2, domain, session.ConstraintCompilers);
             module2 = contributed.Module;
             if (contributed.ReplacedBodies.Count > 0) {
                 Retarget(entryExit, contributed.ReplacedBodies);

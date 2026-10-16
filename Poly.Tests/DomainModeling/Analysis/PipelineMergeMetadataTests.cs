@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Queries;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -169,6 +170,41 @@ public class PipelineMergeMetadataTests {
         var loan = aggregate.Entities.First(e => e.Name == "Loan");
         await Assert.That(loan.IsRoot).IsFalse();
         await Assert.That(loan.AggregateParentName).IsEqualTo("Patron");
+    }
+
+    [Test]
+    public async Task AnalysisSummary_KeepsEveryMessage_AnchoredToItsElement() {
+        // T1: the summary used to stop at ten errors+warnings and every message lost its
+        // code and element path, so the 11th consequence of a change vanished and the
+        // rest were unlinkable to the element they came from.
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Score: Number range(0, 10) default(10)
+              Bump01: action { assign Score to Score + 1 }
+              Bump02: action { assign Score to Score + 1 }
+              Bump03: action { assign Score to Score + 1 }
+              Bump04: action { assign Score to Score + 1 }
+              Bump05: action { assign Score to Score + 1 }
+              Bump06: action { assign Score to Score + 1 }
+              Bump07: action { assign Score to Score + 1 }
+              Bump08: action { assign Score to Score + 1 }
+              Bump09: action { assign Score to Score + 1 }
+              Bump10: action { assign Score to Score + 1 }
+              Bump11: action { assign Score to Score + 1 }
+              Bump12: action { assign Score to Score + 1 }
+            }
+            """);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        var summary = DomainQueries.GetAnalysisSummary(analysis, domain);
+
+        var warnings = summary.Findings!.Where(f => f.Severity == "Warning").ToList();
+        await Assert.That(warnings.Count).IsGreaterThanOrEqualTo(12);
+        await Assert.That(summary.Messages.Count).IsGreaterThanOrEqualTo(12);
+        await Assert.That(warnings.All(f => f.Code is not null)).IsTrue();
+        await Assert.That(warnings.All(f => f.ElementPath.StartsWith("Test/Item", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(summary.Messages.All(m => m.Contains("Test/Item", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

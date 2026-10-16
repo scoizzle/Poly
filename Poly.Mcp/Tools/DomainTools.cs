@@ -108,7 +108,20 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("hasStorageMapping")] bool HasStorageMapping = false,
     [property: JsonPropertyName("aggregateRootCount")] int AggregateRootCount = 0,
     [property: JsonPropertyName("aggregates")] IReadOnlyList<AggregateFact>? Aggregates = null,
-    [property: JsonPropertyName("subscriptionPlans")] IReadOnlyList<SubscriptionPlanFact>? SubscriptionPlans = null
+    [property: JsonPropertyName("subscriptionPlans")] IReadOnlyList<SubscriptionPlanFact>? SubscriptionPlans = null,
+    [property: JsonPropertyName("diagnosticFacts")] IReadOnlyList<DiagnosticFact>? DiagnosticFacts = null
+);
+
+/// <summary>
+/// One diagnostic with its anchor: severity, code, and the written element path. The
+/// string <c>messages</c> list is the human-readable twin of this; a reader that needs to
+/// link a consequence back to the element it came from reads this.
+/// </summary>
+internal sealed record DiagnosticFact(
+    [property: JsonPropertyName("severity")] string Severity,
+    [property: JsonPropertyName("code")] string? Code,
+    [property: JsonPropertyName("elementPath")] string ElementPath,
+    [property: JsonPropertyName("message")] string Message
 );
 
 internal sealed record ActionFact(
@@ -288,7 +301,7 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
                 Affordances: ["get_domain_overview"]
             );
 
-        var summary = DomainQueries.GetAnalysisSummary(state.LatestAnalysis);
+        var summary = DomainQueries.GetAnalysisSummary(state.LatestAnalysis, state.Domain);
 
         // SA′.3: Count hint diagnostics separately from infoCount (Hint ≠ Information severity).
         var hintCount = state.LatestAnalysis.Diagnostics
@@ -396,7 +409,9 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
             HasStorageMapping: hasStorage,
             AggregateRootCount: aggregates.Count,
             Aggregates: aggregates.Count > 0 ? aggregates : null,
-            SubscriptionPlans: subscriptionPlans.Count > 0 ? subscriptionPlans : null
+            SubscriptionPlans: subscriptionPlans.Count > 0 ? subscriptionPlans : null,
+            DiagnosticFacts: summary.Findings?.Select(f => new DiagnosticFact(
+                f.Severity, f.Code, f.ElementPath, f.Message)).ToList() is { Count: > 0 } facts ? facts : null
         );
 
         var message = summary.ErrorCount > 0

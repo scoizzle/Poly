@@ -25,6 +25,7 @@ These documents exist so that:
 
 ## Current Decisions
 
+- [2026-10-16: An action gains a dependency only from the calls it makes](2026-10-16-action-dependency-passing.md) — The compiler threads the storage context along the lowered call chain. The route passes the context it already has. A container parameter, a container-activated handler, an instance field, and an ambient slot were compared and rejected. No new `uses` id.
 - [2026-10-15: Produced operations call the storage context](2026-10-15-produced-code-dependency-injection.md) — `Create` takes the `{Domain}DbContext` the storage pack already emits and calls a static `ExistsWith{Property}` helper before it constructs. The interpreter runs that method. The container stays in the host file. `DomainInstanceStore` is not a second persistence runtime. No new `uses` id.
 - [2026-09-05: Lowered operation module is domain meaning](2026-09-05-lowered-module-is-domain-meaning.md) — Domain meaning is `session.Lower`. Scratch `DomainEntityInstance` / MCP simulate are harness, not product-surface proof. Agents fix lowering when execute and print diverge. Always-on: `AGENTS.md` Agent target.
 - [2026-09-04: Frozen core pipeline (AST / Node / Analysis)](2026-09-04-frozen-core-pipeline.md) — **Architecture freeze.** Nodes + analysis + session libraries + two products (operation module, surface artifacts). Current hosts (scratch store, C# print, HTTP, Store jobs) are replaceable; do not grow dual-paths. Always-on: `AGENTS.md` Frozen core · `docs/CORE.md` §0.

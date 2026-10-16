@@ -16,6 +16,7 @@ Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](../plans/arc
 | `smoke/smoke.poly` | smoke |
 | `grep-2026-10-17/grep.poly` | grep probe — `VmAnalyzerReportTests` canary + `ParityTests` `PrintedCSharpCompiles` (findings: [`findings/grep-2026-10-17.md`](findings/grep-2026-10-17.md)) |
 | `produced-di/` | spike only ([decision](../decisions/2026-10-15-produced-code-dependency-injection.md)); `shop.poly.txt` is not a `*.poly` sample |
+| `action-deps/` | spike only ([decision](../decisions/2026-10-16-action-dependency-passing.md)); no `*.poly` sample |
 
 Author a new probe: `scripts/new-probe.sh <name>` → `docs/probes/<name>/<name>.poly`.  
 Compile-check: `scripts/run-probe.sh docs/probes/<name>/<name>.poly`.

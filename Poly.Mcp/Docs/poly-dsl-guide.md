@@ -370,6 +370,19 @@ Customer: entity {
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
 
+**Which entity is the root.** A collection nav (`children: many Child`) means the
+declaring entity owns the target. `owned` marks composition explicitly. A plain singular
+nav is a *reference*: `Truck.warehouse: Warehouse` is a truck that names its warehouse, not
+a warehouse that names one truck. Where two entities reference each other (the classic 1:1
+pair, `Doctor.schedule: one Schedule` with `Schedule.doctor: Doctor`) one side resolves as
+the owner and the other becomes its child — which side is a resolution detail, not something
+the DSL distinguishes.
+
+Ownership never closes a loop, and an entity with no owner is a **root**: it gets its own
+key and its own HTTP endpoints. So a domain cannot express "nothing owns me, but I am not a
+root" — that state used to be reachable and silently produced an entity with no key and no
+endpoints.
+
 **Owned targets keep their owner.** `unlink_instances` refuses to drop the last
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
 owned target must keep its owner." Non-owned links stay minimum zero, and removing

@@ -26,7 +26,7 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 |----|-------|--------|
 | #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
 | #193 | docs: propose async/await semantics for the interpreter | `docs/async-await-interpreter` |
-| — (no PR yet) | C8-tc2: typed probe + real `EnsureUnique`; this slice holds the board plan commit | `slice/c8-tc2` |
+| #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
 
 ## Next (in order; first unblocked row wins)
 
@@ -37,7 +37,7 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 | 1 | C6c | **merged** `2baec149` (#157) | [tasks/C6c.md](tasks/C6c.md) |
 | 2 | C7d | **merged** `ef8f267b` (#159) | [tasks/C7d.md](tasks/C7d.md) |
 | 3 | C8-tc1a | **merged** `86148036` (#162). Absorbed tc1b (`this.Create{Nav}`, probes deleted). #164 closed. Void-context linking stays an open decision. | [tasks/C8-tc1a.md](tasks/C8-tc1a.md) |
-| 4 | C8-tc2 | C8-tc1 merged. **In flight** on `slice/c8-tc2` (this board update is its plan commit). **Narrowed:** real `EnsureUnique` only. Do not restore probes. `StoreBind.cs` is `StoreJobObjectType` and `TypedNull`. | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
+| 4 | C8-tc2 | C8-tc1 merged. **In flight** on `slice/c8-tc2` (#194 draft; the board refresh was its plan commit). **Narrowed:** real `EnsureUnique` only. Do not restore probes. `StoreBind.cs` is `StoreJobObjectType` and `TypedNull`. | [tasks/C8-tc2.md](tasks/C8-tc2.md) |
 | 5 | C8-tc3 | C8-tc2 | [tasks/C8-tc3.md](tasks/C8-tc3.md) |
 | 6 | C8-vm | False positives and three real bugs merged (#165 `a0c68e64`, #163 `29411bd7`). Still open: `Emit` does not call `ThrowIfVmHasErrors`. Re-check the rest of the task before starting. After C8-tc2. | [tasks/C8-vm.md](tasks/C8-vm.md) |
 | 7 | C8-lc | C8-tc | [tasks/C8-lc.md](tasks/C8-lc.md) |

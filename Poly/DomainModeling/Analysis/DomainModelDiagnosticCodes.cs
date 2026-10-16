@@ -41,6 +41,12 @@ internal static class DomainModelDiagnosticCodes {
     /// Path-prefix on 'many' cardinality relationship (use collection quantifiers instead).
     public const string RelationshipNavigationCardinality = "DMREL001";
 
+    /// A collection relationship that a subscription or a <c>for</c> loop reads while nothing
+    /// in the domain writes it — no <c>create in</c> for it and it is not the target's
+    /// aggregate parent relationship — so the published dispatch plan cannot fire and the
+    /// loop matches nothing. Only an explicit link (or a host) can populate it.
+    public const string UnwrittenRelationship = "DMREL002";
+
     // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
     // historical messages remain identifiable; analysis no longer reports it.
 

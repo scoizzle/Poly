@@ -201,7 +201,7 @@ public sealed class MinimalApiGenerator {
         return new Block(list, locals);
     }
 
-    private static string Pluralize(string name) => name + "s";
+    private static string Pluralize(string name) => Pluralizer.Pluralize(name);
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
     private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
 

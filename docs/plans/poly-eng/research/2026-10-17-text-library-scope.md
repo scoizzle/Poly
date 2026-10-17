@@ -19,11 +19,13 @@ primitive. Nothing else in the probe needed it.
 
 ## 1. The seam (what "a library" is here)
 
-`IDomainLibrary` (`Poly/DomainModeling/Libraries/*/`): `Id`, `PrimitiveSeeds` (catalog types), and
+`IDomainLibrary` (`Poly/DomainModeling/Compile/IDomainLibrary.cs`; implementations under
+`Poly/DomainModeling/Libraries/*/`): `Id`, `PrimitiveSeeds` (catalog types), and
 `Register(SessionBuilder)` which registers binary expression folds, print binders, meaning, and type
-maps. `uses <id>` opts in; the session loads it. `temporal` is the worked example — it owns the
-`Date`/`Time`/`DateTime`/`Duration` catalog types, the `Now`/`Today` clock nodes, the `12 Days`
-postfix spelling, its print binders, and its lowering, while core keeps only the
+maps. `uses <id>` opts in; the session loads it, and `ExtensionCatalog.ProductLanguage` can make a
+door always-on (that is how `temporal` is default-enabled). `temporal` is the worked example — it
+owns the `Date`/`Time`/`DateTime`/`Duration` catalog types, the `Now`/`Today` clock nodes, the
+`12 Days` postfix spelling, its print binders, and its lowering, while core keeps only the
 `DomainExpression`/fold/binder seam.
 
 Two facts decide this library's shape:
@@ -45,11 +47,17 @@ Two facts decide this library's shape:
      tokenizer/parser treatment of the word, and the analysis type rule.
 
    The frozen-core rules ("shipped ⊆ complete generic Syntax tree", "new meaning: lower, analyze, or
-   replace nodes") are satisfied by both; the difference is whether text is always-on language or an
-   opt-in door. The one *known* second use is a regex/pattern library, which the same hook would
-   serve, so (B) is not a framework for an imaginary second use.
+   replace nodes") are satisfied by both. Availability is not the axis a `uses` door decides —
+   `ExtensionCatalog.ProductLanguage` already makes `temporal` always-on — so the real difference is
+   *contract scope*: whether the language owns the operator and the library owns only its meaning, or
+   the library owns the spelling too. The one *known* second use is a regex/pattern library, which the
+   same hook would serve, so (B) is not a framework for an imaginary second use.
 
-## 2. Required surface (minimum, derived from grep)
+## 2. Required surface (the kernel derives from grep; the rest is adjacent)
+
+`contains` is the one operation the probe proves; `startsWith`/`endsWith` and `length` come from
+ordinary use rather than the probe's corpus, and `length`'s `-o` motivation is *not* in this
+library's scope (see §6).
 
 | Operation | Why (grep) | Result | Notes |
 |---|---|---|---|
@@ -69,7 +77,9 @@ normalization.
 
 ## 3. What each layer must do (the exit criterion per operation)
 
-Per AGENTS.md a construct is only "shipped" when it is **represented, executed, and printed**:
+Per the repo's own rule — a construct is only shipped when what you simulate is what you print
+([`docs/domain-modeling/pipeline-stage-map.md`](../../../domain-modeling/pipeline-stage-map.md), and
+AGENTS.md's "shipped ⊆ lowerable") — each operation must be:
 
 - **author** — the spelling parses in a policy body, an `if` condition, and an assign RHS (the three
   places the probe's text reads live), and it round-trips through `export_dsl`;

@@ -19,22 +19,28 @@ not a domain-modelling concern — which is exactly why the seam has to be named
 
 ## 1. The seam (what "a door" is here)
 
-`uses <id>` loads an `IDomainLibrary`; a door may also contribute **artifacts** — the `http` door
-emits `Program.cs` + `demo.http` + routes (`Poly/DomainModeling/Libraries/Http/`), the `storage`
-door emits a `DbContext`. A cli door would contribute a **process entry artifact**: a program that
-reads input, drives exactly one operation, writes results, and exits with a status.
+`uses <id>` loads an `IDomainLibrary`; a door may also contribute **artifacts**. The precedent is the
+`http` door, and its split is worth naming precisely because it decides D3:
 
-Existing precedents that constrain the design:
+- **in core**, `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs` is *registration only* (an id, the
+  door's seeds, an artifact contributor);
+- **outside core**, the actual host emission lives with the other producers in `src/Poly.DslCompiler`
+  (`MinimalApiGenerator` emits `Program.cs` + routes; `HttpFileGenerator` emits `demo.http`), and the
+  `storage` door's `DbContext` follows the same shape.
 
-- **`Main` in core is a hard no** (AGENTS.md frozen core), so the entry point must be an *emitted
-  host*, never a core `Main`. The `http` door emits `Program.cs`; this door does the same for a
-  console process.
+A cli door would contribute a **process entry artifact** the same way: a program that reads input,
+drives exactly one operation, writes results, and exits with a status.
+
+Three precedents constrain the design:
+
+- **`Main` in core is a hard no** (AGENTS.md frozen core), so the entry point is an *emitted* host,
+  never a core `Main` — exactly how `http` emits `Program.cs`.
 - **Poly.MCP is the harness, not the customer API** — so the CLI is a consumer artifact like the
   Minimal API generator, not a new surface on the harness.
-- The **bound-contract seam is fail-closed and not extensible** today (G11): `{Contract}Adapters` is
-  static with no registration hook and conveys only success/failure, so the *algorithm* cannot be
-  injected through a contract. A CLI host must therefore run the domain's own operations, not call
-  out for them.
+- The **bound-contract seam is fail-closed and not registration-extensible** today (G11):
+  `{Contract}Adapters` is a static class with no hook to inject an implementation, and its result
+  conveys only success/failure. A CLI host must therefore run the domain's own operations rather than
+  call out for them (the stub could be hand-edited, but not wired).
 
 ## 2. Required surface
 
@@ -60,9 +66,9 @@ Existing precedents that constrain the design:
 - **D1 — how the ingest mapping is declared.** Candidates: a `uses cli` annotation pack
   (`table(...)`/`column(...)` are the precedent for projection metadata); an entity-level
   `uses cli` convention (the first `Text` property of the named entity gets each line); or a declared
-  `contract` (rejected for now: G11 shows the adapters are not implementable). Recommend the
-  projection-annotation shape, because storage already projects a domain to columns and this is the
-  same idea to rows.
+  `contract` (weakest today: G11's adapters are a fail-closed stub with no registration hook, so a
+  contract cannot carry the ingest). Recommend the projection-annotation shape, because storage
+  already projects a domain to columns and this is the same idea to rows.
 - **D2 — where the exit status comes from.** Two honest shapes:
   - **(a) scalar action return** (probe G4). The domain declares the status (`-> Number`) and the host
     passes it through. This is the *right* fix, and it is a language slice (the analyzer rejects
@@ -70,11 +76,14 @@ Existing precedents that constrain the design:
   - **(b) a convention**: the host maps a *stage* (e.g. `Matched` / `NoMatch` / `Failed`) to a code.
     Smaller, no language change, but it hard-codes a meaning in the host that the domain cannot state.
     Recommend (a), with (b) as the interim only if the CLI door ships before the scalar slice.
-- **D3 — is this a *library* in core, or a host template outside core?** The `http` door is in core
-  (`Libraries/Http`) and emits a host. Tenet 6 ("seam when multiplicity is known") and "no framework
-  for an imaginary second use": the known multiplicity is *one* local-process host today, so a
-  **host template / sample generator** (the `scripts/` + `demo/` layer) may be the honest home,
-  promoted to a `uses cli` door only when a second consumer appears (e.g. a service wrapper).
+- **D3 — is this a *library* in core, or a host template outside core?** The seam already has known
+  multiplicity — `uses` doors plus their producers (http + storage, both in `ExtensionCatalog.Core`),
+  with http shipping on a single consumer — so tenet 6 ("seam when multiplicity is known") does not
+  argue against a third instance. What it *does* argue against is putting emission in core: the
+  `http` split keeps `Poly/DomainModeling/Libraries/Http/` to registration while the generator lives
+  in `src/Poly.DslCompiler`. So the honest reading is **(a) thin `uses cli` registration in core +
+  the host emitter next to `MinimalApiGenerator`**, not a `scripts/`+`demo/` template — the latter is
+  a sample, not the seam.
 - **D4 — what "one operation" means.** grep runs one query per process. Should the host be
   "one root instance + one action" (the probe's shape: `Query.Scan`), or a small command table
   (`add-source`, `scan`, `report`)? Recommend the single-operation shape: it matches how the tool is

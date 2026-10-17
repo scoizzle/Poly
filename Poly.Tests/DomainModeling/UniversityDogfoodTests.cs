@@ -221,10 +221,11 @@ public class UniversityDogfoodTests {
             new Dictionary<string, object?> { ["score"] = 50L });
         await Assert.That(failGrade.Succeeded).IsTrue();
         await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
-        // No enrollment passes the predicate yet: the filtered `for` is a no-op, so the
-        // action succeeds and completes nothing.
+        // No enrollment passes the predicate yet (Grade 50 < 70): the filtered `for` is a
+        // no-op, so the action succeeds and nothing is completed.
         var noPass = student.InvokeAction("CompletePassing");
         await Assert.That(noPass.Succeeded).IsTrue();
+        await Assert.That(e3.CurrentStage).IsEqualTo("Registered");
         await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
 
         var passGrade = e3.InvokeAction("RecordGrade",

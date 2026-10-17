@@ -586,10 +586,8 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   subscriptions have already fired. There is no transaction around the fan-out.
 - **Zero records is a no-op**, not a failure: an empty collection, or a predicate that
   matched none, means the loop body never runs and the action continues with the effect
-  after the `for`. (Changed 2026-10-17: the earlier rule failed the action with
-  "matched zero targets", which made every no-match case — a filter over a collection
-  that matched nothing, a fan-out over an empty collection — a hard error. The DMREL002
-  analysis warning below still reports a collection no code writes.)
+  after the `for`. The DMREL002 analysis warning below still reports a collection no code
+  writes. (Why the rule changed: `docs/decisions/2026-10-17-for-zero-records-is-a-no-op.md`.)
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
   path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
   but the export dereferences null. One that tests `exists` on a property (not a

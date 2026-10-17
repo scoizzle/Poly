@@ -32,7 +32,7 @@ public class UnwrittenRelationshipAnalysisTests {
     public async Task SecondCollectionToTheSameChild_IsReported() {
         // Two owners declare a collection to Claim; the aggregate picks one (Policyholder,
         // declared first) and the generated child-create endpoint writes that edge. The
-        // other collection has no writer at all, so `for claims …` matched zero targets.
+        // other collection has no writer at all, so `for claims …` matches nothing.
         var (_, analysis) = Analyze("""
             domain Test
             Policyholder: entity {

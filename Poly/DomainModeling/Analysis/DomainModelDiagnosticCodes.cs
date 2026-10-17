@@ -41,6 +41,14 @@ internal static class DomainModelDiagnosticCodes {
     /// Path-prefix on 'many' cardinality relationship (use collection quantifiers instead).
     public const string RelationshipNavigationCardinality = "DMREL001";
 
+    /// A collection relationship that a subscription, a <c>for</c> loop, or an expression
+    /// reader (a <c>count</c>/<c>any</c>/<c>all</c>/<c>none</c>/<c>sum</c> quantifier or a
+    /// <c>Rel exists</c> test) reads while nothing in the domain writes it — no <c>create in</c>
+    /// for it and it is not the target's aggregate parent relationship — so the published
+    /// dispatch plan cannot fire, the loop matches nothing, and the expression reads an empty
+    /// set. Only an explicit link (or a host) can populate it.
+    public const string UnwrittenRelationship = "DMREL002";
+
     // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
     // historical messages remain identifiable; analysis no longer reports it.
 
@@ -81,8 +89,9 @@ internal static class DomainModelDiagnosticCodes {
 
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
-    /// Non-root entity has no aggregate parent — potentially orphaned.
-    public const string AggregateOrphan = "DMAGG001";
+    // DMAGG001 removed — the aggregate now promotes a parentless entity to a root, so
+    // "non-root with no aggregate parent" cannot exist. It was a false-positive machine
+    // (fixed for grandchildren, then for singular-only chains: research/2026-10-10-analysis-review.md D2).
 
     // DMAGG002 removed — AggregateAnalyzer reads IsRoot from EntityStructureMetadata,
     // so the two can never conflict in the pipeline. Add back if a real conflict signal

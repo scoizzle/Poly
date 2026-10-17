@@ -35,6 +35,22 @@ Content-Type: application/json
 
 ### ──────────── Leads ────────────
 
+### List all leads
+GET http://localhost:5201/api/leads
+
+### Get lead by Email
+GET http://localhost:5201/api/leads/example-value
+
+### Create a new lead
+POST http://localhost:5201/api/leads
+Content-Type: application/json
+
+{
+    "Company": "sample",
+    "Email": "example-email",
+    "Name": "sample"
+}
+
 ### Action: Convert
 POST http://localhost:5201/api/leads/example-value/convert
 

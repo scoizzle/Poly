@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
@@ -100,8 +101,21 @@ public sealed record AnalysisSummary(
     int InfoCount,
     IReadOnlyList<string> Messages,
     int EntityCount = 0,
-    int RelationshipCount = 0
+    int RelationshipCount = 0,
+    IReadOnlyList<AnalysisMessage>? Findings = null
 );
+
+/// <summary>
+/// One analysis message with the anchor a reader needs to find the element it is about:
+/// severity, diagnostic code, and the written element path (the same shape as
+/// <see cref="ArtifactId.Path"/>). A reader answering "what breaks if I change X?" needs
+/// the code to categorize and the path to locate — a bare message string has neither.
+/// </summary>
+public sealed record AnalysisMessage(
+    string Severity,
+    string? Code,
+    string ElementPath,
+    string Message);
 
 /// <summary>
 /// Lightweight relationship info for query results.
@@ -253,8 +267,11 @@ public static class DomainQueries {
 
     /// <summary>
     /// Summarizes an <see cref="AnalysisResult"/> into a concise agent-friendly form.
+    /// Pass <paramref name="domain"/> to anchor each message to the element it is about
+    /// (<see cref="AnalysisMessage.ElementPath"/>); the messages themselves are unfiltered
+    /// and in severity order.
     /// </summary>
-    public static AnalysisSummary GetAnalysisSummary(AnalysisResult analysis) {
+    public static AnalysisSummary GetAnalysisSummary(AnalysisResult analysis, Domain? domain = null) {
         ArgumentNullException.ThrowIfNull(analysis);
 
         var errors = analysis.Diagnostics
@@ -273,15 +290,27 @@ public static class DomainQueries {
             .Where(d => d.Severity == DiagnosticSeverity.Hint)
             .ToList();
 
+        // Severity order, and nothing is dropped: an answer that silently stops at the
+        // tenth consequence is worse than a long one. `domain` anchors each message to the
+        // element it is about when the caller has it.
+        var findings = errors.Concat(warnings).Concat(hints)
+            .Select(d => new AnalysisMessage(
+                Severity: d.Severity.ToString(),
+                Code: d.Code,
+                ElementPath: domain is null ? "" : DomainElementPath.Resolve(domain, d.Node),
+                Message: d.Message))
+            .ToList();
+
         return new AnalysisSummary(
             ErrorCount: errors.Count,
             WarningCount: warnings.Count,
             InfoCount: infos.Count,
-            Messages: errors.Concat(warnings)
-                .Take(10)
-                .Concat(hints)
-                .Select(d => $"[{d.Severity}] {d.Message}")
-                .ToList()
+            Messages: findings
+                .Select(f => f.Code is null
+                    ? $"[{f.Severity}] {f.Message}"
+                    : $"[{f.Severity}] {f.Code} {f.ElementPath}: {f.Message}")
+                .ToList(),
+            Findings: findings
         );
     }
 

@@ -188,7 +188,9 @@ public sealed class StorageAnalyzer {
             keyName = meta.KeyPropertyName is not null
                 ? DomainTypeMapping.ToCamelCase(meta.KeyPropertyName) : "id";
             keyClrType = meta.KeyClrType;
-            isRoot = meta.IsRoot;
+            // The aggregate resolves ownership cross-entity; when it exists it is the
+            // truth (a parentless entity is a root there). Structure alone cannot know.
+            isRoot = agg?.IsRoot ?? meta.IsRoot;
             hasStages = meta.HasStages;
             if (hasStages) {
                 stagePropertyName = "CurrentStage";

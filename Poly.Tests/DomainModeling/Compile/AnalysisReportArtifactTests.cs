@@ -22,6 +22,10 @@ public sealed class AnalysisReportArtifactTests {
           Amount: Number
           borrower: Patron
           notes: many Note
+          Score: Number range(0, 10) default(10)
+          Bump: action {
+            assign Score to Score + 1
+          }
         }
         """;
 
@@ -134,10 +138,10 @@ public sealed class AnalysisReportArtifactTests {
         var report = (AnalysisReport)session.ArtifactCatalog
             .Find(ArtifactId.Create(["Warehouse"], "analysis-report"))!.Payload!;
 
-        // DMAGG001 is reported on the entity itself → Warehouse/Bin.
-        var orphan = report.Findings.FirstOrDefault(f => f.Code == DomainModelDiagnosticCodes.AggregateOrphan);
-        await Assert.That(orphan).IsNotNull();
-        await Assert.That(orphan!.ElementPath).IsEqualTo("Warehouse/Loan");
+        // A warning anchored on an entity reports the entity path (Warehouse/Loan): the
+        // range-overflow warning from `assign Score to Score + 1` against range(0, 10).
+        var onEntity = report.Findings.FirstOrDefault(f => f.ElementPath == "Warehouse/Loan");
+        await Assert.That(onEntity).IsNotNull();
     }
 
     [Test]

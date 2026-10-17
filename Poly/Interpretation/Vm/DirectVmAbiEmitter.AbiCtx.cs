@@ -113,6 +113,10 @@ public static partial class DirectVmAbiEmitter {
         public Expression? FunctionTableExpr { get; set; }
         public bool IsCompiledFunctionBody { get; set; }
         public AnalysisResult? Analysis { get; set; }
+        /// <summary>The declared <c>Task</c> / <c>Task&lt;T&gt;</c> return of an <c>IsAsync</c>
+        /// function body being compiled; <see cref="EmitReturn"/> wraps every return in a
+        /// completed task while it is set. Null for lambdas and non-async bodies.</summary>
+        public Type? AsyncReturn { get; set; }
         public IReadOnlyList<ParameterExpression> Locals => _locals;
 
         internal const int SmallArrayThreshold = 16;

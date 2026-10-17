@@ -118,13 +118,21 @@ public static partial class DirectVmAbiEmitter {
                 }
 
                 if (method is AstMethodDefinition astMethod && HasExecutableBody(astMethod.DefinitionNode.Body)) {
+                    var asyncReturn = AsyncReturnType(astMethod);
+                    // C# rejects `await` in a method that is not `async` with a Task return type.
+                    // Reject it here so the failure is a deterministic compile reject, not a
+                    // fall-through to a CLR lookup of the same name.
+                    if (asyncReturn is null && ContainsAwait(astMethod.DefinitionNode.Body!))
+                        throw new InvalidOperationException(
+                            $"VM compile rejected: method '{astMethod.Name}' contains 'await' but is not an async method returning Task or Task<T>.");
                     var table = TryCompileAstCallable(
                         astMethod.DefinitionNode,
                         astMethod.DefinitionNode.Body!,
                         astMethod.DefinitionNode.Parameters ?? [],
                         astMethod.DeclaringTypeDefinition,
                         ctx,
-                        instanceSlot: !astMethod.IsStatic);
+                        instanceSlot: !astMethod.IsStatic,
+                        asyncReturn: asyncReturn);
                     // A body the VM cannot analyze (sibling types, host stubs) stays
                     // on the CLR / InvokeNamed path.
                     if (table is not null)
@@ -503,12 +511,14 @@ public static partial class DirectVmAbiEmitter {
         CompilationMode mode,
         AnalysisResult analysis,
         HashSet<object> capturedBindings,
-        bool instanceSlot = false) {
+        bool instanceSlot = false,
+        Type? asyncReturn = null) {
 
         var fnCtx = new AbiCtx();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
+        fnCtx.AsyncReturn = asyncReturn;
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
         // Instance calls pass the receiver handle at frame slot 0. User
@@ -559,10 +569,13 @@ public static partial class DirectVmAbiEmitter {
         // Leave the activation in the compile-time simulator.
         fnCtx.LeaveActivation();
 
-        // Flush result: return value at _slots[_fp], SP = _fp + 1
-        if (fnCtx.RingDepth > 0) {
-            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
-                fnCtx.RingVar(fnCtx.RingDepth - 1)));
+        // Flush result: return value at _slots[_fp], SP = _fp + 1.
+        // An IsAsync method returns a completed Task / Task<T> instead of the body's value.
+        Expression? resultValue = fnCtx.RingDepth > 0 ? fnCtx.RingVar(fnCtx.RingDepth - 1) : null;
+        if (asyncReturn is not null)
+            resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
+        if (resultValue is not null) {
+            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal), resultValue));
             bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
                 Add(fnCtx.FramePosLocal, Constant(1))));
         }
@@ -571,6 +584,77 @@ public static partial class DirectVmAbiEmitter {
 
         var delegateExpr = Lambda<Action<VmState>>(Block(fnCtx.Locals, bodyExprs), fnCtx.State);
         return delegateExpr.Compile();
+    }
+
+    /// <summary>
+    /// The declared CLR return type of an <c>IsAsync</c> AST method when it is one the VM wraps:
+    /// <see cref="Task"/> or <c>Task&lt;T&gt;</c>. Any other return type is left unwrapped, and a
+    /// method that is not <c>IsAsync</c> is never wrapped.
+    /// </summary>
+    private static Type? AsyncReturnType(AstMethodDefinition method) {
+        if (!method.DefinitionNode.IsAsync)
+            return null;
+        var declared = method.MemberTypeDefinition.GetRuntimeType();
+        if (declared == typeof(Task))
+            return declared;
+        return declared is { IsGenericType: true }
+            && declared.GetGenericTypeDefinition() == typeof(Task<>)
+            ? declared
+            : null;
+    }
+
+    /// <summary>True when <paramref name="node"/> or any descendant is an <see cref="Await"/>.</summary>
+    private static bool ContainsAwait(Node node) {
+        if (node is Await)
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && ContainsAwait(child))
+                return true;
+        return false;
+    }
+
+    private static readonly MethodInfo TaskFromResultInfo =
+        typeof(Task).GetMethod(nameof(Task.FromResult))!;
+    private static readonly PropertyInfo TaskCompletedTaskInfo =
+        typeof(Task).GetProperty(nameof(Task.CompletedTask))!;
+
+    /// <summary>
+    /// The node whose value is a function body's result, when it is a single expression:
+    /// an explicit <c>return v</c>, the last statement of a block, or the body itself when it
+    /// is an expression body. A branching body has no single yielding node.
+    /// </summary>
+    private static Node? YieldingNode(Node body) => body switch {
+        Return { Value: { } value } => value,
+        Block { Nodes.Count: > 0 } block => YieldingNode(block.Nodes[^1]),
+        IfStatement => null,
+        _ => body,
+    };
+
+    private static bool IsTaskLike(Type? type) =>
+        type == typeof(Task)
+        || (type is { IsGenericType: true } && type.GetGenericTypeDefinition() == typeof(Task<>));
+
+    /// <summary>
+    /// Wrap the body's yielded value into the completed task an <c>IsAsync</c> method returns:
+    /// <c>Task.FromResult&lt;T&gt;(v)</c> for <c>Task&lt;T&gt;</c>, or <c>Task.CompletedTask</c>
+    /// for <c>Task</c>. The task is heap-allocated like any other reference the ABI returns.
+    /// <paramref name="source"/> is the yielding node, for the ring's double/float un-bitting and
+    /// for rejecting a body that yields a task where the element <c>T</c> is expected.
+    /// </summary>
+    private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, AbiCtx ctx, Node? source) {
+        if (asyncReturn == typeof(Task))
+            return ConvertClrToRing(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx);
+        var resultType = asyncReturn.GetGenericArguments()[0];
+        if (bodyValue is null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: async method returning '{asyncReturn}' has no body result.");
+        var yieldedClr = source is null ? null : ctx.Analysis?.GetResolvedType(source)?.GetRuntimeType();
+        if (!IsTaskLike(resultType) && IsTaskLike(yieldedClr))
+            throw new InvalidOperationException(
+                $"VM compile rejected: async method returning '{asyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
+        var yielded = ConvertRingToClr(bodyValue, resultType, source, ctx);
+        var task = Call(TaskFromResultInfo.MakeGenericMethod(resultType), yielded);
+        return ConvertClrToRing(task, asyncReturn, ctx);
     }
 
     // Compiled AST constructors and methods, per definition node and compilation
@@ -708,7 +792,8 @@ public static partial class DirectVmAbiEmitter {
         IReadOnlyList<Parameter> parameters,
         ITypeDefinition declaring,
         AbiCtx caller,
-        bool instanceSlot) {
+        bool instanceSlot,
+        Type? asyncReturn = null) {
         var mode = caller.Mode;
         lock (AstCallableGate) {
             if (AstCallables.TryGetValue(key, out var byMode) && byMode.TryGetValue(mode, out var done))
@@ -746,13 +831,18 @@ public static partial class DirectVmAbiEmitter {
                 mode,
                 analysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
-                instanceSlot);
+                instanceSlot,
+                asyncReturn);
         }
         catch (Exception ex) {
             // Drop this slot and everything compiled under it: those bodies may
             // call this slot, which stays empty.
             pending.RemoveRange(start, pending.Count - start);
             if (ex is not (InvalidOperationException or NotSupportedException))
+                throw;
+            // An IsAsync method's body must compile: falling back to a CLR lookup of the same
+            // name would run a different method. Surface the body's compile reject instead.
+            if (asyncReturn is not null)
                 throw;
             // A body that only forwards to a CLR static method (host jobs are built
             // this way) must not fall through to a CLR method of the same name.

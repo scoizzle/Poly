@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-16. Master: `5a11038b` (#204). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
+Updated 2026-10-16. Master: `ecffcc4f` (#193). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -60,8 +60,8 @@ Design: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../decis
 
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
-| A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **in flight** #193 | [tasks/AA1.md](tasks/AA1.md) |
-| A2 | async/await — an `IsAsync` AST method returns a completed `Task` | A1 merged | [tasks/AA1b.md](tasks/AA1b.md) |
+| A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **merged** #193 `ecffcc4f` | [tasks/AA1.md](tasks/AA1.md) |
+| A2 | async/await — an `IsAsync` AST method returns a completed `Task` | **in flight** #206 | [tasks/AA1b.md](tasks/AA1b.md) |
 
 ## Swarm (probe findings; one card per agent)
 

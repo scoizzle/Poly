@@ -9,7 +9,7 @@
 
 **Part 1:** [`2026-10-15-async-await-in-the-interpreter.md`](2026-10-15-async-await-in-the-interpreter.md). Part 2 **revises** part 1's handling of a `Task`-typed `Await` operand (part 1 §"What simulatable means at an await", §"The driver", PR 2). It keeps part 1's law (printed ⊆ simulatable, scope (a)) and its resume spine for `SuspendNode`. It removes the await-driven suspend, `ResumeWith`, and the `await` allow-lists.
 
-`docs/decisions/` records why. `docs/plans/` records execution. This document does not open a plan; the product owner admitted its two slices on 2026-10-16 ([board §Async/await](../plans/poly-eng/board.md), [`tasks/AA1.md`](../plans/poly-eng/tasks/AA1.md) / [`AA1b.md`](../plans/poly-eng/tasks/AA1b.md)). **Slice 1 (blocking `Await`) is implemented**; Slice 2 is [`AA1b`](../plans/poly-eng/tasks/AA1b.md).
+`docs/decisions/` records why. `docs/plans/` records execution. This document does not open a plan; the product owner admitted its two slices on 2026-10-16 ([board §Async/await](../plans/poly-eng/board.md), [`tasks/AA1.md`](../plans/poly-eng/tasks/AA1.md) / [`AA1b.md`](../plans/poly-eng/tasks/AA1b.md)). **Slices 1 and 2 are implemented** — Slice 1 merged as #193, Slice 2 is [`AA1b`](../plans/poly-eng/tasks/AA1b.md).
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).
 
@@ -160,7 +160,8 @@ So "allowing async method definitions in the AST" is not a syntax change — the
 
 - A throwing body: C# captures the exception into the returned, faulted `Task<T>`; the sim throws it synchronously from the call. The caller's blocking `Await` (or the root unwrap) rethrows it, so the same exception reaches the same place once awaited. The difference shows only for fire-and-forget, which a module body does not do. If exact fault-task shape is ever required, the method-return lowering can wrap the body in try/catch and produce `Task.FromException`.
 - The sim allocates a `Task` per async method call. It already allocates exceptions and other CLR objects, so this is the same class of cost.
-- The printer needs `IsAsync: true` and a `Task` / `Task<T>` return type for a body that contains `Await`; C# requires it. A lambda whose body contains `Await` is auto-`async` in the writer (`CSharpWriter.cs:980-996`); a method relies on the flag. Analysis should reject a body that contains `Await` in a method that is not `IsAsync` (or that does not declare a `Task` return type), the way C# does.
+- The printer needs `IsAsync: true` and a `Task` / `Task<T>` return type for a body that contains `Await`; C# requires it. A lambda whose body contains `Await` is auto-`async` in the writer (`CSharpWriter.cs:980-996`); a method relies on the flag. A VM compile reject (`DirectVmAbiEmitter.Invoke.cs`) rejects a body that contains `Await` in a method that is not `IsAsync`, or that does not return `Task` / `Task<T>` — deterministically, not as a fall-through to a CLR lookup — the way C# rejects it. A `Task<T>` body that yields a task where the element `T` is expected (or falls through with no value) is rejected the same way, so no unrelated value is wrapped as `T`.
+- The return type must resolve to the CLR `System.Threading.Tasks.Task` / `Task<T>`. An `IsAsync` method whose return type does not resolve to a CLR task (for example a domain type named `Task`) is not wrapped, and its body is rejected if it contains `Await`. Host generators use a fully-qualified reference for this reason.
 
 **Where async methods come from.** Structurally the AST accepts them today. Nothing in `DomainModeling` sets `IsAsync`, and no lowering pass builds an `Await`. A domain operation becomes async only when a later slice lets lowering mark a body async and emit `Await` (for example, a host job that returns `Task<T>`). That slice depends on this meaning; it does not create it. The host generator's `SeedAsync` stays a host artifact (`MinimalApiGenerator.cs:1080-1088`).
 
@@ -263,7 +264,7 @@ All nine confirmed by the product owner on 2026-10-16.
 4. Pause-at-await is not required; `SuspendNode` keeps the resume spine. **Confirmed.**
 5. The type rule: the `Await` type is the awaiter's `GetResult()` result (`Task<T>` / `ValueTask<T>` / custom → `T`; non-generic → void), and a non-awaitable operand is a shape reject (correcting part 1's `HostCompleted` identity row). **Confirmed.**
 6. `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` stay out of the first slice (Part 1's table). **Confirmed.**
-7. Async AST methods: an `IsAsync` method whose body contains `Await` executes, its sim value is a completed `Task<T>` / `Task`, and the VM honors `IsAsync` at return. A body containing `Await` in a non-`IsAsync` method (or without a `Task` return type) is rejected. **Confirmed** (Slice 2, `AA1b`).
+7. Async AST methods: an `IsAsync` method whose body contains `Await` executes, its sim value is a completed `Task<T>` / `Task`, and the VM honors `IsAsync` at return. A body containing `Await` in a non-`IsAsync` method (or without a `Task` return type) is rejected. **Confirmed** (implemented as Slice 2, `AA1b`).
 8. `Await` is a module-level construct. Part 1's assumption that module bodies contain no `Await` — and the `ModuleBodies_DoNotContainAllowListedAwaits` test that encoded it — is replaced by "a module body's `Await` executes or is a shape reject." **Confirmed.**
 9. We do not adopt the spawned-context / real-`Task` route now. If suspension or parallel awaits is wanted later, the first step is a memory/activation split (shared heap, per-call activation), not `Execute` with a PC. **Confirmed.**
 
@@ -322,6 +323,8 @@ Two small slices. No spine work. No board row is edited; a human admits each bef
 **Does:** `await` of `Task<long>` / `ValueTask<long>` / a custom awaitable returns its value; a faulted awaitable throws the original exception; a non-generic `Task` / `ValueTask` is void; `await` inside `try` and inside a stored lambda executes; a non-awaitable operand rejects with a reason. No suspension, no `ResumeWith`.
 
 ### Slice 2 — an `IsAsync` method returns a completed task
+
+**Status:** implemented on `slice/async-methods`.
 
 **Title:** Execute an AST async method: `IsAsync` methods yield a completed `Task`.
 

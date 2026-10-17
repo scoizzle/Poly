@@ -672,6 +672,15 @@ Pending: stage {
 
 ### Placement (stage vs entity-level)
 
+**A subscription fires only for edges that exist.** The relationship it reads is populated
+by the source entity's `create in Rel`, by the aggregate parent relationship (the generated
+child-create endpoint and the printed `Attach` call), or by an explicit link
+(`link_instances` or a host). A peer navigation bound as a *value* — `create in sessions
+{ member: who }` — does **not** give `Member.bookings` an edge, so a subscription (or a
+`for` loop) reading `Member.bookings` can never fire. Analysis reports **DMREL002** when a
+collection relationship is read by a subscription or a `for` loop while nothing in the
+domain writes it; the loop then also fails loudly with "matched zero targets".
+
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|
 | **Stage-scoped** (`when` inside a stage body) | Only while the subscriber is **in that stage** | Yes — same peer rules |

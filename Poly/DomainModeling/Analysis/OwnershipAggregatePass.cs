@@ -98,10 +98,14 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         if (!incomingRels.TryGetValue(name, out var incoming))
             return new AggregateEntity(name, isRoot: false);
 
-        var createInRelNames = topo?.CreateInRelations
+        // Keyed by creator AND relationship name: two owners may declare the same name
+        // (`Member.bookings` and `Session.bookings`), and only the creator that actually
+        // runs `create in` wrote the edge — matching on the name alone credits whichever
+        // owner is declared first.
+        var createInEdges = topo?.CreateInRelations
             .Where(c => string.Equals(c.CreatedEntity, name, StringComparison.Ordinal))
-            .Select(c => c.RelationshipName)
-            .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>();
+            .Select(c => (c.CreatorEntity, c.RelationshipName))
+            .ToHashSet() ?? [];
 
         string? chosenParentName = null;
         string? chosenRelName = null;
@@ -121,7 +125,7 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
                 string.Equals(r.Source.TypeName, name, StringComparison.Ordinal) &&
                 string.Equals(r.Target.TypeName, parentEntity.Name, StringComparison.Ordinal) &&
                 r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
-            if (createInRelNames.Contains(rel.Name)) {
+            if (createInEdges.Contains((rel.Source.TypeName, rel.Name))) {
                 chosenParentName = parentAgg.Name;
                 chosenRelName = rel.Name;
                 chosenBackRef = backRef;

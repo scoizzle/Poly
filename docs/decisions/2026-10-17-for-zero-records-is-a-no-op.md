@@ -55,7 +55,7 @@ iterations is never an error."*
 - Tests that asserted the failure flip to asserting success **and** that the effect after the loop
   runs; the university dogfood walk (`DropAllRegistered`, `CompletePassing` with nothing to do) is a
   real-domain confirmation.
-- A subscription body still cannot carry a fan-out failure: a `for` inside a `when` emits
-  `return DomainResult…` into a `void` handler (**CS0127**) — pre-existing, recorded in
-  `docs/plans/poly-eng/research/2026-10-17-for-in-subscription-handler-void-return.md`.
+- A subscription body still cannot carry a *failure return*: a `for` **or** a plain `invoke` inside a
+  `when` emits `return DomainResult…` into a `void` handler (**CS0127**) — pre-existing, recorded in
+  `docs/plans/poly-eng/research/2026-10-17-failure-return-in-void-subscription-handler.md`.
   The empty-set rule does not change that shape's status.

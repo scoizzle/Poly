@@ -2619,6 +2619,33 @@ E: entity {{
     }
 
     [Test]
+    public async Task CreateInstance_EnumProperty_NamesValueOrReadsRequired() {
+        // S2/S3: an omitted non-defaulted enum and a supplied non-member returned the
+        // same property-only message, so an author could not tell "I forgot it" from
+        // "I misspelled it" — and the culprit value was never shown.
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Test
+            Tier: enum { Basic, Plus, Elite }
+            Member: entity {
+              Name: Text required
+              Level: Tier
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var omitted = McpTestTools.Runtime.CreateInstance(sessionId, "Member", """{"Name":"Ada"}""");
+        await Assert.That(omitted.Success).IsFalse();
+        await Assert.That(omitted.Message).IsEqualTo("Failed to create instance: 'Level' is required.");
+
+        var wrong = McpTestTools.Runtime.CreateInstance(sessionId, "Member",
+            """{"Name":"Cy","Level":"Gold"}""");
+        await Assert.That(wrong.Success).IsFalse();
+        await Assert.That(wrong.Message).IsEqualTo(
+            "Failed to create instance: 'Gold' is not a valid member of Tier for property 'Level'.");
+    }
+
+    [Test]
     public async Task ApplyDsl_EnumAssign_RuntimeInvoke_SetsEnumValue() {
         // Code-review fix: `assign Status to On` (bare enum member) and `assign Status to "On"`
         // (string literal) crashed the runtime VM (DirectVmAbiEmitter: unsupported node type

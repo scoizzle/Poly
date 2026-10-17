@@ -101,7 +101,7 @@ public class Order
         }
         if (state != OrderState.Pending && state != OrderState.Paid && state != OrderState.Shipped && state != OrderState.Delivered && state != OrderState.Cancelled)
         {
-            return DomainResult<Order>.Failure("'State' is not a valid member of OrderState.");
+            return DomainResult<Order>.Failure(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."));
         }
         if (total < 0L)
         {

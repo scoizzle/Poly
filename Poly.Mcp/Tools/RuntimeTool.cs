@@ -26,6 +26,14 @@ namespace Poly.Mcp.Tools;
 internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
+    /// <summary>Rendered stage for an entity that defines none.</summary>
+    private const string NoStage = "(none)";
+
+    /// <summary>Rendered value for a collection nav (and for an unreachable peer).</summary>
+    private const string LinkedMarker = "#linked";
+
+    private static string RenderStage(string? stage) => stage ?? NoStage;
+
     private static DomainToolResponse Failure_NotFound(string sessionId) =>
         new(Success: false,
             Message: $"Session '{sessionId}' not found.",
@@ -165,14 +173,47 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
             _ => raw
         };
 
-    private static InstanceSnapshotData BuildSnapshot(DomainEntityInstance instance) {
+    /// <summary>
+    /// One property value for an MCP snapshot. Scalars render as their string form.
+    /// A navigation renders as <c>#instanceId</c> — the handle the instance tools
+    /// take — or <c>#linked</c> when the peer is not reachable by id in this session;
+    /// a collection nav is <c>#linked</c> (its ids stay in navigationLinks). No
+    /// runtime type ever reaches the answer.
+    /// </summary>
+    private static string RenderPropertyValue(
+        object? value, IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap) =>
+        value switch {
+            DomainEntityInstance navigation => RenderLinkedInstance(navigation, instanceMap),
+            IEnumerable<DomainEntityInstance> => LinkedMarker,
+            _ => value?.ToString() ?? "(null)"
+        };
+
+    private static string RenderLinkedInstance(
+        DomainEntityInstance target, IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap) {
+        if (instanceMap is not null && FindInstanceId(instanceMap, target) is { } id)
+            return $"#{id}";
+        return LinkedMarker;
+    }
+
+    private static string? FindInstanceId(
+        IReadOnlyDictionary<string, DomainEntityInstance> instanceMap, DomainEntityInstance target) {
+        foreach (var (id, instance) in instanceMap) {
+            if (ReferenceEquals(instance, target))
+                return id;
+        }
+        return null;
+    }
+
+    private static InstanceSnapshotData BuildSnapshot(
+        DomainEntityInstance instance,
+        IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap = null) {
         var props = new List<PropertyValueData>();
         foreach (var (key, value) in instance.Snapshot())
-            props.Add(new PropertyValueData(key, value?.ToString() ?? "(null)"));
+            props.Add(new PropertyValueData(key, RenderPropertyValue(value, instanceMap)));
         return new InstanceSnapshotData(
             InstanceId: "",
             EntityName: instance.Entity.Name,
-            CurrentStage: instance.CurrentStage,
+            CurrentStage: RenderStage(instance.CurrentStage),
             Properties: props,
             CreatedChildCount: instance.CreatedChildren.Count,
             NavigationLinks: []
@@ -189,7 +230,7 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     internal sealed record InstanceSnapshotData(
         [property: JsonPropertyName("instanceId")] string InstanceId,
         [property: JsonPropertyName("entityName")] string EntityName,
-        [property: JsonPropertyName("currentStage")] string? CurrentStage,
+        [property: JsonPropertyName("currentStage")] string CurrentStage,
         [property: JsonPropertyName("properties")] IReadOnlyList<PropertyValueData> Properties,
         [property: JsonPropertyName("createdChildCount")] int CreatedChildCount,
         [property: JsonPropertyName("navigationLinks")] IReadOnlyList<NavigationLinkData> NavigationLinks
@@ -204,7 +245,7 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     internal sealed record InstanceSummaryData(
         [property: JsonPropertyName("instanceId")] string InstanceId,
         [property: JsonPropertyName("entityName")] string EntityName,
-        [property: JsonPropertyName("currentStage")] string? CurrentStage,
+        [property: JsonPropertyName("currentStage")] string CurrentStage,
         [property: JsonPropertyName("propertyCount")] int PropertyCount
     );
 
@@ -311,10 +352,10 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
         if (!registered)
             return Failure_NotFound(sessionId);
 
-        var snapshot = BuildSnapshot(instance) with { InstanceId = instanceId };
+        var snapshot = BuildSnapshot(instance, state.InstanceMap) with { InstanceId = instanceId };
         return new DomainToolResponse(
             Success: true,
-            Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{instance.CurrentStage ?? "(none)"}'.",
+            Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{RenderStage(instance.CurrentStage)}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
             Affordances: ["get_instance", "invoke_action", "evaluate_policy", "link_instances", "list_instances"]);
@@ -580,7 +621,7 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        var snapshot = BuildSnapshot(instance) with { InstanceId = instanceId };
+        var snapshot = BuildSnapshot(instance, state.InstanceMap) with { InstanceId = instanceId };
 
         // Populate navigation links from the instance store (link-3)
         var navs = new List<NavigationLinkData>();
@@ -619,7 +660,7 @@ Use case — reassign a child from one parent to another:
 
         return new DomainToolResponse(
             Success: true,
-            Message: $"Instance '{instanceId}' of '{instance.Entity.Name}', stage: '{instance.CurrentStage ?? "(none)"}'.",
+            Message: $"Instance '{instanceId}' of '{instance.Entity.Name}', stage: '{RenderStage(instance.CurrentStage)}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
             Affordances: ["invoke_action", "list_instances", "create_instance"]);
@@ -644,7 +685,7 @@ Use case — reassign a child from one parent to another:
                 !string.Equals(instance.Entity.Name, entityName, StringComparison.Ordinal))
                 continue;
             summaries.Add(new InstanceSummaryData(id, instance.Entity.Name,
-                instance.CurrentStage, instance.Snapshot().Count));
+                RenderStage(instance.CurrentStage), instance.Snapshot().Count));
         }
 
         return new DomainToolResponse(

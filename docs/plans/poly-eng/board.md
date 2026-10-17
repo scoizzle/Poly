@@ -61,7 +61,7 @@ Design: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../decis
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
 | A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **merged** #193 `ecffcc4f` | [tasks/AA1.md](tasks/AA1.md) |
-| A2 | async/await — an `IsAsync` AST method returns a completed `Task` | **in flight** (PR open) | [tasks/AA1b.md](tasks/AA1b.md) |
+| A2 | async/await — an `IsAsync` AST method returns a completed `Task` | **in flight** #206 | [tasks/AA1b.md](tasks/AA1b.md) |
 
 ## Swarm (probe findings; one card per agent)
 

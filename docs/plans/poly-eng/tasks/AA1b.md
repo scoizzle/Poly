@@ -1,7 +1,7 @@
 # TASK AA1b - An `IsAsync` AST method returns a completed `Task`
 
 Status: in review
-Branch `slice/async-methods`. PR (none yet). Lane async. Review see PR.
+Branch `slice/async-methods`. PR #206. Lane async. Review see PR.
 Plan card: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../../decisions/2026-10-16-async-interpreter-execution.md) Slice 2.
 
 ## Scope

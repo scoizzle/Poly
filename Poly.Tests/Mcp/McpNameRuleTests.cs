@@ -10,7 +10,7 @@ namespace Poly.Tests.Mcp;
 /// </summary>
 public class McpNameRuleTests {
     private const string PropertyTemplate =
-        "domain D\n\nMoney: value {\n  Amount: Number\n}\n\nOther: entity {\n  N: Text required\n}\n\nE: entity {\n  NAME: TYPE\n}\n";
+        "domain D\n\nOther: entity {\n  N: Text required\n}\n\nE: entity {\n  NAME: TYPE\n}\n";
     private const string StageTemplate = "domain D\n\nE: entity {\n  NAME: stage { }\n}\n";
     private const string EntityTemplate = "domain D\n\nNAME: entity {\n  N: Text required\n}\n";
     private const string DomainTemplate = "domain NAME\n\nE: entity {\n  N: Text required\n}\n";
@@ -54,10 +54,11 @@ public class McpNameRuleTests {
         await Assert.That(DslTokenReader.IsPropertyName(name, typeName, primitives.Contains)).IsEqualTo(parsed);
     }
 
-    // Primitive keyword types, a known primitive name (Date), a value type and an entity.
+    // Primitive keyword types, a known primitive name (Date), and a non-primitive entity.
+    // (A stored value-typed property is rejected by analysis, not by the name rule.)
     public static IEnumerable<Func<(string, string)>> PropertyNameCases() =>
         from name in Names.Concat(PrimitiveKeywords)
-        from typeName in new[] { "Text", "Number", "Boolean", "Date", "Money", "Other" }
+        from typeName in new[] { "Text", "Number", "Boolean", "Date", "Other" }
         select (Func<(string, string)>)(() => (name, typeName));
 
     [Test]

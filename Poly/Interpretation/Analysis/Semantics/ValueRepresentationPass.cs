@@ -114,6 +114,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Coalesce coalesce => ClassifyCoalesce(context, coalesce),
             Conditional cond => ClassifyConditional(context, cond),
             NullForgiving nf => PropagateChild(context, nf.Operand),
+            Await aw => ClassifyAwait(context, aw),
             _ => (ValueRepresentationKind.Unknown, null),
         };
     }
@@ -147,6 +148,18 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         if (typeDef is IClrTypeDefinition clrType)
             return (defaultKind, clrType.RuntimeType);
         return (defaultKind, null);
+    }
+
+    /// <summary>An <c>await</c> is represented as its result type: the awaiter's
+    /// <c>GetResult()</c> (<c>T</c> for <c>Task&lt;T&gt;</c>, void for <c>Task</c>).</summary>
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyAwait(
+        AnalysisContext context, Await await) {
+        var typeDef = context.GetResolvedType(await);
+        if (typeDef is IClrTypeDefinition { RuntimeType: var rt } && rt == typeof(void))
+            return (ValueRepresentationKind.Void, null);
+        if (typeDef is not null)
+            return ClassifyTypeDefinition(typeDef);
+        return (ValueRepresentationKind.Unknown, null);
     }
 
     private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyCoalesce(

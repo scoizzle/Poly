@@ -121,7 +121,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             SwitchStatement swt => swt.Cases.Count > 0
                 ? ResolveNodeType(context, swt.Cases[0].Body)
                 : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
-            Await aw => ResolveNodeType(context, aw.Operand),
+            Await aw => ResolveAwaitType(context, aw),
             Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
         };
@@ -140,6 +140,39 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         var nullableType = typeof(Nullable<>).MakeGenericType(runtimeType);
         return context.TypeDefinitions.GetTypeDefinition(nullableType) ?? targetType;
+    }
+
+    /// <summary>The type of an <c>await</c> is the awaited result. <c>Task</c> /
+    /// <c>ValueTask</c> resolve to void and <c>Task&lt;T&gt;</c> / <c>ValueTask&lt;T&gt;</c> to
+    /// <c>T</c> without reflecting over the type; any other structurally awaitable
+    /// type resolves the awaiter's <c>GetResult()</c> through the type provider. A
+    /// non-awaitable operand resolves to null.</summary>
+    private static ITypeDefinition? ResolveAwaitType(AnalysisContext context, Await await) {
+        var operandType = ResolveNodeType(context, await.Operand);
+        var runtime = operandType?.GetRuntimeType();
+        if (runtime is null) {
+            return null;
+        }
+
+        if (runtime == typeof(Task) || runtime == typeof(ValueTask)) {
+            return context.TypeDefinitions.GetTypeDefinition(typeof(void));
+        }
+        if (runtime.IsGenericType) {
+            var definition = runtime.GetGenericTypeDefinition();
+            if (definition == typeof(Task<>) || definition == typeof(ValueTask<>)) {
+                return context.TypeDefinitions.GetTypeDefinition(runtime.GetGenericArguments()[0]);
+            }
+        }
+
+        var getAwaiter = operandType!.Methods
+            .WithName("GetAwaiter")
+            .WithParameterTypes()
+            .FirstOrDefault();
+        var getResult = getAwaiter?.MemberTypeDefinition.Methods
+            .WithName("GetResult")
+            .WithParameterTypes()
+            .FirstOrDefault();
+        return getResult?.MemberTypeDefinition;
     }
 
     private static ITypeDefinition? ResolveForEachLoopType(

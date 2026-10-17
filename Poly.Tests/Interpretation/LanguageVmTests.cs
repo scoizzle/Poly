@@ -19,9 +19,118 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Await_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Await(new Constant(1L))))
-            .Throws<InvalidOperationException>();
+    public async Task Await_CompletedTask_ReturnsResult() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_FaultedTask_ThrowsOriginalException() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Faulted))));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_NonGenericTask_IsVoid() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.VoidCompleted))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Await_NonAwaitable_CompileRejected() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Plain))));
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_InsideTry_Executes() {
+        var host = new AwaitHost();
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(0L)),
+            new TryCatchFinally(new Assignment(x,
+                new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed)))))),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_InsideStoredLambda_Executes() {
+        var host = new AwaitHost();
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(fn, new Lambda([],
+                new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed)))))),
+            new Invoke(fn)
+        ], [fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_ValueTask_ReturnsResult() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskCompleted))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_FaultedValueTask_ThrowsOriginalException() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskFaulted))));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_NonGenericValueTask_IsVoid() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskVoid))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Await_CustomAwaitable_Executes() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Custom))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(77L);
+    }
+
+    private sealed class AwaitHost {
+        public long Plain() => 7L;
+        public Task<long> Completed() => Task.FromResult(42L);
+        public Task<long> Faulted() => Task.FromException<long>(new InvalidOperationException("boom"));
+        public Task VoidCompleted() => Task.CompletedTask;
+        public ValueTask<long> ValueTaskCompleted() => new(42L);
+        public ValueTask<long> ValueTaskFaulted() =>
+            new(Task.FromException<long>(new InvalidOperationException("vt-boom")));
+        public ValueTask ValueTaskVoid() => ValueTask.CompletedTask;
+        public CustomAwaitable Custom() => new();
+    }
+
+    // Not Task/ValueTask: any type with GetAwaiter() → awaiter with GetResult() is awaitable.
+    private sealed class CustomAwaitable {
+        public CustomAwaiter GetAwaiter() => new();
+    }
+
+    private struct CustomAwaiter : System.Runtime.CompilerServices.INotifyCompletion {
+        public bool IsCompleted => true;
+        public void OnCompleted(Action continuation) => continuation();
+        public long GetResult() => 77L;
     }
 
     [Test]

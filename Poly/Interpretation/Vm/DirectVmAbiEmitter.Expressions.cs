@@ -532,6 +532,108 @@ public static partial class DirectVmAbiEmitter {
         return null;
     }
 
+    // Well-known awaitables run through these Ref-bound helpers. Their bodies
+    // statically reference the BCL GetAwaiter/GetResult, so trimming keeps those
+    // members and no provider reflection runs for the common shapes. Any other
+    // structurally awaitable type falls back to EmitStructuralAwait (provider).
+    private static readonly MethodInfo AwaitTaskVoidInfo =
+        Ref.Method((Expression<Action<Task>>)(t => AwaitVoid(t)));
+    private static readonly MethodInfo AwaitValueTaskVoidInfo =
+        Ref.Method((Expression<Action<ValueTask>>)(t => AwaitVoid(t)));
+    private static readonly MethodInfo AwaitTaskResultInfo =
+        Ref.Method((Expression<Func<Task<object?>, object?>>)(t => AwaitResult(t)));
+    private static readonly MethodInfo AwaitValueTaskResultInfo =
+        Ref.Method((Expression<Func<ValueTask<object?>, object?>>)(t => AwaitResult(t)));
+
+    private static void AwaitVoid(Task task) => task.GetAwaiter().GetResult();
+    private static void AwaitVoid(ValueTask task) => task.GetAwaiter().GetResult();
+    private static T AwaitResult<T>(Task<T> task) => task.GetAwaiter().GetResult();
+    private static T AwaitResult<T>(ValueTask<T> task) => task.GetAwaiter().GetResult();
+
+    /// <summary>Await: block on the operand and yield its result —
+    /// <c>operand.GetAwaiter().GetResult()</c>, the same shape the LINQ checker emits.
+    /// <c>Task</c> / <c>Task&lt;T&gt;</c> / <c>ValueTask</c> / <c>ValueTask&lt;T&gt;</c> run through the
+    /// Ref-bound helpers; any other structurally awaitable type resolves
+    /// <c>GetAwaiter</c> / <c>GetResult</c> through the type provider.</summary>
+    private static Expression EmitAwait(Await await, AbiCtx ctx) {
+        var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType();
+        if (operandType is null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: Await operand '{await.Operand}' has no resolved CLR type.");
+
+        int d = ctx.RingDepth;
+        var operandExpr = CompileNode(await.Operand, ctx);
+        int slot = ctx.RingDepth - 1;
+        var fold = FoldResultToSlot(ref slot, d, ctx);
+        // A reference awaitable (Task) or a boxed struct awaitable (ValueTask, custom)
+        // both arrive as a heap handle; deref then convert to the awaitable type.
+        var operandObj = Convert(
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ctx.RingVar(slot), typeof(int))),
+            operandType);
+
+        MethodInfo? helper = null;
+        Type? resultType = null;
+        if (operandType == typeof(Task)) {
+            helper = AwaitTaskVoidInfo;
+        }
+        else if (operandType == typeof(ValueTask)) {
+            helper = AwaitValueTaskVoidInfo;
+        }
+        else if (operandType.IsGenericType && operandType.GetGenericTypeDefinition() == typeof(Task<>)) {
+            resultType = operandType.GetGenericArguments()[0];
+            helper = AwaitTaskResultInfo.GetGenericMethodDefinition().MakeGenericMethod(resultType);
+        }
+        else if (operandType.IsGenericType && operandType.GetGenericTypeDefinition() == typeof(ValueTask<>)) {
+            resultType = operandType.GetGenericArguments()[0];
+            helper = AwaitValueTaskResultInfo.GetGenericMethodDefinition().MakeGenericMethod(resultType);
+        }
+
+        if (helper is null)
+            return EmitStructuralAwait(await, operandObj, operandExpr, fold, slot, ctx);
+
+        var call = Call(helper, operandObj);
+        if (resultType is null) {
+            return Block(operandExpr, fold, call, Assign(ctx.RingVar(slot), Constant(0L)));
+        }
+        return Block(operandExpr, fold,
+            Assign(ctx.RingVar(slot), ConvertClrToRing(call, resultType, ctx)));
+    }
+
+    /// <summary>Await of an awaitable that is not one of the well-known BCL shapes:
+    /// resolve the structural <c>GetAwaiter()</c> / <c>GetResult()</c> through the type
+    /// provider — not <c>typeof(T).GetMethod</c>.</summary>
+    private static Expression EmitStructuralAwait(
+        Await await, Expression operandObj, Expression operandExpr, Expression fold, int slot, AbiCtx ctx) {
+        var operandTypeDef = ctx.Analysis?.GetResolvedType(await.Operand)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand '{await.Operand}' has no resolved type.");
+        var getAwaiter = operandTypeDef.Methods
+            .WithName("GetAwaiter")
+            .WithParameterTypes()
+            .FirstOrDefault() as ClrMethod;
+        if (getAwaiter?.MethodInfo is not { } getAwaiterInfo)
+            throw new InvalidOperationException(
+                $"VM compile rejected: Await operand type '{operandTypeDef.FullName}' has no parameterless GetAwaiter(); it is not awaitable.");
+        var getResult = getAwaiter.MemberTypeDefinition.Methods
+            .WithName("GetResult")
+            .WithParameterTypes()
+            .FirstOrDefault() as ClrMethod;
+        if (getResult?.MethodInfo is not { } getResultInfo)
+            throw new InvalidOperationException(
+                $"VM compile rejected: awaiter '{getAwaiter.MemberTypeDefinition.FullName}' has no parameterless GetResult().");
+
+        var awaiterObj = Call(operandObj, getAwaiterInfo);
+        if (getResultInfo.ReturnType == typeof(void)) {
+            return Block(operandExpr, fold,
+                Call(awaiterObj, getResultInfo),
+                Assign(ctx.RingVar(slot), Constant(0L)));
+        }
+        var resultType = getResult.MemberTypeDefinition.GetRuntimeType();
+        return Block(operandExpr, fold,
+            Assign(ctx.RingVar(slot),
+                ConvertClrToRing(Call(awaiterObj, getResultInfo), resultType, ctx)));
+    }
+
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
     private static Expression EmitTypeAs(TypeAs t, AbiCtx ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)

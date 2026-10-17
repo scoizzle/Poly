@@ -9,7 +9,7 @@
 
 **Part 1:** [`2026-10-15-async-await-in-the-interpreter.md`](2026-10-15-async-await-in-the-interpreter.md). Part 2 **revises** part 1's handling of a `Task`-typed `Await` operand (part 1 §"What simulatable means at an await", §"The driver", PR 2). It keeps part 1's law (printed ⊆ simulatable, scope (a)) and its resume spine for `SuspendNode`. It removes the await-driven suspend, `ResumeWith`, and the `await` allow-lists.
 
-`docs/decisions/` records why. `docs/plans/` records execution. This spike implements nothing. It does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board.
+`docs/decisions/` records why. `docs/plans/` records execution. This document does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). **Slice 1 (blocking `Await`) is implemented on this branch**; everything else below stays evidence until a human admits it.
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).
 
@@ -55,6 +55,8 @@ The result and fault rows match exactly. The incomplete row differs only in mech
 
 This is the "already completed" behavior C# documents, generalized: when nothing else can run, awaiting a task is waiting for it.
 
+The pattern is **structural**: `await x` is valid whenever `x` has an accessible parameterless `GetAwaiter()` whose awaiter has `IsCompleted`, `OnCompleted` (i.e. `INotifyCompletion` / `ICriticalNotifyCompletion`), and a parameterless `GetResult()`. There is no `IAwaitable` interface — the .NET 10 reference assemblies ship only `INotifyCompletion` / `ICriticalNotifyCompletion`. `Task`, `Task<T>`, `ValueTask`, and `ValueTask<T>` are the built-ins; a custom type satisfying the pattern works identically. The design therefore is not `Task`-specific: `await` is `x.GetAwaiter().GetResult()` for any awaitable.
+
 ---
 
 ## Why blocking is faithful in this VM
@@ -91,19 +93,20 @@ So "the engine is async" would require an async state machine or an async tree-w
 
 ```text
 EmitAwait(await, ctx):
-  operand = CompileValue(await.Operand, ctx)          // the Task / Task<T> / awaitable
-  operandType = resolved CLR type of await.Operand    // from analysis
-  if operandType is not awaitable: RejectCompile("Await operand <type> has no GetAwaiter.")
-  getAwaiter = operandType.GetMethod("GetAwaiter")    // bound MethodInfo, not the string overload
-  awaiter    = Call(operand, getAwaiter)
-  getResult  = awaiter.Type.GetMethod("GetResult")    // void for Task, T for Task<T>
-  result     = Call(awaiter, getResult)               // spill to ring; void spills nothing
+  operand = CompileValue(await.Operand, ctx)          // any awaitable: Task, ValueTask, custom
+  t = resolved CLR type of await.Operand
+  if t is Task / ValueTask        -> Ref helper AwaitVoid(t)              // void
+  if t is Task<T> / ValueTask<T>  -> Ref helper AwaitResult<T>(t)         // returns T
+  else -> EmitStructuralAwait:                                            // provider, not typeof().GetMethod
+      getAwaiter = t.Methods.WithName("GetAwaiter").WithParameterTypes().First()
+      getResult  = getAwaiter.MemberTypeDefinition.Methods.WithName("GetResult")…First()
+      result     = Call(Call(operandObj, getAwaiter), getResult)          // void for a non-generic awaiter
 ```
 
 Details:
 
-- **Bind a specific `MethodInfo`.** The `Expression.Call(instance, "GetAwaiter", Type.EmptyTypes)` string overload is ambiguous for `Task<T>` (probe) because `Task<T>` also inherits `Task.GetAwaiter`. `EmitAwait` resolves `GetAwaiter` on the operand's type the same way `Ref` resolves known members. The existing `LinqExpressionGenerator.CompileAwait` uses the string overload; the implementing slice should check whether that path is reachable with a generic task and fix it to bind the method too.
-- **Type rule** (`TypeAndMemberResolutionPass`): `Task<T>` → `T`; `Task` → `void`; another awaitable → its awaiter's result type. An operand with no `GetAwaiter` is a **shape reject**, as C# rejects `await` of a non-awaitable. This corrects part 1's `HostCompleted` row, which treated `Await` of a `T`-returning call as the identity `T`; that is not valid C# and the node should not be produced, so the VM rejects it rather than passing it through.
+- **Two tiers.** `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` execute through the `Ref`-bound helpers `AwaitVoid` / `AwaitResult<T>` (their bodies statically call `GetAwaiter().GetResult()`), so the common shapes run with no provider lookup and the BCL members stay visible to the linker. Any other structurally awaitable type takes `EmitStructuralAwait`, which resolves `GetAwaiter` / `GetResult` from the operand's `ITypeDefinition` (`Methods.WithName(...).WithParameterTypes()`) — the provider path, not `typeof(T).GetMethod`. The CLR provider composes members declared-first, so `Task<T>` would yield its own `GetAwaiter`, not the inherited `Task` one; the `Ref` tier never needs that. There is no `IAwaitable` interface, so this split is the practical shape.
+- **Type rule** (`TypeAndMemberResolutionPass`): the `Await` type is the awaiter's `GetResult()` return type — `T` for `Task<T>` / `ValueTask<T>` / a custom awaiter, `void` for the non-generic forms. `Task` / `ValueTask` shapes resolve without reflecting over the type; custom awaitables resolve through the provider. An operand with no parameterless `GetAwaiter` is a **shape reject**, as C# rejects `await` of a non-awaitable. This corrects part 1's `HostCompleted` row, which treated `Await` of a `T`-returning call as the identity `T`; that is not valid C# and the node should not be produced, so the VM rejects it rather than passing it through.
 - **Value representation** follows the result type (`ValueRepresentationAnalyzer.Classify` gains the `Await` arm instead of falling through to `Unknown`, `ValueRepresentationPass.cs:117`).
 - **Print** is unchanged: `CSharpWriter` already emits `await` on the operand.
 
@@ -169,9 +172,26 @@ So "allowing async method definitions in the AST" is not a syntax change — the
 | High | The sim now **runs** the awaited operation, including real I/O if the task does I/O. Two runs could differ if the operation is not deterministic. | This is the same class as any external call the VM already makes; determinism is injected at the `DomainInstanceHostJobs` seam. A deterministic job returns a completed `Task<T>` (`Task.FromResult`), and blocking returns its value. State the choice: the VM executes external work; it does not model a boundary. |
 | Medium | A never-completing task blocks the VM (and the harness thread) forever. | Same as real C#: the method never completes. Cancellation and timeouts are the host's concern; the VM has no scheduler. MCP can run an invocation on a pooled thread with a timeout if that becomes necessary. |
 | Medium | No pause-at-await for a debugger; the await does not expose a suspended state. | `SuspendNode` keeps that capability. Pause-at-await, if ever wanted, is a spine feature layered on top, not the language meaning. |
-| Medium | `GetAwaiter` binding is done with the string overload and is ambiguous for `Task<T>`. | Bind the resolved `MethodInfo`; check `LinqExpressionGenerator.CompileAwait` for the same bug. |
+| Medium | A dynamic awaitable's `GetAwaiter`/`GetResult` is bound wrongly. | Resolve via the type provider (declared-first composition), not `Ref` (which cannot bind a dynamic type). The LINQ checker's string overload is the remaining latent case. |
 | Low | `.Result` / `.Wait()` sneaks in and wraps faults in `AggregateException`. | Name `GetAwaiter().GetResult()` in the emitter and test that a faulted task throws the original exception type. |
-| Low | `ValueTask`, `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` arrive later. | Type-rule rows / new nodes, unchanged from part 1's out-of-scope table. Blocking does not block these; it just does not add them. |
+| Low | `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` arrive later. | Type-rule rows / new nodes, unchanged from part 1's out-of-scope table. Blocking does not block these; it just does not add them. |
+| Medium | Under Native AOT / trimming, the awaited type's `GetAwaiter`/`GetResult` may be trimmed, and `Expression.Compile` runs interpreted. | Same class as the rest of the reflection-backed VM; the design avoids `MakeGenericMethod`. Root the awaiter members (annotations or a descriptor) if AOT is a target. The repo declares no AOT/trim posture today (§"AOT and trimming"). |
+
+---
+
+## AOT and trimming
+
+The await arm inherits the VM's AOT posture; it does not set a new one. Two mechanics matter, and neither is await-specific:
+
+1. **`Expression.Compile()`.** The whole emitter (root and function bodies) builds one `Expression` tree and calls `Compile()`. Under Native AOT the IL-emitting lambda compiler is unavailable, so `Compile()` runs through the expression interpreter (governed by the `System.Linq.Expressions.CanCompileToIL` feature switch). The interpreter executes `Expression.Call(MethodInfo)`, so `GetAwaiter()` / `GetResult()` run — interpreted, not JITed. This is true for every node.
+2. **Reflection / trimming.** `GetAwaiter` / `GetResult` are resolved through the type provider, which reflects over the awaited type (`Task<T>`, `ValueTask<T>`, or a custom type). Under trimming those members must be rooted, exactly as the provider already needs the members of every `Invoke` / `Member` / `New` the module touches. `Poly` declares no `IsAotCompatible` / `IsTrimmable` and carries no `DynamicallyAccessedMembers` / `DynamicDependency` annotations today, so this is undeclared surface — build-time trim warnings are not currently surfaced.
+
+What the design does that is AOT-relevant:
+
+- **Known shapes keep their BCL members alive.** `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` bind to `Ref` helpers whose bodies call `GetAwaiter().GetResult()` directly, so the linker sees those members. `Task<T>` / `ValueTask<T>` close the generic helper with `MakeGenericMethod(resultType)` — a bounded, analyzable instantiation (not a name lookup); ILC must have that instantiation available.
+- **Unknown shapes go through the provider.** Custom awaitables resolve `GetAwaiter` / `GetResult` from `ITypeDefinition`, the same reflection surface as every `Invoke` / `Member` / `New`. The LINQ checker's `Expression.Call(operand, "GetAwaiter", …)` string overload is the least trim-analyzable path and a candidate to delete.
+
+If Poly targets AOT or trimming, the work is VM-wide, not await-specific: annotate the provider entry points (`DynamicallyAccessedMembers`) and/or ship a descriptor rooting the BCL awaiter members, and choose the `CanCompileToIL` posture. A likely first step is marking `Poly` `IsAotCompatible` so consumers' trim warnings appear.
 
 ---
 
@@ -235,8 +255,8 @@ Recommendation: do not adopt the spawned-context / real-`Task` route now. Part 2
 2. Confirm: the VM may run the awaited operation, including real I/O, with determinism supplied by the host-job seam rather than by a driver boundary.
 3. Confirm: the VM runs without a captured `SynchronizationContext` (the deadlock guard).
 4. Confirm: pause-at-await is not required; `SuspendNode` keeps the resume spine.
-5. Confirm the type rule (`Task<T>` → `T`, `Task` → void, other awaitables via their awaiter) and that a non-awaitable operand is a shape reject (correcting part 1's `HostCompleted` identity row).
-6. `ValueTask`, `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` stay out of the first slice (Part 1's table).
+5. Confirm the type rule: the `Await` type is the awaiter's `GetResult()` result (`Task<T>` / `ValueTask<T>` / custom → `T`; non-generic → void), and a non-awaitable operand is a shape reject (correcting part 1's `HostCompleted` identity row).
+6. `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` stay out of the first slice (Part 1's table).
 7. Confirm async AST methods: an `IsAsync` method whose body contains `Await` executes, its sim value is a completed `Task<T>` / `Task`, and the VM honors `IsAsync` at return. A body containing `Await` in a non-`IsAsync` method (or without a `Task` return type) is rejected.
 8. Confirm `Await` is a module-level construct. Part 1's assumption that module bodies contain no `Await` — and the `ModuleBodies_DoNotContainAllowListedAwaits` test that encoded it — is replaced by "a module body's `Await` executes or is a shape reject."
 9. Confirm we do not adopt the spawned-context / real-`Task` route now. If suspension or parallel awaits is wanted later, the first step is a memory/activation split (shared heap, per-call activation), not `Execute` with a PC.
@@ -263,7 +283,7 @@ Recommendation: do not adopt the spawned-context / real-`Task` route now. Part 2
 4. This supersedes part 1's `DriverBoundary`, `ResumeWith`, `VmState.ResumeValue`, and the `await` allow-lists. The resume spine remains for `SuspendNode`.
 5. No scheduler. One statement runs to completion, then the next.
 6. The sim executes the awaited operation; determinism is injected by the host-job seam, not by a driver boundary. The VM must run without a `SynchronizationContext`.
-7. `Await` of a non-awaitable operand is a shape reject; the type rule gives `Task<T>` → `T`, `Task` → void.
+7. `Await` accepts any awaitable — the structural pattern, not a `Task`-specific shape. `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` run through `Ref`-bound helpers; any other awaitable resolves `GetAwaiter` / `GetResult` through the type provider. The result type is the awaiter's `GetResult()` return, and a non-awaitable operand is a shape reject.
 8. No `docs/CORE.md` edit in this document; the implementing slice updates §3.3 and the stale gap line.
 9. The AST may define async methods. `MethodDefinitionNode.IsAsync` with a body containing `Await` is valid; the VM compiles and runs it like any other body. An `IsAsync` method whose body yields `T` produces a **completed** `Task<T>` at its return (and `Task.CompletedTask` for `async Task`), so callers await it uniformly. A non-`async` method returning a `Task<T>` is left alone.
 10. `IsAsync` is a VM semantic fact at method-return lowering, not print-only. This revises Part 1's key decision 7. A body containing `Await` in a method that is not `IsAsync`, or that does not declare a `Task` return type, is rejected as C# rejects it.
@@ -278,6 +298,8 @@ Two small slices. No spine work. No board row is edited; a human admits each bef
 
 ### Slice 1 — execute `Await` by blocking
 
+**Status:** implemented on this branch.
+
 **Title:** Execute `Await` by blocking on the operand.
 
 **Files:**
@@ -286,12 +308,12 @@ Two small slices. No spine work. No board row is edited; a human admits each bef
 - `Poly/Interpretation/Analysis/Semantics/ValueRepresentationPass.cs` (`Await` arm)
 - `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` (both `Await` arms → `EmitAwait`)
 - `Poly/Interpretation/Vm/DirectVmAbiEmitter.Expressions.cs` (or a new partial) for `EmitAwait`
-- `Poly/Interpretation/LinqExpressions/LinqExpressionGenerator.ControlFlow.cs` (confirm/bind `GetAwaiter`)
+- `Poly/Interpretation/LinqExpressions/LinqExpressionGenerator.ControlFlow.cs` — unchanged; its string-overload `GetAwaiter` is a latent bug left for a later cleanup
 - `Poly.Tests/Interpretation/LanguageVmTests.cs` (`Await_CompileRejected` retargets to the shape rejects)
 - `Poly.Tests/Interpretation/LanguageSurfaceTests.cs` if the inventory comment changes
 - `docs/CORE.md` §3.3 `Await` note; `docs/decisions/vm-gap-analysis.md:82`
 
-**Does:** `await` of a `Task<long>` returns its value; `await` of a faulted task throws the original exception; `await` of `Task` is void; `await` inside `try` and inside a stored lambda executes; a non-awaitable operand rejects with a reason. No suspension, no `ResumeWith`.
+**Does:** `await` of `Task<long>` / `ValueTask<long>` / a custom awaitable returns its value; a faulted awaitable throws the original exception; a non-generic `Task` / `ValueTask` is void; `await` inside `try` and inside a stored lambda executes; a non-awaitable operand rejects with a reason. No suspension, no `ResumeWith`.
 
 ### Slice 2 — an `IsAsync` method returns a completed task
 
@@ -305,4 +327,4 @@ Two small slices. No spine work. No board row is edited; a human admits each bef
 
 **Does:** `IsAsync` method bodies containing `Await` execute and produce a completed `Task<T>` / `Task`; callers await them uniformly.
 
-**Defers:** a lowering pass that marks a domain operation `IsAsync` and emits `Await` (a later slice; it depends on this meaning). `ValueTask`, `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken`. Pause-at-await, if ever wanted, is a separate `SuspendNode`-spine feature.
+**Defers:** a lowering pass that marks a domain operation `IsAsync` and emits `Await` (a later slice; it depends on this meaning). `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken`. Pause-at-await, if ever wanted, is a separate `SuspendNode`-spine feature.

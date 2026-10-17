@@ -83,7 +83,7 @@ public class LanguageSurfaceTests {
         [typeof(SwitchStatement)] = Surface.Executable,
 
         [typeof(ParameterReference)] = Surface.CompileReject,
-        [typeof(Await)] = Surface.CompileReject,
+        [typeof(Await)] = Surface.Executable,
         [typeof(NamedTypeReference)] = Surface.CompileReject,
         [typeof(TypeReference)] = Surface.CompileReject,
         [typeof(ClrTypeReference)] = Surface.CompileReject,
@@ -127,7 +127,6 @@ public class LanguageSurfaceTests {
     public async Task CompileRejectKinds_FailLoud() {
         ITypeDefinition stringType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(string));
         Node[] samples = [
-            new Await(new Constant(1L)),
             new ParameterReference(),
             new NamedTypeReference("DateTime"),
             TypeReference.To<string>(),

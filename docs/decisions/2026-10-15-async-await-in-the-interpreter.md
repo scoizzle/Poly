@@ -7,6 +7,8 @@
 
 **Home:** `docs/decisions/2026-10-15-async-await-in-the-interpreter.md`
 
+**Companion (part 2):** [`2026-10-16-async-interpreter-execution.md`](2026-10-16-async-interpreter-execution.md) — whether the interpreter's execution itself should be async. It concludes the engine stays synchronous, and **revises this document's `Task` handling**: `Await` executes by blocking on the operand (`GetAwaiter().GetResult()`), which supersedes the `DriverBoundary` / `ResumeWith` design and the `await` allow-lists here. The resume spine this document defines remains for `SuspendNode`.
+
 `docs/decisions/` records why. `docs/plans/` records execution. This spike chooses a seam and implements nothing. It does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).

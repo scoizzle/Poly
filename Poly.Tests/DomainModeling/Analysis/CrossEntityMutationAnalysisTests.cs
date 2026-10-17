@@ -19,9 +19,6 @@ public class CrossEntityMutationAnalysisTests {
     // Invoice reads Customer; it may change Customer only by invoking Customer.Bump.
     private const string Dsl = """
         domain Billing
-        Address: value {
-          City: Text
-        }
         Customer: entity {
           Balance: Number
           Active: stage {
@@ -37,7 +34,7 @@ public class CrossEntityMutationAnalysisTests {
         }
         Invoice: entity {
           Note: Text
-          Shipping: Address
+          Shipping: Text
           customer: Customer
           lines: many Line
           Open: stage {

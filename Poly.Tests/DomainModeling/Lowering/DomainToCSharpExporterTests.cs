@@ -1162,32 +1162,6 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_UnrequiredValueProperty_CompilesNullableAndDefaultConstructs() {
-        const string dsl = """
-            domain Disputes
-            Money: value {
-              Amount: Number
-              Currency: Text
-            }
-            Dispute: entity {
-              Title: Text required
-              Disputed: Money
-            }
-            CaseFile: entity {
-              disputes: many Dispute
-              File: action { create in disputes { Title: "claim" } }
-            }
-            """;
-        var (domain, analysis) = ParseAndAnalyze(dsl);
-        await AssertExportCompiles(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(
-            new DomainToCSharpExporter().Export(domain, analysis));
-        await Assert.That(csharp).Contains("Money?");
-        await Assert.That(csharp).Contains("new Money()");
-        await Assert.That(csharp).Contains("??");
-    }
-
-    [Test]
     public async Task Export_AssignDatePropToDateTimeProp_EmitsToDateTimeAndCompiles() {
         const string dsl = """
             domain DateWiden

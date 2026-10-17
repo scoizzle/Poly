@@ -286,7 +286,7 @@ public sealed class DbContextGenerator {
 
     // ── Helpers ────────────────────────────────────────────────
 
-    private static string Pluralize(string name) => name + "s";
+    private static string Pluralize(string name) => Pluralizer.Pluralize(name);
 
     private static string ShadowKeyName(Entity entity, StorageEntity store) {
         var taken = entity.Properties.Any(p => p.Name == "Id")

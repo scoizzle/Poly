@@ -214,10 +214,9 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 
 ### Value types
 
-Named records without identity or lifecycle. Declare before entities that use them.
-A property typed as the value type is a nested document, not a relationship.
-Policies and path-prefix expressions cannot read its fields (`Disputed Amount`).
-The diagnostic names the value type and does not call that name a relationship.
+Named records without identity or lifecycle. A value type is a **contract payload or
+action parameter** — it has no storage representation and cannot be a stored entity
+property. Analysis fails closed on a property typed as one:
 
 ```poly
 Money: value {
@@ -226,9 +225,15 @@ Money: value {
 }
 
 Order: entity {
-  Price: Money
+  Total: Money   // error: a value type has no storage representation
 }
 ```
+
+For structured state on an entity, declare a **nested entity** (an `owned`/`many`
+relationship) instead. To move a value shape into behavior, declare the type on a
+contract and take it as a bound **action parameter** (see Contracts below). Policies
+and path-prefix expressions cannot read a value type's fields (`bill Amount`), and
+the diagnostic names the value type rather than calling that name a relationship.
 
 ### Contracts (used sub-domains)
 
@@ -369,6 +374,19 @@ Customer: entity {
 
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
+
+**Which entity is the root.** A collection nav (`children: many Child`) means the
+declaring entity owns the target. `owned` marks composition explicitly. A plain singular
+nav is a *reference*: `Truck.warehouse: Warehouse` is a truck that names its warehouse, not
+a warehouse that names one truck. Where two entities reference each other (the classic 1:1
+pair, `Doctor.schedule: one Schedule` with `Schedule.doctor: Doctor`) one side resolves as
+the owner and the other becomes its child — which side is a resolution detail, not something
+the DSL distinguishes.
+
+Ownership never closes a loop, and an entity with no owner is a **root**: it gets its own
+key and its own HTTP endpoints. So a domain cannot express "nothing owns me, but I am not a
+root" — that state used to be reachable and silently produced an entity with no key and no
+endpoints.
 
 **Owned targets keep their owner.** `unlink_instances` refuses to drop the last
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
@@ -658,6 +676,15 @@ Pending: stage {
 ```
 
 ### Placement (stage vs entity-level)
+
+**A subscription fires only for edges that exist.** The relationship it reads is populated
+by the source entity's `create in Rel`, by the aggregate parent relationship (the generated
+child-create endpoint and the printed `Attach` call), or by an explicit link
+(`link_instances` or a host). A peer navigation bound as a *value* — `create in sessions
+{ member: who }` — does **not** give `Member.bookings` an edge, so a subscription (or a
+`for` loop) reading `Member.bookings` can never fire. Analysis reports **DMREL002** when a
+collection relationship is read by a subscription or a `for` loop while nothing in the
+domain writes it; the loop then also fails loudly with "matched zero targets".
 
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|

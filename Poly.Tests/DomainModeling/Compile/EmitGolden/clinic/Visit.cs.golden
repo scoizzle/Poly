@@ -70,7 +70,7 @@ public class Visit
         }
         if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
         {
-            return DomainResult<Visit>.Failure("'State' is not a valid member of VisitState.");
+            return DomainResult<Visit>.Failure(string.Concat("'", state, "' is not a valid member of VisitState for property 'State'."));
         }
         var created = new Visit(reason, patient, primaryDoctor, state);
         if (patient != null)

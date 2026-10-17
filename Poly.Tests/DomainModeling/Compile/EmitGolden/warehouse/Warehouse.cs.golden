@@ -127,7 +127,7 @@ public class Warehouse
         }
         if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
         {
-            return DomainResult<Warehouse>.Failure("'Status' is not a valid member of TruckStatus.");
+            return DomainResult<Warehouse>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
         {

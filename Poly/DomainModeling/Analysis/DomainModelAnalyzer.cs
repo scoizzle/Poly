@@ -99,6 +99,7 @@ public static class DomainModelAnalysisBuilderExtensions {
             builder.AddAnalyzer(new OwnershipAggregatePass());
             builder.AddAnalyzer(new RuleCoverageAnalyzer());
             builder.AddAnalyzer(new CrossReferencePass());
+            builder.AddAnalyzer(new UnwrittenRelationshipPass());
             builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
             return builder;
         }

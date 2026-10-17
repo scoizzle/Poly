@@ -349,7 +349,7 @@ public sealed partial class DomainToCSharpExporter {
 
                 // Create{Nav} is the typed create-in. A relationship with no create-in
                 // on this entity does not get a factory (Order.CreateCustomer).
-                if (CreatesIn(entity, rel.Name))
+                if (EffectHelpers.CreatesIn(entity, rel.Name))
                     AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
                 AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
             }
@@ -358,7 +358,7 @@ public sealed partial class DomainToCSharpExporter {
                 // Navs are optional references (set at link/create time, may be null
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
-                if (CreatesIn(entity, rel.Name))
+                if (EffectHelpers.CreatesIn(entity, rel.Name))
                     AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
@@ -945,30 +945,4 @@ public sealed partial class DomainToCSharpExporter {
                 new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
             ]),
             AccessModifier: AccessModifier.Public);
-
-    /// <summary>
-    /// True when an action, entry, exit, or subscription on <paramref name="entity"/>
-    /// creates into <paramref name="relationshipName"/>. Nested <c>if</c> effects count.
-    /// </summary>
-    private static bool CreatesIn(Entity entity, string relationshipName) {
-        static bool Match(IEnumerable<Effect> effects, string name) =>
-            EffectHelpers.FlattenEffects(effects).Any(e =>
-                e is CreateEntityInRelationshipEffect create
-                && string.Equals(create.RelationshipName, name, StringComparison.Ordinal));
-
-        if (entity.Actions.Any(a => Match(a.Effects, relationshipName)))
-            return true;
-        if (entity.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
-            return true;
-        foreach (var stage in entity.Stages) {
-            if (Match(stage.OnEntryEffects, relationshipName)
-                || Match(stage.OnExitEffects, relationshipName))
-                return true;
-            if (stage.Actions.Any(a => Match(a.Effects, relationshipName)))
-                return true;
-            if (stage.Subscriptions.Any(s => Match(s.Effects, relationshipName)))
-                return true;
-        }
-        return false;
-    }
 }

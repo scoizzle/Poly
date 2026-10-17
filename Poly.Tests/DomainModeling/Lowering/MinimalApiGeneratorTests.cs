@@ -119,6 +119,37 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task List_Route_EnglishPlural() {
+        // S19: the route segment pluralizes with English rules, not name + "s".
+        var d = ParseDomain("""
+            domain Col
+            Address: entity {
+              Line1: Text required
+              City: Text required
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("\"/api/addresses\"");
+        await Assert.That(rendered.Contains("addresss")).IsFalse();
+        await Assert.That(rendered).Contains("db.Addresses");
+    }
+
+    [Test]
+    [Arguments("Address", "addresses")]
+    [Arguments("Box", "boxes")]
+    [Arguments("Blitz", "blitzes")]
+    [Arguments("Batch", "batches")]
+    [Arguments("Brush", "brushes")]
+    [Arguments("Company", "companies")]
+    [Arguments("Key", "keys")]
+    [Arguments("Person", "people")]
+    [Arguments("Orders", "orders")]
+    public async Task List_Route_PluralizesByShape(string entity, string segment) {
+        var d = ParseDomain($"domain T\n{entity}: entity {{ Name: Text }}");
+        await Assert.That(Render(d)).Contains($"\"/api/{segment}\"");
+    }
+
+    [Test]
     public async Task Post_HasCreateCall() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains(".Create(")).IsTrue();

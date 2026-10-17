@@ -39,6 +39,21 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     return Results.Created(string.Concat("/api/products/", productResult.Value.Sku.ToString()), productResult.Value);
 });
 
+app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
+
+app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Lead lead ? Results.Ok(lead) : Results.NotFound()));
+
+app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
+    var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, null);
+    if (!leadResult.IsSuccess)
+    {
+        return Results.Conflict(leadResult.ErrorMessage);
+    }
+    db.Leads.Add(leadResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Created(string.Concat("/api/leads/", leadResult.Value.Email.ToString()), leadResult.Value);
+});
+
 app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
 
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
@@ -121,7 +136,7 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
         return Results.NotFound();
     }
     await db.Entry(parent).Collection(e => e.Opportunities).LoadAsync();
-    var child = await db.Opportunitys.FindAsync(opportunityId);
+    var child = await db.Opportunities.FindAsync(opportunityId);
     if (child == null || !parent.Opportunities.Any(e => e == child))
     {
         return Results.NotFound();
@@ -129,8 +144,8 @@ app.MapGet("/api/accounts/{id}/opportunities/{opportunityId}", async (int id, in
     return Results.Ok(child);
 });
 
-app.MapGet("/api/opportunitys/{id}/activities", async (int id, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/activities", async (int id, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
@@ -139,14 +154,14 @@ app.MapGet("/api/opportunitys/{id}/activities", async (int id, CrmDbContext db) 
     return Results.Ok(parent.Activities);
 });
 
-app.MapGet("/api/opportunitys/{id}/activities/{activityId}", async (int id, int activityId, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/activities/{activityId}", async (int id, int activityId, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
     }
     await db.Entry(parent).Collection(e => e.Activities).LoadAsync();
-    var child = await db.Activitys.FindAsync(activityId);
+    var child = await db.Activities.FindAsync(activityId);
     if (child == null || !parent.Activities.Any(e => e == child))
     {
         return Results.NotFound();
@@ -154,8 +169,8 @@ app.MapGet("/api/opportunitys/{id}/activities/{activityId}", async (int id, int 
     return Results.Ok(child);
 });
 
-app.MapGet("/api/opportunitys/{id}/quotes", async (int id, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/quotes", async (int id, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
@@ -164,8 +179,8 @@ app.MapGet("/api/opportunitys/{id}/quotes", async (int id, CrmDbContext db) => {
     return Results.Ok(parent.Quotes);
 });
 
-app.MapGet("/api/opportunitys/{id}/quotes/{quoteId}", async (int id, int quoteId, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/quotes/{quoteId}", async (int id, int quoteId, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
@@ -229,8 +244,8 @@ app.MapGet("/api/accounts/{id}/tickets/{ticketId}", async (int id, int ticketId,
     return Results.Ok(child);
 });
 
-app.MapGet("/api/opportunitys/{id}/lines", async (int id, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/lines", async (int id, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
@@ -239,8 +254,8 @@ app.MapGet("/api/opportunitys/{id}/lines", async (int id, CrmDbContext db) => {
     return Results.Ok(parent.Lines);
 });
 
-app.MapGet("/api/opportunitys/{id}/lines/{lineId}", async (int id, int lineId, CrmDbContext db) => {
-    var parent = await db.Opportunitys.FindAsync(id);
+app.MapGet("/api/opportunities/{id}/lines/{lineId}", async (int id, int lineId, CrmDbContext db) => {
+    var parent = await db.Opportunities.FindAsync(id);
     if (parent == null)
     {
         return Results.NotFound();
@@ -606,7 +621,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -644,7 +659,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -682,7 +697,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -720,7 +735,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -758,7 +773,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -801,7 +816,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -839,7 +854,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -877,7 +892,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -915,7 +930,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     {
         return Results.NotFound("Account not found");
     }
-    var entity = await db.Opportunitys.FindAsync(opportunityId);
+    var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -947,13 +962,13 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/activities/{activityId}/snooze", async (int id, int activityId, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int id, int activityId, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
     }
-    var entity = await db.Activitys.FindAsync(activityId);
+    var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
         return Results.NotFound("Activity not found");
@@ -982,13 +997,13 @@ app.MapPost("/api/opportunitys/{id}/activities/{activityId}/snooze", async (int 
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/activities/{activityId}/complete", async (int id, int activityId, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (int id, int activityId, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
     }
-    var entity = await db.Activitys.FindAsync(activityId);
+    var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
         return Results.NotFound("Activity not found");
@@ -1017,8 +1032,8 @@ app.MapPost("/api/opportunitys/{id}/activities/{activityId}/complete", async (in
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/addline", async (int id, int quoteId, QuoteAddLineDto dto, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, int quoteId, QuoteAddLineDto dto, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -1058,8 +1073,8 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/addline", async (int id, in
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/present", async (int id, int quoteId, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, int quoteId, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -1094,8 +1109,8 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/present", async (int id, in
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/accept", async (int id, int quoteId, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, int quoteId, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -1130,8 +1145,8 @@ app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/accept", async (int id, int
     }
 });
 
-app.MapPost("/api/opportunitys/{id}/quotes/{quoteId}/reject", async (int id, int quoteId, CrmDbContext db) => {
-    var parentEntity = await db.Opportunitys.FindAsync(id);
+app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, int quoteId, CrmDbContext db) => {
+    var parentEntity = await db.Opportunities.FindAsync(id);
     if (parentEntity == null)
     {
         return Results.NotFound("Opportunity not found");
@@ -1308,6 +1323,11 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         db.Add(productResult.Value);
     }
+    var leadResult = Lead.Create("Sample", "user@test.com", "Sample", null);
+    if (leadResult.IsSuccess)
+    {
+        db.Add(leadResult.Value);
+    }
     var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (accountResult.IsSuccess)
     {
@@ -1335,6 +1355,17 @@ public record ProductDto
     [MinLength(3)]
     [MaxLength(32)]
     public string Sku { get; init; } = default!;
+}
+
+public record LeadDto
+{
+    [Required]
+    public string Company { get; init; } = default!;
+    [Required]
+    [RegularExpression("^[^@]+@[^@]+$")]
+    public string Email { get; init; } = default!;
+    [Required]
+    public string Name { get; init; } = default!;
 }
 
 public record AccountDto

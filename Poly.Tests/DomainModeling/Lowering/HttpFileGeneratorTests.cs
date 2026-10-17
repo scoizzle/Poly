@@ -52,6 +52,21 @@ public class HttpFileGeneratorTests {
     }
 
     [Test]
+    public async Task SectionHeader_EnglishPlural() {
+        // S19: the demo.http section label and request routes pluralize with English rules.
+        var http = Render(ParseDomain("""
+            domain Col
+            Address: entity {
+              Line1: Text required
+              City: Text required
+            }
+            """));
+        await Assert.That(http).Contains("### ──────────── Addresses ────────────");
+        await Assert.That(http.Contains("Addresss")).IsFalse();
+        await Assert.That(http).Contains("/api/addresses");
+    }
+
+    [Test]
     public async Task StageScopedAction_ListedOnce() {
         var http = Render(ParseDomain("""
             domain T

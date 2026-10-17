@@ -27,11 +27,11 @@ public class CrmDbContext : DbContext
     {
         get => Set<Contact>();
     }
-    public DbSet<Opportunity> Opportunitys
+    public DbSet<Opportunity> Opportunities
     {
         get => Set<Opportunity>();
     }
-    public DbSet<Activity> Activitys
+    public DbSet<Activity> Activities
     {
         get => Set<Activity>();
     }

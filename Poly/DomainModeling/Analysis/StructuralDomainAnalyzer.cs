@@ -64,6 +64,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             }
         }
 
+        // S11: a collection nav whose generated member name (PascalCase) equals its
+        // target type name shadows that type once the create-in factory exists.
+        ReportNavigationNameShadowing(context, domain);
+
         // N4: names lowering emits at module scope must not be user types.
         // Emit/RegisterTrees puts each entity with its `{Entity}Stage` enum in one tree
         // and DomainResult in the scaffolding tree; a user type of that name compiles as CS0101.
@@ -96,6 +100,50 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                     "A value type is a contract payload or action parameter and has no storage representation. " +
                     $"Declare a nested entity for stored state, or pass '{prop.Type.TypeName}' as an action parameter.",
                     DomainModelDiagnosticCodes.StoredValueTypeProperty);
+            }
+        }
+    }
+
+    /// <summary>
+    /// S11: lowering names a nav's C# member <c>PascalCase(nav.Name)</c>; the create-in
+    /// factory emits <c>{TargetType}.Create(...)</c> in an expression position inside the
+    /// owning class, so when member and target type share a name the call can bind to the
+    /// member and the host fails (CS1061, or a confusing other-overload CS7036).
+    ///
+    /// Two measured qualifiers keep this off working domains:
+    /// <list type="bullet">
+    /// <item>A <b>singular</b> nav is exempt: its property type is the target type itself
+    /// (<c>Folio? Folio</c>), so C#'s "Color Color" rule resolves <c>Folio.Create</c> to
+    /// the type. Maintained probes rely on this (<c>Reservation.folio</c>, <c>Contact.account</c>,
+    /// <c>Customer.address</c>). A <b>collection</b> nav's property type is
+    /// <c>IReadOnlyList&lt;T&gt;</c>, so the rule does not apply and the member wins.</item>
+    /// <item>No factory, no break: without a create-in for the nav the class never
+    /// references the target type by simple name in an expression position, and this
+    /// shape is everywhere in maintained probes.</item>
+    /// </list>
+    /// </summary>
+    private static void ReportNavigationNameShadowing(AnalysisContext context, Domain domain) {
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var nav in entity.Navigations) {
+                if (nav.Cardinality is not (RelationshipCardinality.OneToMany
+                    or RelationshipCardinality.ManyToMany))
+                    continue;
+                var targetTypeName = nav.Target.TypeName;
+                // The exact-name form is already the `StructuralDuplicate` rule above.
+                if (string.Equals(nav.Name, targetTypeName, StringComparison.Ordinal))
+                    continue;
+                var generatedMemberName = DomainTypeMapping.ToPascalCase(nav.Name);
+                if (!string.Equals(generatedMemberName, targetTypeName, StringComparison.Ordinal))
+                    continue;
+                if (!EffectHelpers.CreatesIn(entity, nav.Name))
+                    continue;
+                context.ReportError(
+                    nav,
+                    $"Navigation '{nav.Name}' on entity '{entity.Name}' generates member '{generatedMemberName}', " +
+                    $"which shadows entity type '{targetTypeName}': the create-in factory's " +
+                    $"'{targetTypeName}.Create(...)' binds to the member, so the generated host does not compile. " +
+                    $"Rename the navigation, or qualify the generated factory (e.g. 'global::{targetTypeName}.Create').",
+                    DomainModelDiagnosticCodes.NavigationShadowsEntityType);
             }
         }
     }

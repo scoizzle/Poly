@@ -124,6 +124,32 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task GetDomainAnalysis_ReferenceOnlyEntity_IsReportedAsRoot() {
+        // The facts must agree with the aggregate invariant: nothing owns Lead, so it is a
+        // root. It used to be a non-root that no root listed (no key, no endpoints).
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Demo
+
+            Account: entity {
+              Name: Text required
+            }
+
+            Lead: entity {
+              Name: Text required
+              account: Account
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.RootEntityNames!.Any(n => n == "Lead")).IsTrue();
+        await Assert.That(data.Aggregates!.SelectMany(a => a.MemberNames).Any(n => n == "Lead")).IsFalse();
+    }
+
+    [Test]
     public async Task GetEntityDetail_StageActions_AreReportedSeparately() {
         // S30: an entity whose actions all live in stages must not read as "0 actions".
         var (sessionId, _) = McpTestTools.Store.Create("Test");

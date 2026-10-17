@@ -112,9 +112,10 @@ public class PipelineMergeMetadataTests {
     // ── Phase B diagnostic tests (B′.1) ─────────────────────────
 
     [Test]
-    public async Task DomainAnalysis_OrphanEntity_EmitsDMAGG001() {
-        // Singular outbound plus an outbound collection, and no inbound collection,
-        // is still a non-root with no parent (DMAGG001).
+    public async Task DomainAnalysis_EntityWithNoResolvableOwner_ResolvesToRoot() {
+        // A singular outbound plus an outbound collection, with no inbound collection:
+        // nothing owns Loan, so Loan is a root. It used to stay a non-root with no
+        // parent (DMAGG001, since removed) — a state with no key and no HTTP endpoints.
         var domain = ParseDomain("""
             domain Test
             Patron: entity { Name: Text }
@@ -126,12 +127,16 @@ public class PipelineMergeMetadataTests {
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsTrue();
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        var loan = aggregate.Entities.First(e => e.Name == "Loan");
+        await Assert.That(loan.IsRoot).IsTrue();
+        await Assert.That(loan.AggregateParentName).IsNull();
+        await Assert.That(aggregate.Entities.Where(e => !e.IsRoot)
+            .All(e => e.AggregateParentName is not null)).IsTrue();
     }
 
     [Test]
-    public async Task DomainAnalysis_SingularOutboundOnly_NoDMAGG001() {
+    public async Task DomainAnalysis_SingularOutboundOnly_IsRoot() {
         var domain = ParseDomain("""
             domain Test
             Patron: entity { Name: Text }
@@ -141,13 +146,12 @@ public class PipelineMergeMetadataTests {
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsFalse();
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        await Assert.That(aggregate.Entities.First(e => e.Name == "Loan").IsRoot).IsTrue();
     }
 
     [Test]
-    public async Task DomainAnalysis_NoOrphan_OnNormalHierarchy() {
-        // Should not fire DMAGG001 when Loan has proper parent relationship
+    public async Task DomainAnalysis_NormalHierarchy_ChildHasItsParent() {
         var domain = ParseDomain("""
             domain Test
             Patron: entity {
@@ -160,8 +164,11 @@ public class PipelineMergeMetadataTests {
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.AggregateOrphan)).IsFalse();
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        await Assert.That(aggregate.Entities.First(e => e.Name == "Patron").IsRoot).IsTrue();
+        var loan = aggregate.Entities.First(e => e.Name == "Loan");
+        await Assert.That(loan.IsRoot).IsFalse();
+        await Assert.That(loan.AggregateParentName).IsEqualTo("Patron");
     }
 
     [Test]

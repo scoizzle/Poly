@@ -14,6 +14,7 @@ Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](../plans/arc
 | `fleet-eval/09-transport/{warehouse,orders,clinic}.poly` | compile oracle + `scripts/live-demo.sh` |
 | `fleet-eval/12-mcp/mcp-library.poly` | compile oracle |
 | `smoke/smoke.poly` | smoke |
+| `grep-2026-10-17/grep.poly` | grep probe — `VmAnalyzerReportTests` canary + `ParityTests` `PrintedCSharpCompiles` (findings: [`findings/grep-2026-10-17.md`](findings/grep-2026-10-17.md)) |
 
 Author a new probe: `scripts/new-probe.sh <name>` → `docs/probes/<name>/<name>.poly`.  
 Compile-check: `scripts/run-probe.sh docs/probes/<name>/<name>.poly`.

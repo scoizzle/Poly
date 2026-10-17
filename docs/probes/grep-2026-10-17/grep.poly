@@ -1,0 +1,95 @@
+domain Grep
+
+uses http
+
+Mode: enum {
+  Fixed
+  Regex
+}
+
+Query: entity {
+  PatternText: Text required
+  MatchMode: Mode default(Fixed)
+  IgnoreCase: Boolean default(false)
+  Invert: Boolean default(false)
+  MaxCount: Number default(0)
+  TotalHits: Number default(0)
+  ScannedSources: Number default(0)
+  sources: many owned Source
+
+  Prepared: stage {
+    AddSource: action (path: Text) -> Source {
+      create in sources { Path: path }
+    }
+    Scan: action {
+      if (Invert is true) {
+        for sources as src invoke src.ScanInverted(needle: PatternText)
+      } else {
+        for sources as src invoke src.Scan(needle: PatternText)
+      }
+    }
+    Report: action {
+      assign TotalHits to sum sources HitCount
+      transition to Reported
+    }
+  }
+
+  Reported: stage { }
+
+  when sources Scanned {
+    assign ScannedSources to ScannedSources + 1
+  }
+}
+
+Source: entity {
+  Path: Text required
+  HitCount: Number default(0)
+  lines: many owned Line
+  hits: many owned Hit
+
+  Unscanned: stage {
+    LoadLine: action (number: Number, content: Text) -> Line {
+      create in lines { LineNo: number Content: content }
+    }
+    Scan: action (needle: Text) {
+      for lines as line invoke line.Check(needle: needle)
+      transition to Scanned
+    }
+    ScanInverted: action (needle: Text) {
+      for lines as line invoke line.Skew(needle: needle)
+      transition to Scanned
+    }
+  }
+
+  Scanned: stage { }
+
+  when lines Marked as found {
+    create in hits { LineNumber: (found LineNo) Content: (found Content) }
+    assign HitCount to HitCount + 1
+  }
+}
+
+Line: entity {
+  LineNo: Number required
+  Content: Text required
+
+  Unmarked: stage {
+    Check: action (needle: Text) {
+      if (Content is needle) {
+        transition to Marked
+      }
+    }
+    Skew: action (needle: Text) {
+      if (Content is not needle) {
+        transition to Marked
+      }
+    }
+  }
+
+  Marked: stage { }
+}
+
+Hit: entity {
+  LineNumber: Number required
+  Content: Text required
+}

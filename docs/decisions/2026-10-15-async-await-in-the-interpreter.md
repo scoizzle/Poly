@@ -7,15 +7,17 @@
 
 **Home:** `docs/decisions/2026-10-15-async-await-in-the-interpreter.md`
 
-**Companion (part 2):** [`2026-10-16-async-interpreter-execution.md`](2026-10-16-async-interpreter-execution.md) — whether the interpreter's execution itself should be async. It concludes the engine stays synchronous, and **revises this document's `Task` handling**: `Await` executes by blocking on the operand (`GetAwaiter().GetResult()`), which supersedes the `DriverBoundary` / `ResumeWith` design and the `await` allow-lists here. The resume spine this document defines remains for `SuspendNode`.
+**Companion (part 2):** [`2026-10-16-async-interpreter-execution.md`](2026-10-16-async-interpreter-execution.md) is the await-execution contract. The engine stays synchronous. `Await` blocks on the operand. That supersedes this document's `DriverBoundary` / `ResumeWith` design and its `await` allow-lists. The resume spine defined here remains for `SuspendNode`.
 
-`docs/decisions/` records why. `docs/plans/` records execution. This spike chooses a seam and implements nothing. It does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
+**This body is the part 1 record, not the current contract.** Where it says the VM rejects `Await`, that analysis types `await` as the operand, that a `Task` suspends until `ResumeWith`, that `try` or a stored lambda compile-rejects, or that `CompileAwait` must stop calling `GetResult`, those sentences describe the tree at `ff83c598`. Part 2 replaced them.
+
+`docs/decisions/` records why. `docs/plans/` records execution. Part 1 chooses a seam and implements nothing. It does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).
 
 **Also binds:** [`docs/CORE.md`](../CORE.md) §0 and §3.3, [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md).
 
-Evidence is this worktree (`origin/master`, `ff83c598`). A throwaway console project under `/tmp` referenced `Poly/Poly.csproj` from that commit and is not in the tree. [`docs/decisions/vm-gap-analysis.md`](vm-gap-analysis.md) line 82 says `Await` blocks on `GetAwaiter().GetResult()`. That sentence is stale. The VM rejects the node. The blocking call lives only on the LINQ checker.
+Evidence for the probe is `origin/master` at `ff83c598`. A throwaway console project under `/tmp` referenced `Poly/Poly.csproj` from that commit and is not in the tree. At that commit [`docs/decisions/vm-gap-analysis.md`](vm-gap-analysis.md) said `Await` blocks on `GetAwaiter().GetResult()` while the VM rejected the node and only the LINQ checker blocked. Part 2 makes the VM block too. The gap line now describes that execution.
 
 ---
 
@@ -27,9 +29,9 @@ The law, in the owner's words: if code generation produces a construct, the VM m
 
 The scoped reading of the law is (a). It covers the operation-body language: every Syntax construct the printer can emit as live language. The VM must be able to execute that construct. It does not require the VM to execute host compilation units (`Program.cs`, `AddDbContext`, `MapPost`, `app.Run()`). Those units are delivery artifacts. They call the module. They are not a second meaning of the domain. Rejecting (b) — "everything printed, so hosts must become descriptors" — is a decision, and it is the one this spike asks the owner to confirm.
 
-The sim models the **result** of an await, never a `Task` and never a scheduler. A host job that returns `T` is already complete. `await` of that job yields `T` and does not suspend, which is the same observation C# makes when the awaitable is already completed. An incomplete boundary suspends one activation. The driver resumes it with an explicit value. `VmState` holds one continuation. Coordination of several waits is several states, resumed in an order the driver names. The VM does not race.
+**Superseded by part 2.** The sim models the **result** of an await, never a `Task` and never a scheduler. A host job that returns `T` is already complete. `await` of that job yields `T` and does not suspend, which is the same observation C# makes when the awaitable is already completed. An incomplete boundary suspends one activation. The driver resumes it with an explicit value. `VmState` holds one continuation. Coordination of several waits is several states, resumed in an order the driver names. The VM does not race. Part 2 keeps the single continuation and drops the suspend: an incomplete `Task` blocks in `GetResult` instead of waiting for `ResumeWith`.
 
-`Await` does not lower to `SuspendNode`. The probe below shows why that node cannot be the await value. The spine it uses (resume label, `ProgramCounter`, `FramePos`) is the right machinery after two fixes: spill register locals to frame slots at the suspend, and reload them before the next statement. Nested calls and `try` stay compile-rejects until later slices. The thin slice is one root-body await of one synchronous host job, printed as `await` and executed as `T`.
+**Superseded by part 2 where it rejects `try`.** `Await` does not lower to `SuspendNode`. The probe below shows why that node cannot be the await value. The spine it uses (resume label, `ProgramCounter`, `FramePos`) is the right machinery after two fixes: spill register locals to frame slots at the suspend, and reload them before the next statement. Those fixes are still the plan for `SuspendNode`. They are not how `Await` executes. The thin slice below is the part 1 slice, not the one part 2 shipped.
 
 ---
 
@@ -43,7 +45,9 @@ The only product emitter is `src/Poly.DslCompiler/MinimalApiGenerator.cs`. A sea
 
 `InterpreterStatus.Suspended` already names the await boundary (`InterpreterStatus.cs:10-13`). The resume preamble already documents re-reading `FramePos` (`InterpreterStatus.cs:19-22`). The machinery was reserved. It was not finished, and it was not checked against a local that has to survive.
 
-### What the code does
+### What the code did at `ff83c598`
+
+This table is the snapshot the probe ran against. It is not the branch after part 2.
 
 | Fact | Where |
 |------|--------|
@@ -645,15 +649,15 @@ Anything not determined: this spike did not run `Poly.Tests`. The `Await` reject
 ## Key decisions
 
 1. The law is printed ⊆ simulatable, scoped to Syntax constructs. Host compilation units are not simulated as programs. Option (b) is rejected. The owner confirms this in open question 1.
-2. The sim models the result of an await. It does not allocate a `Task` and it does not schedule. A host job that returns `T` is `HostCompleted`: the VM invokes it and does not suspend. A `Task` or `Task<T>` operand is `DriverBoundary`: the VM suspends and the value arrives through `ResumeWith`.
+2. **Superseded by part 2.** The sim models the result of an await. It does not allocate a `Task` and it does not schedule. A host job that returns `T` is `HostCompleted`: the VM invokes it and does not suspend. A `Task` or `Task<T>` operand is `DriverBoundary`: the VM suspends and the value arrives through `ResumeWith`. Part 2 blocks on `GetResult` instead, including for an incomplete task.
 3. `Await` does not lower to `SuspendNode`. `SuspendNode` stays the breakpoint. The expression value of `SuspendNode` is not the resume value. The probe resumed a lone suspend as `0`.
 4. The resume-label spine is the mechanism, after spill and reload of register locals, in both compilation modes. `FramePos` alone does not restore a local. The probe showed `1 + 10` become `10`, and a loop counter stuck at `0`.
-5. `Resume(args)` stays `SetArgs` on the root slots. The await result is `VmState.ResumeValue`, written by `ResumeWith`. The probe showed `Resume(99L)` write slot 0 in `NoDebug`.
+5. **Superseded by part 2.** `Resume(args)` stays `SetArgs` on the root slots. The await result is `VmState.ResumeValue`, written by `ResumeWith`. The probe showed `Resume(99L)` write slot 0 in `NoDebug`. Part 2 does not add `ResumeWith`. `Resume(args)` is still `SetArgs`, and it is not the await result.
 6. One `VmState` is one continuation. There is no scheduler. Several waits are several states, resumed in driver order. That order is the semantics.
 7. `MethodDefinitionNode.IsAsync` is print. The sim follows `Await` nodes. The sim result is `T` or void.
 8. The operand-type rule at `TypeAndMemberResolutionPass.cs:124` is wrong for `Task<T>`. The probe resolved `await` of `Task<int>` as `Task<int>`. The type of the await is `T`. Value representation follows `T` and stops being `Unknown`.
-9. `try`, `using`, and non-inlined callees compile-reject until a later slice. Expression trees cannot jump into a `try`. The probe threw `Control cannot enter a try block.` `CompileFunctionBody` has no PC dispatch, and the callee `finally` unwinds the frame. The probe's stored-lambda resume re-executed the root.
-10. `LinqExpressionGenerator.CompileAwait` stops calling `GetResult`. The checker follows the same table as the VM.
+9. **Superseded by part 2.** `try`, `using`, and non-inlined callees compile-reject until a later slice. Expression trees cannot jump into a `try`. The probe threw `Control cannot enter a try block.` `CompileFunctionBody` has no PC dispatch, and the callee `finally` unwinds the frame. The probe's stored-lambda resume re-executed the root. That limit is the `SuspendNode` resume path. Part 2's blocking `Await` has no resume label, so it compiles inside `try` / `catch` and inside a stored lambda.
+10. **Superseded by part 2.** `LinqExpressionGenerator.CompileAwait` stops calling `GetResult`. The checker follows the same table as the VM. Part 2 keeps `GetResult` and binds `GetAwaiter` from the resolved method, so `Task<T>` is not the ambiguous string lookup.
 11. Enforcement is `PrintedSubsetVmTests`: every concrete node has a print form, a live print of a compile-reject fails, rejected shapes carry an allow-list reason, and an operation-module body contains no allow-listed await. It is red on this commit.
 12. The thin slice is slice 1. One root `await` of a static method that returns `long`, printed with `await`, executed as that `long`. No product host job is added. EF awaits stay on the allow-list.
 13. This document is Proposed. It is not admitted to `board.md`. It does not edit `docs/CORE.md`. The slice that changes the resume contract edits CORE in that change.

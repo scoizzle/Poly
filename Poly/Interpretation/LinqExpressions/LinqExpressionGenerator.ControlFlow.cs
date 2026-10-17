@@ -362,9 +362,13 @@ public sealed partial class LinqExpressionGenerator {
     }
 
     private Expression CompileAwait(Await awaitNode, CompilationContext context) {
-        var operand = CompileNode(awaitNode.Operand, context);
-        var awaiter = Expression.Call(operand, "GetAwaiter", Type.EmptyTypes);
-        return Expression.Call(awaiter, "GetResult", Type.EmptyTypes);
+        var operandType = _analysisResult.GetResolvedType(awaitNode.Operand)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand '{awaitNode.Operand}' has no resolved type.");
+        var binding = AwaitPattern.TryBind(operandType)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand type '{operandType.FullName}' is not awaitable.");
+        return AwaitPattern.CompileGetResult(CompileNode(awaitNode.Operand, context), binding);
     }
 
     /// <summary>

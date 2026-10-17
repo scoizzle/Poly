@@ -114,7 +114,7 @@ Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Do
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, … under `Poly/Interpretation/Vm/` |
 
-No intermediate primitive IR. Keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace). Known members: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), not `typeof(T).GetMethod(...)`. `Await` executes by blocking on the operand: `operand.GetAwaiter().GetResult()`. `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` run through `Ref`-bound helpers; any other structurally awaitable type resolves `GetAwaiter` / `GetResult` through the type provider. Analysis types the result as `T` or void. No state machine, no scheduler; the resume spine is for `SuspendNode`.
+No intermediate primitive IR. Keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace). Known members: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), not `typeof(T).GetMethod(...)`. `Await` executes by blocking on the operand. `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` run through `Ref`-bound helpers whose `GetResult` waits. Any other structurally awaitable type resolves `GetAwaiter`, `IsCompleted`, `OnCompleted` or `UnsafeOnCompleted`, and `GetResult` through the type provider, and blocks on the continuation when `IsCompleted` is false. Analysis types the result as `T` or void. No state machine, no scheduler; the resume spine is for `SuspendNode`.
 
 ### 3.4 Domain lowering
 

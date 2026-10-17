@@ -1,6 +1,8 @@
 using Poly.Interpretation;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -110,6 +112,80 @@ public class LanguageVmTests {
         await Assert.That(exec.GetValue<long>()).IsEqualTo(77L);
     }
 
+    [Test, Timeout(10_000)]
+    public async Task Await_IncompleteCustomAwaitable_WaitsForResult(CancellationToken ct) {
+        var node = new Await(new Constant(new PendingAwaitable()));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task Await_IncompleteCustomAwaitable_DoesNotPostBackToCallerContext(CancellationToken ct) {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DroppingSyncContext());
+        try {
+            var node = new Await(new Constant(new PendingAwaitable()));
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+        }
+        finally {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Test]
+    public async Task Await_AwaiterWithoutIsCompleted_CompileRejected() {
+        var node = new Await(new Constant(new BareAwaitable()));
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_InsideTryCatch_CatchSeesFault() {
+        var host = new AwaitHost();
+        var caught = new Variable("caught");
+        var node = new Block([
+            new Assignment(caught, new Constant(0L)),
+            new TryCatchFinally(
+                new Assignment(caught,
+                    new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Faulted))))),
+                CatchClauses: [
+                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                        new Assignment(caught, new Constant(1L)))
+                ]),
+            caught
+        ], [caught]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Await_InsideTryCatch_SuccessKeepsAssignment() {
+        var host = new AwaitHost();
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(0L)),
+            new TryCatchFinally(
+                new Assignment(x,
+                    new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))))),
+                CatchClauses: [
+                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                        new Assignment(x, new Constant(1L)))
+                ]),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_TaskLong_LinqCheckerCompiles() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))));
+        var expr = new LinqExpressionGenerator(node.AnalyzeNode()).Compile(node).Expression;
+        var compiled = System.Linq.Expressions.Expression.Lambda<Func<long>>(expr).Compile();
+        await Assert.That(compiled()).IsEqualTo(42L);
+    }
+
     private sealed class AwaitHost {
         public long Plain() => 7L;
         public Task<long> Completed() => Task.FromResult(42L);
@@ -131,6 +207,42 @@ public class LanguageVmTests {
         public bool IsCompleted => true;
         public void OnCompleted(Action continuation) => continuation();
         public long GetResult() => 77L;
+    }
+
+    private sealed class PendingAwaitable {
+        public PendingAwaiter GetAwaiter() => new(this);
+        public long Value = -1;
+    }
+
+    private struct PendingAwaiter : System.Runtime.CompilerServices.INotifyCompletion {
+        private readonly PendingAwaitable _owner;
+        public PendingAwaiter(PendingAwaitable owner) => _owner = owner;
+        public bool IsCompleted => _owner.Value >= 0;
+        public long GetResult() => _owner.Value;
+        public void OnCompleted(Action continuation) {
+            var owner = _owner;
+            var captured = SynchronizationContext.Current;
+            ThreadPool.QueueUserWorkItem(_ => {
+                owner.Value = 5L;
+                if (captured is not null)
+                    captured.Post(__ => continuation(), null);
+                else
+                    continuation();
+            });
+        }
+    }
+
+    private sealed class BareAwaitable {
+        public BareAwaiter GetAwaiter() => new();
+    }
+
+    private struct BareAwaiter {
+        public long GetResult() => 1L;
+    }
+
+    /// <summary>Posts are dropped. An awaiter that captures this context never resumes.</summary>
+    private sealed class DroppingSyncContext : SynchronizationContext {
+        public override void Post(SendOrPostCallback d, object? state) { }
     }
 
     [Test]

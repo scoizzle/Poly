@@ -599,39 +599,26 @@ public static partial class DirectVmAbiEmitter {
             Assign(ctx.RingVar(slot), ConvertClrToRing(call, resultType, ctx)));
     }
 
-    /// <summary>Await of an awaitable that is not one of the well-known BCL shapes:
-    /// resolve the structural <c>GetAwaiter()</c> / <c>GetResult()</c> through the type
-    /// provider — not <c>typeof(T).GetMethod</c>.</summary>
+    /// <summary>Await of an awaitable that is not one of the well-known BCL shapes.
+    /// <c>GetResult</c> runs only after <c>IsCompleted</c>, blocking on
+    /// <c>UnsafeOnCompleted</c> / <c>OnCompleted</c> when it is not.</summary>
     private static Expression EmitStructuralAwait(
         Await await, Expression operandObj, Expression operandExpr, Expression fold, int slot, AbiCtx ctx) {
         var operandTypeDef = ctx.Analysis?.GetResolvedType(await.Operand)
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved type.");
-        var getAwaiter = operandTypeDef.Methods
-            .WithName("GetAwaiter")
-            .WithParameterTypes()
-            .FirstOrDefault() as ClrMethod;
-        if (getAwaiter?.MethodInfo is not { } getAwaiterInfo)
-            throw new InvalidOperationException(
-                $"VM compile rejected: Await operand type '{operandTypeDef.FullName}' has no parameterless GetAwaiter(); it is not awaitable.");
-        var getResult = getAwaiter.MemberTypeDefinition.Methods
-            .WithName("GetResult")
-            .WithParameterTypes()
-            .FirstOrDefault() as ClrMethod;
-        if (getResult?.MethodInfo is not { } getResultInfo)
-            throw new InvalidOperationException(
-                $"VM compile rejected: awaiter '{getAwaiter.MemberTypeDefinition.FullName}' has no parameterless GetResult().");
+        var binding = AwaitPattern.TryBind(operandTypeDef)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand type '{operandTypeDef.FullName}' is not awaitable. "
+                + "It needs a parameterless GetAwaiter(), and the awaiter needs IsCompleted, "
+                + "OnCompleted(Action) or UnsafeOnCompleted(Action), and GetResult().");
 
-        var awaiterObj = Call(operandObj, getAwaiterInfo);
-        if (getResultInfo.ReturnType == typeof(void)) {
-            return Block(operandExpr, fold,
-                Call(awaiterObj, getResultInfo),
-                Assign(ctx.RingVar(slot), Constant(0L)));
+        var result = AwaitPattern.CompileGetResult(operandObj, binding);
+        if (binding.GetResult.ReturnType == typeof(void)) {
+            return Block(operandExpr, fold, result, Assign(ctx.RingVar(slot), Constant(0L)));
         }
-        var resultType = getResult.MemberTypeDefinition.GetRuntimeType();
         return Block(operandExpr, fold,
-            Assign(ctx.RingVar(slot),
-                ConvertClrToRing(Call(awaiterObj, getResultInfo), resultType, ctx)));
+            Assign(ctx.RingVar(slot), ConvertClrToRing(result, binding.GetResult.ReturnType, ctx)));
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>

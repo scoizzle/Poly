@@ -121,7 +121,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             SwitchStatement swt => swt.Cases.Count > 0
                 ? ResolveNodeType(context, swt.Cases[0].Body)
                 : swt.DefaultCase is not null ? ResolveNodeType(context, swt.DefaultCase) : null,
-            Await aw => ResolveNodeType(context, aw.Operand),
+            Await aw => ResolveAwaitType(context, aw),
             Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
         };
@@ -140,6 +140,24 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         var nullableType = typeof(Nullable<>).MakeGenericType(runtimeType);
         return context.TypeDefinitions.GetTypeDefinition(nullableType) ?? targetType;
+    }
+
+    /// <summary>The type of an <c>await</c> is the awaiter's <c>GetResult()</c>.
+    /// A non-awaitable operand, including one whose awaiter has no <c>IsCompleted</c>
+    /// and no completion method, resolves to null.</summary>
+    private static ITypeDefinition? ResolveAwaitType(AnalysisContext context, Await await) {
+        var operandType = ResolveNodeType(context, await.Operand);
+        if (operandType is null)
+            return null;
+
+        var binding = AwaitPattern.TryBind(operandType);
+        if (binding is null)
+            return null;
+
+        var result = binding.GetResult.ReturnType;
+        if (result == typeof(void))
+            return context.TypeDefinitions.GetTypeDefinition(typeof(void));
+        return context.TypeDefinitions.GetTypeDefinition(result);
     }
 
     private static ITypeDefinition? ResolveForEachLoopType(

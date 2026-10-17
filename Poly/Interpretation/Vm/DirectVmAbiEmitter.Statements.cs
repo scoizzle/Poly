@@ -346,6 +346,10 @@ public static partial class DirectVmAbiEmitter {
         if (tcf.CatchClauses == null || tcf.CatchClauses.Count == 0) {
             return finallyBody != null ? TryFinally(tryBody, finallyBody) : tryBody;
         }
+        // Catch bodies are void. A value-producing try (an assignment, an await)
+        // has to match, or Expression.TryCatch rejects the tree.
+        if (tryBody.Type != typeof(void))
+            tryBody = Block(tryBody, Empty());
         var catchBlocks = new List<CatchBlock>();
         foreach (var clause in tcf.CatchClauses) {
             var exType = ResolveCatchClrType(clause.ExceptionType, ctx);

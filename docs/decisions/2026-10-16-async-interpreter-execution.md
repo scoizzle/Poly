@@ -1,15 +1,15 @@
 # ADR: Async interpreter execution (part 2 of the async/await spike)
 
 **Date:** 2026-10-16
-**Status:** Proposed
+**Status:** Accepted
 **Author:** design spike
-**Deciders:** product owner
+**Deciders:** product owner (accepted 2026-10-16)
 
 **Home:** `docs/decisions/2026-10-16-async-interpreter-execution.md`
 
 **Part 1:** [`2026-10-15-async-await-in-the-interpreter.md`](2026-10-15-async-await-in-the-interpreter.md). Part 2 **revises** part 1's handling of a `Task`-typed `Await` operand (part 1 §"What simulatable means at an await", §"The driver", PR 2). It keeps part 1's law (printed ⊆ simulatable, scope (a)) and its resume spine for `SuspendNode`. It removes the await-driven suspend, `ResumeWith`, and the `await` allow-lists.
 
-`docs/decisions/` records why. `docs/plans/` records execution. This document does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). **Slice 1 (blocking `Await`) is implemented on this branch**; everything else below stays evidence until a human admits it.
+`docs/decisions/` records why. `docs/plans/` records execution. This document does not open a plan; the product owner admitted its two slices on 2026-10-16 ([board §Async/await](../plans/poly-eng/board.md), [`tasks/AA1.md`](../plans/poly-eng/tasks/AA1.md) / [`AA1b.md`](../plans/poly-eng/tasks/AA1b.md)). **Slice 1 (blocking `Await`) is implemented**; Slice 2 is [`AA1b`](../plans/poly-eng/tasks/AA1b.md).
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-04-frozen-core-pipeline.md`](2026-09-04-frozen-core-pipeline.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).
 
@@ -127,6 +127,7 @@ Details:
 | Allow-list row "Await of Task or Task<T>" | Deleted. It executes. |
 | Allow-list rows "Await inside TryCatchFinally or UsingStatement" and "Await inside a non-inlined lambda / AST method body" | Deleted. With no suspend node inside `await`, there is no resume label to place, no `Control cannot enter a try block`, and no callee `finally` unwinding. `await` composes anywhere an expression is allowed. |
 | Part 1 slice 2 (spill/reload) and slice 3 (nested re-entry), as they relate to `await` | Not needed for `await`. |
+| Part 1's `PrintedSubsetVmTests.Forms`, "one entry per concrete Node" | Scoped to the `Surface.CompileReject` kinds plus pinning samples. The law can only fail on a compile-rejected kind; an `Executable` kind is simulatable by definition. `Poly.Tests/Interpretation/PrintedSubsetVmTests.cs` implements it. |
 | Resume spine (`ProgramCounter`, `FramePos`, resume label) | **Kept** for `SuspendNode` and breakpoints. Part 1's spine analysis is still the plan for that. |
 
 The law is unchanged and better satisfied: every construct the printer emits as live `await` has a defined execution, and it is a plain expression.
@@ -252,17 +253,19 @@ Recommendation: do not adopt the spawned-context / real-`Task` route now. Part 2
 
 ---
 
-## Open questions
+## Open questions (resolved 2026-10-16)
 
-1. Confirm: `Await` executes by blocking — `operand.GetAwaiter().GetResult()` — and this supersedes part 1's `DriverBoundary` / `ResumeWith` for `await`.
-2. Confirm: the VM may run the awaited operation, including real I/O, with determinism supplied by the host-job seam rather than by a driver boundary.
-3. Confirm: the VM runs without a captured `SynchronizationContext` (the deadlock guard).
-4. Confirm: pause-at-await is not required; `SuspendNode` keeps the resume spine.
-5. Confirm the type rule: the `Await` type is the awaiter's `GetResult()` result (`Task<T>` / `ValueTask<T>` / custom → `T`; non-generic → void), and a non-awaitable operand is a shape reject (correcting part 1's `HostCompleted` identity row).
-6. `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` stay out of the first slice (Part 1's table).
-7. Confirm async AST methods: an `IsAsync` method whose body contains `Await` executes, its sim value is a completed `Task<T>` / `Task`, and the VM honors `IsAsync` at return. A body containing `Await` in a non-`IsAsync` method (or without a `Task` return type) is rejected.
-8. Confirm `Await` is a module-level construct. Part 1's assumption that module bodies contain no `Await` — and the `ModuleBodies_DoNotContainAllowListedAwaits` test that encoded it — is replaced by "a module body's `Await` executes or is a shape reject."
-9. Confirm we do not adopt the spawned-context / real-`Task` route now. If suspension or parallel awaits is wanted later, the first step is a memory/activation split (shared heap, per-call activation), not `Execute` with a PC.
+All nine confirmed by the product owner on 2026-10-16.
+
+1. `Await` executes by blocking — `operand.GetAwaiter().GetResult()` — and this supersedes part 1's `DriverBoundary` / `ResumeWith` for `await`. **Confirmed.**
+2. The VM may run the awaited operation, including real I/O, with determinism supplied by the host-job seam rather than by a driver boundary. **Confirmed.**
+3. The VM runs without a captured `SynchronizationContext` (the deadlock guard). **Confirmed.**
+4. Pause-at-await is not required; `SuspendNode` keeps the resume spine. **Confirmed.**
+5. The type rule: the `Await` type is the awaiter's `GetResult()` result (`Task<T>` / `ValueTask<T>` / custom → `T`; non-generic → void), and a non-awaitable operand is a shape reject (correcting part 1's `HostCompleted` identity row). **Confirmed.**
+6. `ConfigureAwait`, `WhenAll` / `WhenAny`, `await using`, `await foreach`, `CancellationToken` stay out of the first slice (Part 1's table). **Confirmed.**
+7. Async AST methods: an `IsAsync` method whose body contains `Await` executes, its sim value is a completed `Task<T>` / `Task`, and the VM honors `IsAsync` at return. A body containing `Await` in a non-`IsAsync` method (or without a `Task` return type) is rejected. **Confirmed** (Slice 2, `AA1b`).
+8. `Await` is a module-level construct. Part 1's assumption that module bodies contain no `Await` — and the `ModuleBodies_DoNotContainAllowListedAwaits` test that encoded it — is replaced by "a module body's `Await` executes or is a shape reject." **Confirmed.**
+9. We do not adopt the spawned-context / real-`Task` route now. If suspension or parallel awaits is wanted later, the first step is a memory/activation split (shared heap, per-call activation), not `Execute` with a PC. **Confirmed.**
 
 ---
 

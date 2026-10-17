@@ -1,9 +1,9 @@
 # ADR: Async/await in the interpreter
 
 **Date:** 2026-10-15
-**Status:** Proposed
+**Status:** Accepted
 **Author:** design spike
-**Deciders:** product owner (not yet accepted)
+**Deciders:** product owner (accepted 2026-10-16; the await model is superseded by part 2)
 
 **Home:** `docs/decisions/2026-10-15-async-await-in-the-interpreter.md`
 
@@ -11,7 +11,7 @@
 
 **This body is the part 1 record, not the current contract.** Where it says the VM rejects `Await`, that analysis types `await` as the operand, that a `Task` suspends until `ResumeWith`, that `try` or a stored lambda compile-rejects, or that `CompileAwait` must stop calling `GetResult`, those sentences describe the tree at `ff83c598`. Part 2 replaced them.
 
-`docs/decisions/` records why. `docs/plans/` records execution. Part 1 chooses a seam and implements nothing. It does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
+`docs/decisions/` records why. `docs/plans/` records execution. Part 1 chooses a seam and implements nothing; part 2 is the contract. The product owner admitted the two slices on 2026-10-16 (board §Async/await).
 
 **Parents:** [`2026-06-08-vm-as-canonical-semantics.md`](2026-06-08-vm-as-canonical-semantics.md), [`2026-06-08-domain-lowering-boundary.md`](2026-06-08-domain-lowering-boundary.md), [`2026-09-05-lowered-module-is-domain-meaning.md`](2026-09-05-lowered-module-is-domain-meaning.md).
 
@@ -601,17 +601,17 @@ Filter while iterating slice 1: `/*/*/LanguageVmTests/*`, `/*/*/LanguageSurfaceT
 
 ---
 
-## Open questions
+## Open questions (dispositioned 2026-10-16)
 
-1. Confirm the scoped law. This spike chooses (a): the construct must be simulatable, and host compilation units are not executed as programs. Confirm that (b), hosts as descriptors, stays rejected.
-2. Confirm a host job that returns `T` does not suspend. The sim yields `T` inside `Execute`. The other choice is to suspend even when the value is already known, so every `await` is a driver pump. This spike chooses the completed-task behavior.
-3. Confirm one `VmState` is one continuation. Coordinating several waits is several states, in an order the driver names. Confirm the VM does not grow a scheduler.
-4. Confirm `await` inside `try` / `using`, and `await` inside a non-inlined callee, compile-reject through slice 2. The expression-tree limit is verified. The `finally`-on-the-way-out behavior was not observed, because compile failed first.
-5. Confirm `Resume(args)` stays `SetArgs`, and the await result is `ResumeWith` / `VmState.ResumeValue`. The probe showed `99` landing in slot 0.
-6. Confirm `MethodDefinitionNode.IsAsync` is a print fact. The sim result of an async method is `T` or void, not a `Task`.
-7. Confirm the current EF awaits in `MinimalApiGenerator` stay host-tree shapes on the allow-list until slice 2, and that they are not rewritten into the operation module.
-8. Confirm `LinqExpressionGenerator.CompileAwait` throws on a driver boundary instead of calling `GetResult`.
-9. The audit, as specified, does not fail when print erases a node the VM executes (`SuspendNode`, `StridedSetBits`). Confirm that the reverse direction stays a warning and not a red test.
+1. The scoped law. This spike chooses (a): the construct must be simulatable, and host compilation units are not executed as programs. Option (b), hosts as descriptors, stays rejected. **Confirmed 2026-10-16.**
+2. A host job that returns `T` does not suspend. The sim yields `T` inside `Execute`. The other choice is to suspend even when the value is already known, so every `await` is a driver pump. This spike chooses the completed-task behavior. **Superseded by part 2** (the VM blocks; it does not suspend).
+3. One `VmState` is one continuation. Coordinating several waits is several states, in an order the driver names. The VM does not grow a scheduler. **Confirmed 2026-10-16.**
+4. `await` inside `try` / `using`, and `await` inside a non-inlined callee, compile-reject through slice 2. The expression-tree limit is verified. The `finally`-on-the-way-out behavior was not observed, because compile failed first. **Superseded by part 2** (blocking `Await` has no resume label, so these shapes compile).
+5. `Resume(args)` stays `SetArgs`, and the await result is `ResumeWith` / `VmState.ResumeValue`. The probe showed `99` landing in slot 0. **Superseded by part 2** (no `ResumeWith`; `Resume(args)` is not the await result).
+6. `MethodDefinitionNode.IsAsync` is a print fact. The sim result of an async method is `T` or void, not a `Task`. **Superseded by part 2** (key decision 10; `IsAsync` is a VM fact and the sim value is a completed `Task`).
+7. The current EF awaits in `MinimalApiGenerator` stay host-tree shapes on the allow-list until slice 2, and are not rewritten into the operation module. **Superseded by part 2** (no allow-list; the host awaits execute).
+8. `LinqExpressionGenerator.CompileAwait` throws on a driver boundary instead of calling `GetResult`. **Superseded by part 2** (the checker keeps `GetResult`, bound by `AwaitPattern`).
+9. The audit, as specified, does not fail when print erases a node the VM executes (`SuspendNode`, `StridedSetBits`). The reverse direction stays a warning and not a red test. **Confirmed 2026-10-16.**
 
 Anything not determined: this spike did not run `Poly.Tests`. The `Await` rejection, the resume cycle, the local loss, the loop, the nested re-execution, the `SetArgs` write, the type of `await Task<int>`, and the try-compile failure were observed in the throwaway probe. The `finally` body was not observed. No product file was modified.
 

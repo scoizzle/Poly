@@ -2,7 +2,7 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-15. Master: `06844e39` (#176). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
+Updated 2026-10-16. Master: `5a11038b` (#204). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
 **CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
@@ -21,7 +21,12 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 
 ## In flight (open PRs; GitHub is the live state)
 
-None.
+| PR | Slice | Branch |
+|----|-------|--------|
+| #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
+| #193 | async/await A1: `Await` executes by blocking + the print audit | `docs/async-await-interpreter` |
+| #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
+| #196 (draft) | docs: analysis coverage audit 2026-10-16 | `spike/analysis-coverage` |
 
 ## Next (in order; first unblocked row wins)
 
@@ -48,6 +53,15 @@ Details, dependencies, done tests and risk for each row: [LOCAL-AGENT.md](LOCAL-
 | 17 | C8c2 | C8c1 | plan card |
 | 18 | C8d (runs alone) | C8c2, T3 (parked; see Needs Scot), C8-lc/web/num/clean | plan card |
 | 19 | C10 | C8d | plan card |
+
+## Async/await (admitted 2026-10-16; a separate lane, does not move row 4)
+
+Design: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../decisions/2026-10-16-async-interpreter-execution.md) (accepted 2026-10-16; part 1 `2026-10-15-async-await-in-the-interpreter.md` is the record). Two slices. No board row is edited by the ADR itself; this table is the admission.
+
+| # | Slice | Depends / hold | Task file |
+|---|-------|----------------|-----------|
+| A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **in flight** #193 | [tasks/AA1.md](tasks/AA1.md) |
+| A2 | async/await — an `IsAsync` AST method returns a completed `Task` | A1 merged | [tasks/AA1b.md](tasks/AA1b.md) |
 
 ## Swarm (probe findings; one card per agent)
 

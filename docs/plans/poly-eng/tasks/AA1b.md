@@ -1,6 +1,6 @@
 # TASK AA1b - An `IsAsync` AST method returns a completed `Task`
 
-Status: in review
+Status: merged #206 `3b29937b` 2026-10-17
 Branch `slice/async-methods`. PR #206. Lane async. Review see PR.
 Plan card: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../../decisions/2026-10-16-async-interpreter-execution.md) Slice 2.
 
@@ -60,3 +60,4 @@ Admitted 2026-10-16 (scope answer: Slice 1 + Slice 2). Stop if the body result t
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-16 | queue | plan | — | planned | none |
 | 2026-10-17 | async | OpenCode | — | pushed | `IsAsync` wrap at method-return lowering; the `Await`-outside-async shape is a VM compile reject; `AsyncMethodVmTests` 5/5, full suite 3939/3939 |
+| 2026-10-17 | async | OpenCode | `3b29937b` | SHIP | merged #206; review found and fixed: the body reject now rethrows instead of degrading to `InvokeNamed`; `Task<T>` bodies that yield a task or fall through are rejected; the double/float ring un-bitting passes the yielding node. `AsyncMethodVmTests` 8/8, full suite 3942/3942 |

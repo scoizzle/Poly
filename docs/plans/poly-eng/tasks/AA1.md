@@ -1,6 +1,6 @@
 # TASK AA1 - Execute `Await` by blocking, and the printed ⊆ simulatable audit
 
-Status: in review
+Status: merged #193 `ecffcc4f` 2026-10-17
 Branch `docs/async-await-interpreter`. PR #193. Lane async. Review see PR.
 Plan card: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../../decisions/2026-10-16-async-interpreter-execution.md) Slice 1.
 
@@ -65,3 +65,4 @@ Approved 2026-10-16: both ADRs accepted; Slice 2 (`AA1b`) admitted.
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-16 | async | spike | `88c5044c` | pushed (Slice 1) | `Await` executes by blocking; `LanguageVmTests` 15 new cases green |
 | 2026-10-16 | async | OpenCode | — | audit + acceptance added | `PrintedSubsetVmTests` green; ADRs accepted; `Forms` scoped to `CompileReject` kinds (recorded in part 2) |
+| 2026-10-17 | async | OpenCode | `ecffcc4f` | SHIP | merged #193; full suite 3934/3934 |

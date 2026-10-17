@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
@@ -170,5 +171,183 @@ public class UnwrittenRelationshipAnalysisTests {
             """);
 
         await Assert.That(DeadEdges(analysis)).IsEmpty();
+    }
+
+    [Test]
+    public async Task CountExpression_OnUnwrittenCollection_IsReported() {
+        // Policy.claims is the second collection to the same child; the aggregate picked
+        // Policyholder.claims, so `count claims` counts an edge nothing writes.
+        var (_, analysis) = Analyze("""
+            domain Test
+            Policyholder: entity {
+              Name: Text
+              claims: many Claim
+            }
+            Policy: entity {
+              Number: Text
+              claims: many Claim
+              Big: policy { count claims > 5 }
+            }
+            Claim: entity {
+              Number: Text
+              holder: Policyholder
+              cover: Policy
+            }
+            """);
+
+        var dead = DeadEdges(analysis);
+        await Assert.That(dead.Count).IsEqualTo(1);
+        await Assert.That(dead[0].Message).Contains("'Policy.claims'");
+        await Assert.That(dead[0].Message).Contains("'count'");
+    }
+
+    [Test]
+    public async Task AnyExpression_OnUnwrittenCollection_IsReported() {
+        var (_, analysis) = Analyze("""
+            domain Test
+            Policyholder: entity {
+              Name: Text
+              claims: many Claim
+            }
+            Policy: entity {
+              Number: Text
+              claims: many Claim
+              Open: policy { any claims where Label is "C1" }
+            }
+            Claim: entity {
+              Label: Text
+              holder: Policyholder
+              cover: Policy
+            }
+            """);
+
+        var dead = DeadEdges(analysis);
+        await Assert.That(dead.Count).IsEqualTo(1);
+        await Assert.That(dead[0].Message).Contains("'Policy.claims'");
+        await Assert.That(dead[0].Message).Contains("'any'");
+    }
+
+    [Test]
+    public async Task RelationshipExists_OnUnwrittenCollection_IsReported() {
+        var (_, analysis) = Analyze("""
+            domain Test
+            Policyholder: entity {
+              Name: Text
+              claims: many Claim
+            }
+            Policy: entity {
+              Number: Text
+              claims: many Claim
+              HasClaims: policy { claims exists }
+            }
+            Claim: entity {
+              Number: Text
+              holder: Policyholder
+              cover: Policy
+            }
+            """);
+
+        var dead = DeadEdges(analysis);
+        await Assert.That(dead.Count).IsEqualTo(1);
+        await Assert.That(dead[0].Message).Contains("'Policy.claims'");
+        await Assert.That(dead[0].Message).Contains("'exists'");
+    }
+
+    [Test]
+    public async Task SumExpression_OnUnwrittenCollection_IsReported() {
+        var (_, analysis) = Analyze("""
+            domain Test
+            Policyholder: entity {
+              Name: Text
+              claims: many Claim
+            }
+            Policy: entity {
+              Number: Text
+              claims: many Claim
+              Total: policy { sum claims Amount > 0 }
+            }
+            Claim: entity {
+              Amount: Number
+              holder: Policyholder
+              cover: Policy
+            }
+            """);
+
+        var dead = DeadEdges(analysis);
+        await Assert.That(dead.Count).IsEqualTo(1);
+        await Assert.That(dead[0].Message).Contains("'Policy.claims'");
+        await Assert.That(dead[0].Message).Contains("'sum'");
+    }
+
+    [Test]
+    public async Task QuantifierExpressions_OnWrittenCollection_AreNotReported() {
+        // `create in bookings` writes Member.bookings, so count / any / exists over it are honest.
+        var (_, analysis) = Analyze("""
+            domain Test
+            Member: entity {
+              Name: Text
+              bookings: many Booking
+              Reserve: action -> Booking {
+                create in bookings { }
+              }
+              Big: policy { count bookings > 5 }
+              Open: policy { any bookings where Label is "B1" }
+              HasBookings: policy { bookings exists }
+            }
+            Booking: entity {
+              member: Member
+              Label: Text
+            }
+            """);
+
+        await Assert.That(DeadEdges(analysis)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SingularRelationshipExists_IsNotReported() {
+        // The boundary from the base slice: a singular edge can be populated by an
+        // explicit link or a value set at create, so `plan exists` is not judged.
+        var (_, analysis) = Analyze("""
+            domain Test
+            Plan: entity {
+              Code: Text
+              Active: stage { }
+            }
+            Member: entity {
+              Name: Text
+              plan: Plan
+              HasPlan: policy { plan exists }
+            }
+            """);
+
+        await Assert.That(DeadEdges(analysis)).IsEmpty();
+    }
+
+    [Test]
+    public async Task ExpressionReader_ReportsOnTheExpressionElementPath() {
+        // The read is anchored on the counted expression inside the action, so the finding's
+        // element path resolves to the action (the nearest named ancestor), not the domain.
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Policyholder: entity {
+              Name: Text
+              claims: many Claim
+            }
+            Policy: entity {
+              Number: Text
+              Count: Number default(0)
+              claims: many Claim
+              Tally: action { assign Count to count claims }
+            }
+            Claim: entity {
+              Number: Text
+              holder: Policyholder
+              cover: Policy
+            }
+            """);
+
+        var dead = DeadEdges(analysis);
+        await Assert.That(dead.Count).IsEqualTo(1);
+        await Assert.That(DomainElementPath.Resolve(domain, dead[0].Node)).IsEqualTo("Test/Policy/Tally");
     }
 }

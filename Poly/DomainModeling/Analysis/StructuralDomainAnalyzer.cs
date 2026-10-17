@@ -2,6 +2,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
+using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -71,6 +72,36 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // Emit/RegisterTrees puts each entity with its `{Entity}Stage` enum in one tree
         // and DomainResult in the scaffolding tree; a user type of that name compiles as CS0101.
         ReportReservedGeneratedNames(context, domain);
+
+        ReportStoredValueTypeProperties(context, domain);
+    }
+
+    /// <summary>
+    /// A domain <c>value</c> type is a contract payload / action parameter — it has no
+    /// identity or storage representation. A property typed as one projects as an
+    /// unmappable EF column (the generated context builds; the host throws on first
+    /// use) and breaks the VM's create-in path. Reject it at analysis: the stored shape
+    /// is a nested entity, or the value travels as an action parameter.
+    /// </summary>
+    private static void ReportStoredValueTypeProperties(AnalysisContext context, Domain domain) {
+        var valueTypeNames = domain.Types.OfType<ValueType>()
+            .Select(static t => t.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        if (valueTypeNames.Count == 0)
+            return;
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var prop in entity.Properties) {
+                if (!valueTypeNames.Contains(prop.Type.TypeName))
+                    continue;
+                context.ReportError(
+                    prop,
+                    $"Entity '{entity.Name}' property '{prop.Name}' is typed as value type '{prop.Type.TypeName}'. " +
+                    "A value type is a contract payload or action parameter and has no storage representation. " +
+                    $"Declare a nested entity for stored state, or pass '{prop.Type.TypeName}' as an action parameter.",
+                    DomainModelDiagnosticCodes.StoredValueTypeProperty);
+            }
+        }
     }
 
     /// <summary>

@@ -10,7 +10,10 @@ namespace Poly.Tests.DomainModeling.Compile;
 /// tree now exists fails, and an unlisted concept with no tree fails.
 /// </summary>
 public sealed class EveryConceptHasTreeTests {
-    private const string InvalidProbe = "nested-invoke-type-mismatch.poly";
+    // Invalid by design: the domain analyzer rejects these.
+    // nested-invoke-type-mismatch: nested invoke type mismatch.
+    // restaurant: stores a domain `value` type as an entity property (DMSTR006).
+    private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly", "restaurant.poly"];
 
     public static IEnumerable<string> SampleDomains() {
         var root = FindRepoRoot();
@@ -22,18 +25,18 @@ public sealed class EveryConceptHasTreeTests {
         return EmitGoldenTests.SampleDomains()
             .Concat(live)
             .Distinct(StringComparer.Ordinal)
-            .Where(p => !string.Equals(Path.GetFileName(p), InvalidProbe, StringComparison.Ordinal))
+            .Where(p => !InvalidProbes.Contains(Path.GetFileName(p), StringComparer.Ordinal))
             .Order(StringComparer.Ordinal);
     }
 
     [Test]
-    public async Task SampleDomains_UnionsGoldensAndLiveRoots_AndSkipsTheInvalidProbe() {
+    public async Task SampleDomains_UnionsGoldensAndLiveRoots_AndSkipsTheInvalidProbes() {
         var samples = SampleDomains().ToList();
         await Assert.That(samples.Count).IsGreaterThan(EmitGoldenTests.SampleDomains().Count());
         await Assert.That(samples.Contains("docs/probes/smoke/smoke.poly")).IsTrue();
         await Assert.That(samples.Contains("demo/live/domain.poly")).IsTrue();
         await Assert.That(samples.Any(p =>
-            string.Equals(Path.GetFileName(p), InvalidProbe, StringComparison.Ordinal))).IsFalse();
+            InvalidProbes.Contains(Path.GetFileName(p), StringComparer.Ordinal))).IsFalse();
         foreach (var golden in EmitGoldenTests.SampleDomains())
             await Assert.That(samples.Contains(golden)).IsTrue();
     }

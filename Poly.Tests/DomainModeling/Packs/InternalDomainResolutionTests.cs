@@ -104,7 +104,7 @@ public sealed class InternalDomainResolutionTests {
         var filled = SuiteWith(parent).FillInternalContracts(parent);
 
         // Plant the stored-property leak through the model API: analysis now rejects an
-        // entity property typed as a value type (DMSTR005), so the parser cannot produce it.
+        // entity property typed as a value type (DMSTR006), so the parser cannot produce it.
         var leaked = filled with {
             Types = filled.Types.Select(t => t is Entity { Name: "Order" } e
                 ? e with {

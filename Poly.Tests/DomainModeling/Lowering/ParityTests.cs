@@ -1038,7 +1038,7 @@ public class ParityTests {
 
     // Probes that are not expected to print compilable C#.
     // nested-invoke-type-mismatch: type error by design.
-    // restaurant: stores a domain `value` type as an entity property (DMSTR005).
+    // restaurant: stores a domain `value` type as an entity property (DMSTR006).
     static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly", "restaurant.poly"];
 
     // Probes declare `uses`; parse them with the product authoring seed and the

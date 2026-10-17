@@ -56,7 +56,7 @@ public sealed class VmAnalyzerReportTests {
     ];
 
     // Rejected by domain analysis (not just VM analysis). restaurant.poly stores a
-    // domain `value` type as an entity property (DMSTR005).
+    // domain `value` type as an entity property (DMSTR006).
     private static readonly string[] DomainErrorSamples = [
         "docs/probes/dogfood/nested-invoke-type-mismatch.poly",
         "docs/probes/scratch-2026-10-14/restaurant.poly",

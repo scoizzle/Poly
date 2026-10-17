@@ -15,7 +15,7 @@ internal static class DomainModelDiagnosticCodes {
     /// contract payload / action parameter with no storage representation, so a stored
     /// column for it cannot be mapped (the host throws on first use).
     /// </summary>
-    public const string StoredValueTypeProperty = "DMSTR005";
+    public const string StoredValueTypeProperty = "DMSTR006";
 
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";

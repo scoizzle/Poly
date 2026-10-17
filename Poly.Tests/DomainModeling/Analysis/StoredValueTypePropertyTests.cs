@@ -9,7 +9,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// representation. A stored entity property typed as one used to pass analysis and fail
 /// later: the DbContext emitted an unmappable column (<c>EnsureCreated</c> threw) and the
 /// VM's <c>create in</c> path threw <c>Member 'IsSuccess' is not resolved</c>. Analysis
-/// now fails closed (DMSTR005); the contract-payload / action-parameter shapes stay legal.
+/// now fails closed (DMSTR006); the contract-payload / action-parameter shapes stay legal.
 /// </summary>
 public sealed class StoredValueTypePropertyTests {
     private static AnalysisResult Analyze(string dsl) {

@@ -757,7 +757,7 @@ public class PolyDslRoundTripTests {
     [Test]
     public async Task Parse_ValueType_RoundTrips() {
         // A value type is a contract payload / action parameter — never a stored
-        // entity property (a property typed as one fails analysis, DMSTR005).
+        // entity property (a property typed as one fails analysis, DMSTR006).
         var poly = """
             domain Test
 

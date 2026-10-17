@@ -12,7 +12,7 @@ namespace Poly.Tests.DomainModeling.Compile;
 public sealed class EveryConceptHasTreeTests {
     // Invalid by design: the domain analyzer rejects these.
     // nested-invoke-type-mismatch: nested invoke type mismatch.
-    // restaurant: stores a domain `value` type as an entity property (DMSTR005).
+    // restaurant: stores a domain `value` type as an entity property (DMSTR006).
     private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly", "restaurant.poly"];
 
     public static IEnumerable<string> SampleDomains() {

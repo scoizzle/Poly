@@ -937,8 +937,10 @@ public class DomainEntityInstanceTests {
     }
 
     [Test]
-    public async Task ForEachInvoke_ZeroTargets_Throws() {
-        // Fail-closed: vacuous success is not allowed.
+    public async Task ForEachInvoke_ZeroTargets_IsANoOpAndTheNextEffectRuns() {
+        // Zero records is a no-op, not a failure: an empty collection (here) and a
+        // predicate that matched none (next test) both skip the loop and continue with
+        // the effect after it.
         var status = new Property("Status", new DomainTypeReference("Text"), []);
         var target = new Entity("Target", [status], Actions: [
             new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
@@ -947,9 +949,12 @@ public class DomainEntityInstanceTests {
             ], [])
         ], [], []);
 
-        var source = new Entity("Source", [], Actions: [
+        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var source = new Entity("Source", [sourceStatus], Actions: [
             new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
-                new ForEachInvokeEffect("Items", "item", null, "Process", [])
+                new ForEachInvokeEffect("Items", "item", null, "Process", []),
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("scanned"))
             ], [])
         ], [], []);
 
@@ -962,8 +967,55 @@ public class DomainEntityInstanceTests {
         store.Add(src);
 
         var zero = src.InvokeAction("RunAll");
-        await Assert.That(zero.Succeeded).IsFalse();
-        await Assert.That(zero.ErrorMessage).Contains("matched zero");
+        await Assert.That(zero.Succeeded).IsTrue();
+        await Assert.That(zero.ErrorMessage).IsNull();
+        await Assert.That(src.GetProperty<string>("Status")).IsEqualTo("scanned");
+    }
+
+    [Test]
+    public async Task ForEachInvoke_PredicateMatchingNothing_IsANoOpAndTheNextEffectRuns() {
+        // The filtered case: targets exist but none satisfies the predicate. The loop
+        // body never runs, the action succeeds, and the effect after the loop still runs.
+        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var count = new Property("Count", new DomainTypeReference("Number"), []);
+        var isSelected = new Policy("IsSelected",
+            DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(42L)));
+        var process = new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
+            new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
+        ], []);
+
+        var target = new Entity("Target", [status, count], [process], [isSelected], []);
+
+        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var source = new Entity("Source", [sourceStatus], Actions: [
+            new Poly.DomainModeling.Ontology.Action("RunSelected", InvocationResult.Void, [], [
+                new ForEachInvokeEffect("Items", "item",
+                    new ForEachNamedPolicy("IsSelected"), "Process", []),
+                new AssignEffect(DomainExpression.Property("Status"),
+                    DomainExpression.Literal("filtered"))
+            ], [])
+        ], [], []);
+
+        var rel = new Relationship("Items",
+            new DomainTypeReference("Source"), new DomainTypeReference("Target"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = ValidDomain.Create("Test", [source, target], [rel]);
+
+        var store = new DomainInstanceStore();
+        var tgt1 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "a", ["Count"] = 1L }, domain: domain);
+        var tgt2 = DomainEntityInstance.Create(target,
+            new Dictionary<string, object?> { ["Status"] = "b", ["Count"] = 2L }, domain: domain);
+        var src = DomainEntityInstance.Create(source, domain: domain);
+        store.Add(tgt1); store.Add(tgt2); store.Add(src);
+        store.Link("Items", src, tgt1);
+        store.Link("Items", src, tgt2);
+
+        var result = src.InvokeAction("RunSelected");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("a");
+        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("b");
+        await Assert.That(src.GetProperty<string>("Status")).IsEqualTo("filtered");
     }
 
     [Test]

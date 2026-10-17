@@ -174,9 +174,11 @@ public class UniversityDogfoodTests {
         await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(0L);
         await Assert.That(section.GetProperty<object>("SeatsTaken")).IsEqualTo(0L);
 
+        // No registered enrollments left: the filtered `for` iterates zero records, which
+        // is a no-op (2026-10-17) — the action succeeds and changes nothing.
         var dropEmpty = student.InvokeAction("DropAllRegistered");
-        await Assert.That(dropEmpty.Succeeded).IsFalse();
-        await Assert.That(dropEmpty.ErrorMessage).Contains("matched zero");
+        await Assert.That(dropEmpty.Succeeded).IsTrue();
+        await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(0L);
 
         await Assert.That(section.InvokeAction("Reopen").Succeeded).IsTrue();
         var staffLeave = section.InvokeAction("StaffLeave");
@@ -219,9 +221,11 @@ public class UniversityDogfoodTests {
             new Dictionary<string, object?> { ["score"] = 50L });
         await Assert.That(failGrade.Succeeded).IsTrue();
         await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
+        // No enrollment passes the predicate yet: the filtered `for` is a no-op, so the
+        // action succeeds and completes nothing.
         var noPass = student.InvokeAction("CompletePassing");
-        await Assert.That(noPass.Succeeded).IsFalse();
-        await Assert.That(noPass.ErrorMessage).Contains("matched zero");
+        await Assert.That(noPass.Succeeded).IsTrue();
+        await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
 
         var passGrade = e3.InvokeAction("RecordGrade",
             new Dictionary<string, object?> { ["score"] = 90L });

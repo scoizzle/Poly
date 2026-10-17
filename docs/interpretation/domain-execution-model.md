@@ -104,7 +104,7 @@ Every action effect list maps to Syntax AST, compiles via `Interpreter.CompileCh
 | `ConditionalEffect` | `IfStatement(cond, thenBlock, elseBlock?)` | Mixed if+create is one tree |
 | `StageTransitionEffect` | Assignment of `CurrentStage` + `Invoke(Member(This, "Notify"), stageName)` | Same tree on runtime and emit |
 | `InvokeActionEffect` | Self: `Invoke(Member(This, action), args)`. Cross-entity: `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard | Same tree on runtime and emit |
-| `ForEachInvokeEffect` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Zero-match `DomainResult.Failure` |
+| `ForEachInvokeEffect` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Zero records is a no-op (no `Failure`) |
 | `CreateEntityInstance` | `this.Create(typeName, prop, value, …)` | Notify-shaped Store job; C# factory may call `Stay.Create` as host bind |
 | `CreateEntityInRelationship` | `this.CreateIn(relName, prop, value, …)` | Store.CreateIn registers and links; C# factory may call `CreateNav` as host bind |
 
@@ -243,7 +243,7 @@ On the simulate path, `Rel exists` and to-one path-prefix lower to Notify-shaped
 |------|------------|----------|
 | Self-invoke | `Invoke(Member(This, action), args)` | Analysis sees the action on the type def; C# prints `this.Checkout()`. Nested Failure is discarded like C# `this.Foo();` |
 | Singular cross-entity | `this.Rel.Action(args)` with a linked-target `DomainResult.Failure` guard before deref | Same tree on runtime and emit. Does not wrap `IsSuccess` |
-| For-invoke | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Analysis rejects ManyToMany / OneToOne. VM walks `IList` (fail-loud non-IList). Per-item `if (!result.IsSuccess) return result`. Zero-match `DomainResult.Failure`; `ExecuteEffect` throws on a failed program result |
+| For-invoke | Fail-fast `ForEachLoop` over a **OneToMany** collection nav | Analysis rejects ManyToMany / OneToOne. VM walks `IList` (fail-loud non-IList). Per-item `if (!result.IsSuccess) return result`. Zero records is a no-op; `ExecuteEffect` throws on a failed program result |
 
 ---
 

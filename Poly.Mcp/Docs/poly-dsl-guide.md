@@ -370,6 +370,19 @@ Customer: entity {
 Cardinality: `one` (default, can be omitted), `many`.
 Ownership: `owned` marks `SourceOwnsTarget = true`.
 
+**Which entity is the root.** A collection nav (`children: many Child`) means the
+declaring entity owns the target. `owned` marks composition explicitly. A plain singular
+nav is a *reference*: `Truck.warehouse: Warehouse` is a truck that names its warehouse, not
+a warehouse that names one truck. Where two entities reference each other (the classic 1:1
+pair, `Doctor.schedule: one Schedule` with `Schedule.doctor: Doctor`) one side resolves as
+the owner and the other becomes its child — which side is a resolution detail, not something
+the DSL distinguishes.
+
+Ownership never closes a loop, and an entity with no owner is a **root**: it gets its own
+key and its own HTTP endpoints. So a domain cannot express "nothing owns me, but I am not a
+root" — that state used to be reachable and silently produced an entity with no key and no
+endpoints.
+
 **Owned targets keep their owner.** `unlink_instances` refuses to drop the last
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
 owned target must keep its owner." Non-owned links stay minimum zero, and removing
@@ -658,6 +671,15 @@ Pending: stage {
 ```
 
 ### Placement (stage vs entity-level)
+
+**A subscription fires only for edges that exist.** The relationship it reads is populated
+by the source entity's `create in Rel`, by the aggregate parent relationship (the generated
+child-create endpoint and the printed `Attach` call), or by an explicit link
+(`link_instances` or a host). A peer navigation bound as a *value* — `create in sessions
+{ member: who }` — does **not** give `Member.bookings` an edge, so a subscription (or a
+`for` loop) reading `Member.bookings` can never fire. Analysis reports **DMREL002** when a
+collection relationship is read by a subscription or a `for` loop while nothing in the
+domain writes it; the loop then also fails loudly with "matched zero targets".
 
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|

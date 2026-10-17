@@ -691,17 +691,28 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, AbiCtx ctx) {
-        if (ret.Value is null)
+        if (ret.Value is null) {
+            if (ctx.AsyncReturn is not null)
+                return Block(
+                    Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
+                        WrapAsyncResult(null, ctx.AsyncReturn, ctx, null)),
+                    Assign(ctx.SlotsStackPointer,
+                        Add(ctx.FramePosLocal, Constant(1))),
+                    Goto(ctx.ExitLabel));
             return Goto(ctx.ExitLabel);
+        }
 
         int d = ctx.RingDepth;
         var valueExpr = CompileNode(ret.Value, ctx);
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        Expression value = ctx.RingVar(resultSlot);
+        if (ctx.AsyncReturn is not null)
+            value = WrapAsyncResult(value, ctx.AsyncReturn, ctx, ret.Value);
 
         return Block(
             valueExpr, fold,
-            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), ctx.RingVar(resultSlot)),
+            Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), value),
             Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))),
             Goto(ctx.ExitLabel));

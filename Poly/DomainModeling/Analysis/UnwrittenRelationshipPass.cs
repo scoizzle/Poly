@@ -4,8 +4,8 @@ using Poly.DomainModeling.Ontology.Effects;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Reports a collection relationship that a subscription or a <c>for</c> loop reads while
-/// nothing in the domain writes it.
+/// Reports a collection relationship that a subscription, a <c>for</c> loop, or an
+/// expression reader reads while nothing in the domain writes it.
 ///
 /// A relationship is written when an action does <c>create in Rel</c> (the runtime store
 /// links the child to the source), or when it is the target's aggregate parent
@@ -13,6 +13,11 @@ namespace Poly.DomainModeling.Analysis;
 /// write that edge. Anything else (a peer nav bound as a value, or a link added by a host)
 /// leaves the edge empty, so a published dispatch plan cannot fire and a quantifier matches
 /// nothing: exactly the shape where analysis used to say "nothing breaks".
+///
+/// Expression readers are the collection quantifiers and aggregates (<c>count</c>,
+/// <c>any</c>, <c>all</c>, <c>none</c>, <c>sum</c>) and <c>Rel exists</c> /
+/// <c>not Rel exists</c>, wherever the expression can appear: policies, <c>if</c>
+/// conditions, assign RHS, and create initializers.
 ///
 /// Only <b>collection</b> relationships are judged: a singular edge can be satisfied by a
 /// value set at create, so "no <c>create in</c>" does not make it dead.
@@ -55,6 +60,13 @@ internal sealed class UnwrittenRelationshipPass : INodeAnalyzer {
                 if (IsUnwrittenCollection(entity, forLoop.RelationshipName, written))
                     context.ReportWarning(forLoop,
                         DeadEdgeMessage(entity, forLoop.RelationshipName, "'for' loop"),
+                        DomainModelDiagnosticCodes.UnwrittenRelationship);
+            }
+
+            foreach (var read in ExpressionReadsOf(entity)) {
+                if (IsUnwrittenCollection(entity, read.RelationshipName, written))
+                    context.ReportWarning(read.Node,
+                        DeadEdgeMessage(entity, read.RelationshipName, read.Reader),
                         DomainModelDiagnosticCodes.UnwrittenRelationship);
             }
         }
@@ -100,6 +112,54 @@ internal sealed class UnwrittenRelationshipPass : INodeAnalyzer {
                 yield return forLoop;
         }
     }
+
+    /// <summary>
+    /// Expression readers of a collection relationship on <paramref name="entity"/>: the
+    /// collection quantifiers and <c>Rel exists</c> / <c>not Rel exists</c>. Walks every
+    /// <see cref="DomainExpression"/> under the entity, so it sees policy expressions, <c>if</c>
+    /// conditions, assign RHS, create initializers, and subscription / entry / exit effects alike.
+    /// </summary>
+    private static IEnumerable<ExpressionRead> ExpressionReadsOf(Entity entity) {
+        foreach (var node in Descendants(entity)) {
+            if (node is not DomainExpression expr) continue;
+            if (ReadOf(expr) is { } read)
+                yield return new ExpressionRead(expr, read.RelationshipName, read.Reader);
+        }
+    }
+
+    private static (string RelationshipName, string Reader)? ReadOf(DomainExpression expr) => expr switch {
+        AnyExpr a => (a.RelationshipName, "an 'any' expression"),
+        AllExpr a => (a.RelationshipName, "an 'all' expression"),
+        NoneExpr n => (n.RelationshipName, "a 'none' expression"),
+        CountExpr c => (c.RelationshipName, "a 'count' expression"),
+        SumExpr s => (s.RelationshipName, "a 'sum' expression"),
+        Exists e => ReadOfExists(e.Target),
+        NotExists e => ReadOfExists(e.Target),
+        _ => null,
+    };
+
+    /// <summary>
+    /// The relationship named by an <c>exists</c> test: <c>Rel exists</c> parses its subject
+    /// as a property access, while a path-prefix exists targets a relationship navigation.
+    /// A property name resolves to no navigation and <see cref="IsUnwrittenCollection"/>
+    /// drops it, so a property <c>exists</c> is never judged.
+    /// </summary>
+    private static (string RelationshipName, string Reader)? ReadOfExists(DomainExpression target) => target switch {
+        RelationshipNavigation rn => (rn.RelationshipName, "an 'exists' test"),
+        PropertyAccess pa => (pa.Name, "an 'exists' test"),
+        _ => null,
+    };
+
+    private static IEnumerable<Node> Descendants(Node node) {
+        foreach (var child in node.Children) {
+            if (child is null) continue;
+            yield return child;
+            foreach (var nested in Descendants(child))
+                yield return nested;
+        }
+    }
+
+    private readonly record struct ExpressionRead(DomainExpression Node, string RelationshipName, string Reader);
 
     /// <summary>Every effect an entity can run: its actions, its stages' actions and entry/exit, and subscription bodies.</summary>
     private static IEnumerable<Effect> EffectsOf(Entity entity) {

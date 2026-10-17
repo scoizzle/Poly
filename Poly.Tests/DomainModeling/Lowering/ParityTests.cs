@@ -1037,7 +1037,9 @@ public class ParityTests {
     }
 
     // Probes that are not expected to print compilable C#.
-    static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
+    // nested-invoke-type-mismatch: type error by design.
+    // restaurant: stores a domain `value` type as an entity property (DMSTR005).
+    static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly", "restaurant.poly"];
 
     // Probes declare `uses`; parse them with the product authoring seed and the
     // shipped library catalog (the same construction VmAnalyzerReportTests uses),

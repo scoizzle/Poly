@@ -97,12 +97,25 @@ public sealed class InternalDomainResolutionTests {
               Currency: Text
             }
             Order: entity {
-              Total: ChargeRequest
+              Total: Number
             }
             """);
 
         var filled = SuiteWith(parent).FillInternalContracts(parent);
-        var analysis = DomainModelAnalyzer.Analyze(filled);
+
+        // Plant the stored-property leak through the model API: analysis now rejects an
+        // entity property typed as a value type (DMSTR005), so the parser cannot produce it.
+        var leaked = filled with {
+            Types = filled.Types.Select(t => t is Entity { Name: "Order" } e
+                ? e with {
+                    Properties = [
+                        new Property("Total", new DomainTypeReference("ChargeRequest"), []),
+                    ]
+                }
+                : t).ToList()
+        };
+
+        var analysis = DomainModelAnalyzer.Analyze(leaked);
 
         var errors = analysis.Diagnostics
             .Where(d => d.Severity == DiagnosticSeverity.Error)

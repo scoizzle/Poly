@@ -214,10 +214,9 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 
 ### Value types
 
-Named records without identity or lifecycle. Declare before entities that use them.
-A property typed as the value type is a nested document, not a relationship.
-Policies and path-prefix expressions cannot read its fields (`Disputed Amount`).
-The diagnostic names the value type and does not call that name a relationship.
+Named records without identity or lifecycle. A value type is a **contract payload or
+action parameter** — it has no storage representation and cannot be a stored entity
+property. Analysis fails closed on a property typed as one:
 
 ```poly
 Money: value {
@@ -226,9 +225,15 @@ Money: value {
 }
 
 Order: entity {
-  Price: Money
+  Total: Money   // error: a value type has no storage representation
 }
 ```
+
+For structured state on an entity, declare a **nested entity** (an `owned`/`many`
+relationship) instead. To move a value shape into behavior, declare the type on a
+contract and take it as a bound **action parameter** (see Contracts below). Policies
+and path-prefix expressions cannot read a value type's fields (`bill Amount`), and
+the diagnostic names the value type rather than calling that name a relationship.
 
 ### Contracts (used sub-domains)
 

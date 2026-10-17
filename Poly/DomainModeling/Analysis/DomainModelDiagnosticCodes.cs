@@ -10,6 +10,13 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ReservedGeneratedName = "DMSTR004";
 
+    /// <summary>
+    /// An entity property is typed as a domain <c>value</c> type. A value type is a
+    /// contract payload / action parameter with no storage representation, so a stored
+    /// column for it cannot be mapped (the host throws on first use).
+    /// </summary>
+    public const string StoredValueTypeProperty = "DMSTR005";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";

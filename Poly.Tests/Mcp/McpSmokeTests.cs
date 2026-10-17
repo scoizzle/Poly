@@ -124,6 +124,32 @@ public class McpSmokeTests {
     }
 
     [Test]
+    public async Task GetDomainAnalysis_RejectedChange_ReportsTheDiagnosticAnchor() {
+        // T1: a reader must be able to link a consequence back to the element it came
+        // from — code and element path, not just a message string.
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Demo
+
+            Item: entity {
+              Score: Number range(0, 10) default(10)
+              Bump: action { assign Score to Score + 1 }
+            }
+            """);
+        await Assert.That(dsl.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        var data = (AnalysisData)response.Data!;
+
+        await Assert.That(data.DiagnosticFacts).IsNotNull();
+        var warning = data.DiagnosticFacts!.First(f => f.Severity == "Warning");
+        await Assert.That(warning.Code).IsNotNull();
+        await Assert.That(warning.ElementPath.StartsWith("Demo/Item", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(warning.Message).IsNotEmpty();
+    }
+
+    [Test]
     public async Task GetDomainAnalysis_ReferenceOnlyEntity_IsReportedAsRoot() {
         // The facts must agree with the aggregate invariant: nothing owns Lead, so it is a
         // root. It used to be a non-root that no root listed (no key, no endpoints).

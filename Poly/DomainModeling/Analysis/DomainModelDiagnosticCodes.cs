@@ -9,6 +9,15 @@ internal static class DomainModelDiagnosticCodes {
     /// (<c>{Entity}Stage</c> for an entity that has stages, or <c>DomainResult</c>).
     /// </summary>
     public const string ReservedGeneratedName = "DMSTR004";
+    /// <summary>
+    /// A collection navigation's generated C# member name (PascalCase of the nav) equals
+    /// the name of the entity type it points at, and lowering emits a create-in factory
+    /// for that nav. The collection member's type (<c>IReadOnlyList&lt;T&gt;</c>) differs
+    /// from its name, so C#'s Color Color rule does not apply, and the unqualified
+    /// <c>{Type}.Create(...)</c> factory call binds to the member — the generated host
+    /// does not compile. Singular navs are exempt (their member type is the target type).
+    /// </summary>
+    public const string NavigationShadowsEntityType = "DMSTR005";
 
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";

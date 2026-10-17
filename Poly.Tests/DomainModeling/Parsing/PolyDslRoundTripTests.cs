@@ -756,6 +756,8 @@ public class PolyDslRoundTripTests {
 
     [Test]
     public async Task Parse_ValueType_RoundTrips() {
+        // A value type is a contract payload / action parameter — never a stored
+        // entity property (a property typed as one fails analysis, DMSTR006).
         var poly = """
             domain Test
 
@@ -765,7 +767,10 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
-              Price: Money
+              Total: Number
+              Charge: action (bill: Money) {
+                assign Total to 0
+              }
             }
             """;
         var first = Apply(poly);
@@ -776,8 +781,9 @@ public class PolyDslRoundTripTests {
         await Assert.That(printed.Contains("Money: value")).IsTrue();
         var second = Apply(printed);
         await Assert.That(second.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().Single().Properties.Count).IsEqualTo(2);
-        await Assert.That(second.Types.OfType<Entity>().Single().Properties.Single().Type.TypeName)
-            .IsEqualTo("Money");
+        var order = second.Types.OfType<Entity>().Single();
+        await Assert.That(order.Properties.Single().Type.TypeName).IsEqualTo("Number");
+        await Assert.That(order.Actions.Single().Parameters.Single().Type.TypeName).IsEqualTo("Money");
     }
 
     [Test]

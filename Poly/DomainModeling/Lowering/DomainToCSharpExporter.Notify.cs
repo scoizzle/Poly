@@ -435,10 +435,11 @@ public sealed partial class DomainToCSharpExporter {
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
 
-            Node Failure(string msg) => new Return(
+            Node Failure(string msg) => FailureNode(new Constant(msg));
+            Node FailureNode(Node msg) => new Return(
                 new Invoke(
                     new Member(resultType, "Failure"),
-                    new Constant(msg)));
+                    msg));
 
             foreach (var constraint in prop.Constraints) {
                 switch (constraint) {
@@ -541,6 +542,16 @@ public sealed partial class DomainToCSharpExporter {
                 && enumProps.TryGetValue(prop.Name, out var enumTypeName)
                 && TryResolveEnumType(domain, analysis, enumTypeName, out var enumType)
                 && enumType is { MemberNames.Count: > 0 }) {
+                // No default(...) — the property is required at create (guide §3). The
+                // VM factory slot is null when the caller omits it; ReferenceEquals
+                // prints for a value-type param (boxing) and is true only for that slot.
+                if (paramRef.DefaultValue is null) {
+                    checks.Add(new IfStatement(
+                        new Invoke(
+                            new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                            [paramRef, new Constant(null)]),
+                        new Block([Failure($"'{prop.Name}' is required.")])));
+                }
                 Node? notMember = null;
                 var enumTypeRef = new NamedTypeReference(enumType.Name);
                 foreach (var member in enumType.MemberNames) {
@@ -549,13 +560,27 @@ public sealed partial class DomainToCSharpExporter {
                 }
                 checks.Add(new IfStatement(
                     notMember!,
-                    new Block([Failure(
-                        $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
+                    new Block([FailureNode(
+                        InvalidEnumMemberMessage(paramRef, enumType.Name, prop.Name))])));
             }
         }
 
         return checks;
     }
+
+    /// <summary>
+    /// <c>'Gold' is not a valid member of Tier for property 'Level'.</c> — a runtime
+    /// <c>string.Concat</c> so the offending value is named, in the same lowered
+    /// tree the C# factory prints and the VM create path executes.
+    /// </summary>
+    private static Node InvalidEnumMemberMessage(Node value, string enumName, string propName) =>
+        new Invoke(
+            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
+            [
+                new Constant("'"),
+                value,
+                new Constant($"' is not a valid member of {enumName} for property '{propName}'.")
+            ]);
 
     /// <summary>Converts a constraint value object to a Syntax Constant.</summary>
     private static Constant? ConvertToConstant(object? value) {

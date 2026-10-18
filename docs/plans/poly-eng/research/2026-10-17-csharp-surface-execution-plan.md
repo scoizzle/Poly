@@ -62,7 +62,7 @@ Heap operands keep the runtime check, where a null handle (0) is false.
 ## Phase 2 — cheap console ergonomics (one slice each; mostly independent)
 
 - **T-A10** qualified type names (`System.X.Y`) — **Landed 2026-10-18.** A dotted member chain that names a CLR type is rewritten to a `ClrTypeReference`, so `System.String.Empty`, `System.Math.Abs(-1)`, `System.Int32.MaxValue`, `System.Threading.Tasks.Task.CompletedTask` and `typeof(System.String)` execute. Known limits: a nested type whose proper prefix is a type (`System.Environment.SpecialFolder`) reports the prefix as a missing member; `typeof(<keyword>)` (e.g. `typeof(string)`) is still unresolved (pre-existing, not a qualified name); and an *untyped* lambda parameter named like a namespace root is treated as the namespace (a typed parameter or a local shadows it correctly). Do this before `T-E6`.
-- **T-E6** `nameof` execution — depends on `T-A10`; do **not** change the reader fold.
+- **T-E6** `nameof` execution — **Landed 2026-10-18** (folded to a constant by the constant-folding pass; the reader fold and tokenizer are unchanged).
 - **T-C8** `throw` expression read-back; **T-F4** `const` locals.
 - **T-B1** verbatim strings; **T-B2** raw strings (dep T-B1); **T-B3** `0x`/`0b`/`_` literals.
 - **T-C2** `??=`; **T-C3** `<<=`/`>>=`; **T-C1** `++`/`--` (see Q2).

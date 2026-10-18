@@ -679,6 +679,35 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_Nameof_ReturnsTheLastIdentifier() {
+        var local = CSharpScript.Run("var x = 1;\nnameof(x)");
+        await Assert.That(local.Success).IsTrue();
+        await Assert.That(local.Value).IsEqualTo("\"x\"");
+
+        var member = CSharpScript.Run("var s = \"hi\";\nnameof(s.Length)");
+        await Assert.That(member.Success).IsTrue();
+        await Assert.That(member.Value).IsEqualTo("\"Length\"");
+
+        var qualified = CSharpScript.Run("nameof(System.String)");
+        await Assert.That(qualified.Success).IsTrue();
+        await Assert.That(qualified.Value).IsEqualTo("\"String\"");
+    }
+
+    [Test]
+    public async Task Run_Nameof_Concatenates() {
+        var r = CSharpScript.Run("var x = 1;\n\"a\" + nameof(x)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("\"ax\"");
+    }
+
+    [Test]
+    public async Task Run_Nameof_InsideLambda_DoesNotCapture() {
+        var r = CSharpScript.Run("var x = 1;\n((long a) => nameof(x))(0)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("\"x\"");
+    }
+
+    [Test]
     public async Task Run_MixedIntegerEquality_IsNumeric() {
         // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.

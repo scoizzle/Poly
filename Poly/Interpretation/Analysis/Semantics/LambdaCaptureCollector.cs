@@ -73,6 +73,9 @@ internal static class LambdaCaptureCollector {
         Func<Node, Node?>? replacement) {
         if (IsTypeNameReplacement(node, replacement))
             return;
+        // A `nameof(arg)` argument is a name, not an expression to capture.
+        if (node is Invoke { Delegate: TypeReference { TypeName: "nameof" } })
+            return;
         if (node is Lambda nested) {
             var nestedOwn = new HashSet<Parameter>(ownParams, ReferenceEqualityComparer.Instance);
             foreach (var np in nested.Parameters)

@@ -19,6 +19,21 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return;
         }
 
+        // `nameof(arg)` is the last identifier of `arg`. Fold it here — before the
+        // compatibility pass rejects the TypeReference callee — and publish it as a
+        // constant so a parent literal `Add` folds in this same pass.
+        if (node is Invoke { Delegate: TypeReference { TypeName: "nameof" } } nameOfInvoke) {
+            if (nameOfInvoke.Arguments.Length == 1
+                && NameOfArgument(context, nameOfInvoke.Arguments[0]) is { } name) {
+                context.SetMetadata(node, new ConstantValueMetadata(name));
+                context.SetNodeReplacement(node, TypeMatchReplacement(node, new Constant(name), context));
+            }
+            else {
+                context.ReportError(node, "nameof(...) requires a single name argument.");
+            }
+            return;
+        }
+
         // Post-order traversal: analyze children first, then fold parent
         this.AnalyzeChildren(context, node);
 
@@ -36,6 +51,27 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             var typed = TypeMatchReplacement(node, simplified, context);
             context.SetNodeReplacement(node, typed);
         }
+    }
+
+    /// <summary>The name a <c>nameof(arg)</c> yields: the last identifier of the argument,
+    /// following the argument's replacement (a dotted CLR type name is rewritten).</summary>
+    private static string? NameOfArgument(AnalysisContext context, Node argument) {
+        var effective = context.GetNodeReplacement(argument) ?? argument;
+        return effective switch {
+            Variable v => v.Name,
+            Parameter p => p.Name,
+            Member m => m.MemberName,
+            ClrTypeReference c => c.RuntimeType.Name,
+            NamedTypeReference n => LastNameSegment(n.FullName),
+            TypeReference t => LastNameSegment(t.TypeName),
+            PrimitiveTypeReference prim => prim.PrimitiveId.GetCSharpKeyword(),
+            _ => null
+        };
+    }
+
+    private static string LastNameSegment(string name) {
+        var dot = name.LastIndexOf('.');
+        return dot >= 0 ? name[(dot + 1)..] : name;
     }
 
     private FoldResult TryFold(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {

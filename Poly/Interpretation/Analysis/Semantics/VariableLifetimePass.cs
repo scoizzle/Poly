@@ -115,6 +115,8 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 break;
 
             case Invoke invoke:
+                if (invoke.Delegate is TypeReference { TypeName: "nameof" })
+                    return; // the argument is a name, not an expression
                 if (invoke.Delegate is not Lambda)
                     MarkSubtreeEscaped(state, invoke.Arguments);
                 AnalyzeChildrenWithState(context, state, node);

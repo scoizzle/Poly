@@ -429,7 +429,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
 
-        return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
+        // A comparison of two constants the operation cannot handle declines to fold
+        // rather than failing the whole analysis (matches FoldComparison).
+        try {
+            return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or FormatException or OverflowException or InvalidCastException) {
+            return FoldResult.NotFoldable;
+        }
     }
 
     private FoldResult FoldConditional(AnalysisContext context, Conditional cond, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -627,12 +634,27 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     };
 
     private static bool IeeeEquals(object? a, object? b) {
-        if (a is not null && b is not null
-            && (a is double or float || b is double or float)
-            && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
-            return da == db;
+        if (a is not null && b is not null) {
+            if ((a is double or float || b is double or float)
+                && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
+                return da == db;
+            // Integral operands compare numerically across widths: the runtime keeps
+            // scalars in long slots, so `1 == 1L` is true there; object.Equals would say
+            // false for a boxed int against a boxed long. (A `ulong` with bit 63 set is the
+            // one divergence — C# compares it as unsigned, the runtime's long slot
+            // bit-casts it; the C# answer is the one taken here.)
+            if (IsIntegral(a) && IsIntegral(b))
+                return Convert.ToDecimal(a) == Convert.ToDecimal(b);
+        }
         return object.Equals(a, b);
     }
+
+    /// <summary>Integral types whose values <see cref="Convert.ToDecimal(object)"/> can
+    /// compare exactly. <c>char</c> is excluded (that conversion throws), so char pairs
+    /// fall through to <see cref="object.Equals(object, object)"/>, which is correct for
+    /// char-vs-char.</summary>
+    private static bool IsIntegral(object value) =>
+        value is int or long or short or byte or sbyte or ushort or uint or ulong;
 
     private static bool IeeeCompare(object a, object b, Func<double, double, bool> op) {
         if (a is double or float || b is double or float) {

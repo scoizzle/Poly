@@ -210,7 +210,7 @@ public class CSharpReaderTests {
         await Assert.That(assignment.Value).IsTypeOf<Add>();
 
         var again = CSharpLanguage.Write(unit);
-        await Assert.That(again).Contains("o.P = o.P + 1L;");
+        await Assert.That(again).Contains("o.P = o.P + 1;");
     }
 
     [Test]

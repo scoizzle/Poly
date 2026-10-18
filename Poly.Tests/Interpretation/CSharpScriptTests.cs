@@ -367,4 +367,102 @@ public class CSharpScriptTests {
 
         await Assert.That(debug.IsBusy).IsFalse();
     }
+
+    // `is` type tests. The reader folds the target to a primitive/named reference, which
+    // the emitter must resolve (it used to test every operand against bool, so all were
+    // false). A scalar is answered from its static type; a heap operand at runtime.
+    [Test]
+    public async Task Run_Is_StringLiteralIsString_IsTrue() {
+        var r = CSharpScript.Run("\"hi\" is string");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_IntLiteralIsInt_IsTrue() {
+        var r = CSharpScript.Run("1 is int");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_IntLiteralIsLong_IsFalse() {
+        // C# `is` tests the runtime type and never widens: a boxed Int32 is not an Int64.
+        var r = CSharpScript.Run("1 is long");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("false");
+    }
+
+    [Test]
+    public async Task Run_Is_LongLiteralIsLong_IsTrue() {
+        var r = CSharpScript.Run("1L is long");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_ScalarIsObject_IsTrue() {
+        var r = CSharpScript.Run("1 is object");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_LocalStringIsString_IsTrue() {
+        var r = CSharpScript.Run("var o = \"hi\";\no is string");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_LocalStringIsObject_IsTrue() {
+        var r = CSharpScript.Run("var o = \"hi\";\no is object");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_Is_NullReferenceIsString_IsFalse() {
+        // A null reference is not an instance of anything — the runtime handle is 0.
+        var r = CSharpScript.Run("string s = null;\ns is string");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("false");
+    }
+
+    [Test]
+    public async Task Run_Is_StringIsInt_IsFalse() {
+        var r = CSharpScript.Run("\"hi\" is int");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("false");
+    }
+
+    [Test]
+    public async Task Run_Is_UnresolvableTarget_FailsClosed() {
+        // An array type reference has no CLR mapping; the emitter must throw, not answer false.
+        var r = CSharpScript.Run("var x = \"hi\";\nx is int[]");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot resolve the type"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_MixedIntegerEquality_IsNumeric() {
+        // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
+        // than compare a boxed int against a boxed long as unequal.
+        var equal = CSharpScript.Run("1 == 1L");
+        await Assert.That(equal.Success).IsTrue();
+        await Assert.That(equal.Value).IsEqualTo("true");
+
+        var notEqual = CSharpScript.Run("1 != 1L");
+        await Assert.That(notEqual.Success).IsTrue();
+        await Assert.That(notEqual.Value).IsEqualTo("false");
+
+        // char reaches the same fold path; uint widens against long.
+        var chars = CSharpScript.Run("'a' == 'a'");
+        await Assert.That(chars.Success).IsTrue();
+        await Assert.That(chars.Value).IsEqualTo("true");
+
+        var unsigned = CSharpScript.Run("1U == 1L");
+        await Assert.That(unsigned.Success).IsTrue();
+        await Assert.That(unsigned.Value).IsEqualTo("true");
+    }
 }

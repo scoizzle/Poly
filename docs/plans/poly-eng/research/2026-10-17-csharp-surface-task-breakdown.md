@@ -34,13 +34,15 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
 ## Wave 0 — the surface lies today (fix before adding anything)
 
 - **T-A1 — `is` always evaluates to `false`.** dest console · S · dep — · today `1 is int`,
-  `"hi" is string`, `o is object`, `o is string s` all return `false` while the node-level
-  oracle `TypeIs(Constant, TypeReference.To<string>())` returns `1`. The reader folds the
-  type operand to a `PrimitiveTypeReference`, which the emitter's three-way `TypeIs`
-  lowering does not match. · build: emitter `TypeIs` (accept the primitive/CLR forms the
-  reader produces), or fail closed in the reader. · accept: `1 is int`→true, `1 is long`→
-  false, `var o = "hi"; o is string`→true, `o is object`→true, a declaration pattern binds
-  `s`, plus a VM oracle for the primitive-reference form.
+  `"hi" is string`, `o is object` all return `false` (and `o is string s` errors) while the
+  node-level oracle `TypeIs(Constant, TypeReference.To<string>())` returns `1`. The reader
+  folds the type operand to a `PrimitiveTypeReference`, which the emitter's three-way `TypeIs`
+  lowering does not match. · build: emitter `TypeIs` (resolve the primitive/CLR forms the
+  reader produces), or fail closed in the reader; a scalar operand is answered from its
+  static type, so the reader must keep an unsuffixed integer literal `int`. · accept:
+  `1 is int`→true, `1 is long`→false, `var o = "hi"; o is string`→true, `o is object`→true,
+  plus a VM oracle for the primitive-reference form. Declaration-pattern *binding* (`s`
+  after `o is string s`) is **T-D2**; T-A1 evaluates the test and leaves `s` unbound.
 - **T-A2 — `foreach` declared type is not enforced.** dest console · M · dep — · today
   `foreach (double d in intArray)` parses but the loop variable keeps the *element* type →
   **wrong values**; the writer always prints `var`. · build: `ForEachLoop` carries the

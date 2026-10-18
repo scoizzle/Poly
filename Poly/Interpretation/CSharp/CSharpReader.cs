@@ -1021,9 +1021,11 @@ public static class CSharpReader {
                 return uint.Parse(clean[..^1], NumberStyles.Integer, CultureInfo.InvariantCulture);
             if (clean.Contains('.') || clean.Contains('e') || clean.Contains('E'))
                 return double.Parse(clean, NumberStyles.Float, CultureInfo.InvariantCulture);
-            return int.TryParse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue)
-                ? intValue
-                : long.Parse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            // An unsuffixed integer literal is `int` when it fits (C#), so the int must
+            // not be widened by a ternary's common type — `1 is int` depends on it.
+            if (int.TryParse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
+                return intValue;
+            return long.Parse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture);
         }
     }
 }

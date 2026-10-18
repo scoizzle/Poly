@@ -109,11 +109,13 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
 - **T-D2 — declaration/constant/type patterns + `when`.** console · M · dep T-A1 · build:
   extend the reader's `is` fold and the emitter's type tests; `when` guards on `case`.
   · accept: `o is string s` binds, `o is 3`, `case string s when s.Length > 1`.
-- **T-E6 — `nameof` execution (M2).** console · M · dep T-A10 · build: fold
-  `Invoke(TypeReference("nameof"), [arg])` → `Constant(lastIdentifier)`; make the resolution
-  passes treat the argument as opaque. Do **not** change the reader fold or the tokenizer
-  (the round-trip test and `DbContextGenerator` depend on the shape). · accept: `nameof(x)`,
-  `nameof(Type.Member)`, and `"a" + nameof(x)`.
+- **T-E6 — `nameof` execution (M2).** console · M · dep T-A10 · **Landed 2026-10-18.** The
+  constant-folding pass folds `Invoke(TypeReference("nameof"), [arg])` to `Constant(lastName)`
+  and publishes the value, so a parent literal add folds it; the scope validator does not walk
+  the argument (it is a name); `CheckInvokeTarget` accepts the callee. The reader fold and the
+  tokenizer are unchanged (the round-trip shape and `DbContextGenerator` still hold). · accept
+  (met): `nameof(x)`, `nameof(Type.Member)`, `nameof(System.String)` and `"a" + nameof(x)`.
+  A bare keyword argument (`nameof(int)`) is extracted but not tested.
 - **T-F1 — `using var x = …;` declarations.** console · M · build: hoist the rest of the
   block into a `UsingStatement` body and register `x` in `Block.variables`. · accept:
   dispose runs at scope exit; locals after the declaration still resolve.

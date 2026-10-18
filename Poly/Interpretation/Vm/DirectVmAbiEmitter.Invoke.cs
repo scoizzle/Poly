@@ -365,6 +365,10 @@ public static partial class DirectVmAbiEmitter {
         if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
             return EmitInvokeIndirect(invoke, ctx);
 
+        if (invoke.Delegate is TypeReference { TypeName: "nameof" })
+            throw new InvalidOperationException(
+                "VM compile rejected: 'nameof' was not folded to a constant.");
+
         throw new InvalidOperationException(
             $"VM compile rejected: Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}.");
     }

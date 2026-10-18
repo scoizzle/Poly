@@ -271,6 +271,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
             return;
         }
+        if (invoke.Delegate is TypeReference { TypeName: "nameof" }) {
+            // Folded to a constant by the constant-folding pass; the callee is accepted here
+            // because the analyzer walks the original node, not the replacement.
+            return;
+        }
         Report(context, invoke,
             $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
     }

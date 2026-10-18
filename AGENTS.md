@@ -2,6 +2,8 @@
 
 Authoritative always-on policy. User-wide agent defaults are a baseline; this file wins. Open [`docs/CORE.md`](docs/CORE.md) before changing platform machinery.
 
+**Before you edit, check:** Is this a CORE mechanism change (then update `docs/CORE.md` in the same change)? Does the board's `CURRENT` admit the work? Does a new `Node` need a `LanguageSurfaceTests.Kinds` entry plus a `CompileNodeInner` arm in lockstep? Does the file already carry edits you did not make — then preserve them; never revert, stage, or clean them up.
+
 ## Core tenets
 
 Depth: [`docs/decisions/2026-core-engineering-principles.md`](docs/decisions/2026-core-engineering-principles.md). Contract: Frozen core and Agent target below. Machinery: [`docs/CORE.md`](docs/CORE.md).
@@ -48,12 +50,29 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 
 - **TFM:** `net10.0`, nullable on.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
-- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate. Do not weaken audit in-repo.
-- **MCP after code changes:** `scripts/restart-poly-mcp.sh`
-- Incomplete while the build fails, unless the user blocks that. Tests ship with features. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
+- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate, in the parent session: run it there and record the pass count in the summary — the `reviewer` cannot build or test. Do not weaken audit in-repo.
+- **MCP after code changes:** run `scripts/restart-poly-mcp.sh` after touching anything the MCP server exposes — Ast, analysis, the VM, `Poly.Mcp`, or the DSL guide.
+- A red build means the task is incomplete; the user may waive that, an agent may not. Tests ship with features. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
 - Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No `#region`.
 - **DSL:** before authoring, call `get_dsl_guide` (short body). Pass `section` for one heading, or `all` for [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md). Update that file in the same change as the parser, printer, tokenizer, or an MCP tool that authors DSL.
 - **Placement:** Ast → `Poly/Ast/`; analysis framework → `Poly/Analysis/`; semantic passes → `Poly/Interpretation/Analysis/`; VM → `Poly/Interpretation/Vm/`; C# language surface → `Poly/Interpretation/CSharp/`; types → `Poly/Introspection/`; domain → `Poly/DomainModeling/`; grammar engine → `Poly/Grammar/`; MCP → `Poly.Mcp/`.
 - **Admission:** [`docs/plans/poly-eng/board.md`](docs/plans/poly-eng/board.md) is the only CURRENT. If it is `(none)`, open only the file named on `THEN`. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
-- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](docs/plans/archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) (fail closed; 🔴🟠 clear; suite green).
+- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md) (severity: `bug` | `suggestion` | `nit`, §6). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/agent/pr1-uncommitted-review-gate.md`](docs/agent/pr1-uncommitted-review-gate.md) (fail closed; 🔴🟠 clear by the gate's own table; suite green).
 - **Doc roles:** CORE = machinery map · `docs/decisions/` = why · `docs/plans/` = execution (archive DONE) · `docs/agent/` = protocols. A CORE mechanism change updates CORE in the same change.
+
+## C# surface
+
+`Poly/Interpretation/CSharp/` is a reader *and* a writer, and everything it accepts must execute on the VM.
+
+- One grammar table drives reader and writer. A pattern-shape change updates the writer's positional fills in the same change.
+- A new `Node` lands in lockstep with its `LanguageSurfaceTests.Kinds` entry and its `DirectVmAbiEmitter.CompileNodeInner` arm (plus a `CompileValue` arm if it is a value).
+- Console-only work leaves the DSL parser, the exporter, and the golden corpus untouched.
+- Fail closed: a form that cannot execute soundly throws a positioned error; it never folds to a wrong shape.
+- Tests ship with the feature, `Write(Read(x))` stays idempotent, and every feature gets its fail-closed case.
+
+## Branching and PRs
+
+- Base a feature branch on `origin/master`, not on a local `master` that may be behind.
+- Never stage or commit files you do not own, or pre-existing modifications you did not make. If a file is already dirty when you start, leave it dirty; do not `git add` in the user's tree.
+- A PR contains the task's work only. Check `git status` against the PR diff before you push.
+- Removing a worktree whose untracked `bin/`/`obj/` blocks the delete needs `force`, and only with the user's confirmation.

@@ -904,7 +904,7 @@ public sealed class CSharpWriter {
             case BitwiseNot bitwiseNot:
                 return Render("expr-unary", "bitwise-not", Expr(bitwiseNot.Operand));
             case ThrowExpression throwExpression:
-                return "throw " + Expr(throwExpression.Value);
+                return Render("expr-conditional", "throw", " " + Expr(throwExpression.Value));
             case Conditional cond:
                 return "(" + Render("expr-conditional", "conditional",
                     Expr(cond.Condition),

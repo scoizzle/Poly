@@ -724,9 +724,24 @@ public static partial class DirectVmAbiEmitter {
         Convert(Call(null, BitOperationsPopCount,
             Convert(CompileValue(pc.Operand, ctx), typeof(ulong))), typeof(long));
 
-    private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
-        Condition(CompileConditionAsBool(c.Condition, ctx),
-            CompileConditionalBranch(c, c.IfTrue, ctx), CompileConditionalBranch(c, c.IfFalse, ctx));
+    private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) {
+        var test = CompileConditionAsBool(c.Condition, ctx);
+        var ifTrue = CompileConditionalBranch(c, c.IfTrue, ctx);
+        var ifFalse = CompileConditionalBranch(c, c.IfFalse, ctx);
+        if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void))
+            return Condition(test, ifTrue, ifFalse);
+
+        // A `throw` arm compiles to a void block, and Expression.Condition rejects a
+        // void arm. Give the void arm the other arm's type so the ternary still
+        // type-checks: the arm throws when taken, so the default it appends is
+        // unreachable. A conditional whose arms both throw has no value at all, so
+        // branch with statements instead.
+        if (ifTrue.Type == typeof(void) && ifFalse.Type == typeof(void))
+            return Block(IfThenElse(test, ifTrue, ifFalse), Constant(0L));
+        return ifTrue.Type == typeof(void)
+            ? Condition(test, Block(ifTrue, Expression.Default(ifFalse.Type)), ifFalse)
+            : Condition(test, ifTrue, Block(ifFalse, Expression.Default(ifTrue.Type)));
+    }
 
     /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
     /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>

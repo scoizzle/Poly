@@ -185,10 +185,14 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         if (typeDef is not null)
             return ClassifyTypeDefinition(typeDef);
 
-        // Fallback: propagate from true branch
+        // Fallback: propagate from the true branch. A `throw` arm is Void and
+        // carries no value, so classify from the other arm instead.
         var trueMeta = context.GetMetadata<ValueRepresentationMetadata>(node.IfTrue);
-        if (trueMeta is not null)
+        if (trueMeta is not null && trueMeta.Kind != ValueRepresentationKind.Void)
             return (trueMeta.Kind, trueMeta.ClrType);
+        var falseMeta = context.GetMetadata<ValueRepresentationMetadata>(node.IfFalse);
+        if (falseMeta is not null)
+            return (falseMeta.Kind, falseMeta.ClrType);
 
         return (ValueRepresentationKind.Unknown, null);
     }

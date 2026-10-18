@@ -132,9 +132,13 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
   of scope after the loop.
 - **T-F7 — bare `T x;` declarations.** console · S · build: a declaration pattern without an
   initializer (definite-assignment implications). · accept: `int x; x = 1; x + 1`.
-- **T-C8 — `throw` as an expression (read-back).** console · S · today it is executable and
-  printed but cannot be read back. · build: an expression-level `throw` rule + fold.
-  · accept: `x > 0 ? 1 : throw new E()` round-trips.
+- **T-C8 — `throw` as an expression (read-back).** console · S · **Landed 2026-10-18.** The
+  `expr-conditional` rule gained a `throw` pattern (`'throw' expr`) and the reader folds it to
+  `ThrowExpression`; the writer prints it through the same table. The conditional emitter now
+  gives a void (`throw`) arm the other arm's type, and `ClassifyConditional` falls through to
+  the value arm, so both `x > 0 ? 1 : throw e` and `x > 0 ? throw e : 1` execute. · accept
+  (met): `x > 0 ? 1 : throw new E()` round-trips. Limits: `?? throw` still fails to read (the
+  throw pattern sits at the conditional level); rethrow `throw;` has no operand.
 - **T-E11 — conditional element access `a?[0]` and `a?.b[c]`.** console · S/M · build: the
   `?[` token/grammar path plus the chain-short-circuit fold. · accept: null receiver
   short-circuits; the current fail-closed pin moves to a still-unsupported form.

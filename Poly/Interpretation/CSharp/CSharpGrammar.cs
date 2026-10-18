@@ -376,7 +376,8 @@ public static class CSharpGrammar {
             .Pattern("compound-or").Kind(CSharpTokenKind.PipeAssign).Ref("expr").Commit()
             .Pattern("compound-xor").Kind(CSharpTokenKind.CaretAssign).Ref("expr").Commit();
         b.Define("expr-conditional")
-            .Pattern("conditional").Ref("expr-coalesce").Optional(R("cond-tail")).Commit();
+            .Pattern("conditional").Ref("expr-coalesce").Optional(R("cond-tail")).Commit()
+            .Pattern("throw").Kind(CSharpTokenKind.KwThrow).Ref("expr").Commit();
         b.Define("cond-tail")
             .Pattern("tail").Kind(CSharpTokenKind.Question).Ref("expr").Value(CSharpTokenKind.Colon, "colon").Ref("expr").Commit();
         b.Define("expr-coalesce").Pattern("coalesce").LeftAssoc("expr-or", CSharpTokenKind.QuestionQuestion).Commit();

@@ -24,13 +24,16 @@ because `T-E6` needs it. No task is dropped.
 below was checked by reading the files on `origin/master` (`2883a409`) unless noted; no claim
 was confirmed by building or running the suite.
 
-**Defect found while landing 1c (2026-10-18): array index access is broken.** `new int[2]`
-(or `long[]`, `double[]`) then `a[0] = 7` or `a[0]` throws
-`InvalidCastException: Unable to cast object of type 'System.Object[]' to type 'System.Int64[]'`
-— the index path reads the array as one type and writes/casts another. This is a wrong
-behaviour (an exception on a form that parses) and it blocks console tests that need a
-populated array; the T-A2 value tests run at the AST level instead. Not yet a `T-*` task;
-admit it as one (array element access) before the collection tasks (T-E1/T-E2/T-C7).
+**Defect fixed 2026-10-18 (array element access).** `new int[2]` (or `long[]`, `double[]`)
+then `a[0] = 7` or `a[0]` used to throw
+`InvalidCastException: Unable to cast object of type 'System.Object[]' to type 'System.Int64[]'`,
+and a reference element read unwritten threw `NullReferenceException`. `EmitNewArray` (and the
+assignment path) mapped a `PrimitiveTypeReference` element to `object`, so scalar arrays were
+created as `object[]` while the index routes cast them to `long[]`. Creation now derives the
+array from the element's CLR value-type-ness (`long[]` for a value type, `object[]` for a
+reference), a reference element read goes through `BoxToAbi` so null is the zero handle, and the
+frame-local small-array encoding was removed — it was not readable through `.Length` and no
+caller tracked its base offset.
 
 ## Phase 0 — admission (human)
 

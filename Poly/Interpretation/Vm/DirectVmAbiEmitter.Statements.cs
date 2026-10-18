@@ -54,7 +54,7 @@ public static partial class DirectVmAbiEmitter {
                 var longArr = Variable(typeof(long[]), "_assignLongArr");
                 store = Block([longArr],
                     Assign(longArr, Convert(rawObj, typeof(long[]))),
-                    Assign(ArrayAccess(longArr, idx), val));
+                    Assign(ArrayAccess(longArr, idx), ConvertIndexStoreValue(val, elemType, a.Value, ctx)));
             }
             else if (elemType is not null) {
                 var objArr = Variable(typeof(object[]), "_assignObjArr");
@@ -137,29 +137,9 @@ public static partial class DirectVmAbiEmitter {
                 $"VM compile rejected: assignment destination must be a Variable, Member, or IndexAccess, got {a.Destination.GetType().Name}.");
         }
 
-        if (a.Value is NewArray newArr && newArr.Length is Constant lenConst
-            && TryValueToLong(lenConst.Value, out long arrLen)
-            && arrLen > 0 && arrLen <= AbiCtx.SmallArrayThreshold) {
-            Type elemType = newArr.ElementType switch {
-                ClrTypeReference ctr when ctr.RuntimeType.IsValueType => ctr.RuntimeType,
-                _ => typeof(object)
-            };
-            if (elemType.IsValueType) {
-                int baseOffset = ctx.AllocateSmallArray();
-                ctx.TrackFrameLocalArray(destVar, baseOffset);
-                var zeroInits = new Expression[(int)arrLen];
-                for (int zi = 0; zi < (int)arrLen; zi++)
-                    zeroInits[zi] = Assign(
-                        ArrayAccess(ctx.SlotsLocal, Constant(baseOffset + zi)),
-                        Constant(0L));
-                int slot = ctx.AllocSlot();
-                return Block(
-                    Block(zeroInits),
-                    ctx.VariableWrite(destVar, Constant((long)baseOffset)),
-                    Assign(ctx.RingVar(slot), Constant((long)baseOffset)));
-            }
-        }
-
+        // Arrays are always heap-allocated. The former frame-local small-array encoding
+        // (a base offset in the variable's slot) was not readable through a member access
+        // (`.Length`) and did not survive every use; the heap path is the one representation.
         ctx.UntrackFrameLocalArray(destVar);
 
         if (ctx.TryGetCapture(destVar, out int capIndex)) {

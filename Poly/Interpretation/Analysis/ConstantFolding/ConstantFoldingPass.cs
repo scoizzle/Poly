@@ -570,6 +570,15 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         (long x, int y) => x + y,
         (int x, double y) => x + y,
         (double x, int y) => x + y,
+        // C# promotes char arithmetic to int (and to the wider operand otherwise), so a
+        // char add folds to a number — which also lets a concat chain see a constant part.
+        (char x, char y) => x + y,
+        (char x, int y) => x + y,
+        (int x, char y) => x + y,
+        (char x, long y) => x + y,
+        (long x, char y) => x + y,
+        (char x, double y) => x + y,
+        (double x, char y) => x + y,
         (string x, string y) => x + y,
         _ => null
     };
@@ -638,23 +647,27 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             if ((a is double or float || b is double or float)
                 && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
                 return da == db;
-            // Integral operands compare numerically across widths: the runtime keeps
-            // scalars in long slots, so `1 == 1L` is true there; object.Equals would say
-            // false for a boxed int against a boxed long. (A `ulong` with bit 63 set is the
-            // one divergence — C# compares it as unsigned, the runtime's long slot
-            // bit-casts it; the C# answer is the one taken here.)
-            if (IsIntegral(a) && IsIntegral(b))
-                return Convert.ToDecimal(a) == Convert.ToDecimal(b);
+            if (TryConvertToDecimal(a, out var ma) && TryConvertToDecimal(b, out var mb))
+                return ma == mb;
         }
         return object.Equals(a, b);
     }
 
-    /// <summary>Integral types whose values <see cref="Convert.ToDecimal(object)"/> can
-    /// compare exactly. <c>char</c> is excluded (that conversion throws), so char pairs
-    /// fall through to <see cref="object.Equals(object, object)"/>, which is correct for
-    /// char-vs-char.</summary>
-    private static bool IsIntegral(object value) =>
-        value is int or long or short or byte or sbyte or ushort or uint or ulong;
+    /// <summary>Exact numeric comparison for integral, char or decimal operands. A char is
+    /// its code point, so `'a' == 97` folds true; <see cref="Convert.ToDecimal(object)"/>
+    /// throws for a char, hence the explicit arm.</summary>
+    private static bool TryConvertToDecimal(object value, out decimal result) {
+        switch (value) {
+            case char c: result = c; return true;
+            case decimal m: result = m; return true;
+            case int or long or short or byte or sbyte or ushort or uint or ulong:
+                result = Convert.ToDecimal(value);
+                return true;
+            default:
+                result = 0;
+                return false;
+        }
+    }
 
     private static bool IeeeCompare(object a, object b, Func<double, double, bool> op) {
         if (a is double or float || b is double or float) {
@@ -683,9 +696,10 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             double d => d,
             float f => f,
             decimal m => (double)m,
+            char c => c,
             _ => 0
         };
-        return value is int or long or double or float or decimal;
+        return value is int or long or double or float or decimal or char;
     }
 
     private readonly struct FoldResult {

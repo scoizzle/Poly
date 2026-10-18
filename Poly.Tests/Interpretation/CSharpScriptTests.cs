@@ -1136,4 +1136,106 @@ public class CSharpScriptTests {
         var result = CSharpScript.Run("for (int i = 0; i < 3; i = \"x\") { }\n0");
         await Assert.That(result.Success).IsFalse();
     }
+    // ── T-B1 verbatim strings @"…" ───────────────────────────────────────────
+
+    [Test]
+    public async Task Run_VerbatimString_DoesNotDecodeEscapes() {
+        // A backslash is literal and "" is one quote, so a Windows path keeps its
+        // backslashes and the value is never re-interpreted as an escape.
+        await AssertValue("@\"C:\\x\"", "\"C:\\x\"");
+        await AssertValue("@\"a\"\"b\"", "\"a\"b\"");
+        await AssertValue("@\"C:\\x\".Length", "4");
+    }
+
+    [Test]
+    public async Task Read_VerbatimString_FoldsLiteralValue() {
+        var unit = CSharpLanguage.Read("{ @\"C:\\x\"; }");
+        var block = (Block)unit.TopLevelStatements![0];
+        var constant = (Constant)block.Nodes[0];
+        await Assert.That(constant.Value).IsEqualTo("C:\\x");
+        await Assert.That(constant.Value).IsTypeOf<string>();
+    }
+
+    [Test]
+    public async Task Write_VerbatimString_PrintsEscapedValueAndStaysIdempotent() {
+        const string text = "class C { string M() { return @\"C:\\x\"; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("\"C:\\\\x\"");
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(again).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_VerbatimString_Unterminated_FailsClosed() {
+        var result = CSharpScript.Run("@\"abc");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Unterminated verbatim"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_InterpolatedVerbatimString_StillFailsClosed() {
+        // T-B5 ($@"…") is out of scope for this slice; it must stay a positioned
+        // error rather than parse as a plain interpolated string.
+        var result = CSharpScript.Run("var x = 1;\n$@\"C:\\{x}\"");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
+
+    // ── T-B2 raw string literals """…""" ─────────────────────────────────────
+
+    [Test]
+    public async Task Run_RawString_Multiline_StripsIndentation() {
+        await AssertValue("var s = \"\"\"\n    hello\n    world\n    \"\"\";\ns.Length", "11");
+        await AssertValue("\"\"\"\nsingle line\n\"\"\"", "\"single line\"");
+    }
+
+    [Test]
+    public async Task Read_RawString_FoldsVerbatimContent() {
+        // Single-line raw content holds quotes that a plain literal would escape.
+        var single = CSharpLanguage.Read("{ \"\"\"a\"b\"\"\"; }");
+        await Assert.That(((Constant)((Block)single.TopLevelStatements![0]).Nodes[0]).Value).IsEqualTo("a\"b");
+
+        // Multi-line raw content is the lines without the closing quotes' margin.
+        var multiline = CSharpLanguage.Read("{\n\"\"\"\n    hello\n    world\n    \"\"\";\n}");
+        await Assert.That(((Constant)((Block)multiline.TopLevelStatements![0]).Nodes[0]).Value)
+            .IsEqualTo("hello\nworld");
+    }
+
+    [Test]
+    public async Task Read_RawString_BlankLineLosesIndentation() {
+        // A whitespace-only line shorter than the margin loses all of it (C#), so
+        // the value has an empty line rather than a stray space.
+        var unit = CSharpLanguage.Read("{\n\"\"\"\n    a\n   \n    b\n    \"\"\";\n}");
+        await Assert.That(((Constant)((Block)unit.TopLevelStatements![0]).Nodes[0]).Value)
+            .IsEqualTo("a\n\nb");
+    }
+
+    [Test]
+    public async Task Write_RawString_PrintsEscapedValueAndStaysIdempotent() {
+        const string text = "class C { string M() { return \"\"\"\n        a\n        b\n        \"\"\"; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("\"a\\nb\"");
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(again).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_RawString_FormsCSharpRejects_FailClosed() {
+        var unterminated = CSharpScript.Run("\"\"\"abc");
+        await Assert.That(unterminated.Success).IsFalse();
+        await Assert.That(unterminated.Diagnostics.Any(d => d.Contains("Unterminated raw"))).IsTrue();
+
+        // A single-line raw string cannot span lines (Roslyn CS8997).
+        var spansLines = CSharpScript.Run("var s = \"\"\"ab\ncd\"\"\";\ns");
+        await Assert.That(spansLines.Success).IsFalse();
+
+        // The closing quotes must match the opening count (Roslyn CS8998).
+        var mismatched = CSharpScript.Run("var s = \"\"\"x\"\"\"\";\ns");
+        await Assert.That(mismatched.Success).IsFalse();
+
+        // A content line under-indented relative to the closing quotes (Roslyn CS8999).
+        var underIndented = CSharpScript.Run("var s = \"\"\"\n    a\n  b\n    \"\"\";\ns");
+        await Assert.That(underIndented.Success).IsFalse();
+        await Assert.That(underIndented.Diagnostics.Any(d => d.Contains("does not start with the same whitespace"))).IsTrue();
+    }
 }

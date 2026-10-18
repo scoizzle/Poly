@@ -551,7 +551,22 @@ public static partial class DirectVmAbiEmitter {
         var continueLabel = Label("for_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
 
+        // A declaration initializer (`for (var i = 0; …)`) owns a scope: allocate its
+        // variables before the initializer writes them, and release the slots when the
+        // loop ends. The plain assignment form declares nothing here.
+        var declared = fl.DeclaredVariables;
+        var scoped = declared is { Count: > 0 };
+        if (scoped)
+            ctx.PushScope();
+
         var stmts = new List<Expression>();
+        if (declared is { Count: > 0 }) {
+            foreach (var v in declared) {
+                ctx.DeclareVariable(v);
+                if (ctx.NeedsCell(v))
+                    stmts.Add(EmitUpvalueCellInit(v, ctx));
+            }
+        }
         if (fl.Initializer != null)
             stmts.Add(CompileNode(fl.Initializer, ctx));
         var condition = fl.Condition ?? new Constant(1L);
@@ -580,6 +595,8 @@ public static partial class DirectVmAbiEmitter {
         if (incrementExpr != null) loopBody.Add(incrementExpr);
 
         stmts.Add(Loop(Block(loopBody), breakLabel));
+        if (scoped)
+            ctx.PopScope();
         ctx.PopLoopScope();
         ctx.RingDepth = d;
         return Block(stmts);

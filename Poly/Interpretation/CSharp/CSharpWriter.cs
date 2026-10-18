@@ -470,8 +470,20 @@ public sealed class CSharpWriter {
             Expr(doWhile.Condition));
 
     private string ForText(ForLoop forLoop, int indent) {
-        var init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
-            ? Expr(forLoop.Initializer) : null;
+        // A declaration initializer (`for (var i = 0; …)`) owns a loop-local variable and
+        // prints through the for-init declaration pattern; a plain assignment initializer
+        // writes one declared in an enclosing scope and prints as an expression.
+        string? init;
+        if (forLoop.DeclaredVariables is { Count: > 0 } declared
+            && forLoop.Initializer is Assignment { Destination: Variable v } declaration
+            && declared.Any(d => ReferenceEquals(d, v))) {
+            init = RenderFills("for-init", "var-decl",
+                Names(("name", EscapeIdent(v.Name))), Expr(declaration.Value));
+        }
+        else {
+            init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
+                ? Expr(forLoop.Initializer) : null;
+        }
         var condition = forLoop.Condition != null ? Expr(forLoop.Condition) : null;
         var increment = forLoop.Increment != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Increment))
             ? Expr(forLoop.Increment) : null;

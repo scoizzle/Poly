@@ -329,6 +329,8 @@ public static class CSharpGrammar {
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("typed-decl-bare").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("expr-stmt").Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("empty").Kind(CSharpTokenKind.Semicolon).Commit();
         b.Define("else")
@@ -340,6 +342,10 @@ public static class CSharpGrammar {
             .Pattern("method").Optional(R("attributes")).Optional(R("modifiers")).Ref("type")
                 .Value(CSharpTokenKind.Identifier, "name").Optional(R("generic-params")).Ref("params").Ref("method-body").Commit();
         b.Define("for-init")
+            .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
+            .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
             .Pattern("init").Ref("expr").Commit();
         b.Define("for-cond")
             .Pattern("cond").Ref("expr").Commit();

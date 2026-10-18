@@ -52,6 +52,10 @@ internal static class LambdaCaptureCollector {
         }
         if (node is ForEachLoop fe)
             declared.Add(fe.LoopVariable);
+        if (node is ForLoop fl && fl.DeclaredVariables is { } forDeclared) {
+            foreach (var variable in forDeclared)
+                declared.Add(variable);
+        }
         foreach (var child in node.Children) {
             if (child is not null)
                 CollectDeclaredLocals(child, declared, replacement);

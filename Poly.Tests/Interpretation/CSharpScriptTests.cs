@@ -881,6 +881,16 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ForDeclaration_InsideLambda_DoesNotCapture() {
+        // The for-init local is declared by the loop; the capture collector must not treat it
+        // as a free upvalue (that used to throw "captured variable has no upvalue cell").
+        var r = CSharpScript.Run(
+            "((long a) => { var t = 0; for (var i = 0; i < 3; i = i + 1) { t = t + i; } return t; })(0)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("3");
+    }
+
+    [Test]
     public async Task Run_MixedIntegerEquality_IsNumeric() {
         // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.
@@ -980,5 +990,118 @@ public class CSharpScriptTests {
         var binary = CSharpScript.Run("0b");
         await Assert.That(binary.Success).IsFalse();
         await Assert.That(binary.Diagnostics.Any(d => d.Contains("Binary literal"))).IsTrue();
+    }
+
+    // ── T-F7 bare `T x;` declarations ────────────────────────────────────────
+
+    [Test]
+    public async Task Run_BareDeclaration_ThenAssignment_UsesLocal() {
+        await AssertValue("int x;\nx = 1;\nx + 1", "2");
+    }
+
+    [Test]
+    public async Task Run_BareDeclaration_HonorsDeclaredType() {
+        // The declared type must survive the missing initializer: as doubles 1 / 2 = 0.5;
+        // if the declaration were ignored the slot stays a scalar and divides as int (0).
+        await AssertValue("double x;\nx = 1;\nx / 2", "0.5");
+    }
+
+    [Test]
+    public async Task Read_BareDeclaration_FoldsToTypedDefaultAssignment() {
+        var block = (Block)CSharpScript.ReadProgram("int x;\nx = 1;\nx + 1");
+        var assignment = (Assignment)block.Nodes[0];
+        await Assert.That(assignment.Destination).IsTypeOf<Variable>();
+        await Assert.That(((Variable)assignment.Destination).Name).IsEqualTo("x");
+        var value = (Default)assignment.Value;
+        await Assert.That(((PrimitiveTypeReference)value.TargetType!).PrimitiveId)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(block.Variables).Count().IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Read_BareDeclaration_RoundTripsAsDefaultInitializedVar() {
+        const string text = "class C { void M() { int x; x = 1; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("var x = default(int);");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_BareVarDeclaration_FailsClosed() {
+        // `var` requires an initializer; only a typed bare declaration is a valid form.
+        var result = CSharpScript.Run("var x;\nx");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Run_BareDeclaration_NarrowingReassignment_FailsClosed() {
+        var result = CSharpScript.Run("int x;\nx = 2.5;\nx");
+        await Assert.That(result.Success).IsFalse();
+    }
+
+    // ── T-F6 for-init declarations ───────────────────────────────────────────
+
+    [Test]
+    public async Task Run_ForInitVarDeclaration_Accumulates() {
+        await AssertValue(
+            "var sum = 0;\nfor (var i = 0; i < 3; i = i + 1) { sum = sum + i; }\nsum", "3");
+    }
+
+    [Test]
+    public async Task Run_ForInitTypedDeclaration_Accumulates() {
+        await AssertValue(
+            "var sum = 0;\nfor (int i = 0; i < 3; i = i + 1) { sum = sum + i; }\nsum", "3");
+    }
+
+    [Test]
+    public async Task Run_ForInitVariable_IsOutOfScopeAfterLoop() {
+        var result = CSharpScript.Run("for (var i = 0; i < 1; i = i + 1) { }\ni");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("not declared"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Read_ForInitDeclaration_FoldsLoopLocalVariable() {
+        var block = (Block)CSharpScript.ReadProgram("for (var i = 0; i < 3; i = i + 1) { }");
+        var loop = (ForLoop)block.Nodes[0];
+        await Assert.That(loop.DeclaredVariables).Count().IsEqualTo(1);
+        var declared = loop.DeclaredVariables![0];
+        await Assert.That(declared.Name).IsEqualTo("i");
+        // The initializer writes the same Variable the loop declares, so its resolved
+        // type is the declaration's.
+        await Assert.That(((Assignment)loop.Initializer!).Destination).IsSameReferenceAs(declared);
+    }
+
+    [Test]
+    public async Task Read_ForInitPlainAssignment_DeclaresNothing() {
+        var block = (Block)CSharpScript.ReadProgram("var i = 0;\nfor (i = 0; i < 3; i = i + 1) { }\ni");
+        var loop = (ForLoop)block.Nodes[1];
+        await Assert.That(loop.DeclaredVariables).IsNull();
+    }
+
+    [Test]
+    public async Task Write_ForInitDeclaration_RoundTripsAsVarDeclaration() {
+        const string text = "class C { void M() { for (var i = 0; i < 3; i = i + 1) { } } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("for (var i = 0;");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Write_ForInitTypedDeclaration_RoundTripsAsVarDeclaration() {
+        const string text = "class C { void M() { for (int i = 0; i < 3; i = i + 1) { } } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("for (var i = (int)0;");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_ForInitDeclaration_IncompatibleIncrement_FailsClosed() {
+        var result = CSharpScript.Run("for (int i = 0; i < 3; i = \"x\") { }\n0");
+        await Assert.That(result.Success).IsFalse();
     }
 }

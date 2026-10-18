@@ -155,6 +155,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 : null,
             TypeReference typeRef => context.TypeDefinitions.GetTypeDefinition(typeRef.TypeName),
             TypeCast cast => ResolveNodeType(context, cast.TargetTypeReference),
+            Default d => d.TargetType is null ? null : ResolveNodeType(context, d.TargetType),
             TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             TypeAs asType => ResolveAsType(context, asType.TargetTypeReference),
             Conditional cond => ResolveNodeType(context, cond.IfTrue),

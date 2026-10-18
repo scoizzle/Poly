@@ -31,14 +31,9 @@ public sealed record TypeIs : Expression {
     internal static bool StaticTypeIsMatch(Type? operandType, Type targetType) {
         if (operandType is null)
             return false;
-        if (operandType == targetType)
-            return true;
-        if (operandType.IsValueType && targetType == typeof(object))
-            return true;
-        if (!operandType.IsValueType && targetType.IsAssignableFrom(operandType))
-            return true;
-        if (operandType.IsValueType && targetType.IsInterface && targetType.IsAssignableFrom(operandType))
-            return true;
-        return false;
+        // `is` tests the runtime type of the operand: identity, a reference upcast, or a
+        // value type boxed to a base type/interface. It never widens (`int is long` is
+        // false), which is why this is IsAssignableFrom and not a numeric rank.
+        return targetType.IsAssignableFrom(operandType);
     }
 }

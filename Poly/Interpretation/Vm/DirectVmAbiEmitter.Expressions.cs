@@ -480,38 +480,50 @@ public static partial class DirectVmAbiEmitter {
             paramType);
     }
 
-    /// <summary>TypeIs: check if the operand's heap object is assignable to the target type.</summary>
+    /// <summary>TypeIs: test the operand against the target type. A scalar operand is
+    /// answered from its static type; a heap operand is tested against the target CLR
+    /// type at runtime (so a null handle is false). An unresolvable target fails closed.</summary>
     private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
         int d = ctx.RingDepth;
         var operandExpr = CompileNode(t.Operand, ctx);
         int resultSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref resultSlot, d, ctx);
 
-        // Resolve target type from TypeReference via analysis or CLR type lookup
-        Type? targetType = null;
-        if (t.TargetTypeReference is ClrTypeReference clrRef) {
-            targetType = clrRef.RuntimeType;
-        }
-        // Try analysis metadata fallback
-        if (targetType is null && ctx.Analysis is not null) {
-            var resolvedType = ctx.Analysis.GetResolvedType(t);
-            if (resolvedType is ClrTypeDefinition clrDef) {
-                targetType = clrDef.RuntimeType;
-            }
+        // The reader folds `x is T` to a primitive/named reference, not a ClrTypeReference,
+        // and analysis resolves the TypeIs node itself to bool — so resolve the target from
+        // the type reference, never from the node. An unresolvable target (an array or map
+        // reference, an unknown name, `void`) fails closed instead of testing against bool.
+        var targetType = ResolveClrType(t.TargetTypeReference, t.TargetTypeReference, ctx);
+        if (targetType is null || targetType == typeof(void)) {
+            throw new InvalidOperationException(
+                $"VM compile rejected: cannot resolve the type in '{t}'.");
         }
 
-        if (targetType is null) {
-            // Cannot resolve — return 0 (false)
-            return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), Constant(0L)));
+        // A scalar operand's static type is a value type, so the test is a compile-time
+        // answer (`1 is int` true, `1 is long` false — C# `is` tests the runtime type and
+        // never widens). A heap operand is a handle (0 = null) tested at runtime, which
+        // keeps `string s = null; s is string` false and resolves interfaces for free.
+        switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
+            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool: {
+                    var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+                    if (operandStatic is null) {
+                        throw new InvalidOperationException(
+                            $"VM compile rejected: cannot resolve the static type of '{t.Operand}' in '{t}'.");
+                    }
+                    var answer = Ast.Nodes.TypeIs.StaticTypeIsMatch(operandStatic, targetType) ? 1L : 0L;
+                    return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), Constant(answer)));
+                }
+            case ValueRepresentationKind.HeapRef: {
+                    var heapObj = Call(ctx.HeapLocal,
+                        HeapUnsafeGet,
+                        Convert(ctx.RingVar(resultSlot), typeof(int)));
+                    var result = Condition(Expression.TypeIs(heapObj, targetType), Constant(1L), Constant(0L));
+                    return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
+                }
+            default:
+                throw new InvalidOperationException(
+                    $"VM compile rejected: cannot tell whether '{t.Operand}' is a scalar or a reference in '{t}'.");
         }
-
-        // Read heap object and check type: _heap.UnsafeGet((int)handle) is TargetType
-        var heapObj = Call(ctx.HeapLocal,
-            HeapUnsafeGet,
-            Convert(ctx.RingVar(resultSlot), typeof(int)));
-        var typeCheck = TypeIs(heapObj, targetType);
-        var result = Condition(typeCheck, Constant(1L), Constant(0L));
-        return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
     }
 
     private static Type? ResolveClrType(Node? typeRef, Node typedNode, AbiCtx ctx) {

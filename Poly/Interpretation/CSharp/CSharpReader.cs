@@ -687,6 +687,10 @@ public static class CSharpReader {
                             CompoundOperator(tail.PatternName, destination, FoldExpr(tail.Children[0])));
                     }
                 case "expr-conditional": {
+                        // A `throw` in expression position; the operand is a full
+                        // expression (C# `throw_expression : 'throw' expression`).
+                        if (match.PatternName == "throw")
+                            return new ThrowExpression((Poly.Ast.Nodes.Expression)FoldExpr(match.Children[0]));
                         var condition = FoldExpr(match.Children[0]);
                         var tail = MaybeChild(match, "cond-tail");
                         return tail is null

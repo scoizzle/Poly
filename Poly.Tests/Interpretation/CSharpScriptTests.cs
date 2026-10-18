@@ -279,6 +279,68 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Read_ThrowExpression_InConditional_RoundTrips() {
+        // `throw` in expression position is executable and printed; the reader folds
+        // it back so a conditional whose branch throws survives Write(Read(x)).
+        const string text = "class C { void M() { var y = x > 0 ? 1 : throw new E(); } }";
+        var unit = CSharpLanguage.Read(text);
+        var body = (Block)unit.Types[0].Methods![0].Body!;
+        var assignment = (Assignment)body.Nodes[0];
+        var conditional = (Conditional)assignment.Value;
+        await Assert.That(conditional.IfFalse).IsTypeOf<ThrowExpression>();
+        await Assert.That(((ThrowExpression)conditional.IfFalse).Value).IsTypeOf<New>();
+
+        var printed = CSharpLanguage.Write(unit);
+        await Assert.That(printed).Contains("throw new E()");
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Run_ThrowExpression_InConditional_ThrowsOnlyWhenTaken() {
+        // The throwing arm only runs when the condition selects it.
+        var valueArm = CSharpScript.Run(
+            "var x = 5;\nx > 0 ? 1 : throw new System.InvalidOperationException(\"boom\")");
+        await Assert.That(valueArm.Success).IsTrue().Because(string.Join(" | ", valueArm.Diagnostics));
+        await Assert.That(valueArm.Value).IsEqualTo("1");
+
+        // A `throw` in the true arm must not void the value the false arm yields;
+        // the conditional is classified from its value arm.
+        var trueArmThrow = CSharpScript.Run(
+            "var x = 0;\nx > 0 ? throw new System.InvalidOperationException(\"boom\") : 1");
+        await Assert.That(trueArmThrow.Success).IsTrue().Because(string.Join(" | ", trueArmThrow.Diagnostics));
+        await Assert.That(trueArmThrow.Value).IsEqualTo("1");
+
+        var takenThrow = CSharpScript.Run(
+            "var x = 0;\nx > 0 ? 1 : throw new System.InvalidOperationException(\"boom\")");
+        await Assert.That(takenThrow.Success).IsFalse();
+        await Assert.That(takenThrow.Diagnostics.Any(d => d.Contains("InvalidOperationException") && d.Contains("boom"))).IsTrue();
+
+        // A conditional whose arms both throw has no value; it still throws the arm
+        // the condition selects.
+        var bothThrow = CSharpScript.Run(
+            "var x = 0;\nx > 0 ? throw new System.InvalidOperationException(\"a\") : throw new System.InvalidOperationException(\"b\")");
+        await Assert.That(bothThrow.Success).IsFalse();
+        await Assert.That(bothThrow.Diagnostics.Any(d => d.Contains("InvalidOperationException") && d.Contains("b"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_ThrowExpression_UnsupportedPositions_FailClosed() {
+        // A rethrow (`throw;`) has no operand to fold.
+        var rethrow = CSharpScript.Run("var x = 0;\nvar y = x > 0 ? 1 : throw;");
+        await Assert.That(rethrow.Success).IsFalse();
+        await Assert.That(rethrow.Diagnostics).IsNotEmpty();
+
+        // The `?? throw` form is not part of this slice: the throw pattern sits at the
+        // conditional level, so the reader rejects it rather than lowering an unshaped
+        // void operand. Move this pin when the coalesce arm is supported.
+        var coalesce = CSharpScript.Run(
+            "var s = \"hi\";\ns ?? throw new System.InvalidOperationException(\"boom\")");
+        await Assert.That(coalesce.Success).IsFalse();
+        await Assert.That(coalesce.Diagnostics.Any(d => d.Contains("Expected statement"))).IsTrue();
+    }
+
+    [Test]
     public async Task Run_CompoundAssignment_UpdatesVariable() {
         var result = CSharpScript.Run("var x = 1;\nx += 2;\nx");
         await Assert.That(result.Success).IsTrue();

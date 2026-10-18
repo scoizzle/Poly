@@ -233,8 +233,11 @@ public sealed partial class DomainToCSharpExporter {
 
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
-            var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
+            var typeRef = MapDomainTypeRef(prop.Type, domain, metadata);
+            // Requiredness is the default; `optional` is the opt-out. A required value is
+            // non-null (T, [Required], NOT NULL); only an optional value is `T?`/omittable.
+            var isRequired = prop.Constraints.IsRequiredValue();
+            var propRef = isRequired ? typeRef : (Node)new OptionalTypeReference(typeRef);
             var isDomainValue = IsDomainValueType(domain, prop.Type.TypeName);
             List<Node>? constraints = null;
             if (isRequired)
@@ -247,8 +250,8 @@ public sealed partial class DomainToCSharpExporter {
             if (IsNonNullableReferenceScalar(propRef))
                 initializer = new Syntactic.PropertyInitializerDefinitionNode(
                     new Syntactic.NullForgiving(new Syntactic.Default()));
-            else if (isDomainValue)
-                initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(propRef));
+            else if (isDomainValue && isRequired)
+                initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(typeRef));
 
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
@@ -280,7 +283,7 @@ public sealed partial class DomainToCSharpExporter {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
                     defaultedCtorParams.Add(new Parameter(paramName,
-                        new OptionalTypeReference(propRef),
+                        new OptionalTypeReference(typeRef),
                         DefaultValue: new Constant(null)));
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
@@ -296,20 +299,23 @@ public sealed partial class DomainToCSharpExporter {
                 continue; // skip ctor param — handled as a trailing optional param
             }
 
-            // No default expression — full constructor param + assignment.
-            // A non-required value record accepts null and becomes `new T()`.
-            if (isDomainValue && !isRequired) {
-                ctorParams.Add(new Parameter(paramName, new OptionalTypeReference(propRef)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), prop.Name),
-                    new Syntactic.Coalesce(new Parameter(paramName), new New(propRef))));
-            }
-            else {
-                ctorParams.Add(new Parameter(paramName, propRef));
+            // An optional property with no default is trailing too: it is omittable at
+            // create, so it needs a C# optional parameter (`T? = null`) after the required
+            // positional ones. Absent stays null (no coercion to `new T()`/type default).
+            if (!isRequired) {
+                defaultedCtorParams.Add(new Parameter(paramName,
+                    new OptionalTypeReference(typeRef), DefaultValue: new Constant(null)));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), prop.Name),
                     new Parameter(paramName)));
+                continue;
             }
+
+            // Required: a full positional constructor param + assignment.
+            ctorParams.Add(new Parameter(paramName, typeRef));
+            ctorAssignments.Add(new Assignment(
+                new Member(new ThisReference(), prop.Name),
+                new Parameter(paramName)));
         }
 
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──

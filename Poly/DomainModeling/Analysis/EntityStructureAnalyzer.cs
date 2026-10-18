@@ -117,6 +117,9 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
+            // An optional property is omittable at create, so it cannot be a required
+            // positional ctor parameter — it trails with the defaulted ones.
+            if (prop.Constraints.IsOptional()) continue;
             if (entryAssignedProps.Contains(prop.Name)) continue;
             parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
         }

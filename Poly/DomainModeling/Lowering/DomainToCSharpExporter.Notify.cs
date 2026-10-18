@@ -183,11 +183,20 @@ public sealed partial class DomainToCSharpExporter {
             ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
         foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
             var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            if (defaultConstraint is null) continue;
+            var isOptional = prop.Constraints.IsOptional();
+            if (defaultConstraint is null && !isOptional) continue;
             if (entryAssigned.Contains(prop.Name)) continue;
 
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
+            if (defaultConstraint is null) {
+                // `optional` with no default: trailing `T? = null`; absent stays null.
+                var optionalParam = new Parameter(paramName,
+                    new OptionalTypeReference(mapped), DefaultValue: new Constant(null));
+                methodParams.Add(optionalParam);
+                createArgs.Add(optionalParam);
+                continue;
+            }
             var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
                 defaultConstraint.Expression,
                 new NamedTypeReference(prop.Type.TypeName),
@@ -364,17 +373,20 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Trailing optional Create/ctor parameters: defaulted properties that are
-    /// not entry-assigned, in the order the Create factory appends them.
+    /// Trailing optional Create/ctor parameters: properties that are omittable at create —
+    /// defaulted OR <c>optional</c> — and not entry-assigned, in the order the Create
+    /// factory appends them. This is the shared trailing list, so the exporter's ctor and
+    /// every call site (CreateNav args, VM <c>FactorySlots</c>) stay in lockstep.
     /// </summary>
-    internal static List<Property> TrailingDefaultedProperties(
+    internal static List<Property> TrailingOptionalProperties(
         Entity entity,
         INodeMetadataProvider metadata) {
         var entryAssigned = metadata.GetStructure(entity)?.EntryAssignedPropertyNames
             ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
         var list = new List<Property>();
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any())
+            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any()
+                && !prop.Constraints.IsOptional())
                 continue;
             if (entryAssigned.Contains(prop.Name))
                 continue;

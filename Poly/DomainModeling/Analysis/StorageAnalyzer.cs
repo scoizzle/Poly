@@ -294,7 +294,7 @@ public sealed class StorageAnalyzer {
                 columnType,
                 baseClrType,
                 isEnum,
-                prop.Constraints.Any(c => c is RequiredConstraint),
+                prop.Constraints.IsRequiredValue(),
                 prop.Constraints.Any(c => c is DefaultValueConstraint),
                 prop.Constraints.Any(c => c is UniqueConstraint),
                 prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength,

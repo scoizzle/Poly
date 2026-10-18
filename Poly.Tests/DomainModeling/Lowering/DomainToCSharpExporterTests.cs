@@ -92,9 +92,9 @@ public class DomainToCSharpExporterTests {
         Loan: entity {
           Status: Text optional
           CheckedOutAt: DateTime
-          DueDate: DateTime optional
+          DueDate: DateTime default(Now)
           ReturnedAt: DateTime optional
-          TimesRenewed: Number optional
+          TimesRenewed: Number default(0)
           book: Book
           borrower: Patron
           Active: stage {
@@ -441,11 +441,16 @@ public class DomainToCSharpExporterTests {
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
         var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
+        // The CreateNav signature is the target's required ctor params, then the trailing
+        // optional params (defaulted OR `optional`, name order) — the same order the
+        // target's `Create` factory appends them.
         var expected = esm.ConstructorParameters
             .Where(p => !p.IsBackReference)
             .Where(p => autoWireBackRef is null
                 || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
             .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
+            .Concat(DomainToCSharpExporter.TrailingOptionalProperties(loan, analysis)
+                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected);
     }
@@ -3192,6 +3197,52 @@ public class DomainToCSharpExporterTests {
         await Assert.That(printFalse).IsEqualTo(simFalse);
         await Assert.That(printTrue).IsTrue();
         await Assert.That(printFalse).IsFalse();
+    }
+
+    [Test]
+    public async Task OptionalProperty_ExportsNullableTypeAndTrailingCtorParam() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain NullabilityContract
+
+            Note: entity {
+              Title: Text
+              Subtitle: Text optional
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var note = new DomainToCSharpExporter().Export(domain, analysis)
+            .First(t => t.Name == "Note");
+
+        var title = note.Properties!.First(p => p.Name == "Title");
+        var subtitle = note.Properties!.First(p => p.Name == "Subtitle");
+        // Required is the default → non-nullable `T`; `optional` → `T?`.
+        await Assert.That(title.MemberType).IsNotAssignableTo<OptionalTypeReference>();
+        await Assert.That(subtitle.MemberType).IsAssignableTo<OptionalTypeReference>();
+
+        // Optional is omittable at create → it trails as `Subtitle? subtitle = null`
+        // after the required positional parameters.
+        var ctorParams = note.Constructors!
+            .MaxBy(c => c.Parameters?.Count ?? 0)!.Parameters!.ToList();
+        await Assert.That(ctorParams[^1].Name).IsEqualTo("subtitle");
+        await Assert.That(ctorParams[^1].DefaultValue).IsNotNull();
+    }
+
+    [Test]
+    public async Task RequiredIsDefault_StorageColumnRequired_OptionalNullable() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain NullabilityStorage
+            uses persistence
+
+            Note: entity {
+              Title: Text
+              Subtitle: Text optional
+            }
+            """);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var note = storage.Entities.Single(e => e.Name == "Note");
+        await Assert.That(note.Columns.Single(c => c.Name == "Title").IsRequired).IsTrue();
+        await Assert.That(note.Columns.Single(c => c.Name == "Subtitle").IsRequired).IsFalse();
     }
 
     private static string[] CompileExported(string cs) {

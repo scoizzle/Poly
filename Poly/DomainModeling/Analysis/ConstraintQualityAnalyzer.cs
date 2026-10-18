@@ -211,8 +211,8 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
                 .FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.Ordinal));
             if (parentProperty is null) continue;
 
-            var parentRequired = parentProperty.Constraints.Any(static c => c is RequiredConstraint);
-            var childRequired = property.Constraints.Any(static c => c is RequiredConstraint);
+            var parentRequired = parentProperty.Constraints.IsRequiredValue();
+            var childRequired = property.Constraints.IsRequiredValue();
             if (parentRequired && !childRequired) {
                 context.ReportWarning(
                     property,

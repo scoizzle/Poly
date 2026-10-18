@@ -940,7 +940,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             slots.Add(ArgumentFor(
                 targetEntity, parameter.Name, parameter.Type, parameter.IsNavigation,
                 parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(
+        foreach (var prop in DomainToCSharpExporter.TrailingOptionalProperties(
                      targetEntity, _analysis))
             slots.Add(ArgumentFor(
                 targetEntity, prop.Name, prop.Type, isNavigation: false, isCollection: false,
@@ -1044,7 +1044,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             slots.Add(ArgumentFor(
                 target, parameter.Name, parameter.Type, parameter.IsNavigation,
                 parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(target, _analysis!))
+        foreach (var prop in DomainToCSharpExporter.TrailingOptionalProperties(target, _analysis!))
             slots.Add(ArgumentFor(
                 target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
                 inits, loweredInitializers));
@@ -1094,6 +1094,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                         defaultConstraint, prop, _domain, _analysis) is { } constant)
                     return (constant, true);
             }
+            // `optional` with no default: absent is null (the trailing ctor param's
+            // default), never a non-null type default. `default(...)` above wins.
+            if (prop.Constraints.IsOptional())
+                return (new Constant(null), true);
         }
         return (TypeDefaultNode(type), false);
     }

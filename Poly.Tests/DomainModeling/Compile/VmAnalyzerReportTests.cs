@@ -29,7 +29,9 @@ public sealed class VmAnalyzerReportTests {
     ];
 
     // H1 @ 0ba89d58: 15 VM Errors, 1 domain Errors, 0 clean.
-    // 23 VM Errors after the 2026-10-14 from-scratch probes (8 added).
+    // 23 VM Errors after the 2026-10-14 from-scratch probes (8 added); 22 after T5
+    // moved restaurant.poly to InvalidProbes.
+    // 23 after the 2026-10-17 grep probe (1 added).
     private static readonly string[] VmErrorSamples = [
         "demo/live/checkout.poly",
         "demo/live/domain.poly",
@@ -45,6 +47,7 @@ public sealed class VmAnalyzerReportTests {
         "docs/probes/fleet-eval/09-transport/orders.poly",
         "docs/probes/fleet-eval/09-transport/warehouse.poly",
         "docs/probes/fleet-eval/12-mcp/mcp-library.poly",
+        "docs/probes/grep-2026-10-17/grep.poly",
         "docs/probes/scratch-2026-10-14/banking.poly",
         "docs/probes/scratch-2026-10-14/fleet.poly",
         "docs/probes/scratch-2026-10-14/gym.poly",

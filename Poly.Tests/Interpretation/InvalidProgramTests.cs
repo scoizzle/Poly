@@ -20,9 +20,11 @@ public class InvalidProgramTests {
     }
 
     [Test]
-    public async Task Add_StringAndNumber_AnalysisErrorAndCompileRejects() {
+    public async Task Add_BoolAndNumber_AnalysisErrorAndCompileRejects() {
+        // `string + number` is valid C# and now folds (see CSharpScriptTests); bool in
+        // arithmetic is still not numeric.
         await AssertAnalysisThenCompileRejects(
-            new Add(new Constant("hello"), new Constant(1L)),
+            new Add(new Constant(true), new Constant(1L)),
             "not numeric",
             SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
     }

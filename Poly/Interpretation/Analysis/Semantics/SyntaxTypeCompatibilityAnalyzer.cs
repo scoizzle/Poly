@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -148,6 +150,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var lc = CategoryOf(left);
         var rc = CategoryOf(right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
+        // A char compares with a numeric operand after promotion (`'a' > 96`).
+        if (IsNumericLike(left) && IsNumericLike(right))
+            return;
         if (!Compatible(lc, left, rc, right))
             Report(context, leftNode,
                 $"comparison between incompatible types '{left.Name}' and '{right.Name}'");
@@ -164,7 +169,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var rc = CategoryOf(right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
 
-        if (kind is ArithmeticKind.Add && lc is Cat.Text && rc is Cat.Text) {
+        // Add is string concatenation when an operand is a string (`"a" + 1`, `'a' + "b"`).
+        // `char + char` is numeric in C# (both are Cat.Text, so it is excluded here).
+        if (kind is ArithmeticKind.Add && (left == typeof(string) || right == typeof(string))) {
             if (!RewriteStringConcat(context, parent, leftNode, rightNode))
                 Report(context, leftNode, "string concatenation could not be resolved to String.Concat");
             return;
@@ -185,11 +192,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        bool ok = lc is Cat.Number && rc is Cat.Number;
+        bool ok = IsNumericLike(left) && IsNumericLike(right);
         if (!ok)
             Report(context, leftNode,
                 $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')");
     }
+
+    /// <summary>True when the type takes part in arithmetic as a number. <c>char</c> is
+    /// <see cref="Cat.Text"/> (string concatenation needs that) but promotes to <c>int</c>
+    /// in arithmetic and comparison, as in C#.</summary>
+    private static bool IsNumericLike(Type t) => t == typeof(char) || CategoryOf(t) is Cat.Number;
 
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
         var target = ClrTypeOf(context, typeAs)
@@ -522,6 +534,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (prior.ClrType is null || rhsType is null || prior.ClrType == rhsType)
             return;
 
+        // char promotes implicitly to a wider numeric prior, as in C# — but only to
+        // ushort/int/uint/long/ulong. `byte`/`sbyte`/`short` would truncate (C# rejects
+        // them), and float/double take the IEEE branch below (which fails closed when the
+        // destination is captured, because the capture store does not coerce).
+        if (rhsType == typeof(char)
+            && prior.ClrType is { } priorType
+            && (priorType == typeof(ushort) || priorType == typeof(int) || priorType == typeof(uint)
+                || priorType == typeof(long) || priorType == typeof(ulong)))
+            return;
+
         var destDef = context.TypeDefinitions.GetTypeDefinition(prior.ClrType);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
         if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
@@ -608,9 +630,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             var srcCat = source is not null ? CategoryOf(source) : Cat.Unknown;
             var destCat = dest is not null ? CategoryOf(dest)
                 : destDef is IClrTypeDefinition cd ? CategoryOf(cd.RuntimeType) : Cat.Unknown;
-            if ((srcCat is Cat.Number && destCat is Cat.Number)
-                || (srcCat is Cat.Enum && destCat is Cat.Number)
-                || (srcCat is Cat.Number && destCat is Cat.Enum)) {
+            bool srcNumeric = source is not null && IsNumericLike(source);
+            bool destNumeric = dest is not null && IsNumericLike(dest);
+            if ((srcNumeric && destNumeric)
+                || (srcCat is Cat.Enum && destNumeric)
+                || (srcNumeric && destCat is Cat.Enum)) {
                 if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                     return;
             }
@@ -746,6 +770,21 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (parts.Count < 2)
             return false;
         ITypeMethod? method;
+        var allStrings = parts.All(p => ClrTypeOf(context, p) == typeof(string));
+        if (!allStrings) {
+            // A non-string part would have to be boxed into a Concat(object) argument, which
+            // the emitter does not do (a scalar ring slot read as a heap handle is garbage).
+            // Literal parts fold to one string constant — the common case — and anything
+            // else fails closed rather than emitting a wrong value.
+            if (!parts.All(p => p is Constant))
+                return false;
+            var text = "";
+            foreach (var p in parts)
+                text += Convert.ToString(((Constant)p).Value, CultureInfo.InvariantCulture);
+            Replace(context, parent, new Constant(text));
+            return true;
+        }
+
         if (parts.Count <= 4) {
             var argTypes = Enumerable.Repeat(stringDef, parts.Count);
             method = stringDef.FindMatchingMethodOverloads("Concat", argTypes).FirstOrDefault();
@@ -771,13 +810,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (effective is Add add
             && ClrTypeOf(context, add.LeftHandValue) is { } lt
             && ClrTypeOf(context, add.RightHandValue) is { } rt
-            && CategoryOf(lt) is Cat.Text
-            && CategoryOf(rt) is Cat.Text) {
+            && (lt == typeof(string) || rt == typeof(string))) {
             CollectStringConcatParts(context, add.LeftHandValue, parts);
             CollectStringConcatParts(context, add.RightHandValue, parts);
             return;
         }
-        parts.Add(node);
+        // Prefer the folded replacement (e.g. `1 + 2` -> Constant(3)) so a literal chain
+        // whose part is a folded add still counts as a constant.
+        parts.Add(effective);
     }
 
     private static bool IsStringConcatInvoke(Node node) =>

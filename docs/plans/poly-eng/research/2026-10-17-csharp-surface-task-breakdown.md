@@ -44,11 +44,7 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
   plus a VM oracle for the primitive-reference form. Declaration-pattern *binding* (`s`
   after `o is string s`) is **T-D2**; T-A1 evaluates the test and leaves `s` unbound.
 - **T-A2 — `foreach` declared type is not enforced.** dest console · M · dep — · **Landed 2026-10-18** (`ForEachLoop.DeclaredType`; the reader folds the typed arm; the resolver prefers it; the analyzer rejects a pair with no per-item conversion; the emitter converts scalar items in slot space; the writer prints the typed form). Scope: scalar element/loop-type pairs only — a value element with a reference loop type fails closed until box-per-item lands. · accept (met): element-typed and cross-typed scalar cases execute with C# semantics; the writer round-trips `foreach (double d in …)`; a non-convertible pair fails closed.
-- **T-A3 — `char` missing from the numeric ladder.** dest console · S · dep — · today
-  `int x = 1; x = 'a';` is rejected (`cannot assign 'Char'…`) though C# allows it. · build:
-  decide the ladder (`NumericWidenRank` vs `CategoryOf`), allow `char → int` without
-  disturbing string/char semantics. · accept: `char → int` widening succeeds, `char → long`
-  succeeds, `int → char` stays rejected.
+- **T-A3 — `char` missing from the numeric ladder.** dest console · S · dep — · **Landed 2026-10-18.** `CategoryOf(char)` stays `Cat.Text` (string concat needs it); `IsNumericLike` carries `char` for arithmetic, comparison, implicit char→numeric assignment, and explicit numeric casts. `char + char` is numeric, and the `string.Concat` rewrite folds literal non-string parts. · accept (met): `char → int`/`long`/`double` widening succeeds, `int → char` stays rejected, `'a' + 1`→98, `'a' + 'b'`→195, `(int)'a'`→97, `"a" + 1`→`"a1"`, `'a' + "b"`→`"ab"`. A non-literal non-string concat part fails closed (the emitter cannot box it into `Concat(object)`).
 - **T-A5 — `BindingOf` degrades silently.** dest console · S · dep — · today a destination
   `Variable` minted *after* the scope pass falls back to per-node keys, so the assignability
   check quietly stops firing. · build: report (or assert) when a destination resolves to

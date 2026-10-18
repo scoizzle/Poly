@@ -480,7 +480,156 @@ public class CSharpScriptTests {
     }
 
     [Test]
-    public async Task Run_MixedIntegerEquality_IsNumeric() {        // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
+    public async Task Run_CharWidensToNumericVariable() {
+        var toInt = CSharpScript.Run("int x = 1;\nx = 'a';\nx");
+        await Assert.That(toInt.Success).IsTrue();
+        await Assert.That(toInt.Value).IsEqualTo("97");
+
+        var toLong = CSharpScript.Run("long x = 1;\nx = 'a';\nx");
+        await Assert.That(toLong.Success).IsTrue();
+        await Assert.That(toLong.Value).IsEqualTo("97");
+
+        var toDouble = CSharpScript.Run("double x = 1;\nx = 'a';\nx");
+        await Assert.That(toDouble.Success).IsTrue();
+        await Assert.That(toDouble.Value).IsEqualTo("97");
+    }
+
+    [Test]
+    public async Task Run_CharArithmetic_IsNumeric() {
+        var plusInt = CSharpScript.Run("'a' + 1");
+        await Assert.That(plusInt.Success).IsTrue();
+        await Assert.That(plusInt.Value).IsEqualTo("98");
+
+        // char + char is int addition in C#, not string concatenation.
+        var plusChar = CSharpScript.Run("'a' + 'b'");
+        await Assert.That(plusChar.Success).IsTrue();
+        await Assert.That(plusChar.Value).IsEqualTo("195");
+
+        var plusDouble = CSharpScript.Run("'a' + 1.5");
+        await Assert.That(plusDouble.Success).IsTrue();
+        await Assert.That(plusDouble.Value).IsEqualTo("98.5");
+    }
+
+    [Test]
+    public async Task Run_CharComparedToInt_IsNumeric() {
+        var r = CSharpScript.Run("'a' > 96");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_CharToIntCast_IsNumeric() {
+        var r = CSharpScript.Run("(int)'a'");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("97");
+    }
+
+    [Test]
+    public async Task Run_IntToCharAssignment_FailsClosed() {
+        // C# requires an explicit cast; an implicit int -> char assignment stays rejected.
+        var r = CSharpScript.Run("char c = 'a';\nc = 98;\nc");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("incompatible"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_StringConcat_RendersNonStringLiteralParts() {
+        var intPart = CSharpScript.Run("\"a\" + 1");
+        await Assert.That(intPart.Success).IsTrue();
+        await Assert.That(intPart.Value).IsEqualTo("\"a1\"");
+
+        var charPart = CSharpScript.Run("'a' + \"b\"");
+        await Assert.That(charPart.Success).IsTrue();
+        await Assert.That(charPart.Value).IsEqualTo("\"ab\"");
+
+        var doublePart = CSharpScript.Run("\"x\" + 1.5");
+        await Assert.That(doublePart.Success).IsTrue();
+        await Assert.That(doublePart.Value).IsEqualTo("\"x1.5\"");
+
+        var boolPart = CSharpScript.Run("\"x\" + true");
+        await Assert.That(boolPart.Success).IsTrue();
+        await Assert.That(boolPart.Value).IsEqualTo("\"xTrue\"");
+
+        var leftInt = CSharpScript.Run("1 + \"b\"");
+        await Assert.That(leftInt.Success).IsTrue();
+        await Assert.That(leftInt.Value).IsEqualTo("\"1b\"");
+    }
+
+    [Test]
+    public async Task Run_StringConcat_NonStringVariable_FailsClosed() {
+        // A non-literal non-string part would need boxing into a Concat(object) argument,
+        // which the emitter does not do; it fails closed rather than emitting garbage.
+        var r = CSharpScript.Run("\"a\" + 1 + \"b\"");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("\"a1b\"");
+
+        var nonLiteral = CSharpScript.Run("var x = 1;\n\"a\" + x");
+        await Assert.That(nonLiteral.Success).IsFalse();
+        await Assert.That(nonLiteral.Diagnostics.Any(d => d.Contains("string concatenation"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_CharComparedToIntLiteral_FoldsNumeric() {
+        var eq = CSharpScript.Run("'a' == 97");
+        await Assert.That(eq.Success).IsTrue();
+        await Assert.That(eq.Value).IsEqualTo("true");
+
+        var ne = CSharpScript.Run("'a' != 97");
+        await Assert.That(ne.Success).IsTrue();
+        await Assert.That(ne.Value).IsEqualTo("false");
+
+        var eqDouble = CSharpScript.Run("'a' == 97.0");
+        await Assert.That(eqDouble.Success).IsTrue();
+        await Assert.That(eqDouble.Value).IsEqualTo("true");
+    }
+
+    [Test]
+    public async Task Run_CharAssignToNarrowInteger_FailsClosed() {
+        // C# rejects the implicit char -> byte/sbyte/short narrowing.
+        var r = CSharpScript.Run("byte b = 1;\nb = 'a';\nb");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("incompatible"))).IsTrue();
+
+        var wide = CSharpScript.Run("ushort u = 1;\nu = 'a';\nu");
+        await Assert.That(wide.Success).IsTrue();
+        await Assert.That(wide.Value).IsEqualTo("97");
+    }
+
+    [Test]
+    public async Task Run_CharArithmetic_PromotesToInt() {
+        // `'a' + 1` is an int in C#, so a later int write is allowed.
+        var r = CSharpScript.Run("var x = 'a' + 1;\nx = 1000;\nx");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("1000");
+    }
+
+    [Test]
+    public async Task Run_StringConcat_LiteralChain_Renders() {
+        var r = CSharpScript.Run("\"a\" + 1 + 2");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("\"a12\"");
+
+        var mixed = CSharpScript.Run("\"a\" + 1 + \"b\" + 2");
+        await Assert.That(mixed.Success).IsTrue();
+        await Assert.That(mixed.Value).IsEqualTo("\"a1b2\"");
+
+        // A numeric sub-expression part folds to its value first: `'a' + 'b'` is 195 (int).
+        var charSum = CSharpScript.Run("'a' + 'b' + \"c\"");
+        await Assert.That(charSum.Success).IsTrue();
+        await Assert.That(charSum.Value).IsEqualTo("\"195c\"");
+
+        var charPlusInt = CSharpScript.Run("'a' + 1 + \"b\"");
+        await Assert.That(charPlusInt.Success).IsTrue();
+        await Assert.That(charPlusInt.Value).IsEqualTo("\"98b\"");
+
+        var intSum = CSharpScript.Run("1 + 2 + \"b\"");
+        await Assert.That(intSum.Success).IsTrue();
+        await Assert.That(intSum.Value).IsEqualTo("\"3b\"");
+    }
+
+    [Test]
+    public async Task Run_MixedIntegerEquality_IsNumeric() {
+        // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.
         var equal = CSharpScript.Run("1 == 1L");
         await Assert.That(equal.Success).IsTrue();

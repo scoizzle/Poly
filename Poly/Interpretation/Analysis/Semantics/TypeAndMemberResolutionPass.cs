@@ -263,21 +263,27 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (leftRank is null || rightRank is null)
             return leftType;
 
-        return leftRank >= rightRank ? leftType : rightType;
+        var promoted = leftRank >= rightRank ? leftType : rightType;
+        // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
+        // must accept a later int write), so a char result becomes int.
+        return promoted.GetRuntimeType() == typeof(char)
+            ? context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted
+            : promoted;
     }
 
     private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
-        PrimitiveType.Int8 => 1,
-        PrimitiveType.Int16 => 2,
-        PrimitiveType.UInt8 => 3,
-        PrimitiveType.UInt16 => 4,
-        PrimitiveType.Int32 => 5,
-        PrimitiveType.UInt32 => 6,
-        PrimitiveType.Int64 => 7,
-        PrimitiveType.UInt64 => 8,
-        PrimitiveType.Float32 => 9,
-        PrimitiveType.Float64 => 10,
-        PrimitiveType.Decimal => 11,
+        PrimitiveType.Char => 1,
+        PrimitiveType.Int8 => 2,
+        PrimitiveType.Int16 => 3,
+        PrimitiveType.UInt8 => 4,
+        PrimitiveType.UInt16 => 5,
+        PrimitiveType.Int32 => 6,
+        PrimitiveType.UInt32 => 7,
+        PrimitiveType.Int64 => 8,
+        PrimitiveType.UInt64 => 9,
+        PrimitiveType.Float32 => 10,
+        PrimitiveType.Float64 => 11,
+        PrimitiveType.Decimal => 12,
         _ => null
     };
 

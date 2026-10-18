@@ -1136,4 +1136,48 @@ public class CSharpScriptTests {
         var result = CSharpScript.Run("for (int i = 0; i < 3; i = \"x\") { }\n0");
         await Assert.That(result.Success).IsFalse();
     }
+    // ── T-B1 verbatim strings @"…" ───────────────────────────────────────────
+
+    [Test]
+    public async Task Run_VerbatimString_DoesNotDecodeEscapes() {
+        // A backslash is literal and "" is one quote, so a Windows path keeps its
+        // backslashes and the value is never re-interpreted as an escape.
+        await AssertValue("@\"C:\\x\"", "\"C:\\x\"");
+        await AssertValue("@\"a\"\"b\"", "\"a\"b\"");
+        await AssertValue("@\"C:\\x\".Length", "4");
+    }
+
+    [Test]
+    public async Task Read_VerbatimString_FoldsLiteralValue() {
+        var unit = CSharpLanguage.Read("{ @\"C:\\x\"; }");
+        var block = (Block)unit.TopLevelStatements![0];
+        var constant = (Constant)block.Nodes[0];
+        await Assert.That(constant.Value).IsEqualTo("C:\\x");
+        await Assert.That(constant.Value).IsTypeOf<string>();
+    }
+
+    [Test]
+    public async Task Write_VerbatimString_PrintsEscapedValueAndStaysIdempotent() {
+        const string text = "class C { string M() { return @\"C:\\x\"; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("\"C:\\\\x\"");
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(again).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_VerbatimString_Unterminated_FailsClosed() {
+        var result = CSharpScript.Run("@\"abc");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Unterminated verbatim"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_InterpolatedVerbatimString_StillFailsClosed() {
+        // T-B5 ($@"…") is out of scope for this slice; it must stay a positioned
+        // error rather than parse as a plain interpolated string.
+        var result = CSharpScript.Run("var x = 1;\n$@\"C:\\{x}\"");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
 }

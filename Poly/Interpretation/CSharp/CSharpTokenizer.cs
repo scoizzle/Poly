@@ -91,6 +91,9 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         if (char.IsDigit(ch))
             return ScanNumber();
 
+        if (ch == '@' && PeekChar(1) == '"')
+            return ScanVerbatimString();
+
         if (ch == '@' && IsWordStart(PeekChar(1)))
             return ScanWord(atPrefixed: true);
 
@@ -145,6 +148,39 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         var raw = ScanStringBody();
         if (_pos < _text.Length) AdvanceChar(); // closing quote
         return new CSharpToken(CSharpTokenKind.StringLiteral, DecodeStringBody(raw), startLine, startCol);
+    }
+
+    /// <summary>
+    /// Scans a verbatim string <c>@"…"</c>. Verbatim content decodes no escapes —
+    /// a backslash is literal — and <c>""</c> is a single quote. The token text is
+    /// the runtime value, matching the ordinary string path, so the writer's
+    /// ordinary escaping prints it back.
+    /// </summary>
+    private CSharpToken ScanVerbatimString() {
+        var startLine = _line;
+        var startCol = _col;
+        AdvanceChar(); // '@'
+        AdvanceChar(); // opening quote
+        var sb = new StringBuilder();
+        var closed = false;
+        while (_pos < _text.Length) {
+            if (PeekChar() == '"') {
+                if (PeekChar(1) == '"') {
+                    sb.Append('"');
+                    AdvanceChar();
+                    AdvanceChar();
+                    continue;
+                }
+                AdvanceChar(); // closing quote
+                closed = true;
+                break;
+            }
+            sb.Append(PeekChar());
+            AdvanceChar();
+        }
+        if (!closed)
+            throw GrammarError.Error("Unterminated verbatim string literal.", startLine, startCol);
+        return new CSharpToken(CSharpTokenKind.StringLiteral, sb.ToString(), startLine, startCol);
     }
 
     /// <summary>

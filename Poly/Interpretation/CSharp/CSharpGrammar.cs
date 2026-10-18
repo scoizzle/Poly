@@ -325,6 +325,8 @@ public static class CSharpGrammar {
             .Pattern("label").Value(CSharpTokenKind.Identifier, "label").Value(CSharpTokenKind.Colon, "colon").Ref("statement").Commit()
             .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("const-decl").Kind(CSharpTokenKind.KwConst).Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("expr-stmt").Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()

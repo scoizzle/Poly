@@ -84,6 +84,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeForEachLoop(context, state, forEachLoop);
                 break;
 
+            case ForLoop forLoop:
+                AnalyzeForLoop(context, state, forLoop);
+                break;
+
             case TryCatchFinally tcf:
                 AnalyzeTryCatchFinally(context, state, tcf);
                 break;
@@ -174,6 +178,26 @@ internal sealed class ScopeValidator : INodeAnalyzer {
             state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : forEachLoop;
         AnalyzeNode(context, state, forEachLoop.Body);
         UnregisterVariable(state, forEachLoop.LoopVariable.Name);
+    }
+
+    /// <summary>A for-loop initializer declaration (<c>for (var i = 0; …)</c>) declares its
+    /// variables for the condition, increment, and body; register them before the loop is
+    /// walked, or the initializer's own destination and every later use would be undeclared.
+    /// The loop's variables go out of scope when the loop ends.</summary>
+    private void AnalyzeForLoop(AnalysisContext context, ScopeState state, ForLoop forLoop) {
+        var declared = forLoop.DeclaredVariables;
+        if (declared is { Count: > 0 }) {
+            foreach (var v in declared) {
+                RegisterScopedVariable(context, state, v);
+                state.Meta.VariableDeclarationScope[v] =
+                    state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : forLoop;
+            }
+        }
+        AnalyzeChildrenWithState(context, state, forLoop);
+        if (declared is { Count: > 0 }) {
+            foreach (var v in declared)
+                UnregisterVariable(state, v.Name);
+        }
     }
 
     private void AnalyzeBlock(AnalysisContext context, ScopeState state, Block block) {

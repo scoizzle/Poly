@@ -342,6 +342,10 @@ public static class CSharpGrammar {
             .Pattern("method").Optional(R("attributes")).Optional(R("modifiers")).Ref("type")
                 .Value(CSharpTokenKind.Identifier, "name").Optional(R("generic-params")).Ref("params").Ref("method-body").Commit();
         b.Define("for-init")
+            .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
+            .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
             .Pattern("init").Ref("expr").Commit();
         b.Define("for-cond")
             .Pattern("cond").Ref("expr").Commit();

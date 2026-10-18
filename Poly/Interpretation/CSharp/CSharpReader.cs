@@ -504,11 +504,13 @@ public static class CSharpReader {
                 case "do":
                     return new DoWhileLoop(FoldStatement(match.Children[0]), FoldExpr(match.Children[1]));
                 case "for": {
-                        var init = MaybeChild(match, "for-init") is { } i ? FoldExpr(i.Children[0]) : null;
+                        var (init, declared) = MaybeChild(match, "for-init") is { } i
+                            ? FoldForInit(i)
+                            : (null, null);
                         var condition = MaybeChild(match, "for-cond") is { } c ? FoldExpr(c.Children[0]) : null;
                         var increment = MaybeChild(match, "for-incr") is { } inc ? FoldExpr(inc.Children[0]) : null;
                         var body = FoldStatement(MaybeChild(match, "statement") ?? throw Error("Expected for statement body."));
-                        return new ForLoop(init, condition, increment, body);
+                        return new ForLoop(init, condition, increment, body, DeclaredVariables: declared);
                     }
                 case "foreach": {
                         var loopVariable = new Variable(Capture(match, "name"));
@@ -610,6 +612,25 @@ public static class CSharpReader {
         private static (Variable Variable, Node Value) FoldBareDeclaration(
             MatchResult<CSharpToken, CSharpTokenKind> statement) =>
             (new Variable(Capture(statement, "name")), new Default(FoldType(statement.Children[0])));
+
+        /// <summary>
+        /// Folds a for-loop initializer. A <c>var</c> or typed declaration declares a
+        /// loop-local variable (<c>for (var i = 0; …)</c>): the declaration assignment is
+        /// the initializer and the freshly minted variable is returned so the loop owns
+        /// its scope. A plain expression is an assignment to a variable declared in an
+        /// enclosing scope and declares nothing.
+        /// </summary>
+        private (Node Init, IReadOnlyList<Variable>? Declared) FoldForInit(
+            MatchResult<CSharpToken, CSharpTokenKind> match) {
+            if (match.PatternName == "init")
+                return (FoldExpr(match.Children[0]), null);
+            var variable = new Variable(Capture(match, "name"));
+            // var-decl children = [expr]; typed-decl children = [type, expr].
+            var value = match.PatternName == "typed-decl"
+                ? (Node)new TypeCast(FoldExpr(match.Children[^1]), FoldType(match.Children[0]))
+                : FoldExpr(match.Children[^1]);
+            return (new Assignment(variable, value), [variable]);
+        }
 
         private Block FoldBlock(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var nodes = new List<Node>();

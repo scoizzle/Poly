@@ -1030,4 +1030,68 @@ public class CSharpScriptTests {
         var result = CSharpScript.Run("int x;\nx = 2.5;\nx");
         await Assert.That(result.Success).IsFalse();
     }
+
+    // ── T-F6 for-init declarations ───────────────────────────────────────────
+
+    [Test]
+    public async Task Run_ForInitVarDeclaration_Accumulates() {
+        await AssertValue(
+            "var sum = 0;\nfor (var i = 0; i < 3; i = i + 1) { sum = sum + i; }\nsum", "3");
+    }
+
+    [Test]
+    public async Task Run_ForInitTypedDeclaration_Accumulates() {
+        await AssertValue(
+            "var sum = 0;\nfor (int i = 0; i < 3; i = i + 1) { sum = sum + i; }\nsum", "3");
+    }
+
+    [Test]
+    public async Task Run_ForInitVariable_IsOutOfScopeAfterLoop() {
+        var result = CSharpScript.Run("for (var i = 0; i < 1; i = i + 1) { }\ni");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("not declared"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Read_ForInitDeclaration_FoldsLoopLocalVariable() {
+        var block = (Block)CSharpScript.ReadProgram("for (var i = 0; i < 3; i = i + 1) { }");
+        var loop = (ForLoop)block.Nodes[0];
+        await Assert.That(loop.DeclaredVariables).Count().IsEqualTo(1);
+        var declared = loop.DeclaredVariables![0];
+        await Assert.That(declared.Name).IsEqualTo("i");
+        // The initializer writes the same Variable the loop declares, so its resolved
+        // type is the declaration's.
+        await Assert.That(((Assignment)loop.Initializer!).Destination).IsSameReferenceAs(declared);
+    }
+
+    [Test]
+    public async Task Read_ForInitPlainAssignment_DeclaresNothing() {
+        var block = (Block)CSharpScript.ReadProgram("var i = 0;\nfor (i = 0; i < 3; i = i + 1) { }\ni");
+        var loop = (ForLoop)block.Nodes[1];
+        await Assert.That(loop.DeclaredVariables).IsNull();
+    }
+
+    [Test]
+    public async Task Write_ForInitDeclaration_RoundTripsAsVarDeclaration() {
+        const string text = "class C { void M() { for (var i = 0; i < 3; i = i + 1) { } } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("for (var i = 0;");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Write_ForInitTypedDeclaration_RoundTripsAsVarDeclaration() {
+        const string text = "class C { void M() { for (int i = 0; i < 3; i = i + 1) { } } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("for (var i = (int)0;");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_ForInitDeclaration_IncompatibleIncrement_FailsClosed() {
+        var result = CSharpScript.Run("for (int i = 0; i < 3; i = \"x\") { }\n0");
+        await Assert.That(result.Success).IsFalse();
+    }
 }

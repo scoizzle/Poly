@@ -708,6 +708,73 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ArrayIndex_ReadWrite() {
+        var writeRead = CSharpScript.Run("var a = new long[2];\na[0] = 7;\na[0]");
+        await Assert.That(writeRead.Success).IsTrue();
+        await Assert.That(writeRead.Value).IsEqualTo("7");
+
+        var unwritten = CSharpScript.Run("var a = new long[2];\na[0]");
+        await Assert.That(unwritten.Success).IsTrue();
+        await Assert.That(unwritten.Value).IsEqualTo("0");
+
+        var length = CSharpScript.Run("var a = new long[2];\na.Length");
+        await Assert.That(length.Success).IsTrue();
+        await Assert.That(length.Value).IsEqualTo("2");
+    }
+
+    [Test]
+    public async Task Run_ArrayIndex_LargeAndReferenceElements() {
+        // Above the (removed) small-array threshold, and a reference element read null.
+        var large = CSharpScript.Run("var a = new long[5000];\na[0] = 7;\na[0]");
+        await Assert.That(large.Success).IsTrue();
+        await Assert.That(large.Value).IsEqualTo("7");
+
+        var nullRef = CSharpScript.Run("var a = new string[2];\na[0]");
+        await Assert.That(nullRef.Success).IsTrue();
+        await Assert.That(nullRef.Value).IsEqualTo("null");
+
+        var refWrite = CSharpScript.Run("var a = new string[3];\na[0] = \"x\";\na[0]");
+        await Assert.That(refWrite.Success).IsTrue();
+        await Assert.That(refWrite.Value).IsEqualTo("\"x\"");
+    }
+
+    [Test]
+    public async Task Run_ArrayIndex_ForeachSeesWrittenElement() {
+        var r = CSharpScript.Run("var a = new long[2];\na[0] = 7;\nvar t = 0;\nforeach (var x in a) { t = t + x; }\nt");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("7");
+    }
+
+    [Test]
+    public async Task Run_ArrayIndex_IeeeElementIsCoerced() {
+        // `double[] a; a[0] = 7` must store IEEE bits, as a variable store does.
+        var assign = CSharpScript.Run("var a = new double[2];\na[0] = 7;\na[0]");
+        await Assert.That(assign.Success).IsTrue();
+        await Assert.That(assign.Value).IsEqualTo("7");
+
+        var arithmetic = CSharpScript.Run("var a = new double[2];\na[0] = 7;\na[0] / 2");
+        await Assert.That(arithmetic.Success).IsTrue();
+        await Assert.That(arithmetic.Value).IsEqualTo("3.5");
+    }
+
+    [Test]
+    public async Task Run_ArrayIndex_UnsupportedElementType_FailsClosed() {
+        // A value-type element that is a heap handle (decimal, DateTime) cannot have its
+        // default in a zeroed slot, so the array is rejected rather than read as null.
+        var r = CSharpScript.Run("var a = new decimal[2];\na[0]");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("is not supported"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_ArrayIndex_FloatingPointIntoIntegerElement_FailsClosed() {
+        // C# rejects `long[] a; a[0] = 1.5`; truncating would be a wrong shape.
+        var r = CSharpScript.Run("var a = new long[2];\na[0] = 1.5;");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot store a floating-point"))).IsTrue();
+    }
+
+    [Test]
     public async Task Run_MixedIntegerEquality_IsNumeric() {
         // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.

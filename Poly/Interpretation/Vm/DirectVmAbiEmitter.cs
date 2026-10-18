@@ -472,25 +472,54 @@ public static partial class DirectVmAbiEmitter {
         int lenSlot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref lenSlot, d, ctx);
         int slot = ctx.AllocSlot();
-        Type elemType = n.ElementType switch {
-            ClrTypeReference ctr when ctr.RuntimeType.IsValueType => ctr.RuntimeType,
-            _ => typeof(object)
-        };
-        if (elemType.IsValueType && n.Length is Constant len && TryValueToLong(len.Value, out long lv)
-            && lv > 0 && lv <= AbiCtx.SmallArrayThreshold) {
-            int baseOffset = ctx.AllocateSmallArray();
-            var zeroInits = new Expression[(int)lv];
-            for (int zi = 0; zi < (int)lv; zi++)
-                zeroInits[zi] = Assign(
-                    ArrayAccess(ctx.SlotsLocal, Constant(baseOffset + zi)),
-                    Constant(0L));
-            return Block(lenExpr, fold, Block(zeroInits),
-                Assign(ctx.RingVar(slot), Constant((long)baseOffset)));
+        // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
+        // the index routes key on the element's CLR value-type-ness, so creation must agree
+        // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
+        Type elemType = ArraySlotElementType(ArrayElementClrType(n.ElementType, ctx));
+        // A value-type element that is not a ring slot (decimal, DateTime, Guid, or any
+        // nullable) is a heap handle, and a fresh array's zero slot would be the null handle,
+        // not default(T); reject rather than read null where C# gives the default value.
+        var elementClr = ArrayElementClrType(n.ElementType, ctx);
+        if (n.ElementType is OptionalTypeReference
+            || (elementClr is { IsValueType: true } nonSlot && !AbiValueTypes.IsLongRepresentable(nonSlot))) {
+            throw new InvalidOperationException(
+                $"VM compile rejected: an array of '{elementClr?.Name ?? "?"}' is not supported.");
         }
+        // Always a heap array here. The frame-local small-array encoding was removed: it was
+        // not readable through a member access and no caller tracked its base offset.
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(arr, typeof(object)));
         return Block(lenExpr, fold, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+    }
+
+    /// <summary>The CLR type of an array's element from its type node, or null when it cannot
+    /// be resolved statically.</summary>
+    private static Type? ArrayElementClrType(Node elementType, AbiCtx ctx) => elementType switch {
+        ClrTypeReference c => c.RuntimeType,
+        PrimitiveTypeReference p => p.PrimitiveId.GetClrType(),
+        _ => ctx.Analysis?.GetResolvedType(elementType)?.GetRuntimeType()
+    };
+
+    /// <summary>The CLR array a VM array uses: <c>long[]</c> for a value-type element (a scalar
+    /// slot or a handle), <c>object[]</c> for a reference element. The index routes use the same
+    /// value-type test, so the array and its accessors agree.</summary>
+    private static Type ArraySlotElementType(Type? elementClr) =>
+        elementClr is { IsValueType: true } ? typeof(long) : typeof(object);
+
+    /// <summary>The value stored into a value-type array slot. An integer element widened into
+    /// an IEEE slot is bit-encoded exactly as a variable store does (`double[] a; a[0] = 7`).
+    /// The reverse (an IEEE value into a non-IEEE element) truncates where C# rejects it, so it
+    /// fails closed, as the analyzer does for the same variable store.</summary>
+    private static Expression ConvertIndexStoreValue(Expression value, Type elementClr, Node valueNode, AbiCtx ctx) {
+        bool elementIeee = elementClr == typeof(double) || elementClr == typeof(float);
+        bool valueIeee = IsDoubleValue(ctx, valueNode);
+        if (elementIeee == valueIeee)
+            return value;
+        if (!elementIeee)
+            throw new InvalidOperationException(
+                $"VM compile rejected: cannot store a floating-point value into a '{elementClr.Name}' array element.");
+        return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
     }
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
@@ -524,7 +553,7 @@ public static partial class DirectVmAbiEmitter {
             var objArr = Variable(typeof(object[]), "_objArr");
             var valExpr = Block([objArr],
                 Assign(objArr, Convert(rawObj, typeof(object[]))),
-                Convert(ArrayAccess(objArr, idx), typeof(long)));
+                Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArr, idx)));
             return Block(arrExpr, idxExpr,
                 Assign(ctx.RingVar(outSlot), valExpr));
         }
@@ -537,7 +566,7 @@ public static partial class DirectVmAbiEmitter {
                 ArrayAccess(longArrU, idx)),
             Block([objArrU],
                 Assign(objArrU, Convert(rawObj, typeof(object[]))),
-                Convert(ArrayAccess(objArrU, idx), typeof(long))));
+                Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArrU, idx))));
         return Block(arrExpr, idxExpr,
             Assign(ctx.RingVar(outSlot), valExprU));
     }

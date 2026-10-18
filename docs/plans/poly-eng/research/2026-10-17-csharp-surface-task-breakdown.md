@@ -65,11 +65,7 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
   `Literals.Count == Holes.Count + 1` invariant is unenforced; `EmitInlineInvoke`'s doc
   comment is stale; `ClearInlineParameters` has no caller. · build: guard + docs. · accept:
   a malformed node throws; no stale comment.
-- **T-A10 — qualified type-name access.** dest console · S · dep — · today
-  `System.Threading.Tasks.Task.CompletedTask` fails with `Variable 'System' is not declared`
-  (a qualified name is folded as an expression), which also breaks `nameof(System.String)`.
-  · build: fold a dotted name in a type position / as a static-access receiver. · accept:
-  `System.String` resolves as a type; the `await` probe executes.
+- **T-A10 — qualified type-name access.** dest console · S · dep — · **Landed 2026-10-18.** A member chain over an identifier that spells a CLR type name is rewritten (in the resolver) to a `ClrTypeReference`, so the access above it is static; `TypeOf.Children` yields its type so `typeof` resolves. · accept (met): `System.String`/`System.Int32`/`System.Math.Abs(-1)` resolve; the `Task.CompletedTask` probe executes. Known limits: a nested type with a type prefix, `typeof(keyword)`, and an *untyped* lambda parameter named like a namespace root (the CLR rewrite wins there; a typed parameter or local shadows correctly).
 - **T-A4 — DEI's remaining name-keyed scans.** dest console · M · dep — · same mis-binding
   class already fixed twice: cell-backed locals, frame-local arrays, and parameters
   (`TryGetInlineParameter`/`TryGetParameterSlot`/`TryGetCapture`). · **check first**: DEI is

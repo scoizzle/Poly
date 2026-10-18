@@ -1,6 +1,7 @@
 namespace Poly.Interpretation.Analysis.Semantics;
 
 using Poly.Ast.Nodes;
+using Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>Resolves both types and member references for all AST nodes.
 /// Merged from the former separate TypeResolver + MemberResolver passes
@@ -114,6 +115,10 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     }
 
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
+        // A node may have been rewritten to a type reference (a dotted CLR type name folded
+        // as a member chain); resolve through the replacement, as the emitter does.
+        if (context.GetNodeReplacement(node) is { } replaced && replaced != node)
+            return ResolveNodeType(context, replaced);
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             InterpolatedString => context.TypeDefinitions.GetTypeDefinition(typeof(string)),
@@ -304,8 +309,22 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         AnalysisContext context,
         Member memberAccess) {
         var instanceType = ResolveNodeType(context, memberAccess.Value);
-        if (instanceType == null)
+        if (instanceType == null) {
+            // A dotted CLR type name (`System.String`, `System.Threading.Tasks.Task`) is
+            // folded as a member chain over an identifier. Resolve the dotted name; on a
+            // CLR type hit, rewrite this node to the type so the access above it is a
+            // static member access.
+            if (DottedNameSpine(memberAccess) is { } dotted
+                && context.TypeDefinitions.GetTypeDefinition(dotted) is ClrTypeDefinition clr) {
+                // Rewrite this member node to the type; the access above it becomes a
+                // static member access (the emitter follows the replacement).
+                var typeRef = new ClrTypeReference(clr.RuntimeType);
+                context.SetNodeReplacement(memberAccess, typeRef);
+                context.SetResolvedType(memberAccess, clr);
+                return clr;
+            }
             return null;
+        }
 
         var member = instanceType.Members.WithName(memberAccess.MemberName).FirstOrDefault();
         if (member is null)
@@ -313,6 +332,21 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         else
             context.SetResolvedMember(memberAccess, member);
         return member?.MemberTypeDefinition;
+    }
+
+    /// <summary>Flatten a member chain over an identifier (`A.B.C`) to the dotted name it
+    /// spells; null when the chain is not a pure identifier spine.</summary>
+    private static string? DottedNameSpine(Node node) {
+        var names = new List<string>();
+        var current = node;
+        while (current is Member member) {
+            names.Insert(0, member.MemberName);
+            current = member.Value;
+        }
+        if (current is not Variable root)
+            return null;
+        names.Insert(0, root.Name);
+        return string.Join(".", names);
     }
 
     private static ITypeDefinition? ResolveMethodInvocationType(
@@ -698,7 +732,7 @@ internal static class MethodInvocationSemanticResolver {
         // An instance host job of the same arity stays for `this.Create(...)`.
         // When no static overload matches, the instance method remains so the
         // VM still rejects an instance call on a type name.
-        if (matches.Count > 1 && IsTypeName(memberAccess.Value)) {
+        if (matches.Count > 1 && IsTypeName(context.GetNodeReplacement(memberAccess.Value) ?? memberAccess.Value)) {
             var staticMatch = matches.FirstOrDefault(static method => method.IsStatic);
             if (staticMatch is not null)
                 return staticMatch;

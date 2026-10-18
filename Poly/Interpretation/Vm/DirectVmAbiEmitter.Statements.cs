@@ -541,7 +541,7 @@ public static partial class DirectVmAbiEmitter {
 
     private static List<Capture> FindBodyCaptures(Lambda lambda, AnalysisResult? analysis) {
         var bindings = analysis?.GetMetadata<LambdaCaptureMetadata>(lambda)?.Bindings
-            ?? LambdaCaptureCollector.Collect(lambda);
+            ?? LambdaCaptureCollector.Collect(lambda, n => analysis?.GetNodeReplacement(n));
         var fromAnalysis = new List<Capture>(bindings.Count);
         foreach (var b in bindings)
             fromAnalysis.Add(new Capture(b.Variable, b.Parameter));

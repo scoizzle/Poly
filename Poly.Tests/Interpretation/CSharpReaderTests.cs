@@ -214,8 +214,27 @@ public class CSharpReaderTests {
     }
 
     [Test]
-    public async Task Read_CompoundShiftOmitted_StillFailsClosed() {
-        await Assert.That(() => CSharpLanguage.Read("class C { void M() { x <<= 1; } }"))
+    public async Task Read_CompoundShift_DesugarsToAssignmentOverShift() {
+        var left = CSharpLanguage.Read("class C { void M() { x <<= 1; } }");
+        var leftAssignment = (Assignment)((Block)left.Types[0].Methods![0].Body!).Nodes[0];
+        await Assert.That(leftAssignment.Value).IsTypeOf<ShiftLeft>();
+
+        var right = CSharpLanguage.Read("class C { void M() { x >>= 1; } }");
+        var rightAssignment = (Assignment)((Block)right.Types[0].Methods![0].Body!).Nodes[0];
+        await Assert.That(rightAssignment.Value).IsTypeOf<ShiftRight>();
+    }
+
+    [Test]
+    public async Task Read_CompoundShift_RoundTrips() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { x <<= 1; } }"));
+        await Assert.That(printed).Contains("x = x << 1;");
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Read_CompoundShiftOnImpureTarget_FailsClosed() {
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { Get().P <<= 1; } }"))
             .Throws<FormatException>();
     }
 

@@ -386,6 +386,12 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_CompoundShift_UpdatesVariable() {
+        await AssertValue("var x = 1;\nx <<= 3;\nx", "8");
+        await AssertValue("var x = 16;\nx >>= 2;\nx", "4");
+    }
+
+    [Test]
     public async Task Run_CompoundBitwise_UpdatesVariable() {
         var result = CSharpScript.Run("var flags = 6;\nflags &= 3;\nflags");
         await Assert.That(result.Success).IsTrue();

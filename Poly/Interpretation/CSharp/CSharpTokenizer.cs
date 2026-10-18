@@ -54,6 +54,8 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
 
         // Multi-character operators, longest first.
         if (ch == '?' && PeekChar(1) == '?' && PeekChar(2) == '=') return Three(CSharpTokenKind.QuestionQuestionAssign);
+        if (ch == '<' && PeekChar(1) == '<' && PeekChar(2) == '=') return Three(CSharpTokenKind.LtLtAssign);
+        if (ch == '>' && PeekChar(1) == '>' && PeekChar(2) == '=') return Three(CSharpTokenKind.GtGtAssign);
         if (ch == '=' && PeekChar(1) == '>') return Two(CSharpTokenKind.Arrow);
         if (ch == '=' && PeekChar(1) == '=') return Two(CSharpTokenKind.EqEq);
         if (ch == '!' && PeekChar(1) == '=') return Two(CSharpTokenKind.NotEq);

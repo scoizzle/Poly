@@ -171,10 +171,9 @@ public sealed partial class DomainToCSharpExporter {
             createArgs.Add(param);
         }
 
-        // NOTE: properties with DefaultValueConstraint are NOT included in
-        // the Target.Create() parameter list — they are set directly in the
-        // constructor body from their default expression. Do NOT append them
-        // to createArgs here; the Create factory already handles them.
+        // NOTE: properties with DefaultValueConstraint are NOT part of the required
+        // Target.Create() parameter list — they trail it as optional params below.
+        // Do NOT append them to createArgs in the loop above.
 
         // Defaulted props of the target become TRAILING optional method params (C#
         // optional params must be last) and are forwarded to Target.Create — so a
@@ -381,8 +380,12 @@ public sealed partial class DomainToCSharpExporter {
     internal static List<Property> TrailingOptionalProperties(
         Entity entity,
         INodeMetadataProvider metadata) {
-        var entryAssigned = metadata.GetStructure(entity)?.EntryAssignedPropertyNames
-            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+        if (metadata.GetStructure(entity)?.TrailingOptionalPropertyNames is { } names) {
+            var byName = entity.Properties.ToDictionary(p => p.Name, StringComparer.Ordinal);
+            return [.. names.Where(byName.ContainsKey).Select(n => byName[n])];
+        }
+        // No ESM (null-analysis path): re-derive the same ordered list.
+        var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
         var list = new List<Property>();
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (!prop.Constraints.OfType<DefaultValueConstraint>().Any()
@@ -446,6 +449,21 @@ public sealed partial class DomainToCSharpExporter {
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+            // An `optional` property's create parameter is T? and may be absent (null).
+            // A constraint guard must then test only a present value — an absent value
+            // passes, because the property is optional. Mirrors the assign-side null skip
+            // in EffectLoweringPass.AppendAssignConstraintChecks (twin trees).
+            var isOptional = prop.Constraints.IsOptional();
+            Node Present(Node condition) => isOptional
+                ? new Syntactic.And(
+                    isText
+                        ? (Node)new Syntactic.Not(new Invoke(
+                            new Member(
+                                new PrimitiveTypeReference(PrimType.String), "IsNullOrEmpty"),
+                            [paramRef]))
+                        : new NotEqual(paramRef, new Constant(null)),
+                    condition)
+                : condition;
 
             Node Failure(string msg) => FailureNode(new Constant(msg));
             Node FailureNode(Node msg) => new Return(
@@ -483,7 +501,7 @@ public sealed partial class DomainToCSharpExporter {
                             var minVal = ConvertToConstant(r.Minimum);
                             if (minVal is not null) {
                                 checks.Add(new IfStatement(
-                                    new LessThan(paramRef, minVal),
+                                    Present(new LessThan(paramRef, minVal)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be >= {EffectLoweringPass.FormatConstraintValue(r.Minimum)}.")])));
                             }
@@ -492,7 +510,7 @@ public sealed partial class DomainToCSharpExporter {
                             var maxVal = ConvertToConstant(r.Maximum);
                             if (maxVal is not null) {
                                 checks.Add(new IfStatement(
-                                    new GreaterThan(paramRef, maxVal),
+                                    Present(new GreaterThan(paramRef, maxVal)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be <= {EffectLoweringPass.FormatConstraintValue(r.Maximum)}.")])));
                             }
@@ -504,15 +522,15 @@ public sealed partial class DomainToCSharpExporter {
                             var lenAccess = new Member(paramRef, "Length");
                             if (l.MinLength > 0) {
                                 checks.Add(new IfStatement(
-                                    new LessThan(lenAccess,
-                                        new Constant((long)l.MinLength)),
+                                    Present(new LessThan(lenAccess,
+                                        new Constant((long)l.MinLength))),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
                             }
                             if (l.MaxLength < int.MaxValue) {
                                 checks.Add(new IfStatement(
-                                    new GreaterThan(lenAccess,
-                                        new Constant((long)l.MaxLength)),
+                                    Present(new GreaterThan(lenAccess,
+                                        new Constant((long)l.MaxLength))),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
                             }
@@ -521,15 +539,16 @@ public sealed partial class DomainToCSharpExporter {
 
                     case PatternConstraint p:
                         if (isText) {
+                            var notMatch = new Syntactic.Not(
+                                new Invoke(
+                                    new Member(
+                                        new NamedTypeReference(
+                                            "System.Text.RegularExpressions.Regex"),
+                                        "IsMatch"),
+                                    [paramRef,
+                                     new Constant(p.Pattern)]));
                             checks.Add(new IfStatement(
-                                new Syntactic.Not(
-                                    new Invoke(
-                                        new Member(
-                                            new NamedTypeReference(
-                                                "System.Text.RegularExpressions.Regex"),
-                                            "IsMatch"),
-                                        [paramRef,
-                                         new Constant(p.Pattern)])),
+                                Present(notMatch),
                                 new Block([Failure(
                                     $"'{prop.Name}' does not match the required pattern.")])));
                         }
@@ -538,8 +557,8 @@ public sealed partial class DomainToCSharpExporter {
                     case EqualityConstraint eq:
                         if (eq.ExpectedValue is not null) {
                             checks.Add(new IfStatement(
-                                new NotEqual(paramRef,
-                                    new Constant(eq.ExpectedValue)),
+                                Present(new NotEqual(paramRef,
+                                    new Constant(eq.ExpectedValue))),
                                 new Block([Failure(
                                     $"'{prop.Name}' must equal {eq.ExpectedValue}.")])));
                         }
@@ -554,9 +573,10 @@ public sealed partial class DomainToCSharpExporter {
                 && enumProps.TryGetValue(prop.Name, out var enumTypeName)
                 && TryResolveEnumType(domain, analysis, enumTypeName, out var enumType)
                 && enumType is { MemberNames.Count: > 0 }) {
-                // No default(...) — the property is required at create (guide §3). The
-                // VM factory slot is null when the caller omits it; ReferenceEquals
-                // prints for a value-type param (boxing) and is true only for that slot.
+                // No default(...) and not optional — the property is required at create
+                // (guide §3). The VM factory slot is null when the caller omits it;
+                // ReferenceEquals prints for a value-type param (boxing) and is true only
+                // for that slot.
                 if (paramRef.DefaultValue is null) {
                     checks.Add(new IfStatement(
                         new Invoke(
@@ -571,7 +591,7 @@ public sealed partial class DomainToCSharpExporter {
                     notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
                 }
                 checks.Add(new IfStatement(
-                    notMember!,
+                    Present(notMember!),
                     new Block([FailureNode(
                         InvalidEnumMemberMessage(paramRef, enumType.Name, prop.Name))])));
             }

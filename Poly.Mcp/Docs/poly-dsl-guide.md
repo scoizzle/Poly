@@ -1126,7 +1126,7 @@ attributes below. What reaches the database:
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
 | `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
 | `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
-| `required` | `IsRequired()` for reference-typed columns. |
+| not `optional` | `IsRequired()` for reference-typed columns. Required is the default, so a bare property is required; only `optional` clears the flag. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport projects them onto DTO validation attributes, so the API boundary
@@ -1139,7 +1139,8 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- `required` → `[Required]` (reference-typed properties).
+- not `optional` → `[Required]` (reference-typed properties). Required is the default, so
+  a bare property projects `[Required]`; only `optional` omits it.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

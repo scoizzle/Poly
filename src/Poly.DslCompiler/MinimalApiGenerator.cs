@@ -131,7 +131,18 @@ public sealed class MinimalApiGenerator {
                 $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
         }
 
-        return metadata.ConstructorParameters;
+        var order = new List<ConstructorParameterOrder>(metadata.ConstructorParameters);
+        // Omittable scalars (`default(...)` or `optional`) trail the printed Create
+        // signature; the generated create contract must carry them too, or a resource
+        // cannot be created with an optional/defaulted value set.
+        foreach (var name in metadata.TrailingOptionalPropertyNames ?? []) {
+            var prop = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.Ordinal));
+            if (prop is null) continue;
+            order.Add(new ConstructorParameterOrder(
+                prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
+        }
+        return order;
     }
 
     /// <summary>

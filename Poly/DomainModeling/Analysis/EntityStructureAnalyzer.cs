@@ -70,6 +70,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         var constructorParameters = ComputeConstructorParameterOrder(entity, lookup);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
+        var trailingOptionalPropertyNames =
+            ComputeTrailingOptionalPropertyNames(entity, entryAssignedPropertyNames);
 
         // ── Enum-typed property map (property name → enum type name) ──
         Dictionary<string, string>? enumPropertyNames = null;
@@ -83,8 +85,29 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
-            enumPropertyNames, entryAssignedPropertyNames
+            enumPropertyNames, entryAssignedPropertyNames, trailingOptionalPropertyNames
         );
+    }
+
+    /// <summary>
+    /// Names of the omittable-at-create scalar properties that trail the constructor
+    /// signature — <c>default(...)</c> or <c>optional</c>, never entry-assigned — in name
+    /// order. Single source for every create contract: the exporter ctor, CreateNav args,
+    /// the VM's factory slots, and the HTTP/MCP producers. Published on
+    /// <see cref="EntityStructureMetadata.TrailingOptionalPropertyNames"/>.
+    /// </summary>
+    internal static IReadOnlyList<string> ComputeTrailingOptionalPropertyNames(
+        Entity entity, IReadOnlySet<string> entryAssigned) {
+        var names = new List<string>();
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any()
+                && !prop.Constraints.IsOptional())
+                continue;
+            if (entryAssigned.Contains(prop.Name))
+                continue;
+            names.Add(prop.Name);
+        }
+        return names;
     }
 
     /// <summary>

@@ -53,7 +53,17 @@ public sealed record EntityStructureMetadata(
     /// and written twice, e.g. StartedAt). Published so the exporter's ctor emission
     /// and this signature stay in lockstep without re-deriving the rule.
     /// </summary>
-    IReadOnlySet<string> EntryAssignedPropertyNames = null!
+    IReadOnlySet<string> EntryAssignedPropertyNames = null!,
+
+    /// <summary>
+    /// Names of the omittable-at-create scalar properties that trail the constructor
+    /// signature — <c>default(...)</c> or <c>optional</c>, never entry-assigned — in name
+    /// order. Published so every create contract (the exporter constructor, CreateNav, the
+    /// VM's factory slots, and the HTTP/MCP producers) reads one ordered list instead of
+    /// re-deriving it — an undefaulted <c>optional</c> used to be a positional create
+    /// field, and must not silently vanish from a producer's contract.
+    /// </summary>
+    IReadOnlyList<string> TrailingOptionalPropertyNames = null!
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(

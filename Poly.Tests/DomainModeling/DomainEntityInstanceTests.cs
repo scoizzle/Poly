@@ -1133,7 +1133,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var entity = new Entity("Worker", [status, count], Actions: [
             new Poly.DomainModeling.Ontology.Action("DoAll", InvocationResult.Void, [],
@@ -2793,7 +2793,7 @@ public class DomainEntityInstanceTests {
     public async Task CreateEntityInRelationship_WithoutStore_NoCrash() {
         // CreateIn with no store attached at construction: the job attaches the
         // C8d named twin, creates the child, and links it. No crash.
-        var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [])], [], [], []);
+        var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [new OptionalConstraint()])], [], [], []);
         var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [])], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new CreateEntityInRelationshipEffect("orders", [])

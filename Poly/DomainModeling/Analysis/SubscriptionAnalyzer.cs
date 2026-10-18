@@ -36,6 +36,18 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         foreach (var entity in lookup.Entities) {
             // Entity-level when is always-active (entity-level dispatch); same contract + binding
             // validation as stage-scoped (including optional peer binder).
+            for (int i = 0; i < entity.Subscriptions.Count; i++) {
+                for (int j = i + 1; j < entity.Subscriptions.Count; j++) {
+                    if (SemanticKeyMatch(entity.Subscriptions[i], entity.Subscriptions[j])) {
+                        context.ReportWarning(
+                            entity.Subscriptions[i],
+                            $"Duplicate entity-level subscription key on entity '{entity.Name}': " +
+                            $"{SubscriptionKey(entity.Subscriptions[i])}.",
+                            DomainModelDiagnosticCodes.SubscriptionContractMismatch);
+                    }
+                }
+            }
+
             foreach (var entitySub in entity.Subscriptions) {
                 ValidateSubscription(context, entitySub, entity, domain, lookup);
             }

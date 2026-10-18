@@ -238,7 +238,7 @@ public class McpSmokeTests {
             }
 
             Loan: entity {
-              Status: Text
+              Status: Text optional
               Active: stage {}
               Overdue: stage {}
             }

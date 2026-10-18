@@ -90,11 +90,11 @@ public class DomainToCSharpExporterTests {
         }
 
         Loan: entity {
-          Status: Text
+          Status: Text optional
           CheckedOutAt: DateTime
-          DueDate: DateTime
-          ReturnedAt: DateTime
-          TimesRenewed: Number
+          DueDate: DateTime optional
+          ReturnedAt: DateTime optional
+          TimesRenewed: Number optional
           book: Book
           borrower: Patron
           Active: stage {
@@ -118,7 +118,7 @@ public class DomainToCSharpExporterTests {
           Amount: Number required
           Reason: Text
           DateIssued: DateTime default(Now)
-          Paid: Boolean
+          Paid: Boolean optional
           patron: Patron
           Unpaid: stage {
             Pay: action {
@@ -468,7 +468,7 @@ public class DomainToCSharpExporterTests {
 
             Order: entity {
               Title: Text required
-              Total: Number range(0, )
+              Total: Number range(0, ) optional
               customer: Customer
               lines: many OrderLine
               notes: many owned Note
@@ -1362,7 +1362,7 @@ public class DomainToCSharpExporterTests {
 
             Order: entity {
               Title: Text required
-              Total: Number range(0, )
+              Total: Number range(0, ) optional
               customer: Customer
               lines: many OrderLine
               notes: many owned Note

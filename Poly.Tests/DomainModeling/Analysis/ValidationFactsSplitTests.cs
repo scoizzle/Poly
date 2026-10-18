@@ -62,7 +62,7 @@ public class ValidationFactsSplitTests {
               lines: many Line
             }
             Line: entity {
-              Qty: Number
+              Qty: Number optional
             }
             """);
 
@@ -96,7 +96,7 @@ public class ValidationFactsSplitTests {
               lines: many Line
             }
             Line: entity {
-              Qty: Number
+              Qty: Number optional
             }
             """);
 

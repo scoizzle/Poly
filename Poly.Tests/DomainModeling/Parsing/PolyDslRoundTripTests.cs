@@ -909,7 +909,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
-              Title: Text
+              Title: Text optional
             }
             """;
 

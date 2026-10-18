@@ -820,6 +820,7 @@ public sealed class DomainDslPrinter {
 
     private string PrintConstraint(Constraint constraint) => constraint switch {
         RequiredConstraint => "required",
+        OptionalConstraint => "optional",
         UniqueConstraint => "unique",
         RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
         LengthConstraint l => l.MinLength == l.MaxLength

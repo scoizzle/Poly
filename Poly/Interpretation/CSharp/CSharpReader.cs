@@ -566,7 +566,7 @@ public static class CSharpReader {
                     return new GotoStatement(Capture(match, "target"));
                 case "label":
                     return new LabelDeclaration(Capture(match, "label"), FoldStatement(match.Children[0]));
-                case "var-decl" or "typed-decl": {
+                case "var-decl" or "typed-decl" or "const-decl": {
                         var (variable, value) = FoldDeclaration(match);
                         return new Assignment(variable, value);
                     }
@@ -581,17 +581,18 @@ public static class CSharpReader {
 
         /// <summary>
         /// A local declaration folds to an assignment to a fresh <see cref="Variable"/>.
-        /// <c>var x = e;</c> infers from <c>e</c>; <c>T x = e;</c> casts the initializer so
-        /// the variable <em>is</em> the declared type (<c>double x = 1;</c> divides as
-        /// double). Later plain assignments are converted to that representation by the
-        /// emitter, so the type holds across reassignment. The caller keeps the returned
-        /// variable so the block declares the same instance.
+        /// <c>var x = e;</c> infers from <c>e</c>; <c>T x = e;</c> and <c>const T x = e;</c>
+        /// cast the initializer so the variable <em>is</em> the declared type
+        /// (<c>double x = 1;</c> divides as double). Later plain assignments are
+        /// converted to that representation by the emitter, so the type holds across
+        /// reassignment. The caller keeps the returned variable so the block declares
+        /// the same instance.
         /// </summary>
         private (Variable Variable, Node Value) FoldDeclaration(
             MatchResult<CSharpToken, CSharpTokenKind> statement) {
             var variable = new Variable(Capture(statement, "name"));
-            // var-decl children = [expr]; typed-decl children = [type, expr].
-            var value = statement.PatternName is "typed-decl"
+            // var-decl children = [expr]; typed-decl / const-decl children = [type, expr].
+            var value = statement.PatternName is "typed-decl" or "const-decl"
                 ? (Node)new TypeCast(FoldExpr(statement.Children[^1]), FoldType(statement.Children[0]))
                 : FoldExpr(statement.Children[^1]);
             return (variable, value);
@@ -601,7 +602,7 @@ public static class CSharpReader {
             var nodes = new List<Node>();
             var variables = new List<Node>();
             foreach (var statement in Children(match, "statement")) {
-                if (statement.PatternName is "var-decl" or "typed-decl") {
+                if (statement.PatternName is "var-decl" or "typed-decl" or "const-decl") {
                     var (variable, value) = FoldDeclaration(statement);
                     variables.Add(variable);
                     nodes.Add(new Assignment(variable, value));

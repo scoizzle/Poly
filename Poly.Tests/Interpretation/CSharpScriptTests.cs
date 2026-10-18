@@ -67,6 +67,50 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ConstLocal_ThenExpression_UsesLocal() {
+        var result = CSharpScript.Run("const int k = 3;\nk + 1");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("4");
+    }
+
+    [Test]
+    public async Task ReadProgram_ConstLocal_FoldsToTypedDeclaration() {
+        var block = (Block)CSharpScript.ReadProgram("const int k = 3;\nk + 1");
+        var assignment = (Assignment)block.Nodes[0];
+        await Assert.That(assignment.Destination).IsTypeOf<Variable>();
+        await Assert.That(((Variable)assignment.Destination).Name).IsEqualTo("k");
+        await Assert.That(assignment.Value).IsTypeOf<TypeCast>();
+        await Assert.That(block.Variables).Count().IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Read_ConstLocal_RoundTripsAsVarDeclaration() {
+        // A const local folds to the same typed declaration a `var`/typed local
+        // produces, so the writer normalizes it to `var`; the second pass is stable.
+        const string text = "class C { void M() { const int k = 3; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+        await Assert.That(written).Contains("var k = (int)3;");
+    }
+
+    [Test]
+    public async Task Run_ConstLocal_ImplicitType_FailsClosed() {
+        // C# requires an explicit type on a const local; `const var` must not fold.
+        var result = CSharpScript.Run("const var k = 3;\nk");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Run_ConstLocal_WithoutInitializer_FailsClosed() {
+        // A const must be initialized, so the bare declaration is not a valid form.
+        var result = CSharpScript.Run("const int k;\nk");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
+
+    [Test]
     public async Task Run_ConditionalAccess_LiteralReceiver() {
         var value = CSharpScript.Run("\"hi\"?.Length");
         await Assert.That(value.Success).IsTrue();

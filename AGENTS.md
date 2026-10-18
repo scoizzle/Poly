@@ -20,7 +20,7 @@ A domain is a library of legal operations. Session compile is Load → one analy
 
 When tenets conflict: domain fidelity and CORE seams over a smaller wrong path; a smaller tested loop over a large untested batch; a known multi-impl seam over a one-off; no speculative framework.
 
-**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer-specific lowering flag · Lower-inside-analysis · twin trees (`UseThisReference`) · `LowerActionBody` as shipped execute input · host-escape keyword · DEI/MCP walk as product proof · empty artifact catalog when required · a second CURRENT.
+**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer-specific lowering flag · Lower-inside-analysis · twin trees (`UseThisReference`; historical name, do not reintroduce) · `LowerActionBody` as shipped execute input · host-escape keyword · DEI/MCP walk as product proof · empty artifact catalog when required · a second CURRENT.
 
 ## Frozen core
 
@@ -53,10 +53,10 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 - **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate, in the parent session: run it there and record the pass count in the summary — the `reviewer` cannot build or test. Do not weaken audit in-repo.
 - **MCP after code changes:** run `scripts/restart-poly-mcp.sh` after touching anything the MCP server exposes — Ast, analysis, the VM, `Poly.Mcp`, or the DSL guide.
 - A red build means the task is incomplete; the user may waive that, an agent may not. Tests ship with features. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
-- Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No `#region`.
+- Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No new `#region`.
 - **DSL:** before authoring, call `get_dsl_guide` (short body). Pass `section` for one heading, or `all` for [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md). Update that file in the same change as the parser, printer, tokenizer, or an MCP tool that authors DSL.
 - **Placement:** Ast → `Poly/Ast/`; analysis framework → `Poly/Analysis/`; semantic passes → `Poly/Interpretation/Analysis/`; VM → `Poly/Interpretation/Vm/`; C# language surface → `Poly/Interpretation/CSharp/`; types → `Poly/Introspection/`; domain → `Poly/DomainModeling/`; grammar engine → `Poly/Grammar/`; MCP → `Poly.Mcp/`.
-- **Admission:** [`docs/plans/poly-eng/board.md`](docs/plans/poly-eng/board.md) is the only CURRENT. If it is `(none)`, open only the file named on `THEN`. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
+- **Admission:** [`docs/plans/poly-eng/board.md`](docs/plans/poly-eng/board.md) is the only CURRENT, and its row bookkeeping is [`docs/plans/poly-eng/README.md`](docs/plans/poly-eng/README.md) §Record rules — no docs-only PRs, no second status schema. If the board is `(none)`, open only the suite `THEN` names, via [`docs/plans/parked/README.md`](docs/plans/parked/README.md); a label with no entry there is reported, not guessed at. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
 - **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md) (severity: `bug` | `suggestion` | `nit`, §6). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/agent/pr1-uncommitted-review-gate.md`](docs/agent/pr1-uncommitted-review-gate.md) (fail closed; 🔴🟠 clear by the gate's own table; suite green).
 - **Doc roles:** CORE = machinery map · `docs/decisions/` = why · `docs/plans/` = execution (archive DONE) · `docs/agent/` = protocols. A CORE mechanism change updates CORE in the same change.
 

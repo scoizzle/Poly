@@ -242,8 +242,9 @@ public static partial class DirectVmAbiEmitter {
             // nested functions use their own parameter index space (INT-027).
             ctx.PushScope();
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
+            ctx.PushFrameParameters();
             foreach (var param in lambda.Parameters)
-                ctx.DeclareParameter(param);
+                ctx.MapFrameParameter(param, ctx.DeclareParameter(param));
 
             // 2. Compile arguments — each goes on ring
             var argExprs = new List<Expression>();
@@ -329,14 +330,18 @@ public static partial class DirectVmAbiEmitter {
             // Save result to temp local BEFORE ring restore (use per-invocation local)
             var invokeResult = Variable(typeof(long), "_invokeResult");
             preBody.Add(Assign(invokeResult, ctx.RingVar(bodyResultSlot)));
-            ctx.RingDepth = 1;
+            // The result belongs in the caller's first free slot (saveDepth), not slot 0:
+            // slot 0 may hold a caller value (an earlier interpolation hole, an inline
+            // parameter argument), and resetting the depth to 1 would discard the caller's
+            // live slots.
+            ctx.RingDepth = saveDepth + 1;
 
             // Restore ring from state.Registers using per-invocation invokeSp
             for (int k = 0; k < saveDepth; k++)
                 postBody.Add(Assign(ctx.RingVar(k), ArrayAccess(regSlots, Add(invokeSp, Constant(k)))));
 
-            // Write saved result to ring slot 0 (ring now fully restored)
-            postBody.Add(Assign(ctx.RingVar(0), invokeResult));
+            // Write saved result to the caller's result slot (ring now fully restored)
+            postBody.Add(Assign(ctx.RingVar(saveDepth), invokeResult));
 
             // Restore _fp from the 2-word header (PreviousFP at _slots[callSp]).
             // When headerSize == 0 (SetArgs pattern), restore from OldFramePos legacy field.
@@ -351,6 +356,7 @@ public static partial class DirectVmAbiEmitter {
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
+            ctx.PopFrameParameters();
             ctx.PopScope();
             return Block([invokeSp, callSp, invokeResult], Block(argExprs),
                 Block(preBody.Concat(postBody)));
@@ -390,6 +396,62 @@ public static partial class DirectVmAbiEmitter {
             elems[i] = ConvertRingToClr(ctx.RingVar(argSlots[i]), elementType, invoke.Arguments[i], ctx);
         packed = NewArrayInit(elementType, elems);
         return true;
+    }
+
+    private static readonly MethodInfo StringConcatObjectArrayInfo =
+        Ref.Method((Expression<Func<object?[], string>>)(parts => string.Concat(parts)));
+
+    /// <summary>
+    /// Interpolated string: <c>$"lit{hole}lit"</c>. Lowered to a single
+    /// <c>string.Concat(object[])</c> call over the interleaved literals and holes.
+    /// Literals become compile-time string constants; each hole is read from its ring
+    /// slot and boxed as an object using its value representation — a scalar hole is
+    /// converted by its CLR type, never mistaken for a heap handle the way
+    /// <c>ConvertRingToClr(..., typeof(object))</c> would (object is not a scalar kind).
+    /// </summary>
+    private static Expression EmitInterpolatedString(InterpolatedString node, AbiCtx ctx) {
+        var parts = new List<Expression>(node.Literals.Count + node.Holes.Count);
+        var seq = new List<Expression>();
+        for (var i = 0; i < node.Literals.Count; i++) {
+            parts.Add(Constant(node.Literals[i], typeof(object)));
+            if (i >= node.Holes.Count)
+                continue;
+            var hole = node.Holes[i];
+            seq.Add(CompileNode(hole, ctx));
+            parts.Add(HoleToClrObject(hole, ctx.RingVar(ctx.RingDepth - 1), ctx));
+        }
+
+        int slot = ctx.AllocSlot();
+        ctx.RingDepth = slot + 1;
+        var concat = Call(null, StringConcatObjectArrayInfo, NewArrayInit(typeof(object), parts));
+        var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(concat, typeof(object)));
+        seq.Add(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+        return Block(seq);
+    }
+
+    /// <summary>
+    /// Boxes a hole's ring value as a CLR object for <c>string.Concat</c>. The
+    /// representation metadata decides: scalars and bools are converted by their CLR
+    /// type (double from IEEE bits, bool from 0/1, ints via their own widening), and
+    /// references / non-long value types are read from the heap. A null hole reads
+    /// the reserved handle 0 as null, which Concat renders as the empty string.
+    /// </summary>
+    private static Expression HoleToClrObject(Node hole, Expression ringVal, AbiCtx ctx) {
+        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(hole)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
+        var clrType = meta.ClrType;
+        if (clrType is null) {
+            if (meta.Kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+                clrType = typeof(long);
+            else if (meta.Kind is ValueRepresentationKind.HeapRef)
+                return Convert(
+                    Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))), typeof(object));
+            else
+                throw new InvalidOperationException(
+                    $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
+        }
+        return Convert(ConvertRingToClr(ringVal, clrType, hole, ctx), typeof(object));
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
@@ -469,14 +531,20 @@ public static partial class DirectVmAbiEmitter {
     /// Skips frame push, closure allocation, and ring save/restore — compiles
     /// arguments directly to the ring and maps parameter reads to argument slots.</summary>
     private static Expression EmitInlineInvoke(Lambda lambda, Invoke invoke, AbiCtx ctx) {
-        int depth = ctx.RingDepth;
+        // Compile every argument before mapping any parameter: an argument
+        // expression belongs to the caller's scope, so it must not see this
+        // lambda's parameter names.
         var argExprs = new Expression[invoke.Arguments.Length];
+        int[] argSlots = new int[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++) {
             argExprs[i] = CompileNode(invoke.Arguments[i], ctx);
-            ctx.MapInlineParameter(lambda.Parameters[i], ctx.RingDepth - 1);
+            argSlots[i] = ctx.RingDepth - 1;
         }
+        ctx.PushInlineParameters();
+        for (int i = 0; i < invoke.Arguments.Length; i++)
+            ctx.MapInlineParameter(lambda.Parameters[i], argSlots[i]);
         var bodyExpr = CompileNode(lambda.Body, ctx);
-        ctx.ClearInlineParameters();
+        ctx.PopInlineParameters();
         return Block(argExprs.Concat([bodyExpr]));
     }
 
@@ -552,8 +620,9 @@ public static partial class DirectVmAbiEmitter {
         // for the receiver. Without the reserve, block-local zeros land on the
         // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
+        fnCtx.PushFrameParameters();
         foreach (var param in parameters)
-            fnCtx.DeclareParameter(param);
+            fnCtx.MapFrameParameter(param, fnCtx.DeclareParameter(param));
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Enter the activation in the compile-time simulator.

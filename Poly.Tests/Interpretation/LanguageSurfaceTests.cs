@@ -22,6 +22,7 @@ public class LanguageSurfaceTests {
     /// </summary>
     public static readonly Dictionary<Type, Surface> Kinds = new() {
         [typeof(Constant)] = Surface.Executable,
+        [typeof(InterpolatedString)] = Surface.Executable,
         [typeof(Add)] = Surface.Executable,
         [typeof(Subtract)] = Surface.Executable,
         [typeof(Multiply)] = Surface.Executable,

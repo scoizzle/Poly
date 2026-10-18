@@ -74,7 +74,11 @@ internal static class LambdaCaptureCollector {
             CollectRecursive(nested.Body, nestedDeclared, nestedOwn, seenVars, seenParams, result);
             return;
         }
-        if (node is Variable v && seenVars.Add(v) && !declared.Contains(v)) {
+        // The reader emits a fresh Variable per identifier, so a body use of a
+        // lambda parameter is a Variable whose name matches an own parameter:
+        // it is the parameter, not a capture of some outer variable.
+        if (node is Variable v && seenVars.Add(v) && !declared.Contains(v)
+            && ownParams.All(p => p.Name != v.Name)) {
             result.Add(new LambdaCaptureBinding(v, null));
             return;
         }

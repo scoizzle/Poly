@@ -49,6 +49,7 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         switch (ch) {
             case '"': return ScanString();
             case '\'': return ScanChar();
+            case '$': return ScanInterpolatedString();
         }
 
         // Multi-character operators, longest first.
@@ -61,6 +62,14 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         if (ch == '|' && PeekChar(1) == '|') return Two(CSharpTokenKind.PipePipe);
         if (ch == '?' && PeekChar(1) == '?') return Two(CSharpTokenKind.QuestionQuestion);
         if (ch == '?' && PeekChar(1) == '.') return Two(CSharpTokenKind.QuestionDot);
+        if (ch == '+' && PeekChar(1) == '=') return Two(CSharpTokenKind.PlusAssign);
+        if (ch == '-' && PeekChar(1) == '=') return Two(CSharpTokenKind.MinusAssign);
+        if (ch == '*' && PeekChar(1) == '=') return Two(CSharpTokenKind.StarAssign);
+        if (ch == '/' && PeekChar(1) == '=') return Two(CSharpTokenKind.SlashAssign);
+        if (ch == '%' && PeekChar(1) == '=') return Two(CSharpTokenKind.PercentAssign);
+        if (ch == '&' && PeekChar(1) == '=') return Two(CSharpTokenKind.AmpAssign);
+        if (ch == '|' && PeekChar(1) == '=') return Two(CSharpTokenKind.PipeAssign);
+        if (ch == '^' && PeekChar(1) == '=') return Two(CSharpTokenKind.CaretAssign);
 
         switch (ch) {
             case '=': return One(CSharpTokenKind.Assign);
@@ -133,18 +142,93 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         var startLine = _line;
         var startCol = _col;
         AdvanceChar(); // opening quote
-        var sb = new StringBuilder();
+        var raw = ScanStringBody();
+        if (_pos < _text.Length) AdvanceChar(); // closing quote
+        return new CSharpToken(CSharpTokenKind.StringLiteral, DecodeStringBody(raw), startLine, startCol);
+    }
+
+    /// <summary>
+    /// Scans the raw body of a <c>"…"</c> literal: everything up to the next
+    /// unescaped quote. Escapes are captured as written (a <c>\"</c> must not end
+    /// the literal); decoding is <see cref="DecodeStringBody"/>'s job, so the
+    /// interpolated reader can split <c>{…}</c> before decoding the literals.
+    /// </summary>
+    private string ScanStringBody() {
+        var start = _pos;
         while (_pos < _text.Length) {
             var ch = PeekChar();
-            if (ch == '"') { AdvanceChar(); break; }
+            if (ch == '"') break;
+            // Skip an escape as a unit so an escaped quote is not the terminator.
+            // \uXXXX / \xXXXX are still captured whole because the scanner only
+            // advances past '\' and the following character.
             if (ch == '\\' && _pos + 1 < _text.Length) {
-                sb.Append(ReadEscape());
+                AdvanceChar();
+                AdvanceChar();
                 continue;
             }
-            sb.Append(ch);
             AdvanceChar();
         }
-        return new CSharpToken(CSharpTokenKind.StringLiteral, sb.ToString(), startLine, startCol);
+        return _text[start.._pos];
+    }
+
+    /// <summary>
+    /// Decodes the C# escapes the exported subset accepts inside a string body.
+    /// Shared by ordinary and interpolated literals so their semantics do not drift.
+    /// </summary>
+    internal static string DecodeStringBody(string raw) {
+        var sb = new StringBuilder();
+        for (var i = 0; i < raw.Length; i++) {
+            var ch = raw[i];
+            if (ch != '\\' || i + 1 >= raw.Length) {
+                sb.Append(ch);
+                continue;
+            }
+            i++;
+            sb.Append(raw[i] switch {
+                'n' => "\n",
+                'r' => "\r",
+                't' => "\t",
+                '0' => "\0",
+                'a' => "\a",
+                'b' => "\b",
+                'f' => "\f",
+                'v' => "\v",
+                '\\' => "\\",
+                '\'' => "'",
+                '"' => "\"",
+                'u' => DecodeHex(raw, ref i),
+                'x' => DecodeHex(raw, ref i),
+                var esc => esc.ToString(),
+            });
+        }
+        return sb.ToString();
+    }
+
+    private static string DecodeHex(string raw, ref int i) {
+        var sb = new StringBuilder();
+        for (var k = 0; k < 4 && i + 1 < raw.Length && Uri.IsHexDigit(raw[i + 1]); k++)
+            sb.Append(raw[++i]);
+        return sb.Length == 0 ? "" : ((char)Convert.ToInt32(sb.ToString(), 16)).ToString();
+    }
+
+    /// <summary>
+    /// Scans a plain interpolated string <c>$"…"</c>. Only the bare form is
+    /// supported: <c>$@"…"</c>, <c>@$"…"</c>, raw <c>$$"""…"""</c> and a bare
+    /// <c>$</c> fail closed. The token text is the raw body between the quotes.
+    /// </summary>
+    private CSharpToken ScanInterpolatedString() {
+        var startLine = _line;
+        var startCol = _col;
+        AdvanceChar(); // '$'
+        if (PeekChar() != '"')
+            throw GrammarError.Error(
+                "Interpolated strings support only the plain $\"...\" form.", _line, _col);
+        AdvanceChar(); // opening quote
+        var raw = ScanStringBody();
+        if (_pos >= _text.Length)
+            throw GrammarError.Error("Unterminated interpolated string.", startLine, startCol);
+        AdvanceChar(); // closing quote
+        return new CSharpToken(CSharpTokenKind.InterpolatedStringLiteral, raw, startLine, startCol);
     }
 
     private CSharpToken ScanChar() {

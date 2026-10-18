@@ -1,0 +1,194 @@
+@page "/console"
+@using System.Diagnostics
+@using System.Globalization
+@using Poly.Demo.Shared.Services
+@using Poly.Interpretation.CSharp
+@implements IDisposable
+
+<PageTitle>Poly Console</PageTitle>
+
+<div class="console">
+    <div class="repl-controls">
+        <label class="field">
+            Snippet
+            <select class="picker" @bind="_sampleIndex" @bind:after="LoadSample">
+                @for (var i = 0; i < PolyReplSamples.All.Count; i++)
+                {
+                    var index = i;
+                    <option value="@index">@PolyReplSamples.All[index].Name</option>
+                }
+            </select>
+        </label>
+        <button class="repl-btn" disabled="@_running" @onclick="RunAsync">Run</button>
+        <button class="repl-btn" disabled="@(_running || _debugBusy)" @onclick="StartDebugAsync">Debug</button>
+        <button class="repl-btn" disabled="@(_running || _debugBusy || _debugSession is null || _debugSession.IsCompleted)" @onclick="StepDebugAsync">Step</button>
+        <button class="repl-btn" disabled="@(_running || _debugBusy || _debugSession is null || _debugSession.IsCompleted)" @onclick="ContinueDebugAsync">Continue</button>
+        <button class="repl-btn" disabled="@(_debugSession is null)" @onclick="StopDebug">Stop</button>
+        <button class="repl-btn" disabled="@(_entries.Count == 0)" @onclick="Clear">Clear</button>
+        <span class="muted hint">Ctrl/⌘ + Enter</span>
+        <FluentSpinner Size="SpinnerSize.Tiny" Visible="@(_running || _debugBusy)" Tooltip="Running…" />
+    </div>
+
+    <textarea class="repl-input" wrap="off" spellcheck="false"
+              @bind="_input" @bind:event="oninput"
+              @onkeydown="OnKeyDown"></textarea>
+
+    <div class="repl-output">
+        @if (_entries.Count == 0)
+        {
+            <p class="muted panel-hint">Run a snippet to see its value and latency; Debug steps through it.</p>
+        }
+        else
+        {
+            @foreach (var entry in _entries)
+            {
+                <div class="repl-entry @(entry.IsError ? "error" : null)">
+                    <div class="repl-prompt">
+                        <span>@entry.Prompt</span>
+                        <span class="repl-timing">@entry.ElapsedMs.ToString("F1", CultureInfo.InvariantCulture) ms</span>
+                    </div>
+                    @foreach (var line in entry.Lines)
+                    {
+                        <div class="repl-line">@line</div>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    private sealed record ReplEntry(string Prompt, IReadOnlyList<string> Lines, double ElapsedMs, bool IsError);
+
+    private int _sampleIndex;
+    private string _input = PolyReplSamples.All[0].Source;
+    private readonly List<ReplEntry> _entries = [];
+    private bool _running;
+    private bool _debugBusy;
+    private ScriptDebugSession? _debugSession;
+
+    public void Dispose() => StopDebugSession();
+
+    private void LoadSample() {
+        if (_sampleIndex >= 0 && _sampleIndex < PolyReplSamples.All.Count)
+            _input = PolyReplSamples.All[_sampleIndex].Source;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs args) {
+        if (args.Key == "Enter" && (args.CtrlKey || args.MetaKey))
+            await RunAsync();
+    }
+
+    private void Clear() => _entries.Clear();
+
+    private async Task RunAsync() {
+        if (_running)
+            return;
+        _running = true;
+        var snippet = _input;
+        var watch = Stopwatch.StartNew();
+        try {
+            var result = await Task.Run(() => CSharpScript.Run(snippet));
+            watch.Stop();
+            IReadOnlyList<string> lines = result.Success
+                ? [$"{result.Value}{(result.ValueType is null ? string.Empty : $" : {result.ValueType}")}"]
+                : ["error:", .. result.Diagnostics];
+            _entries.Add(new ReplEntry($"> {FirstLine(snippet)}", lines, watch.Elapsed.TotalMilliseconds, !result.Success));
+        }
+        catch (Exception ex) {
+            watch.Stop();
+            _entries.Add(new ReplEntry($"> {FirstLine(snippet)}", [$"error: {ex.Message}"], watch.Elapsed.TotalMilliseconds, true));
+        }
+        finally {
+            _running = false;
+        }
+    }
+
+    private async Task StartDebugAsync() {
+        if (_debugBusy)
+            return;
+        StopDebugSession();
+        _debugBusy = true;
+        var snippet = _input;
+        var watch = Stopwatch.StartNew();
+        try {
+            var (session, diagnostics) = await Task.Run(() => {
+                var started = ScriptDebugSession.TryStart(snippet, out var errors);
+                return (started, errors);
+            });
+            watch.Stop();
+            if (session is null) {
+                _entries.Add(new ReplEntry($"> debug {FirstLine(snippet)}", ["error:", .. diagnostics], watch.Elapsed.TotalMilliseconds, true));
+                return;
+            }
+            _debugSession = session;
+            _entries.Add(new ReplEntry($"> debug {FirstLine(snippet)}", FrameLines(session), watch.Elapsed.TotalMilliseconds, false));
+        }
+        catch (Exception ex) {
+            watch.Stop();
+            _entries.Add(new ReplEntry($"> debug {FirstLine(snippet)}", [$"error: {ex.Message}"], watch.Elapsed.TotalMilliseconds, true));
+        }
+        finally {
+            _debugBusy = false;
+        }
+    }
+
+    private Task StepDebugAsync() => AdvanceDebugAsync(step: true);
+    private Task ContinueDebugAsync() => AdvanceDebugAsync(step: false);
+
+    private async Task AdvanceDebugAsync(bool step) {
+        var session = _debugSession;
+        if (_debugBusy || session is null)
+            return;
+        _debugBusy = true;
+        var watch = Stopwatch.StartNew();
+        try {
+            if (step)
+                await session.StepAsync();
+            else
+                await session.ContinueAsync();
+            watch.Stop();
+            if (ReferenceEquals(session, _debugSession))
+                _entries.Add(new ReplEntry(step ? "> step" : "> continue", FrameLines(session), watch.Elapsed.TotalMilliseconds, false));
+        }
+        catch (OperationCanceledException) {
+            // Stopped while the step was in flight; Stop already wrote its entry.
+        }
+        catch (Exception ex) {
+            watch.Stop();
+            _entries.Add(new ReplEntry(step ? "> step" : "> continue", [$"error: {ex.Message}"], watch.Elapsed.TotalMilliseconds, true));
+        }
+        finally {
+            _debugBusy = false;
+        }
+    }
+
+    private void StopDebug() {
+        var watch = Stopwatch.StartNew();
+        StopDebugSession();
+        watch.Stop();
+        _entries.Add(new ReplEntry("> stop", ["— debug stopped —"], watch.Elapsed.TotalMilliseconds, false));
+    }
+
+    private void StopDebugSession() {
+        if (_debugSession is null)
+            return;
+        _debugSession.Dispose();
+        _debugSession = null;
+        // _debugBusy is owned by the in-flight operation's finally; do not clear it here.
+    }
+
+    private static IReadOnlyList<string> FrameLines(ScriptDebugSession session) {
+        var lines = new List<string> { $"at {session.CurrentNodeText}" };
+        if (session.Locals.Count > 0)
+            lines.Add("locals: " + string.Join(", ", session.Locals.Select(local => $"{local.Name}={local.Value}")));
+        if (session.IsCompleted)
+            lines.Add(session.Fault is null ? "(completed)" : $"fault: {session.Fault.Message}");
+        return lines;
+    }
+
+    private static string FirstLine(string text) {
+        var lines = text.Replace("\r\n", "\n").Split('\n');
+        return lines.Length > 1 ? $"{lines[0]} …" : lines[0];
+    }
+}

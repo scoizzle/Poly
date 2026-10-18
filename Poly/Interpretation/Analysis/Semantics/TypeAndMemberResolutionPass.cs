@@ -15,6 +15,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return;
         }
 
+        // Seed parameter uses before the body resolves so a typed lambda
+        // parameter supports member access (e.g. ((string s) => s.Length)).
+        if (node is Lambda lambda)
+            SeedLambdaParameterTypes(context, lambda);
+
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
@@ -37,7 +42,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 }
                 exType ??= context.TypeDefinitions.GetTypeDefinition(typeof(Exception));
                 if (!string.IsNullOrEmpty(clause.VariableName) && exType is not null)
-                    SeedCatchVariableTypes(context, clause.Body, clause.VariableName!, exType);
+                    SeedVariableType(context, clause.Body, clause.VariableName!, exType);
                 Analyze(context, clause.Body);
             }
         }
@@ -48,7 +53,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             context.SetResolvedType(tcf, tryType);
     }
 
-    private static void SeedCatchVariableTypes(
+    /// <summary>Seeds <paramref name="type"/> onto every <see cref="Variable"/> use of
+    /// <paramref name="name"/> in <paramref name="node"/>'s subtree, stopping at a nested
+    /// block that declares the name (shadowing). A local's type lives on its declaration
+    /// node, while each use is a distinct node — and member resolution needs the *use's*
+    /// type — so the declaring scope seeds its uses before the body is walked.</summary>
+    private static void SeedVariableType(
         AnalysisContext context, Node node, string name, ITypeDefinition type) {
         if (node is Variable v && v.Name == name)
             context.SetResolvedType(v, type);
@@ -60,13 +70,53 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
         foreach (var child in node.Children) {
             if (child is not null)
-                SeedCatchVariableTypes(context, child, name, type);
+                SeedVariableType(context, child, name, type);
+        }
+    }
+
+    /// <summary>Seed the resolved types of a lambda's parameter uses before its
+    /// body is analyzed, so member access on a typed parameter resolves
+    /// (<c>((string s) =&gt; s.Length)</c>). The reader emits a fresh
+    /// <see cref="Variable"/> per identifier, so the name is the only link.
+    /// A block that declares the same name shadows the parameter and is left
+    /// alone; nested lambdas seed their own parameters.</summary>
+    private static void SeedLambdaParameterTypes(AnalysisContext context, Lambda lambda) {
+        if (lambda.Parameters.Count == 0)
+            return;
+        var byName = new Dictionary<string, ITypeDefinition>(StringComparer.Ordinal);
+        foreach (var parameter in lambda.Parameters) {
+            if (parameter.TypeReference is null)
+                continue;
+            if (ResolveNodeType(context, parameter.TypeReference) is { } type)
+                byName[parameter.Name] = type;
+        }
+        if (byName.Count == 0)
+            return;
+        SeedParameterVariableTypes(context, lambda.Body, byName);
+    }
+
+    private static void SeedParameterVariableTypes(
+        AnalysisContext context, Node node, IReadOnlyDictionary<string, ITypeDefinition> byName) {
+        if (node is Lambda)
+            return;
+        if (node is Variable v && byName.TryGetValue(v.Name, out var type))
+            context.SetResolvedType(v, type);
+        if (node is Block block) {
+            foreach (var bv in block.Variables) {
+                if (bv is Variable dv && byName.ContainsKey(dv.Name))
+                    return;
+            }
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                SeedParameterVariableTypes(context, child, byName);
         }
     }
 
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
+            InterpolatedString => context.TypeDefinitions.GetTypeDefinition(typeof(string)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => context.GetResolvedType(v),
@@ -173,6 +223,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
         if (elementType != null) {
             context.SetResolvedType(foreachLoop.LoopVariable, elementType);
+            SeedVariableType(context, foreachLoop.Body, foreachLoop.LoopVariable.Name, elementType);
         }
 
         return context.TypeDefinitions.GetTypeDefinition(typeof(void));
@@ -417,6 +468,15 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             }
             if (resolved != null) {
                 context.SetResolvedType(v, resolved);
+                // Member access on a local (`s.Length`, `s?.Length`) resolves against the
+                // use's type, and a use is a distinct node from this declaration, so seed
+                // the declared type over the block's statements. Seed each statement, not
+                // the block itself: the seeder stops at a block that declares the name,
+                // which would be this one.
+                foreach (var statement in nodes) {
+                    if (statement is not null)
+                        SeedVariableType(context, statement, v.Name, resolved);
+                }
             }
         }
 

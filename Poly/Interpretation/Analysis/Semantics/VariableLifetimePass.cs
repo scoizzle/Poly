@@ -28,7 +28,10 @@ internal record ScopeVertex(Block Block, ScopeVertex? Parent, HashSet<Variable> 
 internal sealed record ScopeState(
     VariableAnalysisMetadata Meta,
     List<Block> ScopeStack,
-    Dictionary<string, Stack<Variable>> VariablesByName
+    // Names in scope, innermost last. Values are Variable declarations or
+    // lambda Parameter declarations — a parameter name registered for a lambda
+    // body shadows an outer variable of the same name.
+    Dictionary<string, Stack<Node>> VariablesByName
 );
 
 internal sealed class ScopeValidator : INodeAnalyzer {
@@ -80,6 +83,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeTryCatchFinally(context, state, tcf);
                 break;
 
+            case Lambda lambda:
+                AnalyzeLambda(context, state, lambda);
+                break;
+
             case Variable variable:
                 ValidateVariableReference(context, state, variable);
                 AnalyzeChildrenWithState(context, state, node);
@@ -87,10 +94,18 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
             case Assignment assignment when assignment.Destination is Variable v:
                 AnalyzeChildrenWithState(context, state, node);
-                if (state.VariablesByName.TryGetValue(v.Name, out var countStack) && countStack.Count > 0) {
-                    var decl = countStack.Peek();
+                if (state.VariablesByName.TryGetValue(v.Name, out var countStack)
+                    && countStack.Count > 0
+                    && countStack.Peek() is Variable decl) {
                     state.Meta.AssignmentCount.TryGetValue(decl, out var count);
                     state.Meta.AssignmentCount[decl] = count + 1;
+                    // The destination carries the variable's declared type, not the
+                    // assigned value's type. The VM stores raw slots, so the emitter
+                    // must know the variable's representation to convert on write
+                    // (`double x = 1; x = 2;` would otherwise store the integer 2 where
+                    // the double path reads IEEE bits).
+                    if (context.GetResolvedType(decl) is { } declaredType)
+                        context.SetResolvedType(v, declaredType);
                 }
                 break;
 
@@ -126,11 +141,22 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 }
                 AnalyzeNode(context, state, clause.Body);
                 if (catchVar is not null)
-                    UnregisterVariable(state, catchVar);
+                    UnregisterVariable(state, catchVar.Name);
             }
         }
         if (tcf.FinallyBlock is not null)
             AnalyzeNode(context, state, tcf.FinallyBlock);
+    }
+
+    /// <summary>Register the lambda's parameters before its body so a body
+    /// <see cref="Variable"/> of the same name resolves to the parameter (and
+    /// shadows an outer variable rather than silently reading it).</summary>
+    private void AnalyzeLambda(AnalysisContext context, ScopeState state, Lambda lambda) {
+        foreach (var parameter in lambda.Parameters)
+            RegisterScopedParameter(state, parameter);
+        AnalyzeNode(context, state, lambda.Body);
+        foreach (var parameter in lambda.Parameters)
+            UnregisterVariable(state, parameter.Name);
     }
 
     private void AnalyzeForEachLoop(AnalysisContext context, ScopeState state, ForEachLoop forEachLoop) {
@@ -140,7 +166,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         state.Meta.VariableDeclarationScope[forEachLoop.LoopVariable] =
             state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : forEachLoop;
         AnalyzeNode(context, state, forEachLoop.Body);
-        UnregisterVariable(state, forEachLoop.LoopVariable);
+        UnregisterVariable(state, forEachLoop.LoopVariable.Name);
     }
 
     private void AnalyzeBlock(AnalysisContext context, ScopeState state, Block block) {
@@ -160,7 +186,7 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         AnalyzeChildrenWithState(context, state, block);
 
         for (int i = 0; i < vars.Count; i++) {
-            if (vars[i] is Variable v) UnregisterVariable(state, v);
+            if (vars[i] is Variable v) UnregisterVariable(state, v.Name);
         }
 
         state.ScopeStack.RemoveAt(state.ScopeStack.Count - 1);
@@ -181,24 +207,50 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
     private static void RegisterScopedVariable(AnalysisContext context, ScopeState state, Variable variable) {
         if (!state.VariablesByName.TryGetValue(variable.Name, out var stack)) {
-            stack = new Stack<Variable>();
+            stack = new Stack<Node>();
             state.VariablesByName[variable.Name] = stack;
         }
-        if (stack.Count > 0)
-            context.ReportWarning(variable, $"Variable '{variable.Name}' shadows outer scope variable");
+        if (stack.Count > 0) {
+            // A local cannot shadow a lambda parameter: the emitter resolves parameter
+            // uses by name, so such a local could never be read or written (and C#
+            // forbids it). Fail closed rather than mis-bind.
+            if (stack.Peek() is Parameter)
+                context.ReportError(variable,
+                    $"Variable '{variable.Name}' cannot shadow a lambda parameter of the same name.");
+            else
+                context.ReportWarning(variable, $"Variable '{variable.Name}' shadows outer scope variable");
+        }
         stack.Push(variable);
     }
 
-    private static void UnregisterVariable(ScopeState state, Variable variable) {
-        if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0)
+    private static void UnregisterVariable(ScopeState state, string name) {
+        if (state.VariablesByName.TryGetValue(name, out var stack) && stack.Count > 0)
             stack.Pop();
+    }
+
+    private static void RegisterScopedParameter(ScopeState state, Parameter parameter) {
+        if (!state.VariablesByName.TryGetValue(parameter.Name, out var stack)) {
+            stack = new Stack<Node>();
+            state.VariablesByName[parameter.Name] = stack;
+        }
+        stack.Push(parameter);
     }
 
     private void ValidateVariableReference(AnalysisContext context, ScopeState state, Variable variable) {
         if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
-            var declaration = stack.Peek();
-            var metadata = GetOrCreateMetadata(context, state.Meta, variable);
-            metadata.VariableReferences[variable] = declaration;
+            // A parameter declaration resolves the name but is not a Variable;
+            // its emit slot is recovered by the emitter's parameter maps.
+            if (stack.Peek() is Variable declaration) {
+                var metadata = GetOrCreateMetadata(context, state.Meta, variable);
+                metadata.VariableReferences[variable] = declaration;
+                // A local's type is inferred once, on its declaration (ResolveBlockType);
+                // every use of the name is a distinct Variable node. Carry the declaration's
+                // resolved type onto the use, or type-directed decisions (string +, casts,
+                // arithmetic categories) never see a local's type.
+                if (context.GetResolvedType(variable) is null
+                    && context.GetResolvedType(declaration) is { } declaredType)
+                    context.SetResolvedType(variable, declaredType);
+            }
         }
         else {
             context.ReportError(variable, $"Variable '{variable.Name}' is not declared in this scope");
@@ -229,8 +281,9 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     }
 
     private static void MarkVariableEscaped(ScopeState state, Variable v) {
-        if (state.VariablesByName.TryGetValue(v.Name, out var stack) && stack.Count > 0) {
-            var decl = stack.Peek();
+        if (state.VariablesByName.TryGetValue(v.Name, out var stack)
+            && stack.Count > 0
+            && stack.Peek() is Variable decl) {
             state.Meta.EscapedVariables.Add(decl);
         }
     }

@@ -66,6 +66,40 @@ public class ClosureCaptureTests {
     }
 
     [Test]
+    public async Task Stored_DoubleCapture_AssignScalarInsideLambda_FailsClosed() {
+        // The captured variable is classified double, but a write from inside the
+        // closure goes through its capture cell, which the emitter stores without the
+        // scalar→IEEE conversion the plain path performs. Accepting that widening would
+        // store the raw scalar and mis-read it as a tiny double, so it is rejected:
+        // analysis must fail closed rather than emit a mis-executing program.
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1.5)),
+            new Assignment(fn, new Lambda([], new Assignment(captured, new Constant(2L)))),
+            new Invoke(fn),
+            captured
+        ], [captured, fn]);
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Stored_DoubleCapture_AssignDoubleInsideLambda_SeesWrittenValue() {
+        // A capacity check on the capture write path: a double written to a captured
+        // double from inside the closure must store IEEE bits, exactly as it reads back.
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1.5)),
+            new Assignment(fn, new Lambda([], new Assignment(captured, new Constant(2.5)))),
+            new Invoke(fn),
+            captured
+        ], [captured, fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.5);
+    }
+
+    [Test]
     public async Task Stored_DecimalCapture_MutateAfterStore_SeesLatest() {
         var captured = new Variable("captured");
         var fn = new Variable("fn");

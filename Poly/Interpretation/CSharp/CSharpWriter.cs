@@ -481,6 +481,7 @@ public sealed class CSharpWriter {
 
     private string ForEachText(ForEachLoop forEach, int indent) =>
         RenderFills("statement", "foreach", Names(("name", EscapeIdent(forEach.LoopVariable.Name))),
+            Render("foreach-decl", "var"),
             Expr(forEach.Collection), BodyText(forEach.Body, indent));
 
     private string SwitchText(SwitchStatement switchStmt, int indent) {
@@ -818,6 +819,8 @@ public sealed class CSharpWriter {
         switch (node) {
             case Constant constant:
                 return ConstantText(constant);
+            case InterpolatedString interpolated:
+                return InterpolatedText(interpolated);
             case Variable variable:
                 return IdentText(variable.Name);
             case Parameter parameter:
@@ -1134,6 +1137,40 @@ public sealed class CSharpWriter {
             });
         }
         sb.Append('"');
+        return sb.ToString();
+    }
+
+    /// <summary>Prints an interpolated string back as <c>$"…"</c> — the inverse of
+    /// the reader's fold, so write→read→write is stable.</summary>
+    private string InterpolatedText(InterpolatedString node) {
+        var sb = new StringBuilder("$\"");
+        for (var i = 0; i < node.Literals.Count; i++) {
+            sb.Append(InterpolatedLiteral(node.Literals[i]));
+            if (i < node.Holes.Count)
+                sb.Append('{').Append(Expr(node.Holes[i])).Append('}');
+        }
+        sb.Append('"');
+        return RenderFills("expr-primary", "interpolated", Names(("value", sb.ToString())));
+    }
+
+    /// <summary>Encodes one literal segment: braces for the interpolation syntax and
+    /// string escapes for the C# literal, in a single pass so the two do not interfere.</summary>
+    private static string InterpolatedLiteral(string value) {
+        var sb = new StringBuilder();
+        foreach (var ch in value) {
+            sb.Append(ch switch {
+                '{' => "{{",
+                '}' => "}}",
+                '\\' => "\\\\",
+                '"' => "\\\"",
+                '\n' => "\\n",
+                '\r' => "\\r",
+                '\t' => "\\t",
+                '\0' => "\\0",
+                _ when char.IsControl(ch) => "\\u" + ((int)ch).ToString("x4", CultureInfo.InvariantCulture),
+                _ => ch.ToString(),
+            });
+        }
         return sb.ToString();
     }
 

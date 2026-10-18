@@ -420,7 +420,32 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"lambda has {nParams} parameter(s) but invoke has {nArgs} argument(s)");
     }
 
+    /// <summary>
+    /// A local's type is recorded on its declaring <see cref="Variable"/> node, but
+    /// every use (including each assignment destination) is a distinct node. Resolve
+    /// a use to the declaration the scope validator bound it to, so the prior type of
+    /// the <em>binding</em> — not of one assignment node — is what later writes check.
+    /// </summary>
+    private static Variable BindingOf(AnalysisContext context, Variable variable) {
+        var meta = context.GetMetadata<VariableAnalysisMetadata>(variable);
+        if (meta is not null
+            && meta.VariableReferences.TryGetValue(variable, out var declaration)
+            && declaration is not null) {
+            return declaration;
+        }
+        return variable;
+    }
+
+    /// <summary>
+    /// True for the numeric types a slot can hold directly. Scalar numeric writes share
+    /// one slot encoding (all <c>long</c>), so int↔long writes are fine; only a scalar
+    /// widening into an IEEE slot needs a conversion, which the emitter performs.
+    /// </summary>
+    private static bool IsNumericType(Type? type) =>
+        type is not null && NumericWidenRank(Type.GetTypeCode(type)) is not null;
+
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
+        var binding = BindingOf(context, variable);
         var rhsMeta = context.GetMetadata<ValueRepresentationMetadata>(assignment.Value);
         if (rhsMeta is null)
             return;
@@ -430,10 +455,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(variable);
+        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(binding);
         if (rhsMeta.Kind is ValueRepresentationKind.Unknown) {
             if (prior is null)
-                context.SetMetadata(variable, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));
+                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));
             else if (prior.Kind is not ValueRepresentationKind.Unknown)
                 Report(context, assignment,
                     $"cannot assign '{TypeLabel(rhsMeta.ClrType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
@@ -445,10 +470,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
 
         if (prior is null) {
-            context.SetMetadata(variable, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
+            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
             return;
         }
 
+        // Scalar numeric writes share one slot encoding (all `long`), so int↔long are
+        // fine by construction; the IEEE-slot widening exemption is further down.
         if (prior.Kind != rhsMeta.Kind) {
             Report(context, assignment,
                 $"cannot assign '{TypeLabel(rhsType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
@@ -466,6 +493,17 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
 
         if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
+            // A scalar widening into an IEEE slot is legal and converted on store
+            // (`double x = 1; x = 2;`). The reverse (double → scalar) truncates where
+            // C# rejects it, so it stays rejected. Scalar↔scalar writes are all the
+            // same slot encoding and were always allowed.
+            //
+            // The conversion happens only on the plain variable store. A captured
+            // variable is written through its closure cell, which the emitter does not
+            // coerce, so the widening there would store the raw scalar and mis-read it
+            // later; fail closed instead of accepting it.
+            if (IsIeeeScalar(prior.ClrType) && IsNumericType(rhsType) && !IsCaptured(context, variable))
+                return;
             Report(context, assignment,
                 $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
             return;
@@ -481,6 +519,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static string TypeLabel(Type? type, ValueRepresentationKind kind) =>
         type?.Name ?? kind.ToString();
+
+    /// <summary>True when the assignment destination is a captured binding: its writes
+    /// go through a closure cell, which the emitter stores without a representation
+    /// conversion (only the plain variable path coerces).</summary>
+    private static bool IsCaptured(AnalysisContext context, Variable variable) =>
+        context.GetMetadata<VariableAnalysisMetadata>(variable)?.CapturedVariables.Contains(variable) == true;
 
     private static bool IsIeeeScalar(Type type) =>
         type == typeof(float) || type == typeof(double);

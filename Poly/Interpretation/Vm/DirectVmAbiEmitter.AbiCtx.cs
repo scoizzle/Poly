@@ -295,10 +295,17 @@ public static partial class DirectVmAbiEmitter {
             _variableRegisters.ContainsKey(v) || TryGetVariable(v, out _);
 
         public bool TryGetVariable(Variable v, out int slot) {
+            // Identity first: a Variable node is its binding, so a node that is a
+            // declaration resolves to that declaration even when an inner scope
+            // shadows the name.
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))
                     return true;
-                // Name fallback: catch VariableName is a string; body refs are new Variable(name).
+            }
+            // Name fallback from the innermost scope outward: catch VariableName is
+            // a string and body refs are new Variable(name), and a shadowing
+            // declaration must beat an outer binding of the same name.
+            foreach (var scope in _scopeStack) {
                 foreach (var (key, s) in scope) {
                     if (key.Name == v.Name) {
                         slot = s;
@@ -311,12 +318,35 @@ public static partial class DirectVmAbiEmitter {
         }
 
         private bool TryGetRegister(Variable v, out int regIdx) {
+            // Identity first: a Variable node is its binding, so a node that is a
+            // declaration resolves to that declaration even when an inner scope
+            // shadows the name.
             if (_variableRegisters.TryGetValue(v, out regIdx))
                 return true;
-            foreach (var (key, idx) in _variableRegisters) {
-                if (key.Name == v.Name) {
-                    regIdx = idx;
-                    return true;
+            // If v is itself a declaration in some scope, the register fallback must not
+            // guess by name: a same-named inner binding could then shadow it here while
+            // the scope-aware TryGetVariable still resolves v by identity (reads and
+            // writes would disagree). Report not-found so the caller uses that path.
+            foreach (var scope in _scopeStack) {
+                if (scope.ContainsKey(v)) {
+                    regIdx = -1;
+                    return false;
+                }
+            }
+            // Name fallback from the innermost scope outward. A flat name scan over
+            // _variableRegisters is unordered and would let an outer shadowed binding
+            // win; the innermost declaration of the name is the correct binding.
+            foreach (var vars in _scopeVars) {
+                foreach (var key in vars) {
+                    if (!string.Equals(key.Name, v.Name, StringComparison.Ordinal))
+                        continue;
+                    // The innermost binding with this name decides. If it is
+                    // slot-backed (no free register), report not-found so the caller
+                    // falls through to the scope-aware TryGetVariable.
+                    if (_variableRegisters.TryGetValue(key, out regIdx))
+                        return true;
+                    regIdx = -1;
+                    return false;
                 }
             }
             regIdx = -1;
@@ -351,30 +381,77 @@ public static partial class DirectVmAbiEmitter {
                 Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
 
         private Dictionary<Parameter, int>? _inlineParameters;
+        private readonly List<Dictionary<string, int>> _inlineParameterScopes = new();
+        private readonly List<Dictionary<string, int>> _frameParameterScopes = new();
+
+        /// <summary>Enter an inline-lambda parameter scope. Names resolve
+        /// innermost-first, so an inner lambda parameter shadows an outer one or
+        /// an outer local of the same name.</summary>
+        public void PushInlineParameters() => _inlineParameterScopes.Add(new(StringComparer.Ordinal));
+
+        public void PopInlineParameters() {
+            if (_inlineParameterScopes.Count > 0)
+                _inlineParameterScopes.RemoveAt(_inlineParameterScopes.Count - 1);
+        }
 
         public void MapInlineParameter(Parameter parameter, int ringSlot) {
             _inlineParameters ??= new(ReferenceEqualityComparer.Instance);
             _inlineParameters[parameter] = ringSlot;
+            if (_inlineParameterScopes.Count > 0)
+                _inlineParameterScopes[^1][parameter.Name] = ringSlot;
         }
 
         public bool TryGetInlineParameter(Parameter parameter, out int ringSlot) {
-            if (_inlineParameters is { } map) {
-                if (map.TryGetValue(parameter, out ringSlot))
+            if (_inlineParameters is { } map && map.TryGetValue(parameter, out ringSlot))
+                return true;
+            // Fall back to the *live* parameter scopes by name. The flat map is never
+            // trimmed when a scope pops, so scanning it by name could bind a popped
+            // parameter to a ring slot the emitter has since reused.
+            return TryGetInlineParameter(parameter.Name, out ringSlot);
+        }
+
+        /// <summary>Resolve a body <see cref="Variable"/> whose name is an inline
+        /// lambda parameter to that parameter's argument ring slot. The reader
+        /// emits a fresh <see cref="Variable"/> per identifier, so name is the
+        /// only link between a lambda parameter and its uses.</summary>
+        public bool TryGetInlineParameter(string name, out int ringSlot) {
+            for (int i = _inlineParameterScopes.Count - 1; i >= 0; i--) {
+                if (_inlineParameterScopes[i].TryGetValue(name, out ringSlot))
                     return true;
-                foreach (var (p, slot) in map) {
-                    if (p.Name == parameter.Name) {
-                        ringSlot = slot;
-                        return true;
-                    }
-                }
             }
             ringSlot = 0;
             return false;
         }
 
-        public void ClearInlineParameters() => _inlineParameters = null;
+        public void ClearInlineParameters() {
+            _inlineParameters = null;
+            _inlineParameterScopes.Clear();
+        }
 
-        public bool HasInlineParameters => _inlineParameters is not null;
+        public bool HasInlineParameters => _inlineParameterScopes.Count > 0;
+
+        /// <summary>Enter a lambda-function parameter scope whose values live in
+        /// value-stack slots (<see cref="ParameterRead"/>), not ring registers.</summary>
+        public void PushFrameParameters() => _frameParameterScopes.Add(new(StringComparer.Ordinal));
+
+        public void PopFrameParameters() {
+            if (_frameParameterScopes.Count > 0)
+                _frameParameterScopes.RemoveAt(_frameParameterScopes.Count - 1);
+        }
+
+        /// <summary>Record a frame parameter's slot in the current scope. Callers pair
+        /// this with <see cref="PushFrameParameters"/>; indexing directly fails loud if
+        /// that pairing is ever broken (an auto-created scope would leak instead).</summary>
+        public void MapFrameParameter(Parameter parameter, int paramIndex) =>
+            _frameParameterScopes[^1][parameter.Name] = paramIndex;
+        public bool TryGetFrameParameter(string name, out int paramIndex) {
+            for (int i = _frameParameterScopes.Count - 1; i >= 0; i--) {
+                if (_frameParameterScopes[i].TryGetValue(name, out paramIndex))
+                    return true;
+            }
+            paramIndex = 0;
+            return false;
+        }
 
         private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
 
@@ -460,6 +537,12 @@ public static partial class DirectVmAbiEmitter {
         public void MarkCellBacked(Variable v) => _cellBacked.Add(v);
 
         public Expression VariableReadRaw(Variable v) {
+            // A lambda parameter read/written by name wins over any outer local
+            // of the same name (the parameter shadows it).
+            if (TryGetInlineParameter(v.Name, out int inlineSlot))
+                return RingVar(inlineSlot);
+            if (TryGetFrameParameter(v.Name, out int paramIndex))
+                return ParameterRead(paramIndex);
             if (TryGetRegister(v, out int regIdx))
                 return _regVars[regIdx];
             if (TryGetVariable(v, out int slotIndex))
@@ -468,6 +551,10 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression VariableWriteRaw(Variable v, Expression value) {
+            if (TryGetInlineParameter(v.Name, out int inlineSlot))
+                return Assign(RingVar(inlineSlot), value);
+            if (TryGetFrameParameter(v.Name, out int paramIndex))
+                return Assign(ParameterRead(paramIndex), value);
             if (TryGetRegister(v, out int regIdx))
                 return Assign(_regVars[regIdx], value);
             if (TryGetVariable(v, out int slotIndex))

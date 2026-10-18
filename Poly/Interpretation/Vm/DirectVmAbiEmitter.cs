@@ -97,8 +97,9 @@ public static partial class DirectVmAbiEmitter {
         if (rootParameters is not null) {
             ctx.IsCompiledFunctionBody = true;
             ctx.RestoreParamSlots(1);
+            ctx.PushFrameParameters();
             foreach (var parameter in rootParameters)
-                ctx.DeclareParameter(parameter);
+                ctx.MapFrameParameter(parameter, ctx.DeclareParameter(parameter));
             rootArgCount = 1 + rootParameters.Count;
             ctx.ReserveFrameSlots(rootArgCount);
         }
@@ -269,6 +270,7 @@ public static partial class DirectVmAbiEmitter {
             Parameter p => EmitParameter(p, ctx),
             Lambda l => EmitLambda(l, ctx),
             Invoke inv => EmitInvoke(inv, ctx),
+            InterpolatedString interp => EmitInterpolatedString(interp, ctx),
             New n => EmitNew(n, ctx),
             NewArray n => EmitNewArray(n, ctx),
             IndexAccess n => EmitIndexAccess(n, ctx),
@@ -615,6 +617,7 @@ public static partial class DirectVmAbiEmitter {
             NewArray n => SpillRingRead(CompileNode(n, ctx), ctx),
             Parameter p => SpillRingRead(CompileNode(p, ctx), ctx),
             Invoke inv => SpillRingRead(CompileNode(inv, ctx), ctx),
+            InterpolatedString interp => SpillRingRead(CompileNode(interp, ctx), ctx),
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
             SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
@@ -694,7 +697,26 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
         Condition(CompileConditionAsBool(c.Condition, ctx),
-            CompileValue(c.IfTrue, ctx), CompileValue(c.IfFalse, ctx));
+            CompileConditionalBranch(c, c.IfTrue, ctx), CompileConditionalBranch(c, c.IfFalse, ctx));
+
+    /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
+    /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>
+    /// whose selected member is a scalar, as in <c>s?.Length</c> — has no slot
+    /// representation: the value slot would hold <c>0</c>, a silently wrong result
+    /// where C# produces <c>int?</c> (a shape this subset cannot represent). Fail
+    /// closed by throwing when that arm is taken instead of yielding the sentinel.</summary>
+    private static Expression CompileConditionalBranch(Conditional c, Node branch, AbiCtx ctx) {
+        if (branch is Constant { Value: null } && IsValueRepresented(c, ctx))
+            return Block(
+                Throw(New(InvalidOperationExceptionStringCtor,
+                    Constant("Conditional access ('?.') on a null receiver has no value in this subset."))),
+                Constant(0L));
+        return CompileValue(branch, ctx);
+    }
+
+    private static bool IsValueRepresented(Node node, AbiCtx ctx) =>
+        ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.Kind
+            is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool;
 
     private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
         var tmp = Variable(typeof(long), "_coal");

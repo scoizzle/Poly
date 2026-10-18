@@ -32,7 +32,7 @@ public static partial class DirectVmAbiEmitter {
                     int instanceSlot = -1;
                     Expression? instanceExpr = null;
                     if (!isStatic) {
-                        if (IsTypeNameReceiver(member.Value))
+                        if (IsTypeNameReceiver(member.Value, ctx))
                             throw new InvalidOperationException(
                                 $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
                         instanceExpr = CompileNode(member.Value, ctx);
@@ -143,7 +143,7 @@ public static partial class DirectVmAbiEmitter {
             // ITypeMethod without MethodInfo, or Member that analysis did not
             // resolve as a method: live instance by name+arity, then
             // InvokeNamed(string, object?[]). Fail-closed inside InvokeInstanceMethod.
-            if (IsTypeNameReceiver(member.Value))
+            if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
 
@@ -819,7 +819,7 @@ public static partial class DirectVmAbiEmitter {
         var seq = new List<Expression>();
         Expression? receiver = null;
         if (!isStatic) {
-            if (IsTypeNameReceiver(member.Value))
+            if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
             seq.Add(CompileNode(member.Value, ctx));
@@ -1188,7 +1188,7 @@ public static partial class DirectVmAbiEmitter {
     /// Scalars stay on the ring; only heap receivers are checked.
     /// </summary>
     private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, AbiCtx ctx) {
-        if (receiver is not Member member || IsTypeNameReceiver(member.Value))
+        if (receiver is not Member member || IsTypeNameReceiver(member.Value, ctx))
             return null;
         var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(receiver);
         if (meta is null || meta.Kind != ValueRepresentationKind.HeapRef)

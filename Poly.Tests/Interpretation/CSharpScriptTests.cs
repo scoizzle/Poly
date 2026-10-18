@@ -628,6 +628,57 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_QualifiedTypeName_ResolvesStaticMembers() {
+        var nested = CSharpScript.Run("System.String.Empty");
+        await Assert.That(nested.Success).IsTrue();
+        await Assert.That(nested.Value).IsEqualTo("\"\"");
+
+        var constant = CSharpScript.Run("System.Int32.MaxValue");
+        await Assert.That(constant.Success).IsTrue();
+        await Assert.That(constant.Value).IsEqualTo("2147483647");
+
+        var call = CSharpScript.Run("System.Math.Abs(-1)");
+        await Assert.That(call.Success).IsTrue();
+        await Assert.That(call.Value).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Run_QualifiedTypeName_DeepNamespace_Resolves() {
+        var r = CSharpScript.Run("System.Threading.Tasks.Task.CompletedTask");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).Contains("Task");
+    }
+
+    [Test]
+    public async Task Run_QualifiedTypeName_InLambdaBody_Resolves() {
+        var r = CSharpScript.Run("((long a) => System.Math.Abs(a))(-3)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("3");
+    }
+
+    [Test]
+    public async Task Run_LocalNamedLikeNamespace_ShadowsNamespace() {
+        // A declared local named like a namespace root is a value, not a type name.
+        var r = CSharpScript.Run("var System = \"xy\";\nSystem.Length");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("2");
+    }
+
+    [Test]
+    public async Task Run_QualifiedTypeName_TypeofResolves() {
+        var r = CSharpScript.Run("typeof(System.String)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("System.String");
+    }
+
+    [Test]
+    public async Task Run_UnknownDottedName_FailsClosed() {
+        var r = CSharpScript.Run("System.Nope.Nothing");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("is not declared"))).IsTrue();
+    }
+
+    [Test]
     public async Task Run_MixedIntegerEquality_IsNumeric() {
         // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.

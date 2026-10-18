@@ -214,8 +214,28 @@ public class CSharpReaderTests {
     }
 
     [Test]
-    public async Task Read_CompoundShiftOmitted_StillFailsClosed() {
-        await Assert.That(() => CSharpLanguage.Read("class C { void M() { x <<= 1; } }"))
+    public async Task Read_CompoundShift_DesugarsToAssignmentOverShift() {
+        var left = CSharpLanguage.Read("class C { void M() { x <<= 1; } }");
+        var leftAssignment = (Assignment)((Block)left.Types[0].Methods![0].Body!).Nodes[0];
+        await Assert.That(leftAssignment.Value).IsTypeOf<ShiftLeft>();
+
+        // `>>=` is deferred: the tokenizer must not merge `>` (a nested type argument closes
+        // on a single `>`), so `x >>= 1` is not read yet and fails closed.
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { x >>= 1; } }"))
+            .Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task Read_CompoundShift_RoundTrips() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { x <<= 1; } }"));
+        await Assert.That(printed).Contains("x = x << 1;");
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Read_CompoundShiftOnImpureTarget_FailsClosed() {
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { Get().P <<= 1; } }"))
             .Throws<FormatException>();
     }
 
@@ -225,6 +245,31 @@ public class CSharpReaderTests {
         var body = (Block)unit.Types[0].Methods![0].Body!;
         var assignment = (Assignment)body.Nodes[0];
         await Assert.That(assignment.Value).IsTypeOf<BitwiseAnd>();
+    }
+
+    [Test]
+    public async Task Read_CompoundCoalesce_DesugarsToAssignmentOverCoalesce() {
+        var unit = CSharpLanguage.Read("class C { void M() { x ??= 1; } }");
+        var body = (Block)unit.Types[0].Methods![0].Body!;
+        var assignment = (Assignment)body.Nodes[0];
+        await Assert.That(assignment.Destination).IsTypeOf<Variable>();
+        var coalesce = (Coalesce)assignment.Value;
+        await Assert.That(coalesce.LeftHandValue).IsTypeOf<Variable>();
+        await Assert.That(coalesce.RightHandValue).IsTypeOf<Constant>();
+    }
+
+    [Test]
+    public async Task Read_CompoundCoalesce_RoundTrips() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { x ??= 1; } }"));
+        await Assert.That(printed).Contains("x = x ?? 1;");
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Read_CompoundCoalesceOnImpureTarget_FailsClosed() {
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { Get().P ??= 1; } }"))
+            .Throws<FormatException>();
     }
 
     [Test]

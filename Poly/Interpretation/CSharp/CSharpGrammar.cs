@@ -112,6 +112,8 @@ public static class CSharpGrammar {
         CSharpTokenKind.AmpAssign => "&=",
         CSharpTokenKind.PipeAssign => "|=",
         CSharpTokenKind.CaretAssign => "^=",
+        CSharpTokenKind.QuestionQuestionAssign => "??=",
+        CSharpTokenKind.LtLtAssign => "<<=",
         CSharpTokenKind.Arrow => "=>",
         CSharpTokenKind.Plus => "+",
         CSharpTokenKind.Minus => "-",
@@ -380,7 +382,9 @@ public static class CSharpGrammar {
             .Pattern("compound-mod").Kind(CSharpTokenKind.PercentAssign).Ref("expr").Commit()
             .Pattern("compound-and").Kind(CSharpTokenKind.AmpAssign).Ref("expr").Commit()
             .Pattern("compound-or").Kind(CSharpTokenKind.PipeAssign).Ref("expr").Commit()
-            .Pattern("compound-xor").Kind(CSharpTokenKind.CaretAssign).Ref("expr").Commit();
+            .Pattern("compound-xor").Kind(CSharpTokenKind.CaretAssign).Ref("expr").Commit()
+            .Pattern("compound-coalesce").Kind(CSharpTokenKind.QuestionQuestionAssign).Ref("expr").Commit()
+            .Pattern("compound-shift-left").Kind(CSharpTokenKind.LtLtAssign).Ref("expr").Commit();
         b.Define("expr-conditional")
             .Pattern("conditional").Ref("expr-coalesce").Optional(R("cond-tail")).Commit()
             .Pattern("throw").Kind(CSharpTokenKind.KwThrow).Ref("expr").Commit();

@@ -2,9 +2,9 @@
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
 
-Updated 2026-10-17. Master: `3b29937b` (#206). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
+Updated 2026-10-18. Master: `f8bd4af2` (#210). Rules: [README](README.md). Old board with its run log and parked bug cards: [archive/board-2026-10-06.md](archive/board-2026-10-06.md). [LOCAL-AGENT.md](LOCAL-AGENT.md) §3 is the 2026-10-10 handoff; this table wins when they disagree.
 
-**CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT).
+**CURRENT:** [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md), trimmed to the DEI-retirement path (finish line C8d + C10, Scot 2026-10-09 18:56 CT). **Added 2026-10-18 (Scot):** the [C# surface program](research/2026-10-17-csharp-surface-execution-plan.md) — Phase 1 `csurface-truth` first; the [task breakdown](research/2026-10-17-csharp-surface-task-breakdown.md) is the task list and the [gap inventory](research/2026-10-17-csharp-surface-gap-inventory.md) the gap detail (one CURRENT; the program is a second track under it, not a second board).
 **THEN:** platform-contract residual F8; MCP mut-safety; grammar wrap-up; V3 naming. **PULL:** E5; EF codegen; naming cleanup.
 **Throttle / merge:** not applicable while the bot pipeline is suspended; Scot merges.
 
@@ -26,6 +26,11 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 | #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
 | #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
 | #196 (draft) | docs: analysis coverage audit 2026-10-16 | `spike/analysis-coverage` |
+| — | C# surface Phase 1 `csurface-truth` (`is`, narrowing, `foreach` type, `char`) | `slice/csurface-truth` |
+
+Merged since the last plan commit: #212 (agent rules pinned), #208 (a `for` over zero
+records is a no-op), #209 (grep probe), #210 (C# surface: console page, compound assignment,
+typed locals, `?.`, interpolation, lambda parameters).
 
 ## Next (in order; first unblocked row wins)
 

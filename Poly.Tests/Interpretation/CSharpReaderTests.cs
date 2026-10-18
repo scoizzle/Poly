@@ -228,6 +228,31 @@ public class CSharpReaderTests {
     }
 
     [Test]
+    public async Task Read_CompoundCoalesce_DesugarsToAssignmentOverCoalesce() {
+        var unit = CSharpLanguage.Read("class C { void M() { x ??= 1; } }");
+        var body = (Block)unit.Types[0].Methods![0].Body!;
+        var assignment = (Assignment)body.Nodes[0];
+        await Assert.That(assignment.Destination).IsTypeOf<Variable>();
+        var coalesce = (Coalesce)assignment.Value;
+        await Assert.That(coalesce.LeftHandValue).IsTypeOf<Variable>();
+        await Assert.That(coalesce.RightHandValue).IsTypeOf<Constant>();
+    }
+
+    [Test]
+    public async Task Read_CompoundCoalesce_RoundTrips() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { x ??= 1; } }"));
+        await Assert.That(printed).Contains("x = x ?? 1;");
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Read_CompoundCoalesceOnImpureTarget_FailsClosed() {
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { Get().P ??= 1; } }"))
+            .Throws<FormatException>();
+    }
+
+    [Test]
     public async Task Read_CompoundOnMember_DesugarsAndRoundTrips() {
         var unit = CSharpLanguage.Read("class C { void M() { o.P += 1; } }");
         var body = (Block)unit.Types[0].Methods![0].Body!;

@@ -380,6 +380,12 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_CompoundCoalesce_NullAndNonNullReceivers() {
+        await AssertValue("string s = null;\ns ??= \"x\";\ns", "\"x\"");
+        await AssertValue("string s = \"a\";\ns ??= \"b\";\ns", "\"a\"");
+    }
+
+    [Test]
     public async Task Run_CompoundBitwise_UpdatesVariable() {
         var result = CSharpScript.Run("var flags = 6;\nflags &= 3;\nflags");
         await Assert.That(result.Success).IsTrue();

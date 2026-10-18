@@ -53,6 +53,7 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         }
 
         // Multi-character operators, longest first.
+        if (ch == '?' && PeekChar(1) == '?' && PeekChar(2) == '=') return Three(CSharpTokenKind.QuestionQuestionAssign);
         if (ch == '=' && PeekChar(1) == '>') return Two(CSharpTokenKind.Arrow);
         if (ch == '=' && PeekChar(1) == '=') return Two(CSharpTokenKind.EqEq);
         if (ch == '!' && PeekChar(1) == '=') return Two(CSharpTokenKind.NotEq);
@@ -113,6 +114,14 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
 
     private CSharpToken Two(CSharpTokenKind kind) {
         var text = PeekChar().ToString() + PeekChar(1);
+        AdvanceChar();
+        AdvanceChar();
+        return Make(kind, text);
+    }
+
+    private CSharpToken Three(CSharpTokenKind kind) {
+        var text = PeekChar().ToString() + PeekChar(1) + PeekChar(2);
+        AdvanceChar();
         AdvanceChar();
         AdvanceChar();
         return Make(kind, text);

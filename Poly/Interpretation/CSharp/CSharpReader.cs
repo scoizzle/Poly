@@ -661,7 +661,6 @@ public static class CSharpReader {
             "compound-xor" => new BitwiseXor(target, value),
             "compound-coalesce" => new Coalesce(target, value),
             "compound-shift-left" => new ShiftLeft(target, value),
-            "compound-shift-right" => new ShiftRight(target, value),
             _ => throw new InvalidOperationException($"Unknown compound assignment '{pattern}'."),
         };
 

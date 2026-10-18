@@ -121,7 +121,6 @@ public enum CSharpTokenKind {
     CaretAssign,
     QuestionQuestionAssign,
     LtLtAssign,
-    GtGtAssign,
     Arrow,
     Plus,
     Minus,

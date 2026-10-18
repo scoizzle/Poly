@@ -219,9 +219,10 @@ public class CSharpReaderTests {
         var leftAssignment = (Assignment)((Block)left.Types[0].Methods![0].Body!).Nodes[0];
         await Assert.That(leftAssignment.Value).IsTypeOf<ShiftLeft>();
 
-        var right = CSharpLanguage.Read("class C { void M() { x >>= 1; } }");
-        var rightAssignment = (Assignment)((Block)right.Types[0].Methods![0].Body!).Nodes[0];
-        await Assert.That(rightAssignment.Value).IsTypeOf<ShiftRight>();
+        // `>>=` is deferred: the tokenizer must not merge `>` (a nested type argument closes
+        // on a single `>`), so `x >>= 1` is not read yet and fails closed.
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { x >>= 1; } }"))
+            .Throws<FormatException>();
     }
 
     [Test]

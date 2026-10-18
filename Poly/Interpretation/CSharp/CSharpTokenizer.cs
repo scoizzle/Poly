@@ -283,6 +283,35 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         var startLine = _line;
         var startCol = _col;
         var sb = new StringBuilder();
+
+        // Prefixed integer literals: `0x`/`0X` (hex) and `0b`/`0B` (binary). The
+        // prefix belongs to the number, so `0x1F` must not scan as `0` + identifier.
+        if (PeekChar() == '0' && PeekChar(1) is 'x' or 'X' or 'b' or 'B') {
+            var radix = PeekChar(1) is 'x' or 'X' ? 16 : 2;
+            sb.Append(PeekChar());
+            AdvanceChar();
+            sb.Append(PeekChar());
+            AdvanceChar();
+            var digits = 0;
+            while (_pos < _text.Length && (IsDigitInRadix(PeekChar(), radix) || PeekChar() == '_')) {
+                if (PeekChar() != '_') digits++;
+                sb.Append(PeekChar());
+                AdvanceChar();
+            }
+            if (digits == 0)
+                throw GrammarError.Error(
+                    radix == 16
+                        ? "Hexadecimal literal '0x' has no digits."
+                        : "Binary literal '0b' has no digits.",
+                    startLine, startCol);
+            // f/F/d/D and m/M are hex digits, so only the integer suffixes apply here.
+            while (_pos < _text.Length && PeekChar() is 'u' or 'U' or 'l' or 'L') {
+                sb.Append(PeekChar());
+                AdvanceChar();
+            }
+            return new CSharpToken(CSharpTokenKind.NumberLiteral, sb.ToString(), startLine, startCol);
+        }
+
         while (_pos < _text.Length && (char.IsDigit(PeekChar()) || PeekChar() == '_')) {
             sb.Append(PeekChar());
             AdvanceChar();
@@ -300,7 +329,7 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
             sb.Append(PeekChar());
             AdvanceChar();
             if (PeekChar() is '+' or '-') { sb.Append(PeekChar()); AdvanceChar(); }
-            while (_pos < _text.Length && char.IsDigit(PeekChar())) {
+            while (_pos < _text.Length && (char.IsDigit(PeekChar()) || PeekChar() == '_')) {
                 sb.Append(PeekChar());
                 AdvanceChar();
             }
@@ -323,6 +352,12 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
         var word = _text[start.._pos];
         return new CSharpToken(WordToKind(word, atPrefixed), word, startLine, startCol);
     }
+
+    private static bool IsDigitInRadix(char ch, int radix) => radix switch {
+        16 => char.IsAsciiHexDigit(ch),
+        2 => ch is '0' or '1',
+        _ => char.IsAsciiDigit(ch),
+    };
 
     private static bool IsWordStart(char ch) => char.IsLetter(ch) || ch == '_';
 

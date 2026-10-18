@@ -839,4 +839,84 @@ public class CSharpScriptTests {
         await Assert.That(unsigned.Success).IsTrue();
         await Assert.That(unsigned.Value).IsEqualTo("true");
     }
+
+    [Test]
+    public async Task Run_HexLiteral_ReturnsValue() {
+        await AssertValue("0xFF", "255");
+        await AssertValue("0x1F + 1", "32");
+        await AssertValue("0x10L", "16");
+    }
+
+    [Test]
+    public async Task Run_HexLiteral_EIsADigitNotAnExponent() {
+        // Before the prefix scan, `0xE` folded as `0` followed by the identifier `E`.
+        await AssertValue("0xE", "14");
+        await AssertValue("0xE + 1", "15");
+    }
+
+    [Test]
+    public async Task Run_BinaryLiteral_ReturnsValue() {
+        await AssertValue("0b1010", "10");
+        await AssertValue("0b1010 + 1", "11");
+    }
+
+    [Test]
+    public async Task Run_DigitSeparators_AreIgnored() {
+        await AssertValue("1_000_000", "1000000");
+        await AssertValue("0xFF_FF", "65535");
+        await AssertValue("0b1010_1010", "170");
+        await AssertValue("1_0.5_0", "10.5");
+        await AssertValue("1e0_1", "10");
+    }
+
+    [Test]
+    public async Task Run_HexLiteral_TypedLocalUsesTheValue() {
+        await AssertValue("int x = 0xFF;\nx", "255");
+        await AssertValue("long y = 0x1F;\ny", "31");
+    }
+
+    [Test]
+    public async Task Read_HexLiteral_FoldsOneIntConstant() {
+        // The accept criterion: `0x1F` must not scan as `0` + identifier `1F`.
+        var unit = CSharpLanguage.Read("{ 0x1F; }");
+        var block = (Block)unit.TopLevelStatements![0];
+        await Assert.That(block.Nodes.Count).IsEqualTo(1);
+        var constant = (Constant)block.Nodes[0];
+        await Assert.That(constant.Value).IsEqualTo(31);
+        // C#'s unsuffixed `0xFF` is an int, which `1 is int`-style folds depend on.
+        await Assert.That(constant.Value).IsTypeOf<int>();
+    }
+
+    [Test]
+    public async Task Read_BinaryLiteral_FoldsOneIntConstant() {
+        var unit = CSharpLanguage.Read("{ 0b1010; }");
+        var block = (Block)unit.TopLevelStatements![0];
+        await Assert.That(block.Nodes.Count).IsEqualTo(1);
+        var constant = (Constant)block.Nodes[0];
+        await Assert.That(constant.Value).IsEqualTo(10);
+        await Assert.That(constant.Value).IsTypeOf<int>();
+    }
+
+    [Test]
+    public async Task Write_HexLiteral_PrintsDecimalValueAndStaysIdempotent() {
+        const string text = "class C { int M() { return 0xFF; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("255");
+        var again = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(again).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_HexLiteralWithoutDigits_FailsClosed() {
+        var hex = CSharpScript.Run("0x");
+        await Assert.That(hex.Success).IsFalse();
+        await Assert.That(hex.Diagnostics.Any(d => d.Contains("Hexadecimal literal"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_BinaryLiteralWithoutDigits_FailsClosed() {
+        var binary = CSharpScript.Run("0b");
+        await Assert.That(binary.Success).IsFalse();
+        await Assert.That(binary.Diagnostics.Any(d => d.Contains("Binary literal"))).IsTrue();
+    }
 }

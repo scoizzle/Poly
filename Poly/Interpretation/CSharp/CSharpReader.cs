@@ -1010,6 +1010,11 @@ public static class CSharpReader {
 
         private static object FoldNumber(string text) {
             var clean = text.Replace("_", "", StringComparison.Ordinal);
+            // A hex/binary literal never has a `.` or an exponent, and its `E`/`D`/`F`
+            // letters are digits — so the radix path must run before the float checks.
+            if (clean.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                || clean.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+                return FoldRadixNumber(clean[2..], clean[1] is 'x' or 'X' ? 16 : 2);
             if (clean.EndsWith('f') || clean.EndsWith('F'))
                 return float.Parse(clean[..^1], NumberStyles.Float, CultureInfo.InvariantCulture);
             if (clean.EndsWith('m') || clean.EndsWith('M'))
@@ -1029,6 +1034,39 @@ public static class CSharpReader {
             if (int.TryParse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
                 return intValue;
             return long.Parse(clean, NumberStyles.Integer, CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Folds the digits and suffix of a <c>0x</c>/<c>0b</c> literal. The tokenizer
+        /// has already accepted the digit run, so a malformed value here is a
+        /// conversion throw, never a silently wrong constant. Unsuffixed literals take
+        /// the smallest C# integer type that holds them, so <c>0xFF</c> stays <c>int</c>.
+        /// </summary>
+        private static object FoldRadixNumber(string body, int radix) {
+            var suffix = "";
+            if (body.EndsWith("UL", StringComparison.OrdinalIgnoreCase)
+                || body.EndsWith("LU", StringComparison.OrdinalIgnoreCase)) {
+                suffix = "ul";
+                body = body[..^2];
+            }
+            else if (body.EndsWith('u') || body.EndsWith('U')) {
+                suffix = "u";
+                body = body[..^1];
+            }
+            else if (body.EndsWith('l') || body.EndsWith('L')) {
+                suffix = "l";
+                body = body[..^1];
+            }
+            var value = Convert.ToUInt64(body, radix);
+            return suffix switch {
+                "ul" => value,
+                "u" => value <= uint.MaxValue ? (uint)value : value,
+                "l" => value <= long.MaxValue ? (long)value : value,
+                _ => value <= int.MaxValue ? (int)value
+                    : value <= uint.MaxValue ? (uint)value
+                    : value <= long.MaxValue ? (long)value
+                    : value,
+            };
         }
     }
 }

@@ -417,6 +417,8 @@ public static class CSharpGrammar {
         b.Define("postfix-tail")
             .Pattern("member").Kind(CSharpTokenKind.Dot).Value(CSharpTokenKind.Identifier, "name").Commit()
             .Pattern("conditional-member").Kind(CSharpTokenKind.QuestionDot).Value(CSharpTokenKind.Identifier, "name").Commit()
+            .Pattern("conditional-index").Kind(CSharpTokenKind.Question).Value(CSharpTokenKind.LBracket, "open")
+                .Optional(R("arg-list")).Value(CSharpTokenKind.RBracket, "close").Commit()
             .Pattern("invoke").Ref("args").Commit()
             .Pattern("generic-invoke").Ref("type-args").Ref("args").Commit()
             .Pattern("index").Value(CSharpTokenKind.LBracket, "open").Optional(R("arg-list")).Value(CSharpTokenKind.RBracket, "close").Commit()

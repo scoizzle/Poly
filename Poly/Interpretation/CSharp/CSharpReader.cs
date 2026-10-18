@@ -849,6 +849,8 @@ public static class CSharpReader {
                     return FoldPostfixTails(new NullForgiving(acc), tails, index + 1);
                 case "conditional-member":
                     return FoldConditionalMember(acc, tails, index, tail);
+                case "conditional-index":
+                    return FoldConditionalIndex(acc, tails, index, tail);
                 default:
                     throw new InvalidOperationException($"Cannot fold postfix '{tail.PatternName}'.");
             }
@@ -857,23 +859,46 @@ public static class CSharpReader {
         private static Node ChainNameof(Node acc) =>
             acc is Variable { Name: "nameof" } ? new TypeReference("nameof") : acc;
 
-        /// <summary>Folds <c>recv?.member</c> — and every tail that follows it — to
-        /// <c>recv == null ? null : recv.member…</c>. The member is read only when the
-        /// receiver is non-null, and the whole remainder of the chain is skipped when
-        /// it is null, as in C# (so <c>a?.b.c</c> and <c>a?.M(args)</c> propagate the
-        /// null). The desugaring re-evaluates the receiver, so it is sound only when
-        /// the receiver has no side effects; an impure receiver fails closed rather
-        /// than folding to a wrong shape.</summary>
+        /// <summary>Folds <c>recv?.member</c> onto the single conditional-chain fold in
+        /// <see cref="FoldConditionalChain"/>.</summary>
         private Node FoldConditionalMember(
             Node acc,
             IReadOnlyList<MatchResult<CSharpToken, CSharpTokenKind>> tails,
             int index,
-            MatchResult<CSharpToken, CSharpTokenKind> tail) {
+            MatchResult<CSharpToken, CSharpTokenKind> tail) =>
+            FoldConditionalChain(acc, tails, index, tail, new Member(acc, Capture(tail, "name")), "?.");
+
+        /// <summary>Folds <c>recv?[index]</c> onto the single conditional-chain fold in
+        /// <see cref="FoldConditionalChain"/>.</summary>
+        private Node FoldConditionalIndex(
+            Node acc,
+            IReadOnlyList<MatchResult<CSharpToken, CSharpTokenKind>> tails,
+            int index,
+            MatchResult<CSharpToken, CSharpTokenKind> tail) =>
+            FoldConditionalChain(
+                acc, tails, index, tail,
+                new IndexAccess(acc, tail.Children.Count > 0 ? [.. FoldArgList(tail.Children[0])] : []),
+                "?[");
+
+        /// <summary>Folds <c>recv?.member</c> (and <c>recv?[index]</c>) — and every tail
+        /// that follows it — to <c>recv == null ? null : recv.member…</c>. The member (or
+        /// element) is read only when the receiver is non-null, and the whole remainder
+        /// of the chain is skipped when it is null, as in C# (so <c>a?.b.c</c>,
+        /// <c>a?.b[c]</c> and <c>a?.M(args)</c> propagate the null). The desugaring
+        /// re-evaluates the receiver, so it is sound only when the receiver has no side
+        /// effects; an impure receiver fails closed rather than folding to a wrong
+        /// shape.</summary>
+        private Node FoldConditionalChain(
+            Node acc,
+            IReadOnlyList<MatchResult<CSharpToken, CSharpTokenKind>> tails,
+            int index,
+            MatchResult<CSharpToken, CSharpTokenKind> tail,
+            Node access,
+            string form) {
             if (!IsSideEffectFreeReceiver(acc))
                 throw GrammarError.Error(
-                    "Conditional access ('?.') requires a side-effect-free receiver in the exported subset.",
+                    $"Conditional access ('{form}') requires a side-effect-free receiver in the exported subset.",
                     tail.Tokens[0].Line, tail.Tokens[0].Col);
-            var access = new Member(acc, Capture(tail, "name"));
             var inner = FoldPostfixTails(access, tails, index + 1);
             // `recv != null ? member : null` rather than `recv == null ? null : member`:
             // the analysis classifies a Conditional from its *true* branch, so the null

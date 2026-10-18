@@ -169,10 +169,36 @@ public class CSharpReaderTests {
     }
 
     [Test]
+    public async Task Read_ConditionalElementAccess_RoundTripsDesugared() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { a?[0]; } }"));
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+        await Assert.That(printed).Contains("(!(a == null) ? a[0] : null)");
+    }
+
+    [Test]
+    public async Task Read_ConditionalMemberThenElementAccess_RoundTripsDesugared() {
+        // `a?.b[c]` folds member-then-index as one chain: a null `a` skips both tails.
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("class C { void M() { a?.b[c]; } }"));
+        var reprinted = CSharpLanguage.Write(CSharpLanguage.Read(printed));
+        await Assert.That(reprinted).IsEqualTo(printed);
+        await Assert.That(printed).Contains("(!(a == null) ? a.b[c] : null)");
+    }
+
+    [Test]
+    public async Task Read_ConditionalElementAccess_ImpureReceiver_FailsClosed() {
+        // `?[` re-evaluates its receiver, so an impure receiver would be evaluated
+        // twice; it must fail closed rather than fold to a wrong shape (the `?.` rule).
+        var error = Assert.Throws<FormatException>(
+            () => CSharpLanguage.Read("class C { void M() { f()?[0]; } }"));
+        await Assert.That(error.Message).Contains("side-effect-free");
+    }
+
+    [Test]
     public async Task Read_UnsupportedConstruct_FailsClosed() {
-        // `?.` is read now; conditional *element* access (`a?[0]`) is still outside
-        // the exported subset and must fail closed rather than fold to a wrong shape.
-        await Assert.That(() => CSharpLanguage.Read("class C { void M() { a?[0]; } }"))
+        // `?[` is read now; index-from-end (`^1`) is still outside the exported
+        // subset and must fail closed rather than fold to a wrong shape.
+        await Assert.That(() => CSharpLanguage.Read("class C { void M() { a?[^1]; } }"))
             .Throws<FormatException>();
     }
 

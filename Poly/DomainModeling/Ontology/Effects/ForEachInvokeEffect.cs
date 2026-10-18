@@ -27,7 +27,9 @@ public sealed record ForEachStageMembership(string StageName) : ForEachPredicate
 ///     membership</b> on the target entity — never an inline expression.</item>
 ///   <item>Every matching record is invoked in storage order; the <b>first failure fails
 ///     the whole <c>for</c></b> (no silent swallow).</item>
-///   <item><b>Zero matches fail</b> (no vacuous success).</item>
+///   <item><b>Zero records is a no-op</b>: an empty collection, or a predicate that matched
+///     none, skips the loop and the action continues with the effect after it (2026-10-17;
+///     see <c>docs/decisions/2026-10-17-for-zero-records-is-a-no-op.md</c>).</item>
 /// </list>
 /// </summary>
 public sealed record ForEachInvokeEffect(

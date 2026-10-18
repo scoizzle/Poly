@@ -81,23 +81,17 @@ public class Student
         {
             return DomainResult.Failure("'DropRegistered' requires stage 'Active' on entity 'Student'.");
         }
-        var matched1 = false;
         foreach (var target0 in this.Enrollments)
         {
             if (!(target0.CurrentStage == EnrollmentStage.Registered))
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.Drop();
-            if (!result2.IsSuccess)
+            var result1 = target0.Drop();
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for enrollments.Drop matched zero targets.");
         }
         return DomainResult.Success();
     }
@@ -120,23 +114,17 @@ public class Student
         {
             return DomainResult.Failure("'CompleteRegistered' requires stage 'Active' on entity 'Student'.");
         }
-        var matched1 = false;
         foreach (var target0 in this.Enrollments)
         {
             if (!(target0.CurrentStage == EnrollmentStage.Registered))
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.Complete();
-            if (!result2.IsSuccess)
+            var result1 = target0.Complete();
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for enrollments.Complete matched zero targets.");
         }
         return DomainResult.Success();
     }
@@ -146,23 +134,17 @@ public class Student
         {
             return DomainResult.Failure("'CompletePassing' requires stage 'Active' on entity 'Student'.");
         }
-        var matched1 = false;
         foreach (var target0 in this.Enrollments)
         {
             if (!target0.IsPassing())
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.Complete();
-            if (!result2.IsSuccess)
+            var result1 = target0.Complete();
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for enrollments.Complete matched zero targets.");
         }
         return DomainResult.Success();
     }

@@ -29,45 +29,33 @@ public class Customer
     }
     public DomainResult ShipAll()
     {
-        var matched1 = false;
         foreach (var target0 in this.Orders)
         {
             if (!target0.IsPaid())
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.Ship();
-            if (!result2.IsSuccess)
+            var result1 = target0.Ship();
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for orders.Ship matched zero targets.");
         }
         return DomainResult.Success();
     }
     public DomainResult CancelPending()
     {
-        var matched1 = false;
         foreach (var target0 in this.Orders)
         {
             if (!(target0.CurrentStage == OrderStage.Pending))
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.Cancel("customer request");
-            if (!result2.IsSuccess)
+            var result1 = target0.Cancel("customer request");
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for orders.Cancel matched zero targets.");
         }
         return DomainResult.Success();
     }

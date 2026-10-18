@@ -733,9 +733,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Lowers a <see cref="ForEachInvokeEffect"/> (the <c>for Rel as x [where x.Policy |
     /// where x in Stage] invoke x.Action(args)</c> fan-out) to a fail-fast loop over the
     /// source's collection navigation — "fetch all from storage, invoke on every record".
-    /// The first failing record fails the whole <c>for</c>; zero matches fail (no vacuous
-    /// success). The predicate is a named policy (bool method) or stage membership
-    /// (<c>x.CurrentStage == TargetStage.X</c>) on the target entity.
+    /// The first failing record fails the whole <c>for</c>. Zero records — an empty
+    /// collection, or a predicate that matched none — is a no-op: the action continues
+    /// with the effect after the loop. The predicate is a named policy (bool method) or
+    /// stage membership (<c>x.CurrentStage == TargetStage.X</c>) on the target entity.
     /// </summary>
     protected override Node? ForEachInvoke(ForEachInvokeEffect e) {
         var relName = e.RelationshipName;
@@ -777,27 +778,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
-        // Fail-fast + zero-matches-fail. Same Variable instances for VM identity.
-        // Arg statements sit inside the loop, immediately before the invoke.
-        var matchedVar = _names.Next("matched");
+        // Fail-fast: the first failing record fails the whole `for` and returns the
+        // caller's failure. Zero iterations (an empty collection, or a predicate that
+        // matched none) is a no-op — the action continues to the effect after the loop.
+        // Same Variable instances for VM identity. Arg statements sit inside the loop,
+        // immediately before the invoke.
         var resultVar = _names.Next("result");
         var loopBody = new List<Node>();
         if (predicateGuard is not null) loopBody.Add(predicateGuard);
         loopBody.AddRange(loweredArgs.SelectMany(a => a.Statements));
-        loopBody.Add(new Assignment(matchedVar, new Constant(true)));
         loopBody.Add(new Assignment(resultVar, invokeCall));
         loopBody.Add(new IfStatement(new Poly.Ast.Nodes.Not(new Member(resultVar, "IsSuccess")),
             new Block([ReturnCallerFailureFrom(resultVar)])));
         var loopLocals = new List<Node> { resultVar };
         loopLocals.AddRange(loweredArgs.SelectMany(a => a.Variables));
         var loop = new ForEachLoop(loopVar, navMember, new Block(loopBody, loopLocals));
-        var zeroCheck = new IfStatement(
-            new Poly.Ast.Nodes.Not(matchedVar),
-            new Block([ReturnCallerFailure(new Constant(
-                $"for {relName}.{e.ActionName} matched zero targets."))]));
-        return new Block(
-            [new Assignment(matchedVar, new Constant(false)), loop, zeroCheck],
-            [matchedVar]);
+        return new Block([loop]);
     }
 
     /// <summary>Resolves the stage enum CLR name for a target entity of a relationship

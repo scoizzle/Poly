@@ -926,7 +926,8 @@ public class DomainToCSharpExporterTests {
     public async Task Export_ForEachInvoke_FailFastLoopWithPredicates() {
         // `for Rel as x [where x.Policy | where x in Stage] invoke x.Action(args)` lowers
         // to a fail-fast loop over the nav: continue-guard predicate, binder-scoped args,
-        // first failure returns, zero matches fail. No NotSupportedException / unreachable code.
+        // first failure returns. Zero records is a no-op (no failure return). No
+        // NotSupportedException / unreachable code.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Line: entity {
@@ -951,9 +952,9 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("foreach (var target0 in this.Lines)");
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
-        await Assert.That(cs).Contains("target3.CurrentStage == LineStage.Active");
-        await Assert.That(cs).Contains("return DomainResult.Failure(result2.ErrorMessage ?? \"\");");
-        await Assert.That(cs).Contains("matched zero targets");
+        await Assert.That(cs).Contains("target2.CurrentStage == LineStage.Active");
+        await Assert.That(cs).Contains("return DomainResult.Failure(result1.ErrorMessage ?? \"\");");
+        await Assert.That(cs).DoesNotContain("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
     }
 
@@ -2816,7 +2817,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_ForEachInvokeInProducerAction_RewrapsZeroMatchAsCallerResult() {
+    public async Task Export_ForEachInvokeInProducerAction_RewrapsItemFailureAsCallerResult() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Shop
             Line: entity {
@@ -2839,7 +2840,7 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("public DomainResult<Line> Go(");
         await Assert.That(cs).Contains("return DomainResult<Line>.Failure(result");
-        await Assert.That(cs).Contains("return DomainResult<Line>.Failure(\"for lines.Mark matched zero targets.\")");
+        await Assert.That(cs).DoesNotContain("matched zero targets");
         var errors = CompileExported(cs);
         await Assert.That(errors).IsEmpty();
     }

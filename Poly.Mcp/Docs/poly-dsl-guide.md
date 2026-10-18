@@ -584,7 +584,10 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
 - **Fail-fast:** the first record whose invoke fails fails the whole `for` (the action
   returns `Failure`) — no silent swallow. Records already invoked stay mutated, and their
   subscriptions have already fired. There is no transaction around the fan-out.
-- **Zero matches fail** (no vacuous success).
+- **Zero records is a no-op**, not a failure: an empty collection, or a predicate that
+  matched none, means the loop body never runs and the action continues with the effect
+  after the `for`. The DMREL002 analysis warning below still reports a collection no code
+  writes. (Why the rule changed: `docs/decisions/2026-10-17-for-zero-records-is-a-no-op.md`.)
 - **Some predicates are rejected at analysis:** a `for` predicate policy that reads a
   path-prefix hop is rejected ("reads a path-prefix hop"): an unlinked hop simulates false
   but the export dereferences null. One that tests `exists` on a property (not a
@@ -684,7 +687,8 @@ child-create endpoint and the printed `Attach` call), or by an explicit link
 { member: who }` — does **not** give `Member.bookings` an edge, so a subscription (or a
 `for` loop) reading `Member.bookings` can never fire. Analysis reports **DMREL002** when a
 collection relationship is read by a subscription or a `for` loop while nothing in the
-domain writes it; the loop then also fails loudly with "matched zero targets".
+domain writes it. The loop itself is then a no-op (zero records); the warning, not a
+runtime failure, is the signal.
 
 | Placement | Active when | Optional `as name` |
 |-----------|-------------|--------------------|
@@ -1043,7 +1047,7 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `create Type { ... }` | action |
 | `create in Rel { ... }` | action |
 | `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
-| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero matches fail) |
+| `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.

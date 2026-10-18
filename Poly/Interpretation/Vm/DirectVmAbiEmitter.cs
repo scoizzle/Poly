@@ -745,15 +745,16 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
     /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>
-    /// whose selected member is a scalar, as in <c>s?.Length</c> — has no slot
-    /// representation: the value slot would hold <c>0</c>, a silently wrong result
-    /// where C# produces <c>int?</c> (a shape this subset cannot represent). Fail
-    /// closed by throwing when that arm is taken instead of yielding the sentinel.</summary>
+    /// or <c>?[</c> whose selected member or element is a scalar, as in <c>s?.Length</c>
+    /// — has no slot representation: the value slot would hold <c>0</c>, a silently
+    /// wrong result where C# produces <c>int?</c> (a shape this subset cannot
+    /// represent). Fail closed by throwing when that arm is taken instead of yielding
+    /// the sentinel.</summary>
     private static Expression CompileConditionalBranch(Conditional c, Node branch, AbiCtx ctx) {
         if (branch is Constant { Value: null } && IsValueRepresented(c, ctx))
             return Block(
                 Throw(New(InvalidOperationExceptionStringCtor,
-                    Constant("Conditional access ('?.') on a null receiver has no value in this subset."))),
+                    Constant("Conditional access on a null receiver has no value in this subset."))),
                 Constant(0L));
         return CompileValue(branch, ctx);
     }

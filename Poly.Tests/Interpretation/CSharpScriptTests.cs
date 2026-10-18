@@ -175,6 +175,38 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ConditionalElementAccess_NonNullReceiver_ReadsElement() {
+        var result = CSharpScript.Run("var a = new long[3];\na[0] = 7;\na?[0]");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("7");
+    }
+
+    [Test]
+    public async Task Run_ConditionalElementAccess_TailsAfterIt_StayInTheChain() {
+        // `a?[0].Length` reads the member only on the non-null branch.
+        var result = CSharpScript.Run("var a = new string[1];\na[0] = \"hi\";\na?[0].Length");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("2");
+    }
+
+    [Test]
+    public async Task Run_ConditionalElementAccess_NullReceiver_ShortCircuits() {
+        // A reference element has a null representation, so a null receiver yields null.
+        var result = CSharpScript.Run("var a = new string[1];\na = null;\na?[0]");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("null");
+    }
+
+    [Test]
+    public async Task Run_ConditionalElementAccess_NullReceiverValueElement_FailsClosed() {
+        // A `long` element has no null slot, as with `s?.Length`; the sentinel 0 would
+        // be a silently wrong value, so the null arm fails closed.
+        var result = CSharpScript.Run("var a = new long[1];\na = null;\na?[0]");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Conditional access"))).IsTrue();
+    }
+
+    [Test]
     public async Task Run_ForeachLoopVariable_MemberAccessResolves() {
         var result = CSharpScript.Run(
             "var xs = new string[2];\nxs[0] = \"hi\";\nxs[1] = \"yo\";\nvar total = 0;\nforeach (var x in xs) { total = total + x.Length; }\ntotal");

@@ -286,6 +286,29 @@ public class CSharpReaderTests {
         await Assert.That(loop.Collection).IsTypeOf<Variable>();
     }
 
+    [Test]
+    public async Task Read_TypedForeach_KeepsDeclaredTypeAndRoundTrips() {
+        var unit = CSharpLanguage.Read("class C { void M(double[] xs) { foreach (double d in xs) { } } }");
+        var body = (Block)unit.Types[0].Methods![0].Body!;
+        var loop = (ForEachLoop)body.Nodes[0];
+        await Assert.That(loop.DeclaredType).IsNotNull();
+
+        var again = CSharpLanguage.Write(unit);
+        await Assert.That(again).Contains("foreach (double d in xs)");
+        // Write(Read(x)) stays idempotent.
+        var reread = CSharpLanguage.Read(again);
+        await Assert.That(CSharpLanguage.Write(reread)).IsEqualTo(again);
+    }
+
+    [Test]
+    public async Task Read_VarForeach_DeclaredTypeIsNullAndPrintsVar() {
+        var unit = CSharpLanguage.Read("class C { void M(double[] xs) { foreach (var d in xs) { } } }");
+        var body = (Block)unit.Types[0].Methods![0].Body!;
+        var loop = (ForEachLoop)body.Nodes[0];
+        await Assert.That(loop.DeclaredType).IsNull();
+        await Assert.That(CSharpLanguage.Write(unit)).Contains("foreach (var d in xs)");
+    }
+
     // ── interpolated strings ─────────────────────────────────────────────────
 
     [Test]

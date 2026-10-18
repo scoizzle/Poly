@@ -481,7 +481,9 @@ public sealed class CSharpWriter {
 
     private string ForEachText(ForEachLoop forEach, int indent) =>
         RenderFills("statement", "foreach", Names(("name", EscapeIdent(forEach.LoopVariable.Name))),
-            Render("foreach-decl", "var"),
+            forEach.DeclaredType is null
+                ? Render("foreach-decl", "var")
+                : Render("foreach-decl", "typed", TypeText(forEach.DeclaredType)),
             Expr(forEach.Collection), BodyText(forEach.Body, indent));
 
     private string SwitchText(SwitchStatement switchStmt, int indent) {

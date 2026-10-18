@@ -637,8 +637,7 @@ public static partial class DirectVmAbiEmitter {
                 EmitLoopIterationGuard(ctx),
                 IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
                     Goto(breakLabel)),
-                ctx.VariableWrite(fel.LoopVariable,
-                    Call(null, BoxToAbiInfo, ctx.HeapLocal, Property(enumerator, EnumeratorCurrent))),
+                ctx.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, ctx)),
                 bodyExpr,
                 Label(continueLabel)),
             breakLabel);
@@ -661,6 +660,44 @@ public static partial class DirectVmAbiEmitter {
                     TypeIs(enumerator, typeof(IDisposable)),
                     Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose))));
     }
+
+    /// <summary>The ring value stored into the loop variable each iteration. Without a declared
+    /// type the element keeps its own representation (<see cref="BoxToAbiInfo"/>); with one, the
+    /// element is unboxed to its element type, converted to the declared type, and encoded by that
+    /// type's representation — a value widened into an IEEE slot would otherwise be mis-read, and a
+    /// value stored where the declared type is a reference must become a heap handle.</summary>
+    private static Expression ForEachElementValue(ForEachLoop fel, ParameterExpression enumerator, AbiCtx ctx) {
+        var current = Property(enumerator, EnumeratorCurrent);
+        if (fel.DeclaredType is null)
+            return Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
+
+        var declaredClr = ctx.Analysis?.GetResolvedType(fel.DeclaredType)?.GetRuntimeType();
+        if (declaredClr is null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: cannot resolve the foreach declared type '{fel.DeclaredType}'.");
+        var elementClr = ctx.Analysis?.GetMetadata<ForEachElementTypeMetadata>(fel)?.ElementType?.GetRuntimeType();
+        if (elementClr is null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: cannot resolve the element type of the foreach collection '{fel.Collection}'.");
+
+        var slot = Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
+        if (!IsScalarSlot(elementClr) || !IsScalarSlot(declaredClr))
+            throw new InvalidOperationException(
+                $"VM compile rejected: cannot convert each '{elementClr.Name}' element to the foreach loop type '{declaredClr.Name}'.");
+        bool elementIeee = elementClr == typeof(double) || elementClr == typeof(float);
+        bool declaredIeee = declaredClr == typeof(double) || declaredClr == typeof(float);
+        if (declaredIeee == elementIeee)
+            return slot; // both scalars in the same slot encoding
+        return declaredIeee
+            ? Call(BitConverterDoubleToInt64Bits, Convert(slot, typeof(double)))
+            : Convert(Call(BitConverterInt64BitsToDouble, slot), typeof(long));
+    }
+
+    /// <summary>True for a type that lives in a scalar ring slot (bool or a long-representable
+    /// value type, plus IEEE float/double). <c>decimal</c> and reference types do not.</summary>
+    private static bool IsScalarSlot(Type t) =>
+        t == typeof(double) || t == typeof(float) || t == typeof(bool)
+        || (t.IsValueType && AbiValueTypes.IsLongRepresentable(t));
 
     /// <summary>Goto statement: jump to a named label.</summary>
     private static Expression EmitGotoStatement(GotoStatement gs, AbiCtx ctx) {

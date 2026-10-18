@@ -99,10 +99,47 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             case TypeCast tc:
                 CheckTypeCast(context, tc);
                 break;
+            case ForEachLoop loop:
+                CheckForEachLoop(context, loop);
+                break;
         }
 
         this.AnalyzeChildren(context, node);
     }
+
+    /// <summary>A declared <c>foreach (V x in …)</c> loop variable requires a conversion from
+    /// the collection's element type to <c>V</c> (C# allows an explicit one). When the
+    /// element type is known and no conversion exists, the loop cannot execute soundly.</summary>
+    private void CheckForEachLoop(AnalysisContext context, ForEachLoop loop) {
+        if (loop.DeclaredType is null)
+            return;
+        var declaredDef = context.GetResolvedType(loop.DeclaredType);
+        var declared = declaredDef?.GetRuntimeType();
+        if (declared is null) {
+            Report(context, loop, "cannot resolve the foreach loop variable's declared type");
+            return;
+        }
+        var element = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType?.GetRuntimeType();
+        if (element is null || CanConvert(element, declared))
+            return;
+        Report(context, loop,
+            $"cannot convert each element of type '{element.Name}' to the loop variable type '{declared.Name}'");
+    }
+
+    /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs a per-item conversion
+    /// from the element type to <c>V</c>. Only types that live in a scalar slot are supported
+    /// (converted in slot space); a value element with a reference loop type, or a reference
+    /// element with a different reference loop type, fails closed. <c>decimal</c>/<c>IntPtr</c>
+    /// are <see cref="Cat.Number"/> but not slot scalars, so they are rejected too.</summary>
+    private static bool CanConvert(Type from, Type to) {
+        if (from == to)
+            return true;
+        return IsScalarSlot(from) && IsScalarSlot(to);
+    }
+
+    private static bool IsScalarSlot(Type t) =>
+        t == typeof(double) || t == typeof(float) || t == typeof(bool)
+        || (t.IsValueType && AbiValueTypes.IsLongRepresentable(t));
 
     private void CheckComparison(AnalysisContext context, Node leftNode, Node rightNode) {
         var left = ClrTypeOf(context, leftNode);

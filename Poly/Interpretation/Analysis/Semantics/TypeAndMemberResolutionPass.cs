@@ -221,9 +221,22 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
         elementType ??= collectionType?.GetElementType();
 
-        if (elementType != null) {
-            context.SetResolvedType(foreachLoop.LoopVariable, elementType);
-            SeedVariableType(context, foreachLoop.Body, foreachLoop.LoopVariable.Name, elementType);
+        // Publish the element type so the compatibility check and the emitter agree on it.
+        context.SetMetadata(foreachLoop, new ForEachElementTypeMetadata(elementType));
+
+        // A declared loop type wins over the element type (`foreach (double d in ints)`).
+        ITypeDefinition? declaredType = null;
+        if (foreachLoop.DeclaredType is not null) {
+            declaredType = ResolveNodeType(context, foreachLoop.DeclaredType);
+            if (declaredType is null)
+                return context.TypeDefinitions.GetTypeDefinition(typeof(void));
+            context.SetResolvedType(foreachLoop.DeclaredType, declaredType);
+        }
+
+        var loopType = declaredType ?? elementType;
+        if (loopType != null) {
+            context.SetResolvedType(foreachLoop.LoopVariable, loopType);
+            SeedVariableType(context, foreachLoop.Body, foreachLoop.LoopVariable.Name, loopType);
         }
 
         return context.TypeDefinitions.GetTypeDefinition(typeof(void));
@@ -815,3 +828,7 @@ public static class MemberResolutionMetadataExtensions {
         }
     }
 }
+
+/// <summary>The collection element type resolved for a <see cref="ForEachLoop"/>, published
+/// so the compatibility check and the emitter use one derivation.</summary>
+internal sealed record ForEachElementTypeMetadata(ITypeDefinition? ElementType) : IAnalysisMetadata;

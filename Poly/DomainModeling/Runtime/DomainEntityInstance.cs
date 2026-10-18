@@ -1255,7 +1255,8 @@ public sealed partial record DomainEntityInstance {
                     }).ToList(),
                     t.FinallyBlock is null ? null : Recurse(t.FinallyBlock)),
                 ForEachLoop f => new ForEachLoop(
-                    f.LoopVariable, Recurse(f.Collection), Recurse(f.Body), f.Label),
+                    f.LoopVariable, Recurse(f.Collection), Recurse(f.Body), f.Label,
+                    f.DeclaredType is null ? null : Recurse(f.DeclaredType)),
                 ContinueStatement or BreakStatement => node,
                 LabelDeclaration ld => new LabelDeclaration(ld.Name, Recurse(ld.Statement)),
                 Conditional cond => new Conditional(
@@ -1266,7 +1267,7 @@ public sealed partial record DomainEntityInstance {
                 ThisReference or Parameter or Variable or Constant
                     or NamedTypeReference or TypeReference
                     or PrimitiveTypeReference or ClrTypeReference
-                    or OptionalTypeReference => node,
+                    or OptionalTypeReference or CollectionTypeReference or MapTypeReference => node,
                 _ => throw new InvalidOperationException(
                     $"Cannot bind typed parameters on {node.GetType().Name}.")
             };

@@ -514,7 +514,9 @@ public static class CSharpReader {
                         var loopVariable = new Variable(Capture(match, "name"));
                         var collection = FoldExpr(match.Children[1]);
                         var body = FoldStatement(match.Children[2]);
-                        return new ForEachLoop(loopVariable, collection, body);
+                        var decl = match.Children[0];
+                        var declaredType = decl.PatternName == "typed" ? FoldType(decl.Children[0]) : null;
+                        return new ForEachLoop(loopVariable, collection, body, DeclaredType: declaredType);
                     }
                 case "switch": {
                         var value = FoldExpr(match.Children[0]);

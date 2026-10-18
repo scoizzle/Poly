@@ -444,9 +444,43 @@ public class CSharpScriptTests {
         await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot resolve the type"))).IsTrue();
     }
 
+    // A declared foreach element type is honored: the element is converted per item. The
+    // discriminating value cases live in ForEachDeclaredTypeVmTests (the console surface
+    // cannot populate an array yet — array index reads/writes are broken).
     [Test]
-    public async Task Run_MixedIntegerEquality_IsNumeric() {
-        // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
+    public async Task Run_ForeachDeclaredDouble_OverLongArray_Executes() {
+        var r = CSharpScript.Run(
+            "var a = new long[2];\ndouble t = 0;\nforeach (double d in a) { t = t + d; }\nt");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Run_ForeachDeclaredInt_OverLongArray_Executes() {
+        var r = CSharpScript.Run(
+            "var a = new long[2];\nvar t = 0;\nforeach (int d in a) { t = t + d; }\nt");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Run_ForeachDeclaredType_NotConvertible_FailsClosed() {
+        var r = CSharpScript.Run("var a = new long[1];\nforeach (string s in a) { }\n1");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot convert each element"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_ForeachDeclaredObject_OverLongArray_FailsClosed() {
+        // A value element with a reference loop type needs box-per-item, which the emitter
+        // does not do yet, so the form fails closed rather than storing a wrong shape.
+        var r = CSharpScript.Run("var a = new long[1];\nforeach (object o in a) { }\n1");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot convert each element"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_MixedIntegerEquality_IsNumeric() {        // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.
         var equal = CSharpScript.Run("1 == 1L");
         await Assert.That(equal.Success).IsTrue();

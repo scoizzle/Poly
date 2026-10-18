@@ -43,13 +43,7 @@ inside a `.poly` domain action: DSL parser + lowering + exporter + golden corpus
   `1 is int`→true, `1 is long`→false, `var o = "hi"; o is string`→true, `o is object`→true,
   plus a VM oracle for the primitive-reference form. Declaration-pattern *binding* (`s`
   after `o is string s`) is **T-D2**; T-A1 evaluates the test and leaves `s` unbound.
-- **T-A2 — `foreach` declared type is not enforced.** dest console · M · dep — · today
-  `foreach (double d in intArray)` parses but the loop variable keeps the *element* type →
-  **wrong values**; the writer always prints `var`. · build: `ForEachLoop` carries the
-  declared type; `ResolveForEachLoopType` prefers it (and seeds uses); `ForEachText` prints
-  `foreach-decl/typed`; emitter converts per item if needed. · accept: element-typed and
-  cross-typed cases execute with C# semantics; writer round-trips `foreach (double d in …)`;
-  fail closed if a per-item conversion cannot be emitted.
+- **T-A2 — `foreach` declared type is not enforced.** dest console · M · dep — · **Landed 2026-10-18** (`ForEachLoop.DeclaredType`; the reader folds the typed arm; the resolver prefers it; the analyzer rejects a pair with no per-item conversion; the emitter converts scalar items in slot space; the writer prints the typed form). Scope: scalar element/loop-type pairs only — a value element with a reference loop type fails closed until box-per-item lands. · accept (met): element-typed and cross-typed scalar cases execute with C# semantics; the writer round-trips `foreach (double d in …)`; a non-convertible pair fails closed.
 - **T-A3 — `char` missing from the numeric ladder.** dest console · S · dep — · today
   `int x = 1; x = 'a';` is rejected (`cannot assign 'Char'…`) though C# allows it. · build:
   decide the ladder (`NumericWidenRank` vs `CategoryOf`), allow `char → int` without

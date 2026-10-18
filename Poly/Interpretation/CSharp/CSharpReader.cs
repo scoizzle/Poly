@@ -566,8 +566,10 @@ public static class CSharpReader {
                     return new GotoStatement(Capture(match, "target"));
                 case "label":
                     return new LabelDeclaration(Capture(match, "label"), FoldStatement(match.Children[0]));
-                case "var-decl" or "typed-decl" or "const-decl": {
-                        var (variable, value) = FoldDeclaration(match);
+                case "var-decl" or "typed-decl" or "const-decl" or "typed-decl-bare": {
+                        var (variable, value) = match.PatternName == "typed-decl-bare"
+                            ? FoldBareDeclaration(match)
+                            : FoldDeclaration(match);
                         return new Assignment(variable, value);
                     }
                 case "expr-stmt":
@@ -598,12 +600,25 @@ public static class CSharpReader {
             return (variable, value);
         }
 
+        /// <summary>
+        /// A bare declaration (<c>int x;</c>) folds to an assignment of the declared
+        /// type's default, so the variable carries its declared type and the writer emits
+        /// <c>var x = default(int);</c>. C# requires an assignment before use; this
+        /// normalization gives the local the type's default value instead — the declared
+        /// type is what the form has to carry, and the writer/reader cycle is stable.
+        /// </summary>
+        private static (Variable Variable, Node Value) FoldBareDeclaration(
+            MatchResult<CSharpToken, CSharpTokenKind> statement) =>
+            (new Variable(Capture(statement, "name")), new Default(FoldType(statement.Children[0])));
+
         private Block FoldBlock(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var nodes = new List<Node>();
             var variables = new List<Node>();
             foreach (var statement in Children(match, "statement")) {
-                if (statement.PatternName is "var-decl" or "typed-decl" or "const-decl") {
-                    var (variable, value) = FoldDeclaration(statement);
+                if (statement.PatternName is "var-decl" or "typed-decl" or "const-decl" or "typed-decl-bare") {
+                    var (variable, value) = statement.PatternName == "typed-decl-bare"
+                        ? FoldBareDeclaration(statement)
+                        : FoldDeclaration(statement);
                     variables.Add(variable);
                     nodes.Add(new Assignment(variable, value));
                     continue;

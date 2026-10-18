@@ -329,6 +329,8 @@ public static class CSharpGrammar {
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("typed-decl-bare").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("expr-stmt").Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("empty").Kind(CSharpTokenKind.Semicolon).Commit();
         b.Define("else")

@@ -107,7 +107,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             TypeOf => (ValueRepresentationKind.HeapRef, typeof(Type)),
             Comment => (ValueRepresentationKind.Void, null),
             ThrowExpression => (ValueRepresentationKind.Void, null),
-            Default d => ClassifyDefault(d),
+            Default d => ClassifyDefault(context, d),
             TypeIs => (ValueRepresentationKind.Bool, typeof(bool)),
             IndexAccess ia => ClassifyIndexAccess(context, ia),
             Member ma => ClassifyMember(context, ma),
@@ -207,7 +207,14 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         return (ValueRepresentationKind.Unknown, null);
     }
 
-    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyDefault(Default d) {
+    private static (ValueRepresentationKind Kind, Type? ClrType) ClassifyDefault(
+        AnalysisContext context, Default d) {
+        // The resolved type of the default covers every type-reference spelling the
+        // reader folds (a primitive `default(int)` resolves to Int32); fall back to the
+        // CLR reference form and the bare `default` for producers that emit one.
+        var fromResolved = ClassifyFromResolvedType(context, d);
+        if (fromResolved.Kind != ValueRepresentationKind.Unknown)
+            return fromResolved;
         if (d.TargetType is ClrTypeReference ctr)
             return ClassifyClr(ctr.RuntimeType);
         if (d.TargetType is null)

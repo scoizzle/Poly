@@ -981,4 +981,53 @@ public class CSharpScriptTests {
         await Assert.That(binary.Success).IsFalse();
         await Assert.That(binary.Diagnostics.Any(d => d.Contains("Binary literal"))).IsTrue();
     }
+
+    // ── T-F7 bare `T x;` declarations ────────────────────────────────────────
+
+    [Test]
+    public async Task Run_BareDeclaration_ThenAssignment_UsesLocal() {
+        await AssertValue("int x;\nx = 1;\nx + 1", "2");
+    }
+
+    [Test]
+    public async Task Run_BareDeclaration_HonorsDeclaredType() {
+        // The declared type must survive the missing initializer: as doubles 1 / 2 = 0.5;
+        // if the declaration were ignored the slot stays a scalar and divides as int (0).
+        await AssertValue("double x;\nx = 1;\nx / 2", "0.5");
+    }
+
+    [Test]
+    public async Task Read_BareDeclaration_FoldsToTypedDefaultAssignment() {
+        var block = (Block)CSharpScript.ReadProgram("int x;\nx = 1;\nx + 1");
+        var assignment = (Assignment)block.Nodes[0];
+        await Assert.That(assignment.Destination).IsTypeOf<Variable>();
+        await Assert.That(((Variable)assignment.Destination).Name).IsEqualTo("x");
+        var value = (Default)assignment.Value;
+        await Assert.That(((PrimitiveTypeReference)value.TargetType!).PrimitiveId)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+        await Assert.That(block.Variables).Count().IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Read_BareDeclaration_RoundTripsAsDefaultInitializedVar() {
+        const string text = "class C { void M() { int x; x = 1; } }";
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(text));
+        await Assert.That(written).Contains("var x = default(int);");
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    [Test]
+    public async Task Run_BareVarDeclaration_FailsClosed() {
+        // `var` requires an initializer; only a typed bare declaration is a valid form.
+        var result = CSharpScript.Run("var x;\nx");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Run_BareDeclaration_NarrowingReassignment_FailsClosed() {
+        var result = CSharpScript.Run("int x;\nx = 2.5;\nx");
+        await Assert.That(result.Success).IsFalse();
+    }
 }

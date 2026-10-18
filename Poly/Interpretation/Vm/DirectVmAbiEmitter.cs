@@ -697,7 +697,26 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitConditionalValue(Conditional c, AbiCtx ctx) =>
         Condition(CompileConditionAsBool(c.Condition, ctx),
-            CompileValue(c.IfTrue, ctx), CompileValue(c.IfFalse, ctx));
+            CompileConditionalBranch(c, c.IfTrue, ctx), CompileConditionalBranch(c, c.IfFalse, ctx));
+
+    /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
+    /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>
+    /// whose selected member is a scalar, as in <c>s?.Length</c> — has no slot
+    /// representation: the value slot would hold <c>0</c>, a silently wrong result
+    /// where C# produces <c>int?</c> (a shape this subset cannot represent). Fail
+    /// closed by throwing when that arm is taken instead of yielding the sentinel.</summary>
+    private static Expression CompileConditionalBranch(Conditional c, Node branch, AbiCtx ctx) {
+        if (branch is Constant { Value: null } && IsValueRepresented(c, ctx))
+            return Block(
+                Throw(New(InvalidOperationExceptionStringCtor,
+                    Constant("Conditional access ('?.') on a null receiver has no value in this subset."))),
+                Constant(0L));
+        return CompileValue(branch, ctx);
+    }
+
+    private static bool IsValueRepresented(Node node, AbiCtx ctx) =>
+        ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.Kind
+            is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool;
 
     private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
         var tmp = Variable(typeof(long), "_coal");

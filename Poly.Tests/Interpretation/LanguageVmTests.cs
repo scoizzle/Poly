@@ -905,6 +905,22 @@ public class LanguageVmTests {
     }
 
     [Test]
+    public async Task ConditionalAccess_NullReceiver_ValueMember_FailsClosed() {
+        // The reader's `?.` desugar puts the member on the true branch, so the
+        // conditional is classified as the member's scalar type. A null arm has no
+        // slot representation then: the form must throw rather than yield the 0
+        // sentinel (C#'s `a?.Length` is `int?`, which this subset cannot represent).
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Not(new Equal(receiver, new Constant(null))),
+            new Member(receiver, "Length"),
+            new Constant(null));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs((object?)null));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task And_TrueTrue_IsTrue() {
         using var exec = Interpreter.Execute(Interpreter.Compile(new And(new Constant(true), new Constant(true))));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);

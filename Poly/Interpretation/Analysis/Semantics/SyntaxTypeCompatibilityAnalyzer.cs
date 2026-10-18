@@ -497,7 +497,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             // (`double x = 1; x = 2;`). The reverse (double → scalar) truncates where
             // C# rejects it, so it stays rejected. Scalar↔scalar writes are all the
             // same slot encoding and were always allowed.
-            if (IsIeeeScalar(prior.ClrType) && IsNumericType(rhsType))
+            //
+            // The conversion happens only on the plain variable store. A captured
+            // variable is written through its closure cell, which the emitter does not
+            // coerce, so the widening there would store the raw scalar and mis-read it
+            // later; fail closed instead of accepting it.
+            if (IsIeeeScalar(prior.ClrType) && IsNumericType(rhsType) && !IsCaptured(context, variable))
                 return;
             Report(context, assignment,
                 $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
@@ -514,6 +519,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static string TypeLabel(Type? type, ValueRepresentationKind kind) =>
         type?.Name ?? kind.ToString();
+
+    /// <summary>True when the assignment destination is a captured binding: its writes
+    /// go through a closure cell, which the emitter stores without a representation
+    /// conversion (only the plain variable path coerces).</summary>
+    private static bool IsCaptured(AnalysisContext context, Variable variable) =>
+        context.GetMetadata<VariableAnalysisMetadata>(variable)?.CapturedVariables.Contains(variable) == true;
 
     private static bool IsIeeeScalar(Type type) =>
         type == typeof(float) || type == typeof(double);

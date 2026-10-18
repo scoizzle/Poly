@@ -106,6 +106,31 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ConditionalAccess_NullReceiverValueMember_FailsClosed() {
+        // C# types `s?.Length` as `int?`; this subset has no nullable value type, and
+        // the null arm has no slot representation. Yielding the sentinel 0 would be a
+        // silently wrong value, so the form fails closed when the receiver is null.
+        var result = CSharpScript.Run("string s = null;\ns?.Length");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Conditional access"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_ConditionalAccess_NullReceiverValueMemberArithmetic_FailsClosed() {
+        var result = CSharpScript.Run("string s = null;\ns?.Length + 1");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Conditional access"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Run_ConditionalAccess_NonNullReceiverValueMember_StillReads() {
+        // The null arm is the fail-closed one; a non-null receiver must keep working.
+        var result = CSharpScript.Run("string s = \"hi\";\ns?.Length + 1");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("3");
+    }
+
+    [Test]
     public async Task Run_ForeachLoopVariable_MemberAccessResolves() {
         var result = CSharpScript.Run(
             "var xs = new string[2];\nxs[0] = \"hi\";\nxs[1] = \"yo\";\nvar total = 0;\nforeach (var x in xs) { total = total + x.Length; }\ntotal");

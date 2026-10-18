@@ -316,6 +316,79 @@ public class LanguageVmTests {
         await Assert.That(exec.GetValue<string>()).IsEqualTo("wxyyz");
     }
 
+    // ── interpolated strings ─────────────────────────────────────────────────
+
+    [Test]
+    public async Task InterpolatedString_LiteralAndArithmeticHole_Evaluates() {
+        var node = new InterpolatedString(["x = ", ""], [new Add(new Constant(1), new Constant(1))]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("x = 2");
+    }
+
+    [Test]
+    public async Task InterpolatedString_OnlyHole_Evaluates() {
+        var node = new InterpolatedString(["", ""], [new Multiply(new Constant(6L), new Constant(7L))]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("42");
+    }
+
+    [Test]
+    public async Task InterpolatedString_VariableHole_Evaluates() {
+        var y = new Variable("y");
+        var node = new Block([
+            new Assignment(y, new Constant(5L)),
+            new InterpolatedString(["y = ", ""], [y])
+        ], [y]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("y = 5");
+    }
+
+    [Test]
+    public async Task InterpolatedString_StringHole_Concatenates() {
+        var node = new InterpolatedString(["hello ", "!"], [new Constant("world")]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("hello world!");
+    }
+
+    [Test]
+    public async Task InterpolatedString_LiteralBraces_AreLiteral() {
+        var node = new InterpolatedString(["{braces}"], []);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("{braces}");
+    }
+
+    [Test]
+    public async Task InterpolatedString_NoHoles_IsPlainString() {
+        var node = new InterpolatedString(["plain"], []);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("plain");
+    }
+
+    [Test]
+    public async Task InterpolatedString_DoubleHole_BoxesIeeeBits() {
+        var node = new InterpolatedString(["v = ", ""], [new Constant(2.5)]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("v = 2.5");
+    }
+
+    [Test]
+    public async Task InterpolatedString_ReadFromSource_Executes() {
+        var unit = Poly.Interpretation.CSharp.CSharpLanguage.Read("$\"x = {1 + 1}\";");
+        using var exec = Interpreter.Execute(Interpreter.Compile(unit.TopLevelStatements![0]));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("x = 2");
+    }
+
+    [Test]
+    public async Task InterpolatedString_AssignedToVariable_ResolvesStringMember() {
+        var s = new Variable("s");
+        var node = new Block([
+            new Assignment(s, new InterpolatedString(["hi"], [])),
+            new Member(s, "Length")
+        ], [s]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
+    }
+
     [Test]
     public async Task Add_SameParameterRepeated_FlattensAndEvaluates() {
         var name = new Parameter("name", TypeReference.To<string>());
@@ -804,6 +877,31 @@ public class LanguageVmTests {
         var node = new Conditional(new Constant(true), new Constant(1L), new Constant(2L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    // `a?.Length` desugars (CSharpReader) to `a == null ? null : a.Length`.
+    // These prove that desugared shape executes: null receiver yields null,
+    // non-null receiver reads the member.
+    [Test]
+    public async Task ConditionalAccess_NullReceiver_YieldsNull() {
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Equal(receiver, new Constant(null)),
+            new Constant(null),
+            new Member(receiver, "Length"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs((object?)null));
+        await Assert.That(exec.GetValue<object>()).IsNull();
+    }
+
+    [Test]
+    public async Task ConditionalAccess_NonNullReceiver_ReadsMember() {
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Equal(receiver, new Constant(null)),
+            new Constant(null),
+            new Member(receiver, "Length"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs("hi"));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
     }
 
     [Test]

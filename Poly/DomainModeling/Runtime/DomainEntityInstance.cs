@@ -954,6 +954,14 @@ public sealed partial record DomainEntityInstance {
         IReadOnlyList<Property>? actionParameters = null) =>
         ModuleAwareTypeProvider(Entity, Domain, inner, actionParameters);
 
+    /// <summary>
+    /// Merge key for module methods. Overloads differ by signature, not just name:
+    /// the printed surface has <c>WhenEachX()</c> and <c>WhenEachX(peer)</c>, and a
+    /// name-only key drops the second because a stub of that name already exists.
+    /// </summary>
+    private static string MethodSignatureKey(MethodDefinitionNode method) =>
+        $"{method.Name}/{method.Parameters?.Count ?? 0}";
+
     private static ITypeDefinitionProvider ModuleAwareTypeProvider(
         Entity entity,
         Domain? domain,
@@ -990,14 +998,14 @@ public sealed partial record DomainEntityInstance {
             List<MethodDefinitionNode>? extras = null;
             if (moduleEntity.Methods is { Count: > 0 } moduleMethods) {
                 var names = new HashSet<string>(
-                    (runtimeEntity.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
+                    (runtimeEntity.Methods ?? []).Select(MethodSignatureKey), StringComparer.Ordinal);
                 foreach (var m in moduleMethods) {
                     if (m.IsStatic && string.Equals(m.Name, "Create", StringComparison.Ordinal)) {
                         extras ??= [];
                         extras.Add(BindConstructedNew(m, entity.Name, domain));
                         continue;
                     }
-                    if (!names.Add(m.Name))
+                    if (!names.Add(MethodSignatureKey(m)))
                         continue;
                     extras ??= [];
                     // Create{Nav} and Attach{Nav} are the printed methods. The

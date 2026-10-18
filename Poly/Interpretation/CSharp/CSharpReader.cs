@@ -100,6 +100,11 @@ public static class CSharpReader {
                 ? tokens[0].Text
                 : throw new InvalidOperationException($"Match '{match.RuleName}/{match.PatternName}' is missing capture '{name}'.");
 
+        private static CSharpToken CapturedToken(MatchResult<CSharpToken, CSharpTokenKind> match, string name) =>
+            match.Captures.TryGetValue(name, out var tokens) && tokens.Count > 0
+                ? tokens[0]
+                : throw new InvalidOperationException($"Match '{match.RuleName}/{match.PatternName}' is missing capture '{name}'.");
+
         private static bool HasCapture(MatchResult<CSharpToken, CSharpTokenKind> match, string name) =>
             match.Captures.TryGetValue(name, out var tokens) && tokens.Count > 0;
 
@@ -507,8 +512,8 @@ public static class CSharpReader {
                     }
                 case "foreach": {
                         var loopVariable = new Variable(Capture(match, "name"));
-                        var collection = FoldExpr(match.Children[0]);
-                        var body = FoldStatement(match.Children[1]);
+                        var collection = FoldExpr(match.Children[1]);
+                        var body = FoldStatement(match.Children[2]);
                         return new ForEachLoop(loopVariable, collection, body);
                     }
                 case "switch": {
@@ -559,8 +564,10 @@ public static class CSharpReader {
                     return new GotoStatement(Capture(match, "target"));
                 case "label":
                     return new LabelDeclaration(Capture(match, "label"), FoldStatement(match.Children[0]));
-                case "var-decl":
-                    return new Assignment(new Variable(Capture(match, "name")), FoldExpr(match.Children[0]));
+                case "var-decl" or "typed-decl": {
+                        var (variable, value) = FoldDeclaration(match);
+                        return new Assignment(variable, value);
+                    }
                 case "expr-stmt":
                     return FoldExpr(match.Children[0]);
                 case "empty":
@@ -570,20 +577,82 @@ public static class CSharpReader {
             }
         }
 
+        /// <summary>
+        /// A local declaration folds to an assignment to a fresh <see cref="Variable"/>.
+        /// <c>var x = e;</c> infers from <c>e</c>; <c>T x = e;</c> casts the initializer so
+        /// the variable <em>is</em> the declared type (<c>double x = 1;</c> divides as
+        /// double). Later plain assignments are converted to that representation by the
+        /// emitter, so the type holds across reassignment. The caller keeps the returned
+        /// variable so the block declares the same instance.
+        /// </summary>
+        private (Variable Variable, Node Value) FoldDeclaration(
+            MatchResult<CSharpToken, CSharpTokenKind> statement) {
+            var variable = new Variable(Capture(statement, "name"));
+            // var-decl children = [expr]; typed-decl children = [type, expr].
+            var value = statement.PatternName is "typed-decl"
+                ? (Node)new TypeCast(FoldExpr(statement.Children[^1]), FoldType(statement.Children[0]))
+                : FoldExpr(statement.Children[^1]);
+            return (variable, value);
+        }
+
         private Block FoldBlock(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var nodes = new List<Node>();
             var variables = new List<Node>();
             foreach (var statement in Children(match, "statement")) {
-                if (statement.PatternName == "var-decl") {
-                    var name = Capture(statement, "name");
-                    var variable = new Variable(name);
+                if (statement.PatternName is "var-decl" or "typed-decl") {
+                    var (variable, value) = FoldDeclaration(statement);
                     variables.Add(variable);
-                    nodes.Add(new Assignment(variable, FoldExpr(statement.Children[0])));
+                    nodes.Add(new Assignment(variable, value));
                     continue;
                 }
                 nodes.Add(FoldStatement(statement));
             }
             return new Block(nodes, variables);
+        }
+
+        /// <summary>The binary node a compound assignment desugars into.</summary>
+        private static Node CompoundOperator(string pattern, Node target, Node value) => pattern switch {
+            "compound-add" => new Add(target, value),
+            "compound-sub" => new Subtract(target, value),
+            "compound-mul" => new Multiply(target, value),
+            "compound-div" => new Divide(target, value),
+            "compound-mod" => new Modulo(target, value),
+            "compound-and" => new BitwiseAnd(target, value),
+            "compound-or" => new BitwiseOr(target, value),
+            "compound-xor" => new BitwiseXor(target, value),
+            _ => throw new InvalidOperationException($"Unknown compound assignment '{pattern}'."),
+        };
+
+        /// <summary>
+        /// True when a compound assignment may be desugared to
+        /// <c>target = target op value</c>. The desugar repeats the target, so the
+        /// target's receiver and index expressions must be re-evaluable without
+        /// observable difference — see <see cref="IsPureExpression"/>. The member or
+        /// index access itself is fine: both forms read it once and assign once.
+        /// </summary>
+        private static bool IsPureAssignmentTarget(Node target) => target switch {
+            Variable or ThisReference => true,
+            Member member => IsPureExpression(member.Value),
+            IndexAccess index => IsPureExpression(index.Value) && index.Arguments.All(IsPureExpression),
+            _ => false,
+        };
+
+        /// <summary>
+        /// True when evaluating <paramref name="expression"/> twice cannot be observed:
+        /// literals, variables, <c>this</c>, and operators over those. Member/index
+        /// reads are excluded because a getter or indexer may have side effects, and
+        /// invocations, allocations, assignments, and awaits are excluded outright.
+        /// </summary>
+        private static bool IsPureExpression(Node expression) {
+            switch (expression) {
+                case Member or IndexAccess or Invoke or New or NewArray or Await or Assignment or SuspendNode:
+                    return false;
+            }
+            foreach (var child in expression.Children) {
+                if (child is not null && !IsPureExpression(child))
+                    return false;
+            }
+            return true;
         }
 
         private Node FoldUsingResource(MatchResult<CSharpToken, CSharpTokenKind> match) =>
@@ -600,7 +669,19 @@ public static class CSharpReader {
                 case "expr-assignment": {
                         var destination = FoldExpr(match.Children[0]);
                         var tail = MaybeChild(match, "assign-tail");
-                        return tail is null ? destination : new Assignment(destination, FoldExpr(tail.Children[0]));
+                        if (tail is null)
+                            return destination;
+                        if (tail.PatternName is "tail")
+                            return new Assignment(destination, FoldExpr(tail.Children[0]));
+                        // A compound assignment desugars to `target = target op value`, which
+                        // evaluates the target twice. Only fold it when the target cannot run
+                        // side effects; otherwise fail closed rather than change meaning.
+                        if (!IsPureAssignmentTarget(destination))
+                            throw Error(
+                                "Compound assignment on a target that cannot be re-evaluated safely is not part of the exported subset.");
+                        return new Assignment(
+                            destination,
+                            CompoundOperator(tail.PatternName, destination, FoldExpr(tail.Children[0])));
                     }
                 case "expr-conditional": {
                         var condition = FoldExpr(match.Children[0]);
@@ -690,38 +771,89 @@ public static class CSharpReader {
 
         private Node FoldPostfix(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var acc = FoldExpr(match.Children[0]);
-            foreach (var tail in match.Children.Skip(1)) {
-                switch (tail.PatternName) {
-                    case "member":
-                        acc = new Member(acc, Capture(tail, "name"));
-                        break;
-                    case "invoke":
-                        if (acc is Variable { Name: "nameof" })
-                            acc = new TypeReference("nameof");
-                        acc = new Invoke(acc, [.. FoldArgList(tail.Children[0])]);
-                        break;
-                    case "generic-invoke": {
-                            var typeArguments = FoldTypeArgs(tail.Children[0]);
-                            var arguments = FoldArgList(tail.Children[1]);
-                            acc = new Invoke(acc, [.. arguments]) { TypeArguments = typeArguments };
-                            break;
-                        }
-                    case "index": {
-                            var arguments = tail.Children.Count > 0 ? FoldArgList(tail.Children[0]) : [];
-                            acc = new IndexAccess(acc, [.. arguments]);
-                            break;
-                        }
-                    case "forgiving":
-                        acc = new NullForgiving(acc);
-                        break;
-                    case "conditional-member":
-                        throw Error("Conditional member access ('?.') is not part of the exported subset.");
-                    default:
-                        throw new InvalidOperationException($"Cannot fold postfix '{tail.PatternName}'.");
-                }
-            }
-            return acc;
+            var tails = match.Children.Skip(1).ToArray();
+            return FoldPostfixTails(acc, tails, 0);
         }
+
+        /// <summary>Folds the postfix tails from <paramref name="index"/> onto
+        /// <paramref name="acc"/>. A <c>?.</c> tail short-circuits the rest of the
+        /// chain, so the remaining tails fold inside the non-null branch of a
+        /// <see cref="Conditional"/> rather than being applied to the (possibly
+        /// null) receiver.</summary>
+        private Node FoldPostfixTails(
+            Node acc,
+            IReadOnlyList<MatchResult<CSharpToken, CSharpTokenKind>> tails,
+            int index) {
+            if (index >= tails.Count)
+                return acc;
+            var tail = tails[index];
+            switch (tail.PatternName) {
+                case "member":
+                    return FoldPostfixTails(new Member(acc, Capture(tail, "name")), tails, index + 1);
+                case "invoke":
+                    return FoldPostfixTails(
+                        new Invoke(ChainNameof(acc), [.. FoldArgList(tail.Children[0])]), tails, index + 1);
+                case "generic-invoke":
+                    return FoldPostfixTails(
+                        new Invoke(ChainNameof(acc), [.. FoldArgList(tail.Children[1])]) {
+                            TypeArguments = FoldTypeArgs(tail.Children[0]),
+                        }, tails, index + 1);
+                case "index":
+                    return FoldPostfixTails(
+                        new IndexAccess(acc, tail.Children.Count > 0 ? [.. FoldArgList(tail.Children[0])] : []),
+                        tails, index + 1);
+                case "forgiving":
+                    return FoldPostfixTails(new NullForgiving(acc), tails, index + 1);
+                case "conditional-member":
+                    return FoldConditionalMember(acc, tails, index, tail);
+                default:
+                    throw new InvalidOperationException($"Cannot fold postfix '{tail.PatternName}'.");
+            }
+        }
+
+        private static Node ChainNameof(Node acc) =>
+            acc is Variable { Name: "nameof" } ? new TypeReference("nameof") : acc;
+
+        /// <summary>Folds <c>recv?.member</c> — and every tail that follows it — to
+        /// <c>recv == null ? null : recv.member…</c>. The member is read only when the
+        /// receiver is non-null, and the whole remainder of the chain is skipped when
+        /// it is null, as in C# (so <c>a?.b.c</c> and <c>a?.M(args)</c> propagate the
+        /// null). The desugaring re-evaluates the receiver, so it is sound only when
+        /// the receiver has no side effects; an impure receiver fails closed rather
+        /// than folding to a wrong shape.</summary>
+        private Node FoldConditionalMember(
+            Node acc,
+            IReadOnlyList<MatchResult<CSharpToken, CSharpTokenKind>> tails,
+            int index,
+            MatchResult<CSharpToken, CSharpTokenKind> tail) {
+            if (!IsSideEffectFreeReceiver(acc))
+                throw GrammarError.Error(
+                    "Conditional access ('?.') requires a side-effect-free receiver in the exported subset.",
+                    tail.Tokens[0].Line, tail.Tokens[0].Col);
+            var access = new Member(acc, Capture(tail, "name"));
+            var inner = FoldPostfixTails(access, tails, index + 1);
+            // `recv != null ? member : null` rather than `recv == null ? null : member`:
+            // the analysis classifies a Conditional from its *true* branch, so the null
+            // constant must be the false branch or the result types (and root-extracts)
+            // as the null branch instead of the member.
+            return new Conditional(new Not(new Equal(acc, new Constant(null))), inner, new Constant(null));
+        }
+
+        /// <summary>True when evaluating <paramref name="node"/> twice cannot change
+        /// observable behaviour — the condition under which re-evaluating a
+        /// conditional-access receiver is sound. Mirrors the classification in
+        /// <c>Poly.Interpretation.Analysis.Semantics.SideEffectAnalyzer</c>: member
+        /// reads, arithmetic, comparisons and their operand shapes are pure;
+        /// assignments, calls, indexers, allocations, control flow and suspension
+        /// are not.</summary>
+        private static bool IsSideEffectFreeReceiver(Node node) => node switch {
+            Assignment or Invoke or IndexAccess or New or NewArray or SuspendNode or Return or Await
+                or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
+                or IfStatement or SwitchStatement or ThrowStatement
+                or TryCatchFinally or UsingStatement
+                or BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => false,
+            _ => node.Children.All(child => child is null || IsSideEffectFreeReceiver(child)),
+        };
 
         private Node FoldPrimary(MatchResult<CSharpToken, CSharpTokenKind> match) {
             switch (match.PatternName) {
@@ -729,6 +861,8 @@ public static class CSharpReader {
                     return new Constant(FoldNumber(Capture(match, "value")));
                 case "string":
                     return new Constant(Capture(match, "value"));
+                case "interpolated":
+                    return FoldInterpolatedString(CapturedToken(match, "value"));
                 case "char":
                     return new Constant(Capture(match, "value").Length == 1 ? Capture(match, "value")[0] : '\0');
                 case "true":
@@ -780,6 +914,95 @@ public static class CSharpReader {
                 default:
                     throw new InvalidOperationException($"Cannot fold primary '{match.PatternName}'.");
             }
+        }
+
+        /// <summary>
+        /// Folds <c>$"…"</c> from its raw token body into literal segments and
+        /// expression holes. <c>{{</c>/<c>}}</c> are literal braces; every hole
+        /// expression is parsed with the same <c>expr</c> rule the rest of the
+        /// reader uses, so a hole is a real expression node. Anything the hole
+        /// parser cannot consume whole — format specifiers (<c>{x:N2}</c>),
+        /// alignment (<c>{x,10}</c>), tuples — fails closed with a positioned error
+        /// instead of folding to a wrong shape.
+        /// </summary>
+        private Node FoldInterpolatedString(CSharpToken token) {
+            var raw = token.Text;
+            var literals = new List<string>();
+            var holes = new List<Poly.Ast.Nodes.Expression>();
+            var literal = new StringBuilder();
+            var i = 0;
+            while (i < raw.Length) {
+                var ch = raw[i];
+                if (ch == '{') {
+                    if (i + 1 < raw.Length && raw[i + 1] == '{') {
+                        literal.Append('{');
+                        i += 2;
+                        continue;
+                    }
+                    literals.Add(CSharpTokenizer.DecodeStringBody(literal.ToString()));
+                    literal.Clear();
+                    var holeStart = i + 1;
+                    var holeEnd = FindInterpolationHoleEnd(raw, holeStart);
+                    if (holeEnd < 0)
+                        throw GrammarError.Error("Unterminated interpolation hole.", token.Line, token.Col);
+                    holes.Add(ReadInterpolationHole(raw[holeStart..holeEnd], token, holeStart));
+                    i = holeEnd + 1;
+                    continue;
+                }
+                if (ch == '}') {
+                    if (i + 1 < raw.Length && raw[i + 1] == '}') {
+                        literal.Append('}');
+                        i += 2;
+                        continue;
+                    }
+                    throw GrammarError.Error(
+                        "Unmatched '}' in interpolated string; a literal brace is written '}}'.",
+                        token.Line, token.Col);
+                }
+                literal.Append(ch);
+                i++;
+            }
+            literals.Add(CSharpTokenizer.DecodeStringBody(literal.ToString()));
+            return new InterpolatedString(literals, holes);
+        }
+
+        /// <summary>Index of the <c>}</c> that closes a hole opened at
+        /// <paramref name="start"/>, or -1. Quotes cannot occur inside a hole: the
+        /// tokenizer would have ended the interpolated token there. A char literal can
+        /// (the writer prints holes verbatim), so it is skipped whole — otherwise a
+        /// <c>'}'</c> inside it would end the hole early and break write→read.</summary>
+        private static int FindInterpolationHoleEnd(string raw, int start) {
+            var depth = 1;
+            for (var i = start; i < raw.Length; i++) {
+                var ch = raw[i];
+                if (ch == '\'') {
+                    i++;
+                    while (i < raw.Length && raw[i] != '\'') {
+                        if (raw[i] == '\\')
+                            i++;
+                        i++;
+                    }
+                    continue;
+                }
+                if (ch == '{') depth++;
+                else if (ch == '}' && --depth == 0) return i;
+            }
+            return -1;
+        }
+
+        private Poly.Ast.Nodes.Expression ReadInterpolationHole(string holeText, CSharpToken token, int offsetInRaw) {
+            var absoluteCol = token.Col + 2 + offsetInRaw;
+            if (holeText.Trim().Length == 0)
+                throw GrammarError.Error("Empty interpolation hole '{}'.", token.Line, absoluteCol);
+            var sub = new Parser(holeText);
+            var folded = sub.FoldExpr(sub.Take("expr", "interpolation hole expression"));
+            if (sub.Current.Kind != CSharpTokenKind.EndOfFile)
+                throw GrammarError.Error(
+                    $"Unsupported interpolation hole '{{{holeText}}}'; format specifiers and alignment are not part of the exported subset.",
+                    token.Line, absoluteCol + sub.Current.Col - 1);
+            return folded as Poly.Ast.Nodes.Expression
+                ?? throw GrammarError.Error(
+                    $"Interpolation hole '{{{holeText}}}' is not a value expression.", token.Line, absoluteCol);
         }
 
         private static object FoldNumber(string text) {

@@ -54,6 +54,16 @@ public class CSharpLanguageTests {
         await Assert.That(SyntaxErrors(text)).IsEmpty();
     }
 
+    [Test]
+    public async Task Write_InterpolatedString_ParsesWithRoslynAndRoundTrips() {
+        var unit = CSharpLanguage.Read(
+            "class C { void M() { var s = $\"x = {a}, y = {{lit}}\"; } }");
+        var text = CSharpLanguage.Write(unit);
+        await Assert.That(text).Contains("$\"x = {a}, y = {{lit}}\"");
+        await Assert.That(SyntaxErrors(text)).IsEmpty();
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(text))).IsEqualTo(text);
+    }
+
     // ── reader → Roslyn ──────────────────────────────────────────────────────
 
     [Test]

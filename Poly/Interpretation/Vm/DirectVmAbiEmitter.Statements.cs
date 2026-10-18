@@ -175,9 +175,26 @@ public static partial class DirectVmAbiEmitter {
         int d2 = ctx.RingDepth;
         var valueExpr2 = CompileNode(a.Value, ctx);
         int resultSlot = ctx.RingDepth - 1;
-        var result = ctx.VariableWrite(destVar, ctx.RingVar(resultSlot));
+        var result = ctx.VariableWrite(destVar, CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
         ctx.RingDepth = resultSlot + 1;
         return Block(valueExpr2, result);
+    }
+
+    /// <summary>
+    /// Convert a compiled value into the destination variable's slot representation.
+    /// Doubles and floats live in slots as IEEE bit patterns, so a scalar value needs
+    /// <c>DoubleToInt64Bits</c>, and a double value assigned to a scalar variable needs
+    /// <c>Int64BitsToDouble</c> first. Without this the raw value lands in a slot the
+    /// other representation reads (e.g. <c>double x = 1; x = 2;</c>).
+    /// </summary>
+    private static Expression CoerceSlotToDestination(AbiCtx ctx, Variable destination, Node value, Expression slot) {
+        bool destinationIsDouble = IsDoubleValue(ctx, destination);
+        bool valueIsDouble = IsDoubleValue(ctx, value);
+        if (destinationIsDouble == valueIsDouble)
+            return slot;
+        return destinationIsDouble
+            ? Call(BitConverterDoubleToInt64Bits, Convert(slot, typeof(double)))
+            : Convert(Call(BitConverterInt64BitsToDouble, slot), typeof(long));
     }
 
     private static Expression EmitBlock(Block block, AbiCtx ctx) {

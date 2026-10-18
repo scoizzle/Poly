@@ -58,6 +58,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         AnalysisContext context, Node node) {
         return node switch {
             Constant c => ClassifyConstant(c),
+            InterpolatedString => (ValueRepresentationKind.HeapRef, typeof(string)),
             Parameter p => ClassifyFromResolvedType(context, p),
             Variable v => ClassifyFromResolvedType(context, v),
             ThisReference tr => ClassifyThisReference(context, tr),

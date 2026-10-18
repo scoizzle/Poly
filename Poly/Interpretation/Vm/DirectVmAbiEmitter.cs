@@ -97,8 +97,9 @@ public static partial class DirectVmAbiEmitter {
         if (rootParameters is not null) {
             ctx.IsCompiledFunctionBody = true;
             ctx.RestoreParamSlots(1);
+            ctx.PushFrameParameters();
             foreach (var parameter in rootParameters)
-                ctx.DeclareParameter(parameter);
+                ctx.MapFrameParameter(parameter, ctx.DeclareParameter(parameter));
             rootArgCount = 1 + rootParameters.Count;
             ctx.ReserveFrameSlots(rootArgCount);
         }
@@ -269,6 +270,7 @@ public static partial class DirectVmAbiEmitter {
             Parameter p => EmitParameter(p, ctx),
             Lambda l => EmitLambda(l, ctx),
             Invoke inv => EmitInvoke(inv, ctx),
+            InterpolatedString interp => EmitInterpolatedString(interp, ctx),
             New n => EmitNew(n, ctx),
             NewArray n => EmitNewArray(n, ctx),
             IndexAccess n => EmitIndexAccess(n, ctx),
@@ -615,6 +617,7 @@ public static partial class DirectVmAbiEmitter {
             NewArray n => SpillRingRead(CompileNode(n, ctx), ctx),
             Parameter p => SpillRingRead(CompileNode(p, ctx), ctx),
             Invoke inv => SpillRingRead(CompileNode(inv, ctx), ctx),
+            InterpolatedString interp => SpillRingRead(CompileNode(interp, ctx), ctx),
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
             SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),

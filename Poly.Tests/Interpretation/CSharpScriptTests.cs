@@ -881,6 +881,16 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_ForDeclaration_InsideLambda_DoesNotCapture() {
+        // The for-init local is declared by the loop; the capture collector must not treat it
+        // as a free upvalue (that used to throw "captured variable has no upvalue cell").
+        var r = CSharpScript.Run(
+            "((long a) => { var t = 0; for (var i = 0; i < 3; i = i + 1) { t = t + i; } return t; })(0)");
+        await Assert.That(r.Success).IsTrue();
+        await Assert.That(r.Value).IsEqualTo("3");
+    }
+
+    [Test]
     public async Task Run_MixedIntegerEquality_IsNumeric() {
         // `1 == 1L`: the runtime keeps both in long slots, so the fold must agree rather
         // than compare a boxed int against a boxed long as unequal.

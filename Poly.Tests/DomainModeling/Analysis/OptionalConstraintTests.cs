@@ -72,4 +72,19 @@ public sealed class OptionalConstraintTests {
             .Apply(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
     }
+
+    [Test]
+    public async Task RequiredAndOptionalTogether_IsError() {
+        var result = Apply("domain Both\n\nThing: entity { Name: Text required optional }");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Message.Contains("both 'required' and 'optional'", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task RequiredAlone_IsAccepted() {
+        // `required` is now the default, but stays an accepted (redundant) marker.
+        var result = Apply("domain ExplicitRequired\n\nThing: entity { Name: Text required }");
+        await Assert.That(result.Succeeded).IsTrue();
+    }
 }

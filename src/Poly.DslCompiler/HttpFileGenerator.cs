@@ -41,19 +41,9 @@ public sealed class HttpFileGenerator {
     /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
     /// </summary>
     private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
-        if (_analysis.GetStructure(entity) is not { } esm)
-            return [];
-        var scalars = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
-        // Omittable scalars (`default(...)` or `optional`) trail the printed Create
-        // signature; the DTO and JSON body mirror it so they can be supplied.
-        foreach (var name in esm.TrailingOptionalPropertyNames ?? []) {
-            var prop = entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, name, StringComparison.Ordinal));
-            if (prop is null) continue;
-            scalars.Add(new ConstructorParameterOrder(
-                prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
-        }
-        return scalars;
+        if (_analysis.GetStructure(entity) is { } esm)
+            return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+        return [];
     }
 
     private StorageEntity GetStorageEntity(Entity entity) => _storageLookup[entity.Name];

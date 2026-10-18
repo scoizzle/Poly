@@ -3245,6 +3245,31 @@ public class DomainToCSharpExporterTests {
         await Assert.That(note.Columns.Single(c => c.Name == "Subtitle").IsRequired).IsFalse();
     }
 
+    [Test]
+    public async Task Create_OmittedOptionalWithConstraints_GuardsTestOnlyPresentValues() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalGuards
+
+            Note: entity {
+              Title: Text
+              Code: Text optional length(3, 10)
+              Rank: Number optional range(1, 5)
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Note> Create(");
+
+        // An omitted `optional` arrives as null; the length/range guards must test presence
+        // first (an absent value passes, a present value is still checked). The null test is
+        // IsNullOrEmpty for Text and object.ReferenceEquals for a value type — the VM unwraps
+        // T? to a stack scalar, where `!= null` is not the sentinel test.
+        await Assert.That(create).Contains("string.IsNullOrEmpty(code)");
+        await Assert.That(create).Contains("object.ReferenceEquals(rank, null)");
+    }
+
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

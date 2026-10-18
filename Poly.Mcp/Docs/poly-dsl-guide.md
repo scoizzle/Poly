@@ -1139,8 +1139,9 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- not `optional` → `[Required]` (reference-typed properties). Required is the default, so
-  a bare property projects `[Required]`; only `optional` omits it.
+- `required` → `[Required]` (reference-typed properties). Note: required is the default, so
+  this attribute is not yet projected for an unmarked property — the API generator still
+  keys on the explicit keyword.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

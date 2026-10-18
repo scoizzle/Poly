@@ -449,21 +449,27 @@ public sealed partial class DomainToCSharpExporter {
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
-            // An `optional` property's create parameter is T? and may be absent (null).
-            // A constraint guard must then test only a present value — an absent value
-            // passes, because the property is optional. Mirrors the assign-side null skip
-            // in EffectLoweringPass.AppendAssignConstraintChecks (twin trees).
+            // An `optional` property's create parameter may be absent (null); a guard must
+            // test only a present value. The null test has to hold in BOTH the printer
+            // (`T?`) and the VM, which unwraps `T?` to a stack scalar where `!= null` is
+            // not the sentinel test — so a non-text operand uses object.ReferenceEquals,
+            // exactly like the required-enum guard below. `skipEmpty` matches the assign-side
+            // length check (`""` is "not written"); pattern/equality test the value itself.
             var isOptional = prop.Constraints.IsOptional();
-            Node Present(Node condition) => isOptional
-                ? new Syntactic.And(
-                    isText
+            Node Present(Node condition, bool skipEmpty = false) {
+                if (!isOptional) return condition;
+                Node hasValue = isText
+                    ? skipEmpty
                         ? (Node)new Syntactic.Not(new Invoke(
                             new Member(
                                 new PrimitiveTypeReference(PrimType.String), "IsNullOrEmpty"),
                             [paramRef]))
-                        : new NotEqual(paramRef, new Constant(null)),
-                    condition)
-                : condition;
+                        : new NotEqual(paramRef, new Constant(null))
+                    : new Syntactic.Not(new Invoke(
+                        new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                        [paramRef, new Constant(null)]));
+                return new Syntactic.And(hasValue, condition);
+            }
 
             Node Failure(string msg) => FailureNode(new Constant(msg));
             Node FailureNode(Node msg) => new Return(
@@ -523,14 +529,14 @@ public sealed partial class DomainToCSharpExporter {
                             if (l.MinLength > 0) {
                                 checks.Add(new IfStatement(
                                     Present(new LessThan(lenAccess,
-                                        new Constant((long)l.MinLength))),
+                                        new Constant((long)l.MinLength)), skipEmpty: true),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
                             }
                             if (l.MaxLength < int.MaxValue) {
                                 checks.Add(new IfStatement(
                                     Present(new GreaterThan(lenAccess,
-                                        new Constant((long)l.MaxLength))),
+                                        new Constant((long)l.MaxLength)), skipEmpty: true),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
                             }

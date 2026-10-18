@@ -59,7 +59,7 @@ app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListA
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>(), dto.ClosedTickets, dto.OpenPipeline, dto.WonCount);
+    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (!accountResult.IsSuccess)
     {
         return Results.Conflict(accountResult.ErrorMessage);
@@ -1328,7 +1328,7 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         db.Add(leadResult.Value);
     }
-    var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>(), 1, 1, 1);
+    var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (accountResult.IsSuccess)
     {
         db.Add(accountResult.Value);
@@ -1374,9 +1374,6 @@ public record AccountDto
     public Industry Industry { get; init; }
     [Required]
     public string Name { get; init; } = default!;
-    public long ClosedTickets { get; init; }
-    public long OpenPipeline { get; init; }
-    public long WonCount { get; init; }
 }
 
 public record CampaignDto

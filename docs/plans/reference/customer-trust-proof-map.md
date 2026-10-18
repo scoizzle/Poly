@@ -3,7 +3,7 @@
 **Date:** 2026-08-07  
 **Status:** Design lock / living index — **not** an implementation suite  
 **Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
-**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](../archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) · index [`README.md`](../README.md)
+**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](../archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`pr1-uncommitted-review-gate.md`](../../agent/pr1-uncommitted-review-gate.md) · index [`README.md`](../README.md)
 
 ---
 

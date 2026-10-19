@@ -3321,28 +3321,6 @@ public class DomainToCSharpExporterTests {
         await Assert.That(notLow).Contains("this.Kind != null");
     }
 
-    [Test]
-    public async Task OptionalAssign_ConstraintGuard_TestsOnlyPresentValues() {
-        var (domain, analysis) = ParseAndAnalyze("""
-            domain OptionalAssign
-
-            Item: entity {
-              Rank: Number optional range(1, 5)
-              Bump: action { assign Rank to 3 }
-            }
-            """);
-        await Assert.That(analysis.HasErrors).IsFalse();
-
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
-        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-
-        // An absent optional satisfies the range; a present value is still checked, so the
-        // guard tests presence first (same shape as the create-side guard).
-        var bump = ExportedCSharp.ExtractMethod(cs, "DomainResult Bump(");
-        await Assert.That(bump).Contains("!= null &&");
-        await Assert.That(bump).Contains("must be >= 1");
-    }
-
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

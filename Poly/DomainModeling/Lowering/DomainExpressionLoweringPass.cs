@@ -409,10 +409,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
         // A comparison that reads an `optional` value is false when that value is absent
         // (a null operand never makes a condition true). Guard each optional leaf on the
-        // short-circuit side, so the operand is not evaluated while absent.
+        // short-circuit side, so the operand is not evaluated while absent. `x == null` is
+        // itself the presence test, so it is never guarded — guarding it would contradict.
         var optionalLeaves = new List<Node>();
-        CollectOptionalLeaves(c.Left, optionalLeaves);
-        CollectOptionalLeaves(c.Right, optionalLeaves);
+        if (c.Right is not Ontology.Literal { Value: null }) CollectOptionalLeaves(c.Left, optionalLeaves);
+        if (c.Left is not Ontology.Literal { Value: null }) CollectOptionalLeaves(c.Right, optionalLeaves);
         for (var i = optionalLeaves.Count - 1; i >= 0; i--)
             value = new SN.And(optionalLeaves[i], value);
 

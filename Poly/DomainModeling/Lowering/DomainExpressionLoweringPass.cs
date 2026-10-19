@@ -431,6 +431,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         if (operand is not PropertyAccess property) return;
         if (_isOptionalProperty is null || !_isOptionalProperty(property.Name)) return;
         if (_actionParameterNames?.Contains(property.Name) == true) return;
+        // A session ident (Now / Today / Guid) folds to a call, not a member read; guarding
+        // `Member(subject, name)` would test something the comparison never reads.
+        if (EffectLoweringPass.LowerDefaultExpression(
+                property, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
+            return;
         leaves.Add(new NotEqual(
             new Member(_currentSubject, ResolveName(property.Name)),
             new Constant(null)));

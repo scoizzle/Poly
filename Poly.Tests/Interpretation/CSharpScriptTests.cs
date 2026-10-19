@@ -710,16 +710,37 @@ public class CSharpScriptTests {
     }
 
     [Test]
-    public async Task Run_StringConcat_NonStringVariable_FailsClosed() {
-        // A non-literal non-string part would need boxing into a Concat(object) argument,
-        // which the emitter does not do; it fails closed rather than emitting garbage.
+    public async Task Run_StringConcat_NonStringVariable_BoxesAndRenders() {
+        // A non-string variable part is boxed into the Concat(object) argument by the emitter.
         var r = CSharpScript.Run("\"a\" + 1 + \"b\"");
         await Assert.That(r.Success).IsTrue();
         await Assert.That(r.Value).IsEqualTo("\"a1b\"");
 
-        var nonLiteral = CSharpScript.Run("var x = 1;\n\"a\" + x");
-        await Assert.That(nonLiteral.Success).IsFalse();
-        await Assert.That(nonLiteral.Diagnostics.Any(d => d.Contains("string concatenation"))).IsTrue();
+        var intVar = CSharpScript.Run("var x = 1;\n\"a\" + x");
+        await Assert.That(intVar.Success).IsTrue();
+        await Assert.That(intVar.Value).IsEqualTo("\"a1\"");
+
+        // A double variable renders through Concat(object) under CurrentCulture, so its exact
+        // text is not asserted here; the invariant literal fold covers that formatting.
+        var doubleVar = CSharpScript.Run("var x = 1.5;\n\"a\" + x");
+        await Assert.That(doubleVar.Success).IsTrue();
+
+        var boolVar = CSharpScript.Run("var b = true;\n\"a\" + b");
+        await Assert.That(boolVar.Success).IsTrue();
+        await Assert.That(boolVar.Value).IsEqualTo("\"aTrue\"");
+
+        var charVar = CSharpScript.Run("var c = 'z';\n\"a\" + c");
+        await Assert.That(charVar.Success).IsTrue();
+        await Assert.That(charVar.Value).IsEqualTo("\"az\"");
+
+        var leftVar = CSharpScript.Run("var x = 1;\nx + \"b\"");
+        await Assert.That(leftVar.Success).IsTrue();
+        await Assert.That(leftVar.Value).IsEqualTo("\"1b\"");
+
+        // More than four parts takes the Concat(object[]) packer, which must also box.
+        var chain = CSharpScript.Run("var x = 1;\n\"a\" + x + \"b\" + 2 + \"c\"");
+        await Assert.That(chain.Success).IsTrue();
+        await Assert.That(chain.Value).IsEqualTo("\"a1b2c\"");
     }
 
     [Test]

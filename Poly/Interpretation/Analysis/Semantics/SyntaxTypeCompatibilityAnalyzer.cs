@@ -776,13 +776,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         ITypeMethod? method;
         var allStrings = parts.All(p => ClrTypeOf(context, p) == typeof(string));
-        if (!allStrings) {
-            // A non-string part would have to be boxed into a Concat(object) argument, which
-            // the emitter does not do (a scalar ring slot read as a heap handle is garbage).
-            // Literal parts fold to one string constant — the common case — and anything
-            // else fails closed rather than emitting a wrong value.
-            if (!parts.All(p => p is Constant))
-                return false;
+        if (!allStrings && parts.All(p => p is Constant)) {
+            // Literal parts fold to one string constant (cheaper than a runtime call).
             var text = "";
             foreach (var p in parts)
                 text += Convert.ToString(((Constant)p).Value, CultureInfo.InvariantCulture);
@@ -791,13 +786,18 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
 
         if (parts.Count <= 4) {
-            var argTypes = Enumerable.Repeat(stringDef, parts.Count);
+            // A part that is not a string takes the object overload; the emitter boxes the
+            // scalar into the object argument (`"a" + x`, `x` an int).
+            var objectDef = context.TypeDefinitions.GetTypeDefinition(typeof(object)) ?? stringDef;
+            var argTypes = parts
+                .Select(p => ClrTypeOf(context, p) == typeof(string) ? stringDef : objectDef)
+                .ToArray();
             method = stringDef.FindMatchingMethodOverloads("Concat", argTypes).FirstOrDefault();
         }
         else {
-            method = FindConcatEnumerable(stringDef);
+            method = FindConcatEnumerable(stringDef, allStrings ? typeof(string) : typeof(object));
         }
-        method ??= FindConcatEnumerable(stringDef);
+        method ??= FindConcatEnumerable(stringDef, allStrings ? typeof(string) : typeof(object));
         if (method is null)
             return false;
         var invoke = StampStaticInvoke(context, method, [.. parts]);
@@ -829,7 +829,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         node is Invoke { Delegate: Member { MemberName: "Concat", Value: ClrTypeReference { RuntimeType: var t } } }
         && t == typeof(string);
 
-    private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef) {
+    private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef, Type elementType) {
+        var arrayType = elementType.MakeArrayType();
+        var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
         ITypeMethod? enumerable = null;
         foreach (var method in stringDef.Methods) {
             if (!method.IsStatic || !string.Equals(method.Name, "Concat", StringComparison.Ordinal))
@@ -838,9 +840,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             if (parameters.Length != 1)
                 continue;
             var paramType = parameters[0].ParameterTypeDefinition.GetRuntimeType();
-            if (paramType == typeof(string[]))
+            if (paramType == arrayType)
                 return method;
-            if (paramType == typeof(IEnumerable<string>))
+            if (paramType == enumerableType)
                 enumerable = method;
         }
         return enumerable;

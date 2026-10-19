@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -141,7 +142,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool IsScalarSlot(Type t) =>
         t == typeof(double) || t == typeof(float) || t == typeof(bool)
-        || (t.IsValueType && AbiValueTypes.IsLongRepresentable(t));
+        || (t.IsValueType && RingCodec.IsInline(t));
 
     private void CheckComparison(AnalysisContext context, Node leftNode, Node rightNode) {
         var left = ClrTypeOf(context, leftNode);
@@ -1056,7 +1057,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (rt == typeof(bool))
             return (ValueRepresentationKind.Bool, rt);
         if (rt.IsValueType || rt.IsPrimitive) {
-            return AbiValueTypes.IsLongRepresentable(rt)
+            return RingCodec.IsInline(rt)
                 ? (ValueRepresentationKind.StackScalar, rt)
                 : (ValueRepresentationKind.HeapRef, rt);
         }

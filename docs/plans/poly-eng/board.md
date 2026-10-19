@@ -67,6 +67,16 @@ Design: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../decis
 | A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **merged** #193 `ecffcc4f` | [tasks/AA1.md](tasks/AA1.md) |
 | A2 | async/await — an `IsAsync` AST method returns a completed `Task` | **merged** #206 `3b29937b` | [tasks/AA1b.md](tasks/AA1b.md) |
 
+## Infra (admitted 2026-10-19; a separate lane, does not move row 4)
+
+VM ABI simplification: one codec (`RingCodec`), one frame protocol (`VmCall`), one
+ring discipline (`AbiCtx.RingRegion`), plus ~450 lines of dead ABI machinery removed.
+No behaviour change; the existing suite is the oracle.
+
+| # | Slice | Depends / hold | Task file |
+|---|-------|----------------|-----------|
+| ABI1 | VM ABI simplification (slices 0-3) | none; implemented on `9838889a`, uncommitted | [tasks/ABI1.md](tasks/ABI1.md) |
+
 ## Swarm (probe findings; one card per agent)
 
 Offload queue for the open items in [`docs/probes/findings/evolve-2026-10-14.md`](../../probes/findings/evolve-2026-10-14.md). F27, F32, F33, and F34 are already on master (`06844e39`). U1 and U2 (printed `EnsureUnique`) stay on row 4. Rows 5–19 and THEN are unchanged.

@@ -188,8 +188,9 @@ the full state, and the locals span is built at compile time.
 
 ## Value Marshalling
 
-`VmValueMarshaller` handles conversion between VM internal representation and
-CLR types:
+`RingCodec` handles conversion between VM internal representation and
+CLR types (`FromClr`/`ToClr` at compile time, `ToRing`/`Cast`/`TypeAs`/
+`UnboxNullable` at runtime):
 
 | CLR Type | VM Representation | Direction |
 |----------|-------------------|-----------|

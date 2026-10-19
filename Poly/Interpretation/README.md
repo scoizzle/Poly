@@ -127,31 +127,31 @@ flattening or expansion step exists — the AST is the canonical lowering target
 
 See [`Vm/README.md`](Vm/README.md) for the ABI model and emitter details.
 
-### Frame ABI (CallStack)
+### Frame ABI (`VmCall`)
 
-The call stack uses a linked frame model with a 2-word header:
+The call frame uses a 2-word header followed by argument slots, defined once in
+[`Vm/VmCall.cs`](Vm/VmCall.cs):
 
 ```
-[...argN-1..arg0] [previousFP] [savedSP] [local0..localM-1]
-                   ^-- frame header (2 words)                ^-- SP
+[previousFP] [savedSP] [arg0] [arg1] ...
+ ^-- frame header (2 words)      ^-- FramePos
 ```
 
-- **`previousFP`**: Frame pointer of the caller (-1 for root frame).
-- **`savedSP`**: Stack pointer just before the header was pushed.
+- **`previousFP`**: frame pointer of the caller.
+- **`savedSP`**: stack pointer just before the header was pushed.
 - **Argument/local counts** are known at compile time — not stored on the stack.
 
-`CallStack.AllocateFrame()` pushes the header and reserves local space.
-`CallStack.DeallocateFrame()` restores the stack pointer and pops the frame.
-The `CallStackFrame` record provides typed span accessors (`GetLocals`, `GetArguments`)
-and indexers (`GetLocal`, `GetArgument`) for debug hooks and resume.
+`VmCall.Invoke` pushes the header and arguments, sets `FramePos` to the first
+argument slot, runs the callee, and reads the result from `slots[FramePos]`.
 
 ### Ring Registers
 
 The emitter uses a ring register discipline during compilation: values flow through
 `_r0.._rN` local variables allocated inline during the AST walk. Unlike the old
 primitive path, there is no global pre-pass (`RingAllocator`) — ring assignment
-happens during the AST walk. The result is equivalent: the CLR JIT can enregister
-ring locals.
+happens during the AST walk. A `RingRegion` (`ctx.OpenRing()`) folds a sequence of
+compiled operands into consecutive slots, so callers do not hand-manage
+`RingDepth`. The result is equivalent: the CLR JIT can enregister ring locals.
 
 ### Compilation Modes
 

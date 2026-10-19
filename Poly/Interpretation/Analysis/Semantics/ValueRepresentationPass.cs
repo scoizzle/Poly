@@ -1,4 +1,5 @@
 using Poly.Interpretation.Analysis.ControlFlow;
+using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -227,7 +228,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             return (ValueRepresentationKind.HeapRef, t);
         if (t == typeof(bool))
             return (ValueRepresentationKind.Bool, typeof(bool));
-        if (t.IsValueType && AbiValueTypes.IsLongRepresentable(t))
+        if (t.IsValueType && RingCodec.IsInline(t))
             return (ValueRepresentationKind.StackScalar, t);
         if (t == typeof(float) || t == typeof(double))
             return (ValueRepresentationKind.StackScalar, t);
@@ -244,7 +245,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         if (c.Value.GetType().IsValueType) {
             var vt = c.Value.GetType();
             // Non-long value types (DateTime, DateOnly, Guid, ...) are heap handles.
-            return AbiValueTypes.IsLongRepresentable(vt)
+            return RingCodec.IsInline(vt)
                 ? (ValueRepresentationKind.StackScalar, vt)
                 : (ValueRepresentationKind.HeapRef, vt);
         }
@@ -282,7 +283,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
                 var (kind, clrType) = ClassifyTypeDefinition(returns[0]);
                 if (kind == ValueRepresentationKind.HeapRef
                     && clrType is { IsValueType: true }
-                    && !AbiValueTypes.IsLongRepresentable(clrType))
+                    && !RingCodec.IsInline(clrType))
                     return (kind, clrType);
             }
         }
@@ -355,8 +356,8 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             if (rt.IsValueType || rt.IsPrimitive) {
                 // Non-numeric value types (DateTime, DateOnly, Guid, TimeSpan, ...)
                 // cannot be inlined into the long-based VM ring — their values live
-                // on the heap as boxed handles (AbiValueTypes.IsLongRepresentable).
-                return AbiValueTypes.IsLongRepresentable(rt)
+                // on the heap as boxed handles (RingCodec.IsInline).
+                return RingCodec.IsInline(rt)
                     ? (ValueRepresentationKind.StackScalar, rt)
                     : (ValueRepresentationKind.HeapRef, rt);
             }

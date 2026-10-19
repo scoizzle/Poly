@@ -11,13 +11,6 @@ namespace Poly.Interpretation.Vm;
 
 public static partial class DirectVmAbiEmitter {
 
-    private static bool IsDoubleValue(AbiCtx ctx, Node node) {
-        if (ctx.Analysis is null) return false;
-        var meta = ctx.Analysis.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.ClrType is null) return false;
-        return meta.ClrType == typeof(double) || meta.ClrType == typeof(float);
-    }
-
     public sealed class AbiCtx {
         private readonly ParameterExpression _stateParam;
         private readonly List<ParameterExpression> _ringVars = new();
@@ -39,10 +32,6 @@ public static partial class DirectVmAbiEmitter {
             _locals.Add(FramePosLocal);
             InstanceHandle = Variable(typeof(long), "_this");
             _locals.Add(InstanceHandle);
-            SavedSp = Variable(typeof(int), "_savedSp");
-            _locals.Add(SavedSp);
-            ResultLocal = Variable(typeof(long), "_result");
-            _locals.Add(ResultLocal);
             _regVars = new List<ParameterExpression>(_registerCount);
             for (int i = 0; i < _registerCount; i++) {
                 var r = Variable(typeof(long), $"_reg{i}");
@@ -59,26 +48,14 @@ public static partial class DirectVmAbiEmitter {
         public ParameterExpression HeapLocal { get; }
         public ParameterExpression FramePosLocal { get; }
         public ParameterExpression InstanceHandle { get; }
-        public ParameterExpression SavedSp { get; }
-        public ParameterExpression ResultLocal { get; }
         public LabelTarget EntryLabel { get; }
         public LabelTarget ExitLabel { get; }
-        public int LabelCounter { get; set; }
         public Expression? DebugHookProp { get; set; }
         public Expression CurrentAstNodeExpr =>
             Property(_stateParam, nameof(VmState.CurrentAstNode));
-        public int CurrentLocalCount {
-            get {
-                int count = 0;
-                foreach (var scope in _scopeStack)
-                    count += scope.Count;
-                return count;
-            }
-        }
-
-        /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this,
-        /// not live <see cref="CurrentLocalCount"/>, because sequential inner blocks
-        /// reuse neither slot 0 nor a dense 0..live-1 prefix.</summary>
+        /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this
+        /// rather than a live count, because sequential inner blocks reuse neither
+        /// slot 0 nor a dense 0..live-1 prefix.</summary>
         public int FrameSlotHighWater => _nextFrameSlot;
         public int StepCounter { get; set; }
 
@@ -119,16 +96,6 @@ public static partial class DirectVmAbiEmitter {
         public Type? AsyncReturn { get; set; }
         public IReadOnlyList<ParameterExpression> Locals => _locals;
 
-        internal const int SmallArrayThreshold = 16;
-        internal const int SmallArraySlotBase = 128;
-        private int _nextSmallArraySlot = SmallArraySlotBase;
-
-        public int AllocateSmallArray() {
-            int baseOffset = _nextSmallArraySlot;
-            _nextSmallArraySlot += SmallArrayThreshold;
-            return baseOffset;
-        }
-
         public Expression SlotsInitExpression =>
             Property(Property(_stateParam, StateStackProperty), ValueStackRawSlotsProperty);
         public Expression HeapInitExpression =>
@@ -145,6 +112,59 @@ public static partial class DirectVmAbiEmitter {
         public int RingDepth { get; set; }
         private int _maxDepth;
         public int MaxRingDepth => _maxDepth;
+
+        /// <summary>Open a scoped ring region. Each <see cref="RingRegion.Add"/>
+        /// folds its result into the next contiguous slot, so callers never
+        /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
+        public RingRegion OpenRing() => new(this);
+
+        /// <summary>Contiguous ring slots for a sequence of compiled operands.
+        /// <see cref="Add"/> compacts each result to <c>Base + count</c>; any
+        /// slots the caller allocates afterwards extend the depth normally.</summary>
+        public sealed class RingRegion {
+            private readonly AbiCtx _ctx;
+            private readonly int _base;
+            private readonly List<Expression> _steps = new();
+            private int _count;
+
+            internal RingRegion(AbiCtx ctx) {
+                _ctx = ctx;
+                _base = ctx.RingDepth;
+            }
+
+            /// <summary>The first slot of the region.</summary>
+            public int Base => _base;
+
+            /// <summary>Number of live values accumulated.</summary>
+            public int Count => _count;
+
+            /// <summary>The expressions that produce and fold the accumulated values.</summary>
+            public IReadOnlyList<Expression> Steps => _steps;
+
+            /// <summary>Compile-time slot holding the value added at <paramref name="index"/>.</summary>
+            public int Slot(int index) => _base + index;
+
+            /// <summary>Add a compiled value: fold its result into the next contiguous
+            /// slot and leave <see cref="RingDepth"/> just past it. Returns its slot.</summary>
+            public int Add(Expression compiled) {
+                int result = _ctx.RingDepth - 1;
+                int target = _base + _count;
+                _steps.Add(compiled);
+                if (result != target)
+                    _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingVar(result)));
+                _count++;
+                _ctx.RingDepth = target + 1;
+                return target;
+            }
+
+            /// <summary>Run the accumulated steps, then <paramref name="body"/>.</summary>
+            public Expression Then(Expression body) {
+                var steps = new List<Expression>(_steps.Count + 1);
+                steps.AddRange(_steps);
+                steps.Add(body);
+                return Block(steps);
+            }
+        }
 
         public ParameterExpression RingVar(int absoluteIndex) {
             while (_ringVars.Count <= absoluteIndex) {
@@ -163,20 +183,6 @@ public static partial class DirectVmAbiEmitter {
             RingVar(slot);
             return slot;
         }
-
-        private Dictionary<Variable, int>? _frameLocalVars;
-
-        public void TrackFrameLocalArray(Variable v, int baseOffset) {
-            _frameLocalVars ??= new(ReferenceEqualityComparer.Instance);
-            _frameLocalVars[v] = baseOffset;
-        }
-
-        public void UntrackFrameLocalArray(Variable v) {
-            _frameLocalVars?.Remove(v);
-        }
-
-        public int? TryGetFrameLocalBase(Variable v) =>
-            _frameLocalVars is { } dict && dict.TryGetValue(v, out int baseOffset) ? baseOffset : null;
 
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
         private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
@@ -218,21 +224,6 @@ public static partial class DirectVmAbiEmitter {
                 }
             }
             return stores;
-        }
-
-        public IReadOnlyList<Expression> EmitScopeLoads() {
-            if (_scopeVars.Count == 0 || _scopeStack.Count == 0) return Array.Empty<Expression>();
-            var vars = _scopeVars.Peek();
-            var scope = _scopeStack.Peek();
-            var loads = new List<Expression>(vars.Count);
-            foreach (var v in vars) {
-                if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
-                    loads.Add(Assign(
-                        _regVars[regIdx],
-                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot)))));
-                }
-            }
-            return loads;
         }
 
         /// <summary>
@@ -592,41 +583,5 @@ public static partial class DirectVmAbiEmitter {
             _stepNodes[step] = node;
         }
 
-        private readonly Stack<CompileTimeFrame> _ctFrames = new();
-        private int _ctSp;
-
-        private sealed class CompileTimeFrame {
-            public int ArgumentCount { get; }
-            public int LocalCount { get; }
-            public int BaseOffset { get; }
-            public int HeaderSize { get; }
-            public CompileTimeFrame(int args, int locals, int baseOffset, int headerSize) {
-                ArgumentCount = args;
-                LocalCount = locals;
-                BaseOffset = baseOffset;
-                HeaderSize = headerSize;
-            }
-        }
-
-        public void EnterActivation(int argumentCount, int localCount, int headerSize = 0) {
-            var frame = new CompileTimeFrame(argumentCount, localCount, _ctSp + headerSize, headerSize);
-            _ctFrames.Push(frame);
-            _ctSp += headerSize + argumentCount + localCount;
-        }
-
-        public void LeaveActivation() {
-            if (_ctFrames.Count == 0) throw new InvalidOperationException("No active frame");
-            var f = _ctFrames.Pop();
-            _ctSp -= f.HeaderSize + f.ArgumentCount + f.LocalCount;
-        }
-
-        public int GetCompileTimeVariableOffset(Variable v) {
-            if (!TryGetVariable(v, out int slotInScope))
-                throw new InvalidOperationException($"Variable '{v.Name}' has no slot");
-            return slotInScope;
-        }
-
-        public int GetCurrentFrameSize() =>
-            _ctFrames.Count == 0 ? 0 : _ctFrames.Peek().ArgumentCount + _ctFrames.Peek().LocalCount + 2;
     }
 }

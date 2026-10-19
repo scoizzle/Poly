@@ -66,14 +66,13 @@ public static partial class DirectVmAbiEmitter {
     private static readonly PropertyInfo EnumeratorCurrent =
         Ref<System.Collections.IEnumerator>.Property(e => e.Current);
     private static readonly MethodInfo BoxToAbiInfo =
-        Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
+        Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => RingCodec.BoxToAbi(h, v)));
     private static readonly MethodInfo CastAbiInfo =
-        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => CastAbi(h, r, t)));
+        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => RingCodec.Cast(h, r, t)));
     private static readonly MethodInfo TypeAsAbiInfo =
-        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => TypeAsAbi(h, r, t)));
+        Ref.Method((Expression<Func<Heap, long, Type, long>>)((h, r, t) => RingCodec.TypeAs(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
-        Ref.Method((Expression<Func<Heap, long, long>>)((h, v) => UnboxNullableToLong(h, v)));
-    private static readonly MethodInfo SetStackPointer = Ref<ValueStack>.Method(s => s.SetStackPointer(0));
+        Ref.Method((Expression<Func<Heap, long, long>>)((h, v) => RingCodec.UnboxNullable(h, v)));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
         typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!;
@@ -150,7 +149,6 @@ public static partial class DirectVmAbiEmitter {
         }
 
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
-        ctx.EnterActivation(rootArgCount, 0);
         var rootExpr = CompileStatement(root, ctx);
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
@@ -167,7 +165,6 @@ public static partial class DirectVmAbiEmitter {
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
-        ctx.LeaveActivation();
         body.Add(Label(ctx.ExitLabel));
 
         var rootMeta = analysis.GetMetadata<ValueRepresentationMetadata>(root);
@@ -286,15 +283,10 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitConstant(Constant c, AbiCtx ctx) {
         int slot = ctx.AllocSlot();
-        if (TryValueToLong(c.Value, out long val))
+        if (RingCodec.TryInlineConstant(c.Value, out long val))
             return Assign(ctx.RingVar(slot), Constant(val));
-        if (c.Value is double dbl)
-            return Assign(ctx.RingVar(slot), Constant(BitConverter.DoubleToInt64Bits(dbl)));
-        if (c.Value is float flt)
-            return Assign(ctx.RingVar(slot), Constant(BitConverter.DoubleToInt64Bits(flt)));
-        var allocate = Call(ctx.HeapLocal, HeapAllocate,
-            Convert(Constant(c.Value), typeof(object)));
-        return Assign(ctx.RingVar(slot), Convert(allocate, typeof(long)));
+        return Assign(ctx.RingVar(slot),
+            RingCodec.Box(Convert(Constant(c.Value), typeof(object)), ctx.HeapLocal));
     }
 
     private static Expression EmitNew(New n, AbiCtx ctx) {
@@ -376,11 +368,9 @@ public static partial class DirectVmAbiEmitter {
             created = Call(null, NewEmptyCollectionInfo, Constant((int)collection.Kind));
         }
         else {
-            int before = ctx.RingDepth;
-            seq.Add(CompileNode(n.Arguments[0], ctx));
-            int got = ctx.RingDepth - 1;
-            seq.Add(FoldResultToSlot(ref got, before, ctx));
-            ctx.RingDepth = got + 1;
+            var ring = ctx.OpenRing();
+            int got = ring.Add(CompileNode(n.Arguments[0], ctx));
+            seq.AddRange(ring.Steps);
             var source = Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ctx.RingVar(got), typeof(int)));
             created = Call(null, CopyCollectionInfo, Constant((int)collection.Kind), source);
         }
@@ -467,10 +457,8 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitNewArray(NewArray n, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var lenExpr = CompileNode(n.Length, ctx);
-        int lenSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref lenSlot, d, ctx);
+        var ring = ctx.OpenRing();
+        int lenSlot = ring.Add(CompileNode(n.Length, ctx));
         int slot = ctx.AllocSlot();
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
@@ -481,7 +469,7 @@ public static partial class DirectVmAbiEmitter {
         // not default(T); reject rather than read null where C# gives the default value.
         var elementClr = ArrayElementClrType(n.ElementType, ctx);
         if (n.ElementType is OptionalTypeReference
-            || (elementClr is { IsValueType: true } nonSlot && !AbiValueTypes.IsLongRepresentable(nonSlot))) {
+            || (elementClr is { IsValueType: true } nonSlot && !RingCodec.IsInline(nonSlot))) {
             throw new InvalidOperationException(
                 $"VM compile rejected: an array of '{elementClr?.Name ?? "?"}' is not supported.");
         }
@@ -490,7 +478,7 @@ public static partial class DirectVmAbiEmitter {
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(arr, typeof(object)));
-        return Block(lenExpr, fold, Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+        return ring.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
 
     /// <summary>The CLR type of an array's element from its type node, or null when it cannot
@@ -513,7 +501,7 @@ public static partial class DirectVmAbiEmitter {
     /// fails closed, as the analyzer does for the same variable store.</summary>
     private static Expression ConvertIndexStoreValue(Expression value, Type elementClr, Node valueNode, AbiCtx ctx) {
         bool elementIeee = elementClr == typeof(double) || elementClr == typeof(float);
-        bool valueIeee = IsDoubleValue(ctx, valueNode);
+        bool valueIeee = RingCodec.IsIeee(valueNode, ctx.Analysis);
         if (elementIeee == valueIeee)
             return value;
         if (!elementIeee)
@@ -527,9 +515,6 @@ public static partial class DirectVmAbiEmitter {
         if (indexKind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
-        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int) {
-            return SpillToRing(EmitIndexAccessValue(n, ctx), ctx);
-        }
         var arrExpr = CompileNode(n.Value, ctx);
         int arrSlot = ctx.RingDepth - 1;
         var idxExpr = CompileNode(n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx);
@@ -571,36 +556,11 @@ public static partial class DirectVmAbiEmitter {
             Assign(ctx.RingVar(outSlot), valExprU));
     }
 
-    private static bool TryValueToLong(object? value, out long result) {
-        switch (value) {
-            case null: result = 0; return true;
-            case long l: result = l; return true;
-            case int i: result = i; return true;
-            case bool b: result = b ? 1 : 0; return true;
-            case short s: result = s; return true;
-            case byte bVal: result = bVal; return true;
-            case sbyte sb: result = sb; return true;
-            case ushort us: result = us; return true;
-            case uint ui: result = ui; return true;
-            case ulong ul: result = unchecked((long)ul); return true;
-            case char c: result = c; return true;
-            default: result = 0; return false;
-        }
-    }
-
-    private static Expression FoldResultToSlot(ref int resultSlot, int d, AbiCtx ctx) {
-        if (resultSlot <= d) return Empty();
-        var copy = Assign(ctx.RingVar(d), ctx.RingVar(resultSlot));
-        resultSlot = d;
-        ctx.RingDepth = d + 1;
-        return copy;
-    }
-
     private static Expression CompileValue(Node node, AbiCtx ctx) {
         if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
             return CompileValue(replacement, ctx);
         return node switch {
-            Constant c when TryValueToLong(c.Value, out _) || c.Value is double || c.Value is float
+            Constant c when RingCodec.TryInlineConstant(c.Value, out _)
                 => EmitConstantValue(c),
             Constant c => SpillRingRead(EmitConstant(c, ctx), ctx),
             Variable v => ctx.TryGetCapture(v, out _)
@@ -660,13 +620,6 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitIndexAccessValue(IndexAccess n, AbiCtx ctx) {
-        if (n.Value is Variable arrVar && ctx.TryGetFrameLocalBase(arrVar) is int flBase) {
-            Expression idx = n.Arguments.Length > 0
-                ? CompileValue(n.Arguments[0], ctx)
-                : Constant(0L);
-            return ArrayAccess(ctx.SlotsLocal,
-                Add(Constant(flBase), Convert(idx, typeof(int))));
-        }
         return SpillRingRead(CompileNode(n, ctx), ctx);
     }
 
@@ -682,9 +635,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitConstantValue(Constant c) {
-        if (TryValueToLong(c.Value, out long val)) return Constant(val);
-        if (c.Value is double dbl) return Constant(BitConverter.DoubleToInt64Bits(dbl));
-        if (c.Value is float flt) return Constant(BitConverter.DoubleToInt64Bits(flt));
+        if (RingCodec.TryInlineConstant(c.Value, out long val)) return Constant(val);
         return Constant(0L);
     }
 
@@ -694,7 +645,7 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
             return Call(BitConverterDoubleToInt64Bits,
                 factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
         var rhs = rightVal;
@@ -703,7 +654,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression AsIeeeDouble(Node node, Expression ringVal, AbiCtx ctx) =>
-        IsDoubleValue(ctx, node)
+        RingCodec.IsIeee(node, ctx.Analysis)
             ? Call(BitConverterInt64BitsToDouble, ringVal)
             : Convert(ringVal, typeof(double));
 
@@ -712,7 +663,7 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitUnaryMinusValue(UnaryMinus n, AbiCtx ctx) {
         var v = CompileValue(n.Operand, ctx);
-        return IsDoubleValue(ctx, n.Operand)
+        return RingCodec.IsIeee(n.Operand, ctx.Analysis)
             ? Call(BitConverterDoubleToInt64Bits, Negate(Call(BitConverterInt64BitsToDouble, v)))
             : Negate(v);
     }
@@ -767,32 +718,24 @@ public static partial class DirectVmAbiEmitter {
         var tmp = Variable(typeof(long), "_coal");
         var leftVal = CompileValue(n.LeftHandValue, ctx);
         var rightVal = CompileValue(n.RightHandValue, ctx);
-        Expression whenLeft = UsesAbiNullSentinel(ctx, n.LeftHandValue)
+        Expression whenLeft = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;
         return Block([tmp],
             Assign(tmp, leftVal),
             Condition(
-                UsesAbiNullSentinel(ctx, n.LeftHandValue)
+                RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
                     ? NotEqual(tmp, Constant(0L))
                     : Constant(true),
                 whenLeft,
                 rightVal));
     }
 
-    private static bool UsesAbiNullSentinel(AbiCtx ctx, Node node) {
-        if (node is Constant { Value: null }) return true;
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.Kind == ValueRepresentationKind.HeapRef) return true;
-        if (meta?.ClrType is Type t && Nullable.GetUnderlyingType(t) is not null) return true;
-        return false;
-    }
-
     private static Expression UnboxIfHeapNullable(AbiCtx ctx, Node node, Expression handle) {
         var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
         var clr = meta?.ClrType;
         var underlying = clr is null ? null : Nullable.GetUnderlyingType(clr);
-        if (underlying is null || !AbiValueTypes.IsLongRepresentable(underlying))
+        if (underlying is null || !RingCodec.IsInline(underlying))
             return handle;
         return Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, handle);
     }

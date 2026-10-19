@@ -621,6 +621,20 @@ public class VmCorrectnessTests {
     }
 
     [Test]
+    public async Task SetArgs_TwoParamsAndLocals_SecondParamSurvivesLocalStores() {
+        var x = new Parameter("x", TypeReference.To<long>());
+        var y = new Parameter("y", TypeReference.To<long>());
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var body = new Invoke(new Lambda([x, y], new Block(
+            [new Assignment(a, new Constant(20L)),
+             new Assignment(b, new Constant(99L)),
+             y], [a, b])));
+        var (_, result) = ExecVm(body, s => s.SetArgs(10L, 20L));
+        await Assert.That(result).IsEqualTo(20L);
+    }
+
+    [Test]
     public async Task Stress_PropertyAccessInLoop() {
         var e = new Parameter("entity", TypeReference.To<PersonRecord>());
         var c = new Variable("c");

@@ -21,7 +21,8 @@ delegates for fast execution via `DirectVmAbiEmitter`.
 | `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
 | `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
-| `VmValueMarshaller.cs` | Converts between `VmState` representation and CLR types |
+| `RingCodec.cs` | The ABI codec: value classification and both-direction conversion (compile-time and runtime) |
+| `VmCall.cs` | The one call-frame protocol (2-word header, frame pointer, result slot) |
 
 ## Pipeline
 
@@ -51,22 +52,20 @@ handles structured EH natively via `Expression.TryCatchFinally`.
 
 ## Runtime Types
 
-### `Word`
-The fundamental storage unit — wraps a `long` with implicit conversions to/from
-`int` and `long`. Negative values are heap handles (`Word.IsHandle`).
+### `RingCodec`
+The single definition of the VM's long-slot ABI. Classifies a value as an inline
+scalar, boolean, IEEE bit pattern, or heap handle (`KindFor`, `IsInline`,
+`IsIeee`), and converts in both directions — compile-time `Expression` factories
+(`FromClr`, `ToClr`, `Box`) and runtime helpers (`ToRing`, `Cast`, `TypeAs`,
+`UnboxNullable`). Analysis passes use `IsInline` to predict the same
+classification the emitter applies.
 
-### `CallStackFrame`
-A view into the call stack describing one activation. Links to the caller via
-`PreviousFramePointer` and `SavedStackPointer`. Argument and local counts are
-compile-time-known values attached to the view — not stored on the stack.
-
-### `CallStack`
-The runtime call stack. Provides:
-- `AllocateFrame()` / `DeallocateFrame()` for frame management
-- `GetLocal()` / `GetArgument()` for frame-relative access
-- `GetLocals()` / `GetArguments()` for span-based bulk access (used by debug hooks)
-- `CurrentFrame` to inspect the topmost frame
-- `RunSimulation()` for manual testing of ABI invariants
+### `VmCall`
+The one call-frame protocol. A frame is a 2-word header (previous frame pointer,
+saved stack pointer) then argument slots; `FramePos` is the first argument slot,
+a parameter is read at `FramePos + index`, and the callee result is written to
+`slots[FramePos]`. `Invoke` runs a function in a new frame and restores FP,
+closure, and SP even when the body throws.
 
 ### `ValueStack`
 Pooled `long[]` stack backed by `ArrayPool<long>.Shared`. Automatically grows
@@ -98,15 +97,14 @@ Uses a background thread with blocking hooks. Zero overhead when not stepping.
 
 ## Value Marshalling
 
-`VmValueMarshaller` converts between VM representation (`long` scalars, heap
-handles) and CLR types. Used by `DirectVmAbiEmitter` when emitting external
-method/constructor calls:
+`RingCodec` converts between VM representation (`long` scalars, heap handles) and
+CLR types. `DirectVmAbiEmitter` uses `FromClr` / `ToClr` when emitting external
+method and constructor calls; the emitted runtime helpers are `ToRing` (`object`
+→ ring) and `Cast` / `TypeAs` / `UnboxNullable`.
 
-- `MarshalToClr(rawValue, targetType, heapRawSlots)` — VM → CLR
-- `MarshalFromClr(clrValue, sourceType, heap)` — CLR → VM
-
-Stack scalars pass through `Convert`; booleans use `!= 0` / ternary;
-heap references de-reference via `heapRawSlots[handle]`.
+Stack scalars widen through `Convert`, booleans use `!= 0`, float and double use
+IEEE bit patterns, and heap references allocate through `Heap.Allocate` or
+dereference via `Heap.UnsafeGet`.
 
 ## Key Design Decisions
 
@@ -121,34 +119,22 @@ heap references de-reference via `heapRawSlots[handle]`.
 
 ## VM ABI: Call Frame Layout
 
-Call frame layout (one long slot of metadata):
+Defined once in `VmCall`. A frame is a 2-word header followed by argument slots:
 
-Before a `Call*` the N argument slots are on the stack:
 ```
-[...stuff...][arg0][arg1]...[argN-1]
-                                    ^ SP
-```
-
-The `Call*` handler pushes one metadata long:
-```
-Slot[sp++] = ((returnPC << 32) | (uint)(int)savedFrameBase)
+Slot[callSp + 0]:  previous FP
+Slot[callSp + 1]:  saved SP
+Slot[callSp + 2]:  arg0            ← FramePos (FP)
+Slot[callSp + 3]:  arg1
+...
+Slot[FP + n]:      result          (written by the callee)
 ```
 
-After call setup (0-relative to FB):
-```
-Slot[0]:               arg0            ← FB
-Slot[1 .. ArgSlots-1]: arg1..argN-1
-Slot[ArgSlots]:        metadata
-Slot[ArgSlots+1]:      local0
-Slot[ArgSlots+LocalCount]:  last local
-Slot[ArgSlots+LocalCount+1]: first eval  ← SP
-```
+`VmCall.Invoke` sets `FramePos = FramePointer(callSp)` (the first argument slot),
+runs the callee, reads the result from `slots[FramePos]`, then restores FP, the
+closure handle, and the stack pointer. A parameterless callee still reserves one
+argument slot so its result has somewhere to go (`ArgumentSlots`).
 
-Return convention:
-- `EmitPrimitiveCall` saves the current FrameBase and return PC into a metadata slot,
-  sets up the new frame, and jumps directly to the function-body label.
-- `EmitReturnOp` writes the result to `Slot[FB]`, sets `SP = FB + 1`, and jumps
-  to the compiled delegate's `ExitLabel` (ends program execution).
-- Frame-return (restore caller PC/FB from metadata) will be added when cross-function
-  calls need to return to the caller.
-- FrameBase sentinel: `-1` = "no active frame" (top-level execution).
+Inside a compiled function body, `FramePos` is the first argument slot: a
+parameter resolves at `FramePos + index` and `return` writes
+`slots[FramePos]` then sets `SP = FramePos + 1`.

@@ -14,23 +14,6 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitAssignment(Assignment a, AbiCtx ctx) {
         if (a.Destination is IndexAccess indexAccess) {
-            if (indexAccess.Value is Variable arrVarW
-                && ctx.TryGetFrameLocalBase(arrVarW) is int flBaseW) {
-                Expression idxVal = indexAccess.Arguments.Length > 0
-                    ? CompileValue(indexAccess.Arguments[0], ctx)
-                    : Constant(0L);
-                Expression valVal = CompileValue(a.Value, ctx);
-                int flResultSlot = ctx.AllocSlot();
-                ctx.RingDepth = flResultSlot + 1;
-                var idxTmp = Variable(typeof(int), "_flIdx");
-                return Block([idxTmp],
-                    Assign(idxTmp, Convert(idxVal, typeof(int))),
-                    Assign(ctx.RingVar(flResultSlot), valVal),
-                    Assign(ArrayAccess(ctx.SlotsLocal, Add(Constant(flBaseW), idxTmp)),
-                        ctx.RingVar(flResultSlot)),
-                    ctx.RingVar(flResultSlot));
-            }
-
             var arrExpr = CompileNode(indexAccess.Value, ctx);
             int arrSlot = ctx.RingDepth - 1;
             var idxExpr = CompileNode(
@@ -96,7 +79,7 @@ public static partial class DirectVmAbiEmitter {
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
             bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
                 && clrDef.RuntimeType.IsValueType
-                && AbiValueTypes.IsLongRepresentable(clrDef.RuntimeType);
+                && RingCodec.IsInline(clrDef.RuntimeType);
             if (isInlineValueType)
                 instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
             else
@@ -110,7 +93,7 @@ public static partial class DirectVmAbiEmitter {
             Expression writeValue;
             if (clrMemberType is not null
                 && clrMemberType.IsValueType
-                && AbiValueTypes.IsLongRepresentable(clrMemberType)) {
+                && RingCodec.IsInline(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
                     writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
                         Constant(false, typeof(object)),
@@ -141,24 +124,19 @@ public static partial class DirectVmAbiEmitter {
         // Arrays are always heap-allocated. The former frame-local small-array encoding
         // (a base offset in the variable's slot) was not readable through a member access
         // (`.Length`) and did not survive every use; the heap path is the one representation.
-        ctx.UntrackFrameLocalArray(destVar);
 
         if (ctx.TryGetCapture(destVar, out int capIndex)) {
-            int d = ctx.RingDepth;
-            var valueExpr = CompileNode(a.Value, ctx);
-            int valSlot = ctx.RingDepth - 1;
-            var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
+            var ring = ctx.OpenRing();
+            int valSlot = ring.Add(CompileNode(a.Value, ctx));
             var store = Assign(EmitCaptureCellValue(ctx, capIndex), ctx.RingVar(valSlot));
-            ctx.RingDepth = valSlot + 1;
-            return Block(valueExpr, foldVal, store);
+            return ring.Then(store);
         }
 
-        int d2 = ctx.RingDepth;
-        var valueExpr2 = CompileNode(a.Value, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var result = ctx.VariableWrite(destVar, CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
-        ctx.RingDepth = resultSlot + 1;
-        return Block(valueExpr2, result);
+        var value = ctx.OpenRing();
+        int resultSlot = value.Add(CompileNode(a.Value, ctx));
+        var result = ctx.VariableWrite(destVar,
+            CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
+        return value.Then(result);
     }
 
     /// <summary>
@@ -169,8 +147,8 @@ public static partial class DirectVmAbiEmitter {
     /// other representation reads (e.g. <c>double x = 1; x = 2;</c>).
     /// </summary>
     private static Expression CoerceSlotToDestination(AbiCtx ctx, Variable destination, Node value, Expression slot) {
-        bool destinationIsDouble = IsDoubleValue(ctx, destination);
-        bool valueIsDouble = IsDoubleValue(ctx, value);
+        bool destinationIsDouble = RingCodec.IsIeee(destination, ctx.Analysis);
+        bool valueIsDouble = RingCodec.IsIeee(value, ctx.Analysis);
         if (destinationIsDouble == valueIsDouble)
             return slot;
         return destinationIsDouble
@@ -224,11 +202,9 @@ public static partial class DirectVmAbiEmitter {
         SpillToRing(EmitCoalesceValue(n, ctx), ctx);
 
     private static Expression EmitSwitch(SwitchStatement sw, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var valueExpr = CompileNode(sw.Value, ctx);
-        int valSlot = ctx.RingDepth - 1;
-        var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
-        int savedDepth = valSlot + 1;
+        var ring = ctx.OpenRing();
+        int valSlot = ring.Add(CompileNode(sw.Value, ctx));
+        int savedDepth = ring.Base + 1;
         ctx.RingDepth = savedDepth;
 
         int outSlot = ctx.AllocSlot();
@@ -261,7 +237,7 @@ public static partial class DirectVmAbiEmitter {
         }
 
         ctx.RingDepth = outSlot + 1;
-        return Block(valueExpr, foldVal, rest, ctx.RingVar(outSlot));
+        return ring.Then(Block(rest, ctx.RingVar(outSlot)));
     }
 
     private static Expression EmitWhileLoop(WhileLoop wl, AbiCtx ctx) {
@@ -618,10 +594,8 @@ public static partial class DirectVmAbiEmitter {
             ? EmitUpvalueCellInit(fel.LoopVariable, ctx)
             : Empty();
 
-        int d = ctx.RingDepth;
-        var collectionExpr = CompileNode(fel.Collection, ctx);
-        int colSlot = ctx.RingDepth - 1;
-        var foldCol = FoldResultToSlot(ref colSlot, d, ctx);
+        var ring = ctx.OpenRing();
+        int colSlot = ring.Add(CompileNode(fel.Collection, ctx));
 
         var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
@@ -642,13 +616,11 @@ public static partial class DirectVmAbiEmitter {
 
         ctx.PopLoopScope();
         ctx.PopScope();
-        ctx.RingDepth = d;
+        ctx.RingDepth = ring.Base;
 
-        return Block(
+        return ring.Then(Block(
             [enumerator, colObj],
             loopVarCellInit,
-            collectionExpr,
-            foldCol,
             Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
                 Convert(ctx.RingVar(colSlot), typeof(int)))),
             Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
@@ -656,7 +628,7 @@ public static partial class DirectVmAbiEmitter {
                 loop,
                 IfThen(
                     TypeIs(enumerator, typeof(IDisposable)),
-                    Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose))));
+                    Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose)))));
     }
 
     /// <summary>The ring value stored into the loop variable each iteration. Without a declared
@@ -695,7 +667,7 @@ public static partial class DirectVmAbiEmitter {
     /// value type, plus IEEE float/double). <c>decimal</c> and reference types do not.</summary>
     private static bool IsScalarSlot(Type t) =>
         t == typeof(double) || t == typeof(float) || t == typeof(bool)
-        || (t.IsValueType && AbiValueTypes.IsLongRepresentable(t));
+        || (t.IsValueType && RingCodec.IsInline(t));
 
     /// <summary>Goto statement: jump to a named label.</summary>
     private static Expression EmitGotoStatement(GotoStatement gs, AbiCtx ctx) {
@@ -754,19 +726,16 @@ public static partial class DirectVmAbiEmitter {
             return Goto(ctx.ExitLabel);
         }
 
-        int d = ctx.RingDepth;
-        var valueExpr = CompileNode(ret.Value, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+        var ring = ctx.OpenRing();
+        int resultSlot = ring.Add(CompileNode(ret.Value, ctx));
         Expression value = ctx.RingVar(resultSlot);
         if (ctx.AsyncReturn is not null)
             value = WrapAsyncResult(value, ctx.AsyncReturn, ctx, ret.Value);
 
-        return Block(
-            valueExpr, fold,
+        return ring.Then(Block(
             Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal), value),
             Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))),
-            Goto(ctx.ExitLabel));
+            Goto(ctx.ExitLabel)));
     }
 }

@@ -295,7 +295,8 @@ Interpreter.Execute(program) → program.Delegate(VmState)
 | `Heap.cs` | Object heap with free-list recycling |
 | `Closure.cs` | Function index + captures array |
 | `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …) |
-| `VmValueMarshaller.cs` | Converts between VM `long[]` slots and CLR types |
+| `RingCodec.cs` | The ABI codec: value classification and both-direction conversion |
+| `VmCall.cs` | The one call-frame protocol (2-word header, frame pointer, result slot) |
 
 ### Runtime State Model
 

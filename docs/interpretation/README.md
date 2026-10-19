@@ -67,9 +67,9 @@ should be interpreted: stack scalar (direct `long`), heap handle (dereference
 via index), boolean (zero/non-zero), or void.
 
 ### Frame Model
-The VM uses a linked-frame ABI with a 2-word header (previousFP + savedSP).
-Argument and local counts are known at compile time. The `CallStack` runtime
-provides typed accessors for debug hooks and resume.
+The VM uses a linked-frame ABI with a 2-word header (previousFP + savedSP),
+defined once in `VmCall` (`Vm/`). `VmCall.Invoke` owns the header, argument
+slots, frame pointer, and result slot; `FramePos` persists across suspend/resume.
 
 ### Debugging
 - `VmDebugger`: Step-over and continue on a background thread

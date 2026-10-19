@@ -389,15 +389,6 @@ public class InterpretationStabilizationTests {
         await Assert.That(heap.Get(next)).IsEqualTo("c");
     }
 
-#pragma warning disable CS0618 // Word is tagged dead; this test is slated for purge with it.
-    [Test]
-    public async Task Word_IsHandle_PositiveOnly() {
-        await Assert.That(new Word(0).IsHandle).IsFalse();
-        await Assert.That(new Word(1).IsHandle).IsTrue();
-        await Assert.That(new Word(-1).IsHandle).IsFalse();
-    }
-#pragma warning restore CS0618
-
     [Test]
     public async Task SetArgs_Double_StoresIeeeBits() {
         await AssertSlot0(1.5, BitConverter.DoubleToInt64Bits(1.5));

@@ -26,20 +26,15 @@ public static partial class DirectVmAbiEmitter {
             if (method is not null) {
                 var methodInfo = (method as ClrMethod)?.MethodInfo;
                 if (methodInfo is not null) {
-                    int d = ctx.RingDepth;
+                    var receiver = ctx.OpenRing();
                     // Compile instance (for instance methods) or null (for static)
                     bool isStatic = method.LifetimeModifier == LifetimeModifier.Static;
                     int instanceSlot = -1;
-                    Expression? instanceExpr = null;
                     if (!isStatic) {
                         if (IsTypeNameReceiver(member.Value, ctx))
                             throw new InvalidOperationException(
                                 $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
-                        instanceExpr = CompileNode(member.Value, ctx);
-                        instanceSlot = ctx.RingDepth - 1;
-                        var foldInst = FoldResultToSlot(ref instanceSlot, d, ctx);
-                        instanceExpr = Block(instanceExpr, foldInst);
-                        ctx.RingDepth = instanceSlot + 1;
+                        instanceSlot = receiver.Add(CompileNode(member.Value, ctx));
                     }
 
                     // Compile arguments — track actual result slots
@@ -49,7 +44,8 @@ public static partial class DirectVmAbiEmitter {
                         argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
                         argSlots[i] = ctx.RingDepth - 1;
                     }
-                    ctx.RingDepth = d + (isStatic ? 0 : 1) + invoke.Arguments.Length + 1;
+                    int slot = receiver.Base + receiver.Count + invoke.Arguments.Length;
+                    ctx.RingDepth = slot + 1;
 
                     var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
@@ -64,8 +60,9 @@ public static partial class DirectVmAbiEmitter {
                                 continue;
                             }
                             var ringVal = ctx.RingVar(argSlots[i]);
-                            methodArgs[i] = ConvertRingToClr(
-                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i], ctx);
+                            methodArgs[i] = RingCodec.ToClr(
+                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i],
+                                ctx.Analysis, ctx.HeapLocal);
                         }
                     }
 
@@ -84,13 +81,9 @@ public static partial class DirectVmAbiEmitter {
                         callExpr = Call(Convert(instanceObj, declaringType), methodInfo, methodArgs);
                     }
 
-                    int slot = ctx.AllocSlot();
-                    ctx.RingDepth = slot + 1;
-
                     // Build the full expression sequence: instance → args → call → result
                     var fullBody = new List<Expression>();
-                    if (instanceExpr is not null)
-                        fullBody.Add(instanceExpr);
+                    fullBody.AddRange(receiver.Steps);
                     fullBody.AddRange(argExprs);
 
                     // A null heap receiver (unset DateOnly/DateTime) must not NRE inside AddDays.
@@ -109,11 +102,11 @@ public static partial class DirectVmAbiEmitter {
                     }
                     if (resultType.IsValueType) {
                         fullBody.Add(Assign(ctx.RingVar(slot),
-                            ConvertClrToRing(callExpr, resultType, ctx)));
+                            RingCodec.FromClr(callExpr, resultType, ctx.HeapLocal)));
                         return Block(fullBody);
                     }
                     fullBody.Add(Assign(ctx.RingVar(slot),
-                        ConvertClrToRing(Convert(callExpr, typeof(object)), resultType, ctx)));
+                        RingCodec.FromClr(Convert(callExpr, typeof(object)), resultType, ctx.HeapLocal)));
                     return Block(fullBody);
                 }
 
@@ -147,12 +140,8 @@ public static partial class DirectVmAbiEmitter {
                 throw new InvalidOperationException(
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
 
-            int astDepth = ctx.RingDepth;
-            var astInstanceExpr = CompileNode(member.Value, ctx);
-            int astInstanceSlot = ctx.RingDepth - 1;
-            var astFoldInst = FoldResultToSlot(ref astInstanceSlot, astDepth, ctx);
-            astInstanceExpr = Block(astInstanceExpr, astFoldInst);
-            ctx.RingDepth = astInstanceSlot + 1;
+            var astReceiver = ctx.OpenRing();
+            int astInstanceSlot = astReceiver.Add(CompileNode(member.Value, ctx));
 
             var astArgExprs = new List<Expression>();
             int[] astArgSlots = new int[invoke.Arguments.Length];
@@ -187,7 +176,8 @@ public static partial class DirectVmAbiEmitter {
 
             int astSlot = ctx.AllocSlot();
             ctx.RingDepth = astSlot + 1;
-            var astBody = new List<Expression>(astArgExprs.Count + 4) { astInstanceExpr };
+            var astBody = new List<Expression>(astArgExprs.Count + 4);
+            astBody.AddRange(astReceiver.Steps);
             astBody.AddRange(astArgExprs);
             var unsetReceiver = UnsetReceiverGuard(member.Value, ctx.RingVar(astInstanceSlot), ctx);
             if (unsetReceiver is not null)
@@ -203,7 +193,7 @@ public static partial class DirectVmAbiEmitter {
             }
             else if (returnClr is not null
                 && returnClr.IsValueType
-                && AbiValueTypes.IsLongRepresentable(returnClr)) {
+                && RingCodec.IsInline(returnClr)) {
                 astBody.Add(Assign(ctx.RingVar(astSlot),
                     Convert(Convert(invokeCall, returnClr), typeof(long))));
             }
@@ -237,22 +227,15 @@ public static partial class DirectVmAbiEmitter {
                 return EmitInlineInvoke(lambda, invoke, ctx);
             }
 
-            // 0. Declare lambda parameters in a child scope so EmitParameter works.
-            // Reset the parameter slot counter for this invocation level so that
-            // nested functions use their own parameter index space (INT-027).
+            // A lambda whose parameters are seeded by SetArgs: compile its body inline
+            // in a frame parked at the current SP. Explicit arguments take the
+            // EmitInlineInvoke path above, so this branch never pushes a header or
+            // argument slots of its own.
             ctx.PushScope();
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
             ctx.PushFrameParameters();
             foreach (var param in lambda.Parameters)
                 ctx.MapFrameParameter(param, ctx.DeclareParameter(param));
-
-            // 2. Compile arguments — each goes on ring
-            var argExprs = new List<Expression>();
-            int[] argSlots = new int[invoke.Arguments.Length];
-            for (int i = 0; i < invoke.Arguments.Length; i++) {
-                argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                argSlots[i] = ctx.RingDepth - 1;
-            }
             int saveDepth = ctx.RingDepth;
 
             var preBody = new List<Expression>();   // before inline body
@@ -260,74 +243,29 @@ public static partial class DirectVmAbiEmitter {
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
             var regSlots = Property(ctx.State, "Registers");
 
-            // 3. Create a per-invocation SP local (avoids nested invoke corruption
-            // of the shared ctx.SavedSp). Save current ring to Registers[invokeSp + k].
+            // Per-invocation SP local: nested invokes must not clobber a shared save slot.
             var invokeSp = Variable(typeof(int), "_invokeSp");
             preBody.Add(Assign(invokeSp, spProp));
             for (int k = 0; k < saveDepth; k++)
                 preBody.Add(Assign(ArrayAccess(regSlots, Add(invokeSp, Constant(k))), ctx.RingVar(k)));
 
-            // 5. Push arguments from ring to value stack with optional 2-word frame header.
-            // When there are explicit Invoke arguments, push a 2-word header (PreviousFP,
-            // SavedSP) before the arguments. When there are 0 arguments (the SetArgs pattern),
-            // skip the header to preserve backward compatibility with root-level SetArgs.
-            //
-            // Layout with header:
-            //   [_callSp + 0] = PreviousFP (current _fp value)
-            //   [_callSp + 1] = SavedSP
-            //   [_callSp + 2] = arg0, [_callSp + 3] = arg1, ...
-            //   _fp = callSp + 2 + max(args.Length, 1)
-            //
-            // ParameterRead uses _fp - ParamSlotOffset + paramIdx which resolves to
-            // _slots[callSp + 2 + paramIdx] — correct with the 2-word header.
             var callSp = Variable(typeof(int), "_callSp");
             preBody.Add(Assign(callSp, spProp));
+            // SetArgs seeded the arguments at slots[callSp + index]; the frame pointer
+            // is that first slot, so parameters resolve at FP + index.
+            preBody.Add(Assign(ctx.FramePosLocal, callSp));
 
-            int headerSize = invoke.Arguments.Length > 0 ? 2 : 0;
-
-            if (headerSize > 0) {
-                // Push PreviousFP (= current _fp as long)
-                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, callSp),
-                    Convert(ctx.FramePosLocal, typeof(long))));
-                // Push SavedSP (= callSp as long, the SP before the header)
-                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal, Add(callSp, Constant(1))),
-                    Convert(callSp, typeof(long))));
-                // Advance SP past the 2-word header
-                preBody.Add(Call(Property(ctx.State, "Stack"),
-                    SetStackPointer,
-                    Add(callSp, Constant(headerSize))));
-            }
-
-            // Push arguments
-            for (int i = 0; i < invoke.Arguments.Length; i++) {
-                preBody.Add(Assign(ArrayAccess(ctx.SlotsLocal,
-                    Add(callSp, Constant(headerSize + i))),
-                    ctx.RingVar(argSlots[i])));
-            }
-            // Advance SP past args
-            if (invoke.Arguments.Length > 0 || headerSize > 0) {
-                preBody.Add(Call(Property(ctx.State, "Stack"),
-                    SetStackPointer,
-                    Add(callSp, Constant(headerSize + invoke.Arguments.Length))));
-            }
-
-            // _fp = callSp + headerSize + max(args.Length, 1) so params are at slots[_fp - N + paramIdx]
-            // Even with 0 args, reserve 1 slot for implicit SetArgs parameter.
-            int paramCount = Math.Max(1, invoke.Arguments.Length);
-            Expression newFp = Add(callSp, Constant(headerSize + paramCount));
-
-            // 6. Set new _fp (saved PreviousFP is already in the 2-word header).
-            preBody.Add(Assign(ctx.FramePosLocal, newFp));
-
-            // Set ParamSlotOffset so EmitParameter reads from corrected slot
             int savedParamOffset = ctx.ParamSlotOffset;
-            ctx.ParamSlotOffset = paramCount;
+            ctx.ParamSlotOffset = 0;
+            // SetArgs seeds the parameters into slots[callSp..]; reserve those slots so a
+            // body local (written by EmitScopeStores) cannot overwrite a parameter.
+            ctx.ReserveFrameSlots(lambda.Parameters.Count);
 
             // Compile lambda body inline — leaves result on ring
             var bodyExpr = CompileNode(lambda.Body, ctx);
             int bodyResultSlot = ctx.RingDepth - 1;
             preBody.Add(bodyExpr);
-            // Save result to temp local BEFORE ring restore (use per-invocation local)
+            // Save result to a temp local BEFORE the ring restore.
             var invokeResult = Variable(typeof(long), "_invokeResult");
             preBody.Add(Assign(invokeResult, ctx.RingVar(bodyResultSlot)));
             // The result belongs in the caller's first free slot (saveDepth), not slot 0:
@@ -336,29 +274,20 @@ public static partial class DirectVmAbiEmitter {
             // live slots.
             ctx.RingDepth = saveDepth + 1;
 
-            // Restore ring from state.Registers using per-invocation invokeSp
+            // Restore ring from state.Registers using the per-invocation SP.
             for (int k = 0; k < saveDepth; k++)
                 postBody.Add(Assign(ctx.RingVar(k), ArrayAccess(regSlots, Add(invokeSp, Constant(k)))));
 
             // Write saved result to the caller's result slot (ring now fully restored)
             postBody.Add(Assign(ctx.RingVar(saveDepth), invokeResult));
-
-            // Restore _fp from the 2-word header (PreviousFP at _slots[callSp]).
-            // When headerSize == 0 (SetArgs pattern), restore from OldFramePos legacy field.
-            if (headerSize > 0) {
-                var prevFp = Convert(ArrayAccess(ctx.SlotsLocal, callSp), typeof(int));
-                postBody.Add(Assign(ctx.FramePosLocal, prevFp));
-            }
-            else {
-                postBody.Add(Assign(ctx.FramePosLocal,
-                    Property(ctx.State, nameof(VmState.OldFramePos))));
-            }
+            postBody.Add(Assign(ctx.FramePosLocal,
+                Property(ctx.State, nameof(VmState.OldFramePos))));
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopFrameParameters();
             ctx.PopScope();
-            return Block([invokeSp, callSp, invokeResult], Block(argExprs),
+            return Block([invokeSp, callSp, invokeResult],
                 Block(preBody.Concat(postBody)));
         }
 
@@ -397,7 +326,7 @@ public static partial class DirectVmAbiEmitter {
             return false;
         var elems = new Expression[invoke.Arguments.Length];
         for (var i = 0; i < invoke.Arguments.Length; i++)
-            elems[i] = ConvertRingToClr(ctx.RingVar(argSlots[i]), elementType, invoke.Arguments[i], ctx);
+            elems[i] = RingCodec.ToClr(ctx.RingVar(argSlots[i]), elementType, invoke.Arguments[i], ctx.Analysis, ctx.HeapLocal);
         packed = NewArrayInit(elementType, elems);
         return true;
     }
@@ -411,7 +340,7 @@ public static partial class DirectVmAbiEmitter {
     /// Literals become compile-time string constants; each hole is read from its ring
     /// slot and boxed as an object using its value representation — a scalar hole is
     /// converted by its CLR type, never mistaken for a heap handle the way
-    /// <c>ConvertRingToClr(..., typeof(object))</c> would (object is not a scalar kind).
+    /// <c>RingCodec.ToClr(..., typeof(object))</c> would (object is not a scalar kind).
     /// </summary>
     private static Expression EmitInterpolatedString(InterpolatedString node, AbiCtx ctx) {
         var parts = new List<Expression>(node.Literals.Count + node.Holes.Count);
@@ -455,7 +384,7 @@ public static partial class DirectVmAbiEmitter {
                 throw new InvalidOperationException(
                     $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
         }
-        return Convert(ConvertRingToClr(ringVal, clrType, hole, ctx), typeof(object));
+        return Convert(RingCodec.ToClr(ringVal, clrType, hole, ctx.Analysis, ctx.HeapLocal), typeof(object));
     }
 
     private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
@@ -502,33 +431,7 @@ public static partial class DirectVmAbiEmitter {
         if ((uint)idx >= (uint)table.Length || table[idx] is null)
             throw new InvalidOperationException("VM: invalid closure index.");
 
-        var stack = state.Stack;
-        int callSp = stack.StackPointer;
-        int header = 2;
-        int n = Math.Max(1, args.Length);
-        int need = callSp + header + n;
-        if (need > stack.RawSlots.Length)
-            throw new InvalidOperationException("VM: value stack overflow.");
-        stack.SetStackPointer(need);
-        var slots = stack.RawSlots;
-        slots[callSp] = state.FramePos;
-        slots[callSp + 1] = callSp;
-        for (int i = 0; i < args.Length; i++)
-            slots[callSp + header + i] = args[i];
-
-        int savedFp = state.FramePos;
-        int savedClosure = state.ClosureHandle;
-        state.FramePos = callSp + header;
-        state.ClosureHandle = (int)handle;
-        try {
-            table[idx](state);
-            return slots[callSp + header];
-        }
-        finally {
-            state.FramePos = savedFp;
-            state.ClosureHandle = savedClosure;
-            stack.SetStackPointer(callSp);
-        }
+        return VmCall.Invoke(state, table[idx], args, (int)handle);
     }
 
     /// <summary>Inline a small lambda with no captures and a single-expression body.
@@ -629,18 +532,9 @@ public static partial class DirectVmAbiEmitter {
             fnCtx.MapFrameParameter(param, fnCtx.DeclareParameter(param));
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
-        // Enter the activation in the compile-time simulator.
-        // Local count is 0 initially; DeclareVariable calls inside the body
-        // will assign scope-relative slots but the simulator currently tracks
-        // frame size based on the counts passed here.
-        fnCtx.EnterActivation(parameters.Count, 0);
-
         // Compile body
         var bodyCompiled = CompileNode(body, fnCtx);
         bodyExprs.Add(bodyCompiled);
-
-        // Leave the activation in the compile-time simulator.
-        fnCtx.LeaveActivation();
 
         // Flush result: return value at _slots[_fp], SP = _fp + 1.
         // An IsAsync method returns a completed Task / Task<T> instead of the body's value.
@@ -716,7 +610,7 @@ public static partial class DirectVmAbiEmitter {
     /// </summary>
     private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, AbiCtx ctx, Node? source) {
         if (asyncReturn == typeof(Task))
-            return ConvertClrToRing(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx);
+            return RingCodec.FromClr(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
         var resultType = asyncReturn.GetGenericArguments()[0];
         if (bodyValue is null)
             throw new InvalidOperationException(
@@ -725,9 +619,9 @@ public static partial class DirectVmAbiEmitter {
         if (!IsTaskLike(resultType) && IsTaskLike(yieldedClr))
             throw new InvalidOperationException(
                 $"VM compile rejected: async method returning '{asyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
-        var yielded = ConvertRingToClr(bodyValue, resultType, source, ctx);
+        var yielded = RingCodec.ToClr(bodyValue, resultType, source, ctx.Analysis, ctx.HeapLocal);
         var task = Call(TaskFromResultInfo.MakeGenericMethod(resultType), yielded);
-        return ConvertClrToRing(task, asyncReturn, ctx);
+        return RingCodec.FromClr(task, asyncReturn, ctx.HeapLocal);
     }
 
     // Compiled AST constructors and methods, per definition node and compilation
@@ -752,32 +646,7 @@ public static partial class DirectVmAbiEmitter {
     private static long InvokeAstFunction(VmState state, Action<VmState> function, long[] args) {
         if (function is null)
             throw new InvalidOperationException("VM: AST member is not compiled.");
-        var stack = state.Stack;
-        int callSp = stack.StackPointer;
-        int header = 2;
-        int n = Math.Max(1, args.Length);
-        int need = callSp + header + n;
-        if (need > stack.RawSlots.Length)
-            throw new InvalidOperationException("VM: value stack overflow.");
-        stack.SetStackPointer(need);
-        var slots = stack.RawSlots;
-        slots[callSp] = state.FramePos;
-        slots[callSp + 1] = callSp;
-        for (int i = 0; i < args.Length; i++)
-            slots[callSp + header + i] = args[i];
-
-        int savedFp = state.FramePos;
-        int savedClosure = state.ClosureHandle;
-        state.FramePos = callSp + header;
-        try {
-            function(state);
-            return slots[callSp + header];
-        }
-        finally {
-            state.FramePos = savedFp;
-            state.ClosureHandle = savedClosure;
-            stack.SetStackPointer(callSp);
-        }
+        return VmCall.Invoke(state, function, args);
     }
 
     private static bool HasExecutableBody(Node? body) =>
@@ -798,12 +667,9 @@ public static partial class DirectVmAbiEmitter {
                 $"VM compile rejected: {callee} has {parameters.Count} parameter(s) but the call has {arguments.Count} argument(s).");
 
         var values = new List<Expression>(parameters.Count);
+        var ring = ctx.OpenRing();
         for (int i = 0; i < arguments.Count; i++) {
-            int before = ctx.RingDepth;
-            seq.Add(CompileNode(arguments[i], ctx));
-            int got = ctx.RingDepth - 1;
-            seq.Add(FoldResultToSlot(ref got, before, ctx));
-            ctx.RingDepth = got + 1;
+            int got = ring.Add(CompileNode(arguments[i], ctx));
             values.Add(ArgumentIsStackScalar(arguments[i], ctx) && !ParameterIsValueType(parameters[i])
                 ? Convert(
                     Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
@@ -812,6 +678,7 @@ public static partial class DirectVmAbiEmitter {
         }
         for (int i = arguments.Count; i < parameters.Count; i++)
             values.Add(ParameterDefaultLong(parameters[i], ctx));
+        seq.AddRange(ring.Steps);
         return values;
     }
 
@@ -819,17 +686,15 @@ public static partial class DirectVmAbiEmitter {
         Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, AbiCtx ctx) {
         var definition = method.DefinitionNode;
         bool isStatic = method.IsStatic;
-        int depth = ctx.RingDepth;
         var seq = new List<Expression>();
         Expression? receiver = null;
         if (!isStatic) {
             if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
-            seq.Add(CompileNode(member.Value, ctx));
-            int instanceSlot = ctx.RingDepth - 1;
-            seq.Add(FoldResultToSlot(ref instanceSlot, depth, ctx));
-            ctx.RingDepth = instanceSlot + 1;
+            var receiverRing = ctx.OpenRing();
+            int instanceSlot = receiverRing.Add(CompileNode(member.Value, ctx));
+            seq.AddRange(receiverRing.Steps);
             receiver = ctx.RingVar(instanceSlot);
         }
 
@@ -1040,7 +905,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression ParameterDefaultLong(Parameter parameter, AbiCtx ctx) {
         if (parameter.DefaultValue is not Constant constant)
             return Constant(0L);
-        if (TryValueToLong(constant.Value, out long scalar))
+        if (RingCodec.TryInlineConstant(constant.Value, out long scalar))
             return Constant(scalar);
         return Convert(
             Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(constant.Value), typeof(object))),
@@ -1090,9 +955,6 @@ public static partial class DirectVmAbiEmitter {
                 Block(Assign(ctx.StatePcFlush, Constant(step)), Block(stmts))),
             body);
     }
-
-    /// <summary>Convert a CLR constant to the long-based ABI representation.
-    /// Only inline-able types; non-inline types must use <see cref="TryValueToLong"/>.</summary>
 
     // ── Static property/method refs ─────────────────────────────────
 
@@ -1217,57 +1079,6 @@ public static partial class DirectVmAbiEmitter {
             return Default(parameter.ParameterType);
         return Constant(value, parameter.ParameterType);
     }
-
-    private static long CastAbi(Heap heap, long raw, Type target) {
-        if (raw == 0L) {
-            if (target.IsValueType)
-                throw new InvalidCastException($"Cannot convert null to '{target}'.");
-            return 0L;
-        }
-        var value = heap.UnsafeGet((int)raw);
-        if (value is null) {
-            if (target.IsValueType)
-                throw new InvalidCastException($"Cannot convert null to '{target}'.");
-            return 0L;
-        }
-        if (target.IsInstanceOfType(value))
-            return raw;
-        // Entity types publish IDictionary<string, object>. The instance is
-        // IDictionary<string, object?> (invariance blocks the CLR cast).
-        if (target == typeof(IDictionary<string, object>) && value is IDictionary<string, object?>)
-            return raw;
-        throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
-    }
-
-    private static long UnboxNullableToLong(Heap heap, long handle) {
-        if (handle == 0L) return 0L;
-        var obj = heap.UnsafeGet((int)handle);
-        if (obj is null) return 0L;
-        return System.Convert.ToInt64(obj);
-    }
-
-    private static long TypeAsAbi(Heap heap, long raw, Type target) {
-        if (raw == 0L) return 0L;
-        var obj = heap.UnsafeGet((int)raw);
-        return obj is not null && target.IsInstanceOfType(obj) ? raw : 0L;
-    }
-
-    private static long BoxToAbi(Heap heap, object? value) => value switch {
-        null => 0L,
-        bool b => b ? 1L : 0L,
-        byte b => b,
-        sbyte sb => sb,
-        short s => s,
-        ushort us => us,
-        int i => i,
-        uint ui => ui,
-        long l => l,
-        ulong ul => unchecked((long)ul),
-        char c => c,
-        float f => BitConverter.DoubleToInt64Bits(f),
-        double d => BitConverter.DoubleToInt64Bits(d),
-        _ => heap.Allocate(value)
-    };
 
     private static object? InvokeAndUnwrap(MethodInfo method, object instance, object?[] args) {
         try {

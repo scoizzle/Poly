@@ -49,84 +49,43 @@ The heap uses a free-list to recycle handles when objects are set to null.
 
 ## Call Frame Layout
 
-Each function activation occupies a contiguous region on the value stack:
+The layout is defined once in `VmCall` (`Poly/Interpretation/Vm/VmCall.cs`).
+A frame starts at `callSp = state.Stack.StackPointer`:
 
 ```
-                          Low addresses (earlier pushes)
-  ┌──────────────────────────────────────────────┐
-  │           Caller's frame                     │
-  │  [caller locals ... caller temporaries]      │
-  ├──────────────────────────────────────────────┤
-  │           Argument slots                     │
-  │  arg0 (highest address, first pushed)        │
-  │  arg1                                       │
-  │  ...                                        │
-  │  argN-1 (lowest address, last pushed)        │
-  ├──────────────────────────────────────────────┤ ← savedSP
-  │           Frame header (2 words)             │
-  │  previousFP (caller's frame pointer)         │
-  │  savedSP (SP before header push)             │
-  ├──────────────────────────────────────────────┤ ← savedSP + 2
-  │           Local slots                        │
-  │  local0                                     │
-  │  local1                                     │
-  │  ...                                        │
-  │  localM-1                                   │
-  └──────────────────────────────────────────────┘ ← SP
-                          High addresses (later pushes)
+Slot[callSp + 0]:  previous FP (caller's FramePos)
+Slot[callSp + 1]:  saved SP (callSp)
+Slot[callSp + 2]:  arg0            ← FramePos (FP)
+Slot[callSp + 3]:  arg1
+...
+Slot[FP + n]:      result          (written by the callee)
 ```
 
-### Frame Header Fields
+`VmCall.FramePointer(callSp)` is `callSp + 2`. `FramePos` on `VmState` is that
+first argument slot and persists across suspend/resume. A parameterless callee
+still reserves one argument slot (`VmCall.ArgumentSlots`) so its result has a
+slot to write to.
 
-| Field | Size | Description |
-|-------|------|-------------|
-| `previousFP` | 1 word | Caller's frame pointer (-1 for root frame) |
-| `savedSP` | 1 word | Stack pointer value just before this header was pushed |
+### Invocation
 
-Argument and local counts are **not** stored on the stack — they are known at
-compile time and attached to the `CallStackFrame` view.
+`VmCall.Invoke(state, function, args, closureHandle)`:
 
-### Frame Access
+1. reads `callSp` from `state.Stack.StackPointer`
+2. checks the stack has room for `VmCall.Extent(args.Length)` slots
+3. writes the header, then the argument slots
+4. sets `FramePos = FramePointer(callSp)` and the closure handle
+5. runs the callee delegate
+6. returns `slots[FramePos]`
+7. in `finally`, restores `FramePos`, `ClosureHandle`, and `SP = callSp`
 
-The `CallStack` class provides typed accessors:
+### Callee
 
-| Method | Description |
-|--------|-------------|
-| `GetLocal(frame, i)` | Reference to local variable `i` |
-| `GetArgument(frame, i)` | Reference to argument `i` |
-| `GetLocals(frame)` | Span over all locals |
-| `GetArguments(frame)` | Span over all arguments |
-| `AllocateFrame(pfp, ssp, argc, localc)` | Push new frame |
-| `DeallocateFrame(frame)` | Pop frame, restore SP |
-
-### Frame Base
-- `FrameBase = savedSP` (where the frame header starts)
-- `FrameBase` sentinel `-1` = "no active frame" (top-level execution)
-- `FramePos` on `VmState` persists the frame position across suspend/resume
-
-## Calling Convention
-
-### Caller Responsibilities
-1. Evaluate arguments left-to-right, pushing each onto the stack
-2. Advance SP past the argument slots
-3. Set `state.ClosureHandle` for closure calls
-4. Invoke the callee delegate (for external methods or compiled function bodies)
+1. a parameter resolves at `FramePos + index`; an instance frame's receiver
+   occupies `FramePos` and user parameters follow it
+2. `return` writes `slots[FramePos]` and sets `SP = FramePos + 1`
+3. a void callee writes no result; the caller does not read the slot
 
 Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed long)`, `[1..] = `long[1]` cells. Function-table bodies read and write `cell[0]`. The enclosing frame stores a heap handle to the same cell in the captured variable's slot. Capture lists come from analysis (`LambdaCaptureMetadata`). `Invoke(Variable)` is typed as the lambda body's value kind so result unwrap uses `Bool` / `StackScalar` rather than treating ABI `1` as heap handle 1. `VariableLayout.IsUpvalueCell` tells `VmDebugger.GetLocals` to present `cell[0]`. Invoke fails closed if an upvalue slot is not a `long[1]`.
-
-### Callee Responsibilities
-1. Allocate frame header (push previousFP + savedSP)
-2. Reserve local slots
-3. Execute function body
-4. Write result to `FrameBase[0]` (first local/arg slot)
-5. Set `SP = FrameBase + 1` (leaving result on stack)
-6. Jump to exit or return to caller
-
-### Return Convention
-- Result is in `Slot[FrameBase]` with `SP = FrameBase + 1`
-- For void functions, the caller does not read the result
-- Cross-function returns (restoring caller PC/FP from metadata) are planned
-  for when nested calls across compiled functions are required
 
 ## Ring Register Model
 
@@ -188,8 +147,9 @@ the full state, and the locals span is built at compile time.
 
 ## Value Marshalling
 
-`VmValueMarshaller` handles conversion between VM internal representation and
-CLR types:
+`RingCodec` handles conversion between VM internal representation and
+CLR types (`FromClr`/`ToClr` at compile time, `ToRing`/`Cast`/`TypeAs`/
+`UnboxNullable` at runtime):
 
 | CLR Type | VM Representation | Direction |
 |----------|-------------------|-----------|

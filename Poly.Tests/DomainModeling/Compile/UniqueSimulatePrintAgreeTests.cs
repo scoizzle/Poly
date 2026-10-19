@@ -95,6 +95,32 @@ public class UniqueSimulatePrintAgreeTests {
         await Assert.That(simulate.ErrorMessage).Contains("Unique constraint violated");
     }
 
+    private const string AssignDsl = """
+        domain Lab
+        Lot: entity {
+          Label: Text unique
+          Rename: action (label: Text) {
+            assign Label to label
+          }
+        }
+        """;
+
+    [Test]
+    public async Task DuplicateAssign_FailsInPrint() {
+        var (domain, analysis, session) = Evolve(AssignDsl);
+        var module = session.Lower(domain, analysis);
+        var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(
+            new CSharpGenerator().Generate(module), "UniqueAssignParity");
+        var port = new TestPort();
+        WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Lot", ("db", port), ("label", "A"));
+        var second = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Lot", ("db", port), ("label", "B"));
+
+        var renamed = Invoke(second, "Rename", ("label", "A"), ("db", port));
+
+        await Assert.That(Success(renamed)).IsFalse();
+        await Assert.That(Message(renamed)).Contains("Unique constraint violated");
+    }
+
     private static (Domain Domain, Poly.Analysis.AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var builder = SessionBuilder.CreateEmpty();
         foreach (var id in ExtensionCatalog.ProductAuthoring)

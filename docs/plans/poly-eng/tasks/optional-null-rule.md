@@ -30,11 +30,10 @@ nullable field that coalesces) in the DTO, otherwise the CLR default overrides `
 ## Files
 
 - `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` — guard collection recurses
-  through arithmetic/temporal; path-prefix target optionality; quantifier-body context.
+  through arithmetic/temporal; value-context unbox; path-prefix/binder entity scoping;
+  quantifier-body context.
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` — assign guards; optional predicate flows
   into every lowering context.
-- `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` — guard collection, value-context
-  unbox, path-prefix/binder entity scoping.
 - `Poly/DomainModeling/Lowering/LoweringContext.cs` — target-entity and binder-entity wiring.
 - `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` — create guard shape (shared).
 - `Poly/DomainModeling/Libraries/Temporal/TemporalLowering.cs` — path-aware date operand types.

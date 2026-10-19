@@ -1,6 +1,6 @@
 # Constraint contribution seam: per-constraint codegen, dependency transport, lambda bridge
 
-**Status:** round 4 — agreed for execution. Round 1 (verifier): needs-rework, 6 `bug`/3 `suggestion`/1 `nit`; all fact-checked and addressed. Round 2: sound-with-findings, all ten `addressed`, 2 new `bug`/1 `suggestion`/1 `nit` addressed in round 3. Round 3: all four `addressed`; 1 `bug`/1 `suggestion` remained (the record/`ExistsWith`/`SaveChanges` contract). Round 4 closes the contract as **D11-B** and pins the record call in slice 1. Open: **D8** (blocker for slices 2–5), **D11-B confirmation** (before slice 3a), **D1** wording. Slice 1 (engine + test double) is not blocked and can start now.
+**Status:** round 5 — agreed for execution; #232 and #233 closed without merging (branches retained: `spike/contributed-methods` is slice 1's base, `docs/action-dependency-passing` is evidence). Round 1 (verifier): needs-rework, 6 `bug`/3 `suggestion`/1 `nit`; all fact-checked and addressed. Round 2: sound-with-findings, all ten `addressed`, 2 new `bug`/1 `suggestion`/1 `nit` addressed in round 3. Round 3: all four `addressed`; 1 `bug`/1 `suggestion` remained (the record/`ExistsWith`/`SaveChanges` contract). Round 4 closes the contract as **D11-B** and pins the record call in slice 1. Round 5 dispositions #232/#233 as closed. Open: **D8** (blocker for slices 2–5), **D11-B confirmation** (before slice 3a). Slice 1 (engine + test double) is not blocked and can start now.
 
 ## Goal
 
@@ -8,8 +8,8 @@ A constraint owns its code generation. It compiles to a **complete AST contribut
 
 Three coordinated pieces:
 
-1. **Contribution contract + placement engine** (from `spike/contributed-methods`, PR #233).
-2. **Storage awareness** (from `docs/action-dependency-passing`, PR #232; units from PR #192 — *not yet built*, see D3).
+1. **Contribution contract + placement engine** (branch `spike/contributed-methods` — closed PR #233; the branch is slice 1's base).
+2. **Storage awareness** (branch `docs/action-dependency-passing` — closed PR #232; evidence only. Units from PR #192 — *not yet built*, see D3).
 3. **Lambda bridge** — module `Lambda` nodes become real delegates or `Expression<TDelegate>` at CLR call boundaries.
 
 ## Constraints
@@ -27,7 +27,7 @@ Three coordinated pieces:
 - **The spike engine throws when any parameter carries a default** (`ContributedMethods.cs:149-151` and `:229-231`, "Cannot append contributed parameter … a parameter already has a default"). Product `Create` signatures have trailing optional parameters — `hotel/Guest.cs.golden:149`: `Create(string email, string name, string phone, IEnumerable<EventHold>? events = null, … long stayCount = 0L)`. **Appending `db` would put a required parameter after optional ones — illegal C#.** The spike's `Widget` domain (only `Code`) hides this.
 - **Assign-time unique exists and is not a method-entry guard**: `EffectLoweringPass.WrapConstrainedAssign` (`:291`) evaluates the RHS once, runs intrinsic checks (required → range → length → pattern → enum member, per the comment at `:289`), then the `EnsureUnique` invoke (`:305-311`), then assigns. `StoreBindUniqueTests` pins the "EnsureUnique then assign" shape.
 - **The store unique gate is the only simulate enforcement today**: `DomainInstanceStore.cs:299`/`:325` (`TryAdd`/`EnsureUnique` path, message "Unique constraint violated: '{propertyName}' value is already used on another '{entity.Name}'." at `:335`), and the catch at `DomainEntityInstance.cs:937` turns `Unique constraint violated` into action `Failure` because the printed factory does not check unique. `DomainEntityInstance.cs:366`/`:460` produce the same text on other paths.
-- **The #232 probe's dependency is not read-only**: `docs/probes/action-deps/Program.cs:174-183` — `ExistsWithCode(db, code)` is local-or-database, and `Create` calls `db.Widgets.Add(created)` **before returning**. The host Adds only after the action returns (`MinimalApiGenerator.cs:457-462` on master).
+- **The #232 probe's dependency is not read-only** (branch `docs/action-dependency-passing`, closed PR #232): `docs/probes/action-deps/Program.cs:174-183` has `ExistsWithCode(db, code)` local-or-database, and `Create` calls `db.Widgets.Add(created)` **before returning**. The host Adds only after the action returns (`MinimalApiGenerator.cs:457-462` on master).
 - **The spike calls `GetOrLower` from `src/`** (`MinimalApiGenerator.cs:785` in `AppendContributedArguments`) — C9 (`tasks/C9.md:6,26,29`) made the catalog the bind surface and its done-when is `git grep GetOrLower -- src` → empty. The same generator also builds POST `Entity.Create` (`:444` comment region) and the `SeedAsync` local function (`:320`, `:1071-1113`) — both call `Create` and stop compiling once `Create` gains `db`.
 - `UniqueConstraint` also appears in the parser (`PolyDslParser.cs:1423`), printer (`DomainDslPrinter.cs:823`), `StorageAnalyzer`'s `IsUnique` projection, `HttpFileGenerator` example JSON (`:195`), and MCP `DomainTools` — authoring and projection, not enforcement.
 - `EnsureUnique` appears in **13 entity goldens across 7 domains**: hotel `Room`/`Guest`, mcp-library `Book`, crm `Lead`/`Contact`/`Product`, university `Instructor`/`Student`/`Course`, orders `Customer`, warehouse `Warehouse`/`Truck`, clinic `Doctor`. Host `Program.cs.golden` also changes when create/seed/action calls gain the `db` suffix.
@@ -44,7 +44,7 @@ Three coordinated pieces:
 
 ## Decisions
 
-- **D1 (recommended, confirm on execution).** New ADR "constraints contribute AST at semantic anchors"; #232 stays the transport policy record; both cross-linked. Fix #232's absolute "No generator change" line — the route suffix is part of the mechanism.
+- **D1 (amended, round 5).** The new ADR "constraints contribute AST at semantic anchors" lands with slice 1's branch. The transport decisions are recorded in this plan; the closed #232 prototype is evidence, not a merge candidate. This plan supersedes #232's absolute "No generator change" non-goal — the route suffix is part of the mechanism.
 - **D2 (amended, round 3).** Two anchor kinds, because assign-time unique is not a method-entry guard:
   - *Method anchors* (`OnCreate`, `OnCreateIn`, `OnStageEntry`, `Named`) resolve to **all** matching lowered methods. `OnCreate` has **two slots**, matching the probe's order (check → construct → record → return, `Program.cs:178-184`): the guard before the first `New`, and a **post-construct record call before return**. The record call records the pending key on `db` (the spike's `Add(code)` shape, or a context method both the generated context and the simulate binding implement). It **must not pass the constructed instance to `DbSet.Add`** — simulate's bound constructor produces a `DomainEntityInstance`, not an EF entity, so a real `DbSet.Add` throws on the VM side slice 5 runs.
   - *`OnAssign`* splices into the existing fail-before-mutate wrap (`WrapConstrainedAssign`): after the RHS local, after the intrinsic checks, before the assignment. It does not run at method entry, and it checks the assigned value, not a constructor argument.
@@ -71,7 +71,7 @@ Three coordinated pieces:
 
 ## Slices (each its own branch/PR, smallest testable loop first)
 
-1. **Contract + engine** (on `spike/contributed-methods`, PR #233): `CompiledConstraint` → `ConstraintContribution` with the D2 anchor split; anchor resolution to all matching lowered methods; deterministic order (intrinsic before storage, stable tiebreak by library id + name); dependency dedupe with type agreement; supporting-method dedupe; provenance `(library, constraint, entity)`; body-map retarget kept. **Dependency parameters insert *before the first optional parameter*, not appended** — replacing the spike's throw-on-default (`ContributedMethods.cs:149-151`, `:229-231`) — and every positional caller is updated in the same change. Fail-closed cases: no anchor, conflicting dependency type, duplicate supporting method, unsettlable threading. *Done when:* the test-double compiler places a guard on every create path **including a `Create` with trailing defaults (the `Guest` shape, `Guest.cs.golden:149`)**, the Guest-shaped test also asserts the **post-construct key record call after `New` and before the success return**, and each fail-closed case has a test; suite green.
+1. **Contract + engine** (on a slice branch based on `spike/contributed-methods`, closed PR #233): `CompiledConstraint` → `ConstraintContribution` with the D2 anchor split; anchor resolution to all matching lowered methods; deterministic order (intrinsic before storage, stable tiebreak by library id + name); dependency dedupe with type agreement; supporting-method dedupe; provenance `(library, constraint, entity)`; body-map retarget kept. **Dependency parameters insert *before the first optional parameter*, not appended** — replacing the spike's throw-on-default (`ContributedMethods.cs:149-151`, `:229-231`) — and every positional caller is updated in the same change. Fail-closed cases: no anchor, conflicting dependency type, duplicate supporting method, unsettlable threading. *Done when:* the test-double compiler places a guard on every create path **including a `Create` with trailing defaults (the `Guest` shape, `Guest.cs.golden:149`)**, the Guest-shaped test also asserts the **post-construct key record call after `New` and before the success return**, and each fail-closed case has a test; suite green.
 2. **Storage facts in the request (blocked on D8):** the request carries the entity's single `StorageModel` mapping (D3 — no `OnlyUnit`, no units); `ImpliedParameter` gains a dependency identity (library id + name + type); **contributed parameters are read from the catalog trees `Lower` already registered, never `GetOrLower` from `src/`** (C9), and POST `Entity.Create` and `SeedAsync` pass the same suffix as action routes. Fail-closed: entity with no storage mapping; the no-compiler case is proven on a **test double** only (the product `unique` diagnostic turns on in 3a with `UniqueCompiler`, per D4). *Done when:* single-`db` threading passes end to end, `git grep GetOrLower -- src` is empty, and the fail-closed cases throw named errors.
 3. **3a — real `unique` goes live:** persistence library registers `UniqueCompiler` (guard at D2 anchors + thin module wrapper + `db` dependency per D11) **and turns the D4 no-compiler diagnostic on in the same change**; storage pack emits `ExistsWith{Property}` and pending-key record partials beside `{Domain}DbContext`; **both host `Add`s stay** (they persist; per D11 contract B) and are not edited here; parser/printer/storage-projection/authoring **stay** (they are not enforcement); goldens updated deliberately — the **full set: the 13 entity goldens across 7 domains plus host `Program.cs.golden`**; `docs/CORE.md` in the same change; board row updated per D5. The store gate (D6) **stays live** in 3a.
    **3b — delete the old path (gated on slice 5 parity):** delete `DomainInstanceStore` `TryAdd`/`EnsureUnique`, the `SetProperty` path, the host job, and retarget the `DomainEntityInstance.cs:937` catch. *Done when (3a+3b together):* no **lowering or store enforcement** arm remains for `unique` (the done-when is deliberately *not* "no `UniqueConstraint` switch arm anywhere" — parser, printer, storage projection, and authoring remain); printed C# and VM simulate produce the identical duplicate failure; **a duplicate assign does not mutate** (D2 `OnAssign`).
@@ -86,9 +86,9 @@ Three coordinated pieces:
 
 ## Sequencing
 
-1. #232 ADR fix + new ADR (docs; merge immediately).
+1. Merge this plan (#234) as the program record; #232 and #233 are closed without merging.
 2. **D8 decided** (Scot) — blocks slices 2–5.
-3. #233 → slice 1, undraft after admission (D5).
+3. Slice 1 off the retained `spike/contributed-methods` branch; admitted per D5.
 4. Slices 2 → 3a → 4 → 5 → 3b in order: nothing ships with two *silent* unique paths, and the store gate deletes only after parity proves the module guard enforces on both sides.
 5. #192 proceeds independently; slice 6 consumes it; slice 7 optional.
 
@@ -114,7 +114,7 @@ Three coordinated pieces:
 
 - **D8 (blocker for slices 2–5)** — the `db` parameter's static type: (a) in-process context base type contributed by the pack, (b) simulate Roslyn-compiles the host, (c) name-resolved + VM-side type binding.
 - **D11 confirmation** — contract B adopted (pending-key record OR database; host `Add`s stay). Contract A (generated `RecordCreated` → `DbSet.Add`; host `Add`s deleted) is the recorded alternative. Confirm before slice 3a; slice 1 is unaffected.
-- **D1 sign-off** — ADR placement and wording; #194 close-or-absorb under the narrowed row.
+- **D1** — the new ADR lands with slice 1; #194 close-or-absorb under the narrowed row.
 - Switch to a build agent to execute slice 1 (the engine + test double; not blocked by D8 or D11).
 
 ## Review log

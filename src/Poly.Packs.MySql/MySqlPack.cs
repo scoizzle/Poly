@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Libraries.Storage;
+
 namespace Poly.Packs.MySql;
 
 /// <summary>
@@ -19,6 +21,7 @@ public sealed class MySqlLibrary : IDomainLibrary {
         MySqlDefaults.ApplyTypeMaps(builder.TypeMaps);
         builder.AddAnalyzer(new StoragePass(builder.TypeMaps, builder.StorageConventions));
         builder.AddAnalyzer(new PersistenceSurfacePass());
+        builder.AddConstraintCompiler(new UniqueConstraintCompiler(Id));
         if (_contributor is not null)
             builder.AddArtifactContributor(_contributor);
     }

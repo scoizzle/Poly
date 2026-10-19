@@ -204,7 +204,7 @@ public class ContributedMethodTests {
 
     [Test]
     public async Task EntityWithoutStorageMapping_ThrowsNamedError() {
-        var (domain, analysis, session) = Compile(Poly, new ProbeLibrary(), withPersistence: false);
+        var (domain, analysis, session) = Compile(Poly, new StorageRequiringLibrary(), withPersistence: false);
         await Assert.That(() => session.Lower(domain, analysis))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("has no storage mapping");
@@ -251,6 +251,20 @@ public class ContributedMethodTests {
     }
 
     [Test]
+    public async Task PersistenceLibrary_RegistersTheProductUniqueCompiler() {
+        var (domain, analysis, session) = Compile(Poly, new NoOpLibrary(), withPersistence: true);
+        var module = session.Lower(domain, analysis);
+
+        var create = Method(module, "Widget", "Create");
+        await Assert.That(Names(create)).Contains("db");
+        await Assert.That(Calls(create, "ExistsWithCode")).IsTrue();
+
+        var exists = Method(module, "Widget", "ExistsWithCode");
+        await Assert.That(Invokes(exists.Body!).Any(i =>
+            i.Delegate is Member { MemberName: "Exists" })).IsTrue();
+    }
+
+    [Test]
     public async Task CreateWithOptionalParameters_InsertsDependencyBeforeTheFirstDefault() {
         var (domain, analysis, session) = Compile(PolyWithDefaults, new ProbeLibrary());
         var module = session.Lower(domain, analysis);
@@ -275,7 +289,7 @@ public class ContributedMethodTests {
 
     [Test]
     public async Task NamedAnchor_ResolvesTheMethod() {
-        var (domain, analysis, session) = Compile(Poly, new NamedCreateLibrary());
+        var (domain, analysis, session) = Compile(Poly, new NamedCreateLibrary(), withPersistence: false);
         var module = session.Lower(domain, analysis);
         var create = Method(module, "Widget", "Create");
         await Assert.That(Names(create)).IsEqualTo("code,db");
@@ -283,13 +297,13 @@ public class ContributedMethodTests {
 
     [Test]
     public async Task AnchorWithNoMatchingMethod_Throws() {
-        var (domain, analysis, session) = Compile(Poly, new BadAnchorLibrary());
+        var (domain, analysis, session) = Compile(Poly, new BadAnchorLibrary(), withPersistence: false);
         await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task TwoTypesForOneDependency_Throws() {
-        var (domain, analysis, session) = Compile(PolyTwoUnique, new SplitDbLibrary());
+        var (domain, analysis, session) = Compile(PolyTwoUnique, new SplitDbLibrary(), withPersistence: false);
         await Assert.That(() => session.Lower(domain, analysis))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("Widget.Sku (UniqueConstraint)");
@@ -297,7 +311,7 @@ public class ContributedMethodTests {
 
     [Test]
     public async Task DuplicateSupportingMethod_Throws() {
-        var (domain, analysis, session) = Compile(Poly, new DuplicateSupportLibrary());
+        var (domain, analysis, session) = Compile(Poly, new DuplicateSupportLibrary(), withPersistence: false);
         await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
     }
 
@@ -398,9 +412,8 @@ public class ContributedMethodTests {
         public string Id => "probe-store";
 
         public void Register(SessionBuilder builder) {
-            builder.AddConstraintCompiler(new UniqueCompiler(Id));
-            // Present so a second constraint kind can imply its own parameter.
-            // This domain has no range, so Compile is not called.
+            // Unique is owned by the persistence library; this probe supplies
+            // only a second constraint kind so the contribution list is exercised.
             builder.AddConstraintCompiler(new RangeCompiler(Id));
         }
     }
@@ -411,10 +424,12 @@ public class ContributedMethodTests {
     /// </summary>
     private sealed class UniqueCompiler : IConstraintCompiler {
         private readonly ConstraintAnchor _anchor;
+        private readonly bool _requireStorage;
 
-        public UniqueCompiler(string libraryId, ConstraintAnchor? anchor = null) {
+        public UniqueCompiler(string libraryId, ConstraintAnchor? anchor = null, bool requireStorage = true) {
             LibraryId = libraryId;
             _anchor = anchor ?? new ConstraintAnchor.Create();
+            _requireStorage = requireStorage;
         }
 
         public string LibraryId { get; }
@@ -422,13 +437,13 @@ public class ContributedMethodTests {
         public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
-            var storage = request.RequireStorage();
+            var storage = _requireStorage ? request.RequireStorage() : null;
             var dbType = new ClrTypeReference(typeof(IStoragePort));
             var text = new ClrTypeReference(typeof(string));
             var existsDb = new Parameter("db", dbType);
             var existsCode = new Parameter("code", text);
             var methodName = "ExistsWith" + request.Property.Name;
-            var entityName = storage.Name;
+            var entityName = storage?.Name ?? request.Entity.Name;
             var propertyName = request.Property.Name;
             var exists = new MethodDefinitionNode(
                 methodName,
@@ -504,7 +519,20 @@ public class ContributedMethodTests {
         public string Id => "probe-named-create";
 
         public void Register(SessionBuilder builder) =>
-            builder.AddConstraintCompiler(new UniqueCompiler(Id, new ConstraintAnchor.Named("Create")));
+            builder.AddConstraintCompiler(new UniqueCompiler(Id, new ConstraintAnchor.Named("Create"), requireStorage: false));
+    }
+
+    private sealed class StorageRequiringLibrary : IDomainLibrary {
+        public string Id => "probe-storage-required";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddConstraintCompiler(new UniqueCompiler(Id));
+    }
+
+    private sealed class NoOpLibrary : IDomainLibrary {
+        public string Id => "probe-none";
+
+        public void Register(SessionBuilder builder) { }
     }
 
     private sealed class BadAnchorLibrary : IDomainLibrary {

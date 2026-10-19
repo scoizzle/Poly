@@ -22,6 +22,7 @@ public sealed class PersistenceEmitLibrary : IDomainLibrary {
         ArgumentNullException.ThrowIfNull(builder);
         builder.AddAnalyzer(new StoragePass(builder.TypeMaps, builder.StorageConventions));
         builder.AddAnalyzer(new PersistenceSurfacePass());
+        builder.AddConstraintCompiler(new UniqueConstraintCompiler(Id));
         if (_contributor is not null)
             builder.AddArtifactContributor(_contributor);
     }

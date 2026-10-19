@@ -175,7 +175,6 @@ public static partial class DirectVmAbiEmitter {
         return new VmProgram(del, registerScratchSize, RootValueKind: rootMeta?.Kind,
             RootClrType: rootMeta?.ClrType,
             StepNodes: ctx.StepNodes, DebugInfo: debugInfo,
-            RegisterCount: ctx.RegisterCount,
             RootParameterClrTypes: ctx.RootParameterClrTypes);
     }
 

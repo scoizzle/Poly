@@ -18,7 +18,6 @@ delegates for fast execution via `DirectVmAbiEmitter`.
 | `Heap.cs` | Object heap for reference-type values with free-list recycling |
 | `CompilationMode.cs` | Debug/tracing vs. optimized mode enum |
 | `Closure.cs` | Closure representation (function index + captured values) |
-| `FunctionEntry.cs` | Function metadata (start PC, arg slots, local count) |
 | `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
 | `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
 | `RingCodec.cs` | The ABI codec: value classification and both-direction conversion (compile-time and runtime) |

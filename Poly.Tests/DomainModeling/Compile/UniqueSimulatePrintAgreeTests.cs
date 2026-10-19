@@ -28,6 +28,10 @@ public class UniqueSimulatePrintAgreeTests {
           Issue: action (code: Text) {
             create in widgets { Code: code }
           }
+          Double: action (code: Text) {
+            create in widgets { Code: code }
+            create in widgets { Code: code }
+          }
         }
         """;
 
@@ -64,6 +68,31 @@ public class UniqueSimulatePrintAgreeTests {
         await Assert.That(Success(printedThird)).IsTrue();
         await Assert.That(Message(printedSecond)).IsEqualTo(second.ErrorMessage);
         await Assert.That(second.ErrorMessage).Contains("Unique constraint violated");
+    }
+
+    [Test]
+    public async Task NestedSecondCreate_FailsBeforeSaveInPrintAndSimulate() {
+        var (domain, analysis, session) = Evolve(Dsl);
+
+        var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
+        store.Add(lot);
+        var simulate = lot.InvokeAction("Double", new Dictionary<string, object?> { ["code"] = "A" });
+
+        var module = session.Lower(domain, analysis);
+        var source = new CSharpGenerator().Generate(module);
+        var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "UniqueParityNested");
+        var port = new TestPort();
+        var printedLot = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Lot", ("db", port));
+        var printed = Invoke(printedLot, "Double", ("code", "A"), ("db", port));
+
+        // The first create recorded the pending key; the second create in the
+        // same action fails before any host save.
+        await Assert.That(simulate.Succeeded).IsFalse();
+        await Assert.That(Success(printed)).IsFalse();
+        await Assert.That(Message(printed)).IsEqualTo(simulate.ErrorMessage);
+        await Assert.That(simulate.ErrorMessage).Contains("Unique constraint violated");
     }
 
     private static (Domain Domain, Poly.Analysis.AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {

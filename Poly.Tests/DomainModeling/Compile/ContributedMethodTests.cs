@@ -172,6 +172,14 @@ public class ContributedMethodTests {
     }
 
     [Test]
+    public async Task NamedAnchor_ResolvesTheMethod() {
+        var (domain, analysis, session) = Compile(Poly, new NamedCreateLibrary());
+        var module = session.Lower(domain, analysis);
+        var create = Method(module, "Widget", "Create");
+        await Assert.That(Names(create)).IsEqualTo("code,db");
+    }
+
+    [Test]
     public async Task AnchorWithNoMatchingMethod_Throws() {
         var (domain, analysis, session) = Compile(Poly, new BadAnchorLibrary());
         await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
@@ -180,7 +188,9 @@ public class ContributedMethodTests {
     [Test]
     public async Task TwoTypesForOneDependency_Throws() {
         var (domain, analysis, session) = Compile(PolyTwoUnique, new SplitDbLibrary());
-        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+        await Assert.That(() => session.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("Widget.Sku (UniqueConstraint)");
     }
 
     [Test]
@@ -290,7 +300,12 @@ public class ContributedMethodTests {
     /// Create runs before <c>new</c>. The storage context is an implied parameter.
     /// </summary>
     private sealed class UniqueCompiler : IConstraintCompiler {
-        public UniqueCompiler(string libraryId) => LibraryId = libraryId;
+        private readonly ConstraintAnchor _anchor;
+
+        public UniqueCompiler(string libraryId, ConstraintAnchor? anchor = null) {
+            LibraryId = libraryId;
+            _anchor = anchor ?? new ConstraintAnchor.Create();
+        }
 
         public string LibraryId { get; }
 
@@ -332,7 +347,7 @@ public class ContributedMethodTests {
             return new ConstraintContribution(
                 LibraryId,
                 request.Entity.Name,
-                new ConstraintAnchor.Create(),
+                _anchor,
                 [statements[0]],
                 [statements[1]],
                 [new ImpliedParameter("db", dbType, ThreadToCallers: true)],
@@ -362,6 +377,13 @@ public class ContributedMethodTests {
                 [],
                 [new ImpliedParameter("scale", scale, ThreadToCallers: true)]);
         }
+    }
+
+    private sealed class NamedCreateLibrary : IDomainLibrary {
+        public string Id => "probe-named-create";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddConstraintCompiler(new UniqueCompiler(Id, new ConstraintAnchor.Named("Create")));
     }
 
     private sealed class BadAnchorLibrary : IDomainLibrary {

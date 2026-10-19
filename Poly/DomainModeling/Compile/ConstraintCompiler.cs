@@ -9,18 +9,18 @@ namespace Poly.DomainModeling.Compile;
 /// create path cannot be silently missed.
 /// </summary>
 public abstract record ConstraintAnchor {
-    /// <summary>The entity's <c>Create</c> factory.</summary>
+    /// <summary>
+    /// The entity's <c>Create</c> factory. Create-in paths call this factory, so
+    /// a guard here covers them; a target type's <c>Create{Nav}</c> method creates
+    /// the nav's children and is not this anchor.
+    /// </summary>
     public sealed record Create(bool AfterConstruction = false) : ConstraintAnchor;
-
-    /// <summary>Every <c>Create{Nav}</c> create-in factory (not <c>Create</c>).</summary>
-    public sealed record CreateIn(bool AfterConstruction = false) : ConstraintAnchor;
 
     /// <summary>A named method on the target type, for a one-off anchor.</summary>
     public sealed record Named(string MethodName, bool AfterConstruction = false) : ConstraintAnchor;
 
     public override string ToString() => this switch {
         Create c => $"Create({SlotName(c.AfterConstruction)})",
-        CreateIn c => $"CreateIn({SlotName(c.AfterConstruction)})",
         Named n => $"Named({n.MethodName}, {SlotName(n.AfterConstruction)})",
         _ => GetType().Name
     };
@@ -79,22 +79,24 @@ public sealed class ConstraintCompileRequest {
 }
 
 /// <summary>
-/// AST produced by compiling one constraint. <see cref="Anchor"/> is null only
-/// for a contribution that adds supporting methods and nothing else.
-/// <see cref="BeforeStatements"/> run before the anchor method constructs;
-/// <see cref="AfterStatements"/> run before its return. <see cref="ImpliedParameters"/>
-/// are inserted before the method's first optional parameter and, when marked,
-/// threaded through its callers. <see cref="SupportingMethods"/> are added to
-/// the same type; they are the methods the statements call.
+/// AST produced by compiling one constraint. <see cref="BeforeStatements"/> run
+/// before the anchor method constructs; <see cref="AfterStatements"/> run before
+/// its return. <see cref="ImpliedParameters"/> are inserted before the method's
+/// first optional parameter and, when marked, threaded through its callers.
+/// <see cref="SupportingMethods"/> are added to the same type; they are the
+/// methods the statements call.
 /// </summary>
 public sealed record ConstraintContribution(
     string LibraryId,
     string TargetTypeName,
-    ConstraintAnchor? Anchor,
+    ConstraintAnchor Anchor,
     IReadOnlyList<Node> BeforeStatements,
     IReadOnlyList<Node> AfterStatements,
     IReadOnlyList<ImpliedParameter> ImpliedParameters,
-    IReadOnlyList<MethodDefinitionNode>? SupportingMethods = null);
+    IReadOnlyList<MethodDefinitionNode>? SupportingMethods = null) {
+    /// <summary>Set by core to <c>Entity.Property (ConstraintKind)</c>, for diagnostics.</summary>
+    public string? Provenance { get; init; }
+}
 
 /// <summary>
 /// A parameter a compiled constraint needs and the domain did not name.

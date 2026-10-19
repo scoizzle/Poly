@@ -143,7 +143,7 @@ internal static class ContributedMethods {
             if (existing is not null) {
                 if (!string.Equals(existing.TypeReference?.ToString(), parameter.Type.ToString(), StringComparison.Ordinal))
                     throw new InvalidOperationException(
-                        $"Implied parameter '{parameter.Name}' on {contribution.TargetTypeName}.{method.Name} is required as two types.");
+                        $"Implied parameter '{parameter.Name}' on {contribution.TargetTypeName}.{method.Name} is required as two types ({contribution.Provenance}).");
                 continue;
             }
             added ??= [];
@@ -226,16 +226,21 @@ internal static class ContributedMethods {
             throw new InvalidOperationException(
                 $"Cannot place a post-construction contribution on {method.Name}: the body is not a block.");
         var nodes = block.Nodes.ToList();
+        var returns = 0;
         var index = -1;
         for (var i = nodes.Count - 1; i >= 0; i--) {
             if (nodes[i] is Return) {
-                index = i;
-                break;
+                returns++;
+                if (index < 0)
+                    index = i;
             }
         }
         if (index < 0)
             throw new InvalidOperationException(
                 $"Cannot place a post-construction contribution on {method.Name}: the body has no return.");
+        if (returns > 1)
+            throw new InvalidOperationException(
+                $"Cannot place a post-construction contribution on {method.Name}: the body has {returns} top-level returns.");
         nodes.InsertRange(index, statements);
         return method with { Body = new Block(nodes, block.Variables) };
     }
@@ -391,14 +396,18 @@ internal static class ContributedMethods {
             if (index < 0)
                 throw new InvalidOperationException(
                     $"Contributed parameter '{slot.Name}' is not on {typeName}.{member.MemberName}.");
-            if (index < invoke.Arguments.Length
-                && invoke.Arguments[index] is Parameter passed
-                && string.Equals(passed.Name, slot.Name, StringComparison.Ordinal))
+            if (index < invoke.Arguments.Length && IsSameBinding(invoke.Arguments[index], slot.Name))
                 continue;
             missing.Add((index, slot));
         }
         return missing.OrderBy(m => m.Index).ToList();
     }
+
+    private static bool IsSameBinding(Node argument, string name) => argument switch {
+        Parameter parameter => string.Equals(parameter.Name, name, StringComparison.Ordinal),
+        Variable variable => string.Equals(variable.Name, name, StringComparison.Ordinal),
+        _ => false
+    };
 
     private static void RejectConstructorCalls(
         IReadOnlyList<TypeDefinitionNode> module,

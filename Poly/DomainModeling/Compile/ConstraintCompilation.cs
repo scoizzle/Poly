@@ -42,7 +42,9 @@ internal static class ConstraintCompilation {
                     }
                     if (match is null)
                         continue;
-                    var compiled = match.Compile(Request(entity, property, constraint, type));
+                    var compiled = match.Compile(Request(entity, property, constraint, type)) with {
+                        Provenance = $"{entity.Name}.{property.Name} ({constraint.GetType().Name})"
+                    };
                     Absorb(pending, match.LibraryId, entity.Name, module, compiled);
                 }
             }
@@ -75,22 +77,12 @@ internal static class ConstraintCompilation {
         string typeName,
         IReadOnlyList<TypeDefinitionNode> module,
         ConstraintContribution compiled) {
-        if (compiled.Anchor is null) {
-            if (compiled.BeforeStatements.Count > 0
-                || compiled.AfterStatements.Count > 0
-                || compiled.ImpliedParameters.Count > 0)
-                throw new InvalidOperationException(
-                    $"Library '{libraryId}' compiled a contribution on '{typeName}' with statements or parameters but no anchor.");
-            if (compiled.SupportingMethods is null || compiled.SupportingMethods.Count == 0)
-                throw new InvalidOperationException(
-                    $"Library '{libraryId}' compiled a contribution on '{typeName}' with no anchor and no supporting method.");
-        }
-        else if (compiled.BeforeStatements.Count == 0
+        if (compiled.BeforeStatements.Count == 0
             && compiled.AfterStatements.Count == 0
             && compiled.ImpliedParameters.Count == 0
             && (compiled.SupportingMethods is null || compiled.SupportingMethods.Count == 0))
             throw new InvalidOperationException(
-                $"Library '{libraryId}' compiled a constraint on '{typeName}' that produced no AST and no parameters.");
+                $"Library '{libraryId}' compiled {ProvenanceOf(compiled)} and produced no AST and no parameters.");
         ValidateParameters(libraryId, typeName, compiled.ImpliedParameters);
 
         if (compiled.SupportingMethods is not null) {
@@ -101,13 +93,11 @@ internal static class ConstraintCompilation {
                 var key = (libraryId, typeName, method.Name, ContributionPlacement.Start);
                 if (pending.ContainsKey(key))
                     throw new InvalidOperationException(
-                        $"Library '{libraryId}' compiled {typeName}.{method.Name} more than once.");
-                pending[key] = Pending.Method(libraryId, typeName, method, ParametersOn(method, compiled.ImpliedParameters));
+                        $"Library '{libraryId}' compiled {typeName}.{method.Name} more than once ({ProvenanceOf(compiled)}).");
+                pending[key] = Pending.Method(
+                    libraryId, typeName, method, ParametersOn(method, compiled.ImpliedParameters), compiled.Provenance);
             }
         }
-
-        if (compiled.Anchor is null)
-            return;
 
         var methods = ResolveAnchor(compiled.Anchor, libraryId, typeName, module);
         foreach (var methodName in methods) {
@@ -115,28 +105,31 @@ internal static class ConstraintCompilation {
                 var key = (libraryId, typeName, methodName, ContributionPlacement.BeforeConstruction);
                 if (!pending.TryGetValue(key, out var existing)) {
                     pending[key] = Pending.Injection(
-                        libraryId, typeName, methodName, ContributionPlacement.BeforeConstruction);
+                        libraryId, typeName, methodName, ContributionPlacement.BeforeConstruction, compiled.Provenance);
                     existing = pending[key];
                 }
                 if (existing.NewMethod is not null)
                     throw new InvalidOperationException(
                         $"Library '{libraryId}' compiles {typeName}.{methodName} as both a new method and an existing method.");
-                existing.Add(compiled.BeforeStatements, compiled.ImpliedParameters);
+                existing.Add(compiled.BeforeStatements, compiled.ImpliedParameters, compiled.Provenance);
             }
             if (compiled.AfterStatements.Count > 0) {
                 var key = (libraryId, typeName, methodName, ContributionPlacement.BeforeReturn);
                 if (!pending.TryGetValue(key, out var existing)) {
                     pending[key] = Pending.Injection(
-                        libraryId, typeName, methodName, ContributionPlacement.BeforeReturn);
+                        libraryId, typeName, methodName, ContributionPlacement.BeforeReturn, compiled.Provenance);
                     existing = pending[key];
                 }
                 if (existing.NewMethod is not null)
                     throw new InvalidOperationException(
                         $"Library '{libraryId}' compiles {typeName}.{methodName} as both a new method and an existing method.");
-                existing.Add(compiled.AfterStatements, compiled.ImpliedParameters);
+                existing.Add(compiled.AfterStatements, compiled.ImpliedParameters, compiled.Provenance);
             }
         }
     }
+
+    private static string ProvenanceOf(ConstraintContribution contribution) =>
+        contribution.Provenance ?? contribution.TargetTypeName;
 
     /// <summary>
     /// Resolves a semantic anchor to every matching method on the target type.
@@ -152,9 +145,6 @@ internal static class ConstraintCompilation {
         IEnumerable<string> names = anchor switch {
             ConstraintAnchor.Create =>
                 methods.Where(m => string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name),
-            ConstraintAnchor.CreateIn =>
-                methods.Where(m => m.Name.StartsWith("Create", StringComparison.Ordinal)
-                    && !string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name),
             ConstraintAnchor.Named named =>
                 methods.Where(m => string.Equals(m.Name, named.MethodName, StringComparison.Ordinal)).Select(m => m.Name),
             _ => throw new InvalidOperationException(
@@ -221,7 +211,8 @@ internal static class ConstraintCompilation {
             ContributionPlacement placement,
             List<ContributedParameter> parameters,
             MethodDefinitionNode? newMethod,
-            List<Node> statements) {
+            List<Node> statements,
+            string? provenance) {
             LibraryId = libraryId;
             TypeName = typeName;
             MethodName = methodName;
@@ -229,6 +220,7 @@ internal static class ConstraintCompilation {
             Parameters = parameters;
             NewMethod = newMethod;
             Statements = statements;
+            Provenance = provenance;
         }
 
         public string LibraryId { get; }
@@ -238,19 +230,25 @@ internal static class ConstraintCompilation {
         public List<ContributedParameter> Parameters { get; }
         public MethodDefinitionNode? NewMethod { get; }
         public List<Node> Statements { get; }
+        public string? Provenance { get; }
 
         public static Pending Method(
-            string libraryId, string typeName, MethodDefinitionNode method, List<ContributedParameter> parameters) =>
-            new(libraryId, typeName, method.Name, ContributionPlacement.Start, parameters, method, []);
+            string libraryId,
+            string typeName,
+            MethodDefinitionNode method,
+            List<ContributedParameter> parameters,
+            string? provenance) =>
+            new(libraryId, typeName, method.Name, ContributionPlacement.Start, parameters, method, [], provenance);
 
         public static Pending Injection(
             string libraryId,
             string typeName,
             string methodName,
-            ContributionPlacement placement) =>
-            new(libraryId, typeName, methodName, placement, [], null, []);
+            ContributionPlacement placement,
+            string? provenance) =>
+            new(libraryId, typeName, methodName, placement, [], null, [], provenance);
 
-        public void Add(IReadOnlyList<Node> statements, IReadOnlyList<ImpliedParameter> parameters) {
+        public void Add(IReadOnlyList<Node> statements, IReadOnlyList<ImpliedParameter> parameters, string? provenance) {
             Statements.AddRange(statements);
             foreach (var parameter in parameters) {
                 var prior = Parameters.FirstOrDefault(p =>
@@ -261,15 +259,15 @@ internal static class ConstraintCompilation {
                 }
                 if (!string.Equals(prior.Type.ToString(), parameter.Type.ToString(), StringComparison.Ordinal))
                     throw new InvalidOperationException(
-                        $"Implied parameter '{parameter.Name}' on {TypeName}.{MethodName} is required as two types.");
+                        $"Implied parameter '{parameter.Name}' on {TypeName}.{MethodName} is required as two types ({provenance}).");
                 if (prior.ThreadToCallers != parameter.ThreadToCallers)
                     throw new InvalidOperationException(
-                        $"Implied parameter '{parameter.Name}' on {TypeName}.{MethodName} disagrees about threading to callers.");
+                        $"Implied parameter '{parameter.Name}' on {TypeName}.{MethodName} disagrees about threading to callers ({provenance}).");
             }
         }
 
         public MethodContribution ToContribution() =>
-            new(LibraryId, TypeName, MethodName, Placement, Parameters, NewMethod, Statements);
+            new(LibraryId, TypeName, MethodName, Placement, Parameters, NewMethod, Statements, Provenance);
     }
 
     private static class PendingKey {

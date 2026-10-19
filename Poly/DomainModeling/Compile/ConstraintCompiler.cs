@@ -1,4 +1,5 @@
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
@@ -50,7 +51,9 @@ public interface IConstraintCompiler {
 /// One property constraint on one entity, plus the produced parameters that
 /// already stand for that property. <see cref="ParameterOn"/> returns the
 /// signature parameter of the named method when the property is already an
-/// argument there.
+/// argument there. <see cref="StorageModel"/> is the domain's single storage
+/// mapping, so a constraint that needs storage reads the entity's mapping
+/// instead of naming a host type.
 /// </summary>
 public sealed class ConstraintCompileRequest {
     private readonly IReadOnlyDictionary<string, Parameter> _parameters;
@@ -59,11 +62,13 @@ public sealed class ConstraintCompileRequest {
         Entity entity,
         Property property,
         Constraint constraint,
-        IReadOnlyDictionary<string, Parameter> parameters) {
+        IReadOnlyDictionary<string, Parameter> parameters,
+        StorageModel? storage) {
         Entity = entity;
         Property = property;
         Constraint = constraint;
         _parameters = parameters;
+        StorageModel = storage;
     }
 
     public Entity Entity { get; }
@@ -71,6 +76,23 @@ public sealed class ConstraintCompileRequest {
     public Property Property { get; }
 
     public Constraint Constraint { get; }
+
+    /// <summary>The domain's single storage mapping, or null when none was analyzed.</summary>
+    public StorageModel? StorageModel { get; }
+
+    /// <summary>The entity's mapping in <see cref="StorageModel"/>, or null.</summary>
+    public StorageEntity? Storage => StorageModel?.Entities.FirstOrDefault(e =>
+        ReferenceEquals(e.Source, Entity)
+        || string.Equals(e.Name, Entity.Name, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The entity's storage mapping. Fails closed when the constraint needs
+    /// storage and the domain has no mapping for this entity.
+    /// </summary>
+    public StorageEntity RequireStorage() =>
+        Storage ?? throw new InvalidOperationException(
+            $"Constraint '{Constraint.GetType().Name}' on {Entity.Name}.{Property.Name} requires storage, "
+            + $"but entity '{Entity.Name}' has no storage mapping.");
 
     public Parameter? ParameterOn(string methodName) {
         ArgumentException.ThrowIfNullOrWhiteSpace(methodName);

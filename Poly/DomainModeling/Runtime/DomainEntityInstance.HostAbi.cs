@@ -40,6 +40,19 @@ public sealed partial record DomainEntityInstance {
     }
 
     /// <summary>
+    /// True when a lowered parameter is the in-process storage port the simulator
+    /// supplies per action invocation. Compiled constraints declare the parameter
+    /// but the DSL caller never names it.
+    /// </summary>
+    internal static bool IsStoragePortParameter(Parameter parameter) =>
+        parameter.TypeReference switch {
+            ClrTypeReference reference => typeof(IStoragePort).IsAssignableFrom(reference.RuntimeType),
+            TypeReference type => string.Equals(
+                type.TypeName, typeof(IStoragePort).FullName, StringComparison.Ordinal),
+            _ => false
+        };
+
+    /// <summary>
     /// Notify-shaped Store bind: link a just-created child. No Store is a no-op
     /// (CreateEntityInstance.RelationshipName without a store still allocates).
     /// Unknown relationship with a Store bound fails loud.

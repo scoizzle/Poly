@@ -26,7 +26,7 @@ internal static class ConstraintCompilation {
         IReadOnlyList<TypeDefinitionNode> module,
         Domain domain,
         IReadOnlyList<IConstraintCompiler> compilers) {
-        var pending = new Dictionary<(string Library, string Type, string Method), Pending>(PendingKey.Comparer);
+        var pending = new Dictionary<(string Library, string Type, string Method, ContributionPlacement Placement), Pending>(PendingKey.Comparer);
         foreach (var entity in domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal)) {
             var type = FindType(module, entity.Name);
             foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
@@ -43,7 +43,7 @@ internal static class ConstraintCompilation {
                     if (match is null)
                         continue;
                     var compiled = match.Compile(Request(entity, property, constraint, type));
-                    Absorb(pending, match.LibraryId, entity.Name, compiled);
+                    Absorb(pending, match.LibraryId, entity.Name, module, compiled);
                 }
             }
         }
@@ -70,16 +70,25 @@ internal static class ConstraintCompilation {
     }
 
     private static void Absorb(
-        Dictionary<(string Library, string Type, string Method), Pending> pending,
+        Dictionary<(string Library, string Type, string Method, ContributionPlacement Placement), Pending> pending,
         string libraryId,
         string typeName,
-        CompiledConstraint compiled) {
-        if (string.IsNullOrWhiteSpace(compiled.TargetMethod))
-            throw new InvalidOperationException(
-                $"Library '{libraryId}' compiled a constraint on '{typeName}' without a target method.");
-        if (compiled.Statements.Count == 0
-            && (compiled.SupportingMethods is null || compiled.SupportingMethods.Count == 0)
-            && compiled.ImpliedParameters.Count == 0)
+        IReadOnlyList<TypeDefinitionNode> module,
+        ConstraintContribution compiled) {
+        if (compiled.Anchor is null) {
+            if (compiled.BeforeStatements.Count > 0
+                || compiled.AfterStatements.Count > 0
+                || compiled.ImpliedParameters.Count > 0)
+                throw new InvalidOperationException(
+                    $"Library '{libraryId}' compiled a contribution on '{typeName}' with statements or parameters but no anchor.");
+            if (compiled.SupportingMethods is null || compiled.SupportingMethods.Count == 0)
+                throw new InvalidOperationException(
+                    $"Library '{libraryId}' compiled a contribution on '{typeName}' with no anchor and no supporting method.");
+        }
+        else if (compiled.BeforeStatements.Count == 0
+            && compiled.AfterStatements.Count == 0
+            && compiled.ImpliedParameters.Count == 0
+            && (compiled.SupportingMethods is null || compiled.SupportingMethods.Count == 0))
             throw new InvalidOperationException(
                 $"Library '{libraryId}' compiled a constraint on '{typeName}' that produced no AST and no parameters.");
         ValidateParameters(libraryId, typeName, compiled.ImpliedParameters);
@@ -89,7 +98,7 @@ internal static class ConstraintCompilation {
                 if (string.IsNullOrWhiteSpace(method.Name))
                     throw new InvalidOperationException(
                         $"Library '{libraryId}' compiled a supporting method on '{typeName}' without a name.");
-                var key = (libraryId, typeName, method.Name);
+                var key = (libraryId, typeName, method.Name, ContributionPlacement.Start);
                 if (pending.ContainsKey(key))
                     throw new InvalidOperationException(
                         $"Library '{libraryId}' compiled {typeName}.{method.Name} more than once.");
@@ -97,18 +106,65 @@ internal static class ConstraintCompilation {
             }
         }
 
-        if (compiled.Statements.Count == 0 && compiled.ImpliedParameters.Count == 0)
+        if (compiled.Anchor is null)
             return;
-        var target = (libraryId, typeName, compiled.TargetMethod);
-        if (!pending.TryGetValue(target, out var existing)) {
-            pending[target] = Pending.Injection(
-                libraryId, typeName, compiled.TargetMethod, compiled.Statements, compiled.ImpliedParameters);
-            return;
+
+        var methods = ResolveAnchor(compiled.Anchor, libraryId, typeName, module);
+        foreach (var methodName in methods) {
+            if (compiled.BeforeStatements.Count > 0 || compiled.ImpliedParameters.Count > 0) {
+                var key = (libraryId, typeName, methodName, ContributionPlacement.BeforeConstruction);
+                if (!pending.TryGetValue(key, out var existing)) {
+                    pending[key] = Pending.Injection(
+                        libraryId, typeName, methodName, ContributionPlacement.BeforeConstruction);
+                    existing = pending[key];
+                }
+                if (existing.NewMethod is not null)
+                    throw new InvalidOperationException(
+                        $"Library '{libraryId}' compiles {typeName}.{methodName} as both a new method and an existing method.");
+                existing.Add(compiled.BeforeStatements, compiled.ImpliedParameters);
+            }
+            if (compiled.AfterStatements.Count > 0) {
+                var key = (libraryId, typeName, methodName, ContributionPlacement.BeforeReturn);
+                if (!pending.TryGetValue(key, out var existing)) {
+                    pending[key] = Pending.Injection(
+                        libraryId, typeName, methodName, ContributionPlacement.BeforeReturn);
+                    existing = pending[key];
+                }
+                if (existing.NewMethod is not null)
+                    throw new InvalidOperationException(
+                        $"Library '{libraryId}' compiles {typeName}.{methodName} as both a new method and an existing method.");
+                existing.Add(compiled.AfterStatements, compiled.ImpliedParameters);
+            }
         }
-        if (existing.NewMethod is not null)
+    }
+
+    /// <summary>
+    /// Resolves a semantic anchor to every matching method on the target type.
+    /// A match miss fails closed rather than silently dropping the constraint.
+    /// </summary>
+    private static IReadOnlyList<string> ResolveAnchor(
+        ConstraintAnchor anchor,
+        string libraryId,
+        string typeName,
+        IReadOnlyList<TypeDefinitionNode> module) {
+        var type = FindType(module, typeName);
+        var methods = type.Methods ?? [];
+        IEnumerable<string> names = anchor switch {
+            ConstraintAnchor.Create =>
+                methods.Where(m => string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name),
+            ConstraintAnchor.CreateIn =>
+                methods.Where(m => m.Name.StartsWith("Create", StringComparison.Ordinal)
+                    && !string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name),
+            ConstraintAnchor.Named named =>
+                methods.Where(m => string.Equals(m.Name, named.MethodName, StringComparison.Ordinal)).Select(m => m.Name),
+            _ => throw new InvalidOperationException(
+                $"Library '{libraryId}' used an unknown anchor on '{typeName}'.")
+        };
+        var resolved = names.Distinct(StringComparer.Ordinal).ToList();
+        if (resolved.Count == 0)
             throw new InvalidOperationException(
-                $"Library '{libraryId}' compiles {typeName}.{compiled.TargetMethod} as both a new method and an existing method.");
-        existing.Add(compiled.Statements, compiled.ImpliedParameters);
+                $"Library '{libraryId}' anchor {anchor} matched no method on '{typeName}'.");
+        return resolved;
     }
 
     private static void ValidateParameters(
@@ -162,41 +218,37 @@ internal static class ConstraintCompilation {
             string libraryId,
             string typeName,
             string methodName,
+            ContributionPlacement placement,
             List<ContributedParameter> parameters,
             MethodDefinitionNode? newMethod,
-            List<Node> statements,
-            bool beforeConstruction) {
+            List<Node> statements) {
             LibraryId = libraryId;
             TypeName = typeName;
             MethodName = methodName;
+            Placement = placement;
             Parameters = parameters;
             NewMethod = newMethod;
             Statements = statements;
-            BeforeConstruction = beforeConstruction;
         }
 
         public string LibraryId { get; }
         public string TypeName { get; }
         public string MethodName { get; }
+        public ContributionPlacement Placement { get; }
         public List<ContributedParameter> Parameters { get; }
         public MethodDefinitionNode? NewMethod { get; }
         public List<Node> Statements { get; }
-        public bool BeforeConstruction { get; }
 
         public static Pending Method(
             string libraryId, string typeName, MethodDefinitionNode method, List<ContributedParameter> parameters) =>
-            new(libraryId, typeName, method.Name, parameters, method, [], false);
+            new(libraryId, typeName, method.Name, ContributionPlacement.Start, parameters, method, []);
 
         public static Pending Injection(
             string libraryId,
             string typeName,
             string methodName,
-            IReadOnlyList<Node> statements,
-            IReadOnlyList<ImpliedParameter> parameters) {
-            var pending = new Pending(libraryId, typeName, methodName, [], null, [], true);
-            pending.Add(statements, parameters);
-            return pending;
-        }
+            ContributionPlacement placement) =>
+            new(libraryId, typeName, methodName, placement, [], null, []);
 
         public void Add(IReadOnlyList<Node> statements, IReadOnlyList<ImpliedParameter> parameters) {
             Statements.AddRange(statements);
@@ -217,26 +269,28 @@ internal static class ConstraintCompilation {
         }
 
         public MethodContribution ToContribution() =>
-            new(LibraryId, TypeName, MethodName, Parameters, NewMethod, Statements, BeforeConstruction);
+            new(LibraryId, TypeName, MethodName, Placement, Parameters, NewMethod, Statements);
     }
 
     private static class PendingKey {
-        public static readonly IEqualityComparer<(string Library, string Type, string Method)> Comparer =
+        public static readonly IEqualityComparer<(string Library, string Type, string Method, ContributionPlacement Placement)> Comparer =
             new KeyComparer();
 
-        private sealed class KeyComparer : IEqualityComparer<(string Library, string Type, string Method)> {
+        private sealed class KeyComparer : IEqualityComparer<(string Library, string Type, string Method, ContributionPlacement Placement)> {
             public bool Equals(
-                (string Library, string Type, string Method) x,
-                (string Library, string Type, string Method) y) =>
+                (string Library, string Type, string Method, ContributionPlacement Placement) x,
+                (string Library, string Type, string Method, ContributionPlacement Placement) y) =>
                 string.Equals(x.Library, y.Library, StringComparison.Ordinal)
                 && string.Equals(x.Type, y.Type, StringComparison.Ordinal)
-                && string.Equals(x.Method, y.Method, StringComparison.Ordinal);
+                && string.Equals(x.Method, y.Method, StringComparison.Ordinal)
+                && x.Placement == y.Placement;
 
-            public int GetHashCode((string Library, string Type, string Method) obj) =>
+            public int GetHashCode((string Library, string Type, string Method, ContributionPlacement Placement) obj) =>
                 HashCode.Combine(
                     StringComparer.Ordinal.GetHashCode(obj.Library),
                     StringComparer.Ordinal.GetHashCode(obj.Type),
-                    StringComparer.Ordinal.GetHashCode(obj.Method));
+                    StringComparer.Ordinal.GetHashCode(obj.Method),
+                    (int)obj.Placement);
         }
     }
 }

@@ -34,6 +34,35 @@ public class ContributedMethodTests {
         }
         """;
 
+    private const string PolyWithDefaults = """
+        domain Lab
+        Widget: entity {
+          Code: Text required unique
+          tags: many Tag
+        }
+        Tag: entity {
+          Label: Text
+        }
+        Lot: entity {
+          widgets: many Widget
+          Note: Text
+          Issue: action (code: Text) { create in widgets { Code: code } }
+        }
+        """;
+
+    private const string PolyTwoUnique = """
+        domain Lab
+        Widget: entity {
+          Code: Text required unique
+          Sku: Text unique
+        }
+        Lot: entity {
+          widgets: many Widget
+          Note: Text
+          Issue: action (code: Text) { create in widgets { Code: code } }
+        }
+        """;
+
     [Test]
     public async Task CreateIn_ContributedParameter_ThreadsThroughCallersOnly() {
         var (domain, analysis, session) = Compile(Poly, new ProbeLibrary());
@@ -117,6 +146,47 @@ public class ContributedMethodTests {
 
         await Assert.That(source.Contains("entity.Issue(dto.code, db)", StringComparison.Ordinal)).IsTrue();
         await Assert.That(source.Contains("entity.Touch(dto.label, db)", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateWithOptionalParameters_InsertsDependencyBeforeTheFirstDefault() {
+        var (domain, analysis, session) = Compile(PolyWithDefaults, new ProbeLibrary());
+        var module = session.Lower(domain, analysis);
+
+        var create = Method(module, "Widget", "Create");
+        var parameters = (create.Parameters ?? []).ToList();
+        var dbIndex = parameters.FindIndex(p => p.Name == "db");
+        var firstOptional = parameters.FindIndex(p => p.DefaultValue is not null);
+        await Assert.That(dbIndex).IsGreaterThanOrEqualTo(0);
+        await Assert.That(firstOptional).IsGreaterThan(dbIndex);
+        await Assert.That(parameters[dbIndex].DefaultValue).IsNull();
+
+        var newAt = TopIndex(create, n => n is New);
+        var addAt = TopIndex(create, n => n is Invoke i && i.Delegate is Member { MemberName: "Add" });
+        await Assert.That(addAt).IsGreaterThan(newAt);
+
+        var createWidgets = Method(module, "Lot", "CreateWidgets");
+        var invoke = Invokes(createWidgets.Body!).First(i => i.Delegate is Member { MemberName: "Create" });
+        await Assert.That(invoke.Arguments[1]).IsTypeOf<Parameter>();
+        await Assert.That(((Parameter)invoke.Arguments[1]).Name).IsEqualTo("db");
+    }
+
+    [Test]
+    public async Task AnchorWithNoMatchingMethod_Throws() {
+        var (domain, analysis, session) = Compile(Poly, new BadAnchorLibrary());
+        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task TwoTypesForOneDependency_Throws() {
+        var (domain, analysis, session) = Compile(PolyTwoUnique, new SplitDbLibrary());
+        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task DuplicateSupportingMethod_Throws() {
+        var (domain, analysis, session) = Compile(Poly, new DuplicateSupportLibrary());
+        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
     }
 
     private static MethodDefinitionNode Method(
@@ -226,7 +296,7 @@ public class ContributedMethodTests {
 
         public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
 
-        public CompiledConstraint Compile(ConstraintCompileRequest request) {
+        public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var dbType = new ClrTypeReference(typeof(SeenCodes));
             var text = new ClrTypeReference(typeof(string));
             var existsDb = new Parameter("db", dbType);
@@ -259,9 +329,12 @@ public class ContributedMethodTests {
                     ])),
                 new Invoke(new Member(db, "Add"), code)
             ];
-            return new CompiledConstraint(
-                "Create",
-                statements,
+            return new ConstraintContribution(
+                LibraryId,
+                request.Entity.Name,
+                new ConstraintAnchor.Create(),
+                [statements[0]],
+                [statements[1]],
                 [new ImpliedParameter("db", dbType, ThreadToCallers: true)],
                 [exists]);
         }
@@ -278,13 +351,100 @@ public class ContributedMethodTests {
 
         public bool Applies(Constraint constraint) => constraint is RangeConstraint;
 
-        public CompiledConstraint Compile(ConstraintCompileRequest request) {
+        public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var scale = new ClrTypeReference(typeof(int));
             var parameter = new Parameter("scale", scale);
-            return new CompiledConstraint(
-                "Create",
+            return new ConstraintContribution(
+                LibraryId,
+                request.Entity.Name,
+                new ConstraintAnchor.Create(),
                 [new Invoke(new Member(parameter, "GetHashCode"))],
+                [],
                 [new ImpliedParameter("scale", scale, ThreadToCallers: true)]);
+        }
+    }
+
+    private sealed class BadAnchorLibrary : IDomainLibrary {
+        public string Id => "probe-bad-anchor";
+
+        public void Register(SessionBuilder builder) => builder.AddConstraintCompiler(new BadAnchorCompiler(Id));
+    }
+
+    private sealed class BadAnchorCompiler : IConstraintCompiler {
+        public BadAnchorCompiler(string libraryId) => LibraryId = libraryId;
+
+        public string LibraryId { get; }
+
+        public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        public ConstraintContribution Compile(ConstraintCompileRequest request) =>
+            new(
+                LibraryId,
+                request.Entity.Name,
+                new ConstraintAnchor.Named("NoSuchMethod"),
+                [new Invoke(new Member(new NamedTypeReference(request.Entity.Name), "NoSuchMethod"))],
+                [],
+                []);
+    }
+
+    private sealed class SplitDbLibrary : IDomainLibrary {
+        public string Id => "probe-split-db";
+
+        public void Register(SessionBuilder builder) => builder.AddConstraintCompiler(new SplitDbCompiler(Id));
+    }
+
+    private sealed class SplitDbCompiler : IConstraintCompiler {
+        public SplitDbCompiler(string libraryId) => LibraryId = libraryId;
+
+        public string LibraryId { get; }
+
+        public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        public ConstraintContribution Compile(ConstraintCompileRequest request) {
+            var type = request.Property.Name == "Code"
+                ? new ClrTypeReference(typeof(SeenCodes))
+                : new ClrTypeReference(typeof(string));
+            var db = new Parameter("db", type);
+            var value = request.ParameterOn("Create")
+                ?? new Parameter("value", new ClrTypeReference(typeof(string)));
+            return new ConstraintContribution(
+                LibraryId,
+                request.Entity.Name,
+                new ConstraintAnchor.Create(),
+                [new Invoke(new Member(db, "Contains"), value)],
+                [],
+                [new ImpliedParameter("db", type, ThreadToCallers: true)]);
+        }
+    }
+
+    private sealed class DuplicateSupportLibrary : IDomainLibrary {
+        public string Id => "probe-duplicate-support";
+
+        public void Register(SessionBuilder builder) => builder.AddConstraintCompiler(new DuplicateSupportCompiler(Id));
+    }
+
+    private sealed class DuplicateSupportCompiler : IConstraintCompiler {
+        public DuplicateSupportCompiler(string libraryId) => LibraryId = libraryId;
+
+        public string LibraryId { get; }
+
+        public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        public ConstraintContribution Compile(ConstraintCompileRequest request) {
+            var method = new MethodDefinitionNode(
+                "ExistsWithAnything",
+                new ClrTypeReference(typeof(bool)),
+                Parameters: [],
+                Body: new Block([new Return(new Constant(true))]),
+                IsStatic: true);
+            return new ConstraintContribution(
+                LibraryId,
+                request.Entity.Name,
+                new ConstraintAnchor.Create(),
+                [new Invoke(new Member(new NamedTypeReference(request.Entity.Name), method.Name))],
+                [],
+                [],
+                [method, method]);
         }
     }
 }

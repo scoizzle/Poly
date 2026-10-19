@@ -146,21 +146,36 @@ internal static class ContributedMethods {
                         $"Implied parameter '{parameter.Name}' on {contribution.TargetTypeName}.{method.Name} is required as two types.");
                 continue;
             }
-            if (current.Any(p => p.DefaultValue is not null) || added?.Any(p => p.DefaultValue is not null) == true)
-                throw new InvalidOperationException(
-                    $"Cannot append contributed parameter '{parameter.Name}' to {contribution.TargetTypeName}.{method.Name}: a parameter already has a default.");
             added ??= [];
             added.Add(new Parameter(parameter.Name, parameter.Type));
         }
         if (added is null)
             return method;
-        return method with { Parameters = [.. current, .. added] };
+        var parameters = current.ToList();
+        parameters.InsertRange(FirstOptional(current), added);
+        return method with { Parameters = parameters };
+    }
+
+    /// <summary>
+    /// Contributed parameters go before the first optional parameter: a required
+    /// parameter may not follow a defaulted one.
+    /// </summary>
+    private static int FirstOptional(IReadOnlyList<Parameter> parameters) {
+        for (var i = 0; i < parameters.Count; i++) {
+            if (parameters[i].DefaultValue is not null)
+                return i;
+        }
+        return parameters.Count;
     }
 
     private static MethodDefinitionNode Place(MethodDefinitionNode method, MethodContribution contribution) =>
-        contribution.BeforeConstruction
-            ? InsertBeforeConstruction(method, contribution.Statements)
-            : Prepend(method, contribution.Statements);
+        contribution.Placement switch {
+            ContributionPlacement.Start => Prepend(method, contribution.Statements),
+            ContributionPlacement.BeforeConstruction => InsertBeforeConstruction(method, contribution.Statements),
+            ContributionPlacement.BeforeReturn => InsertBeforeReturn(method, contribution.Statements),
+            _ => throw new InvalidOperationException(
+                $"Unknown contribution placement {contribution.Placement}.")
+        };
 
     /// <summary>
     /// Constraint guards run with the checks already in the method, before the
@@ -198,6 +213,33 @@ internal static class ContributedMethods {
         return false;
     }
 
+    /// <summary>
+    /// After-construction statements run before the method's final return, so a
+    /// created value is recorded only once it exists. A method with no return
+    /// fails closed rather than dropping the contribution.
+    /// </summary>
+    private static MethodDefinitionNode InsertBeforeReturn(
+        MethodDefinitionNode method, IReadOnlyList<Node>? statements) {
+        if (statements is null || statements.Count == 0)
+            return method;
+        if (method.Body is not Block block)
+            throw new InvalidOperationException(
+                $"Cannot place a post-construction contribution on {method.Name}: the body is not a block.");
+        var nodes = block.Nodes.ToList();
+        var index = -1;
+        for (var i = nodes.Count - 1; i >= 0; i--) {
+            if (nodes[i] is Return) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0)
+            throw new InvalidOperationException(
+                $"Cannot place a post-construction contribution on {method.Name}: the body has no return.");
+        nodes.InsertRange(index, statements);
+        return method with { Body = new Block(nodes, block.Variables) };
+    }
+
     private static MethodDefinitionNode Prepend(MethodDefinitionNode method, IReadOnlyList<Node>? statements) {
         if (statements is null || statements.Count == 0)
             return method;
@@ -225,18 +267,13 @@ internal static class ContributedMethods {
                 method.Body, typeIndex, method.Name, module, methods, threaded, threadedMethods)))
             return method;
 
-        var typeName = module[typeIndex].Name;
-        if (needed.Count > 0 && signature.Any(p => p.DefaultValue is not null))
-            throw new InvalidOperationException(
-                $"Cannot append a contributed parameter to {typeName}.{method.Name}: a parameter already has a default.");
-
         var ordered = needed.Values
             .OrderBy(s => s.LibraryId, StringComparer.Ordinal)
             .ThenBy(s => s.Name, StringComparer.Ordinal)
             .ToList();
+        var insertAt = FirstOptional(signature);
         foreach (var slot in ordered) {
-            var parameter = new Parameter(slot.Name, slot.Type);
-            signature.Add(parameter);
+            signature.Insert(insertAt++, new Parameter(slot.Name, slot.Type));
             AddSlot(threaded, threadedMethods, typeIndex, method.Name, slot);
         }
 
@@ -257,7 +294,7 @@ internal static class ContributedMethods {
         HashSet<string> threadedMethods,
         Dictionary<string, Slot> needed) {
         if (node is Invoke invoke) {
-            foreach (var slot in Missing(invoke, enclosing, enclosingMethod, module, methods, threaded, threadedMethods)) {
+            foreach (var (_, slot) in Missing(invoke, enclosing, enclosingMethod, module, methods, threaded, threadedMethods)) {
                 if (signature.Any(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal)))
                     continue;
                 if (needed.TryGetValue(slot.Name, out var prior)
@@ -292,7 +329,7 @@ internal static class ContributedMethods {
         return false;
     }
 
-    private static List<Slot> Missing(
+    private static List<(int Index, Slot Slot)> Missing(
         Invoke invoke,
         int enclosing,
         string enclosingMethod,
@@ -339,21 +376,28 @@ internal static class ContributedMethods {
         var typeIndex = hits[0].TypeIndex;
         var callee = methods[typeIndex][hits[0].MethodIndex];
         var parameters = callee.Parameters ?? [];
-        if (invoke.Arguments.Length >= parameters.Count)
-            return [];
         if (!threaded.TryGetValue((typeIndex, member.MemberName), out var slots))
             return [];
 
-        var missing = new List<Slot>();
-        for (var i = invoke.Arguments.Length; i < parameters.Count; i++) {
-            var name = parameters[i].Name;
-            var slot = slots.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.Ordinal));
-            if (slot is null)
+        var missing = new List<(int Index, Slot Slot)>();
+        foreach (var slot in slots) {
+            var index = -1;
+            for (var i = 0; i < parameters.Count; i++) {
+                if (string.Equals(parameters[i].Name, slot.Name, StringComparison.Ordinal)) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index < 0)
                 throw new InvalidOperationException(
-                    $"Call to {typeName}.{member.MemberName} from {module[enclosing].Name}.{enclosingMethod} is missing '{name}', which is not a contributed parameter.");
-            missing.Add(slot);
+                    $"Contributed parameter '{slot.Name}' is not on {typeName}.{member.MemberName}.");
+            if (index < invoke.Arguments.Length
+                && invoke.Arguments[index] is Parameter passed
+                && string.Equals(passed.Name, slot.Name, StringComparison.Ordinal))
+                continue;
+            missing.Add((index, slot));
         }
-        return missing;
+        return missing.OrderBy(m => m.Index).ToList();
     }
 
     private static void RejectConstructorCalls(
@@ -472,15 +516,14 @@ internal static class ContributedMethods {
         var missing = Missing(updated, enclosing, enclosingMethod, module, methods, threaded, threadedMethods);
         if (missing.Count == 0)
             return updated;
-        var extra = new Node[missing.Count];
-        for (var i = 0; i < missing.Count; i++) {
-            var name = missing[i].Name;
-            var parameter = signature.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal))
+        var argList = updated.Arguments.ToList();
+        foreach (var (index, slot) in missing) {
+            var parameter = signature.FirstOrDefault(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
                 ?? throw new InvalidOperationException(
-                    $"{module[enclosing].Name}.{enclosingMethod} calls a method that needs '{name}' but does not declare it.");
-            extra[i] = parameter;
+                    $"{module[enclosing].Name}.{enclosingMethod} calls a method that needs '{slot.Name}' but does not declare it.");
+            argList.Insert(Math.Min(index, argList.Count), parameter);
         }
-        return updated with { Arguments = [.. updated.Arguments, .. extra] };
+        return updated with { Arguments = [.. argList] };
     }
 
     private static Block RewriteBlock(Block block, Func<Node, Node> map) {

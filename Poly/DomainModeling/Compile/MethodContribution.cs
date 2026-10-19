@@ -4,24 +4,32 @@ namespace Poly.DomainModeling.Compile;
 
 /// <summary>
 /// A parameter a library adds to a produced method. <see cref="ThreadToCallers"/>
-/// means core appending copies it onto every method that calls this one, as a
-/// suffix ordered by library id then name. The library does not walk callers.
+/// means core inserts copies into every method that calls this one, as a suffix
+/// ordered by library id then name, placed before the method's first optional
+/// parameter. The library does not walk callers.
 /// </summary>
 public sealed record ContributedParameter(string Name, Node Type, bool ThreadToCallers);
 
 /// <summary>
-/// Splice built from one <see cref="CompiledConstraint"/>. Not a library door.
-/// <see cref="NewMethod"/> is added when the type does not already define
-/// <see cref="MethodName"/>. <see cref="Statements"/> go at the start of the
-/// body, or immediately before the first construction when
-/// <see cref="BeforeConstruction"/> is set. Parameters are appended after the
-/// method's own parameters.
+/// Where injected statements land inside the anchor method.
+/// <see cref="Start"/> is the method entry; <see cref="BeforeConstruction"/>
+/// is immediately before the first <c>new</c>; <see cref="BeforeReturn"/> is
+/// immediately before the method's final return.
+/// </summary>
+public enum ContributionPlacement { Start, BeforeConstruction, BeforeReturn }
+
+/// <summary>
+/// Splice built from one <see cref="ConstraintContribution"/>. Not a library
+/// door. <see cref="NewMethod"/> is added when the type does not already define
+/// <see cref="MethodName"/>. <see cref="Statements"/> are placed per
+/// <see cref="Placement"/>. Parameters are inserted before the method's first
+/// optional parameter.
 /// </summary>
 public sealed record MethodContribution(
     string LibraryId,
     string TargetTypeName,
     string MethodName,
+    ContributionPlacement Placement,
     IReadOnlyList<ContributedParameter> Parameters,
     MethodDefinitionNode? NewMethod = null,
-    IReadOnlyList<Node>? Statements = null,
-    bool BeforeConstruction = false);
+    IReadOnlyList<Node>? Statements = null);

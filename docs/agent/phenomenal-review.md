@@ -21,6 +21,10 @@ The caller names a **target** and optionally a **mode**. Defaults if omitted:
 | **PR** | Diff of the named PR if `gh` is available; else stop and say so |
 | **Paths** | Only the listed paths within the chosen target |
 
+The commands above and below need a shell. A reviewer without one works from the
+**review bundle** a parent gives it — status, diff, untracked contents, and
+baselines — and reports any baseline it lacks as uncertainty (§3.8).
+
 | Mode | Default | Meaning |
 |---|---|---|
 | **standard** | yes | One thorough adversarial pass (this agent is **reviewer only**) |
@@ -34,7 +38,7 @@ User may pass prior review docs to **re-verify**, not rubber-stamp.
 ```text
 Read docs/agent/phenomenal-review.md and execute it against <local | branch | pr N | paths…>
 [mode: standard | multi].
-Write findings and follow-up tasks into the docs as the protocol requires.
+Write findings and follow-up tasks into the docs as the protocol requires (a shell-less reviewer returns them in its reply; the parent writes them).
 Assume the code is wrong until evidence says otherwise.
 ```
 
@@ -54,7 +58,7 @@ From the Bun rewrite: the implementer wants the change accepted; the reviewer wa
 | **Prefer diff-first** | Start from the unified diff. Load surrounding source only to prove or disprove a failure mode — not to re-derive the author’s design story. |
 | **If you also wrote the code** | Prefer **mode: multi**: spawn (or ask for) a second review context that receives **only** the diff + this protocol + required project maps — **not** the session’s implementation chat. Merge both issue lists. |
 | **Multi-reviewer merge** | Deduplicate by (file, failure mode). Keep the stronger severity. Never drop a bug because another reviewer “liked” the approach. |
-| **Primary evidence only** | Do not chain-trust prior review quotes, chat summaries, or “~N” counts. Re-read current source, re-run greps, re-`git show` baselines yourself (§3.8). |
+| **Primary evidence only** | Do not chain-trust prior review quotes, chat summaries, or “~N” counts. Re-read current source, re-run greps, re-`git show` baselines yourself (§3.8) — greps need only `read`; `git show` needs a shell. |
 
 Default success metric is unchanged: a second engineer can implement fixes from the follow-ups doc alone.
 
@@ -110,15 +114,17 @@ Flag changes that **delete, skip, or weaken** tests without replacing the oracle
 
 ### 3.1 Collect the diff
 
+With a shell, run:
+
 ```bash
 git status --porcelain
 git diff --stat HEAD          # local tracked
 git diff HEAD
-# untracked source: inspect or diff --no-index as needed; skip binaries / local DBs unless ship risk
+git ls-files --others --exclude-standard   # untracked files — read each in full; do not skip an untracked source file
 ```
 
 For branch/PR targets, use the merge-base or `gh pr diff` as appropriate.  
-**Size gate:** if the unified diff is multi‑MB of junk (e.g. untracked `node_modules`, datasets), stop and ask to ignore or clean — do not pretend to review it.
+**Size gate:** if the unified diff is multi‑MB of junk (e.g. untracked `node_modules`, datasets), stop and ask to ignore or clean — do not pretend to review it. A reviewer without a shell takes the same items from the review bundle.
 
 Note **scope drift**: files that do not belong to the claimed task (scratch demos, generated one-offs, local DBs).
 
@@ -233,7 +239,7 @@ Target:
   <local | branch <name> | pr <n> | paths: …>
 
 Diff (primary evidence — start here):
-  <path to unified diff file, or: run git diff HEAD / gh pr diff N yourself>
+  <path to the review bundle directory, or for a reviewer with a shell: run git diff HEAD / gh pr diff N>
 
 Required maps (if present in repo):
   Agents.md (or AGENTS.md), docs/CORE.md if core machinery touched,
@@ -248,9 +254,10 @@ Hard rules:
     invariant on ALL siblings and whether tests force each sibling.
   - Reachability before severity: for any new throw/fail-loud, argue who can hit it
     on valid vs corrupt inputs before choosing bug vs suggestion vs nit.
-  - Primary evidence: recompute counts with your own greps; re-read current files;
-    if comparing to HEAD, run git show / git diff yourself — do not trust quoted
-    baselines from other reviews.
+  - Primary evidence: recompute counts with your own greps; re-read current files.
+    Greps and reads need no shell. If comparing to HEAD, git show / git diff need
+    a shell; without one, take the baseline from the bundle's `04-show` sections.
+    Do not trust quoted baselines from other reviews.
   - Invariant-stating comments are checklists: every sibling path must satisfy them.
 
 Deliverables for Pass B (return in your reply; parent will merge into docs/):
@@ -271,7 +278,7 @@ Empty Issues only after an honest adversarial pass.
 | Claim type | Required evidence |
 |---|---|
 | **“Still broken at line N”** | Your `read_file` / grep of **current** tree, not a quote from r1/r2/r3 |
-| **“HEAD used to throw X”** | `git show HEAD:path` or `git diff HEAD -- path` run **by you** this session |
+| **"HEAD used to throw X"** | `git show HEAD:path` or `git diff HEAD -- path`, run **by you** this session — needs a shell; without one, the baseline comes from the bundle's `04-show` sections |
 | **“~N markers / N call sites”** | Recompute: per-file greps, then **sum**; write the exact total (not “~36” from memory) |
 | **“Prior review said fixed”** | Re-verify against current source; disposition fixed/open/invalid yourself |
 | **Derived aggregates in plans** | Same — re-grep before repeating a number into the new review note |
@@ -307,7 +314,8 @@ When the diff adds or keeps comments of the form “always X”, “must Y”, �
 
 ### 5.1 Review note in docs
 
-Write under **`docs/`** (prefer a stable convention):
+Write under **`docs/`** (prefer a stable convention). A shell-less reviewer
+returns the note in its reply, and the parent writes it here:
 
 | Situation | Path |
 |---|---|
@@ -343,10 +351,10 @@ Call out oracle strength (tests/types) and any multi-pass merge.
 
 **Chat is not the system of record.**
 
-1. Create or update a follow-ups file next to the suite (e.g. `<prefix>-followups-YYYY-MM-DD.md`) or under `docs/agent/reviews/`.
+1. Create or update a follow-ups file next to the suite (e.g. `<prefix>-followups-YYYY-MM-DD.md`) or under `docs/agent/reviews/`. A shell-less reviewer returns this text in its reply; the parent writes it.
 2. Every open **bug** and material **suggestion** becomes a checkable task (`- [ ] **F#** — …`) with file, do-statement, and owning plan phase if any.
 3. Disposition prior open items: **fixed** / **still open** / **invalid** with one-line evidence.
-4. Update the suite README or plan status table if reopenings change phase/gate state — **do not** mark complete unless true.
+4. Update the suite README or plan status table if reopenings change phase/gate state — **do not** mark complete unless true. A shell-less reviewer returns the needed status change in its reply; the parent applies it.
 5. If the suite states “all follow-ups go into the docs,” obey that rule literally.
 6. **Process follow-ups:** if the same bug class keeps recurring (e.g. metadata key mismatch, test theater), add an explicit task to tighten gates, tests, or this protocol — not only a one-off code fix.
 
@@ -368,6 +376,18 @@ In the conversation, give a short report: verdict, counts, path to review file, 
 
 When unsure between **bug** and **suggestion** for a throw: complete §3.2b first; default to **bug** only if valid product inputs can hit a wrong outcome (including silent wrong success on a sibling path).
 
+The global OpenCode scale maps onto these labels, so a review from any tool
+agrees with this one:
+
+| Global | Here |
+|---|---|
+| 🔴 | bug |
+| 🟠 | bug |
+| 🟡 | suggestion |
+| 🟢 | nit |
+
+Blocking means 🔴 or 🟠. A 🟢 is a nit.
+
 ---
 
 ## 7. Relationship to other processes
@@ -375,7 +395,7 @@ When unsure between **bug** and **suggestion** for a throw: complete §3.2b firs
 | Process | Difference |
 |---|---|
 | **This protocol** | Deep **adversarial** correctness review; docs artifacts; no fix by default; optional multi-pass split context |
-| **Pre-ship gate** | After (or instead of) review when shipping: categorize → **fix** 🔴/🟠 → re-review → green build/tests |
+| **Pre-ship gate** | After (or instead of) review when shipping: categorize → **fix** 🔴 and 🟠 → re-review → green build/tests |
 | **Implementer loop** | Write code; must not self-approve under this bar without a separate reviewer context |
 | **Maintainability / code-judo audit** | Structure, file size, abstraction quality — separate pass |
 | **Tool-specific “/review” UIs** | May collect diffs or post PR comments; they should still **execute this bar**, prefer **split-context** reviewers, and **land follow-ups in docs** |
@@ -413,13 +433,13 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 - [ ] Sibling-path check done for dual paths; tests force each sibling (§3.2a)
 - [ ] Fail-loud / throw changes have reachability → severity (§3.2b)
 - [ ] Invariant-stating comments checked against all siblings (§3.9)
-- [ ] Counts and HEAD baselines recomputed by you (§3.8) — no chain-trust of prior reviews
+- [ ] Counts and HEAD baselines recomputed by you (§3.8) — no chain-trust of prior reviews (greps need no shell; a `git show` baseline needs one, else the bundle's `04-show`)
 - [ ] Same-shape-different-meaning and cleanup/once-only considered where relevant
 - [ ] Fail-closed tests actually strip dependencies
 - [ ] Oracles not weakened (no silent skip/delete/stub-to-green)
 - [ ] Plan/gate status matches residual work
-- [ ] Review file written under `docs/`
-- [ ] Follow-up tasks written under `docs/` with checkboxes (including process fixes if recurring)
+- [ ] Review file written under `docs/` (a shell-less reviewer returns it; the parent writes it)
+- [ ] Follow-up tasks written under `docs/` with checkboxes (including process fixes if recurring) — same writer rule
 - [ ] Prior follow-ups dispositioned from **current** source
 - [ ] Pass B used template §3.7.1 when mode is multi
 - [ ] User given paths + top issues

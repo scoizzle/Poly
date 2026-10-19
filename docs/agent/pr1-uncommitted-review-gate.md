@@ -21,17 +21,27 @@ Review ──→ Findings ──→ Harden ──→ Re-review ──→ Ship
 - `AGENTS.md` — principles 1–5 (especially §4 Go well to go fast, §5 Shipped capability)
 - `docs/CORE.md` — module boundaries, pipeline
 - `docs/plans/archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md` — historical suite conventions (frozen product direction)
-- **Your suite's own task files and source changes** — review via `git diff --stat HEAD` then `git diff HEAD`
+- **Your suite's own task files and source changes** — collect status, diff, and untracked files as Step 1 describes
 
 ## Exact Steps
 
 ### Step 1 — Review uncommitted changes
 
-Run:
+Collect the complete change. With a shell, run:
 ```
-git diff --stat HEAD        # quick overview: which files, how many lines
-git diff HEAD               # full diff — read carefully
+git status --short                          # staged, unstaged, and untracked
+git diff --stat HEAD                        # quick overview: which files, how many lines
+git diff HEAD                               # staged + unstaged vs HEAD — read carefully
+git ls-files --others --exclude-standard    # untracked files — read each in full
 ```
+`git diff HEAD` does not list untracked files. Read every untracked, non-ignored
+file the last command names; an untracked source file is easy to miss and is a
+dirty file of this task.
+
+A reviewer without a shell does not collect evidence. The parent gives it the
+same items — status, diff, and the contents of every untracked file — as a
+`review-bundle` directory or pasted. The reviewer reads only what it was given,
+and reports any of those items missing as uncertainty, not as a clean review.
 
 For each dirty file:
 - Is it source code? Tests? Docs? Config?
@@ -39,18 +49,24 @@ For each dirty file:
 
 ### Step 2 — Categorize findings
 
-For every structural or behavioral change, classify each finding by severity:
+For every structural or behavioral change, classify each finding by **category**,
+then assign its **severity** from phenomenal §6 (🔴 and 🟠 block; 🟡 is a
+suggestion; 🟢 is a nit).
 
-| Severity | Label | Example | Action |
-|----------|-------|---------|--------|
-| 🔴 **Structure** | Package/type placement wrong, module boundary violation | New type in wrong namespace | Fix — violates AGENTS.md / CORE.md |
-| 🟠 **Contract** | Silent fallback, missing error, unexpected success | Empty `all` returns true; missing `where` drops filter | Fix — fail-closed |
-| 🟡 **Edge case** | Off-by-one, empty set, null input, zero match | Remove-by-name with no match silently no-ops | Fix or note as known gap |
-| ⚪ **Hygiene** | Dead code, stale comment, inconsistent naming | Dead `using`, parameter named wrong | Fix if small; else file as follow-up |
+The category says what kind of defect it is; it does **not** set severity. A 🔴
+or 🟠 is fixed in this gate even when its category is Edge case or Hygiene.
+"Note as known gap" and "file as follow-up" apply only to 🟡 and 🟢.
+
+| Category | Example | Action |
+|----------|---------|--------|
+| **Structure** | Package/type placement wrong, module boundary violation | Fix — violates AGENTS.md / CORE.md |
+| **Contract** | Silent fallback, missing error, unexpected success | Fix — fail-closed |
+| **Edge case** | Off-by-one, empty set, null input, zero match | Fix or note as known gap |
+| **Hygiene** | Dead code, stale comment, inconsistent naming | Fix if small; else file as follow-up |
 
 ### Step 3 — Apply three-layer defense
 
-When fixing a 🟠 **Contract** or 🔴 **Structure** finding, verify all three enforcement layers:
+When fixing a **Contract** or **Structure** finding, verify all three enforcement layers:
 
 | Layer | Where | What to check |
 |-------|-------|---------------|
@@ -69,23 +85,24 @@ For each finding:
 
 ### Step 5 — Re-review
 
-After all fixes are applied:
-```
-git diff --stat HEAD        # verify the fix delta is proportional
-git diff HEAD               # re-read — no new problems introduced
-```
+After all fixes are applied, collect the fix delta with the same evidence as
+Step 1 (status, diff, and untracked files) and re-read it:
 
-- Findings count should be 0 for 🔴🟠
-- 🟡 findings should be resolved or explicitly filed in `docs/plans/`
-- ⚪ hygiene should be clean unless deferred with a note
+- No 🔴 or 🟠 finding remains open.
+- 🟡 findings should be resolved or explicitly filed as follow-ups under `docs/` (phenomenal §5.2); they are evidence, not admitted work.
+- Hygiene findings should be clean unless deferred with a note
+
+Re-review only the fix delta. Steps 1–2 are the gate's one review pass; Step 5 is
+not a second full review. A regression outside the edited lines still counts as a
+finding.
 
 ### Step 6 — Ship
 
 Only mark the suite/slice "Done" when:
-- [ ] `git diff --stat HEAD` shows no dirty file belonging to **this task**, and every other dirty file is itemized in the finding list with its category — a preserved pre-existing edit, drift from an earlier task, or named next-task work; no dirty file is left unnamed
+- [ ] The Step 1 evidence (status, diff, and the contents of every untracked file) shows no dirty file belonging to **this task**, and every other dirty file is itemized in the finding list with its category — a preserved pre-existing edit, drift from an earlier task, or named next-task work; no dirty file is left unnamed. A review note or follow-ups written for this gate belong to this task and are **committed before this box is checked**, not left dirty and itemized as someone else's
 - [ ] All 🔴 and 🟠 findings resolved
-- [ ] 🟡 findings filed or resolved
-- [ ] ⚪ hygiene clean or deferred with a doc note
+- [ ] 🟡 findings filed or resolved — filed means under `docs/` (phenomenal §5.2), which is evidence, not admitted work
+- [ ] Hygiene clean or deferred with a doc note
 - [ ] `dotnet build` passes
 - [ ] Full suite passes (`dotnet run --project Poly.Tests/Poly.Tests.csproj`)
 

@@ -1,11 +1,14 @@
 #nullable enable
 
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Poly.Generated;
 
-public class CrmDbContext : DbContext
+public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
 {
+    private readonly HashSet<string> _pendingKeys = new HashSet<string>();
     public CrmDbContext(DbContextOptions<CrmDbContext> options) : base(options) { }
     public DbSet<Site> Sites
     {
@@ -179,5 +182,41 @@ public class CrmDbContext : DbContext
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
     b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("INTEGER");
 });
+    }
+    public bool Exists(string entity, string property, string @value)
+    {
+        if (this._pendingKeys.Contains(entity + "\u001f" + property + "\u001f" + @value))
+        {
+            return true;
+        }
+        if (entity == "Contact")
+        {
+            if (property == "Email")
+            {
+                return this.Contacts.Any(e => e.Email == @value);
+            }
+            return false;
+        }
+        if (entity == "Lead")
+        {
+            if (property == "Email")
+            {
+                return this.Leads.Any(e => e.Email == @value);
+            }
+            return false;
+        }
+        if (entity == "Product")
+        {
+            if (property == "Sku")
+            {
+                return this.Products.Any(e => e.Sku == @value);
+            }
+            return false;
+        }
+        return false;
+    }
+    public void Record(string entity, string property, string @value)
+    {
+        this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + @value);
     }
 }

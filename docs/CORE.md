@@ -127,6 +127,8 @@ No intermediate primitive IR. Keep the emitter a generic compiler of known nodes
 
 Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke / cross-entity / for-invoke / create / unique / clocks — shapes and residual debt: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md). ADR: [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](decisions/2026-06-08-domain-lowering-boundary.md). Named invoke runs module method bodies from `session.Lower` (same tree print uses). Do not add consumer-specific lowering flags or a second effect interpreter.
 
+**Constraint contributions.** A library may register an `IConstraintCompiler`; core places its AST at a semantic anchor (`ConstraintAnchor`), inserts contributed parameters before the method's first optional parameter, and threads them along the lowered call set. The storage libraries own `unique`: the guard calls the in-process `IStoragePort` (`Exists` = pending key or database), and the post-construction call records the pending key. The port is read-only — no writes and no `SaveChanges` — and is implemented by the generated `{Domain}DbContext` and by the simulator. The module never names a host context type, and there is no second persistence runtime.
+
 ### 3.5 Introspection
 
 Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consumers use `ITypeDefinition` / providers — not ad-hoc reflection or a second registry. Adapt missing shapes via analysis replacement, not emitter special cases. Detail: `Poly/Introspection/README.md`, `docs/technical/introspection.md`.

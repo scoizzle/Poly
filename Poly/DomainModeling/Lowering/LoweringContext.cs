@@ -71,6 +71,12 @@ namespace Poly.DomainModeling.Lowering;
 /// date arithmetic (<c>DueDate + 14</c> → <c>DueDate.AddDays(...)</c>) in every
 /// expression context (policies, if conditions, initializers), not just assign.
 /// </param>
+/// <param name="IsOptionalProperty">
+/// Optional predicate answering whether a DSL property name is <c>optional</c> on the
+/// source entity. Expression lowering guards a comparison whose operand reads an
+/// optional value, so an absent value makes the condition false instead of dereferencing
+/// null. Null-safe: no guard is emitted when absent.
+/// </param>
 /// <param name="Names">
 /// Shared generator of unique local names for one method. Passes built from
 /// this context via <c>with</c> keep the same instance.
@@ -98,6 +104,7 @@ public sealed record LoweringContext(
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,
+    Func<string, bool>? IsOptionalProperty = null,
     Node? ActionResultType = null,
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,

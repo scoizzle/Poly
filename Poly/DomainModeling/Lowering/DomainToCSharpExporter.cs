@@ -282,19 +282,24 @@ public sealed partial class DomainToCSharpExporter {
                 if (runtimeExpr is not null) {
                     // Runtime default (now/today/guid) can't be a compile-time default —
                     // T? = null sentinel; body applies the runtime default when null.
-                    defaultedCtorParams.Add(new Parameter(paramName,
+                    // Reuse the ONE typed parameter node in both the signature and the
+                    // assignment (an untyped copy has no type, so the VM cannot tell an
+                    // absent value from a default-constructed one).
+                    var runtimeParam = new Parameter(paramName,
                         new OptionalTypeReference(typeRef),
-                        DefaultValue: new Constant(null)));
+                        DefaultValue: new Constant(null));
+                    defaultedCtorParams.Add(runtimeParam);
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
-                        new Syntactic.Coalesce(new Parameter(paramName), runtimeExpr)));
+                        new Syntactic.Coalesce(runtimeParam, runtimeExpr)));
                 }
                 else {
                     var defaultNode = LowerDefaultConstantNode(defaultValue, prop, domain, metadata);
-                    defaultedCtorParams.Add(new Parameter(paramName, propRef, DefaultValue: defaultNode));
+                    var constantParam = new Parameter(paramName, propRef, DefaultValue: defaultNode);
+                    defaultedCtorParams.Add(constantParam);
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
-                        new Parameter(paramName)));
+                        constantParam));
                 }
                 continue; // skip ctor param — handled as a trailing optional param
             }
@@ -303,11 +308,12 @@ public sealed partial class DomainToCSharpExporter {
             // create, so it needs a C# optional parameter (`T? = null`) after the required
             // positional ones. Absent stays null (no coercion to `new T()`/type default).
             if (!isRequired) {
-                defaultedCtorParams.Add(new Parameter(paramName,
-                    new OptionalTypeReference(typeRef), DefaultValue: new Constant(null)));
+                var optionalParam = new Parameter(paramName,
+                    new OptionalTypeReference(typeRef), DefaultValue: new Constant(null));
+                defaultedCtorParams.Add(optionalParam);
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), prop.Name),
-                    new Parameter(paramName)));
+                    optionalParam));
                 continue;
             }
 

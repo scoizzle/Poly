@@ -38,6 +38,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
+    private readonly Func<string, bool>? _isOptionalProperty;
     private readonly Domain? _domain;
     private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
@@ -77,6 +78,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
+        _isOptionalProperty = context.IsOptionalProperty;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
@@ -399,7 +401,33 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         for (var i = valueHops.Count - 1; i >= 0; i--)
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
+        // A comparison that reads an `optional` value is false when that value is absent
+        // (a null operand never makes a condition true). Guard each optional heap-reference
+        // leaf on the short-circuit side, so the operand is not evaluated while absent.
+        var optionalLeaves = new List<Node>();
+        CollectOptionalLeaves(c.Left, optionalLeaves);
+        CollectOptionalLeaves(c.Right, optionalLeaves);
+        for (var i = optionalLeaves.Count - 1; i >= 0; i--)
+            value = new SN.And(new NotEqual(optionalLeaves[i], new Constant(null)), value);
+
         return LoweredExpression.Combine([left, right], value);
+    }
+
+    /// <summary>
+    /// Collects the optional heap-reference leaves an operand reads directly, so a
+    /// comparison on them is false when the value is absent. Number/Int/Boolean and enum
+    /// leaves are skipped: an absent scalar is not yet a distinct VM value (the
+    /// interpretation system owns that representation), and analysis rejects their use in
+    /// an operator meanwhile.
+    /// </summary>
+    private void CollectOptionalLeaves(DomainExpression operand, List<Node> leaves) {
+        if (operand is not PropertyAccess property) return;
+        if (_isOptionalProperty is null || !_isOptionalProperty(property.Name)) return;
+        if (_actionParameterNames?.Contains(property.Name) == true) return;
+        if (_enumPropertyNames?.ContainsKey(property.Name) == true) return;
+        var typeName = _propertyTypeResolver?.Invoke(property.Name);
+        if (typeName is "Number" or "Int" or "Boolean") return;
+        leaves.Add(new Member(_currentSubject, ResolveName(property.Name)));
     }
 
     /// <summary>

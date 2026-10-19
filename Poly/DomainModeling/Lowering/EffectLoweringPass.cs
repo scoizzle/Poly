@@ -84,7 +84,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
-            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity)
+            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
+            IsOptionalProperty = context.IsOptionalProperty ?? BuildIsOptionalProperty(entity)
         });
         Subject = context.Subject;
     }
@@ -162,6 +163,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 foreach (var p in action.Parameters)
                     byName.TryAdd(p.Name, p.Type.TypeName);
         return name => byName.TryGetValue(name, out var typeName) ? typeName : null;
+    }
+
+    /// <summary>
+    /// Predicate answering whether a DSL property name is <c>optional</c> on the entity.
+    /// Expression lowering uses it to guard a comparison whose operand reads an optional
+    /// value, so an absent value makes the condition false (a null operand never makes a
+    /// condition true). Action parameters and navigations are not properties here.
+    /// </summary>
+    internal static Func<string, bool> BuildIsOptionalProperty(Entity entity) {
+        var optional = entity.Properties
+            .Where(p => p.Constraints.IsOptional())
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return optional.Contains;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>

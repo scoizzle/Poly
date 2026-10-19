@@ -3270,6 +3270,30 @@ public class DomainToCSharpExporterTests {
         await Assert.That(create).Contains("object.ReferenceEquals(rank, null)");
     }
 
+    [Test]
+    public async Task OptionalTextCondition_GuardsOnPresence() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalCondition
+
+            Item: entity {
+              Nickname: Text optional
+              Flagged: policy { Nickname is "Ada" }
+              NotAda: policy { Nickname is not "Ada" }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        // `is "Ada"` and `is not "Ada"` are both false when Nickname is absent: a null
+        // operand never makes a condition true, so the guard tests presence first.
+        var flagged = ExportedCSharp.ExtractMethod(cs, "bool Flagged(");
+        await Assert.That(flagged).Contains("Nickname != null");
+        var notAda = ExportedCSharp.ExtractMethod(cs, "bool NotAda(");
+        await Assert.That(notAda).Contains("Nickname != null");
+    }
+
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

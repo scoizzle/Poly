@@ -29,6 +29,7 @@ internal static class TemporalLowering {
             DomainExpression expression,
             Func<DomainExpression, Node> route,
             Func<string, string?>? propertyTypeResolver,
+            Func<DomainExpression, string?>? expressionTypeResolver,
             out Node result) {
             result = UtcNowMember();
             return true;
@@ -42,6 +43,7 @@ internal static class TemporalLowering {
             DomainExpression expression,
             Func<DomainExpression, Node> route,
             Func<string, string?>? propertyTypeResolver,
+            Func<DomainExpression, string?>? expressionTypeResolver,
             out Node result) {
             result = DateOnlyFromUtcNow();
             return true;
@@ -55,11 +57,12 @@ internal static class TemporalLowering {
             DomainExpression expression,
             Func<DomainExpression, Node> route,
             Func<string, string?>? propertyTypeResolver,
+            Func<DomainExpression, string?>? expressionTypeResolver,
             out Node result) {
             var d = (DateOperation)expression;
             var date = route(d.Date);
             var offset = route(d.Offset);
-            var family = ResolveDateClrFamily(d.Date, propertyTypeResolver);
+            var family = ResolveDateClrFamily(d.Date, propertyTypeResolver, expressionTypeResolver);
 
             if (family is DateClrFamily.TimeOnly
                 && d.Kind is DateOperationKind.AddSeconds or DateOperationKind.AddMilliseconds) {
@@ -108,6 +111,7 @@ internal static class TemporalLowering {
             DomainExpression expression,
             Func<DomainExpression, Node> route,
             Func<string, string?>? propertyTypeResolver,
+            Func<DomainExpression, string?>? expressionTypeResolver,
             out Node result) {
             result = null!;
             DomainExpression leftExpr;
@@ -122,10 +126,14 @@ internal static class TemporalLowering {
                 leftExpr = a.Left;
                 rightExpr = a.Right;
             }
-            if (leftExpr is not PropertyAccess pa
-                || propertyTypeResolver?.Invoke(pa.Name) is not { } typeName)
+            // The date operand may be a direct property or a path-prefix/binder read
+            // (`order DueDate + 14`); the expression resolver knows the target type.
+            var typeName = leftExpr is PropertyAccess pa
+                ? propertyTypeResolver?.Invoke(pa.Name)
+                : expressionTypeResolver?.Invoke(leftExpr);
+            if (typeName is not { } resolvedTypeName)
                 return false;
-            var family = FamilyFromTypeName(typeName);
+            var family = FamilyFromTypeName(resolvedTypeName);
             if (family is not DateClrFamily.DateOnly and not DateClrFamily.DateTime)
                 return false;
             if (_subtract
@@ -178,7 +186,8 @@ internal static class TemporalLowering {
 
     private static DateClrFamily ResolveDateClrFamily(
         DomainExpression dateExpr,
-        Func<string, string?>? propertyTypeResolver) {
+        Func<string, string?>? propertyTypeResolver,
+        Func<DomainExpression, string?>? expressionTypeResolver = null) {
         if (dateExpr is Now)
             return DateClrFamily.DateTime;
         if (dateExpr is Today)
@@ -186,8 +195,12 @@ internal static class TemporalLowering {
         if (DateOperandName(dateExpr) is { } name
             && propertyTypeResolver?.Invoke(name) is { } typeName)
             return FamilyFromTypeName(typeName);
+        if (dateExpr is RelationshipNavigation)
+            return expressionTypeResolver?.Invoke(dateExpr) is { } pathType
+                ? FamilyFromTypeName(pathType)
+                : DateClrFamily.Unknown;
         if (dateExpr is DateOperation nested)
-            return ResolveDateClrFamily(nested.Date, propertyTypeResolver);
+            return ResolveDateClrFamily(nested.Date, propertyTypeResolver, expressionTypeResolver);
         return DateClrFamily.Unknown;
     }
 

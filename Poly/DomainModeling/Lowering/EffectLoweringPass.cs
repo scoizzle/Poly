@@ -837,21 +837,16 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             foreach (var kv in _context.Parameters)
                 mergedParams[kv.Key] = kv.Value;
         mergedParams[e.BinderName] = loopVar;
-        // Arguments read the target entity's members: optionality and temporal date
-        // families resolve there, not on the fan-out source.
+        // Reads resolve against the entity they land on: a bare name is the source, a
+        // binder-rooted read (`x Qty`) is the target. Keep the source scope and let the
+        // binder resolver retarget only binder reads.
         var targetName = _entity.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relName, StringComparison.Ordinal))?.Target.TypeName;
-        var targetEntity = _domain?.Types.OfType<Entity>().FirstOrDefault(t =>
-            string.Equals(t.Name, targetName, StringComparison.Ordinal));
         var argPass = new DomainExpressionLoweringPass(_context with {
             Parameters = mergedParams,
-            SourceEntityName = targetName ?? _context.SourceEntityName,
-            IsOptionalProperty = targetEntity is not null
-                ? BuildIsOptionalProperty(targetEntity)
-                : _isOptionalProperty,
-            PropertyTypeResolver = targetEntity is not null
-                ? BuildPropertyTypeResolver(targetEntity)
-                : _context.PropertyTypeResolver,
+            BinderEntityResolver = name => string.Equals(name, e.BinderName, StringComparison.Ordinal)
+                ? targetName
+                : null,
         });
         var loweredArgs = e.ParameterBindings
             .Select(binding => argPass.LowerExpression(binding.Expression, Subject))

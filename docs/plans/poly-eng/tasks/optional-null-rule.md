@@ -11,8 +11,9 @@ Finish the `optional` constraint PR (#221) so the shipped capability is fail clo
 
 1. **Arithmetic null rule.** A comparison that reads an `optional` value through arithmetic or
    temporal arithmetic (`DueDate + 14 > Today`, `Qty * 2 > 10`) is false when the operand is
-   absent. Value-producing arithmetic over an `optional` (assign RHS and other value positions)
-   fails closed at analysis, because it has no value to produce.
+   absent. A value-producing use of an `optional` (assign RHS, initializer, invoke argument,
+   arithmetic/library argument) unboxes to the underlying type; absent throws, because there is
+   no value to produce — it never folds to a type default.
 2. **Assign-side presence.** Range and enum-membership guards on an assign test only a *present*
    value, using the assigned expression's own optionality (not an untyped local), so an absent
    `optional` passes and a present value is validated (`0`/`false` included).
@@ -49,7 +50,7 @@ nullable field that coalesces) in the DTO, otherwise the CLR default overrides `
 |---|---|---|---|
 | `DueDate + 14 > Today`, `DueDate` optional | unguarded; print does not compile | presence guard on the operand; absent ⇒ false | lowering + VM + print compile |
 | `Qty * 2 > 10`, `Qty` optional Number | unguarded; VM throws on absent | presence guard; absent ⇒ false; present `0` tested | lowering + VM |
-| `assign Total to Qty + 1`, `Qty` optional | non-compiling print / VM throw | analysis rejects: no value to produce | analysis diagnostic |
+| `assign Total to Qty + 1`, `Qty` optional | non-compiling print / VM throw | unboxes; absent throws | print compile + VM throw |
 | assign optional Number with `range(...)`, absent RHS | VM throws; print silently skips | absent passes; present validated | lowering + VM + print |
 | policy reads optional target prop through `rel` | source-entity predicate | target-entity presence guard | lowering |
 | quantifier body reads optional target prop | source-entity predicate | target-entity presence guard | lowering |
@@ -59,7 +60,8 @@ nullable field that coalesces) in the DTO, otherwise the CLR default overrides `
 
 - Every `optional` read in a comparison (direct, arithmetic, temporal, path-prefix, quantifier,
   `sum`/`foreach`) is guarded on presence, and absent ⇒ false in both print and VM.
-- Value-producing arithmetic over an `optional` is rejected at analysis with a positioned error.
+- A value-producing use of an `optional` unboxes; absent throws in both print and VM (no
+  silent type default).
 - Assign guards test only present values; print and VM agree for absent and present (`0`/`false`).
 - Not-`optional` create DTO members carry `[Required]`.
 - Full suite green; guide updated in the same change.

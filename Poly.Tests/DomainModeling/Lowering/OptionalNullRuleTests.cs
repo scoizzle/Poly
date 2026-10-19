@@ -226,7 +226,6 @@ public class OptionalNullRuleTests {
     }
 
     // ── optional target assign constraints ──────────────────────────────────────
-
     [Test]
     public async Task OptionalAssignTarget_RangeGuardTestsOnlyPresentValue_IncludingZero() {
         const string dsl = """
@@ -254,5 +253,117 @@ public class OptionalNullRuleTests {
         await Assert.That(asm.GetType("Meter")!.GetProperty("Reading")!.GetValue(present))
             .IsEqualTo(5L);
         await Assert.That(Succeeded(clone.Invoke(zero, null))).IsFalse();
+    }
+
+    // ── path-prefix and binder leaves beyond a plain numeric comparison ─────────
+
+    [Test]
+    public async Task PathPrefix_OptionalBoolean_IsNotFolded_AndCompiles() {
+        const string dsl = """
+            domain OptionalPathBoolean
+            Order: entity { Active: Boolean optional }
+            Customer: entity {
+              order: Order
+              ActiveOrder: policy { order Active == true }
+              NotActive: policy { not order Active }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalPathBooleanPrint");
+        await Assert.That(cs).Contains(".Active != null");
+
+        object Customer(bool? active) {
+            var order = active is null
+                ? Create(asm, "Order")
+                : Create(asm, "Order", ("active", active.Value));
+            return Create(asm, "Customer", ("order", order));
+        }
+
+        // Absence is not `false`: both predicates are false.
+        await Assert.That(Policy(asm, "Customer", Customer(null), "ActiveOrder")).IsFalse();
+        await Assert.That(Policy(asm, "Customer", Customer(null), "NotActive")).IsFalse();
+        await Assert.That(Policy(asm, "Customer", Customer(true), "ActiveOrder")).IsTrue();
+        await Assert.That(Policy(asm, "Customer", Customer(false), "NotActive")).IsTrue();
+    }
+
+    [Test]
+    public async Task PathPrefix_OptionalDateArithmetic_CompilesAndEvaluates() {
+        const string dsl = """
+            domain OptionalPathDate
+            uses temporal
+            Order: entity { DueDate: Date optional }
+            Customer: entity {
+              order: Order
+              Start: Date
+              Soon: policy { order DueDate + 7 > Start }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalPathDatePrint");
+        await Assert.That(cs).Contains("(DateOnly)");
+        await Assert.That(cs).Contains(".DueDate != null");
+
+        var start = new DateOnly(2026, 10, 19);
+        var absentOrder = Create(asm, "Order");
+        var dueOrder = Create(asm, "Order", ("dueDate", start));
+        var absent = Create(asm, "Customer", ("order", absentOrder), ("start", start));
+        var due = Create(asm, "Customer", ("order", dueOrder), ("start", start));
+
+        await Assert.That(Policy(asm, "Customer", absent, "Soon")).IsFalse();
+        await Assert.That(Policy(asm, "Customer", due, "Soon")).IsTrue();
+    }
+
+    [Test]
+    public async Task PathPrefix_OptionalRead_AssignedToOptionalTarget_GuardTestsPresentOnly() {
+        const string dsl = """
+            domain OptionalPathAssign
+            Order: entity { Qty: Number optional }
+            Meter: entity {
+              order: Order
+              Reading: Number optional range(1, 10)
+              Copy: action { assign Reading to order Qty }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalPathAssignPrint");
+        await Assert.That(cs).Contains(".Qty != null");
+        await Assert.That(cs).Contains("(long)");
+
+        object Meter(long? qty) {
+            var order = qty is null
+                ? Create(asm, "Order")
+                : Create(asm, "Order", ("qty", qty.Value));
+            return Create(asm, "Meter", ("order", order));
+        }
+
+        var copy = asm.GetType("Meter")!.GetMethod("Copy")!;
+        var absent = Meter(null);
+        var present = Meter(5L);
+        var zero = Meter(0L);
+
+        await Assert.That(Succeeded(copy.Invoke(absent, null))).IsTrue();
+        await Assert.That(Succeeded(copy.Invoke(present, null))).IsTrue();
+        await Assert.That(asm.GetType("Meter")!.GetProperty("Reading")!.GetValue(present))
+            .IsEqualTo(5L);
+        await Assert.That(Succeeded(copy.Invoke(zero, null))).IsFalse();
+    }
+
+    [Test]
+    public async Task SubscriptionBinder_OptionalTargetProperty_GuardsTheParameter() {
+        const string dsl = """
+            domain OptionalBinder
+            Job: entity {
+              Score: Number optional
+              Flagged: stage { }
+            }
+            Queue: entity {
+              jobs: many Job
+              BigCount: Number default(0)
+              when jobs Flagged as job {
+                if (job Score > 50) { assign BigCount to BigCount + 1 }
+              }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalBinderPrint");
+        // The binder parameter is the peer instance: guard its own optional property.
+        await Assert.That(cs).Contains("job.Score != null");
+        await Assert.That(asm.GetType("Queue")).IsNotNull();
     }
 }

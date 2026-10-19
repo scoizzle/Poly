@@ -39,6 +39,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
     private readonly Func<string, bool>? _isOptionalProperty;
+    private readonly Func<string, string?>? _binderEntityResolver;
     private readonly Domain? _domain;
     private readonly INodeMetadataProvider? _analysis;
     private readonly ExpressionMeaning _meaning;
@@ -79,6 +80,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _isCollectionNavigation = context.IsCollectionNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
         _isOptionalProperty = context.IsOptionalProperty;
+        _binderEntityResolver = context.BinderEntityResolver;
         _domain = context.Domain;
         _analysis = context.Analysis;
         _meaning = context.Meaning ?? ExpressionMeaning.Empty;
@@ -166,7 +168,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
                     $"Nested path-prefix under binder '{rn.RelationshipName}' is not supported. " +
                     "Use a single peer property (e.g. 'order Code'), not nested navigation.");
             }
-            return Route(rn.TargetProperty, parameterSubject);
+            // The binder prefix wraps the whole subexpression (`job Score > 50` is a
+            // comparison under the binder), so the target is lowered against the binder's
+            // entity: optionality, guards and date families belong to the peer, not the
+            // subscriber.
+            return LowerAgainstEntity(
+                _binderEntityResolver?.Invoke(rn.RelationshipName),
+                rn.TargetProperty,
+                parameterSubject);
         }
 
         // Every hop in a path-prefix is a relationship navigation.
@@ -242,7 +251,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             // the VM's arithmetic/relational rule) rather than printed as a nullable.
             return UnboxOptionalRead(child, routed.Value);
         }
-        if (EffectiveMeaning.Lowering.TryLower(expr, RouteChild, _propertyTypeResolver, out var node)) {
+        if (EffectiveMeaning.Lowering.TryLower(
+                expr, RouteChild, _propertyTypeResolver, ResolveDomainTypeName, out var node)) {
             lowered = LoweredExpression.Combine(children, node);
             return true;
         }
@@ -405,12 +415,11 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
         // Simplify boolean comparisons: boolProp == true  → boolProp
         //                            boolProp == false → !boolProp
-        // Never fold an `optional` Boolean: absence is not `false`, so `!flag` would be
-        // true for an absent value, and `bool?` does not compile under `!` in the printed
-        // form. The optional presence guard on the comparison carries the meaning instead.
-        var folds = c.Left is not PropertyAccess p
-            || _isOptionalProperty is null
-            || !_isOptionalProperty(p.Name);
+        // Never fold an `optional` Boolean — directly, through a path prefix or a binder:
+        // absence is not `false`, so `!flag` would be true for an absent value, and `bool?`
+        // does not compile under `!` in the printed form. The optional presence guard on
+        // the comparison carries the meaning instead.
+        var folds = !IsOptionalRead(c.Left);
         Node value;
         if (folds && c.Kind == ComparisonKind.Equal
             && loweredRight is Constant { Value: bool b }) {
@@ -475,30 +484,19 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private void CollectOptionalLeaves(
         DomainExpression operand, Node subject, string? entityName, List<Node> leaves) {
         switch (operand) {
-            case PropertyAccess property:
-                if (IsOptionalPropertyOn(entityName, property.Name)
-                    && _actionParameterNames?.Contains(property.Name) != true
-                    // A session ident (Now / Today / Guid) folds to a call, not a member
-                    // read; guarding `Member(subject, name)` would test something the
-                    // comparison never reads.
-                    && EffectLoweringPass.LowerDefaultExpression(
-                        property, typeHint: null, EffectiveMeaning, EffectiveForms) is null)
-                    leaves.Add(new NotEqual(new Member(subject, ResolveName(property.Name)),
-                        new Constant(null)));
-                return;
-            case RelationshipNavigation rn:
-                if (_parameters.ContainsKey(rn.RelationshipName)
-                    || IsCollectionNav(rn.RelationshipName))
-                    return;
-                CollectOptionalLeaves(
-                    rn.TargetProperty,
-                    new Member(subject, ResolveNavName(rn.RelationshipName)),
-                    ResolveRelationshipTarget(rn.RelationshipName, entityName),
-                    leaves);
+            case Ontology.PropertyAccess or Ontology.RelationshipNavigation:
+                // A direct read (optionally through a path prefix or binder root) is one
+                // leaf: guard the member it lands on, resolved against its own entity.
+                if (TryResolveOptionalLeaf(operand, subject, entityName, out var member, out _, out _))
+                    leaves.Add(new NotEqual(member, new Constant(null)));
                 return;
             case Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr
                 or Ontology.CountExpr or Ontology.SumExpr
-                or Ontology.Literal or Ontology.ParameterAccess:
+                or Ontology.Literal or Ontology.ParameterAccess
+                // Owned path-prefix has no hop guard today; adding a leaf guard without one
+                // would dereference a possibly-absent owned object. Leave it unguarded
+                // (pre-existing behaviour) rather than emit a wrong guard.
+                or Ontology.OwnedAccess:
                 // Quantifier/sum bodies guard their own comparisons against the loop item.
                 return;
             default:
@@ -508,42 +506,103 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         }
     }
 
-    /// <summary>True when <paramref name="expr"/> is a direct read of an `optional` property.</summary>
+    /// <summary>
+    /// Resolves a read expression to the member node it lowers to and the entity that
+    /// member belongs to. Handles a direct property, a path-prefix chain (<c>order Total</c>,
+    /// <c>advisor mentor Age</c>) and a binder root (<c>order Total</c> in a subscription
+    /// handler: the binder parameter is the subject, its entity comes from the binder
+    /// resolver). Returns false when the read is not an optional property.
+    /// </summary>
+    private bool TryResolveOptionalLeaf(
+        DomainExpression expr, Node subject, string? entityName,
+        out Node member, out string? leafEntity, out string leafProperty) {
+        switch (expr) {
+            case PropertyAccess property:
+                member = new Member(subject, ResolveName(property.Name));
+                leafEntity = entityName;
+                leafProperty = property.Name;
+                return _actionParameterNames?.Contains(property.Name) != true
+                    // A session ident (Now / Today / Guid) folds to a call, not a member
+                    // read; guarding `Member(subject, name)` would test something the
+                    // comparison never reads.
+                    && EffectLoweringPass.LowerDefaultExpression(
+                        property, typeHint: null, EffectiveMeaning, EffectiveForms) is null
+                    && IsOptionalPropertyOn(entityName, property.Name);
+            case RelationshipNavigation rn:
+                if (_parameters.TryGetValue(rn.RelationshipName, out var parameter)) {
+                    // Binder root: the parameter is the peer instance itself.
+                    var binderEntity = _binderEntityResolver?.Invoke(rn.RelationshipName);
+                    return TryResolveOptionalLeaf(
+                        rn.TargetProperty, parameter, binderEntity,
+                        out member, out leafEntity, out leafProperty);
+                }
+                if (IsCollectionNav(rn.RelationshipName)) {
+                    member = null!;
+                    leafEntity = null;
+                    leafProperty = "";
+                    return false;
+                }
+                return TryResolveOptionalLeaf(
+                    rn.TargetProperty,
+                    new Member(subject, ResolveNavName(rn.RelationshipName)),
+                    ResolveRelationshipTarget(rn.RelationshipName, entityName),
+                    out member, out leafEntity, out leafProperty);
+            default:
+                member = null!;
+                leafEntity = null;
+                leafProperty = "";
+                return false;
+        }
+    }
+
+    /// <summary>True when <paramref name="expr"/> reads an `optional` property, directly or
+    /// through a path prefix or binder root.</summary>
     private bool IsOptionalRead(DomainExpression expr) =>
-        expr is PropertyAccess p
-        && _actionParameterNames?.Contains(p.Name) != true
-        && IsOptionalPropertyOn(_context.SourceEntityName, p.Name);
+        TryResolveOptionalLeaf(expr, _currentSubject, _context.SourceEntityName,
+            out _, out _, out _);
 
     /// <summary>
-    /// Unboxes a direct read of an `optional` property used where a value is required
+    /// Unboxes a read of an `optional` property used where a value is required
     /// (arithmetic, a library argument, an assign to a required target): the explicit cast
     /// to the underlying type compiles in the printed C#, and the VM's cast unboxes the
     /// handle. An absent value throws, matching the VM's arithmetic/relational rule.
     /// </summary>
     internal Node UnboxOptionalRead(DomainExpression expr, Node lowered) {
-        if (expr is not PropertyAccess p) return lowered;
-        if (_actionParameterNames?.Contains(p.Name) == true) return lowered;
-        if (!IsOptionalPropertyOn(_context.SourceEntityName, p.Name)) return lowered;
-        if (EffectLoweringPass.LowerDefaultExpression(
-                p, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
-            return lowered; // session ident
-        return OptionalUnboxNode(lowered, _context.SourceEntityName, p.Name);
+        if (!TryResolveOptionalLeaf(expr, _currentSubject, _context.SourceEntityName,
+                out _, out var leafEntity, out var leafProperty))
+            return lowered;
+        return OptionalUnboxNode(lowered, leafEntity, leafProperty);
     }
 
     /// <summary>
-    /// Presence test for a direct read of an `optional` property (null when the expression
-    /// is not one). Uses the typed member read, not an untyped local: a local's raw slot
-    /// makes a null test a `!= 0` check on a value, not a handle-presence test.
+    /// Presence test for a read of an `optional` property (null when the expression is not
+    /// one). Uses the typed member read, not an untyped local: a local's raw slot makes a
+    /// null test a `!= 0` check on a value, not a handle-presence test.
     /// </summary>
     internal Node? OptionalReadPresence(DomainExpression expr) {
-        if (expr is not PropertyAccess p) return null;
-        if (_actionParameterNames?.Contains(p.Name) == true) return null;
-        if (!IsOptionalPropertyOn(_context.SourceEntityName, p.Name)) return null;
-        if (EffectLoweringPass.LowerDefaultExpression(
-                p, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
+        if (!TryResolveOptionalLeaf(expr, _currentSubject, _context.SourceEntityName,
+                out var member, out _, out _))
             return null;
-        return new NotEqual(new Member(_currentSubject, ResolveName(p.Name)), new Constant(null));
+        return new NotEqual(member, new Constant(null));
     }
+
+    /// <summary>Resolves a read expression to its domain type name (null when unknown).
+    /// Used by library handlers to claim date arithmetic on a path-prefix/binder read.</summary>
+    private string? ResolveDomainTypeName(DomainExpression expr) => expr switch {
+        PropertyAccess p => _propertyTypeResolver?.Invoke(p.Name),
+        RelationshipNavigation rn when _parameters.ContainsKey(rn.RelationshipName) =>
+            rn.TargetProperty is PropertyAccess p
+                ? FindEntity(_binderEntityResolver?.Invoke(rn.RelationshipName))
+                    ?.Properties.FirstOrDefault(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal))
+                    ?.Type.TypeName
+                : null,
+        RelationshipNavigation rn => rn.TargetProperty is PropertyAccess p
+            ? FindEntity(ResolveRelationshipTarget(rn.RelationshipName, _context.SourceEntityName))
+                ?.Properties.FirstOrDefault(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal))
+                ?.Type.TypeName
+            : null,
+        _ => null,
+    };
 
     private Node OptionalUnboxNode(Node lowered, string? entityName, string propertyName) {
         var property = FindEntity(entityName)?.Properties.FirstOrDefault(p =>

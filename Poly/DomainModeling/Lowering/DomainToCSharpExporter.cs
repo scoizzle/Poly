@@ -623,7 +623,12 @@ public sealed partial class DomainToCSharpExporter {
                         Analysis: metadata,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames,
-                        PostTransitionNotifyStages: postTransitionNotifyStages);
+                        PostTransitionNotifyStages: postTransitionNotifyStages,
+                        BinderEntityResolver: HasPeerBinding(info)
+                            ? name => string.Equals(name, peerBinding, StringComparison.Ordinal)
+                                ? info.TargetEntity.Name
+                                : null
+                            : null);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)

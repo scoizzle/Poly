@@ -459,7 +459,7 @@ public static partial class DirectVmAbiEmitter {
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
         // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
-        Type elemType = ArraySlotElementType(ArrayElementClrType(n.ElementType, ctx));
+        Type elemType = RingCodec.ArraySlotElementType(ArrayElementClrType(n.ElementType, ctx));
         // A value-type element that is not a ring slot (decimal, DateTime, Guid, or any
         // nullable) is a heap handle, and a fresh array's zero slot would be the null handle,
         // not default(T); reject rather than read null where C# gives the default value.
@@ -485,27 +485,6 @@ public static partial class DirectVmAbiEmitter {
         _ => ctx.Analysis?.GetResolvedType(elementType)?.GetRuntimeType()
     };
 
-    /// <summary>The CLR array a VM array uses: <c>long[]</c> for a value-type element (a scalar
-    /// slot or a handle), <c>object[]</c> for a reference element. The index routes use the same
-    /// value-type test, so the array and its accessors agree.</summary>
-    private static Type ArraySlotElementType(Type? elementClr) =>
-        elementClr is { IsValueType: true } ? typeof(long) : typeof(object);
-
-    /// <summary>The value stored into a value-type array slot. An integer element widened into
-    /// an IEEE slot is bit-encoded exactly as a variable store does (`double[] a; a[0] = 7`).
-    /// The reverse (an IEEE value into a non-IEEE element) truncates where C# rejects it, so it
-    /// fails closed, as the analyzer does for the same variable store.</summary>
-    private static Expression ConvertIndexStoreValue(Expression value, Type elementClr, Node valueNode, AbiCtx ctx) {
-        bool elementIeee = elementClr == typeof(double) || elementClr == typeof(float);
-        bool valueIeee = RingCodec.IsIeee(valueNode, ctx.Analysis);
-        if (elementIeee == valueIeee)
-            return value;
-        if (!elementIeee)
-            throw new InvalidOperationException(
-                $"VM compile rejected: cannot store a floating-point value into a '{elementClr.Name}' array element.");
-        return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
-    }
-
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
         var indexKind = ctx.Analysis?.GetValueRepresentation(n.Value);
         if (indexKind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
@@ -516,37 +495,12 @@ public static partial class DirectVmAbiEmitter {
         int idxSlot = ring.Add(CompileNode(
             n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
         int outSlot = ctx.AllocSlot();
-        var rawObj = Call(ctx.HeapLocal, HeapUnsafeGet,
-            Convert(ctx.RingVar(arrSlot), typeof(int)));
-        var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
         Type? elementType = ctx.Analysis?.GetResolvedType(n) is ClrTypeDefinition clrElem
             ? clrElem.RuntimeType
             : null;
-        if (elementType is { IsValueType: true }) {
-            var longArr = Variable(typeof(long[]), "_longArr");
-            var valExpr = Block([longArr],
-                Assign(longArr, Convert(rawObj, typeof(long[]))),
-                ArrayAccess(longArr, idx));
-            return ring.Then(Assign(ctx.RingVar(outSlot), valExpr));
-        }
-        if (elementType is not null) {
-            var objArr = Variable(typeof(object[]), "_objArr");
-            var valExpr = Block([objArr],
-                Assign(objArr, Convert(rawObj, typeof(object[]))),
-                Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArr, idx)));
-            return ring.Then(Assign(ctx.RingVar(outSlot), valExpr));
-        }
-        var longArrU = Variable(typeof(long[]), "_longArr");
-        var objArrU = Variable(typeof(object[]), "_objArr");
-        var valExprU = Condition(
-            TypeIs(rawObj, typeof(long[])),
-            Block([longArrU],
-                Assign(longArrU, Convert(rawObj, typeof(long[]))),
-                ArrayAccess(longArrU, idx)),
-            Block([objArrU],
-                Assign(objArrU, Convert(rawObj, typeof(object[]))),
-                Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArrU, idx))));
-        return ring.Then(Assign(ctx.RingVar(outSlot), valExprU));
+        var read = RingCodec.ArrayElementRead(
+            ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), elementType);
+        return ring.Then(Assign(ctx.RingVar(outSlot), read));
     }
 
     private static Expression CompileValue(Node node, AbiCtx ctx) {

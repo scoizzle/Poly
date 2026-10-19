@@ -102,8 +102,6 @@ public static partial class DirectVmAbiEmitter {
             Property(_stateParam, "Heap");
         public Expression Registers =>
             Property(_stateParam, StateRegistersProperty);
-        public Expression HeapRawSlots =>
-            Property(HeapLocal, StateHeapRawSlotsProperty);
         public Expression ClosureHandle =>
             Property(_stateParam, StateClosureHandleProperty);
         public Expression SlotsStackPointer =>
@@ -353,9 +351,7 @@ public static partial class DirectVmAbiEmitter {
             var raw = VariableReadRaw(v);
             if (!IsCellBacked(v))
                 return raw;
-            return ArrayAccess(
-                Convert(ArrayAccess(HeapRawSlots, Convert(raw, typeof(int))), typeof(long[])),
-                Constant(0));
+            return RingCodec.CellRead(HeapLocal, raw);
         }
 
         public Expression VariableWrite(int varIndex, Expression value) =>
@@ -363,7 +359,7 @@ public static partial class DirectVmAbiEmitter {
 
         public Expression VariableWrite(Variable v, Expression value) {
             if (IsCellBacked(v))
-                return Assign(VariableRead(v), value);
+                return RingCodec.CellWrite(HeapLocal, VariableReadRaw(v), value);
             return VariableWriteRaw(v, value);
         }
 

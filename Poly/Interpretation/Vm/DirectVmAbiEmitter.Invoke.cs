@@ -934,8 +934,6 @@ public static partial class DirectVmAbiEmitter {
         Ref<ValueStack>.Property(s => s.StackPointer);
     private static readonly PropertyInfo StateRegistersProperty =
         Ref<VmState>.Property(e => e.Registers);
-    private static readonly PropertyInfo StateHeapRawSlotsProperty =
-        Ref<VmState>.Property(e => e.Heap.RawSlots);
     private static readonly PropertyInfo StateClosureHandleProperty =
         Ref<VmState>.Property(e => e.ClosureHandle);
 

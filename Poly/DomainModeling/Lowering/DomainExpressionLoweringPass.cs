@@ -375,28 +375,41 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     protected override LoweredExpression Not(Not n) {
         var operand = Route(n.Operand);
         // An absent optional Boolean is not `false`, so `!flag` must not be true for it:
-        // a null operand never makes a condition true. Guard presence, then negate the
-        // unboxed value.
-        if (IsOptionalRead(n.Operand))
-            return operand with {
-                Value = new SN.And(
-                    new NotEqual(operand.Value, new Constant(null)),
-                    new SN.Not(UnboxOptionalRead(n.Operand, operand.Value)))
-            };
-        return operand with { Value = new SN.Not(operand.Value) };
+        // a null operand never makes a condition true. Guard the hop (outermost) and the
+        // optional presence, then negate the unboxed value.
+        return operand with {
+            Value = WrapPredicateGuards(
+                n.Operand,
+                operand.Value,
+                new SN.Not(UnboxOptionalRead(n.Operand, operand.Value)))
+        };
+    }
+
+    /// <summary>
+    /// Guards a bare boolean operand that reads through a to-one hop: each hop (outermost)
+    /// and, for an `optional` leaf, its presence (innermost), so an unlinked hop or an
+    /// absent value makes the predicate false instead of dereferencing null.
+    /// </summary>
+    private Node WrapPredicateGuards(DomainExpression expr, Node lowered, Node body) {
+        var hopGuards = new List<Node>();
+        if (expr is Ontology.RelationshipNavigation) {
+            var seenPaths = new HashSet<string>(StringComparer.Ordinal);
+            CollectValueHops(expr, _currentSubject, "", hopGuards, seenPaths);
+        }
+        if (IsOptionalRead(expr))
+            body = new SN.And(new NotEqual(lowered, new Constant(null)), body);
+        for (var i = hopGuards.Count - 1; i >= 0; i--)
+            body = new SN.And(new NotEqual(hopGuards[i], new Constant(null)), body);
+        return body;
     }
 
     /// <summary>
     /// A boolean operand that reads an `optional` value: absent makes the operand false
     /// (a null operand never makes a condition true), so guard presence and unbox.
     /// </summary>
-    private Node PredicateOperand(DomainExpression expr, Node lowered) {
-        if (!IsOptionalRead(expr))
-            return lowered;
-        return new SN.And(
-            new NotEqual(lowered, new Constant(null)),
-            UnboxOptionalRead(expr, lowered));
-    }
+    private Node PredicateOperand(DomainExpression expr, Node lowered) =>
+        WrapPredicateGuards(expr, lowered,
+            IsOptionalRead(expr) ? UnboxOptionalRead(expr, lowered) : lowered);
 
     protected override LoweredExpression Comparison(Comparison c) {
         var left = Route(c.Left);
@@ -612,8 +625,16 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         var typeName = property?.Type.TypeName
             ?? (SameScope(entityName) ? _propertyTypeResolver?.Invoke(propertyName) : null);
         if (typeName is null) return lowered;
-        var typeRef = DomainToCSharpExporter.MapDomainTypeRef(
-            property?.Type ?? new DomainTypeReference(typeName), _domain, _analysis);
+        var domainType = property?.Type ?? new DomainTypeReference(typeName);
+        // A reference-typed optional (Text, an entity value) has no nullable-unwrap cast:
+        // `(string)null` is null, not a throw, so a cast would store the absent value into a
+        // required target. Fail loudly on absence, the same rule the value-type cast has.
+        if (!DomainTypeMapping.IsNonNullableClrValueType(
+                RuntimeAnalysisCache.ClrTypeName(_domain, typeName)))
+            return new SN.Coalesce(lowered, new ThrowExpression(new New(
+                new NamedTypeReference("InvalidOperationException"),
+                new Constant("Cannot use an absent optional value."))));
+        var typeRef = DomainToCSharpExporter.MapDomainTypeRef(domainType, _domain, _analysis);
         return new TypeCast(lowered, typeRef);
     }
 

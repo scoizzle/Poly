@@ -97,3 +97,4 @@ none.
 | 2026-10-19 | OpenCode | — | — | implement: arithmetic/temporal/boolean guards, value-context unbox, target-entity optionality, assign presence, `sum` skip, `[Required]` | full suite 4131 passed |
 | 2026-10-19 | OpenCode | — | `761d9293` | review round 1: 4 bugs (path-prefix/binder leaves), 1 suggestion, 1 nit | fixed in `44e3cd4a` + follow-up |
 | 2026-10-19 | OpenCode | — | — | review round 2: for-each resolver scoping, multi-hop date type; fix + tests | full suite 4137 passed |
+| 2026-10-19 | OpenCode | — | — | review round 3: reference-typed unbox throws; hop guards on `not`/and/or; nits | full suite 4139 passed |

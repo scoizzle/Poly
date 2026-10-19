@@ -423,4 +423,57 @@ public class OptionalNullRuleTests {
         await Assert.That(cs).Contains("(DateOnly)");
         await Assert.That(asm.GetType("Appointment")).IsNotNull();
     }
+
+    // ── reference-typed leaves fail loudly; hop guards on boolean path operands ──
+
+    [Test]
+    public async Task OptionalText_AssignedToRequiredTarget_ThrowsWhenAbsent() {
+        const string dsl = """
+            domain OptionalTextRequired
+            Note: entity {
+              Title: Text
+              Subtitle: Text optional
+              Copy: action { assign Title to Subtitle }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalTextRequiredPrint");
+        // A reference-typed absent value has no nullable-unwrap cast: the unbox must
+        // fail loudly, not store the null into a required target.
+        await Assert.That(cs).Contains("?? throw");
+
+        var note = Create(asm, "Note", ("title", "x"));
+        var copy = asm.GetType("Note")!.GetMethod("Copy")!;
+        TargetInvocationException? thrown = null;
+        try {
+            copy.Invoke(note, null);
+        }
+        catch (TargetInvocationException ex) {
+            thrown = ex;
+        }
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(asm.GetType("Note")!.GetProperty("Title")!.GetValue(note))
+            .IsEqualTo("x");
+    }
+
+    [Test]
+    public async Task NotPathBoolean_UnlinkedHop_IsFalse() {
+        const string dsl = """
+            domain OptionalNotPathHop
+            Order: entity { Active: Boolean }
+            Customer: entity {
+              order: Order
+              Off: policy { not order Active }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalNotPathHopPrint");
+        await Assert.That(cs).Contains("this.Order != null");
+
+        var unlinked = Create(asm, "Customer", ("order", null));
+        await Assert.That(Policy(asm, "Customer", unlinked, "Off")).IsFalse();
+
+        var inactive = Create(asm, "Customer",
+            ("order", Create(asm, "Order", ("active", false))));
+        await Assert.That(Policy(asm, "Customer", inactive, "Off")).IsTrue();
+    }
 }

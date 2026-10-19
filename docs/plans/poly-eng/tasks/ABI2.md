@@ -1,7 +1,7 @@
 # TASK ABI2 - Dead ABI state + one scalar predicate
 
 Status: implemented on `slice/abi2` (stacked on ABI1 / PR #239). Review 1.
-Plan: [`abi-cleanup.md`](/Users/scoizzle/.opencode/plan/abi-cleanup.md) (ABI2 slice).
+Plan: the external ABI cleanup plan (`/Users/scoizzle/.opencode/plan/abi-cleanup.md`) (ABI2 slice).
 
 ## Scope
 Delete the dead `VmProgram`/`VmState` ABI state, delete the duplicate scalar

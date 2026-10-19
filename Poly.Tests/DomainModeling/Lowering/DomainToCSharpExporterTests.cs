@@ -3264,8 +3264,8 @@ public class DomainToCSharpExporterTests {
 
         // An omitted `optional` arrives as null; the length/range guards must test presence
         // first (an absent value passes, a present value is still checked). The null test is
-        // IsNullOrEmpty for Text and object.ReferenceEquals for a value type — the VM unwraps
-        // T? to a stack scalar, where `!= null` is not the sentinel test.
+        // IsNullOrEmpty for the Text length check, and a plain `!= null` for a value type —
+        // an absent optional scalar is the null handle in the printed `T?` and the VM alike.
         await Assert.That(create).Contains("string.IsNullOrEmpty(code)");
         await Assert.That(create).Contains("rank != null");
     }
@@ -3338,8 +3338,9 @@ public class DomainToCSharpExporterTests {
 
         // An absent optional satisfies the range; a present value is still checked, so the
         // guard tests presence first (same shape as the create-side guard).
-        await Assert.That(cs).Contains("!= null &&");
-        await Assert.That(cs).Contains("must be >= 1");
+        var bump = ExportedCSharp.ExtractMethod(cs, "DomainResult Bump(");
+        await Assert.That(bump).Contains("!= null &&");
+        await Assert.That(bump).Contains("must be >= 1");
     }
 
     private static string[] CompileExported(string cs) {

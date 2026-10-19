@@ -340,6 +340,15 @@ public sealed class VmState : IDisposable {
     /// Compared against <see cref="MaxLoopIterations"/> when that limit is &gt;= 0.</summary>
     public long LoopTicks { get; set; }
 
+    /// <summary>Preallocated heap cell holding boxed <c>true</c> for a present <c>bool?</c>,
+    /// or 0 until first used. One shared cell per value keeps a bool optional from
+    /// allocating on every write.</summary>
+    public long OptionalTrueCell { get; set; }
+
+    /// <summary>Preallocated heap cell holding boxed <c>false</c> for a present <c>bool?</c>,
+    /// or 0 until first used.</summary>
+    public long OptionalFalseCell { get; set; }
+
     // ── Closure/function call frame state ────────────────────────
 
     /// <summary>Closure handle active during a compiled function body.
@@ -421,6 +430,8 @@ public sealed class VmState : IDisposable {
         FramePos = 0;
         Stack.Reset();
         Heap.Clear();
+        OptionalTrueCell = 0;
+        OptionalFalseCell = 0;
         LoopTicks = 0;
         CurrentAstNode = null;
         CurrentNodeId = null;

@@ -665,12 +665,22 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
-            return Call(BitConverterDoubleToInt64Bits,
-                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
-        var rhs = rightVal;
-        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
-        return factory(leftVal, rhs);
+        var absentLeft = AbsentTest(left, leftVal, ctx);
+        var absentRight = AbsentTest(right, rightVal, ctx);
+        var l = ScalarOperand(left, leftVal, ctx);
+        var r = ScalarOperand(right, rightVal, ctx);
+        Expression result;
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            result = Call(BitConverterDoubleToInt64Bits,
+                factory(AsIeeeDouble(left, l, ctx), AsIeeeDouble(right, r, ctx)));
+        }
+        else {
+            var rhs = r;
+            if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
+            result = factory(l, rhs);
+        }
+        var absent = absentLeft is null ? absentRight : absentRight is null ? absentLeft : OrElse(absentLeft, absentRight);
+        return absent is null ? result : Block(IfThen(absent, ThrowAbsentOptional()), result);
     }
 
     private static Expression AsIeeeDouble(Node node, Expression ringVal, AbiCtx ctx) =>
@@ -678,18 +688,30 @@ public static partial class DirectVmAbiEmitter {
             ? Call(BitConverterInt64BitsToDouble, ringVal)
             : Convert(ringVal, typeof(double));
 
-    private static Expression EmitNotValue(Not n, AbiCtx ctx) =>
-        Condition(Equal(CompileValue(n.Value, ctx), Constant(0L)), Constant(1L), Constant(0L));
-
-    private static Expression EmitUnaryMinusValue(UnaryMinus n, AbiCtx ctx) {
-        var v = CompileValue(n.Operand, ctx);
-        return IsDoubleValue(ctx, n.Operand)
-            ? Call(BitConverterDoubleToInt64Bits, Negate(Call(BitConverterInt64BitsToDouble, v)))
-            : Negate(v);
+    private static Expression EmitNotValue(Not n, AbiCtx ctx) {
+        // A `bool?` operand unboxes (an absent one is false) rather than testing the handle.
+        var v0 = CompileValue(n.Value, ctx);
+        var v = ScalarOperand(n.Value, v0, ctx);
+        return Condition(Equal(v, Constant(0L)), Constant(1L), Constant(0L));
     }
 
-    private static Expression EmitBitwiseNotValue(BitwiseNot n, AbiCtx ctx) =>
-        Not(CompileValue(n.Operand, ctx));
+    private static Expression EmitUnaryMinusValue(UnaryMinus n, AbiCtx ctx) {
+        var v0 = CompileValue(n.Operand, ctx);
+        var absent = AbsentTest(n.Operand, v0, ctx);
+        var v = ScalarOperand(n.Operand, v0, ctx);
+        Expression negated = IsDoubleValue(ctx, n.Operand)
+            ? Call(BitConverterDoubleToInt64Bits, Negate(Call(BitConverterInt64BitsToDouble, v)))
+            : Negate(v);
+        return absent is null ? negated : Block(IfThen(absent, ThrowAbsentOptional()), negated);
+    }
+
+    private static Expression EmitBitwiseNotValue(BitwiseNot n, AbiCtx ctx) {
+        var v0 = CompileValue(n.Operand, ctx);
+        var absent = AbsentTest(n.Operand, v0, ctx);
+        var v = ScalarOperand(n.Operand, v0, ctx);
+        var result = Not(v);
+        return absent is null ? result : Block(IfThen(absent, ThrowAbsentOptional()), result);
+    }
 
     private static Expression EmitPopCountValue(PopCount pc, AbiCtx ctx) =>
         Convert(Call(null, BitOperationsPopCount,
@@ -722,6 +744,13 @@ public static partial class DirectVmAbiEmitter {
         var tmp = Variable(typeof(long), "_coal");
         var leftVal = CompileValue(n.LeftHandValue, ctx);
         var rightVal = CompileValue(n.RightHandValue, ctx);
+        // `a ?? b` with both operands optional scalars selects a handle; unboxing the left
+        // would yield a raw scalar where the right arm yields a handle.
+        if (OptionalScalarUnderlying(n.LeftHandValue, ctx) is not null
+            && OptionalScalarUnderlying(n.RightHandValue, ctx) is not null)
+            return Block([tmp],
+                Assign(tmp, leftVal),
+                Condition(NotEqual(tmp, Constant(0L)), tmp, rightVal));
         Expression whenLeft = UsesAbiNullSentinel(ctx, n.LeftHandValue)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;
@@ -743,6 +772,73 @@ public static partial class DirectVmAbiEmitter {
         return false;
     }
 
+    /// <summary>The underlying `long`/`bool` of an optional scalar (`long?`/`bool?`), or null
+    /// when the node is not one. Its slot is a handle: 0 is absent, else a cell holding the
+    /// boxed value.</summary>
+    private static Type? OptionalScalarUnderlying(Node node, AbiCtx ctx) {
+        Type? clr = null;
+        if (node is Variable variable && ctx.Analysis is not null) {
+            // A later plain store overwrites the binding node's resolved type, so read the
+            // binding's first assigned (optional) type instead.
+            var meta = ctx.Analysis.GetMetadata<VariableAnalysisMetadata>(variable);
+            var declaration = variable;
+            if (meta is not null && meta.VariableReferences.TryGetValue(variable, out var decl) && decl is not null)
+                declaration = decl;
+            clr = ctx.Analysis.GetMetadata<VariableAssignedTypeMetadata>(declaration)?.ClrType;
+        }
+        clr ??= ctx.Analysis?.GetResolvedType(node)?.GetRuntimeType()
+            ?? ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.ClrType
+            ?? (node is Constant { Value: not null } c ? c.Value.GetType() : null);
+        return OptionalScalarUnderlying(clr);
+    }
+
+    private static Type? OptionalScalarUnderlying(Type? clr) {
+        var underlying = clr is null ? null : Nullable.GetUnderlyingType(clr);
+        // The contract is `long?` (Number) and `bool?` (Boolean). Other nullable value types
+        // keep their existing representation, so `int?`/`double?` are out of scope here.
+        return underlying == typeof(long) || underlying == typeof(bool) ? underlying : null;
+    }
+
+    /// <summary>The scalar an operation uses from an optional-scalar operand: the cell's value
+    /// for a present one, the raw slot for a plain scalar.</summary>
+    private static Expression ScalarOperand(Node node, Expression ringVal, AbiCtx ctx) =>
+        OptionalScalarUnderlying(node, ctx) is null
+            ? ringVal
+            : Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, ringVal);
+
+    /// <summary>`slot == 0` for an optional-scalar operand (absent), else null.</summary>
+    private static Expression? AbsentTest(Node node, Expression ringVal, AbiCtx ctx) =>
+        OptionalScalarUnderlying(node, ctx) is null ? null : Equal(ringVal, Constant(0L));
+
+    /// <summary>A relational or arithmetic use of an absent optional scalar is unsound: it has
+    /// no value to order or compute with, so the VM throws rather than fold null to zero.</summary>
+    private static Expression ThrowAbsentOptional() =>
+        Throw(New(InvalidOperationExceptionStringCtor,
+            Constant("Cannot use an absent optional value in an operation.")));
+
+    /// <summary>The handle stored into an optional-scalar destination for a present scalar
+    /// <paramref name="scalarRaw"/> (its raw long). A `bool` reuses one preallocated cell per
+    /// value, so it is not reallocated per write.</summary>
+    private static Expression BoxOptionalScalar(Expression scalarRaw, Type underlying, AbiCtx ctx) {
+        if (underlying == typeof(bool)) {
+            var trueCell = Property(ctx.State, nameof(VmState.OptionalTrueCell));
+            var falseCell = Property(ctx.State, nameof(VmState.OptionalFalseCell));
+            return Condition(NotEqual(scalarRaw, Constant(0L)),
+                Block(
+                    IfThen(Equal(trueCell, Constant(0L)),
+                        Assign(trueCell, Convert(Call(ctx.HeapLocal, HeapAllocate,
+                            Convert(Constant(true, typeof(object)), typeof(object))), typeof(long)))),
+                    trueCell),
+                Block(
+                    IfThen(Equal(falseCell, Constant(0L)),
+                        Assign(falseCell, Convert(Call(ctx.HeapLocal, HeapAllocate,
+                            Convert(Constant(false, typeof(object)), typeof(object))), typeof(long)))),
+                    falseCell));
+        }
+        return Convert(Call(ctx.HeapLocal, HeapAllocate,
+            Convert(Convert(scalarRaw, underlying), typeof(object))), typeof(long));
+    }
+
     private static Expression UnboxIfHeapNullable(AbiCtx ctx, Node node, Expression handle) {
         var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
         var clr = meta?.ClrType;
@@ -752,15 +848,19 @@ public static partial class DirectVmAbiEmitter {
         return Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, handle);
     }
 
-    private static Expression EmitLogicalAndValue(And n, AbiCtx ctx) =>
-        Condition(Equal(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
+    private static Expression EmitLogicalAndValue(And n, AbiCtx ctx) {
+        var left = CompileValue(n.LeftHandValue, ctx);
+        return Condition(Equal(ScalarOperand(n.LeftHandValue, left, ctx), Constant(0L)),
             Constant(0L),
-            CompileValue(n.RightHandValue, ctx));
+            ScalarOperand(n.RightHandValue, CompileValue(n.RightHandValue, ctx), ctx));
+    }
 
-    private static Expression EmitLogicalOrValue(Or n, AbiCtx ctx) =>
-        Condition(NotEqual(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
+    private static Expression EmitLogicalOrValue(Or n, AbiCtx ctx) {
+        var left = CompileValue(n.LeftHandValue, ctx);
+        return Condition(NotEqual(ScalarOperand(n.LeftHandValue, left, ctx), Constant(0L)),
             Constant(1L),
-            CompileValue(n.RightHandValue, ctx));
+            ScalarOperand(n.RightHandValue, CompileValue(n.RightHandValue, ctx), ctx));
+    }
 
     private static Expression CompileConditionAsBool(Node node, AbiCtx ctx) =>
         node switch {
@@ -775,6 +875,6 @@ public static partial class DirectVmAbiEmitter {
                 CompileConditionAsBool(n.RightHandValue, ctx)),
             Or n => OrElse(CompileConditionAsBool(n.LeftHandValue, ctx),
                 CompileConditionAsBool(n.RightHandValue, ctx)),
-            _ => NotEqual(CompileValue(node, ctx), Constant(0L))
+            _ => NotEqual(ScalarOperand(node, CompileValue(node, ctx), ctx), Constant(0L))
         };
 }

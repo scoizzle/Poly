@@ -107,7 +107,26 @@ public static partial class DirectVmAbiEmitter {
             var clrMemberType = memberTypeDef.GetRuntimeType()
                 ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
-            if (clrMemberType is not null
+            if (clrMemberType is not null && OptionalScalarUnderlying(clrMemberType) is { } nullableMember) {
+                // The member takes null for the null handle and the unboxed value otherwise. A
+                // plain scalar is boxed first (a raw slot would read back as absent); a value
+                // that is already optional contributes its handle.
+                Expression handle;
+                if (a.Value is Constant { Value: null })
+                    handle = Constant(0L);
+                else if (OptionalScalarUnderlying(a.Value, ctx) is not null)
+                    handle = ctx.RingVar(valueSlot);
+                else
+                    handle = BoxOptionalScalar(ctx.RingVar(valueSlot), nullableMember, ctx);
+                var raw = Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, handle);
+                Expression memberValue = nullableMember == typeof(bool)
+                    ? NotEqual(raw, Constant(0L))
+                    : Convert(raw, nullableMember);
+                writeValue = Condition(Equal(handle, Constant(0L)),
+                    Constant(null, typeof(object)),
+                    Convert(memberValue, typeof(object)));
+            }
+            else if (clrMemberType is not null
                 && clrMemberType.IsValueType
                 && AbiValueTypes.IsLongRepresentable(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
@@ -167,7 +186,7 @@ public static partial class DirectVmAbiEmitter {
             var valueExpr = CompileNode(a.Value, ctx);
             int valSlot = ctx.RingDepth - 1;
             var foldVal = FoldResultToSlot(ref valSlot, d, ctx);
-            var store = Assign(EmitCaptureCellValue(ctx, capIndex), ctx.RingVar(valSlot));
+            var store = Assign(EmitCaptureCellValue(ctx, capIndex), StoreValue(ctx, destVar, a.Value, ctx.RingVar(valSlot)));
             ctx.RingDepth = valSlot + 1;
             return Block(valueExpr, foldVal, store);
         }
@@ -175,9 +194,34 @@ public static partial class DirectVmAbiEmitter {
         int d2 = ctx.RingDepth;
         var valueExpr2 = CompileNode(a.Value, ctx);
         int resultSlot = ctx.RingDepth - 1;
-        var result = ctx.VariableWrite(destVar, CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
+        var result = ctx.VariableWrite(destVar, StoreValue(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
         ctx.RingDepth = resultSlot + 1;
         return Block(valueExpr2, result);
+    }
+
+    /// <summary>The slot value to store into <paramref name="destination"/>: a present scalar
+    /// into an optional-scalar destination is boxed into a cell so it stays distinguishable
+    /// from absent (0). A null value and an already-optional value keep the ABI representation.</summary>
+    private static Expression StoreValue(AbiCtx ctx, Variable destination, Node value, Expression slotValue) {
+        var underlying = OptionalScalarUnderlying(DestinationClr(ctx, destination));
+        if (underlying is not null && value is not Constant { Value: null }
+            && OptionalScalarUnderlying(value, ctx) is null)
+            return BoxOptionalScalar(slotValue, underlying, ctx);
+        return CoerceSlotToDestination(ctx, destination, value, slotValue);
+    }
+
+    private static Type? DestinationClr(AbiCtx ctx, Variable destination) {
+        // The binding's first assigned type is the variable's representation; a later
+        // assignment's destination use may be typed from its value instead.
+        var meta = ctx.Analysis?.GetMetadata<VariableAnalysisMetadata>(destination);
+        var declaration = destination;
+        if (meta is not null && meta.VariableReferences.TryGetValue(destination, out var decl) && decl is not null)
+            declaration = decl;
+        var assigned = ctx.Analysis?.GetMetadata<VariableAssignedTypeMetadata>(declaration)?.ClrType;
+        if (assigned is not null)
+            return assigned;
+        return ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(destination)?.ClrType
+            ?? ctx.Analysis?.GetResolvedType(destination)?.GetRuntimeType();
     }
 
     /// <summary>
@@ -668,13 +712,32 @@ public static partial class DirectVmAbiEmitter {
     /// value stored where the declared type is a reference must become a heap handle.</summary>
     private static Expression ForEachElementValue(ForEachLoop fel, ParameterExpression enumerator, AbiCtx ctx) {
         var current = Property(enumerator, EnumeratorCurrent);
-        if (fel.DeclaredType is null)
+        if (fel.DeclaredType is null) {
+            // A nullable element keeps the handle/cell representation (null → the null handle,
+            // a present value → a cell), matching what readers unbox.
+            if (ctx.Analysis?.GetMetadata<ForEachElementTypeMetadata>(fel)?.ElementType?.GetRuntimeType() is { } elementOpt
+                && OptionalScalarUnderlying(elementOpt) is { } elementUnderlying) {
+                Expression elementRaw = elementUnderlying == typeof(bool)
+                    ? Convert(Convert(current, typeof(bool)), typeof(long))
+                    : Convert(current, elementUnderlying);
+                return Condition(Equal(current, Constant(null)), Constant(0L),
+                    BoxOptionalScalar(elementRaw, elementUnderlying, ctx));
+            }
             return Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
+        }
 
         var declaredClr = ctx.Analysis?.GetResolvedType(fel.DeclaredType)?.GetRuntimeType();
         if (declaredClr is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot resolve the foreach declared type '{fel.DeclaredType}'.");
+        // A declared optional-scalar loop variable is a handle, not an inline scalar.
+        if (OptionalScalarUnderlying(declaredClr) is { } declaredUnderlying) {
+            Expression declaredRaw = declaredUnderlying == typeof(bool)
+                ? Convert(Convert(current, typeof(bool)), typeof(long))
+                : Convert(current, declaredUnderlying);
+            return Condition(Equal(current, Constant(null)), Constant(0L),
+                BoxOptionalScalar(declaredRaw, declaredUnderlying, ctx));
+        }
         var elementClr = ctx.Analysis?.GetMetadata<ForEachElementTypeMetadata>(fel)?.ElementType?.GetRuntimeType();
         if (elementClr is null)
             throw new InvalidOperationException(

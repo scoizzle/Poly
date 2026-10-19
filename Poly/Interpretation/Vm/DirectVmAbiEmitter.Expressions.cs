@@ -17,6 +17,8 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
+        if (OptionalComparisonBool(left, right, cf, lv, rv, ctx) is { } optionalTest)
+            return optionalTest;
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
@@ -47,6 +49,10 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx, Node? cn = null) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
+        // An optional scalar operand takes the optional rules (presence / unbox / throw)
+        // before the heap-equality and heap-ordering paths.
+        if (OptionalComparisonBool(left, right, cf, lv, rv, ctx) is { } optionalTest)
+            return Condition(optionalTest, Constant(1L), Constant(0L));
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
@@ -71,6 +77,45 @@ public static partial class DirectVmAbiEmitter {
             return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
                 Constant(1L), Constant(0L));
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
+    }
+
+    /// <summary>A comparison (`==`, `!=`, `<`, …) with an optional-scalar operand, as a bool
+    /// test: `x == null` / `x != null` test presence; any other scalar compares the unboxed
+    /// value, where an absent operand equals only another absent operand; a relational use of
+    /// an absent operand throws. Returns null when neither operand is an optional scalar.</summary>
+    private static Expression? OptionalComparisonBool(
+        Node left, Node right, Func<Expression, Expression, BinaryExpression> cf,
+        Expression lv, Expression rv, AbiCtx ctx) {
+        var absentLeft = AbsentTest(left, lv, ctx);
+        var absentRight = AbsentTest(right, rv, ctx);
+        if (absentLeft is null && absentRight is null)
+            return null;
+        bool eq = cf == Equal || cf == NotEqual;
+        var l = ScalarOperand(left, lv, ctx);
+        var r = ScalarOperand(right, rv, ctx);
+        if (eq) {
+            // `x == null` / `x != null` is a presence test on the handle.
+            if (left is Constant { Value: null } || right is Constant { Value: null }) {
+                var handle = absentLeft is not null ? lv : rv;
+                var present = NotEqual(handle, Constant(0L));
+                return cf == Equal ? Not(present) : present;
+            }
+            Expression presentLeft = absentLeft is null ? Constant(true) : NotEqual(lv, Constant(0L));
+            Expression presentRight = absentRight is null ? Constant(true) : NotEqual(rv, Constant(0L));
+            Expression bothPresent = AndAlso(presentLeft, presentRight);
+            Expression bothAbsent = AndAlso(Not(presentLeft), Not(presentRight));
+            Expression valuesEqual = Equal(l, r);
+            var equal = Condition(bothPresent, valuesEqual, bothAbsent);
+            return cf == Equal ? equal : Not(equal);
+        }
+        Expression absent = absentLeft is null ? absentRight! : absentRight is null ? absentLeft : OrElse(absentLeft, absentRight);
+        // A literal `null` operand is absent: a relational against it has no value to order.
+        if (left is Constant { Value: null } || right is Constant { Value: null })
+            return Block(ThrowAbsentOptional(), Constant(false));
+        var cmp = IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)
+            ? cf(Call(BitConverterInt64BitsToDouble, l), Call(BitConverterInt64BitsToDouble, r))
+            : cf(l, r);
+        return Block(IfThen(absent, ThrowAbsentOptional()), cmp);
     }
 
     // ── Ring-based expression helpers ──
@@ -143,12 +188,22 @@ public static partial class DirectVmAbiEmitter {
         AbiCtx ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
-            return SpillToRing(Call(BitConverterDoubleToInt64Bits,
-                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx))), ctx);
-        var rhs = rightVal;
-        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
-        return SpillToRing(factory(leftVal, rhs), ctx);
+        var absentLeft = AbsentTest(left, leftVal, ctx);
+        var absentRight = AbsentTest(right, rightVal, ctx);
+        var l = ScalarOperand(left, leftVal, ctx);
+        var r = ScalarOperand(right, rightVal, ctx);
+        Expression arithmetic;
+        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
+            arithmetic = Call(BitConverterDoubleToInt64Bits,
+                factory(AsIeeeDouble(left, l, ctx), AsIeeeDouble(right, r, ctx)));
+        }
+        else {
+            var rhs = r;
+            if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
+            arithmetic = factory(l, rhs);
+        }
+        var absent = absentLeft is null ? absentRight : absentRight is null ? absentLeft : OrElse(absentLeft, absentRight);
+        return SpillToRing(absent is null ? arithmetic : Block(IfThen(absent, ThrowAbsentOptional()), arithmetic), ctx);
     }
 
     /// <summary>Comparison (eq, neq, lt, gt, etc.) → 0/1 long.
@@ -182,6 +237,27 @@ public static partial class DirectVmAbiEmitter {
                     : Condition(equalCheck, Constant(0L), Constant(1L)));
             ctx.RingDepth = d + 1;
             return Block(leftExpr, rightExpr, result);
+        }
+
+        // Relational use of an optional scalar (`long?`/`bool?`): unbox a present operand and
+        // throw on an absent one rather than order the null handle. Equality is handled above
+        // (presence / boxed-value equality).
+        if (!isEquality) {
+            var absentLeft = AbsentTest(left, ctx.RingVar(leftResult), ctx);
+            var absentRight = AbsentTest(right, ctx.RingVar(rightResult), ctx);
+            if (absentLeft is not null || absentRight is not null) {
+                var l = ScalarOperand(left, ctx.RingVar(leftResult), ctx);
+                var r = ScalarOperand(right, ctx.RingVar(rightResult), ctx);
+                var cmp = IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)
+                    ? comparisonFactory(Call(BitConverterInt64BitsToDouble, l), Call(BitConverterInt64BitsToDouble, r))
+                    : comparisonFactory(l, r);
+                var absent = absentLeft is null ? absentRight! : absentRight is null ? absentLeft : OrElse(absentLeft, absentRight);
+                var optionalResult = Assign(ctx.RingVar(d),
+                    Block(IfThen(absent, ThrowAbsentOptional()),
+                        Condition(cmp, Constant(1L), Constant(0L))));
+                ctx.RingDepth = d + 1;
+                return Block(leftExpr, rightExpr, optionalResult);
+            }
         }
 
         // Double/float comparison: reinterpret bits before comparing
@@ -459,6 +535,20 @@ public static partial class DirectVmAbiEmitter {
         if (clrType == typeof(float) || clrType == typeof(double)) {
             return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
         }
+        // A nullable scalar is a handle: absent is the null sentinel, present is a cell holding
+        // the boxed value, so a present 0/false stays distinguishable from absent.
+        if (clrType is not null && OptionalScalarUnderlying(clrType) is { } nullableUnderlying) {
+            // Spill the nullable to a local so its getter/return runs once; a present value
+            // becomes a cell (a bool reuses the shared true/false cells).
+            var typed = Variable(clrType, "_opt");
+            Expression present = nullableUnderlying == typeof(bool)
+                ? BoxOptionalScalar(Convert(Property(typed, "Value"), typeof(long)), typeof(bool), ctx)
+                : Convert(Call(ctx.HeapLocal, HeapAllocate,
+                    Convert(Convert(Property(typed, "Value"), nullableUnderlying), typeof(object))), typeof(long));
+            return Block([typed],
+                Assign(typed, Convert(value, clrType)),
+                Condition(Property(typed, "HasValue"), present, Constant(0L)));
+        }
         if (clrType is not null && clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
             return Convert(Convert(value, clrType), typeof(long));
         }
@@ -475,6 +565,22 @@ public static partial class DirectVmAbiEmitter {
         }
         if (paramType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
+        // A nullable parameter takes null for the null handle, otherwise the cell's value as
+        // `T?`; a plain scalar lifts into `T?`.
+        if (OptionalScalarUnderlying(paramType) is { } parameterUnderlying) {
+            if (source is Constant { Value: null })
+                return Constant(null, paramType);
+            bool sourceIsOptional = source is not null && OptionalScalarUnderlying(source, ctx) is not null;
+            Expression present = sourceIsOptional
+                ? Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, ringVal)
+                : ringVal;
+            Expression value = parameterUnderlying == typeof(bool)
+                ? NotEqual(present, Constant(0L))
+                : Convert(present, parameterUnderlying);
+            return sourceIsOptional
+                ? Condition(Equal(ringVal, Constant(0L)), Constant(null, paramType), Convert(value, paramType))
+                : Convert(value, paramType);
+        }
         if (paramType.IsValueType && AbiValueTypes.IsLongRepresentable(paramType))
             return Convert(ringVal, paramType);
         return Convert(
@@ -663,6 +769,15 @@ public static partial class DirectVmAbiEmitter {
         var operandExpr = CompileNode(t.Operand, ctx);
         int slot = ctx.RingDepth - 1;
         var fold = FoldResultToSlot(ref slot, d, ctx);
+        // Casting to an optional scalar boxes a present value into a cell so present 0/false is
+        // distinguishable from absent; null stays the null handle and an already-optional value
+        // passes its handle through.
+        if (OptionalScalarUnderlying(targetType) is { } boxed) {
+            if (t.Operand is Constant { Value: null } || OptionalScalarUnderlying(t.Operand, ctx) is not null)
+                return Block(operandExpr, fold);
+            return Block(operandExpr, fold,
+                Assign(ctx.RingVar(slot), BoxOptionalScalar(ctx.RingVar(slot), boxed, ctx)));
+        }
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(operandExpr, fold);
         return Block(

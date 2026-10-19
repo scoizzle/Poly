@@ -59,3 +59,4 @@ none (admitted 2026-10-19).
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-19 | OpenCode | local | uncommitted | Slices 0-3 implemented on `9838889a`; `dotnet build Poly.Benchmarks` clean, `Poly.Tests` 4149/4149 green | none yet |
 | 2026-10-19 | verifier | local | uncommitted | Verify round 1: 1 🟠, 2 🟡, 1 🟢. Fix round: reserved SetArgs parameter slots (+ red/green test), `RingCodec` internal, `IsIeee` exact, docs updated. Full suite 4150/4150 green. Re-verify: all closed, no new finding | 🟠 SetArgs locals clobbered a parameter; 🟡 public codec type; 🟡 nullable IEEE classification; 🟢 stale marshaller docs |
+| 2026-10-19 | reviewer | local | PR #239 | Review: no runtime defect. Applied both suggestions: ABI reference/README now describe `VmCall` (not `CallStack`), and `OpenRing`/`RingRegion` are internal. Build clean, 4150/4150 green | 2 suggestions |

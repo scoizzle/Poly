@@ -116,12 +116,12 @@ public static partial class DirectVmAbiEmitter {
         /// <summary>Open a scoped ring region. Each <see cref="RingRegion.Add"/>
         /// folds its result into the next contiguous slot, so callers never
         /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
-        public RingRegion OpenRing() => new(this);
+        internal RingRegion OpenRing() => new(this);
 
         /// <summary>Contiguous ring slots for a sequence of compiled operands.
         /// <see cref="Add"/> compacts each result to <c>Base + count</c>; any
         /// slots the caller allocates afterwards extend the depth normally.</summary>
-        public sealed class RingRegion {
+        internal sealed class RingRegion {
             private readonly AbiCtx _ctx;
             private readonly int _base;
             private readonly List<Expression> _steps = new();

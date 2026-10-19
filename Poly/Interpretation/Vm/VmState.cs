@@ -14,11 +14,6 @@ public sealed class VmState : IDisposable {
     /// Backed by <see cref="ArrayPool{long}"/>.</summary>
     public ValueStack Stack { get; } = new();
 
-    /// <summary>General-purpose register file used during µop execution.
-    /// Allocated lazily — must be set before the program delegate runs.
-    /// Default size is 256 slots.</summary>
-    public long[]? Registers { get; set; }
-
     /// <summary>Current program counter (µop index) for debug/trace
     /// purposes. Updated by the compiled delegate in Debug/Normal mode.
     /// Set to 0 at the start of execution.</summary>

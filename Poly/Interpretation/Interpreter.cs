@@ -132,8 +132,6 @@ public static class Interpreter {
         var state = new VmState(program);
         configure(state);
         state.Status = InterpreterStatus.Running;
-        // Registers array must be large enough for SP-based ring save indexing.
-        state.Registers ??= new long[256];
         state.Program.Delegate(state);
         return new ExecutionResult(state, InterpretResult(state));
     }
@@ -155,7 +153,6 @@ public static class Interpreter {
     /// </summary>
     internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
         state.Status = InterpreterStatus.Resuming;
-        state.Registers ??= new long[256];
         state.SetArgs(args);
         state.Program.Delegate(state);
         return InterpretResult(state);

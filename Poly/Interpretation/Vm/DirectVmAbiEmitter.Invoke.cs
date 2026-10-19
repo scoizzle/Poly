@@ -232,13 +232,16 @@ public static partial class DirectVmAbiEmitter {
             var preBody = new List<Expression>();   // before inline body
             var postBody = new List<Expression>();  // after inline body
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
-            var regSlots = Property(ctx.State, "Registers");
 
-            // Per-invocation SP local: nested invokes must not clobber a shared save slot.
-            var invokeSp = Variable(typeof(int), "_invokeSp");
-            preBody.Add(Assign(invokeSp, spProp));
-            for (int k = 0; k < saveDepth; k++)
-                preBody.Add(Assign(ArrayAccess(regSlots, Add(invokeSp, Constant(k))), ctx.RingVar(k)));
+            // Save the caller's ring into per-invocation CLR locals. The inline body
+            // may reuse these ring slots and cannot reach the locals. (A resume inside
+            // the body skips this save; the root caller does not read its ring after
+            // the SetArgs result is written.)
+            var savedRing = new ParameterExpression[saveDepth];
+            for (int k = 0; k < saveDepth; k++) {
+                savedRing[k] = Variable(typeof(long), $"_save{k}");
+                preBody.Add(Assign(savedRing[k], ctx.RingVar(k)));
+            }
 
             var callSp = Variable(typeof(int), "_callSp");
             preBody.Add(Assign(callSp, spProp));
@@ -265,9 +268,9 @@ public static partial class DirectVmAbiEmitter {
             // live slots.
             ctx.RingDepth = saveDepth + 1;
 
-            // Restore ring from state.Registers using the per-invocation SP.
+            // Restore the caller's ring from the per-invocation locals.
             for (int k = 0; k < saveDepth; k++)
-                postBody.Add(Assign(ctx.RingVar(k), ArrayAccess(regSlots, Add(invokeSp, Constant(k)))));
+                postBody.Add(Assign(ctx.RingVar(k), savedRing[k]));
 
             // Write saved result to the caller's result slot (ring now fully restored)
             postBody.Add(Assign(ctx.RingVar(saveDepth), invokeResult));
@@ -279,8 +282,9 @@ public static partial class DirectVmAbiEmitter {
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopFrameParameters();
             ctx.PopScope();
-            return Block([invokeSp, callSp, invokeResult],
-                Block(preBody.Concat(postBody)));
+            var locals = new List<ParameterExpression> { callSp, invokeResult };
+            locals.AddRange(savedRing);
+            return Block(locals, Block(preBody.Concat(postBody)));
         }
 
         if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
@@ -491,8 +495,6 @@ public static partial class DirectVmAbiEmitter {
         bodyExprs.Add(Label(fnCtx.EntryLabel));
         bodyExprs.Add(Assign(fnCtx.SlotsLocal, fnCtx.SlotsInitExpression));
         bodyExprs.Add(Assign(fnCtx.HeapLocal, fnCtx.HeapInitExpression));
-        bodyExprs.Add(Assign(fnCtx.Registers,
-            Coalesce(fnCtx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         bodyExprs.Add(Assign(fnCtx.FramePosLocal,
             Property(fnCtx.State, nameof(VmState.FramePos))));
         if (instanceSlot) {
@@ -932,8 +934,6 @@ public static partial class DirectVmAbiEmitter {
         Ref<ValueStack>.Property(s => s.RawSlots);
     private static readonly PropertyInfo ValueStackStackPointerProperty =
         Ref<ValueStack>.Property(s => s.StackPointer);
-    private static readonly PropertyInfo StateRegistersProperty =
-        Ref<VmState>.Property(e => e.Registers);
     private static readonly PropertyInfo StateClosureHandleProperty =
         Ref<VmState>.Property(e => e.ClosureHandle);
 

@@ -32,4 +32,4 @@ suspend-through-finally, SP-0 seeding).
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-19 | OpenCode | local | pending | planned | plan review closed before implementation |
+| 2026-10-19 | OpenCode | local | pending | implemented; suite 4153/4153 green (includes the suspend-through-SetArgs characterization) | none |

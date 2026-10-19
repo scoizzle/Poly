@@ -844,6 +844,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             string.Equals(n.Name, relName, StringComparison.Ordinal))?.Target.TypeName;
         var argPass = new DomainExpressionLoweringPass(_context with {
             Parameters = mergedParams,
+            // The pass's own resolvers are installed on `_expressionPass`, not on this
+            // context; carry them so a source read still types/guards correctly.
+            PropertyTypeResolver = _context.PropertyTypeResolver ?? BuildPropertyTypeResolver(_entity),
+            IsOptionalProperty = _context.IsOptionalProperty ?? _isOptionalProperty,
             BinderEntityResolver = name => string.Equals(name, e.BinderName, StringComparison.Ordinal)
                 ? targetName
                 : null,

@@ -136,10 +136,14 @@ internal static class TemporalLowering {
             var family = FamilyFromTypeName(resolvedTypeName);
             if (family is not DateClrFamily.DateOnly and not DateClrFamily.DateTime)
                 return false;
+            // Date - Date is a day difference; both operands must be the same date family,
+            // through a path chain too (`order DueDate - order PaidDate`).
+            var rightTypeName = rightExpr is PropertyAccess rightPa
+                ? propertyTypeResolver?.Invoke(rightPa.Name)
+                : expressionTypeResolver?.Invoke(rightExpr);
             if (_subtract
-                && rightExpr is PropertyAccess rightPa
-                && propertyTypeResolver?.Invoke(rightPa.Name) is { } rightTypeName
-                && FamilyFromTypeName(rightTypeName) == family) {
+                && rightTypeName is { } rightResolved
+                && FamilyFromTypeName(rightResolved) == family) {
                 result = new Invoke(new Member(route(leftExpr), "Subtract"), [route(rightExpr)]);
                 return true;
             }

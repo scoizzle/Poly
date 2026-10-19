@@ -587,20 +587,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     }
 
     /// <summary>Resolves a read expression to its domain type name (null when unknown).
-    /// Used by library handlers to claim date arithmetic on a path-prefix/binder read.</summary>
+    /// Walks a path-prefix/binder chain to the leaf property, so a library handler can
+    /// claim date arithmetic on it.</summary>
     private string? ResolveDomainTypeName(DomainExpression expr) => expr switch {
         PropertyAccess p => _propertyTypeResolver?.Invoke(p.Name),
+        RelationshipNavigation rn => ResolvePathPropertyType(rn, _context.SourceEntityName),
+        _ => null,
+    };
+
+    private string? ResolvePathPropertyType(DomainExpression expr, string? entityName) => expr switch {
+        PropertyAccess p => FindEntity(entityName)?.Properties.FirstOrDefault(x =>
+            string.Equals(x.Name, p.Name, StringComparison.Ordinal))?.Type.TypeName,
         RelationshipNavigation rn when _parameters.ContainsKey(rn.RelationshipName) =>
-            rn.TargetProperty is PropertyAccess p
-                ? FindEntity(_binderEntityResolver?.Invoke(rn.RelationshipName))
-                    ?.Properties.FirstOrDefault(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal))
-                    ?.Type.TypeName
-                : null,
-        RelationshipNavigation rn => rn.TargetProperty is PropertyAccess p
-            ? FindEntity(ResolveRelationshipTarget(rn.RelationshipName, _context.SourceEntityName))
-                ?.Properties.FirstOrDefault(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal))
-                ?.Type.TypeName
-            : null,
+            ResolvePathPropertyType(rn.TargetProperty, _binderEntityResolver?.Invoke(rn.RelationshipName)),
+        RelationshipNavigation rn =>
+            ResolvePathPropertyType(rn.TargetProperty,
+                ResolveRelationshipTarget(rn.RelationshipName, entityName)),
         _ => null,
     };
 

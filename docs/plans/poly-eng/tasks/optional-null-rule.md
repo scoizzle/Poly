@@ -33,10 +33,11 @@ nullable field that coalesces) in the DTO, otherwise the CLR default overrides `
   through arithmetic/temporal; path-prefix target optionality; quantifier-body context.
 - `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` — assign guards; optional predicate flows
   into every lowering context.
-- `Poly/DomainModeling/Lowering/LoweringContext.cs` — target-entity predicate wiring.
+- `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` — guard collection, value-context
+  unbox, path-prefix/binder entity scoping.
+- `Poly/DomainModeling/Lowering/LoweringContext.cs` — target-entity and binder-entity wiring.
 - `Poly/DomainModeling/Lowering/DomainToCSharpExporter.Notify.cs` — create guard shape (shared).
-- `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs` — fail closed on value-producing
-  arithmetic over an `optional` (with a positioned diagnostic).
+- `Poly/DomainModeling/Libraries/Temporal/TemporalLowering.cs` — path-aware date operand types.
 - `src/Poly.DslCompiler/MinimalApiGenerator.cs` — `[Required]` keyed on not-`optional`.
 - `Poly.Mcp/Docs/poly-dsl-guide.md` — arithmetic rule, target-entity presence, `[Required]`.
 - Tests: `Poly.Tests/DomainModeling/Analysis/OptionalConstraintTests.cs`,
@@ -95,3 +96,5 @@ none.
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-19 | Scot | — | `224a507d` | plan: full null rule, transport `[Required]`, merge on Scot's OK | — |
 | 2026-10-19 | OpenCode | — | — | implement: arithmetic/temporal/boolean guards, value-context unbox, target-entity optionality, assign presence, `sum` skip, `[Required]` | full suite 4131 passed |
+| 2026-10-19 | OpenCode | — | `761d9293` | review round 1: 4 bugs (path-prefix/binder leaves), 1 suggestion, 1 nit | fixed in `44e3cd4a` + follow-up |
+| 2026-10-19 | OpenCode | — | — | review round 2: for-each resolver scoping, multi-hop date type; fix + tests | full suite 4137 passed |

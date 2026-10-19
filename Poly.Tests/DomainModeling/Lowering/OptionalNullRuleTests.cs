@@ -366,4 +366,61 @@ public class OptionalNullRuleTests {
         await Assert.That(cs).Contains("job.Score != null");
         await Assert.That(asm.GetType("Queue")).IsNotNull();
     }
+
+    // ── multi-hop dates and for-each source arguments ───────────────────────────
+
+    [Test]
+    public async Task MultiHopPath_OptionalDateArithmetic_CompilesAndEvaluates() {
+        const string dsl = """
+            domain OptionalChainDate
+            uses temporal
+            Order: entity { DueDate: Date optional }
+            Loan: entity { order: Order }
+            Customer: entity {
+              loan: Loan
+              Start: Date
+              Soon: policy { loan order DueDate + 7 > Start }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalChainDatePrint");
+        await Assert.That(cs).Contains("(DateOnly)");
+        await Assert.That(cs).Contains(".DueDate != null");
+
+        var start = new DateOnly(2026, 10, 19);
+        var order = Create(asm, "Order", ("dueDate", start));
+        var loan = Create(asm, "Loan", ("order", order));
+        var customer = Create(asm, "Customer", ("loan", loan), ("start", start));
+        await Assert.That(Policy(asm, "Customer", customer, "Soon")).IsTrue();
+
+        var emptyOrder = Create(asm, "Order");
+        var emptyLoan = Create(asm, "Loan", ("order", emptyOrder));
+        var absent = Create(asm, "Customer", ("loan", emptyLoan), ("start", start));
+        await Assert.That(Policy(asm, "Customer", absent, "Soon")).IsFalse();
+    }
+
+    [Test]
+    public async Task ForEachArgument_SourceOptionalDateArithmetic_UsesTheSourceType() {
+        const string dsl = """
+            domain OptionalForEachDate
+            uses temporal
+            Appointment: entity {
+              Start: Date
+              DueDate: Date optional
+              lines: many Line
+              Run: action {
+                for lines as line invoke line.Schedule(at: DueDate + 7)
+              }
+            }
+            Line: entity {
+              LastRun: Date
+              Schedule: action (at: Date) { assign LastRun to at }
+            }
+            """;
+        var (asm, cs) = ExportAndLoad(dsl, "OptionalForEachDatePrint");
+        // The source `DueDate + 7` is claimed as AddDays and unboxed; it must not fall
+        // through to numeric `+` because the for-each argument pass lost the resolver.
+        await Assert.That(cs).Contains(".AddDays(");
+        await Assert.That(cs).Contains("(DateOnly)");
+        await Assert.That(asm.GetType("Appointment")).IsNotNull();
+    }
 }

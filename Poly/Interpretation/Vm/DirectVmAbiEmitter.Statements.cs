@@ -94,9 +94,10 @@ public static partial class DirectVmAbiEmitter {
 
             Expression instanceObj;
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
-            bool isValueType = declaringTypeDef is ClrTypeDefinition clrDef
-                && clrDef.RuntimeType.IsValueType;
-            if (isValueType)
+            bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
+                && clrDef.RuntimeType.IsValueType
+                && AbiValueTypes.IsLongRepresentable(clrDef.RuntimeType);
+            if (isInlineValueType)
                 instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
             else
                 instanceObj = Call(ctx.HeapLocal,

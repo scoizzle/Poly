@@ -477,10 +477,44 @@ public static partial class DirectVmAbiEmitter {
             return NotEqual(ringVal, Constant(0L));
         if (paramType.IsValueType && AbiValueTypes.IsLongRepresentable(paramType))
             return Convert(ringVal, paramType);
+        // A *scalar* argument reaching an `object` parameter must be boxed — its ring slot
+        // holds the raw value, not a handle. Anything else (a reference, or a value type that
+        // is a heap handle such as DateOnly/DateTime/decimal/nullable) is a handle and is
+        // dereferenced. The test is the argument's representation kind, not `IsValueType`:
+        // `int?` is a value type but its slot is a handle.
+        if (paramType == typeof(object) && source is not null) {
+            ValueRepresentationKind? kind = source is Constant constant
+                ? ConstantSlotKind(constant.Value)
+                : ctx.Analysis?.GetValueRepresentation(source);
+            if (kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool) {
+                var sourceClr = source is Constant c2 && c2.Value is not null
+                    ? c2.Value.GetType()
+                    : ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType
+                        ?? ctx.Analysis?.GetResolvedType(source)?.GetRuntimeType();
+                if (sourceClr is not null) {
+                    Expression scalar = sourceClr == typeof(double) || sourceClr == typeof(float)
+                        ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
+                        : sourceClr == typeof(bool)
+                            ? NotEqual(ringVal, Constant(0L))
+                            : Convert(ringVal, sourceClr);
+                    return Convert(scalar, typeof(object));
+                }
+            }
+        }
         return Convert(
             Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))),
             paramType);
     }
+
+    /// <summary>The slot kind of a constant, matching what <c>EmitConstant</c> actually stores:
+    /// an integral/bool/char value or an IEEE bitcast is inline; everything else — including an
+    /// enum constant, which <c>TryValueToLong</c> does not accept — is a heap handle.</summary>
+    private static ValueRepresentationKind ConstantSlotKind(object? value) => value switch {
+        bool => ValueRepresentationKind.Bool,
+        int or long or short or byte or sbyte or ushort or uint or ulong or char
+            or double or float => ValueRepresentationKind.StackScalar,
+        _ => ValueRepresentationKind.HeapRef
+    };
 
     /// <summary>TypeIs: test the operand against the target type. A scalar operand is
     /// answered from its static type; a heap operand is tested against the target CLR

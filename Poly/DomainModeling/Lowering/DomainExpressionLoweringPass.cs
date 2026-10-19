@@ -366,12 +366,18 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
         // Simplify boolean comparisons: boolProp == true  → boolProp
         //                            boolProp == false → !boolProp
+        // Never fold an `optional` Boolean: absence is not `false`, so `!flag` would be
+        // true for an absent value, and `bool?` does not compile under `!` in the printed
+        // form. The optional presence guard on the comparison carries the meaning instead.
+        var folds = c.Left is not PropertyAccess p
+            || _isOptionalProperty is null
+            || !_isOptionalProperty(p.Name);
         Node value;
-        if (c.Kind == ComparisonKind.Equal
+        if (folds && c.Kind == ComparisonKind.Equal
             && loweredRight is Constant { Value: bool b }) {
             value = b ? loweredLeft : new SN.Not(loweredLeft);
         }
-        else if (c.Kind == ComparisonKind.NotEqual
+        else if (folds && c.Kind == ComparisonKind.NotEqual
             && loweredRight is Constant { Value: bool b2 }) {
             value = b2 ? new SN.Not(loweredLeft) : loweredLeft;
         }
@@ -416,22 +422,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// <summary>
     /// Collects a presence guard for each optional leaf an operand reads directly, so a
     /// comparison on it is false when the value is absent (a null operand never makes a
-    /// condition true). Text absence is the null handle, so the guard is <c>leaf != null</c>.
-    /// A value type's absent slot is not a null handle (the interpretation system owns that
-    /// representation), so the guard reuses the presence test the create checks already use:
-    /// <c>object.ReferenceEquals(leaf, null)</c> boxes and is true only for the absent slot.
+    /// condition true). Presence is the plain null test for every optional kind: an absent
+    /// value is the null handle in both the printed C# and the VM (a present value is a
+    /// cell), so no ABI workaround is encoded here.
     /// </summary>
     private void CollectOptionalLeaves(DomainExpression operand, List<Node> leaves) {
         if (operand is not PropertyAccess property) return;
         if (_isOptionalProperty is null || !_isOptionalProperty(property.Name)) return;
         if (_actionParameterNames?.Contains(property.Name) == true) return;
-        var leaf = new Member(_currentSubject, ResolveName(property.Name));
-        var isText = _propertyTypeResolver?.Invoke(property.Name) is "Text" or "String";
-        leaves.Add(isText
-            ? new NotEqual(leaf, new Constant(null))
-            : new SN.Not(new SN.Invoke(
-                new SN.Member(new SN.ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                [leaf, new Constant(null)])));
+        leaves.Add(new NotEqual(
+            new Member(_currentSubject, ResolveName(property.Name)),
+            new Constant(null)));
     }
 
     /// <summary>

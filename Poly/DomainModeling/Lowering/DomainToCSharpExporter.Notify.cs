@@ -450,24 +450,19 @@ public sealed partial class DomainToCSharpExporter {
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
             // An `optional` property's create parameter may be absent (null); a guard must
-            // test only a present value. The null test has to hold in BOTH the printer
-            // (`T?`) and the VM, which unwraps `T?` to a stack scalar where `!= null` is
-            // not the sentinel test — so a non-text operand uses object.ReferenceEquals,
-            // exactly like the required-enum guard below. `skipEmpty` matches the assign-side
-            // length check (`""` is "not written"); pattern/equality test the value itself.
+            // test only a present value. Presence is a plain null test: an absent value is
+            // the null handle in the printed C# (`T?`) and in the VM alike, so no ABI
+            // workaround is encoded here. `skipEmpty` matches the assign-side length check
+            // (`""` is "not written"); pattern/equality test the value itself.
             var isOptional = prop.Constraints.IsOptional();
             Node Present(Node condition, bool skipEmpty = false) {
                 if (!isOptional) return condition;
-                Node hasValue = isText
-                    ? skipEmpty
-                        ? (Node)new Syntactic.Not(new Invoke(
-                            new Member(
-                                new PrimitiveTypeReference(PrimType.String), "IsNullOrEmpty"),
-                            [paramRef]))
-                        : new NotEqual(paramRef, new Constant(null))
-                    : new Syntactic.Not(new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                        [paramRef, new Constant(null)]));
+                Node hasValue = isText && skipEmpty
+                    ? (Node)new Syntactic.Not(new Invoke(
+                        new Member(
+                            new PrimitiveTypeReference(PrimType.String), "IsNullOrEmpty"),
+                        [paramRef]))
+                    : new NotEqual(paramRef, new Constant(null));
                 return new Syntactic.And(hasValue, condition);
             }
 

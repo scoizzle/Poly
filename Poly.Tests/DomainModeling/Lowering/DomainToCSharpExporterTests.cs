@@ -3267,7 +3267,7 @@ public class DomainToCSharpExporterTests {
         // IsNullOrEmpty for Text and object.ReferenceEquals for a value type — the VM unwraps
         // T? to a stack scalar, where `!= null` is not the sentinel test.
         await Assert.That(create).Contains("string.IsNullOrEmpty(code)");
-        await Assert.That(create).Contains("object.ReferenceEquals(rank, null)");
+        await Assert.That(create).Contains("rank != null");
     }
 
     [Test]
@@ -3313,13 +3313,33 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        // A value type's absent slot is not a null handle, so presence reuses the create
-        // check's test: object.ReferenceEquals boxes and is true only for the absent slot.
-        // Without it, `Rank is not 0` would be true when Rank is absent.
+        // A value type's absent value is the null handle too, so presence is the plain null
+        // test — no ABI workaround. Without it, `Rank is not 0` would be true when absent.
         var notZero = ExportedCSharp.ExtractMethod(cs, "bool NotZero(");
-        await Assert.That(notZero).Contains("ReferenceEquals(this.Rank, null)");
+        await Assert.That(notZero).Contains("this.Rank != null");
         var notLow = ExportedCSharp.ExtractMethod(cs, "bool NotLow(");
-        await Assert.That(notLow).Contains("ReferenceEquals(this.Kind, null)");
+        await Assert.That(notLow).Contains("this.Kind != null");
+    }
+
+    [Test]
+    public async Task OptionalAssign_ConstraintGuard_TestsOnlyPresentValues() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalAssign
+
+            Item: entity {
+              Rank: Number optional range(1, 5)
+              Bump: action { assign Rank to 3 }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        // An absent optional satisfies the range; a present value is still checked, so the
+        // guard tests presence first (same shape as the create-side guard).
+        await Assert.That(cs).Contains("!= null &&");
+        await Assert.That(cs).Contains("must be >= 1");
     }
 
     private static string[] CompileExported(string cs) {

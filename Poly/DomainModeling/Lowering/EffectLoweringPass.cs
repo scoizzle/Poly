@@ -369,6 +369,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
+        // An `optional` property may hold an absent value; a constraint check then tests only
+        // a present value (an absent value satisfies it). Required and defaulted properties
+        // are unaffected. Mirrors the create-side presence guard.
+        var isOptional = prop.Constraints.IsOptional();
+        Node Present(Node condition) => isOptional
+            ? new Syntactic.And(new NotEqual(valueRef, new Constant(null)), condition)
+            : condition;
+
         foreach (var r in prop.Constraints.OfType<RangeConstraint>()) {
             if (!isNumber)
                 continue;
@@ -376,7 +384,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 var minVal = ConvertAssignConstraintConstant(r.Minimum);
                 if (minVal is not null) {
                     nodes.Add(new IfStatement(
-                        new LessThan(valueRef, minVal),
+                        Present(new LessThan(valueRef, minVal)),
                         new Block([Fail(
                             $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
                 }
@@ -385,7 +393,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 var maxVal = ConvertAssignConstraintConstant(r.Maximum);
                 if (maxVal is not null) {
                     nodes.Add(new IfStatement(
-                        new GreaterThan(valueRef, maxVal),
+                        Present(new GreaterThan(valueRef, maxVal)),
                         new Block([Fail(
                             $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
                 }
@@ -452,7 +460,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
             }
             nodes.Add(new IfStatement(
-                notMember!,
+                Present(notMember!),
                 new Block([Fail(
                     $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
         }

@@ -165,6 +165,9 @@ public class ContributedMethodTests {
 
         await Assert.That(source.Contains("entity.Issue(dto.code, db)", StringComparison.Ordinal)).IsTrue();
         await Assert.That(source.Contains("entity.Touch(dto.label, db)", StringComparison.Ordinal)).IsFalse();
+        // The action lambda now takes the port, so the host must register it.
+        await Assert.That(source.Contains(
+            "AddScoped<Poly.DomainModeling.Runtime.IStoragePort", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]

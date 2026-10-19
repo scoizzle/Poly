@@ -3,6 +3,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -299,6 +300,21 @@ public sealed class MinimalApiGenerator {
                 BuildProviderRegistration(dbOptionsParam))) {
             TypeArguments = [new TypeReference(dbContextName)]
         });
+
+        // A route that carries the storage port names IStoragePort, not the
+        // context. The generated context implements the port, so register it
+        // as the scoped implementation.
+        if (_catalog?.RequiresStoragePort == true) {
+            topLevelStatements.Add(new Invoke(
+                new Member(
+                    new Member(new TypeReference(BuilderVar), "Services"),
+                    "AddScoped")) {
+                TypeArguments = [
+                    new ClrTypeReference(typeof(IStoragePort)),
+                    new TypeReference(dbContextName)
+                ]
+            });
+        }
 
         // ── Build + seed ──
         topLevelStatements.Add(Init(AppVar,

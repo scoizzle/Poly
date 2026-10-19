@@ -38,13 +38,11 @@ public static partial class DirectVmAbiEmitter {
                     }
 
                     // Compile arguments — track actual result slots
-                    var argExprs = new List<Expression>();
+                    var args = ctx.OpenRing();
                     int[] argSlots = new int[invoke.Arguments.Length];
-                    for (int i = 0; i < invoke.Arguments.Length; i++) {
-                        argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                        argSlots[i] = ctx.RingDepth - 1;
-                    }
-                    int slot = receiver.Base + receiver.Count + invoke.Arguments.Length;
+                    for (int i = 0; i < invoke.Arguments.Length; i++)
+                        argSlots[i] = args.Add(CompileNode(invoke.Arguments[i], ctx));
+                    int slot = args.Base + args.Count;
                     ctx.RingDepth = slot + 1;
 
                     var methodParams = methodInfo.GetParameters();
@@ -84,7 +82,7 @@ public static partial class DirectVmAbiEmitter {
                     // Build the full expression sequence: instance → args → call → result
                     var fullBody = new List<Expression>();
                     fullBody.AddRange(receiver.Steps);
-                    fullBody.AddRange(argExprs);
+                    fullBody.AddRange(args.Steps);
 
                     // A null heap receiver (unset DateOnly/DateTime) must not NRE inside AddDays.
                     if (!isStatic) {
@@ -143,12 +141,10 @@ public static partial class DirectVmAbiEmitter {
             var astReceiver = ctx.OpenRing();
             int astInstanceSlot = astReceiver.Add(CompileNode(member.Value, ctx));
 
-            var astArgExprs = new List<Expression>();
+            var astArgs = ctx.OpenRing();
             int[] astArgSlots = new int[invoke.Arguments.Length];
-            for (int i = 0; i < invoke.Arguments.Length; i++) {
-                astArgExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-                astArgSlots[i] = ctx.RingDepth - 1;
-            }
+            for (int i = 0; i < invoke.Arguments.Length; i++)
+                astArgSlots[i] = astArgs.Add(CompileNode(invoke.Arguments[i], ctx));
 
             var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
                 Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
@@ -171,9 +167,9 @@ public static partial class DirectVmAbiEmitter {
 
             int astSlot = ctx.AllocSlot();
             ctx.RingDepth = astSlot + 1;
-            var astBody = new List<Expression>(astArgExprs.Count + 4);
+            var astBody = new List<Expression>(astArgs.Count + 4);
             astBody.AddRange(astReceiver.Steps);
-            astBody.AddRange(astArgExprs);
+            astBody.AddRange(astArgs.Steps);
             var unsetReceiver = UnsetReceiverGuard(member.Value, ctx.RingVar(astInstanceSlot), ctx);
             if (unsetReceiver is not null)
                 astBody.Add(unsetReceiver);
@@ -346,8 +342,10 @@ public static partial class DirectVmAbiEmitter {
             if (i >= node.Holes.Count)
                 continue;
             var hole = node.Holes[i];
-            seq.Add(CompileNode(hole, ctx));
-            parts.Add(HoleToClrObject(hole, ctx.RingVar(ctx.RingDepth - 1), ctx));
+            var holeRing = ctx.OpenRing();
+            int holeSlot = holeRing.Add(CompileNode(hole, ctx));
+            parts.Add(HoleToClrObject(hole, ctx.RingVar(holeSlot), ctx));
+            seq.AddRange(holeRing.Steps);
         }
 
         int slot = ctx.AllocSlot();
@@ -388,14 +386,11 @@ public static partial class DirectVmAbiEmitter {
             && invoke.Arguments.Length != stored.Lambda.Parameters.Count)
             throw new InvalidOperationException(
                 $"VM compile rejected: lambda has {stored.Lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
-        var targetExpr = CompileNode(invoke.Delegate, ctx);
-        int targetSlot = ctx.RingDepth - 1;
-        var argExprs = new List<Expression>();
+        var ring = ctx.OpenRing();
+        int targetSlot = ring.Add(CompileNode(invoke.Delegate, ctx));
         int[] argSlots = new int[invoke.Arguments.Length];
-        for (int i = 0; i < invoke.Arguments.Length; i++) {
-            argExprs.Add(CompileNode(invoke.Arguments[i], ctx));
-            argSlots[i] = ctx.RingDepth - 1;
-        }
+        for (int i = 0; i < invoke.Arguments.Length; i++)
+            argSlots[i] = ring.Add(CompileNode(invoke.Arguments[i], ctx));
         var argInits = new Expression[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++)
             argInits[i] = ctx.RingVar(argSlots[i]);
@@ -407,10 +402,7 @@ public static partial class DirectVmAbiEmitter {
                 ctx.RingVar(targetSlot),
                 ctx.FunctionTableExpr!,
                 NewArrayInit(typeof(long), argInits)));
-        var seq = new List<Expression>(argExprs.Count + 2) { targetExpr };
-        seq.AddRange(argExprs);
-        seq.Add(call);
-        return Block(seq);
+        return ring.Then(call);
     }
 
     private static long InvokeHeapClosure(VmState state, long handle, Action<VmState>[] table, long[] args) {
@@ -437,18 +429,16 @@ public static partial class DirectVmAbiEmitter {
         // Compile every argument before mapping any parameter: an argument
         // expression belongs to the caller's scope, so it must not see this
         // lambda's parameter names.
-        var argExprs = new Expression[invoke.Arguments.Length];
+        var ring = ctx.OpenRing();
         int[] argSlots = new int[invoke.Arguments.Length];
-        for (int i = 0; i < invoke.Arguments.Length; i++) {
-            argExprs[i] = CompileNode(invoke.Arguments[i], ctx);
-            argSlots[i] = ctx.RingDepth - 1;
-        }
+        for (int i = 0; i < invoke.Arguments.Length; i++)
+            argSlots[i] = ring.Add(CompileNode(invoke.Arguments[i], ctx));
         ctx.PushInlineParameters();
         for (int i = 0; i < invoke.Arguments.Length; i++)
             ctx.MapInlineParameter(lambda.Parameters[i], argSlots[i]);
         var bodyExpr = CompileNode(lambda.Body, ctx);
         ctx.PopInlineParameters();
-        return Block(argExprs.Concat([bodyExpr]));
+        return ring.Then(bodyExpr);
     }
 
     /// <summary>

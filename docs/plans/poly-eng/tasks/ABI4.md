@@ -1,7 +1,7 @@
 # TASK ABI4 - SetArgs ring-spill consolidation (no frame-protocol change)
 
-Status: planned. Branch `slice/abi4` (stacked on ABI3). Review 1.
-Plan: the external ABI cleanup plan (`/Users/scoizzle/.opencode/plan/abi-cleanup.md`).
+Status: planned; branch `slice/abi4` (stacked on ABI3). Review 1.
+Plan: the external ABI cleanup plan (`/Users/scoizzle/.opencode/plan/abi-cleanup.md`) (ABI4 slice).
 
 ## Scope
 Replace the SetArgs inline path's `state.Registers[sp + k]` ring spill with
@@ -32,4 +32,4 @@ suspend-through-finally, SP-0 seeding).
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-19 | - | - | - | planned | - |
+| 2026-10-19 | OpenCode | local | pending | planned | plan review closed before implementation |

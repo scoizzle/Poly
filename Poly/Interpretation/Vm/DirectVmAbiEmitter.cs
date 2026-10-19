@@ -311,13 +311,10 @@ public static partial class DirectVmAbiEmitter {
             return EmitSyntheticCollection(n, (AstCollectionTypeDefinition)resolved.DeclaringTypeDefinition, ctx);
 
         if (ctor is not null) {
-            int d = ctx.RingDepth;
-            var argExprs = new List<Expression>();
+            var args = ctx.OpenRing();
             int[] argSlots = new int[n.Arguments.Length];
-            for (int i = 0; i < n.Arguments.Length; i++) {
-                argExprs.Add(CompileNode(n.Arguments[i], ctx));
-                argSlots[i] = ctx.RingDepth - 1;
-            }
+            for (int i = 0; i < n.Arguments.Length; i++)
+                argSlots[i] = args.Add(CompileNode(n.Arguments[i], ctx));
             var ctorParams = ctor.GetParameters();
             var ctorArgs = new Expression[ctorParams.Length];
             for (int i = 0; i < ctorParams.Length; i++) {
@@ -347,7 +344,7 @@ public static partial class DirectVmAbiEmitter {
             int slot = ctx.AllocSlot();
             var handle = Call(ctx.HeapLocal, HeapAllocate, boxed);
             ctx.RingDepth = slot + 1;
-            return Block(argExprs.Concat([Assign(ctx.RingVar(slot), Convert(handle, typeof(long)))]));
+            return args.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
         }
         var typeName = targetType?.Name ?? n.Type.ToString();
         throw new InvalidOperationException(
@@ -514,10 +511,10 @@ public static partial class DirectVmAbiEmitter {
         if (indexKind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
-        var arrExpr = CompileNode(n.Value, ctx);
-        int arrSlot = ctx.RingDepth - 1;
-        var idxExpr = CompileNode(n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx);
-        int idxSlot = ctx.RingDepth - 1;
+        var ring = ctx.OpenRing();
+        int arrSlot = ring.Add(CompileNode(n.Value, ctx));
+        int idxSlot = ring.Add(CompileNode(
+            n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
         int outSlot = ctx.AllocSlot();
         var rawObj = Call(ctx.HeapLocal, HeapUnsafeGet,
             Convert(ctx.RingVar(arrSlot), typeof(int)));
@@ -530,16 +527,14 @@ public static partial class DirectVmAbiEmitter {
             var valExpr = Block([longArr],
                 Assign(longArr, Convert(rawObj, typeof(long[]))),
                 ArrayAccess(longArr, idx));
-            return Block(arrExpr, idxExpr,
-                Assign(ctx.RingVar(outSlot), valExpr));
+            return ring.Then(Assign(ctx.RingVar(outSlot), valExpr));
         }
         if (elementType is not null) {
             var objArr = Variable(typeof(object[]), "_objArr");
             var valExpr = Block([objArr],
                 Assign(objArr, Convert(rawObj, typeof(object[]))),
                 Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArr, idx)));
-            return Block(arrExpr, idxExpr,
-                Assign(ctx.RingVar(outSlot), valExpr));
+            return ring.Then(Assign(ctx.RingVar(outSlot), valExpr));
         }
         var longArrU = Variable(typeof(long[]), "_longArr");
         var objArrU = Variable(typeof(object[]), "_objArr");
@@ -551,8 +546,7 @@ public static partial class DirectVmAbiEmitter {
             Block([objArrU],
                 Assign(objArrU, Convert(rawObj, typeof(object[]))),
                 Call(null, BoxToAbiInfo, ctx.HeapLocal, ArrayAccess(objArrU, idx))));
-        return Block(arrExpr, idxExpr,
-            Assign(ctx.RingVar(outSlot), valExprU));
+        return ring.Then(Assign(ctx.RingVar(outSlot), valExprU));
     }
 
     private static Expression CompileValue(Node node, AbiCtx ctx) {

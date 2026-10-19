@@ -14,13 +14,11 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitAssignment(Assignment a, AbiCtx ctx) {
         if (a.Destination is IndexAccess indexAccess) {
-            var arrExpr = CompileNode(indexAccess.Value, ctx);
-            int arrSlot = ctx.RingDepth - 1;
-            var idxExpr = CompileNode(
-                indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx);
-            int idxSlot = ctx.RingDepth - 1;
-            var valExpr = CompileNode(a.Value, ctx);
-            int valSlot = ctx.RingDepth - 1;
+            var ring = ctx.OpenRing();
+            int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
+            int idxSlot = ring.Add(CompileNode(
+                indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
+            int valSlot = ring.Add(CompileNode(a.Value, ctx));
 
             var rawObj = Convert(
                 ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(arrSlot), typeof(int))),
@@ -59,8 +57,7 @@ public static partial class DirectVmAbiEmitter {
             }
 
             ctx.RingDepth = arrSlot + 1;
-            return Block(arrExpr, idxExpr, valExpr, store,
-                Assign(ctx.RingVar(arrSlot), val));
+            return ring.Then(Block(store, Assign(ctx.RingVar(arrSlot), val)));
         }
 
         if (a.Destination is Member member) {
@@ -69,11 +66,9 @@ public static partial class DirectVmAbiEmitter {
                 throw new NotSupportedException(
                     $"Assignment to unresolved member '{member.MemberName}'");
 
-            int d = ctx.RingDepth;
-            var instanceExpr = CompileNode(member.Value, ctx);
-            int instanceSlot = ctx.RingDepth - 1;
-            var valueExpr = CompileNode(a.Value, ctx);
-            int valueSlot = ctx.RingDepth - 1;
+            var ring = ctx.OpenRing();
+            int instanceSlot = ring.Add(CompileNode(member.Value, ctx));
+            int valueSlot = ring.Add(CompileNode(a.Value, ctx));
 
             Expression instanceObj;
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
@@ -110,10 +105,10 @@ public static partial class DirectVmAbiEmitter {
             var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
             var outSlot = ctx.AllocSlot();
             ctx.RingDepth = outSlot + 1;
-            return Block(instanceExpr, valueExpr,
+            return ring.Then(Block(
                 writeExpr ?? throw new NotSupportedException(
                     $"Member '{member.MemberName}' does not support EmitWrite"),
-                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot)));
+                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot))));
         }
 
         if (a.Destination is not Variable destVar) {

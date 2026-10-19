@@ -237,7 +237,10 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         Node RouteChild(DomainExpression child) {
             var routed = Route(child);
             children.Add(routed);
-            return routed.Value;
+            // A library handler consumes this child as a value. An `optional` read has no
+            // value when absent, so it is unboxed (the cast throws when absent, matching
+            // the VM's arithmetic/relational rule) rather than printed as a nullable.
+            return UnboxOptionalRead(child, routed.Value);
         }
         if (EffectiveMeaning.Lowering.TryLower(expr, RouteChild, _propertyTypeResolver, out var node)) {
             lowered = LoweredExpression.Combine(children, node);
@@ -275,11 +278,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private bool IsCollectionNav(string name) =>
         _isCollectionNavigation?.Invoke(name) == true;
 
-    private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null || _context.SourceEntityName is null)
-            return null;
+    private string? ResolveRelationshipTarget(string relationshipName, string? sourceEntityName = null) {
+        if (_domain is null) return null;
+        var entityName = sourceEntityName ?? _context.SourceEntityName;
+        if (entityName is null) return null;
         var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-            string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
+            string.Equals(e.Name, entityName, StringComparison.Ordinal));
         var rel = source?.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
         return rel?.Target.TypeName;
@@ -290,7 +294,8 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             return lowered;
         var left = Route(a.Left);
         var right = Route(a.Right);
-        return LoweredExpression.Combine([left, right], new SN.Add(left.Value, right.Value));
+        return LoweredExpression.Combine([left, right],
+            new SN.Add(UnboxOptionalRead(a.Left, left.Value), UnboxOptionalRead(a.Right, right.Value)));
     }
 
     protected override LoweredExpression Subtract(Subtract s) {
@@ -298,35 +303,48 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             return lowered;
         var left = Route(s.Left);
         var right = Route(s.Right);
-        return LoweredExpression.Combine([left, right], new SN.Subtract(left.Value, right.Value));
+        return LoweredExpression.Combine([left, right],
+            new SN.Subtract(UnboxOptionalRead(s.Left, left.Value), UnboxOptionalRead(s.Right, right.Value)));
     }
 
     protected override LoweredExpression Multiply(Multiply m) {
         var left = Route(m.Left);
         var right = Route(m.Right);
-        return LoweredExpression.Combine([left, right], new SN.Multiply(left.Value, right.Value));
+        return LoweredExpression.Combine([left, right],
+            new SN.Multiply(UnboxOptionalRead(m.Left, left.Value), UnboxOptionalRead(m.Right, right.Value)));
     }
 
     protected override LoweredExpression Divide(Divide d) {
         var left = Route(d.Left);
         var right = Route(d.Right);
-        return LoweredExpression.Combine([left, right], new SN.Divide(left.Value, right.Value));
+        return LoweredExpression.Combine([left, right],
+            new SN.Divide(UnboxOptionalRead(d.Left, left.Value), UnboxOptionalRead(d.Right, right.Value)));
     }
 
     protected override LoweredExpression And(And a) {
         var left = Route(a.Left);
         var right = Route(a.Right);
+        var leftValue = PredicateOperand(a.Left, left.Value);
+        var rightValue = PredicateOperand(a.Right, right.Value);
         if (right.Statements.Count == 0)
-            return LoweredExpression.Combine([left, right], new SN.And(left.Value, right.Value));
-        return ShortCircuit(left, right, whenTrue: true);
+            return LoweredExpression.Combine([left, right], new SN.And(leftValue, rightValue));
+        return ShortCircuit(
+            left with { Value = leftValue },
+            right with { Value = rightValue },
+            whenTrue: true);
     }
 
     protected override LoweredExpression Or(Or o) {
         var left = Route(o.Left);
         var right = Route(o.Right);
+        var leftValue = PredicateOperand(o.Left, left.Value);
+        var rightValue = PredicateOperand(o.Right, right.Value);
         if (right.Statements.Count == 0)
-            return LoweredExpression.Combine([left, right], new SN.Or(left.Value, right.Value));
-        return ShortCircuit(left, right, whenTrue: false);
+            return LoweredExpression.Combine([left, right], new SN.Or(leftValue, rightValue));
+        return ShortCircuit(
+            left with { Value = leftValue },
+            right with { Value = rightValue },
+            whenTrue: false);
     }
 
     /// <summary>
@@ -346,7 +364,28 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
 
     protected override LoweredExpression Not(Not n) {
         var operand = Route(n.Operand);
+        // An absent optional Boolean is not `false`, so `!flag` must not be true for it:
+        // a null operand never makes a condition true. Guard presence, then negate the
+        // unboxed value.
+        if (IsOptionalRead(n.Operand))
+            return operand with {
+                Value = new SN.And(
+                    new NotEqual(operand.Value, new Constant(null)),
+                    new SN.Not(UnboxOptionalRead(n.Operand, operand.Value)))
+            };
         return operand with { Value = new SN.Not(operand.Value) };
+    }
+
+    /// <summary>
+    /// A boolean operand that reads an `optional` value: absent makes the operand false
+    /// (a null operand never makes a condition true), so guard presence and unbox.
+    /// </summary>
+    private Node PredicateOperand(DomainExpression expr, Node lowered) {
+        if (!IsOptionalRead(expr))
+            return lowered;
+        return new SN.And(
+            new NotEqual(lowered, new Constant(null)),
+            UnboxOptionalRead(expr, lowered));
     }
 
     protected override LoweredExpression Comparison(Comparison c) {
@@ -393,6 +432,20 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             };
         }
 
+        // A comparison that reads an `optional` value is false when that value is absent
+        // (a null operand never makes a condition true). Guard each optional leaf on the
+        // short-circuit side, so the operand is not evaluated while absent. `x == null` is
+        // itself the presence test, so it is never guarded — guarding it would contradict.
+        // Optional guards fold innermost: a path-prefix leaf dereferences its hop, so the
+        // hop guard below must short-circuit outside it.
+        var optionalLeaves = new List<Node>();
+        if (c.Right is not Ontology.Literal { Value: null })
+            CollectOptionalLeaves(c.Left, _currentSubject, _context.SourceEntityName, optionalLeaves);
+        if (c.Left is not Ontology.Literal { Value: null })
+            CollectOptionalLeaves(c.Right, _currentSubject, _context.SourceEntityName, optionalLeaves);
+        for (var i = optionalLeaves.Count - 1; i >= 0; i--)
+            value = new SN.And(optionalLeaves[i], value);
+
         // Value hops (`Age < advisor Age`) do not get the predicate-shape
         // `rel != null && leaf` from RelationshipNavigation. Guard each to-one hop
         // that an operand reads through from this comparison's subject, on both
@@ -407,38 +460,118 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         for (var i = valueHops.Count - 1; i >= 0; i--)
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
-        // A comparison that reads an `optional` value is false when that value is absent
-        // (a null operand never makes a condition true). Guard each optional leaf on the
-        // short-circuit side, so the operand is not evaluated while absent. `x == null` is
-        // itself the presence test, so it is never guarded — guarding it would contradict.
-        var optionalLeaves = new List<Node>();
-        if (c.Right is not Ontology.Literal { Value: null }) CollectOptionalLeaves(c.Left, optionalLeaves);
-        if (c.Left is not Ontology.Literal { Value: null }) CollectOptionalLeaves(c.Right, optionalLeaves);
-        for (var i = optionalLeaves.Count - 1; i >= 0; i--)
-            value = new SN.And(optionalLeaves[i], value);
-
         return LoweredExpression.Combine([left, right], value);
     }
 
     /// <summary>
-    /// Collects a presence guard for each optional leaf an operand reads directly, so a
-    /// comparison on it is false when the value is absent (a null operand never makes a
-    /// condition true). Presence is the plain null test for every optional kind: an absent
-    /// value is the null handle in both the printed C# and the VM (a present value is a
-    /// cell), so no ABI workaround is encoded here.
+    /// Collects a presence guard for each optional leaf an operand reads, so a comparison
+    /// on it is false when the value is absent (a null operand never makes a condition
+    /// true). Recurses through arithmetic/temporal operands and resolves a path-prefix
+    /// leaf against its target entity — optionality is a property of the entity the read
+    /// lands on, not the comparison's subject. Presence is the plain null test for every
+    /// optional kind: an absent value is the null handle in both the printed C# and the VM
+    /// (a present value is a cell), so no ABI workaround is encoded here.
     /// </summary>
-    private void CollectOptionalLeaves(DomainExpression operand, List<Node> leaves) {
-        if (operand is not PropertyAccess property) return;
-        if (_isOptionalProperty is null || !_isOptionalProperty(property.Name)) return;
-        if (_actionParameterNames?.Contains(property.Name) == true) return;
-        // A session ident (Now / Today / Guid) folds to a call, not a member read; guarding
-        // `Member(subject, name)` would test something the comparison never reads.
+    private void CollectOptionalLeaves(
+        DomainExpression operand, Node subject, string? entityName, List<Node> leaves) {
+        switch (operand) {
+            case PropertyAccess property:
+                if (IsOptionalPropertyOn(entityName, property.Name)
+                    && _actionParameterNames?.Contains(property.Name) != true
+                    // A session ident (Now / Today / Guid) folds to a call, not a member
+                    // read; guarding `Member(subject, name)` would test something the
+                    // comparison never reads.
+                    && EffectLoweringPass.LowerDefaultExpression(
+                        property, typeHint: null, EffectiveMeaning, EffectiveForms) is null)
+                    leaves.Add(new NotEqual(new Member(subject, ResolveName(property.Name)),
+                        new Constant(null)));
+                return;
+            case RelationshipNavigation rn:
+                if (_parameters.ContainsKey(rn.RelationshipName)
+                    || IsCollectionNav(rn.RelationshipName))
+                    return;
+                CollectOptionalLeaves(
+                    rn.TargetProperty,
+                    new Member(subject, ResolveNavName(rn.RelationshipName)),
+                    ResolveRelationshipTarget(rn.RelationshipName, entityName),
+                    leaves);
+                return;
+            case Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr
+                or Ontology.CountExpr or Ontology.SumExpr
+                or Ontology.Literal or Ontology.ParameterAccess:
+                // Quantifier/sum bodies guard their own comparisons against the loop item.
+                return;
+            default:
+                foreach (var child in operand.Children.OfType<DomainExpression>())
+                    CollectOptionalLeaves(child, subject, entityName, leaves);
+                return;
+        }
+    }
+
+    /// <summary>True when <paramref name="expr"/> is a direct read of an `optional` property.</summary>
+    private bool IsOptionalRead(DomainExpression expr) =>
+        expr is PropertyAccess p
+        && _actionParameterNames?.Contains(p.Name) != true
+        && IsOptionalPropertyOn(_context.SourceEntityName, p.Name);
+
+    /// <summary>
+    /// Unboxes a direct read of an `optional` property used where a value is required
+    /// (arithmetic, a library argument, an assign to a required target): the explicit cast
+    /// to the underlying type compiles in the printed C#, and the VM's cast unboxes the
+    /// handle. An absent value throws, matching the VM's arithmetic/relational rule.
+    /// </summary>
+    internal Node UnboxOptionalRead(DomainExpression expr, Node lowered) {
+        if (expr is not PropertyAccess p) return lowered;
+        if (_actionParameterNames?.Contains(p.Name) == true) return lowered;
+        if (!IsOptionalPropertyOn(_context.SourceEntityName, p.Name)) return lowered;
         if (EffectLoweringPass.LowerDefaultExpression(
-                property, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
-            return;
-        leaves.Add(new NotEqual(
-            new Member(_currentSubject, ResolveName(property.Name)),
-            new Constant(null)));
+                p, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
+            return lowered; // session ident
+        return OptionalUnboxNode(lowered, _context.SourceEntityName, p.Name);
+    }
+
+    /// <summary>
+    /// Presence test for a direct read of an `optional` property (null when the expression
+    /// is not one). Uses the typed member read, not an untyped local: a local's raw slot
+    /// makes a null test a `!= 0` check on a value, not a handle-presence test.
+    /// </summary>
+    internal Node? OptionalReadPresence(DomainExpression expr) {
+        if (expr is not PropertyAccess p) return null;
+        if (_actionParameterNames?.Contains(p.Name) == true) return null;
+        if (!IsOptionalPropertyOn(_context.SourceEntityName, p.Name)) return null;
+        if (EffectLoweringPass.LowerDefaultExpression(
+                p, typeHint: null, EffectiveMeaning, EffectiveForms) is not null)
+            return null;
+        return new NotEqual(new Member(_currentSubject, ResolveName(p.Name)), new Constant(null));
+    }
+
+    private Node OptionalUnboxNode(Node lowered, string? entityName, string propertyName) {
+        var property = FindEntity(entityName)?.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        var typeName = property?.Type.TypeName
+            ?? (SameScope(entityName) ? _propertyTypeResolver?.Invoke(propertyName) : null);
+        if (typeName is null) return lowered;
+        var typeRef = DomainToCSharpExporter.MapDomainTypeRef(
+            property?.Type ?? new DomainTypeReference(typeName), _domain, _analysis);
+        return new TypeCast(lowered, typeRef);
+    }
+
+    private bool IsOptionalPropertyOn(string? entityName, string propertyName) {
+        if (SameScope(entityName) && _isOptionalProperty is { } predicate)
+            return predicate(propertyName);
+        var property = FindEntity(entityName)?.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
+        return property?.Constraints.IsOptional() == true;
+    }
+
+    private bool SameScope(string? entityName) =>
+        entityName is null
+        || string.Equals(entityName, _context.SourceEntityName, StringComparison.Ordinal);
+
+    private Entity? FindEntity(string? entityName) {
+        if (_domain is null || entityName is null) return null;
+        return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, entityName, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -548,13 +681,22 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         var collection = new Member(_currentSubject, ResolveNavName(s.RelationshipName));
         var item = _names.Next("item");
         var result = _names.Next("result");
+        var itemProperty = new Member(item, s.PropertyName);
+        // An `optional` element is skipped when absent: the aggregate has no value to
+        // add, and a null operand never contributes. A present value is unboxed.
+        var target = ResolveRelationshipTarget(s.RelationshipName);
+        Node add = IsOptionalPropertyOn(target, s.PropertyName)
+            ? new IfStatement(
+                new NotEqual(itemProperty, new Constant(null)),
+                new Block([
+                    new Assignment(result,
+                        new SN.Add(result, OptionalUnboxNode(itemProperty, target, s.PropertyName))),
+                ]))
+            : new Assignment(result, new SN.Add(result, itemProperty));
         return new LoweredExpression(
             [
                 new Assignment(result, new Constant(0L)),
-                new ForEachLoop(item, collection,
-                    new Block([
-                        new Assignment(result, new SN.Add(result, new Member(item, s.PropertyName))),
-                    ])),
+                new ForEachLoop(item, collection, new Block([add])),
             ],
             [result],
             result);
@@ -643,16 +785,25 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private LoweredExpression LowerAgainstEntity(
         string? entityName, DomainExpression expression, Node subject) {
         IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
+        Func<string, bool>? optional = _isOptionalProperty;
+        Func<string, string?>? propertyTypes = _propertyTypeResolver;
         if (_domain is not null && entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
                 string.Equals(e.Name, entityName, StringComparison.Ordinal));
-            if (targetEntity is not null)
+            if (targetEntity is not null) {
                 enums = DomainToCSharpExporter.GetEnumPropertyNames(
                     targetEntity, _domain, _analysis);
+                // Optionality (and the date family used by temporal arithmetic) belongs to
+                // the entity the read lands on, not the path-prefix source.
+                optional = EffectLoweringPass.BuildIsOptionalProperty(targetEntity);
+                propertyTypes = EffectLoweringPass.BuildPropertyTypeResolver(targetEntity);
+            }
         }
         var nested = new DomainExpressionLoweringPass(_context with {
             EnumPropertyNames = enums,
-            SourceEntityName = entityName ?? _context.SourceEntityName
+            SourceEntityName = entityName ?? _context.SourceEntityName,
+            IsOptionalProperty = optional,
+            PropertyTypeResolver = propertyTypes,
         });
         return nested.LowerExpression(expression, subject);
     }

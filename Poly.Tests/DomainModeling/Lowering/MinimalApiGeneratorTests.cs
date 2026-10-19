@@ -200,6 +200,26 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task CreateDto_RequiredIsDefault_ProjectsRequiredAttribute() {
+        // Required is the default; the explicit keyword is redundant. The DTO member
+        // must carry [Required] for a bare property, not only for `required`.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Mark: Text default("x")
+              Memo: Text optional
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered)
+            .Contains("[Required]\n    public string Title { get; init; }");
+        // Trailing omittable scalars are not create-DTO members (held out separately).
+        await Assert.That(IrUnit(d).FindType("NoteDto")!.Properties!.Any(p => p.Name == "Memo")).IsFalse();
+        await Assert.That(IrUnit(d).FindType("NoteDto")!.Properties!.Any(p => p.Name == "Mark")).IsFalse();
+    }
+
+    [Test]
     public async Task BadRequest_Present() {
         var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
         var rendered = Render(d);
@@ -306,7 +326,8 @@ public class MinimalApiGeneratorTests {
         var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
         var rendered = Render(d with { Types = types });
 
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
+        await Assert.That(rendered)
+            .Contains("[AllowedValues(\"Active\")]\n    [Required]\n    public string Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string @value { get; init; }");
     }
 

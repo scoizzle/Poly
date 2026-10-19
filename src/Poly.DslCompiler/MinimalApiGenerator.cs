@@ -1017,11 +1017,20 @@ public sealed class MinimalApiGenerator {
             var effective = new List<Constraint>();
             var range = GetPropertyRange(entity, param.Name);
             if (range is not null) effective.Add(range);
-            var declared = entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, param.Name, StringComparison.Ordinal))?.Constraints ?? [];
+            var domainProp = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, param.Name, StringComparison.Ordinal));
+            var declared = domainProp?.Constraints ?? [];
             effective.AddRange(declared.Where(c =>
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
                     or EqualityConstraint));
+            // Required is the default: a not-`optional` property projects `[Required]`
+            // without the redundant keyword. Trailing omittable scalars are not DTO
+            // members, so every member here is required unless explicitly optional.
+            if (domainProp is not null
+                && !domainProp.Constraints.IsOptional()
+                && !domainProp.Constraints.OfType<DefaultValueConstraint>().Any()
+                && !effective.OfType<RequiredConstraint>().Any())
+                effective.Add(new RequiredConstraint());
 
             var attrs = BuildConstraintAttributes(clrType, effective);
             // Enum-typed members: the CLR enum type enforces membership at binding; the

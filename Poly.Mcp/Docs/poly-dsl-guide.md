@@ -329,6 +329,20 @@ and need not be supplied, and the auto-wired back-reference navigation is exempt
 `required` is still accepted for compatibility, but it is now redundant: required is the
 default, and `optional` is what changes it.
 
+**Reading an `optional` value.** Presence and value are separate:
+
+- **In a predicate** (`policy`, `require`, `when`, `if`), a comparison that reads an
+  `optional` value is **false when the value is absent** — a null operand never makes a
+  condition true. This holds through arithmetic and temporal arithmetic
+  (`DueDate + 7 > Start`), path-prefix reads on a related entity (`order Total > 100`),
+  quantifier bodies (`any lines where Score > 50`) and `not`/`and`/`or`.
+- **In a value position** (assign RHS, initializer, invoke argument), the read unboxes to
+  the property's type. An absent value has no value to produce, so it **throws** rather
+  than silently becoming a type default (`0`, `false`, `""`).
+- `sum Rel Prop` **skips** an absent element; an aggregate adds nothing for it.
+- `x == null` / `x != null` are the presence tests. Do not write `not flag` expecting an
+  absent flag to read as `true`: absent makes the predicate false.
+
 ### Annotations (Portable Storage Hints)
 
 Annotations are metadata attached to entities (`table`) or properties (`column`)
@@ -1139,9 +1153,9 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- `required` → `[Required]` (reference-typed properties). Note: required is the default, so
-  this attribute is not yet projected for an unmarked property — the API generator still
-  keys on the explicit keyword.
+- `required` → `[Required]` (reference-typed properties). Required is the default, so a
+  bare not-`optional` property projects it too; only `optional` clears the flag. Trailing
+  `optional`/`default(...)` scalars are not create-DTO members yet — see the follow-up note.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

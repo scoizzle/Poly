@@ -92,3 +92,4 @@ none.
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-19 | Scot | — | `224a507d` | plan: full null rule, transport `[Required]`, merge on Scot's OK | — |
+| 2026-10-19 | OpenCode | — | — | implement: arithmetic/temporal/boolean guards, value-context unbox, target-entity optionality, assign presence, `sum` skip, `[Required]` | full suite 4131 passed |

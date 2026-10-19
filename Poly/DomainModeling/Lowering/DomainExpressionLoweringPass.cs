@@ -402,32 +402,36 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             value = new SN.And(new NotEqual(valueHops[i], new Constant(null)), value);
 
         // A comparison that reads an `optional` value is false when that value is absent
-        // (a null operand never makes a condition true). Guard each optional heap-reference
-        // leaf on the short-circuit side, so the operand is not evaluated while absent.
+        // (a null operand never makes a condition true). Guard each optional leaf on the
+        // short-circuit side, so the operand is not evaluated while absent.
         var optionalLeaves = new List<Node>();
         CollectOptionalLeaves(c.Left, optionalLeaves);
         CollectOptionalLeaves(c.Right, optionalLeaves);
         for (var i = optionalLeaves.Count - 1; i >= 0; i--)
-            value = new SN.And(new NotEqual(optionalLeaves[i], new Constant(null)), value);
+            value = new SN.And(optionalLeaves[i], value);
 
         return LoweredExpression.Combine([left, right], value);
     }
 
     /// <summary>
-    /// Collects the optional heap-reference leaves an operand reads directly, so a
-    /// comparison on them is false when the value is absent. Number/Int/Boolean and enum
-    /// leaves are skipped: an absent scalar is not yet a distinct VM value (the
-    /// interpretation system owns that representation), and analysis rejects their use in
-    /// an operator meanwhile.
+    /// Collects a presence guard for each optional leaf an operand reads directly, so a
+    /// comparison on it is false when the value is absent (a null operand never makes a
+    /// condition true). Text absence is the null handle, so the guard is <c>leaf != null</c>.
+    /// A value type's absent slot is not a null handle (the interpretation system owns that
+    /// representation), so the guard reuses the presence test the create checks already use:
+    /// <c>object.ReferenceEquals(leaf, null)</c> boxes and is true only for the absent slot.
     /// </summary>
     private void CollectOptionalLeaves(DomainExpression operand, List<Node> leaves) {
         if (operand is not PropertyAccess property) return;
         if (_isOptionalProperty is null || !_isOptionalProperty(property.Name)) return;
         if (_actionParameterNames?.Contains(property.Name) == true) return;
-        if (_enumPropertyNames?.ContainsKey(property.Name) == true) return;
-        var typeName = _propertyTypeResolver?.Invoke(property.Name);
-        if (typeName is "Number" or "Int" or "Boolean") return;
-        leaves.Add(new Member(_currentSubject, ResolveName(property.Name)));
+        var leaf = new Member(_currentSubject, ResolveName(property.Name));
+        var isText = _propertyTypeResolver?.Invoke(property.Name) is "Text" or "String";
+        leaves.Add(isText
+            ? new NotEqual(leaf, new Constant(null))
+            : new SN.Not(new SN.Invoke(
+                new SN.Member(new SN.ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                [leaf, new Constant(null)])));
     }
 
     /// <summary>

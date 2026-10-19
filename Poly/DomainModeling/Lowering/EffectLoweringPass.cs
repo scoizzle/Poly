@@ -29,6 +29,7 @@ namespace Poly.DomainModeling.Lowering;
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
+    private readonly Func<string, bool> _isOptionalProperty;
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
@@ -79,13 +80,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
             parameters = merged;
         }
+        var isOptionalProperty = context.IsOptionalProperty ?? BuildIsOptionalProperty(entity);
+        _isOptionalProperty = isOptionalProperty;
         _expressionPass = new DomainExpressionLoweringPass(_context with {
             Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
             PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
-            IsOptionalProperty = context.IsOptionalProperty ?? BuildIsOptionalProperty(entity)
+            IsOptionalProperty = isOptionalProperty
         });
         Subject = context.Subject;
     }
@@ -785,7 +788,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             foreach (var kv in _context.Parameters)
                 mergedParams[kv.Key] = kv.Value;
         mergedParams[e.BinderName] = loopVar;
-        var argPass = new DomainExpressionLoweringPass(_context with { Parameters = mergedParams });
+        var argPass = new DomainExpressionLoweringPass(_context with {
+            Parameters = mergedParams,
+            IsOptionalProperty = _isOptionalProperty
+        });
         var loweredArgs = e.ParameterBindings
             .Select(binding => argPass.LowerExpression(binding.Expression, Subject))
             .ToList();

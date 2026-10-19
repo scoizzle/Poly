@@ -3294,6 +3294,34 @@ public class DomainToCSharpExporterTests {
         await Assert.That(notAda).Contains("Nickname != null");
     }
 
+    [Test]
+    public async Task OptionalValueCondition_GuardsOnPresence() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalValueCondition
+
+            Kind: enum { Low, High }
+
+            Item: entity {
+              Rank: Number optional
+              Kind: Kind optional
+              NotZero: policy { Rank is not 0 }
+              NotLow: policy { Kind is not Low }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        // A value type's absent slot is not a null handle, so presence reuses the create
+        // check's test: object.ReferenceEquals boxes and is true only for the absent slot.
+        // Without it, `Rank is not 0` would be true when Rank is absent.
+        var notZero = ExportedCSharp.ExtractMethod(cs, "bool NotZero(");
+        await Assert.That(notZero).Contains("ReferenceEquals(this.Rank, null)");
+        var notLow = ExportedCSharp.ExtractMethod(cs, "bool NotLow(");
+        await Assert.That(notLow).Contains("ReferenceEquals(this.Kind, null)");
+    }
+
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

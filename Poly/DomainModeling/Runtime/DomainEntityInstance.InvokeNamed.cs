@@ -44,13 +44,22 @@ public sealed partial record DomainEntityInstance {
         }
 
         IReadOnlyDictionary<string, object?>? mapped = null;
-        if (action.Parameters.Count > 0) {
-            if (args.Length != action.Parameters.Count)
-                throw new InvalidOperationException(
-                    $"Action '{name}' expects {action.Parameters.Count} argument(s), got {args.Length}.");
+        MethodDefinitionNode? moduleMethod = null;
+        if (Domain is not null)
+            RuntimeAnalysisCache.TryGetModuleMethod(Domain, Entity.Name, name, out moduleMethod);
+        var moduleParameters = moduleMethod?.Parameters;
+        var expected = moduleParameters?.Count ?? action.Parameters.Count;
+        if (args.Length != expected)
+            throw new InvalidOperationException(
+                $"Action '{name}' expects {expected} argument(s), got {args.Length}.");
+        if (args.Length > 0) {
             var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-            for (int i = 0; i < action.Parameters.Count; i++)
-                dict[action.Parameters[i].Name] = args[i];
+            for (int i = 0; i < args.Length; i++) {
+                var parameterName = moduleParameters is not null
+                    ? moduleParameters[i].Name
+                    : action.Parameters[i].Name;
+                dict[parameterName] = args[i];
+            }
             mapped = dict;
         }
 

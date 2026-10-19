@@ -1,8 +1,11 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
+
+using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.DslCompiler;
 
@@ -27,10 +30,12 @@ public sealed class DbContextGenerator {
     private readonly StorageModel _storageModel;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
     private readonly IStorageSyntaxEmitter? _emitter;
+    private readonly bool _implementsStoragePort;
 
     public DbContextGenerator(Domain domain, StorageModel storageModel,
-        IStorageSyntaxEmitter? emitter = null) {
+        IStorageSyntaxEmitter? emitter = null, bool implementsStoragePort = false) {
         _emitter = emitter;
+        _implementsStoragePort = implementsStoragePort;
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _contextName = $"{domain.Name}DbContext";
@@ -88,6 +93,19 @@ public sealed class DbContextGenerator {
             AccessModifier: AccessModifier.Protected
         );
 
+        var methods = new List<MethodDefinitionNode> { onModelCreatingMethod };
+        List<FieldDefinitionNode>? fields = null;
+        List<Node>? interfaces = null;
+        var usings = new List<string> { "Microsoft.EntityFrameworkCore" };
+        if (_implementsStoragePort) {
+            usings.Add("System.Collections.Generic");
+            usings.Add("System.Linq");
+            fields = [PendingKeysField()];
+            methods.Add(ExistsMethod());
+            methods.Add(RecordMethod());
+            interfaces = [new ClrTypeReference(typeof(IStoragePort))];
+        }
+
         var contextType = new TypeDefinitionNode(
             _contextName,
             BaseType: new TypeReference("DbContext"),
@@ -101,11 +119,13 @@ public sealed class DbContextGenerator {
                 }
             ],
             Properties: props,
-            Methods: [onModelCreatingMethod]
+            Methods: methods,
+            Fields: fields,
+            Interfaces: interfaces
         );
 
         var unit = new CompilationUnitNode(
-            Usings: ["Microsoft.EntityFrameworkCore"],
+            Usings: usings,
             Namespace: @namespace,
             Types: [contextType],
             TopLevelStatements: null
@@ -116,6 +136,88 @@ public sealed class DbContextGenerator {
             return _emitter.EmitDbContext(unit, _storageModel);
 
         return unit;
+    }
+
+    /// <summary>
+    /// The context is the host half of <see cref="IStoragePort"/>: <c>Exists</c>
+    /// queries the mapped <c>DbSet</c>; <c>Record</c> keeps the pending key a
+    /// nested create must see before the host saves.
+    /// </summary>
+    private static FieldDefinitionNode PendingKeysField() =>
+        new("_pendingKeys",
+            new NamedTypeReference("HashSet", TypeArguments: [new PrimitiveTypeReference(ClrPrimitive.String)]),
+            DefaultValue: new New(new NamedTypeReference("HashSet", TypeArguments: [new PrimitiveTypeReference(ClrPrimitive.String)])),
+            IsReadOnly: true,
+            AccessModifier: AccessModifier.Private);
+
+    private MethodDefinitionNode ExistsMethod() {
+        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
+        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
+        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        var nodes = new List<Node> {
+            new IfStatement(
+                new Invoke(
+                    new Member(new Member(new ThisReference(), "_pendingKeys"), "Contains"),
+                    PendingKey(entityParam, propertyParam, valueParam)),
+                new Block([new Return(new Constant(true))]))
+        };
+
+        foreach (var store in _storageModel.Entities.OrderBy(e => e.Name, StringComparer.Ordinal)) {
+            var unique = store.Columns
+                .Where(c => c.IsUnique)
+                .OrderBy(c => c.Name, StringComparer.Ordinal)
+                .ToList();
+            if (unique.Count == 0)
+                continue;
+            var body = new List<Node>();
+            foreach (var column in unique) {
+                var row = new Parameter("e");
+                Node comparison = string.Equals(column.ClrTypeName, "string", StringComparison.Ordinal)
+                    ? new Equal(new Member(row, column.Name), valueParam)
+                    : new Equal(
+                        new Invoke(new Member(new Member(row, column.Name), "ToString")),
+                        valueParam);
+                var any = new Invoke(
+                    new Member(new Member(new ThisReference(), Pluralize(store.Name)), "Any"),
+                    new Lambda([row], comparison));
+                body.Add(new IfStatement(
+                    new Equal(propertyParam, new Constant(column.Name)),
+                    new Block([new Return(any)])));
+            }
+            body.Add(new Return(new Constant(false)));
+            nodes.Add(new IfStatement(
+                new Equal(entityParam, new Constant(store.Name)),
+                new Block(body)));
+        }
+
+        nodes.Add(new Return(new Constant(false)));
+        return new MethodDefinitionNode(
+            "Exists",
+            new PrimitiveTypeReference(ClrPrimitive.Boolean),
+            Parameters: [entityParam, propertyParam, valueParam],
+            Body: new Block(nodes));
+    }
+
+    private static MethodDefinitionNode RecordMethod() {
+        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
+        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
+        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        return new MethodDefinitionNode(
+            "Record",
+            new TypeReference("void"),
+            Parameters: [entityParam, propertyParam, valueParam],
+            Body: new Block([
+                new Invoke(
+                    new Member(new Member(new ThisReference(), "_pendingKeys"), "Add"),
+                    PendingKey(entityParam, propertyParam, valueParam))
+            ]));
+    }
+
+    private static Node PendingKey(Node entity, Node property, Node value) {
+        Node key = new Poly.Ast.Nodes.Add(entity, new Constant("\u001f"));
+        key = new Poly.Ast.Nodes.Add(key, property);
+        key = new Poly.Ast.Nodes.Add(key, new Constant("\u001f"));
+        return new Poly.Ast.Nodes.Add(key, value);
     }
 
     /// <summary>Builds Syntax IR for a single entity's OnModelCreating config block.</summary>

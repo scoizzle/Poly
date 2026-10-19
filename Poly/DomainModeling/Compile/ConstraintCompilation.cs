@@ -1,4 +1,6 @@
+using Poly.Analysis;
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 
@@ -12,11 +14,12 @@ internal static class ConstraintCompilation {
     public static ContributedMethods.AppliedModule Apply(
         IReadOnlyList<TypeDefinitionNode> module,
         Domain domain,
+        AnalysisResult analysis,
         IReadOnlyList<IConstraintCompiler> compilers) {
         if (compilers.Count == 0)
             return new ContributedMethods.AppliedModule(module, []);
 
-        var contributions = Compile(module, domain, compilers);
+        var contributions = Compile(module, domain, analysis, compilers);
         if (contributions.Count == 0)
             return new ContributedMethods.AppliedModule(module, []);
         return ContributedMethods.Apply(module, contributions);
@@ -25,7 +28,9 @@ internal static class ConstraintCompilation {
     private static List<MethodContribution> Compile(
         IReadOnlyList<TypeDefinitionNode> module,
         Domain domain,
+        AnalysisResult analysis,
         IReadOnlyList<IConstraintCompiler> compilers) {
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         var pending = new Dictionary<(string Library, string Type, string Method, ContributionPlacement Placement), Pending>(PendingKey.Comparer);
         foreach (var entity in domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal)) {
             var type = FindType(module, entity.Name);
@@ -42,7 +47,7 @@ internal static class ConstraintCompilation {
                     }
                     if (match is null)
                         continue;
-                    var compiled = match.Compile(Request(entity, property, constraint, type)) with {
+                    var compiled = match.Compile(Request(entity, property, constraint, type, storage)) with {
                         Provenance = $"{entity.Name}.{property.Name} ({constraint.GetType().Name})"
                     };
                     Absorb(pending, match.LibraryId, entity.Name, module, compiled);
@@ -57,7 +62,8 @@ internal static class ConstraintCompilation {
     }
 
     private static ConstraintCompileRequest Request(
-        Entity entity, Property property, Constraint constraint, TypeDefinitionNode type) {
+        Entity entity, Property property, Constraint constraint, TypeDefinitionNode type,
+        StorageModel? storage) {
         var parameterName = DomainToCSharpExporter.ToCamelCase(property.Name);
         var parameters = new Dictionary<string, Parameter>(StringComparer.Ordinal);
         if (type.Methods is not null) {
@@ -68,7 +74,7 @@ internal static class ConstraintCompilation {
                     parameters[method.Name] = parameter;
             }
         }
-        return new ConstraintCompileRequest(entity, property, constraint, parameters);
+        return new ConstraintCompileRequest(entity, property, constraint, parameters, storage);
     }
 
     private static void Absorb(

@@ -16,6 +16,7 @@ public static class ConstraintMerge {
             (RangeConstraint a, RangeConstraint b) => MergeRange(a, b),
             (LengthConstraint a, LengthConstraint b) => MergeLength(a, b),
             (RequiredConstraint, RequiredConstraint) => new RequiredConstraint(),
+            (OptionalConstraint, OptionalConstraint) => new OptionalConstraint(),
             (EqualityConstraint a, EqualityConstraint b) =>
                 Equals(a.ExpectedValue, b.ExpectedValue) ? a : null,
             (PatternConstraint a, PatternConstraint b) =>

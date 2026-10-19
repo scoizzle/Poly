@@ -90,11 +90,11 @@ public class DomainToCSharpExporterTests {
         }
 
         Loan: entity {
-          Status: Text
+          Status: Text optional
           CheckedOutAt: DateTime
-          DueDate: DateTime
-          ReturnedAt: DateTime
-          TimesRenewed: Number
+          DueDate: DateTime default(Now)
+          ReturnedAt: DateTime optional
+          TimesRenewed: Number default(0)
           book: Book
           borrower: Patron
           Active: stage {
@@ -118,7 +118,7 @@ public class DomainToCSharpExporterTests {
           Amount: Number required
           Reason: Text
           DateIssued: DateTime default(Now)
-          Paid: Boolean
+          Paid: Boolean optional
           patron: Patron
           Unpaid: stage {
             Pay: action {
@@ -441,11 +441,16 @@ public class DomainToCSharpExporterTests {
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
         var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
+        // The CreateNav signature is the target's required ctor params, then the trailing
+        // optional params (defaulted OR `optional`, name order) — the same order the
+        // target's `Create` factory appends them.
         var expected = esm.ConstructorParameters
             .Where(p => !p.IsBackReference)
             .Where(p => autoWireBackRef is null
                 || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
             .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
+            .Concat(DomainToCSharpExporter.TrailingOptionalProperties(loan, analysis)
+                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected);
     }
@@ -468,7 +473,7 @@ public class DomainToCSharpExporterTests {
 
             Order: entity {
               Title: Text required
-              Total: Number range(0, )
+              Total: Number range(0, ) optional
               customer: Customer
               lines: many OrderLine
               notes: many owned Note
@@ -1362,7 +1367,7 @@ public class DomainToCSharpExporterTests {
 
             Order: entity {
               Title: Text required
-              Total: Number range(0, )
+              Total: Number range(0, ) optional
               customer: Customer
               lines: many OrderLine
               notes: many owned Note
@@ -3192,6 +3197,128 @@ public class DomainToCSharpExporterTests {
         await Assert.That(printFalse).IsEqualTo(simFalse);
         await Assert.That(printTrue).IsTrue();
         await Assert.That(printFalse).IsFalse();
+    }
+
+    [Test]
+    public async Task OptionalProperty_ExportsNullableTypeAndTrailingCtorParam() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain NullabilityContract
+
+            Note: entity {
+              Title: Text
+              Subtitle: Text optional
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var note = new DomainToCSharpExporter().Export(domain, analysis)
+            .First(t => t.Name == "Note");
+
+        var title = note.Properties!.First(p => p.Name == "Title");
+        var subtitle = note.Properties!.First(p => p.Name == "Subtitle");
+        // Required is the default → non-nullable `T`; `optional` → `T?`.
+        await Assert.That(title.MemberType).IsNotAssignableTo<OptionalTypeReference>();
+        await Assert.That(subtitle.MemberType).IsAssignableTo<OptionalTypeReference>();
+
+        // Optional is omittable at create → it trails as `Subtitle? subtitle = null`
+        // after the required positional parameters.
+        var ctorParams = note.Constructors!
+            .MaxBy(c => c.Parameters?.Count ?? 0)!.Parameters!.ToList();
+        await Assert.That(ctorParams[^1].Name).IsEqualTo("subtitle");
+        await Assert.That(ctorParams[^1].DefaultValue).IsNotNull();
+    }
+
+    [Test]
+    public async Task RequiredIsDefault_StorageColumnRequired_OptionalNullable() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain NullabilityStorage
+            uses persistence
+
+            Note: entity {
+              Title: Text
+              Subtitle: Text optional
+            }
+            """);
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var note = storage.Entities.Single(e => e.Name == "Note");
+        await Assert.That(note.Columns.Single(c => c.Name == "Title").IsRequired).IsTrue();
+        await Assert.That(note.Columns.Single(c => c.Name == "Subtitle").IsRequired).IsFalse();
+    }
+
+    [Test]
+    public async Task Create_OmittedOptionalWithConstraints_GuardsTestOnlyPresentValues() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalGuards
+
+            Note: entity {
+              Title: Text
+              Code: Text optional length(3, 10)
+              Rank: Number optional range(1, 5)
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Note> Create(");
+
+        // An omitted `optional` arrives as null; the length/range guards must test presence
+        // first (an absent value passes, a present value is still checked). The null test is
+        // IsNullOrEmpty for the Text length check, and a plain `!= null` for a value type —
+        // an absent optional scalar is the null handle in the printed `T?` and the VM alike.
+        await Assert.That(create).Contains("string.IsNullOrEmpty(code)");
+        await Assert.That(create).Contains("rank != null");
+    }
+
+    [Test]
+    public async Task OptionalTextCondition_GuardsOnPresence() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalCondition
+
+            Item: entity {
+              Nickname: Text optional
+              Flagged: policy { Nickname is "Ada" }
+              NotAda: policy { Nickname is not "Ada" }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        // `is "Ada"` and `is not "Ada"` are both false when Nickname is absent: a null
+        // operand never makes a condition true, so the guard tests presence first.
+        var flagged = ExportedCSharp.ExtractMethod(cs, "bool Flagged(");
+        await Assert.That(flagged).Contains("Nickname != null");
+        var notAda = ExportedCSharp.ExtractMethod(cs, "bool NotAda(");
+        await Assert.That(notAda).Contains("Nickname != null");
+    }
+
+    [Test]
+    public async Task OptionalValueCondition_GuardsOnPresence() {
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalValueCondition
+
+            Kind: enum { Low, High }
+
+            Item: entity {
+              Rank: Number optional
+              Kind: Kind optional
+              NotZero: policy { Rank is not 0 }
+              NotLow: policy { Kind is not Low }
+            }
+            """);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        // A value type's absent value is the null handle too, so presence is the plain null
+        // test — no ABI workaround. Without it, `Rank is not 0` would be true when absent.
+        var notZero = ExportedCSharp.ExtractMethod(cs, "bool NotZero(");
+        await Assert.That(notZero).Contains("this.Rank != null");
+        var notLow = ExportedCSharp.ExtractMethod(cs, "bool NotLow(");
+        await Assert.That(notLow).Contains("this.Kind != null");
     }
 
     private static string[] CompileExported(string cs) {

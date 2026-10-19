@@ -528,6 +528,15 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // A plain scalar lifts into an optional-scalar variable (`long? v = x`, x a long):
+        // the store boxes the value into a cell. The reverse (an optional into a plain
+        // scalar) still needs an explicit `.Value`/cast, so it stays rejected.
+        if (prior.ClrType is { } optionalClr
+            && Nullable.GetUnderlyingType(optionalClr) is { } optionalUnderlying
+            && (optionalUnderlying == typeof(long) || optionalUnderlying == typeof(bool))
+            && rhsType == optionalUnderlying)
+            return;
+
         // Scalar numeric writes share one slot encoding (all `long`), so int↔long are
         // fine by construction; the IEEE-slot widening exemption is further down.
         if (prior.Kind != rhsMeta.Kind) {

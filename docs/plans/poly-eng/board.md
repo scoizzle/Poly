@@ -23,6 +23,7 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 
 | PR | Slice | Branch |
 |----|-------|--------|
+| #221 | `optional` value null rule + transport requiredness ([task](tasks/optional-null-rule.md)) | `slice/analysis-truth` |
 | #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
 | #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
 | #196 (draft) | docs: analysis coverage audit 2026-10-16 | `spike/analysis-coverage` |

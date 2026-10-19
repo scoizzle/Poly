@@ -1128,7 +1128,7 @@ public sealed partial record DomainEntityInstance {
         var slots = new List<string>();
         foreach (var p in DomainToCSharpExporter.GetConstructorParameters(entity, analysis))
             slots.Add(p.Name);
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(entity, analysis))
+        foreach (var prop in DomainToCSharpExporter.TrailingOptionalProperties(entity, analysis))
             slots.Add(prop.Name);
         return slots;
     }

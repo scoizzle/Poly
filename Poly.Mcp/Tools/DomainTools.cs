@@ -1108,6 +1108,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
                 cfg?.TryGetValue("min", out var min) == true ? NormalizeJsonElement(min) : null,
                 cfg?.TryGetValue("max", out var max) == true ? NormalizeJsonElement(max) : null),
             "Required" => new RequiredConstraint(),
+            "Optional" => new OptionalConstraint(),
             "Length" => new LengthConstraint(
                 cfg?.TryGetValue("min", out var lmin) == true ? lmin.GetInt32() : 0,
                 cfg?.TryGetValue("max", out var lmax) == true ? lmax.GetInt32() : int.MaxValue),
@@ -1116,7 +1117,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
                     ? p.GetString()!
                     : throw new ArgumentException("Pattern requires 'pattern' config.")),
             "Unique" => new UniqueConstraint(),
-            _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Length, Pattern, Unique.")
+            _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Optional, Length, Pattern, Unique.")
         };
     }
 
@@ -1134,6 +1135,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
     private static string FormatConstraint(Constraint c) => c switch {
         RangeConstraint r => $"Range(min={r.Minimum}, max={r.Maximum})",
         RequiredConstraint => "Required",
+        OptionalConstraint => "Optional",
         LengthConstraint l => $"Length(min={l.MinLength}, max={l.MaxLength})",
         PatternConstraint p => $"Pattern({p.Pattern})",
         UniqueConstraint => "Unique",

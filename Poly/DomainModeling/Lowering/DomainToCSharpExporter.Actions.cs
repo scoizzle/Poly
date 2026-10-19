@@ -546,6 +546,7 @@ public sealed partial class DomainToCSharpExporter {
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
+            IsOptionalProperty: EffectLoweringPass.BuildIsOptionalProperty(entity),
             SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
         var lowered = pass.LowerExpression(expr, new ThisReference());

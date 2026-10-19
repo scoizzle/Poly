@@ -312,7 +312,7 @@ public sealed class PolyDslParser : DslCursor {
                 continue;
             }
 
-            throw Error($"Expected property, stage, action, or policy, got '{Current.Text}'");
+            throw Error(ExpectedMemberToken(Current));
         }
 
         Expect(TokenKind.RBrace);
@@ -1418,6 +1418,10 @@ public sealed class PolyDslParser : DslCursor {
                 Advance();
                 return new RequiredConstraint();
 
+            case TokenKind.Optional:
+                Advance();
+                return new OptionalConstraint();
+
             case TokenKind.Unique:
                 Advance();
                 return new UniqueConstraint();
@@ -1543,7 +1547,7 @@ public sealed class PolyDslParser : DslCursor {
     };
 
     private static bool IsConstraint(TokenKind kind) => kind switch {
-        TokenKind.Required or TokenKind.Unique or TokenKind.Range
+        TokenKind.Required or TokenKind.Optional or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
             or TokenKind.Equals or TokenKind.Equality or TokenKind.Enum => true,
         _ => false,
@@ -1558,6 +1562,21 @@ public sealed class PolyDslParser : DslCursor {
             || !string.Equals(Current.Text, word, StringComparison.Ordinal))
             throw Error($"Expected '{word}', got '{Current.Text}'");
         Advance();
+    }
+
+    /// <summary>
+    /// The member-position error. A reserved keyword used where a member line was expected
+    /// (e.g. <c>policy</c>, <c>stage</c>, <c>when</c>) lexes as its keyword token, not an
+    /// identifier, and lands here; name that cause instead of repeating the token back.
+    /// </summary>
+    private static string ExpectedMemberToken(DslToken token) {
+        var got = token.Text;
+        var reserved = token.Kind != TokenKind.Identifier
+            && got.Length > 0 && char.IsLetter(got[0]);
+        return reserved
+            ? $"Expected property, stage, action, or policy, got '{got}'. " +
+              $"'{got}' is a reserved word and cannot be used as a member name; rename it."
+            : $"Expected property, stage, action, or policy, got '{got}'.";
     }
 
     /// <summary>

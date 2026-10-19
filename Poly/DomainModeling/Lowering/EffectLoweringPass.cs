@@ -29,6 +29,7 @@ namespace Poly.DomainModeling.Lowering;
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
+    private readonly Func<string, bool> _isOptionalProperty;
     private readonly Domain? _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
     private readonly INodeMetadataProvider? _analysis;
@@ -79,12 +80,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
             parameters = merged;
         }
+        var isOptionalProperty = context.IsOptionalProperty ?? BuildIsOptionalProperty(entity);
+        _isOptionalProperty = isOptionalProperty;
         _expressionPass = new DomainExpressionLoweringPass(_context with {
             Parameters = parameters,
             NavigationNameResolver = context.NavigationNameResolver ?? BuildNavigationNameResolver(entity, _domain, _analysis),
             IsCollectionNavigation = context.IsCollectionNavigation
                 ?? BuildIsCollectionNavigation(entity, _domain, _analysis),
-            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity)
+            PropertyTypeResolver = context.PropertyTypeResolver ?? BuildPropertyTypeResolver(entity),
+            IsOptionalProperty = isOptionalProperty
         });
         Subject = context.Subject;
     }
@@ -162,6 +166,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 foreach (var p in action.Parameters)
                     byName.TryAdd(p.Name, p.Type.TypeName);
         return name => byName.TryGetValue(name, out var typeName) ? typeName : null;
+    }
+
+    /// <summary>
+    /// Predicate answering whether a DSL property name is <c>optional</c> on the entity.
+    /// Expression lowering uses it to guard a comparison whose operand reads an optional
+    /// value, so an absent value makes the condition false (a null operand never makes a
+    /// condition true). Action parameters and navigations are not properties here.
+    /// </summary>
+    internal static Func<string, bool> BuildIsOptionalProperty(Entity entity) {
+        var optional = entity.Properties
+            .Where(p => p.Constraints.IsOptional())
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return optional.Contains;
     }
 
     /// <summary>The Syntax AST node representing the current entity instance.</summary>
@@ -250,13 +268,33 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp);
+
+        // A required (not `optional`) target needs a value: unbox a direct optional read
+        // so the printed form compiles and the VM unboxes; an absent value throws, matching
+        // the VM's arithmetic/relational rule. An `optional` target keeps the handle, and
+        // its range/enum guards run only for a present value.
+        Node? presence = null;
+        Node? guardedCheckValue = null;
+        if (assignProp is not null) {
+            if (!assignProp.Constraints.IsOptional())
+                value = value with {
+                    Value = _expressionPass.UnboxOptionalRead(a.Value, value.Value)
+                };
+            else if (_expressionPass.OptionalReadPresence(a.Value) is { } optionalPresence) {
+                presence = optionalPresence;
+                guardedCheckValue = _expressionPass.UnboxOptionalRead(a.Value, value.Value);
+            }
+        }
+
         Node assignment = uniqueName is null && !needsConstraintWrap
             ? new Assignment(target.Value, value.Value)
             : WrapConstrainedAssign(
                 target.Value,
                 needsConstraintWrap ? assignProp : null,
                 value.Value,
-                uniqueName);
+                uniqueName,
+                presence,
+                guardedCheckValue);
         return LoweredExpression.Before([target, value], assignment);
     }
 
@@ -292,7 +330,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Node destination,
         Property? property,
         Node value,
-        string? uniquePropertyName) {
+        string? uniquePropertyName,
+        Node? presence = null,
+        Node? guardedCheckValue = null) {
         var assignedVar = _names.Next("assignValue");
         var locals = new List<Node> { assignedVar };
         var nodes = new List<Node> {
@@ -300,7 +340,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         };
 
         if (property is not null)
-            AppendAssignConstraintChecks(nodes, property, assignedVar);
+            AppendAssignConstraintChecks(nodes, property, assignedVar, presence, guardedCheckValue);
 
         if (uniquePropertyName is not null) {
             var checkVar = _names.Next("uniqueCheck");
@@ -327,7 +367,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
     /// </summary>
     private void AppendAssignConstraintChecks(
-        List<Node> nodes, Property prop, Node valueRef) {
+        List<Node> nodes, Property prop, Node valueRef,
+        Node? presence = null, Node? guardedCheckValue = null) {
         var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
                   || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
         var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
@@ -351,14 +392,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
         }
 
+        // An `optional` target may receive an absent value: run the range and enum checks
+        // only for a present one. The presence test uses the typed read of the RHS (passed
+        // in), not the untyped local — a raw slot makes `!= null` a value test, not a
+        // handle-presence test. `checkRef` is the unboxed read used inside the guard.
+        var checkRef = guardedCheckValue ?? valueRef;
+
+        var rangeChecks = new List<Node>();
         foreach (var r in prop.Constraints.OfType<RangeConstraint>()) {
             if (!isNumber)
                 continue;
             if (r.Minimum is not null) {
                 var minVal = ConvertAssignConstraintConstant(r.Minimum);
                 if (minVal is not null) {
-                    nodes.Add(new IfStatement(
-                        new LessThan(valueRef, minVal),
+                    rangeChecks.Add(new IfStatement(
+                        new LessThan(checkRef, minVal),
                         new Block([Fail(
                             $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
                 }
@@ -366,13 +414,14 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             if (r.Maximum is not null) {
                 var maxVal = ConvertAssignConstraintConstant(r.Maximum);
                 if (maxVal is not null) {
-                    nodes.Add(new IfStatement(
-                        new GreaterThan(valueRef, maxVal),
+                    rangeChecks.Add(new IfStatement(
+                        new GreaterThan(checkRef, maxVal),
                         new Block([Fail(
                             $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
                 }
             }
         }
+        AppendGuarded(nodes, rangeChecks, presence);
 
         foreach (var l in prop.Constraints.OfType<LengthConstraint>()) {
             if (!isText)
@@ -430,14 +479,27 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             Node? notMember = null;
             var enumTypeRef = new NamedTypeReference(enumType.Name);
             foreach (var member in enumType.MemberNames) {
-                var ne = new NotEqual(valueRef, new Member(enumTypeRef, member));
+                var ne = new NotEqual(checkRef, new Member(enumTypeRef, member));
                 notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
             }
-            nodes.Add(new IfStatement(
-                notMember!,
-                new Block([Fail(
-                    $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
+            AppendGuarded(nodes, [
+                new IfStatement(
+                    notMember!,
+                    new Block([Fail(
+                        $"'{prop.Name}' is not a valid member of {enumType.Name}.")])),
+            ], presence);
         }
+    }
+
+    /// <summary>Adds assign checks, wrapped in the optional-value presence guard when one is
+    /// present: an absent `optional` satisfies them; a present value is still checked.</summary>
+    private static void AppendGuarded(List<Node> nodes, List<Node> checks, Node? presence) {
+        if (checks.Count == 0)
+            return;
+        if (presence is null)
+            nodes.AddRange(checks);
+        else
+            nodes.Add(new IfStatement(presence, new Block(checks)));
     }
 
     /// <summary>
@@ -672,7 +734,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var loweredArgs = i.ParameterBindings
             .Select(binding => _expressionPass.LowerExpression(binding.Expression, Subject))
             .ToList();
-        var args = loweredArgs.Select(a => a.Value).ToList();
+        // The callee's parameters are not optional: unbox a direct optional read so the
+        // printed call compiles and the VM unboxes (an absent value throws).
+        var args = loweredArgs
+            .Select((a, index) =>
+                _expressionPass.UnboxOptionalRead(i.ParameterBindings[index].Expression, a.Value))
+            .ToList();
 
         // Singular cross-entity invoke (OneToOne): the runtime requires exactly one
         // outbound link (ResolveRelationshipTarget) and fails loud otherwise. Enforce the
@@ -770,11 +837,28 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             foreach (var kv in _context.Parameters)
                 mergedParams[kv.Key] = kv.Value;
         mergedParams[e.BinderName] = loopVar;
-        var argPass = new DomainExpressionLoweringPass(_context with { Parameters = mergedParams });
+        // Reads resolve against the entity they land on: a bare name is the source, a
+        // binder-rooted read (`x Qty`) is the target. Keep the source scope and let the
+        // binder resolver retarget only binder reads.
+        var targetName = _entity.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, relName, StringComparison.Ordinal))?.Target.TypeName;
+        var argPass = new DomainExpressionLoweringPass(_context with {
+            Parameters = mergedParams,
+            // The pass's own resolvers are installed on `_expressionPass`, not on this
+            // context; carry them so a source read still types/guards correctly.
+            PropertyTypeResolver = _context.PropertyTypeResolver ?? BuildPropertyTypeResolver(_entity),
+            IsOptionalProperty = _context.IsOptionalProperty ?? _isOptionalProperty,
+            BinderEntityResolver = name => string.Equals(name, e.BinderName, StringComparison.Ordinal)
+                ? targetName
+                : null,
+        });
         var loweredArgs = e.ParameterBindings
             .Select(binding => argPass.LowerExpression(binding.Expression, Subject))
             .ToList();
-        var args = loweredArgs.Select(a => a.Value).ToList();
+        var args = loweredArgs
+            .Select((a, index) =>
+                argPass.UnboxOptionalRead(e.ParameterBindings[index].Expression, a.Value))
+            .ToList();
 
         var invokeCall = new Invoke(new Member(loopVar, e.ActionName), [.. args]);
 
@@ -940,7 +1024,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             slots.Add(ArgumentFor(
                 targetEntity, parameter.Name, parameter.Type, parameter.IsNavigation,
                 parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(
+        foreach (var prop in DomainToCSharpExporter.TrailingOptionalProperties(
                      targetEntity, _analysis))
             slots.Add(ArgumentFor(
                 targetEntity, prop.Name, prop.Type, isNavigation: false, isCollection: false,
@@ -1044,7 +1128,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             slots.Add(ArgumentFor(
                 target, parameter.Name, parameter.Type, parameter.IsNavigation,
                 parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(target, _analysis!))
+        foreach (var prop in DomainToCSharpExporter.TrailingOptionalProperties(target, _analysis!))
             slots.Add(ArgumentFor(
                 target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
                 inits, loweredInitializers));
@@ -1094,6 +1178,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                         defaultConstraint, prop, _domain, _analysis) is { } constant)
                     return (constant, true);
             }
+            // `optional` with no default: absent is null (the trailing ctor param's
+            // default), never a non-null type default. `default(...)` above wins.
+            if (prop.Constraints.IsOptional())
+                return (new Constant(null), true);
         }
         return (TypeDefaultNode(type), false);
     }
@@ -1105,9 +1193,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (prop is not null
             && LowerDefault(expr, new NamedTypeReference(prop.Type.TypeName)) is { } adapted)
             return LoweredExpression.Of(adapted);
-        if (prop is not null)
-            return LowerEnumAwareValue(expr, prop.Type, Subject);
-        return _expressionPass.LowerExpression(expr, Subject);
+        var lowered = prop is not null
+            ? LowerEnumAwareValue(expr, prop.Type, Subject)
+            : _expressionPass.LowerExpression(expr, Subject);
+        // A required initializer target needs a value: unbox a direct optional read.
+        if (prop is not null && !prop.Constraints.IsOptional())
+            lowered = lowered with {
+                Value = _expressionPass.UnboxOptionalRead(expr, lowered.Value)
+            };
+        return lowered;
     }
 
     private static Dictionary<string, PropertyBinding> BindingsByName(

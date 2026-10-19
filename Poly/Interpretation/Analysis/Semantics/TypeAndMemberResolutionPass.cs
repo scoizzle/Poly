@@ -130,7 +130,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
             Divide div => ResolveNumericArithmeticType(context, div.LeftHandValue, div.RightHandValue),
             Modulo mod => ResolveNumericArithmeticType(context, mod.LeftHandValue, mod.RightHandValue),
-            UnaryMinus minus => ResolveNodeType(context, minus.Operand),
+            UnaryMinus minus => UnwrapOptionalScalar(context, ResolveNodeType(context, minus.Operand)),
             And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Not => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
@@ -171,7 +171,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             BitwiseXor bx => ResolveArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
             ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
-            BitwiseNot bn => ResolveNodeType(context, bn.Operand),
+            BitwiseNot bn => UnwrapOptionalScalar(context, ResolveNodeType(context, bn.Operand)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
             SwitchStatement swt => swt.Cases.Count > 0
@@ -267,14 +267,27 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         // Promote to the wider numeric type (C#-style); fall back to the
         // left operand type when either side is not a numeric primitive.
         if (leftRank is null || rightRank is null)
-            return leftType;
+            return UnwrapOptionalScalar(context, leftType);
 
         var promoted = leftRank >= rightRank ? leftType : rightType;
+        // An optional scalar operand is unboxed by the operation, so the result is the
+        // underlying scalar slot, not a nullable handle.
+        promoted = UnwrapOptionalScalar(context, promoted) ?? promoted;
         // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
         // must accept a later int write), so a char result becomes int.
         return promoted.GetRuntimeType() == typeof(char)
             ? context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted
             : promoted;
+    }
+
+    /// <summary>An optional scalar (`long?`/`bool?`) is unboxed by an operation, so a numeric
+    /// result is its underlying scalar slot, not a nullable handle.</summary>
+    private static ITypeDefinition? UnwrapOptionalScalar(AnalysisContext context, ITypeDefinition? type) {
+        var runtime = type?.GetRuntimeType();
+        var underlying = runtime is null ? null : Nullable.GetUnderlyingType(runtime);
+        if (underlying is null || (underlying != typeof(long) && underlying != typeof(bool)))
+            return type;
+        return context.TypeDefinitions.GetTypeDefinition(underlying) ?? type;
     }
 
     private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
@@ -303,7 +316,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (leftType == null || rightType == null)
             return null;
 
-        return leftType;
+        return UnwrapOptionalScalar(context, leftType);
     }
 
     private static ITypeDefinition? ResolveMemberAccessType(

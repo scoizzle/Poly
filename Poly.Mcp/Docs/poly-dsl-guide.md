@@ -91,13 +91,14 @@ parameter. To-one navigation bindings in `create in` initializers are **legal**
 (e.g. `create in loans { book: book }`) — the binding flows into the child's
 value bag / constructor parameter like a scalar initializer.
 
-**Required coverage (DMEFF011):** every `required` **scalar** property of the
-created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default`. Only scalar/enum-typed properties carry constraints —
-navigation properties cannot be `required` (the DSL rejects `nav: Type required`
-as a parse error), so the back-reference exemption simply means the auto-wired
-nav needs no initializer value. Analysis rejects a create that omits a required
-property — the generated `Create` factory would otherwise throw at runtime.
+**Required coverage (DMEFF011):** every **scalar** property of the created entity is
+required by default and must be provided in the `create` / `create in` initializers,
+unless it has a `default(...)` or is marked `optional`. Properties assigned by the
+first stage's entry effects are body-initialized and are exempt. Navigation properties
+cannot carry `required` (the DSL rejects `nav: Type required` as a parse error), so the
+back-reference exemption simply means the auto-wired nav needs no initializer value.
+Analysis rejects a create that omits a required property — the generated `Create`
+factory would otherwise run with a missing value.
 
 ```poly
 // ✅ Correct — both required props provided
@@ -285,6 +286,7 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
 | Required | `required` | `Name: Text required` |
+| Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
@@ -306,17 +308,40 @@ Item: entity {
 }
 ```
 
-### What makes a property optional at create
+### Required by default; `optional` opts out
 
-Every property **without** `default(...)` is a **required parameter of the generated
-`Create` factory** (and of the entity's create DTO), so a `create` / `create in` /
-`create_instance` must supply it. **Only `default(...)` makes a property optional** — the
-default is applied when the value is omitted.
+A property is **required by default**. `optional` is the explicit opt-out — you do not
+write a keyword to make something required, because that is what you get for free.
 
-`required` is a *value* rule (the value must not be empty when it is written); it is not
-what decides creatability. So an enum property, a `value`-typed (nested document) property,
-or a plain `Text` property with no `default(...)` all block create when omitted, while a
-`required` property *with* a `default(...)` does not.
+`default(...)` and `optional` are **two orthogonal axes**; do not conflate them:
+
+- **`default(X)` — initialization.** Provides an initial value and makes the property
+  omittable at create: an omitted property takes `X`. It says nothing about whether the
+  value is required.
+- **`optional` — requiredness.** The value may be absent. Required is the default.
+
+Consequently a `create` / `create in` / `create_instance` must supply a property unless it
+has a `default(...)` **or** is `optional`. A required property may still carry a default
+(omit at create, get the default); an optional property may be undefaulted (omit at create,
+value absent). Properties assigned by the first stage's entry effects are body-initialized
+and need not be supplied, and the auto-wired back-reference navigation is exempt.
+
+`required` is still accepted for compatibility, but it is now redundant: required is the
+default, and `optional` is what changes it.
+
+**Reading an `optional` value.** Presence and value are separate:
+
+- **In a predicate** (`policy`, `require`, `when`, `if`), a comparison that reads an
+  `optional` value is **false when the value is absent** — a null operand never makes a
+  condition true. This holds through arithmetic and temporal arithmetic
+  (`DueDate + 7 > Start`), path-prefix reads on a related entity (`order Total > 100`),
+  quantifier bodies (`any lines where Score > 50`) and `not`/`and`/`or`.
+- **In a value position** (assign RHS, initializer, invoke argument), the read unboxes to
+  the property's type. An absent value has no value to produce, so it **throws** rather
+  than silently becoming a type default (`0`, `false`, `""`).
+- `sum Rel Prop` **skips** an absent element; an aggregate adds nothing for it.
+- `x == null` / `x != null` are the presence tests. Do not write `not flag` expecting an
+  absent flag to read as `true`: absent makes the predicate false.
 
 ### Annotations (Portable Storage Hints)
 
@@ -1084,6 +1109,7 @@ SetName: action (newName: Text) {
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
 | Required | `required` | `Name: Text required` |
+| Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
@@ -1114,7 +1140,7 @@ attributes below. What reaches the database:
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
 | `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
 | `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
-| `required` | `IsRequired()` for reference-typed columns. |
+| not `optional` | `IsRequired()` for reference-typed columns. Required is the default, so a bare property is required; only `optional` clears the flag. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport projects them onto DTO validation attributes, so the API boundary
@@ -1127,7 +1153,11 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- `required` → `[Required]` (reference-typed properties).
+- `required` → `[Required]` (reference-typed properties). Required is the default, so a
+  bare not-`optional` property projects it too; only `optional` clears the flag. Trailing
+  `optional`/`default(...)` scalars are not create-DTO members yet: carrying them needs the
+  domain default (or a coalescing nullable field) in the DTO, otherwise the CLR default
+  overrides `default(...)` — tracked as a follow-up.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

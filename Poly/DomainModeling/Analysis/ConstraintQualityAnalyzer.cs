@@ -32,6 +32,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
 
     private static void ValidatePropertyConstraints(AnalysisContext context, Property property) {
         var constraints = property.Constraints;
+        ValidateRequiredOptionalExclusivity(context, property, constraints);
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);
         ValidateEqualitySatisfiability(context, property, constraints);
@@ -39,6 +40,23 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateConstraintTypeCompatibility(context, property, constraints);
         ValidateDefaultWithinConstraints(context, property, constraints);
         NoteUnprojectedStorageConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// F4: <c>required</c> and <c>optional</c> contradict. Required is the default and
+    /// <c>optional</c> is the explicit opt-out, so writing both is ambiguous authoring —
+    /// reject it rather than let <c>optional</c> silently win the presence rule while
+    /// <c>required</c> silently wins nullability.
+    /// </summary>
+    private static void ValidateRequiredOptionalExclusivity(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        if (constraints.Any(static c => c is RequiredConstraint)
+            && constraints.Any(static c => c is OptionalConstraint)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' cannot be both 'required' and 'optional' — required is the default and 'optional' is the opt-out; remove one.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
     }
 
     /// <summary>
@@ -193,8 +211,8 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
                 .FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.Ordinal));
             if (parentProperty is null) continue;
 
-            var parentRequired = parentProperty.Constraints.Any(static c => c is RequiredConstraint);
-            var childRequired = property.Constraints.Any(static c => c is RequiredConstraint);
+            var parentRequired = parentProperty.Constraints.IsRequiredValue();
+            var childRequired = property.Constraints.IsRequiredValue();
             if (parentRequired && !childRequired) {
                 context.ReportWarning(
                     property,

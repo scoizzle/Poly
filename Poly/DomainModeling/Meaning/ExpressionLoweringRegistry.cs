@@ -14,6 +14,7 @@ public interface IExpressionLoweringHandler {
         DomainExpression expression,
         Func<DomainExpression, Node> route,
         Func<string, string?>? propertyTypeResolver,
+        Func<DomainExpression, string?>? expressionTypeResolver,
         out Node result);
 }
 
@@ -36,12 +37,13 @@ public sealed class ExpressionLoweringRegistry {
         DomainExpression expression,
         Func<DomainExpression, Node> route,
         Func<string, string?>? propertyTypeResolver,
+        Func<DomainExpression, string?>? expressionTypeResolver,
         out Node result) {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(route);
         foreach (var handler in _handlers) {
             if (handler.ExpressionType.IsInstanceOfType(expression)
-                && handler.TryLower(expression, route, propertyTypeResolver, out result!))
+                && handler.TryLower(expression, route, propertyTypeResolver, expressionTypeResolver, out result!))
                 return true;
         }
         result = null!;

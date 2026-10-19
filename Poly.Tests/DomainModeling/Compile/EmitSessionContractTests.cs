@@ -155,7 +155,7 @@ public sealed class EmitSessionContractTests {
 
             Stay: entity {
               Guest: Text
-              Industry: Industry
+              Industry: Industry optional
               Vacant: stage {
                 CheckIn: action { transition to Occupied }
               }

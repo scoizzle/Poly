@@ -42,13 +42,14 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task BoolConstant_IsBool() {
+    public async Task BoolConstant_IsWordWithBoolClrType() {
         var node = new Constant(true);
         var result = AnalyzerWithPass.Analyze(node);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(node);
 
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(bool));
     }
 
     [Test]
@@ -92,7 +93,7 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task Invoke_StoredLambdaReturningBool_IsBool() {
+    public async Task Invoke_StoredLambdaReturningBool_IsBoolWord() {
         var captured = new Variable("captured");
         var fn = new Variable("fn");
         var node = new Block([
@@ -105,7 +106,8 @@ public class ValueRepresentationTests {
         var invoke = (Invoke)node.Nodes[^1];
         var meta = result.GetMetadata<ValueRepresentationMetadata>(invoke);
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(bool));
         var lambda = (Lambda)((Assignment)node.Nodes[1]).Value;
         var captures = result.GetMetadata<LambdaCaptureMetadata>(lambda);
         await Assert.That(captures).IsNotNull();
@@ -114,23 +116,25 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task EqualityComparison_IsBool() {
+    public async Task EqualityComparison_IsBoolWord() {
         var node = new Equal(new Constant(1), new Constant(2));
         var result = AnalyzerWithPass.Analyze(node);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(node);
 
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(bool));
     }
 
     [Test]
-    public async Task BooleanAnd_IsBool() {
+    public async Task BooleanAnd_IsBoolWord() {
         var node = new And(new Constant(true), new Constant(false));
         var result = AnalyzerWithPass.Analyze(node);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(node);
 
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(bool));
     }
 
     [Test]
@@ -172,7 +176,8 @@ public class ValueRepresentationTests {
         var invokeResult = AnalyzerWithPass.Analyze(invokeBlock);
         var invokeMeta = invokeResult.GetMetadata<ValueRepresentationMetadata>(invoke);
         await Assert.That(invokeMeta).IsNotNull();
-        await Assert.That(invokeMeta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(invokeMeta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(invokeMeta.ClrType).IsEqualTo(typeof(bool));
     }
 
     [Test]
@@ -375,13 +380,14 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task Not_IsBool() {
+    public async Task Not_IsBoolWord() {
         var node = new Not(new Constant(true));
         var result = AnalyzerWithPass.Analyze(node);
         var meta = result.GetMetadata<ValueRepresentationMetadata>(node);
 
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(meta!.Kind).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(meta.ClrType).IsEqualTo(typeof(bool));
     }
 
     [Test]

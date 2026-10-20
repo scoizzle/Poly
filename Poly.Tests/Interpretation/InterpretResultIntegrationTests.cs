@@ -114,6 +114,7 @@ public class InterpretResultIntegrationTests {
         var boolExpr = new Equal(new Constant(1), new Constant(1));
         var progBool = Interpreter.Compile(boolExpr, CompilationMode.Normal);
         await Assert.That(progBool.RootValueKind).IsNotNull();
-        await Assert.That(progBool.RootValueKind!.Value).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(progBool.RootValueKind!.Value).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(progBool.RootClrType).IsEqualTo(typeof(bool));
     }
 }

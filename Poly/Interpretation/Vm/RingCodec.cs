@@ -10,8 +10,8 @@ namespace Poly.Interpretation.Vm;
 
 /// <summary>
 /// The single definition of the VM's long-slot ABI: how a value is classified
-/// (inline scalar, boolean, IEEE bit pattern, heap handle) and converted in both
-/// directions — at compile time (<see cref="Expression"/> factories) and at
+/// (inline word — numeric, boolean 0/non-zero, or IEEE bit pattern — and heap
+/// handle) and converted in both directions — at compile time (<see cref="Expression"/> factories) and at
 /// runtime (<see cref="ToRing(object?, Heap)"/> and friends).
 /// </summary>
 /// <remarks>
@@ -39,7 +39,9 @@ internal static class RingCodec {
     public static ValueRepresentationKind KindFor(Type type) {
         var t = Nullable.GetUnderlyingType(type) ?? type;
         if (t.IsEnum) return ValueRepresentationKind.StackScalar;
-        if (t == typeof(bool)) return ValueRepresentationKind.Bool;
+        // A boolean is an inline word (0 = false, non-zero = true); its CLR type is
+        // what marks it boolean at decode boundaries.
+        if (t == typeof(bool)) return ValueRepresentationKind.StackScalar;
         if (t == typeof(long) || t == typeof(int) || t == typeof(short)
             || t == typeof(byte) || t == typeof(sbyte) || t == typeof(ushort)
             || t == typeof(uint) || t == typeof(ulong) || t == typeof(char)
@@ -51,7 +53,7 @@ internal static class RingCodec {
     /// <summary>True when the type's value lives inline in the ring slot rather
     /// than on the heap as a handle.</summary>
     public static bool IsInline(Type type) =>
-        KindFor(type) is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool;
+        KindFor(type) is ValueRepresentationKind.StackScalar;
 
     /// <summary>True when the type stores its IEEE bit pattern in the slot.
     /// Exact <c>float</c>/<c>double</c> only; a nullable wraps the value in a
@@ -60,12 +62,12 @@ internal static class RingCodec {
         type == typeof(float) || type == typeof(double);
 
     /// <summary>The slot kind a compile-time constant is stored as: derived from
-    /// <see cref="TryInlineConstant"/>, with the two representational exceptions —
+    /// <see cref="TryInlineConstant"/>, with one representational exception —
     /// <c>null</c> is the heap null sentinel (it folds to 0 but is not a scalar
-    /// value), and <c>bool</c> keeps its own kind.</summary>
+    /// value). A <c>bool</c> constant is an ordinary inline word.</summary>
     public static ValueRepresentationKind KindFor(object? constant) {
         if (constant is null) return ValueRepresentationKind.HeapRef;
-        if (constant is bool) return ValueRepresentationKind.Bool;
+        if (constant is bool) return ValueRepresentationKind.StackScalar;
         return TryInlineConstant(constant, out _)
             ? ValueRepresentationKind.StackScalar
             : ValueRepresentationKind.HeapRef;
@@ -113,7 +115,7 @@ internal static class RingCodec {
     /// argument's resolved type does.</summary>
     public static bool IsStackScalar(Node node, AnalysisResult? analysis) {
         switch (analysis?.GetValueRepresentation(node)) {
-            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool:
+            case ValueRepresentationKind.StackScalar:
                 return true;
             case ValueRepresentationKind.HeapRef:
                 return false;
@@ -133,7 +135,7 @@ internal static class RingCodec {
     /// throws.</summary>
     public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) {
         if (analysis?.GetValueRepresentation(node)
-            is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+            is ValueRepresentationKind.StackScalar)
             return true;
         return node is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
             or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
@@ -177,7 +179,7 @@ internal static class RingCodec {
             var kind = source is Constant constant
                 ? KindFor(constant.Value)
                 : analysis?.GetValueRepresentation(source);
-            if (kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool) {
+            if (kind is ValueRepresentationKind.StackScalar) {
                 var sourceClr = source is Constant c2 && c2.Value is not null
                     ? c2.Value.GetType()
                     : analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType

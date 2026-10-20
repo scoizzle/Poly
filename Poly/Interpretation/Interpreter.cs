@@ -179,7 +179,7 @@ public static class Interpreter {
         if (rootKind == PrimValueKind.Void)
             return InterpreterResult.Void;
 
-        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool) {
+        if (rootKind == PrimValueKind.StackScalar) {
             if (clr == typeof(double) || clr == typeof(float))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
             return InterpreterResult.FromValue(raw);

@@ -485,7 +485,7 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
         var indexKind = ctx.Analysis?.GetValueRepresentation(n.Value);
-        if (indexKind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+        if (indexKind is ValueRepresentationKind.StackScalar)
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
         var ring = ctx.OpenRing();
@@ -657,7 +657,7 @@ public static partial class DirectVmAbiEmitter {
 
     private static bool IsValueRepresented(Node node, AbiCtx ctx) =>
         ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.Kind
-            is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool;
+            is ValueRepresentationKind.StackScalar;
 
     private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
         var tmp = Variable(typeof(long), "_coal");

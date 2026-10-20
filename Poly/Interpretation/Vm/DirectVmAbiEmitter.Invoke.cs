@@ -374,7 +374,7 @@ public static partial class DirectVmAbiEmitter {
                 $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
         var clrType = meta.ClrType;
         if (clrType is null) {
-            if (meta.Kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+            if (meta.Kind is ValueRepresentationKind.StackScalar)
                 clrType = typeof(long);
             else if (meta.Kind is ValueRepresentationKind.HeapRef)
                 return Convert(

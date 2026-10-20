@@ -8,8 +8,8 @@ public class CallSiteCatalogTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -114,8 +114,8 @@ public class CallSiteCatalogTests {
         // Use a single cached analyzer instance (mirrors Interpreter._analyzer reuse).
         var analyzer = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

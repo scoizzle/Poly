@@ -78,8 +78,8 @@ public class LinqExpressionGeneratorTests {
 
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -102,8 +102,8 @@ public class LinqExpressionGeneratorTests {
 
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -126,8 +126,8 @@ public class LinqExpressionGeneratorTests {
 
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -149,8 +149,8 @@ public class LinqExpressionGeneratorTests {
 
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

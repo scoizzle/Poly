@@ -908,8 +908,8 @@ public class C99ParserInterpreterTests {
 
         var analysisResult = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(fn.Body, setup: ctx => {
                 foreach (var (param, clrType) in allParams) {

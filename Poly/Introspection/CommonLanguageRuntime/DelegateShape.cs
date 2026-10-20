@@ -8,7 +8,7 @@ namespace Poly.Introspection.CommonLanguageRuntime;
 /// <see cref="Expression{TDelegate}"/> over such a delegate. The analysis resolver and
 /// the emitter both ask this type, so the shape knowledge exists once.
 /// </summary>
-public static class DelegateShape {
+internal static class DelegateShape {
     /// <summary>True for a closed delegate type, excluding the
     /// <see cref="Delegate"/> and <see cref="MulticastDelegate"/> bases.</summary>
     public static bool IsDelegate(Type? type) =>

@@ -172,6 +172,15 @@ public static partial class DirectVmAbiEmitter {
                 return true;
             }
         }
+        // A directly built Parameter use resolves through the emitter's parameter
+        // maps; the runtime dispatch accepts a host delegate or a VM closure.
+        if (argument is Parameter parameterUse
+            && (ctx.TryGetParameterSlot(parameterUse, out _)
+                || ctx.TryGetFrameParameter(parameterUse.Name, out _)
+                || ctx.TryGetInlineParameter(parameterUse.Name, out _))) {
+            handle = ParameterValue(parameterUse, ctx);
+            return true;
+        }
         return false;
     }
 
@@ -313,6 +322,9 @@ public static partial class DirectVmAbiEmitter {
             ctx.RingDepth = savedDepth;
         }
         var statements = new List<Expression> { Assign(closureLocal, closureExpr) };
+        var targetLocal = ctx.DeclareBridgeLocal(typeof(object), "target");
+        statements.Add(Assign(targetLocal,
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(closureLocal, typeof(int)))));
         var table = ctx.FunctionTableExpr
             ?? throw new InvalidOperationException(
                 "VM compile rejected: lambda bridge has no function table.");
@@ -327,13 +339,12 @@ public static partial class DirectVmAbiEmitter {
         // A forwarded parameter may hold a host delegate rather than a VM closure.
         // Dispatch on the target: only the host arm materializes the object array,
         // so a VM closure pays nothing for a path it never takes.
-        var targetObject = Call(ctx.HeapLocal, HeapUnsafeGet, Convert(closureLocal, typeof(int)));
         var hostArgsArray = NewArrayInit(typeof(object),
             parameters.Select(p => (Expression)Convert(p, typeof(object))));
         Expression raw = Condition(
-            TypeIs(targetObject, typeof(object[])),
+            TypeIs(targetLocal, typeof(object[])),
             Call(null, InvokeHeapClosureInfo, ctx.State, closureLocal, table, argsArray),
-            Call(null, InvokeHostDelegateInfo, targetObject, hostArgsArray, ctx.HeapLocal));
+            Call(null, InvokeHostDelegateInfo, targetLocal, hostArgsArray, ctx.HeapLocal));
         Expression body;
         if (returnType == typeof(void)) {
             body = Block(raw, Empty());

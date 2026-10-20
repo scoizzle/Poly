@@ -245,6 +245,22 @@ public class LambdaBridgeVmTests {
     }
 
     [Test]
+    public async Task ProducedStoredLambda_IsNotQuoted() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(1L))));
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var node = new Block([
+            new Assignment(declaration, new Invoke(producer)),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred"))
+        ], [declaration]);
+
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("reassigned or conditional");
+    }
+
+    [Test]
     public async Task CapturedReassignmentOfStoredExpression_Throws() {
         var declaration = new Variable("pred");
         var x = new Parameter("x", TypeReference.To<int>());

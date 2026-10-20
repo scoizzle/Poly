@@ -75,115 +75,111 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
     }
 
-    /// <summary>Seed a stored lambda's metadata onto every <see cref="Variable"/> use of
-    /// <paramref name="name"/> in <paramref name="node"/>'s subtree, stopping at a nested
-    /// block that declares the name (shadowing). Mirrors <see cref="SeedVariableType"/>:
-    /// the declaration owns the metadata, each use is a distinct node.</summary>
-    private static void SeedStoredLambda(
-        AnalysisContext context, Node node, string name, StoredLambdaMetadata stored) {
-        if (node is Variable v && v.Name == name)
-            context.SetMetadata(v, stored);
-        // A nested lambda parameter of the same name shadows the outer binding.
-        if (node is Lambda lambda
-            && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
+    /// <summary>One shadow rule for the binding name, shared by the metadata seeders
+    /// and the quote-safety counter: a lambda or method parameter, a block declaration,
+    /// or a for-loop declaration of the same name introduces a different binding for
+    /// its scope.</summary>
+    private static bool ShadowsStoredLambdaName(Node node, string name) => node switch {
+        Lambda lambda => lambda.Parameters.Any(
+            p => string.Equals(p.Name, name, StringComparison.Ordinal)),
+        Block block => block.Variables.Any(
+            v => v is Variable dv && string.Equals(dv.Name, name, StringComparison.Ordinal)),
+        ForLoop forLoop => forLoop.DeclaredVariables?.Any(
+            v => string.Equals(v.Name, name, StringComparison.Ordinal)) == true,
+        MethodDefinitionNode method => method.Parameters?.Any(
+            p => string.Equals(p.Name, name, StringComparison.Ordinal)) == true,
+        _ => false,
+    };
+
+    /// <summary>Walk the scope a stored-lambda name can refer to, visiting each node in
+    /// tree order. Shadowing scopes are skipped; a foreach's collection is read before
+    /// its loop variable is in scope; a catch variable scopes only its own body.</summary>
+    private static void WalkStoredLambdaScope(
+        Node node, string name, bool isDirectStatement, Action<Node, bool> visit) {
+        if (ShadowsStoredLambdaName(node, name))
             return;
-        if (node is Block block) {
-            foreach (var bv in block.Variables) {
-                if (bv is Variable dv && dv.Name == name)
-                    return;
+        visit(node, isDirectStatement);
+        if (node is TryCatchFinally tryCatch) {
+            if (tryCatch.TryBlock is { } tryBlock)
+                WalkStoredLambdaScope(tryBlock, name, isDirectStatement: false, visit);
+            if (tryCatch.CatchClauses is { } clauses) {
+                foreach (var clause in clauses) {
+                    if (!string.Equals(clause.VariableName, name, StringComparison.Ordinal))
+                        WalkStoredLambdaScope(clause.Body, name, isDirectStatement: false, visit);
+                }
             }
+            if (tryCatch.FinallyBlock is { } finallyBlock)
+                WalkStoredLambdaScope(finallyBlock, name, isDirectStatement: false, visit);
+            return;
+        }
+        if (node is ForEachLoop forEach) {
+            WalkStoredLambdaScope(forEach.Collection, name, isDirectStatement: false, visit);
+            if (!string.Equals(forEach.LoopVariable.Name, name, StringComparison.Ordinal))
+                WalkStoredLambdaScope(forEach.Body, name, isDirectStatement: false, visit);
+            if (forEach.DeclaredType is { } declaredType)
+                WalkStoredLambdaScope(declaredType, name, isDirectStatement: false, visit);
+            return;
         }
         foreach (var child in node.Children) {
             if (child is not null)
-                SeedStoredLambda(context, child, name, stored);
+                WalkStoredLambdaScope(child, name, isDirectStatement: false, visit);
         }
     }
 
-    /// <summary>Seed the unquotable mark onto every use of <paramref name="name"/>,
-    /// mirroring <see cref="SeedStoredLambda"/>'s shadow rules.</summary>
+    /// <summary>Seed a stored lambda's metadata onto every <see cref="Variable"/> use of
+    /// <paramref name="name"/> in scope. The declaration owns the metadata, each use is
+    /// a distinct node.</summary>
+    private static void SeedStoredLambda(
+        AnalysisContext context, Node node, string name, StoredLambdaMetadata stored) {
+        WalkStoredLambdaScope(node, name, isDirectStatement: false, (visited, _) => {
+            if (visited is Variable v && v.Name == name)
+                context.SetMetadata(v, stored);
+        });
+    }
+
+    /// <summary>Seed the unquotable mark onto every use of <paramref name="name"/>.</summary>
     private static void SeedUnquotableStoredLambda(
         AnalysisContext context, Node node, string name) {
-        if (node is Variable v && v.Name == name)
-            context.SetMetadata(v, new UnquotableStoredLambdaMetadata());
-        if (node is Lambda lambda
-            && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
-            return;
-        if (node is Block block) {
-            foreach (var bv in block.Variables) {
-                if (bv is Variable dv && dv.Name == name)
-                    return;
-            }
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                SeedUnquotableStoredLambda(context, child, name);
-        }
+        WalkStoredLambdaScope(node, name, isDirectStatement: false, (visited, _) => {
+            if (visited is Variable v && v.Name == name)
+                context.SetMetadata(v, new UnquotableStoredLambdaMetadata());
+        });
     }
 
     /// <summary>Count assignments to <paramref name="declaration"/>'s name across the
-    /// block subtree, stopping at a nested lambda (own scope) or a nested block that
-    /// declares the name (shadowing). <c>Direct</c> is true only when the sole
-    /// assignment is an unconditional statement of this block, so the lambda is the
-    /// value at every use and can be quoted.</summary>
-    private static (int Assignments, Lambda? SingleLambda, bool Direct)
+    /// block subtree. <c>Direct</c> is true only for an unconditional statement of this
+    /// block; <c>SingleValueIsLambda</c> is true only when that assignment's value is
+    /// syntactically a lambda (a produced closure may be one of several returns).</summary>
+    private static (int Assignments, Lambda? SingleLambda, bool Direct, bool SingleValueIsLambda)
         CountStoredLambdaAssignments(AnalysisContext context, Block block, Variable declaration) {
         int assignments = 0;
         Lambda? singleLambda = null;
         bool direct = false;
+        bool singleValueIsLambda = false;
         var name = declaration.Name;
 
-        for (int i = 0; i < block.Nodes.Count; i++)
-            Walk(block.Nodes[i], isDirectStatement: true);
-        return (assignments, singleLambda, direct);
-
-        void Walk(Node node, bool isDirectStatement) {
-            // A lambda parameter shadows the name; the body can still write a
-            // captured binding, so only a shadowing parameter stops the walk.
-            if (node is Lambda lambda
-                && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
-                return;
-            if (node is Block nested) {
-                foreach (var nestedVariable in nested.Variables) {
-                    if (nestedVariable is Variable shadow && shadow.Name == name)
+        for (int i = 0; i < block.Nodes.Count; i++) {
+            WalkStoredLambdaScope(block.Nodes[i], name, isDirectStatement: true,
+                (node, isDirectStatement) => {
+                    if (node is not Assignment assignment
+                        || assignment.Destination is not Variable destination
+                        || destination.Name != name)
                         return;
-                }
-            }
-            // Loop and catch declarations also shadow the name but are not Block
-            // children; a write in their scope belongs to the inner binding.
-            if (node is ForLoop forLoop
-                && forLoop.DeclaredVariables?.Any(v => v.Name == name) == true)
-                return;
-            if (node is ForEachLoop forEach
-                && string.Equals(forEach.LoopVariable.Name, name, StringComparison.Ordinal))
-                return;
-            if (node is TryCatchFinally tryCatch) {
-                if (tryCatch.TryBlock is { } tryBlock)
-                    Walk(tryBlock, isDirectStatement: false);
-                if (tryCatch.CatchClauses is { } clauses) {
-                    foreach (var clause in clauses) {
-                        if (!string.Equals(clause.VariableName, name, StringComparison.Ordinal))
-                            Walk(clause.Body, isDirectStatement: false);
+                    assignments++;
+                    direct |= isDirectStatement;
+                    if (assignment.Value is Lambda assigned) {
+                        singleLambda = assigned;
+                        singleValueIsLambda = true;
                     }
-                }
-                if (tryCatch.FinallyBlock is { } finallyBlock)
-                    Walk(finallyBlock, isDirectStatement: false);
-                return;
-            }
-            if (node is Assignment assignment
-                && assignment.Destination is Variable destination
-                && destination.Name == name) {
-                assignments++;
-                direct |= isDirectStatement;
-                var assigned = assignment.Value as Lambda
-                    ?? context.GetMetadata<StoredLambdaMetadata>(assignment.Value)?.Lambda;
-                if (assigned is not null)
-                    singleLambda = assigned;
-            }
-            foreach (var child in node.Children) {
-                if (child is not null)
-                    Walk(child, isDirectStatement: false);
-            }
+                    else {
+                        var produced = context.GetMetadata<StoredLambdaMetadata>(assignment.Value)?.Lambda;
+                        if (produced is not null)
+                            singleLambda = produced;
+                        singleValueIsLambda = false;
+                    }
+                });
         }
+        return (assignments, singleLambda, direct, singleValueIsLambda);
     }
 
     /// <summary>Seed the resolved types of a lambda's parameter uses before its
@@ -647,12 +643,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             // conditional or nested reassignment cannot be mistaken for a single
             // value. A single unconditional assignment is quotable; anything else
             // keeps the shape for the delegate adapter but is marked unquotable.
-            var (assignments, singleLambda, direct) =
+            var (assignments, singleLambda, direct, singleValueIsLambda) =
                 CountStoredLambdaAssignments(context, block, v);
             if (singleLambda is not null) {
                 var stored = new StoredLambdaMetadata(singleLambda);
                 context.SetMetadata(v, stored);
-                bool quotable = assignments == 1 && direct;
+                bool quotable = assignments == 1 && direct && singleValueIsLambda;
                 if (!quotable)
                     context.SetMetadata(v, new UnquotableStoredLambdaMetadata());
                 foreach (var statement in nodes) {

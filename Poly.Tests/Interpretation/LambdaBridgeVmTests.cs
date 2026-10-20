@@ -261,6 +261,21 @@ public class LambdaBridgeVmTests {
     }
 
     [Test]
+    public async Task ProducedStoredLambda_AtDelegatePosition_UsesTheLiveClosure() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(0L))));
+        var node = new Block([
+            new Assignment(declaration, new Invoke(producer)),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.CountIf)), new Variable("pred"), new Constant(5))
+        ], [declaration]);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task CapturedReassignmentOfStoredExpression_Throws() {
         var declaration = new Variable("pred");
         var x = new Parameter("x", TypeReference.To<int>());

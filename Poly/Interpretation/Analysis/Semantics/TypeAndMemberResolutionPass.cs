@@ -137,13 +137,37 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         return (assignments, singleLambda, direct);
 
         void Walk(Node node, bool isDirectStatement) {
-            if (node is Lambda)
+            // A lambda parameter shadows the name; the body can still write a
+            // captured binding, so only a shadowing parameter stops the walk.
+            if (node is Lambda lambda
+                && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
                 return;
             if (node is Block nested) {
                 foreach (var nestedVariable in nested.Variables) {
                     if (nestedVariable is Variable shadow && shadow.Name == name)
                         return;
                 }
+            }
+            // Loop and catch declarations also shadow the name but are not Block
+            // children; a write in their scope belongs to the inner binding.
+            if (node is ForLoop forLoop
+                && forLoop.DeclaredVariables?.Any(v => v.Name == name) == true)
+                return;
+            if (node is ForEachLoop forEach
+                && string.Equals(forEach.LoopVariable.Name, name, StringComparison.Ordinal))
+                return;
+            if (node is TryCatchFinally tryCatch) {
+                if (tryCatch.TryBlock is { } tryBlock)
+                    Walk(tryBlock, isDirectStatement: false);
+                if (tryCatch.CatchClauses is { } clauses) {
+                    foreach (var clause in clauses) {
+                        if (!string.Equals(clause.VariableName, name, StringComparison.Ordinal))
+                            Walk(clause.Body, isDirectStatement: false);
+                    }
+                }
+                if (tryCatch.FinallyBlock is { } finallyBlock)
+                    Walk(finallyBlock, isDirectStatement: false);
+                return;
             }
             if (node is Assignment assignment
                 && assignment.Destination is Variable destination

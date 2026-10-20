@@ -323,14 +323,17 @@ public static partial class DirectVmAbiEmitter {
             parameters[i] = Parameter(invokeParameters[i].ParameterType, invokeParameters[i].Name);
         var argsArray = NewArrayInit(typeof(long),
             parameters.Select(p => (Expression)Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(p, typeof(object)))));
+
         // A forwarded parameter may hold a host delegate rather than a VM closure.
-        // The target decides at runtime; a host delegate is invoked through
-        // DynamicInvoke with the same arguments.
+        // Dispatch on the target: only the host arm materializes the object array,
+        // so a VM closure pays nothing for a path it never takes.
+        var targetObject = Call(ctx.HeapLocal, HeapUnsafeGet, Convert(closureLocal, typeof(int)));
         var hostArgsArray = NewArrayInit(typeof(object),
             parameters.Select(p => (Expression)Convert(p, typeof(object))));
-
-        Expression raw = Call(null, InvokeBridgeTargetInfo,
-            ctx.State, closureLocal, table, argsArray, hostArgsArray);
+        Expression raw = Condition(
+            TypeIs(targetObject, typeof(object[])),
+            Call(null, InvokeHeapClosureInfo, ctx.State, closureLocal, table, argsArray),
+            Call(null, InvokeHostDelegateInfo, targetObject, hostArgsArray, ctx.HeapLocal));
         Expression body;
         if (returnType == typeof(void)) {
             body = Block(raw, Empty());
@@ -755,33 +758,28 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>
-    /// Invoke a bridged argument's target: a VM closure re-enters the function table,
-    /// a host delegate is invoked directly. The handle is null for an unset parameter.
+    /// Invoke a host delegate reached through a bridged parameter: a forwarded
+    /// parameter may hold a real CLR delegate rather than a VM closure.
     /// </summary>
-    private static long InvokeBridgeTarget(
-        VmState state, long handle, Action<VmState>[] table, long[] args, object?[] hostArgs) {
-        if (handle <= 0)
+    private static long InvokeHostDelegate(object? target, object?[] args, Heap heap) {
+        if (target is null)
             throw new InvalidOperationException("VM: invoke of null.");
-        var target = state.Heap.UnsafeGet((int)handle);
-        if (target is object[] { Length: >= 1 } closure && closure[0] is long)
-            return InvokeHeapClosure(state, handle, table, args);
-        if (target is Delegate hostDelegate) {
-            object? result;
-            try {
-                result = hostDelegate.DynamicInvoke(hostArgs);
-            }
-            catch (TargetInvocationException ex) when (ex.InnerException is not null) {
-                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
-                throw;
-            }
-            return RingCodec.ToRing(result, state.Heap);
+        if (target is not Delegate hostDelegate)
+            throw new InvalidOperationException(
+                "VM: lambda bridge target is neither a VM closure nor a delegate.");
+        object? result;
+        try {
+            result = hostDelegate.DynamicInvoke(args);
         }
-        throw new InvalidOperationException(
-            "VM: lambda bridge target is neither a VM closure nor a delegate.");
+        catch (TargetInvocationException ex) when (ex.InnerException is not null) {
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
+        return RingCodec.ToRing(result, heap);
     }
 
-    private static readonly MethodInfo InvokeBridgeTargetInfo =
-        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeBridgeTarget),
+    private static readonly MethodInfo InvokeHostDelegateInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeHostDelegate),
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
     private static readonly MethodInfo StringConcatInfo =

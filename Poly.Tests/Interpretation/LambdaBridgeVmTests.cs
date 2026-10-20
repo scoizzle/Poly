@@ -245,6 +245,25 @@ public class LambdaBridgeVmTests {
     }
 
     [Test]
+    public async Task CapturedReassignmentOfStoredExpression_Throws() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
+        var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
+        var mutator = new Lambda([], new Assignment(new Variable("pred"), second));
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var node = new Block([
+            new Assignment(declaration, first),
+            new Invoke(mutator),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred"))
+        ], [declaration]);
+
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("reassigned or conditional");
+    }
+
+    [Test]
     public async Task ConditionallyReassignedStoredDelegate_UsesTheLiveClosure() {
         var declaration = new Variable("pred");
         var x = new Parameter("x", TypeReference.To<int>());

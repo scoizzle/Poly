@@ -85,6 +85,16 @@ public class ParameterBindingTests {
     }
 
     [Test]
+    public async Task ZeroArgLambda_FirstParameterWrite_IsVisible() {
+        // A zero-argument invocation binds the lambda's first parameter through
+        // SetArgs at slot 0. A write must update the same slot later reads use.
+        var result = CSharpScript.Run("((long x) => { x = x + 1; return x; })()");
+
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("1");
+    }
+
+    [Test]
     public async Task MethodParameter_MemberAccess_Resolves() {
         var text = new Parameter("text", TypeReference.To<string>());
         var type = new TypeDefinitionNode(

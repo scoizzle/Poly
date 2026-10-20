@@ -533,8 +533,17 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression VariableReadRaw(Variable v) {
-            if (BoundParameter(v) is { } parameter)
-                return DirectVmAbiEmitter.ParameterValue(parameter, this);
+            if (BoundParameter(v) is { } parameter) {
+                // Read the same storage the write path uses. ParameterValue's
+                // slot-0 InstanceHandle snapshot is for ThisReference; a bound
+                // parameter must see the live slot after a write.
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return RingVar(inlineSlot);
+                if (TryGetParameterSlot(parameter, out int paramIndex))
+                    return ParameterRead(paramIndex);
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' not declared in any scope");
+            }
             if (TryGetRegister(v, out int regIdx))
                 return _regVars[regIdx];
             if (TryGetVariable(v, out int slotIndex))
@@ -548,8 +557,6 @@ public static partial class DirectVmAbiEmitter {
                     return Assign(RingVar(inlineSlot), value);
                 if (TryGetParameterSlot(parameter, out int paramIndex))
                     return Assign(ParameterRead(paramIndex), value);
-                if (TryGetFrameParameter(parameter.Name, out int frameIndex))
-                    return Assign(ParameterRead(frameIndex), value);
                 throw new InvalidOperationException(
                     $"Parameter '{parameter.Name}' not declared in any scope");
             }

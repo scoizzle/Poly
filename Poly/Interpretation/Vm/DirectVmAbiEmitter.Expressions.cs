@@ -518,8 +518,7 @@ public static partial class DirectVmAbiEmitter {
         int limitSlot = ring.Add(CompileNode(ssb.Limit, ctx));
 
         // ABI-level strided set — heap array path (direct cast to long[]).
-        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots,
-            Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
+        var arrObj = RingCodec.LongArray(ctx.HeapLocal, ctx.RingVar(arrSlot));
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");

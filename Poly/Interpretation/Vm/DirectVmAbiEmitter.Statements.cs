@@ -14,53 +14,21 @@ public static partial class DirectVmAbiEmitter {
 
     private static Expression EmitAssignment(Assignment a, AbiCtx ctx) {
         if (a.Destination is IndexAccess indexAccess) {
-            var arrExpr = CompileNode(indexAccess.Value, ctx);
-            int arrSlot = ctx.RingDepth - 1;
-            var idxExpr = CompileNode(
-                indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx);
-            int idxSlot = ctx.RingDepth - 1;
-            var valExpr = CompileNode(a.Value, ctx);
-            int valSlot = ctx.RingDepth - 1;
-
-            var rawObj = Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(ctx.RingVar(arrSlot), typeof(int))),
-                typeof(object));
-            var idx = Convert(ctx.RingVar(idxSlot), typeof(int));
-            var val = ctx.RingVar(valSlot);
+            var ring = ctx.OpenRing();
+            int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
+            int idxSlot = ring.Add(CompileNode(
+                indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
+            int valSlot = ring.Add(CompileNode(a.Value, ctx));
 
             Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
                 ? clrElem.RuntimeType
                 : null;
-
-            Expression store;
-            if (elemType is { IsValueType: true }) {
-                var longArr = Variable(typeof(long[]), "_assignLongArr");
-                store = Block([longArr],
-                    Assign(longArr, Convert(rawObj, typeof(long[]))),
-                    Assign(ArrayAccess(longArr, idx), ConvertIndexStoreValue(val, elemType, a.Value, ctx)));
-            }
-            else if (elemType is not null) {
-                var objArr = Variable(typeof(object[]), "_assignObjArr");
-                store = Block([objArr],
-                    Assign(objArr, Convert(rawObj, typeof(object[]))),
-                    Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object))));
-            }
-            else {
-                var longArr = Variable(typeof(long[]), "_assignLongArr");
-                var objArr = Variable(typeof(object[]), "_assignObjArr");
-                store = IfThenElse(
-                    TypeIs(rawObj, typeof(long[])),
-                    Block([longArr],
-                        Assign(longArr, Convert(rawObj, typeof(long[]))),
-                        Assign(ArrayAccess(longArr, idx), val)),
-                    Block([objArr],
-                        Assign(objArr, Convert(rawObj, typeof(object[]))),
-                        Assign(ArrayAccess(objArr, idx), Convert(val, typeof(object)))));
-            }
+            var store = RingCodec.ArrayElementWrite(
+                ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
+                elemType, RingCodec.IsIeee(a.Value, ctx.Analysis));
 
             ctx.RingDepth = arrSlot + 1;
-            return Block(arrExpr, idxExpr, valExpr, store,
-                Assign(ctx.RingVar(arrSlot), val));
+            return ring.Then(Block(store, Assign(ctx.RingVar(arrSlot), ctx.RingVar(valSlot))));
         }
 
         if (a.Destination is Member member) {
@@ -69,11 +37,9 @@ public static partial class DirectVmAbiEmitter {
                 throw new NotSupportedException(
                     $"Assignment to unresolved member '{member.MemberName}'");
 
-            int d = ctx.RingDepth;
-            var instanceExpr = CompileNode(member.Value, ctx);
-            int instanceSlot = ctx.RingDepth - 1;
-            var valueExpr = CompileNode(a.Value, ctx);
-            int valueSlot = ctx.RingDepth - 1;
+            var ring = ctx.OpenRing();
+            int instanceSlot = ring.Add(CompileNode(member.Value, ctx));
+            int valueSlot = ring.Add(CompileNode(a.Value, ctx));
 
             Expression instanceObj;
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
@@ -110,10 +76,10 @@ public static partial class DirectVmAbiEmitter {
             var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
             var outSlot = ctx.AllocSlot();
             ctx.RingDepth = outSlot + 1;
-            return Block(instanceExpr, valueExpr,
+            return ring.Then(Block(
                 writeExpr ?? throw new NotSupportedException(
                     $"Member '{member.MemberName}' does not support EmitWrite"),
-                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot)));
+                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot))));
         }
 
         if (a.Destination is not Variable destVar) {
@@ -422,11 +388,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitCaptureCell(AbiCtx ctx, int capIndex) =>
-        Convert(
-            ArrayAccess(
-                Convert(ArrayAccess(ctx.HeapRawSlots, Convert(ctx.ClosureHandle, typeof(int))), typeof(object[])),
-                Constant(capIndex + 1)),
-            typeof(long[]));
+        RingCodec.ClosureCell(ctx.HeapLocal, ctx.ClosureHandle, capIndex);
 
     private static Expression EmitCaptureCellValue(AbiCtx ctx, int capIndex) =>
         ArrayAccess(EmitCaptureCell(ctx, capIndex), Constant(0));
@@ -451,13 +413,13 @@ public static partial class DirectVmAbiEmitter {
         var locals = new List<ParameterExpression> { closureArrVar };
         var body = new List<Expression>();
         body.Add(Assign(closureArrVar, NewArrayBounds(typeof(object), Constant(arrLen))));
-        body.Add(Assign(ArrayAccess(closureArrVar, Constant(0)),
+        body.Add(Assign(ArrayAccess(closureArrVar, Constant(RingCodec.ClosureIndexSlot)),
             Convert(Constant((long)lambda.LambdaIndex), typeof(object))));
         for (int i = 0; i < captures.Count; i++) {
             var cellVar = Variable(typeof(long[]), $"_upvalue{i}");
             locals.Add(cellVar);
             body.Add(EmitLoadOrCreateUpvalueCell(captures[i], ctx, cellVar));
-            body.Add(Assign(ArrayAccess(closureArrVar, Constant(1 + i)),
+            body.Add(Assign(ArrayAccess(closureArrVar, Constant(RingCodec.FirstCaptureIndex + i)),
                 Convert(cellVar, typeof(object))));
         }
         var handle = Call(ctx.HeapLocal, HeapAllocate,
@@ -475,9 +437,7 @@ public static partial class DirectVmAbiEmitter {
             if (!ctx.IsCellBacked(v))
                 throw new InvalidOperationException(
                     $"VM compile rejected: captured variable '{v.Name}' has no upvalue cell.");
-            return Assign(cellVar, Convert(
-                ArrayAccess(ctx.HeapRawSlots, Convert(ctx.VariableReadRaw(v), typeof(int))),
-                typeof(long[])));
+            return Assign(cellVar, RingCodec.CellArray(ctx.HeapLocal, ctx.VariableReadRaw(v)));
         }
         return Block(
             Assign(cellVar, NewArrayBounds(typeof(long), Constant(1))),

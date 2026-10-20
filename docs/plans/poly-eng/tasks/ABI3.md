@@ -1,7 +1,7 @@
 # TASK ABI3 - Ring discipline completion + one heap-shape accessor
 
-Status: planned. Branch `slice/abi3` (stacked on ABI2). Review 1 per concern.
-Plan: the external ABI cleanup plan (`/Users/scoizzle/.opencode/plan/abi-cleanup.md`).
+Status: implemented on `slice/abi3` (stacked on ABI2). Review 1 per concern.
+Plan: the external ABI cleanup plan (`/Users/scoizzle/.opencode/plan/abi-cleanup.md`) (ABI3 slice).
 
 ## Scope
 Part A: retire the caller-side parallel slot arrays and the remaining unconditional
@@ -16,6 +16,7 @@ Stay list (not migrated): `EmitLogicalAnd`/`Or` right operands (short-circuit),
 ## Files
 - `Poly/Interpretation/Vm/DirectVmAbiEmitter.{cs,Expressions,Statements,Invoke,AbiCtx}.cs`
 - `Poly/Interpretation/Vm/RingCodec.cs`
+- Tests only if a characterization is needed (none expected; suite is the oracle)
 
 ## Done when
 - Part A: no caller-side `argSlots`/`astArgSlots`/operand-triplet arrays remain;
@@ -28,4 +29,4 @@ Stay list (not migrated): `EmitLogicalAnd`/`Or` right operands (short-circuit),
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-19 | - | - | - | planned | - |
+| 2026-10-19 | OpenCode | local | pending | Part A implemented; suite green | none |

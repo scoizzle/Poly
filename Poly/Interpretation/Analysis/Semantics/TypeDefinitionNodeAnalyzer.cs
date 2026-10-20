@@ -11,7 +11,7 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// Stores the extracted type definitions in the analysis context for use by other analyzers.
 /// Also acts as an ITypeDefinitionProvider for the analyzed types.
 /// </summary>
-public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider {
+public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider, ITypeDefinitionNodeProvider {
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
     private AstTypeRegistry? _registry;
@@ -28,9 +28,18 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
         if (node is TypeDefinitionNode typeDef) {
             // A re-analysis of a type the caller already built must keep that
             // instance. A second Patron is not assignable to the first, so
-            // this fails to match a Patron parameter.
-            if (context.GetMetadata<TypeDefinitionMetadata>(typeDef)?.TypeDefinition is AstTypeDefinition existing)
-                registry.Add(existing);
+            // this fails to match a Patron parameter. A type registered by the
+            // provider passed to this analysis is that same instance. Look up
+            // by node, not name: a domain can hold two definitions with the
+            // same name (module and runtime shapes), and the provider's
+            // precedence decides which one a bare name resolves to.
+            var existing = context.GetMetadata<TypeDefinitionMetadata>(typeDef)?.TypeDefinition
+                    as AstTypeDefinition
+                ?? context.TypeDefinitions.GetTypeDefinition(typeDef) as AstTypeDefinition;
+            if (existing is not null) {
+                if (context.GetMetadata<TypeDefinitionMetadata>(typeDef) is null)
+                    context.SetMetadata(typeDef, new TypeDefinitionMetadata(existing));
+            }
             else {
                 var definition = new AstTypeDefinition(typeDef, context.TypeDefinitions);
                 registry.Add(definition);
@@ -49,6 +58,17 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() =>
         _registry?.GetTypeDefinitions() ?? [];
+
+    public IEnumerable<TypeDefinitionNode> GetTypeDefinitionNodes() =>
+        _registry?.GetTypeDefinitions()
+            .OfType<AstTypeDefinition>()
+            .Select(static type => type.Syntax)
+        ?? [];
+
+    public ITypeDefinition? GetTypeDefinition(TypeDefinitionNode node) =>
+        _registry?.GetTypeDefinitions()
+            .OfType<AstTypeDefinition>()
+            .FirstOrDefault(type => ReferenceEquals(type.Syntax, node));
 }
 
 /// <summary>

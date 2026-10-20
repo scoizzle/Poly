@@ -44,6 +44,29 @@ public class ResolvedTypeVmTests {
     }
 
     [Test]
+    public async Task Analyze_ProviderTypes_ShareTheCompilationUnit() {
+        // The provider's type declarations are part of the analyzed unit, so a
+        // member body carries resolved facts before emit runs.
+        var cast = new TypeCast(new Constant(42L), new ClrTypeReference(typeof(long)));
+        var typeNode = new TypeDefinitionNode(
+            "Caster", "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Cast",
+                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    Parameters: [],
+                    Body: cast,
+                    IsStatic: true)
+            ]);
+        var tda = Analyze(typeNode);
+
+        var analysis = Interpreter.Analyze(
+            new Invoke(new Member(new TypeReference("Sample.Caster"), "Cast")), tda);
+
+        await Assert.That(analysis.GetResolvedType(cast)).IsNotNull();
+    }
+
+    [Test]
     public async Task AstBody_NoVariables_UsesItsOwnAnalysis() {
         // A body with no Variable/Member nodes must not reuse the caller's
         // analysis: the caller never walked this body, so its type nodes are

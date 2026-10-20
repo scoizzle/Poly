@@ -142,7 +142,6 @@ public static partial class AbiEmitter {
                         astMethod.DefinitionNode,
                         astMethod.DefinitionNode.Body!,
                         astMethod.DefinitionNode.Parameters ?? [],
-                        astMethod.DeclaringTypeDefinition,
                         ctx,
                         instanceSlot: !astMethod.IsStatic,
                         asyncReturn: asyncReturn);
@@ -774,7 +773,6 @@ public static partial class AbiEmitter {
         Node key,
         Node body,
         IReadOnlyList<Parameter> parameters,
-        ITypeDefinition declaring,
         Context caller,
         bool instanceSlot,
         Type? asyncReturn = null) {
@@ -798,7 +796,10 @@ public static partial class AbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(body, declaring, key);
+            var analysis = AnalysisForAstBody(
+                caller.Analysis ?? throw new InvalidOperationException(
+                    "VM compile rejected: emit requires the analysis of the compilation unit."),
+                key);
             if (analysis.HasErrors) {
                 var text = string.Join("; ", analysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -858,48 +859,22 @@ public static partial class AbiEmitter {
         return statement is Invoke { Delegate: Member { Value: ClrTypeReference } };
     }
 
-    private static AnalysisResult AnalysisForAstBody(
-        Node body, ITypeDefinition declaring, Node member) {
-        if (declaring is not AstTypeDefinition astType)
-            throw new InvalidOperationException(
-                "VM compile rejected: AST member body is not on an AST type.");
-        // Copy the provider. Analyzer reuses a TypeDefinitionProviderCollection
-        // and the type-definition pass pushes a registry onto it.
-        var provider = astType.ResolutionProvider;
-        if (provider is TypeDefinitionProviderCollection collection)
-            provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
-        // Always analyze the declaring type for this body. Reusing the caller's
-        // analysis is unsafe: a body the caller never walked has no resolved
-        // member or type facts, and Emit consumes only those facts. A typed
-        // Create forwarder shares that type with printed helpers the VM analyzer
-        // still flags (C8-vm). Diagnostics outside this method must not reject
-        // the forwarder. An error on the method, its signature, or its body
-        // still fails it. Every other member keeps the type-level result, so a
-        // dirty type still falls through to InvokeNamed.
-        var analysis = Interpreter.Analyzer.Analyze(
-            astType.Syntax,
-            typeDefinitions: provider,
-            setup: ctx => ctx.SetMetadata(astType.Syntax, new TypeDefinitionMetadata(astType)));
-        if (!analysis.HasErrors
-            || !ForwardsToClrStatic(body)
-            || ErrorsTouch(member, analysis))
+    /// <summary>The caller's compilation-unit analysis, narrowed to diagnostics
+    /// that belong to this member. A typed Create forwarder shares its type with
+    /// printed helpers the VM analyzer still flags (C8-vm); an error on another
+    /// member must not reject this body. Emit consumes the unit's facts and never
+    /// analyzes.</summary>
+    private static AnalysisResult AnalysisForAstBody(AnalysisResult analysis, Node member) {
+        if (!analysis.HasErrors)
             return analysis;
+        var relevant = analysis.Diagnostics
+            .Where(diagnostic => diagnostic.Node is { } node
+                && (ReferenceEquals(node, member) || ContainsNode(member, node)))
+            .ToArray();
         return analysis with {
-            HasErrors = false,
-            Diagnostics = analysis.Diagnostics
-                .Where(d => d.Severity != DiagnosticSeverity.Error)
-                .ToArray()
+            Diagnostics = relevant,
+            HasErrors = relevant.Any(d => d.Severity == DiagnosticSeverity.Error)
         };
-    }
-
-    private static bool ErrorsTouch(Node body, AnalysisResult analysis) {
-        foreach (var diagnostic in analysis.Diagnostics) {
-            if (diagnostic.Severity != DiagnosticSeverity.Error)
-                continue;
-            if (ReferenceEquals(diagnostic.Node, body) || ContainsNode(body, diagnostic.Node))
-                return true;
-        }
-        return false;
     }
 
     private static bool ContainsNode(Node root, Node target) {

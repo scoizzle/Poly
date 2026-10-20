@@ -443,7 +443,7 @@ public static partial class AbiEmitter {
             return Block(seq);
 
         var table = TryCompileAstCallable(
-            definition, definition.Body!, parameters, astCtor.DeclaringTypeDefinition, ctx, instanceSlot: true)
+            definition, definition.Body!, parameters, ctx, instanceSlot: true)
             ?? throw new InvalidOperationException(
                 "VM compile rejected: AST constructor body could not be compiled.");
         var inits = new List<Expression>(parameters.Count + 1) { ctx.RingVar(slot) };

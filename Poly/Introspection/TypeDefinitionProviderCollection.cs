@@ -1,10 +1,12 @@
 namespace Poly.Introspection;
 
+using Poly.Ast.Nodes;
+
 /// <summary>
 /// A LIFO stack of <see cref="ITypeDefinitionProvider"/> instances that resolves types by
 /// querying the most recently added provider first. Useful for layering overrides above defaults.
 /// </summary>
-public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : ITypeDefinitionProvider, ICollection<ITypeDefinitionProvider> {
+public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDefinitionProvider> providers) : ITypeDefinitionProvider, ITypeDefinitionNodeProvider, ICollection<ITypeDefinitionProvider> {
     private readonly List<ITypeDefinitionProvider> _providers = [.. providers];
 
     /// <summary>
@@ -92,6 +94,25 @@ public sealed class TypeDefinitionProviderCollection(params IEnumerable<ITypeDef
     /// <typeparam name="T">The generic type parameter to resolve.</typeparam>
     /// <returns>The type definition if found; otherwise, null.</returns>
     public ITypeDefinition? GetTypeDefinition<T>() => GetTypeDefinition(typeof(T));
+
+    /// <summary>AST type declarations supplied by providers in this stack, in
+    /// query order, without reference duplicates.</summary>
+    public IEnumerable<TypeDefinitionNode> GetTypeDefinitionNodes() =>
+        _providers
+            .OfType<ITypeDefinitionNodeProvider>()
+            .SelectMany(static provider => provider.GetTypeDefinitionNodes())
+            .Distinct<TypeDefinitionNode>(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The first provider's definition built for exactly this node, in
+    /// query order.</summary>
+    public ITypeDefinition? GetTypeDefinition(TypeDefinitionNode node) {
+        foreach (var provider in _providers.AsReadOnly()) {
+            if (provider is ITypeDefinitionNodeProvider nodeProvider
+                && nodeProvider.GetTypeDefinition(node) is { } definition)
+                return definition;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Determines whether the collection contains the specified provider.

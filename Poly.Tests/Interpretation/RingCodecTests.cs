@@ -22,8 +22,11 @@ public class RingCodecTests {
     }
 
     [Test]
-    public async Task KindFor_Bool_IsBool() {
-        await Assert.That(RingCodec.KindFor(typeof(bool))).IsEqualTo(ValueRepresentationKind.Bool);
+    public async Task KindFor_Bool_IsStackScalar() {
+        // A boolean is an inline word: 0 = false, non-zero = true. Boolean-ness is
+        // carried by the CLR type and decoded at the boundary, not a slot kind.
+        await Assert.That(RingCodec.KindFor(typeof(bool))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(RingCodec.IsInline(typeof(bool))).IsTrue();
     }
 
     [Test]
@@ -65,7 +68,7 @@ public class RingCodecTests {
 
     [Test]
     public async Task KindFor_Constant_MatchesStoredSlot() {
-        await Assert.That(RingCodec.KindFor((object?)true)).IsEqualTo(ValueRepresentationKind.Bool);
+        await Assert.That(RingCodec.KindFor((object?)true)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(RingCodec.KindFor((object?)1.5)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(RingCodec.KindFor((object?)7L)).IsEqualTo(ValueRepresentationKind.StackScalar);
         // An enum constant is boxed by the emitter, not folded to an inline slot.

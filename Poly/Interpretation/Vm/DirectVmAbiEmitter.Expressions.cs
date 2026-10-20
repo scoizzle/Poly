@@ -329,7 +329,7 @@ public static partial class DirectVmAbiEmitter {
         // never widens). A heap operand is a handle (0 = null) tested at runtime, which
         // keeps `string s = null; s is string` false and resolves interfaces for free.
         switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
-            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool: {
+            case ValueRepresentationKind.StackScalar: {
                     var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
                     if (operandStatic is null) {
                         throw new InvalidOperationException(

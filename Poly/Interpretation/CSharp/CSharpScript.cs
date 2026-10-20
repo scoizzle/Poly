@@ -46,11 +46,11 @@ public static class CSharpScript {
                 return new ScriptResult(true, [], "(suspended)", null);
             if (!exec.HasValue)
                 return new ScriptResult(true, [], "(void)", null);
-            // A boolean-classified root reaches Result.Value as a raw long (1/0);
+            // A boolean-typed root reaches Result.Value as a raw word (0/non-zero);
             // render it honestly. Other values are read off Result.Value, not
             // RawValue: a double result is boxed there, where RawValue would
             // expose its bit pattern.
-            return exec.State.Program.RootValueKind == ValueRepresentationKind.Bool
+            return exec.State.Program.RootClrType == typeof(bool)
                 ? new ScriptResult(true, [], exec.Result.Value is long flag && flag != 0L ? "true" : "false", nameof(Boolean))
                 : Describe(exec.Result.Value);
         }

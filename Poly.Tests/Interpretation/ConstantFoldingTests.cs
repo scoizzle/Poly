@@ -13,8 +13,8 @@ public class ConstantFoldingTests {
 
         // Act
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -36,8 +36,8 @@ public class ConstantFoldingTests {
         var ast = new Subtract(Wrap(10), Wrap(3));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -55,8 +55,8 @@ public class ConstantFoldingTests {
         var ast = new Multiply(Wrap(4), Wrap(5));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -74,8 +74,8 @@ public class ConstantFoldingTests {
         var ast = new Divide(Wrap(20), Wrap(4));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -93,8 +93,8 @@ public class ConstantFoldingTests {
         var ast = new Modulo(Wrap(17), Wrap(5));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -112,8 +112,8 @@ public class ConstantFoldingTests {
         var ast = new UnaryMinus(Wrap(42));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -133,8 +133,8 @@ public class ConstantFoldingTests {
         var ast = new Multiply(left, right);
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -156,8 +156,8 @@ public class ConstantFoldingTests {
         var ast = new And(Wrap(true), Wrap(false));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -175,8 +175,8 @@ public class ConstantFoldingTests {
         var ast = new Or(Wrap(true), Wrap(false));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -194,8 +194,8 @@ public class ConstantFoldingTests {
         var ast = new Not(Wrap(true));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -213,8 +213,8 @@ public class ConstantFoldingTests {
         var ast = new GreaterThan(Wrap(5), Wrap(3));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -232,8 +232,8 @@ public class ConstantFoldingTests {
         var ast = new LessThanOrEqual(Wrap(3), Wrap(3));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -251,8 +251,8 @@ public class ConstantFoldingTests {
         var ast = new Equal(Wrap(42), Wrap(42));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -270,8 +270,8 @@ public class ConstantFoldingTests {
         var ast = new NotEqual(Wrap(42), Wrap(43));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -289,8 +289,8 @@ public class ConstantFoldingTests {
         var ast = new Conditional(Wrap(true), Wrap(1), Wrap(2));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -308,8 +308,8 @@ public class ConstantFoldingTests {
         var ast = new Conditional(Wrap(false), Wrap(1), Wrap(2));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -328,8 +328,8 @@ public class ConstantFoldingTests {
         var ast = new Add(variable, Wrap(1));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -347,8 +347,8 @@ public class ConstantFoldingTests {
         var ast = new Divide(Wrap(10), Wrap(0));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -365,8 +365,8 @@ public class ConstantFoldingTests {
         var ast = new Add(Wrap(3.5), Wrap(2.5));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -384,8 +384,8 @@ public class ConstantFoldingTests {
         var ast = new And(Wrap(false), parameter);
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -402,8 +402,8 @@ public class ConstantFoldingTests {
         var ast = new Or(Wrap(true), parameter);
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -420,8 +420,8 @@ public class ConstantFoldingTests {
         var ast = new Add(Wrap("Hello"), Wrap(" World"));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -439,8 +439,8 @@ public class ConstantFoldingTests {
         var ast = new Coalesce(Wrap("value"), Wrap("default"));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -459,8 +459,8 @@ public class ConstantFoldingTests {
         var ast = new Invoke(lambda, Wrap(5));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -479,8 +479,8 @@ public class ConstantFoldingTests {
         var ast = new Invoke(new Lambda([outer], new Invoke(lambda, Wrap(5))), Wrap(3));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -500,8 +500,8 @@ public class ConstantFoldingTests {
         var ast = new Divide(sub, Wrap(3));
 
         var result = new AnalyzerBuilder().UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -518,8 +518,8 @@ public class ConstantFoldingTests {
         var add = new Add(Wrap(2), Wrap(3));
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

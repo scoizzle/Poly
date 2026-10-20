@@ -90,8 +90,8 @@ Console.WriteLine(result.GetValue<int>()); // 5
 ### Custom Pipeline
 ```csharp
 var analyzer = new AnalyzerBuilder()
-    .UseTypeAndMemberResolver()
     .UseVariableScopeValidator()
+    .UseTypeAndMemberResolver()
     .UseSideEffectAnalysis()
     .Build();
 

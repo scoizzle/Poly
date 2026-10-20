@@ -20,8 +20,8 @@ public class VmCorrectnessTests {
     private static AnalysisResult LinqAnalyze(Node node) {
         return new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

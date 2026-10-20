@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -521,13 +522,28 @@ public static partial class DirectVmAbiEmitter {
 
         public void MarkCellBacked(Variable v) => _cellBacked.Add(v);
 
+        /// <summary>The parameter a use is bound to by the bind pass, or null for a
+        /// local or an unbound use. The binding is the identity edge; no name lookup.</summary>
+        public Parameter? BoundParameter(Variable variable) {
+            if (Analysis?.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
+                return null;
+            return metadata.ParameterReferences.TryGetValue(variable, out var parameter)
+                ? parameter
+                : null;
+        }
+
         public Expression VariableReadRaw(Variable v) {
-            // A lambda parameter read/written by name wins over any outer local
-            // of the same name (the parameter shadows it).
-            if (TryGetInlineParameter(v.Name, out int inlineSlot))
-                return RingVar(inlineSlot);
-            if (TryGetFrameParameter(v.Name, out int paramIndex))
-                return ParameterRead(paramIndex);
+            if (BoundParameter(v) is { } parameter) {
+                // Read the same storage the write path uses. ParameterValue's
+                // slot-0 InstanceHandle snapshot is for ThisReference; a bound
+                // parameter must see the live slot after a write.
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return RingVar(inlineSlot);
+                if (TryGetParameterSlot(parameter, out int paramIndex))
+                    return ParameterRead(paramIndex);
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' not declared in any scope");
+            }
             if (TryGetRegister(v, out int regIdx))
                 return _regVars[regIdx];
             if (TryGetVariable(v, out int slotIndex))
@@ -536,10 +552,14 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression VariableWriteRaw(Variable v, Expression value) {
-            if (TryGetInlineParameter(v.Name, out int inlineSlot))
-                return Assign(RingVar(inlineSlot), value);
-            if (TryGetFrameParameter(v.Name, out int paramIndex))
-                return Assign(ParameterRead(paramIndex), value);
+            if (BoundParameter(v) is { } parameter) {
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return Assign(RingVar(inlineSlot), value);
+                if (TryGetParameterSlot(parameter, out int paramIndex))
+                    return Assign(ParameterRead(paramIndex), value);
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' not declared in any scope");
+            }
             if (TryGetRegister(v, out int regIdx))
                 return Assign(_regVars[regIdx], value);
             if (TryGetVariable(v, out int slotIndex))

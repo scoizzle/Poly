@@ -17,8 +17,8 @@ public static class AnalyzerBuilderExtensions {
     extension(AnalyzerBuilder builder) {
         public AnalyzerBuilder UseAllAnalyzers() => builder
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

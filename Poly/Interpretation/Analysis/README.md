@@ -9,8 +9,8 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 |------|-----------------|-------------------|-------------|
 | `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; also an `ITypeDefinitionProvider` | (none; member-type miss is fail-closed. Generic parameters and `NamedTypeReference` type arguments resolve.) |
 | `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
-| `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types + resolved members | Structural failures (missing members) |
-| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (block scopes, escapes, captured bindings), `LambdaCaptureMetadata` per `Lambda` | Scoping errors |
+| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (bindings, parameter bindings, block scopes, writes, escapes, captures), `CatchBindingMetadata`, `LambdaCaptureMetadata`; resolves dotted CLR type names against the scope | Scoping errors |
+| `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types (projected through bindings) + resolved members | Structural failures (missing members) |
 | `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `ElisionMetadata`, `AssignmentValueUsedMetadata` | `DEAD_CODE_ELIDABLE` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
@@ -29,9 +29,9 @@ Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_M
 ```
  1. TypeDefinitionNodeAnalyzer
  2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
- 3. TypeAndMemberResolver
- 4. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
- 5. ScopeValidator
+ 3. ScopeValidator                  (bindings; every use resolves to a declaration)
+ 4. TypeAndMemberResolver           (types projected from bindings)
+ 5. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
  6. SideEffectAnalyzer
  7. ConstantFoldingPass
  8. JumpTargetAnalyzer

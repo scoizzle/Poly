@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -863,6 +864,12 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static bool AstBodyMembersResolved(Node node, AnalysisResult analysis) {
+        // Reusing the caller's analysis is only safe when it actually analyzed this
+        // body: a Variable use must carry the bind bag (VariableReferences /
+        // ParameterReferences), or the emitter cannot project its declaration type.
+        if (node is Variable variable
+            && analysis.GetMetadata<VariableAnalysisMetadata>(variable) is null)
+            return false;
         if (node is Member member && analysis.GetResolvedMember(member) is null)
             return false;
         foreach (var child in node.Children) {

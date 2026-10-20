@@ -15,7 +15,7 @@ public class ControlFlowAnalysisTests {
         );
 
         // Act
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -34,7 +34,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new IfStatement(condition, thenBranch, elseBranch);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -52,7 +52,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3) // This should be dead code
         );
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -71,7 +71,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -92,7 +92,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -113,7 +113,7 @@ public class ControlFlowAnalysisTests {
             new LabelDeclaration("end", Wrap(3))
         );
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -134,7 +134,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForLoop(init, condition, increment, body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -151,7 +151,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), collection, body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -175,7 +175,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3)
         );
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -194,7 +194,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new DoWhileLoop(body, condition);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -218,7 +218,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3)
         );
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -240,7 +240,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new WhileLoop(condition, body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -261,7 +261,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -282,7 +282,7 @@ public class ControlFlowAnalysisTests {
 
         var ast = new ForEachLoop(new Variable("item"), new Variable("items"), body);
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -301,7 +301,7 @@ public class ControlFlowAnalysisTests {
             Wrap(3) // Dead code
         );
 
-        var result = new AnalyzerBuilder().UseThisReferenceContext().UseTypeAndMemberResolver().UseVariableScopeValidator().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
+        var result = new AnalyzerBuilder().UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver().UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding().UseControlFlowAnalysis().Build().Analyze(ast);
 
         // Assert
         var cfg = result.GetControlFlowGraph(ast);
@@ -325,8 +325,8 @@ public class ControlFlowAnalysisTests {
 
         var result = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -355,8 +355,8 @@ public class ControlFlowAnalysisTests {
 
         var result = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -382,8 +382,8 @@ public class ControlFlowAnalysisTests {
 
         var result = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -407,8 +407,8 @@ public class ControlFlowAnalysisTests {
 
         var result = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -479,8 +479,8 @@ public class ControlFlowAnalysisTests {
     private static AnalysisResult CfAnalyze(Node ast) =>
         new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

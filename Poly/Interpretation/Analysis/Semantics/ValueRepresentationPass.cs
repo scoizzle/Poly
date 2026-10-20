@@ -449,7 +449,7 @@ public static class ValueRepresentationExtensions {
         /// <summary>
         /// Adds the <see cref="ValueRepresentationAnalyzer"/> to the pipeline.
         /// This pass classifies every node by its value representation kind
-        /// (stack scalar, bool, heap ref, void, or unknown).
+        /// (stack scalar, heap ref, void, or unknown); boolean-ness is the CLR type.
         /// </summary>
         public AnalyzerBuilder UseValueRepresentationAnalysis() {
             builder.AddAnalyzer(new ValueRepresentationAnalyzer());

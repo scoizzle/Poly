@@ -111,7 +111,7 @@ public static partial class DirectVmAbiEmitter {
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
-            // Both representations known and neither is a heap ref (StackScalar/Bool) →
+            // Both representations known and neither is a heap ref (StackScalar) →
             // the comparison is scalar. Do NOT fall through to the Member heuristic:
             // a value-typed (e.g. long) member read produces a scalar, and treating it
             // as a heap handle reads garbage heap slots (broken `== 0` in quantifiers).

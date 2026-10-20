@@ -122,6 +122,55 @@ public class AstMemberVmTests {
         await Assert.That(bag["Count"]).IsEqualTo(8L);
     }
 
+    [Test]
+    public async Task CompileExecute_Invoke_AstMethod_QualifiedLongParameter_KeepsScalar() {
+        // A qualified primitive is a TypeReference, not a PrimitiveTypeReference.
+        // The callee parameter is a value-type raw slot; the argument must not be
+        // boxed to a heap handle.
+        var value = new Parameter("value", new TypeReference("System.Int64"));
+        var typeNode = new TypeDefinitionNode(
+            "Counter", "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Inc",
+                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    Parameters: [value],
+                    Body: new Add(new Variable("value"), new Constant(1L)),
+                    IsStatic: true)
+            ]);
+        var tda = Analyze(typeNode);
+        var program = Interpreter.Compile(
+            new Invoke(new Member(new TypeReference("Sample.Counter"), "Inc"), new Constant(41L)),
+            tda);
+
+        using var exec = Interpreter.Execute(program);
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task CompileExecute_New_AstConstructor_QualifiedLongParameter_KeepsScalar() {
+        var count = new Parameter("count", new TypeReference("System.Int64"));
+        var typeNode = new TypeDefinitionNode(
+            "Item", "Sample",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    [count],
+                    new Block([
+                        new Assignment(new Member(new ThisReference(), "Count"), count)
+                    ]))
+            ],
+            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
+        var tda = Analyze(typeNode);
+        var program = Interpreter.Compile(new New(new TypeReference("Sample.Item"), new Constant(41L)), tda);
+
+        using var exec = Interpreter.Execute(program);
+        var bag = exec.GetValue<Dictionary<string, object?>>();
+
+        await Assert.That(bag).IsNotNull();
+        await Assert.That(bag!["Count"]).IsEqualTo(41L);
+    }
+
     private static TypeDefinitionNodeAnalyzer Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
         tda.Analyze(AnalysisContext.CreateDefault(), typeNode);

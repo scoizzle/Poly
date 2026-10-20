@@ -493,14 +493,20 @@ public static partial class AbiEmitter {
         private readonly Dictionary<Parameter, int> _parameters = new(ReferenceEqualityComparer.Instance);
         private int _nextParamSlot;
 
+        /// <summary>A node's CLR type, from the analysis only: the type pass owns
+        /// resolution, and emit never peels a type-reference node by shape.</summary>
+        public Type? TryClrType(Node node) =>
+            Analysis?.GetResolvedType(node)?.GetRuntimeType();
+
         public int DeclareParameter(Parameter p) {
             int slot = _nextParamSlot++;
             _parameters[p] = slot;
             if (ParamSlotOffset == 0 && !HasInlineParameters) {
                 while (_rootParameterClrTypes.Count <= slot)
                     _rootParameterClrTypes.Add(null);
-                Type? t = p.TypeReference is ClrTypeReference ctr ? ctr.RuntimeType : null;
-                t ??= Analysis?.GetResolvedType(p)?.GetRuntimeType();
+                Type? t = TryClrType(p);
+                if (t is null && p.TypeReference is not null)
+                    t = TryClrType(p.TypeReference);
                 _rootParameterClrTypes[slot] = t;
             }
             return slot;

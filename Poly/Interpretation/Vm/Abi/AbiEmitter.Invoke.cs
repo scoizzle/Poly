@@ -665,15 +665,21 @@ public static partial class AbiEmitter {
     /// Compiles the arguments of an AST constructor or method call (appended to
     /// <paramref name="seq"/>) and returns one callee frame value per parameter.
     /// A missing argument takes the parameter default. A stack scalar passed to a
-    /// reference parameter is heap-allocated, because the callee reads that slot
-    /// as a heap handle.
+    /// parameter that does not read a raw slot is heap-allocated, because the
+    /// callee reads that slot as a heap handle. The storage convention is the
+    /// definition's (<paramref name="declaredParameters"/>); the value comes from
+    /// the caller's analysis of the argument node.
     /// </summary>
     private static List<Expression> EmitAstArguments(
         IReadOnlyList<Node> arguments, IReadOnlyList<Parameter> parameters,
+        IReadOnlyList<IParameter> declaredParameters,
         string callee, List<Expression> seq, Context ctx) {
         if (arguments.Count > parameters.Count)
             throw new InvalidOperationException(
                 $"VM compile rejected: {callee} has {parameters.Count} parameter(s) but the call has {arguments.Count} argument(s).");
+        if (declaredParameters.Count != parameters.Count)
+            throw new InvalidOperationException(
+                $"VM compile rejected: {callee} parameter metadata does not match its declaration.");
 
         var values = new List<Expression>(parameters.Count);
         var ring = ctx.OpenRing();
@@ -690,16 +696,35 @@ public static partial class AbiEmitter {
                 continue;
             }
             int got = ring.Add(CompileNode(arguments[i], ctx));
-            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterIsValueType(parameters[i])
+            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ReadsRawSlot(declaredParameters[i])
                 ? Convert(
                     Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
                     typeof(long))
                 : ctx.RingVar(got));
         }
         for (int i = arguments.Count; i < parameters.Count; i++)
-            values.Add(ParameterDefaultLong(parameters[i], ctx));
+            values.Add(DefaultArgument(parameters[i], declaredParameters[i], ctx));
         seq.AddRange(ring.Steps);
         return values;
+    }
+
+    /// <summary>A callee parameter's storage convention, from its declaration.
+    /// Inline value types (including nullable inline types, which IsInline peels)
+    /// are raw slots; non-inline value types and references live on the heap.</summary>
+    private static bool ReadsRawSlot(IParameter parameter) {
+        var runtimeType = parameter.ParameterTypeDefinition.GetRuntimeType();
+        return runtimeType is not null && RingCodec.IsInline(runtimeType);
+    }
+
+    /// <summary>An omitted argument's default, stored by the callee parameter's
+    /// convention: a raw slot for an inline value type, a heap handle otherwise.</summary>
+    private static Expression DefaultArgument(Parameter parameter, IParameter declared, Context ctx) {
+        if (ReadsRawSlot(declared))
+            return ParameterDefaultLong(parameter, ctx);
+        var value = parameter.DefaultValue is Constant constant ? constant.Value : null;
+        return Convert(
+            Call(ctx.HeapLocal, HeapAllocate, Constant(value, typeof(object))),
+            typeof(long));
     }
 
     private static Expression EmitAstInvoke(
@@ -719,7 +744,8 @@ public static partial class AbiEmitter {
         }
 
         var parameters = definition.Parameters ?? [];
-        var args = EmitAstArguments(invoke.Arguments, parameters, $"method '{method.Name}'", seq, ctx);
+        var args = EmitAstArguments(invoke.Arguments, parameters, method.Parameters.ToArray(),
+            $"method '{method.Name}'", seq, ctx);
         var inits = new List<Expression>(parameters.Count + 1);
         if (receiver is not null)
             inits.Add(receiver);
@@ -772,7 +798,7 @@ public static partial class AbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(body, declaring, caller.Analysis, key);
+            var analysis = AnalysisForAstBody(body, declaring, key);
             if (analysis.HasErrors) {
                 var text = string.Join("; ", analysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -832,18 +858,8 @@ public static partial class AbiEmitter {
         return statement is Invoke { Delegate: Member { Value: ClrTypeReference } };
     }
 
-    private static bool ParameterIsValueType(Parameter parameter) {
-        if (parameter.TypeReference is PrimitiveTypeReference prim)
-            return prim.PrimitiveId.GetClrType() is { IsValueType: true };
-        if (parameter.TypeReference is ClrTypeReference clr)
-            return clr.RuntimeType.IsValueType;
-        return false;
-    }
-
     private static AnalysisResult AnalysisForAstBody(
-        Node body, ITypeDefinition declaring, AnalysisResult? caller, Node member) {
-        if (caller is not null && AstBodyMembersResolved(body, caller))
-            return caller;
+        Node body, ITypeDefinition declaring, Node member) {
         if (declaring is not AstTypeDefinition astType)
             throw new InvalidOperationException(
                 "VM compile rejected: AST member body is not on an AST type.");
@@ -852,8 +868,10 @@ public static partial class AbiEmitter {
         var provider = astType.ResolutionProvider;
         if (provider is TypeDefinitionProviderCollection collection)
             provider = new TypeDefinitionProviderCollection(collection.Providers.ToArray());
-        // Re-analyze the declaring type so members resolve. A typed Create
-        // forwarder shares that type with printed helpers the VM analyzer
+        // Always analyze the declaring type for this body. Reusing the caller's
+        // analysis is unsafe: a body the caller never walked has no resolved
+        // member or type facts, and Emit consumes only those facts. A typed
+        // Create forwarder shares that type with printed helpers the VM analyzer
         // still flags (C8-vm). Diagnostics outside this method must not reject
         // the forwarder. An error on the method, its signature, or its body
         // still fails it. Every other member keeps the type-level result, so a

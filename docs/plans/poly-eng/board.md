@@ -23,6 +23,7 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 
 | PR | Slice | Branch |
 |----|-------|--------|
+| #246 | a boolean is an inline word ([task](tasks/bool-word.md)) | `slice/bool-word` |
 | #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
 | #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
 | #196 (draft) | docs: analysis coverage audit 2026-10-16 | `spike/analysis-coverage` |

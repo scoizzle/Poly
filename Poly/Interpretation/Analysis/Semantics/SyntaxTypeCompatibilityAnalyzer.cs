@@ -1055,7 +1055,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (Nullable.GetUnderlyingType(rt) is not null)
             return (ValueRepresentationKind.HeapRef, rt);
         if (rt == typeof(bool))
-            return (ValueRepresentationKind.Bool, rt);
+            return (ValueRepresentationKind.StackScalar, rt);
         if (rt.IsValueType || rt.IsPrimitive) {
             return RingCodec.IsInline(rt)
                 ? (ValueRepresentationKind.StackScalar, rt)

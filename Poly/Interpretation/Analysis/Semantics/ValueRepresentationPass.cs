@@ -11,11 +11,10 @@ public enum ValueRepresentationKind {
     /// <summary>Node produces no value (statement/void).</summary>
     Void,
 
-    /// <summary>Numeric scalar stored directly in a stack slot (int, long, float, etc.).</summary>
+    /// <summary>Inline word in a stack slot: a number, a boolean (0 = false,
+    /// non-zero = true), or an IEEE float/double bit pattern. Boolean-ness is the
+    /// CLR type (<c>typeof(bool)</c>), decoded at the boundary, not a slot kind.</summary>
     StackScalar,
-
-    /// <summary>Boolean value (true=1, false=0).</summary>
-    Bool,
 
     /// <summary>Heap-allocated reference; the stack slot holds a heap handle.</summary>
     HeapRef,
@@ -35,7 +34,7 @@ public sealed record ValueRepresentationMetadata(
 /// <summary>
 /// Analysis pass that classifies every expression/statement node by its
 /// <see cref="ValueRepresentationKind"/> — whether the node produces a
-/// stack scalar, a heap handle, a boolean, or nothing (void).
+/// stack word, a heap handle, or nothing (void). Boolean-ness is the CLR type.
 ///
 /// Post-order traversal: children are classified first, then the parent
 /// node's representation is derived from its children's types.
@@ -80,15 +79,15 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Assignment a => PropagateChild(context, a.Value),
             SwitchStatement sw => ClassifySwitch(sw, context),
             TryCatchFinally tcf => PropagateChild(context, tcf.TryBlock),
-            Equal => (ValueRepresentationKind.Bool, typeof(bool)),
-            NotEqual => (ValueRepresentationKind.Bool, typeof(bool)),
-            LessThan => (ValueRepresentationKind.Bool, typeof(bool)),
-            LessThanOrEqual => (ValueRepresentationKind.Bool, typeof(bool)),
-            GreaterThan => (ValueRepresentationKind.Bool, typeof(bool)),
-            GreaterThanOrEqual => (ValueRepresentationKind.Bool, typeof(bool)),
-            And => (ValueRepresentationKind.Bool, typeof(bool)),
-            Or => (ValueRepresentationKind.Bool, typeof(bool)),
-            Not => (ValueRepresentationKind.Bool, typeof(bool)),
+            Equal => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            NotEqual => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            LessThan => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            LessThanOrEqual => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            GreaterThan => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            GreaterThanOrEqual => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            And => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            Or => (ValueRepresentationKind.StackScalar, typeof(bool)),
+            Not => (ValueRepresentationKind.StackScalar, typeof(bool)),
             Add n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: true),
             Subtract n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
             Multiply n => ClassifyArithmetic(context, n, n.LeftHandValue, n.RightHandValue, isAdd: false),
@@ -109,7 +108,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             Comment => (ValueRepresentationKind.Void, null),
             ThrowExpression => (ValueRepresentationKind.Void, null),
             Default d => ClassifyDefault(context, d),
-            TypeIs => (ValueRepresentationKind.Bool, typeof(bool)),
+            TypeIs => (ValueRepresentationKind.StackScalar, typeof(bool)),
             IndexAccess ia => ClassifyIndexAccess(context, ia),
             Member ma => ClassifyMember(context, ma),
             Invoke inv => ClassifyInvoke(context, inv),
@@ -227,7 +226,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         if (Nullable.GetUnderlyingType(t) is not null)
             return (ValueRepresentationKind.HeapRef, t);
         if (t == typeof(bool))
-            return (ValueRepresentationKind.Bool, typeof(bool));
+            return (ValueRepresentationKind.StackScalar, typeof(bool));
         if (t.IsValueType && RingCodec.IsInline(t))
             return (ValueRepresentationKind.StackScalar, t);
         if (t == typeof(float) || t == typeof(double))
@@ -239,7 +238,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
         if (c.Value is null)
             return (ValueRepresentationKind.HeapRef, null);
         if (c.Value is bool)
-            return (ValueRepresentationKind.Bool, typeof(bool));
+            return (ValueRepresentationKind.StackScalar, typeof(bool));
         if (c.Value is string)
             return (ValueRepresentationKind.HeapRef, typeof(string));
         if (c.Value.GetType().IsValueType) {
@@ -352,7 +351,7 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             if (Nullable.GetUnderlyingType(rt) is not null)
                 return (ValueRepresentationKind.HeapRef, rt);
             if (rt == typeof(bool))
-                return (ValueRepresentationKind.Bool, rt);
+                return (ValueRepresentationKind.StackScalar, rt);
             if (rt.IsValueType || rt.IsPrimitive) {
                 // Non-numeric value types (DateTime, DateOnly, Guid, TimeSpan, ...)
                 // cannot be inlined into the long-based VM ring — their values live
@@ -450,7 +449,7 @@ public static class ValueRepresentationExtensions {
         /// <summary>
         /// Adds the <see cref="ValueRepresentationAnalyzer"/> to the pipeline.
         /// This pass classifies every node by its value representation kind
-        /// (stack scalar, bool, heap ref, void, or unknown).
+        /// (stack scalar, heap ref, void, or unknown); boolean-ness is the CLR type.
         /// </summary>
         public AnalyzerBuilder UseValueRepresentationAnalysis() {
             builder.AddAnalyzer(new ValueRepresentationAnalyzer());

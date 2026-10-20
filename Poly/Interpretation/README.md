@@ -170,8 +170,7 @@ classifies every expression by how its value should be interpreted:
 
 | Kind | Description | Example |
 |------|-------------|---------|
-| `StackScalar` | Numeric value stored directly (int, long, float, etc.) | `2 + 3` |
-| `Bool` | Boolean (1 = true, 0 = false) | `a == b` |
+| `StackScalar` | Inline word: a number, a boolean (0 = false, non-zero = true; the CLR type is `bool`), or an IEEE bit pattern | `2 + 3`, `a == b` |
 | `HeapRef` | Heap handle; the slot holds an index into `VmState.Heap` | `new Person()` |
 | `Void` | Statement/produces no value | `if (x) { }` |
 | `Unknown` | Could not be determined statically | Runtime dispatch |

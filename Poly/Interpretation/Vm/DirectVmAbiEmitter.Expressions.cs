@@ -111,7 +111,7 @@ public static partial class DirectVmAbiEmitter {
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
-            // Both representations known and neither is a heap ref (StackScalar/Bool) →
+            // Both representations known and neither is a heap ref (StackScalar) →
             // the comparison is scalar. Do NOT fall through to the Member heuristic:
             // a value-typed (e.g. long) member read produces a scalar, and treating it
             // as a heap handle reads garbage heap slots (broken `== 0` in quantifiers).
@@ -329,7 +329,7 @@ public static partial class DirectVmAbiEmitter {
         // never widens). A heap operand is a handle (0 = null) tested at runtime, which
         // keeps `string s = null; s is string` false and resolves interfaces for free.
         switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
-            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool: {
+            case ValueRepresentationKind.StackScalar: {
                     var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
                     if (operandStatic is null) {
                         throw new InvalidOperationException(

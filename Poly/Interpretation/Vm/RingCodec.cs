@@ -62,9 +62,9 @@ internal static class RingCodec {
         type == typeof(float) || type == typeof(double);
 
     /// <summary>The slot kind a compile-time constant is stored as: derived from
-    /// <see cref="TryInlineConstant"/>, with the two representational exceptions —
+    /// <see cref="TryInlineConstant"/>, with one representational exception —
     /// <c>null</c> is the heap null sentinel (it folds to 0 but is not a scalar
-    /// value), and <c>bool</c> keeps its own kind.</summary>
+    /// value). A <c>bool</c> constant is an ordinary inline word.</summary>
     public static ValueRepresentationKind KindFor(object? constant) {
         if (constant is null) return ValueRepresentationKind.HeapRef;
         if (constant is bool) return ValueRepresentationKind.StackScalar;

@@ -66,6 +66,10 @@ public static partial class DirectVmAbiEmitter {
         bool hasStored = TryResolveStoredLambda(argument, ctx, out var storedLambda, out var handle);
 
         if (isExpression) {
+            // A forwarded Expression<D> parameter or a host Expression object is the
+            // value the parameter wants; stale binding metadata must not quote over it.
+            if (ArgumentAlreadyExpression(argument, parameterType!, ctx))
+                return false;
             if (hasStored && storedLambda is not null) {
                 if (!CapturesResolve(storedLambda, ctx)) {
                     throw new InvalidOperationException(
@@ -73,10 +77,6 @@ public static partial class DirectVmAbiEmitter {
                 }
                 return BuildExpressionArgument(storedLambda, delegateType, invokeMethod, ctx, out prelude, out callArgument);
             }
-            // A forwarded Expression<D> parameter, or a host Expression<T> object, is
-            // already the CLR value the parameter wants.
-            if (ArgumentAlreadyExpression(argument, parameterType!, ctx))
-                return false;
             throw new InvalidOperationException(
                 $"VM compile rejected: a forwarded or stored lambda cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary or declare the forwarding parameter as '{parameterType.Name}'.");
         }
@@ -143,6 +143,20 @@ public static partial class DirectVmAbiEmitter {
             && ctx.Analysis?.GetMetadata<StoredLambdaMetadata>(binding) is { } stored) {
             lambda = stored.Lambda;
             handle = ReadBindingValue(binding, ctx);
+            return true;
+        }
+
+        // A module local of delegate type holds a VM closure even when metadata is
+        // absent (a lambda stored by a later assignment). Read its slot handle; the
+        // runtime closure-shape check is the backstop.
+        if (argument is Variable localUse
+            && binding is Variable localDeclaration
+            && !ReferenceEquals(localDeclaration, localUse)
+            && ctx.Analysis?.GetResolvedType(localUse)?.GetRuntimeType() is { } localType
+            && typeof(Delegate).IsAssignableFrom(localType)
+            && localType != typeof(Delegate)
+            && localType != typeof(MulticastDelegate)) {
+            handle = ReadBindingValue(localDeclaration, ctx);
             return true;
         }
 
@@ -221,12 +235,10 @@ public static partial class DirectVmAbiEmitter {
                 throw new InvalidOperationException(
                     $"VM compile rejected: captured '{CaptureName(capture)}' has no CLR type for the lambda bridge.");
             var local = ctx.DeclareBridgeLocal(captureType, CaptureName(capture));
-            var read = capture.Variable is { } variable
-                ? ctx.VariableRead(variable)
-                : ParameterValue(capture.Parameter!, ctx);
+            var binding = capture.Variable is { } variable ? (Node)variable : capture.Parameter!;
+            var read = ReadBindingValue(binding, ctx);
             spills.Add(Assign(local, RingCodec.ToClr(
-                read, captureType, capture.Variable ?? (Node?)capture.Parameter,
-                ctx.Analysis, ctx.HeapLocal)));
+                read, captureType, binding, ctx.Analysis, ctx.HeapLocal)));
             pure.AddCapture(capture, local);
         }
 
@@ -313,9 +325,18 @@ public static partial class DirectVmAbiEmitter {
             parameters.Select(p => (Expression)Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(p, typeof(object)))));
 
         Expression raw = Call(null, InvokeHeapClosureInfo, ctx.State, closureLocal, table, argsArray);
-        Expression body = returnType == typeof(void)
-            ? Block(raw, Empty())
-            : RingCodec.ToClr(raw, returnType, shape, ctx.Analysis, ctx.HeapLocal);
+        Expression body;
+        if (returnType == typeof(void)) {
+            body = Block(raw, Empty());
+        }
+        else if (shape is null && (returnType == typeof(double) || returnType == typeof(float))) {
+            // A forwarded parameter has no body node to classify; the delegate's
+            // declared return type carries the IEEE shape.
+            body = Convert(Call(BitConverterInt64BitsToDouble, raw), returnType);
+        }
+        else {
+            body = RingCodec.ToClr(raw, returnType, shape?.Body, ctx.Analysis, ctx.HeapLocal);
+        }
         callArgument = Lambda(delegateType, body, parameters);
         prelude = Block(statements);
         return true;

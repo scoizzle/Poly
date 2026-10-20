@@ -83,6 +83,10 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         AnalysisContext context, Node node, string name, StoredLambdaMetadata stored) {
         if (node is Variable v && v.Name == name)
             context.SetMetadata(v, stored);
+        // A nested lambda parameter of the same name shadows the outer binding.
+        if (node is Lambda lambda
+            && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
+            return;
         if (node is Block block) {
             foreach (var bv in block.Variables) {
                 if (bv is Variable dv && dv.Name == name)
@@ -533,10 +537,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                     resolved = ResolveNodeType(context, a.Value);
                     NoteDomainResultValue(context, a);
                     resolved = DomainResultValueType(context, a.Value) ?? resolved;
-                    if (a.Value is Lambda assignedLambda)
-                        context.SetMetadata(v, new StoredLambdaMetadata(assignedLambda));
-                    else if (context.GetMetadata<StoredLambdaMetadata>(a.Value) is { } produced)
-                        context.SetMetadata(v, produced);
                     break;
                 }
             }
@@ -552,12 +552,31 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                         SeedVariableType(context, statement, v.Name, resolved);
                 }
             }
-            // A stored lambda's metadata lives on the declaration; overload scoring and
-            // the bridge need it on each distinct use node.
-            if (context.GetMetadata<StoredLambdaMetadata>(v) is { } storedLambda) {
+            // A stored lambda's metadata lives on its assignments; the bridge and the
+            // overload scorer need it on each distinct use node. Only a single
+            // lambda-valued assignment is unambiguous for a static quote; multiple
+            // assignments (conditional or reassigned) leave it off, so the delegate
+            // path reads the live slot handle and Expression positions fail closed.
+            Lambda? singleLambda = null;
+            int lambdaAssignments = 0;
+            for (int i = 0; i < n; i++) {
+                if (nodes[i] is not Assignment a
+                    || a.Destination is not Variable destination
+                    || destination.Name != v.Name)
+                    continue;
+                var assigned = a.Value as Lambda
+                    ?? context.GetMetadata<StoredLambdaMetadata>(a.Value)?.Lambda;
+                if (assigned is null)
+                    continue;
+                lambdaAssignments++;
+                singleLambda = assigned;
+            }
+            if (lambdaAssignments == 1 && singleLambda is not null) {
+                var stored = new StoredLambdaMetadata(singleLambda);
+                context.SetMetadata(v, stored);
                 foreach (var statement in nodes) {
                     if (statement is not null)
-                        SeedStoredLambda(context, statement, v.Name, storedLambda);
+                        SeedStoredLambda(context, statement, v.Name, stored);
                 }
             }
         }

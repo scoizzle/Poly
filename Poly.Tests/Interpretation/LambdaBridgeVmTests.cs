@@ -206,12 +206,59 @@ public class LambdaBridgeVmTests {
         await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
+    [Test]
+    public async Task DelegateReturningDouble_BitcastsTheIeeeSlot() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var body = new Lambda([x], new Constant(1.5));
+        using var exec = Interpreter.Execute(Interpreter.Compile(
+            new Invoke(Probe(nameof(LambdaBridgeProbe.ApplyDouble)), body, new Constant(3))));
+
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(1.5);
+    }
+
+    [Test]
+    public async Task NestedExpressionCapture_QuotesFromTheCell() {
+        var threshold = new Variable("threshold");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var inner = new Lambda([x], new GreaterThan(x, threshold));
+        var any = new Invoke(Probe(nameof(LambdaBridgeProbe.Any)),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery))), inner);
+        var outer = new Lambda([], any);
+        var node = new Block([
+            new Assignment(threshold, new Constant(2L)),
+            new Invoke(outer)
+        ], [threshold]);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
+    }
+
+    [Test]
+    public async Task ReassignedStoredDelegate_UsesTheLiveSlot() {
+        var pred = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
+        var second = new Lambda([x], new GreaterThan(x, new Constant(0L)));
+        var node = new Block([
+            new Assignment(pred, first),
+            new Assignment(new Variable("pred"), second),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.CountIf)), new Variable("pred"), new Constant(5))
+        ], [pred]);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
     public static class LambdaBridgeProbe {
         private static Func<int, bool>? _captured;
 
         public static void Capture(Func<int, bool> predicate) => _captured = predicate;
 
         public static bool Fire(int value) => _captured!(value);
+
+        public static double ApplyDouble(Func<int, double> body, int value) => body(value);
 
         public static void Reset() => _captured = null;
 

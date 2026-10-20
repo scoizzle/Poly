@@ -67,7 +67,10 @@ public static class CSharpScript {
     /// added unless the snippet already ends in <c>}</c>. A snippet ending in
     /// <c>}</c> is taken as a complete block and gets no trailing terminator, so
     /// an initializer or lambda whose text ends in <c>}</c> must supply its own
-    /// <c>;</c>. Throws <see cref="FormatException"/> on empty or unsupported input.
+    /// <c>;</c>. A snippet with type declarations is parsed as a compilation unit;
+    /// its top-level statements are wrapped in a block before analysis, and that
+    /// same block is returned. Throws <see cref="FormatException"/> on empty or
+    /// unsupported input.
     /// </summary>
     public static Node ReadProgram(string snippet) => ProgramBlock(ReadUnit(snippet));
 
@@ -81,6 +84,27 @@ public static class CSharpScript {
             throw new FormatException("Snippet is empty.");
         if (!body.EndsWith('}') && !body.EndsWith(';'))
             body += ";";
+
+        // Type declarations belong at unit scope. Parse the snippet as a unit
+        // when it has one; statement-only snippets keep the block wrapper that
+        // records their `var` locals.
+        try {
+            var unit = CSharpLanguage.Read(body);
+            if (unit.Types.Count > 0) {
+                // Wrap the top-level statements before analysis, not after:
+                // the emitted root must be the node the analysis stamped.
+                var statements = unit.TopLevelStatements;
+                if (statements is { Count: > 0 }
+                    && (statements.Count != 1 || statements[0] is not Block))
+                    unit = unit with {
+                        TopLevelStatements = [new Block(statements, Array.Empty<Node>())]
+                    };
+                return unit;
+            }
+        }
+        catch (FormatException) {
+            // Not a unit; the block wrapper below is the statement form.
+        }
 
         return CSharpLanguage.Read("{ " + body + " }");
     }

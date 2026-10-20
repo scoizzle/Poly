@@ -278,6 +278,34 @@ public class AstMemberVmTests {
     }
 
     [Test]
+    public async Task Compile_AstMethod_NestedDirtyBody_RejectsLikeDirect() {
+        // A clean static method calls a dirty static one. The nested callable
+        // must see the callee's diagnostics, not the caller's narrowed copy.
+        var typeNode = new TypeDefinitionNode(
+            "Shop", "Sample",
+            Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Dirty",
+                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    Parameters: [],
+                    Body: new Member(new ThisReference(), "Count"),
+                    IsStatic: true),
+                new MethodDefinitionNode(
+                    "Clean",
+                    new PrimitiveTypeReference(PrimitiveType.Int64),
+                    Parameters: [],
+                    Body: new Invoke(new Member(new TypeReference("Sample.Shop"), "Dirty")),
+                    IsStatic: true)
+            ]);
+        var tda = Analyze(typeNode);
+
+        await Assert.That(() => Interpreter.Compile(
+                new Invoke(new Member(new TypeReference("Sample.Shop"), "Clean")), tda))
+            .Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task Compile_ClrForwarder_BodyFails_Throws() {
         // Run() { HostJobProbe.Take(this, x => x); }
         var tda = Analyze(new TypeDefinitionNode(

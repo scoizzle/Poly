@@ -796,25 +796,27 @@ public static partial class AbiEmitter {
             if (lambdas.Count > 0)
                 throw new InvalidOperationException(
                     "VM compile rejected: a lambda inside an AST constructor or method is not yet compiled as its own frame.");
-            var analysis = AnalysisForAstBody(
-                caller.Analysis ?? throw new InvalidOperationException(
-                    "VM compile rejected: emit requires the analysis of the compilation unit."),
-                key);
-            if (analysis.HasErrors) {
-                var text = string.Join("; ", analysis.Diagnostics
+            var unitAnalysis = caller.Analysis ?? throw new InvalidOperationException(
+                "VM compile rejected: emit requires the analysis of the compilation unit.");
+            var bodyAnalysis = AnalysisForAstBody(unitAnalysis, key);
+            if (bodyAnalysis.HasErrors) {
+                var text = string.Join("; ", bodyAnalysis.Diagnostics
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
                     .Take(8)
                     .Select(d => d.Message));
                 throw new InvalidOperationException(
                     "VM compile rejected: AST member body analysis reported errors: " + text);
             }
+            // Keep the full unit analysis on the frame. A nested callable must see
+            // its own callee's diagnostics; handing it the narrowed copy would
+            // make a dirty callee look clean.
             slot[0] = CompileFunctionBody(
                 body,
                 parameters,
                 [],
                 [],
                 mode,
-                analysis,
+                unitAnalysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
                 instanceSlot,
                 asyncReturn);

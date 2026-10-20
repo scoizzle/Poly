@@ -67,10 +67,9 @@ public class ResolvedTypeVmTests {
     }
 
     [Test]
-    public async Task AstBody_NoVariables_UsesItsOwnAnalysis() {
-        // A body with no Variable/Member nodes must not reuse the caller's
-        // analysis: the caller never walked this body, so its type nodes are
-        // unstamped.
+    public async Task AstBody_NoVariables_ExecutesFromTheUnitAnalysis() {
+        // A body with no Variable/Member nodes still executes from the shared
+        // unit analysis: its type nodes were walked with the provider's types.
         var typeNode = new TypeDefinitionNode(
             "Caster", "Sample",
             Methods: [

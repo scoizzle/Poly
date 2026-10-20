@@ -325,6 +325,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var paramType = parameter.ParameterTypeDefinition;
         if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
             return true;
+        var shape = arg as Lambda
+            ?? context.GetMetadata<StoredLambdaMetadata>(arg)?.Lambda;
+        if (shape is not null && MethodInvocationSemanticResolver.AcceptsLambdaArgument(context, shape, paramType))
+            return true;
         if (IsNumericWidening(argType, paramType))
             return true;
         if (arg is Constant { Value: null })

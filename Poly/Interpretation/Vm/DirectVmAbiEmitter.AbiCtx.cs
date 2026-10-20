@@ -153,6 +153,20 @@ public static partial class DirectVmAbiEmitter {
                 return target;
             }
 
+            /// <summary>Append a step that produces no ring value (a prelude or spill
+            /// assignment). Does not touch <see cref="Count"/> or <see cref="RingDepth"/>.</summary>
+            public void AddUncounted(Expression step) => _steps.Add(step);
+
+            /// <summary>Assign <paramref name="value"/> into the next slot and count it —
+            /// for a value that is not already on the ring (e.g. a boxed CLR expression).</summary>
+            public int AddValue(Expression value) {
+                int target = _base + _count;
+                _steps.Add(Assign(_ctx.RingVar(target), value));
+                _count++;
+                _ctx.RingDepth = target + 1;
+                return target;
+            }
+
             /// <summary>Run the accumulated steps, then <paramref name="body"/>.</summary>
             public Expression Then(Expression body) {
                 var steps = new List<Expression>(_steps.Count + 1);
@@ -160,6 +174,17 @@ public static partial class DirectVmAbiEmitter {
                 steps.Add(body);
                 return Block(steps);
             }
+        }
+
+        private int _bridgeLocalCounter;
+
+        /// <summary>Declares a typed local in the outermost block for a lambda-bridge
+        /// spill. The local is closed over by a nested delegate/expression tree, so it
+        /// must live outside the invoke's expression sequence.</summary>
+        public ParameterExpression DeclareBridgeLocal(Type type, string name) {
+            var variable = Variable(type, $"_lambda_{name}_{_bridgeLocalCounter++}");
+            _locals.Add(variable);
+            return variable;
         }
 
         public ParameterExpression RingVar(int absoluteIndex) {

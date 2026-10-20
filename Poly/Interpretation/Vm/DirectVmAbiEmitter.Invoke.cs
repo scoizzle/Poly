@@ -37,15 +37,32 @@ public static partial class DirectVmAbiEmitter {
                         instanceSlot = receiver.Add(CompileNode(member.Value, ctx));
                     }
 
-                    // Compile arguments — track actual result slots
+                    var methodParams = methodInfo.GetParameters();
+
+                    // Compile arguments — track actual result slots. A Lambda passed
+                    // to a delegate/Expression<D> parameter is not a VM closure value:
+                    // it becomes a nested CLR lambda and is emitted straight into the
+                    // call argument (see DirectVmAbiEmitter.LambdaBridge.cs). A bridged
+                    // argument contributes a prelude step but no ring slot.
                     var args = ctx.OpenRing();
                     int[] argSlots = new int[invoke.Arguments.Length];
-                    for (int i = 0; i < invoke.Arguments.Length; i++)
+                    var bridgeArgs = new Expression?[invoke.Arguments.Length];
+                    for (int i = 0; i < invoke.Arguments.Length; i++) {
+                        var parameterType = i < methodParams.Length
+                            ? methodParams[i].ParameterType
+                            : null;
+                        if (TryBuildLambdaBridgeArgument(
+                                invoke.Arguments[i], parameterType, ctx,
+                                out var bridgePrelude, out var bridgeArgument)) {
+                            args.AddUncounted(bridgePrelude);
+                            bridgeArgs[i] = bridgeArgument;
+                            continue;
+                        }
                         argSlots[i] = args.Add(CompileNode(invoke.Arguments[i], ctx));
+                    }
                     int slot = args.Base + args.Count;
                     ctx.RingDepth = slot + 1;
 
-                    var methodParams = methodInfo.GetParameters();
                     var methodArgs = new Expression[methodParams.Length];
                     if (TryPackEnumerableArgs(methodParams, invoke, argSlots, ctx, out var packed)) {
                         methodArgs[0] = packed;
@@ -55,6 +72,10 @@ public static partial class DirectVmAbiEmitter {
                             if (i >= invoke.Arguments.Length) {
                                 // Omitted optional: the default, not a ring slot (a scalar there is not a handle).
                                 methodArgs[i] = MissingClrArgument(methodParams[i]);
+                                continue;
+                            }
+                            if (bridgeArgs[i] is { } bridgeArgument) {
+                                methodArgs[i] = bridgeArgument;
                                 continue;
                             }
                             var ringVal = ctx.RingVar(argSlots[i]);
@@ -657,6 +678,17 @@ public static partial class DirectVmAbiEmitter {
         var values = new List<Expression>(parameters.Count);
         var ring = ctx.OpenRing();
         for (int i = 0; i < arguments.Count; i++) {
+            var parameterType = ParameterClrType(parameters[i], ctx);
+            if (IsExpressionBridgeParameter(parameterType)
+                && TryBuildLambdaBridgeArgument(
+                    arguments[i], parameterType, ctx,
+                    out var bridgePrelude, out var bridgeArgument)) {
+                ring.AddUncounted(bridgePrelude);
+                int bridged = ring.AddValue(
+                    RingCodec.FromClr(bridgeArgument, parameterType, ctx.HeapLocal));
+                values.Add(ctx.RingVar(bridged));
+                continue;
+            }
             int got = ring.Add(CompileNode(arguments[i], ctx));
             values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterIsValueType(parameters[i])
                 ? Convert(

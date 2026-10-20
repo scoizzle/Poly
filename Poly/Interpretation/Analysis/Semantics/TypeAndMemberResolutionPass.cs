@@ -75,6 +75,26 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
     }
 
+    /// <summary>Seed a stored lambda's metadata onto every <see cref="Variable"/> use of
+    /// <paramref name="name"/> in <paramref name="node"/>'s subtree, stopping at a nested
+    /// block that declares the name (shadowing). Mirrors <see cref="SeedVariableType"/>:
+    /// the declaration owns the metadata, each use is a distinct node.</summary>
+    private static void SeedStoredLambda(
+        AnalysisContext context, Node node, string name, StoredLambdaMetadata stored) {
+        if (node is Variable v && v.Name == name)
+            context.SetMetadata(v, stored);
+        if (node is Block block) {
+            foreach (var bv in block.Variables) {
+                if (bv is Variable dv && dv.Name == name)
+                    return;
+            }
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                SeedStoredLambda(context, child, name, stored);
+        }
+    }
+
     /// <summary>Seed the resolved types of a lambda's parameter uses before its
     /// body is analyzed, so member access on a typed parameter resolves
     /// (<c>((string s) =&gt; s.Length)</c>). The reader emits a fresh
@@ -532,6 +552,14 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                         SeedVariableType(context, statement, v.Name, resolved);
                 }
             }
+            // A stored lambda's metadata lives on the declaration; overload scoring and
+            // the bridge need it on each distinct use node.
+            if (context.GetMetadata<StoredLambdaMetadata>(v) is { } storedLambda) {
+                foreach (var statement in nodes) {
+                    if (statement is not null)
+                        SeedStoredLambda(context, statement, v.Name, storedLambda);
+                }
+            }
         }
 
         if (n == 0) return null;
@@ -729,6 +757,15 @@ internal static class MethodInvocationSemanticResolver {
         var matches = targetType
             .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
             .ToList();
+        // A lambda argument's natural type is its Func/Action shape, not the
+        // delegate or Expression<D> the parameter declares. When ordinary type
+        // matching finds nothing, fall back to the lambda bridge's rule: a
+        // delegate-typed parameter accepts a lambda whose parameter list agrees.
+        if (matches.Count == 0 && methodInv.Arguments.Any(argument =>
+                argument is Lambda
+                || context.GetMetadata<StoredLambdaMetadata>(argument) is not null))
+            matches = FindLambdaDelegateOverloads(
+                context, targetType, memberAccess.MemberName, methodInv.Arguments).ToList();
         // A type-name receiver (`Person.Create(name)`) binds the static factory.
         // An instance host job of the same arity stays for `this.Create(...)`.
         // When no static overload matches, the instance method remains so the
@@ -743,6 +780,96 @@ internal static class MethodInvocationSemanticResolver {
 
     private static bool IsTypeName(Node node) => node is
         NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+
+    /// <summary>
+    /// Best-scoring overload when one or more arguments are lambdas bound to a
+    /// delegate or <c>Expression&lt;D&gt;</c> parameter. Parameter count and
+    /// parameter types must agree; the return type is checked by the emitter so a
+    /// value body against a void delegate fails with the bridge's own diagnostic.
+    /// </summary>
+    private static IEnumerable<ITypeMethod> FindLambdaDelegateOverloads(
+        AnalysisContext context,
+        ITypeDefinition targetType,
+        string name,
+        IReadOnlyList<Node> arguments) {
+        int? bestScore = null;
+        var best = new List<ITypeMethod>();
+        foreach (var candidate in targetType.Methods.WithName(name)) {
+            int? score = LambdaOverloadScore(context, candidate, arguments);
+            if (score is null)
+                continue;
+            if (bestScore is null || score < bestScore) {
+                bestScore = score;
+                best = [candidate];
+            }
+            else if (score == bestScore) {
+                best.Add(candidate);
+            }
+        }
+        return best;
+    }
+
+    private static int? LambdaOverloadScore(
+        AnalysisContext context, ITypeMethod candidate, IReadOnlyList<Node> arguments) {
+        var parameters = candidate.Parameters?.ToArray() ?? [];
+        if (arguments.Count > parameters.Length)
+            return null;
+        for (int i = arguments.Count; i < parameters.Length; i++) {
+            if (!parameters[i].IsOptional)
+                return null;
+        }
+
+        var score = 0;
+        for (int i = 0; i < arguments.Count; i++) {
+            var argument = arguments[i];
+            var parameterType = parameters[i].ParameterTypeDefinition;
+            var argumentType = context.GetResolvedType(argument);
+            if (argumentType is not null
+                && (ReferenceEquals(parameterType, argumentType)
+                    || parameterType.IsAssignableFrom(argumentType))) {
+                if (!ReferenceEquals(parameterType, argumentType))
+                    score++;
+                continue;
+            }
+            var shape = argument as Lambda
+                ?? context.GetMetadata<StoredLambdaMetadata>(argument)?.Lambda;
+            if (shape is not null && AcceptsLambdaArgument(context, shape, parameterType))
+                score += 2;
+            else
+                return null;
+        }
+        return score;
+    }
+
+    /// <summary>
+    /// True when <paramref name="parameterType"/> is a delegate <c>D</c> or
+    /// <c>Expression&lt;D&gt;</c> whose Invoke parameter list matches the lambda's
+    /// declared parameter list. Untyped lambda parameters take the delegate's types.
+    /// </summary>
+    internal static bool AcceptsLambdaArgument(
+        AnalysisContext context, Lambda lambda, ITypeDefinition parameterType) {
+        var parameterClr = parameterType.GetRuntimeType();
+        if (parameterClr is null)
+            return false;
+        if (!DelegateShape.TryGet(parameterClr, out var delegateType, out _))
+            return false;
+        var invoke = delegateType.GetMethod(nameof(Action.Invoke));
+        if (invoke is null)
+            return false;
+        var delegateParameters = invoke.GetParameters();
+        if (delegateParameters.Length != lambda.Parameters.Count)
+            return false;
+        for (int i = 0; i < delegateParameters.Length; i++) {
+            var declared = DeclaredParameterType(context, lambda.Parameters[i]);
+            if (declared is not null && declared != delegateParameters[i].ParameterType)
+                return false;
+        }
+        return true;
+    }
+
+    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) =>
+        ClrTypeResolution.Resolve(
+            parameter.TypeReference, parameter, context.GetResolvedType);
 }
 
 internal static class ConstructorInvocationSemanticResolver {

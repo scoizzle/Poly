@@ -56,6 +56,35 @@ public class ParameterBindingTests {
     }
 
     [Test]
+    public async Task MethodParameter_ReaderShapedWrite_UpdatesTheParameter() {
+        var value = new Parameter("value", TypeReference.To<long>());
+        var type = new TypeDefinitionNode(
+            "Counter", "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Bump",
+                    TypeReference.To<long>(),
+                    Parameters: [value],
+                    Body: new Block([
+                        new Assignment(
+                            new Variable("value"),
+                            new Add(new Variable("value"), new Constant(1L))),
+                        new Variable("value")
+                    ]))
+            ]);
+        var provider = Analyze(type);
+        var counter = new Parameter("counter", new TypeReference("Sample.Counter"));
+        var program = Interpreter.Compile(
+            new Invoke(new Member(counter, "Bump"), new Constant(4L)),
+            provider);
+
+        using var exec = Interpreter.Execute(program,
+            state => state.SetArgs(new object?[] { new Dictionary<string, object?>(), }));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test]
     public async Task MethodParameter_MemberAccess_Resolves() {
         var text = new Parameter("text", TypeReference.To<string>());
         var type = new TypeDefinitionNode(

@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis;
@@ -21,11 +22,12 @@ public static partial class DirectVmAbiEmitter {
     /// the tree, so the tree is pure and a query provider sees closure fields.
     /// </summary>
     /// <remarks>
-    /// Synchronous pass-and-call only: the delegate must not outlive the call that
-    /// received it. The thread that invokes it is not policed; the supported off-thread
-    /// pattern is the parked call (the VM thread is blocked inside the CLR call that
-    /// owns the delegate), and concurrent use of one <see cref="VmState"/> is the
-    /// caller's responsibility.
+    /// The delegate closes over the live <see cref="VmState"/>, so it is valid while
+    /// that state is alive. The thread that invokes it is not policed; the supported
+    /// off-thread pattern is the parked call (the VM thread is blocked inside the CLR
+    /// call that owns the delegate), and concurrent use of one state is the caller's
+    /// responsibility. A host delegate forwarded through a module parameter is invoked
+    /// directly rather than re-entered.
     /// </remarks>
     private static bool TryBuildLambdaBridgeArgument(
         Node argument,
@@ -63,28 +65,38 @@ public static partial class DirectVmAbiEmitter {
         // A non-literal argument: a stored module lambda (metadata on the binding),
         // a forwarded module parameter (a runtime closure handle), or a real CLR
         // delegate/Expression object supplied by the host.
-        bool hasStored = TryResolveStoredLambda(argument, ctx, out var storedLambda, out var handle);
+        bool hasStored = TryResolveStoredLambda(
+            argument, ctx, out var stored, out bool quotable, out var handle);
 
         if (isExpression) {
             // A forwarded Expression<D> parameter or a host Expression object is the
             // value the parameter wants; stale binding metadata must not quote over it.
             if (ArgumentAlreadyExpression(argument, parameterType!, ctx))
                 return false;
-            if (hasStored && storedLambda is not null) {
-                if (!CapturesResolve(storedLambda, ctx)) {
+            if (stored is not null) {
+                if (!quotable) {
                     throw new InvalidOperationException(
-                        $"VM compile rejected: stored lambda '{storedLambda}' captures bindings that are not in scope here; pass the lambda at the '{parameterType!.Name}' boundary.");
+                        $"VM compile rejected: lambda bound to a reassigned or conditional variable cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary.");
                 }
-                return BuildExpressionArgument(storedLambda, delegateType, invokeMethod, ctx, out prelude, out callArgument);
+                if (!CapturesResolve(stored.Lambda, ctx)) {
+                    throw new InvalidOperationException(
+                        $"VM compile rejected: stored lambda '{stored.Lambda}' captures bindings that are not in scope here; pass the lambda at the '{parameterType!.Name}' boundary.");
+                }
+                return BuildExpressionArgument(stored.Lambda, delegateType, invokeMethod, ctx, out prelude, out callArgument);
             }
-            throw new InvalidOperationException(
-                $"VM compile rejected: a forwarded or stored lambda cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary or declare the forwarding parameter as '{parameterType.Name}'.");
+            if (hasStored) {
+                throw new InvalidOperationException(
+                    $"VM compile rejected: a lambda forwarded through a delegate parameter cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary or declare the forwarding parameter as '{parameterType.Name}'.");
+            }
+            // A real host Expression<D> object — a method or member result, or null —
+            // is already the CLR value the parameter wants.
+            return false;
         }
 
         if (hasStored) {
-            if (storedLambda is not null)
-                CheckDelegateShape(storedLambda, delegateType, invokeMethod, ctx);
-            return BuildDelegateArgument(storedLambda, handle, delegateType, invokeMethod, ctx, out prelude, out callArgument);
+            if (stored is not null)
+                CheckDelegateShape(stored.Lambda, delegateType, invokeMethod, ctx);
+            return BuildDelegateArgument(stored?.Lambda, handle, delegateType, invokeMethod, ctx, out prelude, out callArgument);
         }
 
         // A real delegate object: the normal ToClr path derefs and passes it.
@@ -122,8 +134,9 @@ public static partial class DirectVmAbiEmitter {
     /// closure (a real host delegate/Expression object).
     /// </summary>
     private static bool TryResolveStoredLambda(
-        Node argument, AbiCtx ctx, out Lambda? lambda, out Expression handle) {
-        lambda = null;
+        Node argument, AbiCtx ctx, out StoredLambdaMetadata? stored, out bool quotable, out Expression handle) {
+        stored = null;
+        quotable = true;
         handle = null!;
 
         Node? binding = null;
@@ -140,8 +153,9 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (binding is not null
-            && ctx.Analysis?.GetMetadata<StoredLambdaMetadata>(binding) is { } stored) {
-            lambda = stored.Lambda;
+            && ctx.Analysis?.GetMetadata<StoredLambdaMetadata>(binding) is { } bindingMetadata) {
+            stored = bindingMetadata;
+            quotable = ctx.Analysis?.GetMetadata<UnquotableStoredLambdaMetadata>(binding) is null;
             handle = ReadBindingValue(binding, ctx);
             return true;
         }
@@ -309,8 +323,14 @@ public static partial class DirectVmAbiEmitter {
             parameters[i] = Parameter(invokeParameters[i].ParameterType, invokeParameters[i].Name);
         var argsArray = NewArrayInit(typeof(long),
             parameters.Select(p => (Expression)Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(p, typeof(object)))));
+        // A forwarded parameter may hold a host delegate rather than a VM closure.
+        // The target decides at runtime; a host delegate is invoked through
+        // DynamicInvoke with the same arguments.
+        var hostArgsArray = NewArrayInit(typeof(object),
+            parameters.Select(p => (Expression)Convert(p, typeof(object))));
 
-        Expression raw = Call(null, InvokeHeapClosureInfo, ctx.State, closureLocal, table, argsArray);
+        Expression raw = Call(null, InvokeBridgeTargetInfo,
+            ctx.State, closureLocal, table, argsArray, hostArgsArray);
         Expression body;
         if (returnType == typeof(void)) {
             body = Block(raw, Empty());
@@ -733,6 +753,36 @@ public static partial class DirectVmAbiEmitter {
             AllowedExpressions.Add(local);
         }
     }
+
+    /// <summary>
+    /// Invoke a bridged argument's target: a VM closure re-enters the function table,
+    /// a host delegate is invoked directly. The handle is null for an unset parameter.
+    /// </summary>
+    private static long InvokeBridgeTarget(
+        VmState state, long handle, Action<VmState>[] table, long[] args, object?[] hostArgs) {
+        if (handle <= 0)
+            throw new InvalidOperationException("VM: invoke of null.");
+        var target = state.Heap.UnsafeGet((int)handle);
+        if (target is object[] { Length: >= 1 } closure && closure[0] is long)
+            return InvokeHeapClosure(state, handle, table, args);
+        if (target is Delegate hostDelegate) {
+            object? result;
+            try {
+                result = hostDelegate.DynamicInvoke(hostArgs);
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null) {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
+            return RingCodec.ToRing(result, state.Heap);
+        }
+        throw new InvalidOperationException(
+            "VM: lambda bridge target is neither a VM closure nor a delegate.");
+    }
+
+    private static readonly MethodInfo InvokeBridgeTargetInfo =
+        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeBridgeTarget),
+            BindingFlags.Static | BindingFlags.NonPublic)!;
 
     private static readonly MethodInfo StringConcatInfo =
         typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!;

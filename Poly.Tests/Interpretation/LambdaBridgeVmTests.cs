@@ -62,8 +62,8 @@ public class LambdaBridgeVmTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // The bridge does not police the execution window: the delegate closes over
-        // the live VmState, so invocation is permitted while the state is alive.
-        await Assert.That(() => LambdaBridgeProbe.Fire(5)).ThrowsNothing();
+        // the live VmState, so it still sees the captured value (5 > 1).
+        await Assert.That(LambdaBridgeProbe.Fire(5)).IsTrue();
     }
 
     [Test]
@@ -207,6 +207,75 @@ public class LambdaBridgeVmTests {
     }
 
     [Test]
+    public async Task HostExpressionReturnedFromClr_PassedToQueryable_PassesThrough() {
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var host = new Invoke(Probe(nameof(LambdaBridgeProbe.HostExpression)));
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, host)));
+
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
+    }
+
+    [Test]
+    public async Task NullExpressionArgument_Compiles() {
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+
+        await Assert.That(() => Interpreter.Compile(
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Constant(null))))
+            .ThrowsNothing();
+    }
+
+    [Test]
+    public async Task ConditionallyReassignedStoredExpression_Throws() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
+        var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var node = new Block([
+            new Assignment(declaration, first),
+            new IfStatement(new Constant(true), new Assignment(new Variable("pred"), second)),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred"))
+        ], [declaration]);
+
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("reassigned or conditional");
+    }
+
+    [Test]
+    public async Task ConditionallyReassignedStoredDelegate_UsesTheLiveClosure() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
+        var second = new Lambda([x], new GreaterThan(x, new Constant(0L)));
+        var node = new Block([
+            new Assignment(declaration, first),
+            new IfStatement(new Constant(true), new Assignment(new Variable("pred"), second)),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.CountIf)), new Variable("pred"), new Constant(5))
+        ], [declaration]);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ForwardedHostDelegate_ThroughInlineParameter_Invokes() {
+        var pred = new Parameter("pred", TypeReference.To<Func<int, bool>>());
+        var body = new Lambda([pred], new Invoke(
+            Probe(nameof(LambdaBridgeProbe.CountIf)),
+            new Variable("pred"),
+            new Constant(5)));
+        var host = new Invoke(Probe(nameof(LambdaBridgeProbe.HostPredicate)));
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(body, host)));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task DelegateReturningDouble_BitcastsTheIeeeSlot() {
         var x = new Parameter("x", TypeReference.To<int>());
         // A computed double body (not a constant) exercises the body metadata path.
@@ -259,5 +328,10 @@ public class LambdaBridgeVmTests {
             IQueryable<int> source,
             System.Linq.Expressions.Expression<Func<int, bool>> predicate) =>
             source.Any(predicate);
+
+        public static System.Linq.Expressions.Expression<Func<int, bool>> HostExpression() =>
+            x => x > 1;
+
+        public static Func<int, bool> HostPredicate() => x => x > 0;
     }
 }

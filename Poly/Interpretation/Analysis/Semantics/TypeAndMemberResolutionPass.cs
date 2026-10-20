@@ -99,6 +99,69 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
     }
 
+    /// <summary>Seed the unquotable mark onto every use of <paramref name="name"/>,
+    /// mirroring <see cref="SeedStoredLambda"/>'s shadow rules.</summary>
+    private static void SeedUnquotableStoredLambda(
+        AnalysisContext context, Node node, string name) {
+        if (node is Variable v && v.Name == name)
+            context.SetMetadata(v, new UnquotableStoredLambdaMetadata());
+        if (node is Lambda lambda
+            && lambda.Parameters.Any(p => string.Equals(p.Name, name, StringComparison.Ordinal)))
+            return;
+        if (node is Block block) {
+            foreach (var bv in block.Variables) {
+                if (bv is Variable dv && dv.Name == name)
+                    return;
+            }
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                SeedUnquotableStoredLambda(context, child, name);
+        }
+    }
+
+    /// <summary>Count assignments to <paramref name="declaration"/>'s name across the
+    /// block subtree, stopping at a nested lambda (own scope) or a nested block that
+    /// declares the name (shadowing). <c>Direct</c> is true only when the sole
+    /// assignment is an unconditional statement of this block, so the lambda is the
+    /// value at every use and can be quoted.</summary>
+    private static (int Assignments, Lambda? SingleLambda, bool Direct)
+        CountStoredLambdaAssignments(AnalysisContext context, Block block, Variable declaration) {
+        int assignments = 0;
+        Lambda? singleLambda = null;
+        bool direct = false;
+        var name = declaration.Name;
+
+        for (int i = 0; i < block.Nodes.Count; i++)
+            Walk(block.Nodes[i], isDirectStatement: true);
+        return (assignments, singleLambda, direct);
+
+        void Walk(Node node, bool isDirectStatement) {
+            if (node is Lambda)
+                return;
+            if (node is Block nested) {
+                foreach (var nestedVariable in nested.Variables) {
+                    if (nestedVariable is Variable shadow && shadow.Name == name)
+                        return;
+                }
+            }
+            if (node is Assignment assignment
+                && assignment.Destination is Variable destination
+                && destination.Name == name) {
+                assignments++;
+                direct |= isDirectStatement;
+                var assigned = assignment.Value as Lambda
+                    ?? context.GetMetadata<StoredLambdaMetadata>(assignment.Value)?.Lambda;
+                if (assigned is not null)
+                    singleLambda = assigned;
+            }
+            foreach (var child in node.Children) {
+                if (child is not null)
+                    Walk(child, isDirectStatement: false);
+            }
+        }
+    }
+
     /// <summary>Seed the resolved types of a lambda's parameter uses before its
     /// body is analyzed, so member access on a typed parameter resolves
     /// (<c>((string s) =&gt; s.Length)</c>). The reader emits a fresh
@@ -512,11 +575,13 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (assignment.Destination is Variable variable) {
             if (valueType != null)
                 context.SetResolvedType(variable, valueType);
+            // A closure produced by an expression (`f = MakeFn()`) carries its lambda
+            // metadata from the value; a reassigned binding keeps its unquotable mark.
             if (assignment.Value is Lambda assignedLambda)
                 context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
             else if (context.GetMetadata<StoredLambdaMetadata>(assignment.Value) is { } produced)
                 context.SetMetadata(variable, produced);
-            else
+            else if (context.GetMetadata<UnquotableStoredLambdaMetadata>(variable) is null)
                 context.Metadata.Remove<StoredLambdaMetadata>(variable);
         }
 
@@ -552,38 +617,31 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                         SeedVariableType(context, statement, v.Name, resolved);
                 }
             }
-            // A stored lambda's metadata lives on its assignments; the bridge and the
-            // overload scorer need it on each distinct use node. Only a single
-            // lambda-valued assignment is unambiguous for a static quote; multiple
-            // assignments (conditional or reassigned) leave it off, so the delegate
-            // path reads the live slot handle and Expression positions fail closed.
-            Lambda? singleLambda = null;
-            int lambdaAssignments = 0;
-            for (int i = 0; i < n; i++) {
-                if (nodes[i] is not Assignment a
-                    || a.Destination is not Variable destination
-                    || destination.Name != v.Name)
-                    continue;
-                var assigned = a.Value as Lambda
-                    ?? context.GetMetadata<StoredLambdaMetadata>(a.Value)?.Lambda;
-                if (assigned is null)
-                    continue;
-                lambdaAssignments++;
-                singleLambda = assigned;
-            }
-            if (lambdaAssignments == 1 && singleLambda is not null) {
+            // A stored lambda's metadata lives on its binding; the bridge and the
+            // overload scorer need it on each distinct use node. Count every
+            // assignment in the block subtree (not just direct statements) so a
+            // conditional or nested reassignment cannot be mistaken for a single
+            // value. A single unconditional assignment is quotable; anything else
+            // keeps the shape for the delegate adapter but is marked unquotable.
+            var (assignments, singleLambda, direct) =
+                CountStoredLambdaAssignments(context, block, v);
+            if (singleLambda is not null) {
                 var stored = new StoredLambdaMetadata(singleLambda);
                 context.SetMetadata(v, stored);
+                bool quotable = assignments == 1 && direct;
+                if (!quotable)
+                    context.SetMetadata(v, new UnquotableStoredLambdaMetadata());
                 foreach (var statement in nodes) {
-                    if (statement is not null)
+                    if (statement is not null) {
                         SeedStoredLambda(context, statement, v.Name, stored);
+                        if (!quotable)
+                            SeedUnquotableStoredLambda(context, statement, v.Name);
+                    }
                 }
             }
-            else if (lambdaAssignments != 1) {
-                // More than one lambda (or none) is ambiguous for a static quote.
-                // Remove any metadata an expression-level assignment may have left on
-                // the declaration so delegation falls back to the live slot and an
-                // Expression<D> position fails closed instead of quoting a stale lambda.
+            else {
+                // A closure produced by an expression (`f = MakeFn()`) is classified
+                // by ResolveAssignmentType after children; nothing to seed here.
                 context.Metadata.Remove<StoredLambdaMetadata>(v);
             }
         }
@@ -723,6 +781,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 /// <summary>The node holds or produces a stored <see cref="Lambda"/> (closure handle).
 /// Invoke uses the lambda body type; the binding itself is a heap ref.</summary>
 internal sealed record StoredLambdaMetadata(Lambda Lambda) : IAnalysisMetadata;
+
+/// <summary>Marks a binding whose lambda is reassigned or conditionally assigned. The
+/// closure handle is still the value at a use, so delegate wrapping is sound, but the
+/// AST is not that value, so an <c>Expression&lt;D&gt;</c> quote must fail closed.</summary>
+internal sealed record UnquotableStoredLambdaMetadata : IAnalysisMetadata;
 
 /// <summary>
 /// <c>DomainResult&lt;T&gt;</c> declared on an AST method. Closing that name

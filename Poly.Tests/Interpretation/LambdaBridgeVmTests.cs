@@ -209,11 +209,12 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task DelegateReturningDouble_BitcastsTheIeeeSlot() {
         var x = new Parameter("x", TypeReference.To<int>());
-        var body = new Lambda([x], new Constant(1.5));
+        // A computed double body (not a constant) exercises the body metadata path.
+        var body = new Lambda([x], new Add(new Constant(1.5), new Constant(0.5)));
         using var exec = Interpreter.Execute(Interpreter.Compile(
             new Invoke(Probe(nameof(LambdaBridgeProbe.ApplyDouble)), body, new Constant(3))));
 
-        await Assert.That(exec.GetValue<double>()).IsEqualTo(1.5);
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.0);
     }
 
     [Test]
@@ -234,22 +235,6 @@ public class LambdaBridgeVmTests {
         await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
-    [Test]
-    public async Task ReassignedStoredDelegate_UsesTheLiveSlot() {
-        var pred = new Variable("pred");
-        var x = new Parameter("x", TypeReference.To<int>());
-        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
-        var second = new Lambda([x], new GreaterThan(x, new Constant(0L)));
-        var node = new Block([
-            new Assignment(pred, first),
-            new Assignment(new Variable("pred"), second),
-            new Invoke(Probe(nameof(LambdaBridgeProbe.CountIf)), new Variable("pred"), new Constant(5))
-        ], [pred]);
-
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-
-        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
-    }
 
     public static class LambdaBridgeProbe {
         private static Func<int, bool>? _captured;

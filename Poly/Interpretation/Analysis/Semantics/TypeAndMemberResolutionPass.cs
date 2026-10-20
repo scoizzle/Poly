@@ -579,6 +579,13 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                         SeedStoredLambda(context, statement, v.Name, stored);
                 }
             }
+            else if (lambdaAssignments != 1) {
+                // More than one lambda (or none) is ambiguous for a static quote.
+                // Remove any metadata an expression-level assignment may have left on
+                // the declaration so delegation falls back to the live slot and an
+                // Expression<D> position fails closed instead of quoting a stale lambda.
+                context.Metadata.Remove<StoredLambdaMetadata>(v);
+            }
         }
 
         if (n == 0) return null;

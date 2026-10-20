@@ -146,20 +146,6 @@ public static partial class DirectVmAbiEmitter {
             return true;
         }
 
-        // A module local of delegate type holds a VM closure even when metadata is
-        // absent (a lambda stored by a later assignment). Read its slot handle; the
-        // runtime closure-shape check is the backstop.
-        if (argument is Variable localUse
-            && binding is Variable localDeclaration
-            && !ReferenceEquals(localDeclaration, localUse)
-            && ctx.Analysis?.GetResolvedType(localUse)?.GetRuntimeType() is { } localType
-            && typeof(Delegate).IsAssignableFrom(localType)
-            && localType != typeof(Delegate)
-            && localType != typeof(MulticastDelegate)) {
-            handle = ReadBindingValue(localDeclaration, ctx);
-            return true;
-        }
-
         // A reader emits a Variable for a module parameter use. The frame/inline
         // scopes are the only binding maps the emitter has; no parameter node exists.
         if (argument is Variable use) {

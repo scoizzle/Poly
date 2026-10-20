@@ -133,8 +133,6 @@ public static partial class DirectVmAbiEmitter {
         body.Add(Label(ctx.EntryLabel));
         body.Add(Assign(ctx.SlotsLocal, ctx.SlotsInitExpression));
         body.Add(Assign(ctx.HeapLocal, ctx.HeapInitExpression));
-        body.Add(Assign(ctx.Registers,
-            Coalesce(ctx.Registers, NewArrayBounds(typeof(long), Constant(256)))));
         body.Add(Assign(ctx.FramePosLocal,
             Condition(
                 Equal(Property(ctx.State, nameof(VmState.Status)),

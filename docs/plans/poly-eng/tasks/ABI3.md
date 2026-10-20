@@ -30,3 +30,4 @@ Stay list (not migrated): `EmitLogicalAnd`/`Or` right operands (short-circuit),
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-19 | OpenCode | local | pending | Part A implemented; suite green | none |
+| 2026-10-19 | OpenCode | local | 74c6176b | Part B implemented; suites 4152/4152; element-access casts and HeapRawSlots live only in RingCodec | none |

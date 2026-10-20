@@ -431,7 +431,7 @@ public class VmDebuggerTests {
     [Test]
     public async Task VmDebugger_PreexistingState_UsesSameState() {
         var program = Interpreter.Compile(new Constant(3L));
-        var state = new VmState(program) { Registers = new long[256] };
+        var state = new VmState(program);
         using var dbg = new VmDebugger(program, state);
         dbg.Start();
         dbg.Continue();

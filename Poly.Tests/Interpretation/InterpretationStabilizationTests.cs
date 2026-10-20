@@ -287,7 +287,7 @@ public class InterpretationStabilizationTests {
     [Test]
     public async Task MaxLoopIterations_Reset_ZerosLoopTicks() {
         var program = Interpreter.Compile(new WhileLoop(new Constant(true), new Constant(0L)));
-        var state = new VmState(program) { MaxLoopIterations = 5, Registers = new long[256] };
+        var state = new VmState(program) { MaxLoopIterations = 5 };
         state.Status = InterpreterStatus.Running;
         try {
             try { program.Delegate(state); } catch (InvalidOperationException) { }

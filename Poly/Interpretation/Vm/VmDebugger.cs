@@ -102,7 +102,6 @@ public sealed class VmDebugger : IDisposable {
         if (_execution is not null)
             throw new InvalidOperationException("VM debugger has already been started.");
         _state.Status = InterpreterStatus.Running;
-        _state.Registers ??= new long[256];
         _state.DebugHook = DebugHookHandler;
 
         // Set step flag before launching so the first hook blocks immediately.

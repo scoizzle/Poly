@@ -32,4 +32,5 @@ suspend-through-finally, SP-0 seeding).
 ## Log
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-19 | OpenCode | local | pending | planned | plan review closed before implementation |
+| 2026-10-19 | OpenCode | local | pending | implemented; suite 4153/4153 green (includes the suspend-through-SetArgs characterization) | none |
+| 2026-10-19 | OpenCode | local | 7fdd5190 | Perf evidence: PolyVM perf-comparison (median of 5) baseline→ABI4: sieve 1M 3413→3476µs, collatz 1M 135798→134684µs, nqueens 8 100→105µs (all within noise; these paths do not use SetArgs). Allocation probe: 4584→2496 bytes per `Interpreter.Execute` (−2088 ≈ the removed `long[256]`). `Heap.UnsafeGet` marked AggressiveInlining for the ABI3 funnel. | none |

@@ -100,8 +100,6 @@ public static partial class DirectVmAbiEmitter {
             Property(Property(_stateParam, StateStackProperty), ValueStackRawSlotsProperty);
         public Expression HeapInitExpression =>
             Property(_stateParam, "Heap");
-        public Expression Registers =>
-            Property(_stateParam, StateRegistersProperty);
         public Expression ClosureHandle =>
             Property(_stateParam, StateClosureHandleProperty);
         public Expression SlotsStackPointer =>

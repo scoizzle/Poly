@@ -30,4 +30,18 @@ public class SuspendResumeVmTests {
         await Assert.That(resumed.IsSuspended).IsFalse();
         await Assert.That(resumed.Result.GetValue<long>()).IsEqualTo(2L);
     }
+
+    [Test]
+    public async Task Suspend_InsideSetArgsBody_ResumesAndReturnsParameter() {
+        var x = new Parameter("x", TypeReference.To<long>());
+        var body = new Invoke(new Lambda([x], new Block([
+            new SuspendNode(new Constant(0L), "mid"),
+            x
+        ])));
+        var program = Interpreter.Compile(body);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(42L));
+        await Assert.That(exec.IsSuspended).IsTrue();
+        using var resumed = exec.Resume();
+        await Assert.That(resumed.Result.GetValue<long>()).IsEqualTo(42L);
+    }
 }

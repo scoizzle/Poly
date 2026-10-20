@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Object heap for the Poly VM. Reference-type values are stored
@@ -73,6 +75,7 @@ public sealed class Heap {
     /// is known to be valid (e.g. from safe code paths that already validated).</summary>
     /// <param name="handle">The heap handle.</param>
     /// <returns>The stored object (may be null).</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? UnsafeGet(int handle) => _objects[handle];
 
     /// <summary>Unsafe set — skips bounds checking. If the value is null and

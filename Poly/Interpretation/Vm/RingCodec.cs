@@ -59,15 +59,17 @@ internal static class RingCodec {
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
 
-    /// <summary>The slot kind a compile-time constant is stored as. Enums are
-    /// heap handles here because <see cref="TryInlineConstant"/> does not fold an
-    /// enum value (the emitter boxes it).</summary>
-    public static ValueRepresentationKind KindFor(object? constant) => constant switch {
-        bool => ValueRepresentationKind.Bool,
-        int or long or short or byte or sbyte or ushort or uint or ulong or char
-            or double or float => ValueRepresentationKind.StackScalar,
-        _ => ValueRepresentationKind.HeapRef,
-    };
+    /// <summary>The slot kind a compile-time constant is stored as: derived from
+    /// <see cref="TryInlineConstant"/>, with the two representational exceptions —
+    /// <c>null</c> is the heap null sentinel (it folds to 0 but is not a scalar
+    /// value), and <c>bool</c> keeps its own kind.</summary>
+    public static ValueRepresentationKind KindFor(object? constant) {
+        if (constant is null) return ValueRepresentationKind.HeapRef;
+        if (constant is bool) return ValueRepresentationKind.Bool;
+        return TryInlineConstant(constant, out _)
+            ? ValueRepresentationKind.StackScalar
+            : ValueRepresentationKind.HeapRef;
+    }
 
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
@@ -120,6 +122,22 @@ internal static class RingCodec {
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: cannot tell whether argument '{node}' is a scalar or a reference.");
         return type.GetRuntimeType() is { IsValueType: true };
+    }
+
+    /// <summary>Whether an argument to the name-dispatched invoke path sits in its
+    /// ring slot as a scalar (boxed by its source type) rather than a heap handle.
+    /// Unlike <see cref="IsStackScalar"/>, a
+    /// <see cref="ValueRepresentationKind.HeapRef"/> classification does not
+    /// suppress the syntactic arm: a string-concat or decimal arithmetic node is
+    /// classified HeapRef yet is still scalar-boxed here. This predicate never
+    /// throws.</summary>
+    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) {
+        if (analysis?.GetValueRepresentation(node)
+            is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool)
+            return true;
+        return node is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
+            or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
+            || node is Constant { Value: long or int or bool or byte or short or sbyte };
     }
 
     // ── Compile-time conversion ──────────────────────────────────

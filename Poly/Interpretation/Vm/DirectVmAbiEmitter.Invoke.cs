@@ -155,12 +155,7 @@ public static partial class DirectVmAbiEmitter {
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
                 var arg = invoke.Arguments[i];
-                var argKind = ctx.Analysis?.GetValueRepresentation(arg);
-                bool scalar = argKind is ValueRepresentationKind.StackScalar
-                    or ValueRepresentationKind.Bool
-                    || arg is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
-                    or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
-                    || arg is Constant { Value: long or int or bool or byte or short or sbyte };
+                bool scalar = RingCodec.IsInvokeArgumentScalar(arg, ctx.Analysis);
                 argObjs[i] = scalar
                     ? Convert(ctx.RingVar(astArgSlots[i]), typeof(object))
                     : Call(ctx.HeapLocal, HeapUnsafeGet,
@@ -280,8 +275,9 @@ public static partial class DirectVmAbiEmitter {
 
             // Write saved result to the caller's result slot (ring now fully restored)
             postBody.Add(Assign(ctx.RingVar(saveDepth), invokeResult));
-            postBody.Add(Assign(ctx.FramePosLocal,
-                Property(ctx.State, nameof(VmState.OldFramePos))));
+            // This legacy SetArgs path restores the root frame sentinel 0. The old
+            // OldFramePos field was never written, so that was always the value.
+            postBody.Add(Assign(ctx.FramePosLocal, Constant(0)));
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
@@ -670,7 +666,7 @@ public static partial class DirectVmAbiEmitter {
         var ring = ctx.OpenRing();
         for (int i = 0; i < arguments.Count; i++) {
             int got = ring.Add(CompileNode(arguments[i], ctx));
-            values.Add(ArgumentIsStackScalar(arguments[i], ctx) && !ParameterIsValueType(parameters[i])
+            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterIsValueType(parameters[i])
                 ? Convert(
                     Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
                     typeof(long))
@@ -810,24 +806,6 @@ public static partial class DirectVmAbiEmitter {
         if (statement is Return { Value: { } value })
             statement = value;
         return statement is Invoke { Delegate: Member { Value: ClrTypeReference } };
-    }
-
-    /// <summary>
-    /// Whether a call argument sits in its slot as a raw scalar (not a heap handle).
-    /// The value representation decides; without one, the argument's resolved type
-    /// does (a CLR value type is a scalar, anything else a handle).
-    /// </summary>
-    private static bool ArgumentIsStackScalar(Node arg, AbiCtx ctx) {
-        switch (ctx.Analysis?.GetValueRepresentation(arg)) {
-            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool:
-                return true;
-            case ValueRepresentationKind.HeapRef:
-                return false;
-        }
-        var type = ctx.Analysis?.GetResolvedType(arg)
-            ?? throw new InvalidOperationException(
-                $"VM compile rejected: cannot tell whether argument '{arg}' is a scalar or a reference.");
-        return type.GetRuntimeType() is { IsValueType: true };
     }
 
     private static bool ParameterIsValueType(Parameter parameter) {

@@ -1,3 +1,5 @@
+using Poly.Ast.Nodes;
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 
@@ -87,5 +89,18 @@ public class RingCodecTests {
 
         await Assert.That(RingCodec.TryInlineConstant(DayOfWeek.Monday, out _)).IsFalse();
         await Assert.That(RingCodec.TryInlineConstant("x", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task IsInvokeArgumentScalar_StringConcatAdd_StaysScalarBoxed() {
+        var add = new Add(new Constant("a"), new Constant("b"));
+        var analysis = Interpreter.Analyze(add);
+        await Assert.That(analysis.GetValueRepresentation(add)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(RingCodec.IsInvokeArgumentScalar(add, analysis)).IsTrue();
+    }
+
+    [Test]
+    public async Task IsInvokeArgumentScalar_PlainReferenceConstant_IsFalse() {
+        await Assert.That(RingCodec.IsInvokeArgumentScalar(new Constant("a"), null)).IsFalse();
     }
 }

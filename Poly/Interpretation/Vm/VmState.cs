@@ -88,10 +88,6 @@ public sealed class VmState : IDisposable {
     /// <c>LoadUpvalue</c>/<c>StoreUpvalue</c> to access captures.</summary>
     public int ClosureHandle { get; set; }
 
-    /// <summary>Caller's frame position saved before invoking a
-    /// function.  Restored by the caller after the function returns.</summary>
-    public int OldFramePos { get; set; }
-
     /// <summary>Holds a reference to the AST node currently being executed
     /// or at which we are suspended. Allows debuggers, tracers, and
     /// suspend/resume logic to work directly with the symbolic AST rather

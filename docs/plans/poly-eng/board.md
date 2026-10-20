@@ -76,6 +76,9 @@ No behaviour change; the existing suite is the oracle.
 | # | Slice | Depends / hold | Task file |
 |---|-------|----------------|-----------|
 | ABI1 | VM ABI simplification (slices 0-3) | none; implemented on `9838889a`, uncommitted | [tasks/ABI1.md](tasks/ABI1.md) |
+| ABI2 | Dead ABI state + one scalar predicate | ABI1 | [tasks/ABI2.md](tasks/ABI2.md) |
+| ABI3 | Ring discipline completion + heap-shape accessor | ABI2 | [tasks/ABI3.md](tasks/ABI3.md) |
+| ABI4 | SetArgs ring-spill consolidation | ABI3 | [tasks/ABI4.md](tasks/ABI4.md) |
 
 ## Swarm (probe findings; one card per agent)
 

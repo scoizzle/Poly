@@ -19,9 +19,11 @@ public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseTypeDefinitionNodeAnalyzer()
         .UseThisReferenceContext()
+        // Bindings precede type/member resolution so a use's type projects from its
+        // declaration; the bind pass resolves dotted type names against the scope.
+        .UseVariableScopeValidator()
         .UseTypeAndMemberResolver()
         .UseLambdaReturnTypeResolution()
-        .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
         .UseConstantFolding()
         .UseJumpTargetResolution()

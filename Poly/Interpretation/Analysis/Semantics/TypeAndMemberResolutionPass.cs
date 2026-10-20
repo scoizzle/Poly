@@ -16,11 +16,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return;
         }
 
-        // Seed parameter uses before the body resolves so a typed lambda
-        // parameter supports member access (e.g. ((string s) => s.Length)).
-        if (node is Lambda lambda)
-            SeedLambdaParameterTypes(context, lambda);
-
         var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
@@ -30,8 +25,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
-    /// <summary>Seed catch <see cref="CatchClause.VariableName"/> types before the body
-    /// so <c>Member(ex, "Message")</c> resolves; then walk try/catch/finally normally.</summary>
+    /// <summary>Stamp the catch variable's synthetic declaration from the resolved
+    /// exception type before the body is analyzed; uses project through the binding.</summary>
     private void AnalyzeTryCatchFinally(AnalysisContext context, TryCatchFinally tcf) {
         Analyze(context, tcf.TryBlock);
         if (tcf.CatchClauses is not null) {
@@ -42,8 +37,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                     exType = context.GetResolvedType(clause.ExceptionType);
                 }
                 exType ??= context.TypeDefinitions.GetTypeDefinition(typeof(Exception));
-                if (!string.IsNullOrEmpty(clause.VariableName) && exType is not null)
-                    SeedVariableType(context, clause.Body, clause.VariableName!, exType);
+                if (exType is not null
+                    && context.GetMetadata<CatchBindingMetadata>(clause.Body) is { } binding)
+                    context.SetResolvedType(binding.Declaration, exType);
                 Analyze(context, clause.Body);
             }
         }
@@ -54,64 +50,31 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             context.SetResolvedType(tcf, tryType);
     }
 
-    /// <summary>Seeds <paramref name="type"/> onto every <see cref="Variable"/> use of
-    /// <paramref name="name"/> in <paramref name="node"/>'s subtree, stopping at a nested
-    /// block that declares the name (shadowing). A local's type lives on its declaration
-    /// node, while each use is a distinct node — and member resolution needs the *use's*
-    /// type — so the declaring scope seeds its uses before the body is walked.</summary>
-    private static void SeedVariableType(
-        AnalysisContext context, Node node, string name, ITypeDefinition type) {
-        if (node is Variable v && v.Name == name)
-            context.SetResolvedType(v, type);
-        if (node is Block block) {
-            foreach (var bv in block.Variables) {
-                if (bv is Variable dv && dv.Name == name)
-                    return;
-            }
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                SeedVariableType(context, child, name, type);
-        }
+    /// <summary>True when <paramref name="variable"/> is a use bound to a different
+    /// declaration, not the declaration node itself.</summary>
+    private static bool IsBoundUse(AnalysisContext context, Variable variable) {
+        if (context.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
+            return false;
+        return (metadata.VariableReferences.TryGetValue(variable, out var declaration)
+                    && declaration is not null
+                    && !ReferenceEquals(declaration, variable))
+            || metadata.ParameterReferences.ContainsKey(variable);
     }
 
-    /// <summary>Seed the resolved types of a lambda's parameter uses before its
-    /// body is analyzed, so member access on a typed parameter resolves
-    /// (<c>((string s) =&gt; s.Length)</c>). The reader emits a fresh
-    /// <see cref="Variable"/> per identifier, so the name is the only link.
-    /// A block that declares the same name shadows the parameter and is left
-    /// alone; nested lambdas seed their own parameters.</summary>
-    private static void SeedLambdaParameterTypes(AnalysisContext context, Lambda lambda) {
-        if (lambda.Parameters.Count == 0)
-            return;
-        var byName = new Dictionary<string, ITypeDefinition>(StringComparer.Ordinal);
-        foreach (var parameter in lambda.Parameters) {
-            if (parameter.TypeReference is null)
-                continue;
-            if (ResolveNodeType(context, parameter.TypeReference) is { } type)
-                byName[parameter.Name] = type;
-        }
-        if (byName.Count == 0)
-            return;
-        SeedParameterVariableTypes(context, lambda.Body, byName);
-    }
-
-    private static void SeedParameterVariableTypes(
-        AnalysisContext context, Node node, IReadOnlyDictionary<string, ITypeDefinition> byName) {
-        if (node is Lambda)
-            return;
-        if (node is Variable v && byName.TryGetValue(v.Name, out var type))
-            context.SetResolvedType(v, type);
-        if (node is Block block) {
-            foreach (var bv in block.Variables) {
-                if (bv is Variable dv && byName.ContainsKey(dv.Name))
-                    return;
-            }
-        }
-        foreach (var child in node.Children) {
-            if (child is not null)
-                SeedParameterVariableTypes(context, child, byName);
-        }
+    /// <summary>A use's type is its declaration's type, found through the binding.
+    /// The analyzer stamps the use from this result.</summary>
+    private static ITypeDefinition? ResolveVariableType(AnalysisContext context, Variable variable) {
+        if (context.GetResolvedType(variable) is { } existing)
+            return existing;
+        if (context.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
+            return null;
+        if (metadata.VariableReferences.TryGetValue(variable, out var declaration)
+            && declaration is not null
+            && !ReferenceEquals(declaration, variable))
+            return ResolveNodeType(context, declaration);
+        if (metadata.ParameterReferences.TryGetValue(variable, out var parameter))
+            return ResolveNodeType(context, parameter);
+        return null;
     }
 
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
@@ -124,7 +87,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             InterpolatedString => context.TypeDefinitions.GetTypeDefinition(typeof(string)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
-            Variable v => context.GetResolvedType(v),
+            Variable v => ResolveVariableType(context, v),
             Add add => ResolveNumericArithmeticType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
@@ -240,10 +203,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
 
         var loopType = declaredType ?? elementType;
-        if (loopType != null) {
+        if (loopType != null)
             context.SetResolvedType(foreachLoop.LoopVariable, loopType);
-            SeedVariableType(context, foreachLoop.Body, foreachLoop.LoopVariable.Name, loopType);
-        }
 
         return context.TypeDefinitions.GetTypeDefinition(typeof(void));
     }
@@ -315,8 +276,15 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             // folded as a member chain over an identifier. Resolve the dotted name; on a
             // CLR type hit, rewrite this node to the type so the access above it is a
             // static member access.
-            if (DottedNameSpine(memberAccess) is { } dotted
-                && context.TypeDefinitions.GetTypeDefinition(dotted) is ClrTypeDefinition clr) {
+            // A bound root wins even when its projected type is null (an untyped
+            // parameter): do not steal the name for a CLR type. Only an unbound
+            // spine is a type name.
+            if (DottedTypeNames.TryGetSpine(memberAccess, out _, out var rootVariable)
+                && context.GetMetadata<VariableAnalysisMetadata>(rootVariable) is { } bindingMetadata
+                && (bindingMetadata.VariableReferences.ContainsKey(rootVariable)
+                    || bindingMetadata.ParameterReferences.ContainsKey(rootVariable)))
+                return null;
+            if (DottedTypeNames.TryResolveType(context, memberAccess, out var clr)) {
                 // Rewrite this member node to the type; the access above it becomes a
                 // static member access (the emitter follows the replacement).
                 var typeRef = new ClrTypeReference(clr.RuntimeType);
@@ -333,21 +301,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         else
             context.SetResolvedMember(memberAccess, member);
         return member?.MemberTypeDefinition;
-    }
-
-    /// <summary>Flatten a member chain over an identifier (`A.B.C`) to the dotted name it
-    /// spells; null when the chain is not a pure identifier spine.</summary>
-    private static string? DottedNameSpine(Node node) {
-        var names = new List<string>();
-        var current = node;
-        while (current is Member member) {
-            names.Insert(0, member.MemberName);
-            current = member.Value;
-        }
-        if (current is not Variable root)
-            return null;
-        names.Insert(0, root.Name);
-        return string.Join(".", names);
     }
 
     private static ITypeDefinition? ResolveMethodInvocationType(
@@ -486,7 +439,10 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         valueType = DomainResultValueType(context, assignment.Value) ?? valueType;
 
         if (assignment.Destination is Variable variable) {
-            if (valueType != null)
+            // A write to a bound local takes the declaration's type; the use projects
+            // through the binding. Only the declaration's own initializer stamps the
+            // declared shape.
+            if (valueType != null && !IsBoundUse(context, variable))
                 context.SetResolvedType(variable, valueType);
             if (assignment.Value is Lambda assignedLambda)
                 context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
@@ -520,18 +476,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                     break;
                 }
             }
-            if (resolved != null) {
+            if (resolved != null)
                 context.SetResolvedType(v, resolved);
-                // Member access on a local (`s.Length`, `s?.Length`) resolves against the
-                // use's type, and a use is a distinct node from this declaration, so seed
-                // the declared type over the block's statements. Seed each statement, not
-                // the block itself: the seeder stops at a block that declares the name,
-                // which would be this one.
-                foreach (var statement in nodes) {
-                    if (statement is not null)
-                        SeedVariableType(context, statement, v.Name, resolved);
-                }
-            }
         }
 
         if (n == 0) return null;

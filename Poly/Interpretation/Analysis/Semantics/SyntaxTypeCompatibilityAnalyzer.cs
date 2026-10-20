@@ -481,12 +481,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// a use to the declaration the scope validator bound it to, so the prior type of
     /// the <em>binding</em> — not of one assignment node — is what later writes check.
     /// </summary>
-    private static Variable BindingOf(AnalysisContext context, Variable variable) {
+    private static Node BindingOf(AnalysisContext context, Variable variable) {
         var meta = context.GetMetadata<VariableAnalysisMetadata>(variable);
-        if (meta is not null
-            && meta.VariableReferences.TryGetValue(variable, out var declaration)
-            && declaration is not null) {
-            return declaration;
+        if (meta is not null) {
+            if (meta.VariableReferences.TryGetValue(variable, out var declaration)
+                && declaration is not null)
+                return declaration;
+            if (meta.ParameterReferences.TryGetValue(variable, out var parameter))
+                return parameter;
         }
         return variable;
     }
@@ -511,6 +513,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
 
         var prior = context.GetMetadata<VariableAssignedTypeMetadata>(binding);
+        // A parameter's declared type is its prior, even on the first write. It is
+        // not stored on the parameter so every write is checked against the signature.
+        if (prior is null
+            && binding is Parameter parameter
+            && context.GetResolvedType(parameter)?.GetRuntimeType() is { } parameterType
+            && context.GetMetadata<ValueRepresentationMetadata>(parameter) is { } parameterMeta) {
+            prior = new VariableAssignedTypeMetadata(parameterType, parameterMeta.Kind);
+        }
         if (rhsMeta.Kind is ValueRepresentationKind.Unknown) {
             if (prior is null)
                 context.SetMetadata(binding, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));

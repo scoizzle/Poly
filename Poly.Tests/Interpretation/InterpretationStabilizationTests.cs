@@ -443,9 +443,9 @@ public class InterpretationStabilizationTests {
         string[] expected = [
             TypeDefinitionNodeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
+            ScopeValidator.Id,
             TypeAndMemberResolver.Id,
             LambdaReturnTypeAnalyzer.Id,
-            ScopeValidator.Id,
             SideEffectAnalyzer.Id,
             ConstantFoldingPass.Id,
             JumpTargetAnalyzer.Id,

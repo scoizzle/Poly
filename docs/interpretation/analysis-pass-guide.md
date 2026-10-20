@@ -113,8 +113,8 @@ In your application code:
 ```csharp
 var analyzer = new AnalyzerBuilder()
     .UseThisReferenceContext()
+    .UseVariableScopeValidator()   // bindings first: uses project types from declarations
     .UseTypeAndMemberResolver()
-    .UseVariableScopeValidator()
     .UseSideEffectAnalysis()
     .UseWidgetAnalysis()  // <-- new pass
     .UseJumpTargetResolution()

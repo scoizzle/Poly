@@ -158,8 +158,8 @@ All in `Poly/Ast/Nodes/TypeDefinitions/`:
 
 ```csharp
 new AnalyzerBuilder()
-    .UseTypeAndMemberResolver()     // resolve types and members in one pass
-    .UseVariableScopeValidator()    // validate scopes, produce VariableAnalysisMetadata
+    .UseVariableScopeValidator()    // bind names first; produce VariableAnalysisMetadata
+    .UseTypeAndMemberResolver()     // project use types from bindings; resolve members
     .UseThisReferenceContext()      // validate `this` usage
     .UseControlFlowAnalysis()       // build CFG, detect dead code
     .UseConstantFolding()           // fold constant subexpressions
@@ -173,14 +173,20 @@ new AnalyzerBuilder()
 #### Type & Member Resolution — `Semantics/TypeAndMemberResolutionPass.cs`
 - Resolves both CLR `ITypeDefinition` and `ITypeMember` for every AST node in a single pass
 - Merged from former separate TypeResolver + MemberResolver passes to eliminate duplicate tree walk
+- A use's type is projected from its declaration through the scope pass's bindings; there is no
+  name-based type seeding
 - Stores `TypeResolutionMetadata` (`GetResolvedType`) and `MemberResolutionMetadata` (`GetResolvedMember`)
 - Registration: `UseTypeAndMemberResolver()`
 
 #### Variable Scope & Alias Analysis — `Semantics/VariableLifetimePass.cs`
 - Fully stateless pass — per-analysis `ScopeState` allocated on entry, threaded through recursive calls, discarded on return
 - Validates scopes, detects undeclared variables and shadowing
+- Runs before type/member resolution; every use resolves to a declaration (`Variable`,
+  `Parameter`, or a synthetic catch variable) and dotted CLR type names are rewritten against
+  the live scope
 - Produces `VariableAnalysisMetadata` (stored on root node via `context.SetMetadata`):
   - `VariableReferences` — use-site → declaration-site mapping
+  - `ParameterReferences` — use-site → method/constructor/lambda parameter
   - `BlockScopes` — per-block variable sets
   - `ScopeVertices` — scope hierarchy tree (parent links)
   - `VariableDeclarationScope` — each variable → its declaring node

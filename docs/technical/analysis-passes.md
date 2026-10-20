@@ -9,8 +9,8 @@ Throughout this document, "dead code" means a value or method that is **computed
 ## Pipeline
 
 ```
-TypeAndMemberResolver (300 lines) — resolves types + members in a single pass
-ScopeValidator (212 lines) — scope validation + VariableAnalysisMetadata
+ScopeValidator — bindings + VariableAnalysisMetadata (runs first)
+TypeAndMemberResolver — resolves types + members; projects use types from bindings
 ThisReferenceContext (88 lines) — validates `this` in static contexts
 ControlFlowAnalysis (980 lines) — CFG + BasicBlocks + dead-code elision
 ConstantFolding (512 lines) — constant folding + simplifications
@@ -55,7 +55,7 @@ DefiniteAssignmentAnalyzer (136 lines) — definitely-assigned tracking
 
 **What they are:** `BlockScopes`, `ScopeVertices`, `VariableDeclarationScope` — three fields on `VariableAnalysisMetadata` populated during the scope walk.
 
-**Why keep:** They are part of the `VariableAnalysisMetadata` record, which is the complete data model produced by the `ScopeValidator`. The record represents the full scope tree: which variables are declared in which block, how scopes nest, and which scope each variable belongs to. Current consumers only query `VariableReferences`, `AssignmentCount`, and `EscapedVariables`. But the hierarchy data is part of the same coherent model — removing it would make the record incomplete by design, not dead code.
+**Why keep:** They are part of the `VariableAnalysisMetadata` record, which is the complete data model produced by the `ScopeValidator`. The record represents the full scope tree: which variables are declared in which block, how scopes nest, and which scope each variable belongs to. Current consumers query `VariableReferences`, `ParameterReferences`, `AssignmentCount`, and `EscapedVariables`. But the hierarchy data is part of the same coherent model — removing it would make the record incomplete by design, not dead code.
 
 ## Summary
 

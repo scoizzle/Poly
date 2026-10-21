@@ -529,26 +529,44 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     /// <summary>The value of the return that always yields from this block: an
     /// unconditional valued return, or a return inside an <c>if (true)</c> branch.
     /// Null when no return dominates.</summary>
-    private static Node? DominatingReturnValue(Block block) {
-        foreach (var statement in block.Nodes) {
-            if (statement is Return { Value: { } value })
+    private static Node? DominatingReturnValue(Node? node) {
+        switch (node) {
+            case null:
+                return null;
+            case Return { Value: { } value }:
                 return value;
-            // A nested block or a try body runs unconditionally; look inside it before
-            // a later sibling can yield.
-            if (statement is Block nested && DominatingReturnValue(nested) is { } fromBlock)
-                return fromBlock;
-            if (statement is TryCatchFinally { TryBlock: Block tryBlock }
-                && DominatingReturnValue(tryBlock) is { } fromTry)
-                return fromTry;
-            if (statement is IfStatement { Condition: Constant { Value: true } } ifTrue) {
-                if (ifTrue.ThenBranch is Block thenBlock
-                    && DominatingReturnValue(thenBlock) is { } fromThen)
-                    return fromThen;
-                if (ifTrue.ThenBranch is Return { Value: { } fromDirect })
-                    return fromDirect;
-            }
+            case Block block:
+                foreach (var statement in block.Nodes) {
+                    if (DominatingReturnValue(statement) is { } fromStatement)
+                        return fromStatement;
+                }
+                return null;
+            case TryCatchFinally { TryBlock: { } tryBlock }:
+                return DominatingReturnValue(tryBlock);
+            case IfStatement ifStatement:
+                return DominatingReturnValue(ifStatement);
+            default:
+                return null;
         }
-        return null;
+    }
+
+    /// <summary>The return that always yields from an <c>if</c>: <c>if (true)</c> yields
+    /// its then-branch, and a two-armed <c>if</c> yields only when both arms do.</summary>
+    private static Node? DominatingReturnValue(IfStatement ifStatement) {
+        if (ifStatement.Condition is Constant { Value: true })
+            return DominatingReturnValue(ifStatement.ThenBranch)
+                ?? FindReturnValueNode(ifStatement.ThenBranch);
+        if (ifStatement.Condition is Constant { Value: false }) {
+            return ifStatement.ElseBranch is null
+                ? null
+                : DominatingReturnValue(ifStatement.ElseBranch)
+                    ?? FindReturnValueNode(ifStatement.ElseBranch);
+        }
+        if (ifStatement.ElseBranch is null)
+            return null;
+        var then = DominatingReturnValue(ifStatement.ThenBranch);
+        var otherwise = DominatingReturnValue(ifStatement.ElseBranch);
+        return then is not null && otherwise is not null ? then : null;
     }
 
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {

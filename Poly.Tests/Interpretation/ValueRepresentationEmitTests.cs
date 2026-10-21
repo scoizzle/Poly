@@ -116,6 +116,49 @@ public class ValueRepresentationEmitTests {
     }
 
     [Test]
+    public async Task IfTrue_NakedNestedReturn_YieldsTheLiveReturn() {
+        var node = new Block([
+            new IfStatement(new Constant(true),
+                new IfStatement(new Constant(true), new Return(new Constant(1L)))),
+            new Return(new Constant("miss"))
+        ]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, result));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task IfTrue_IfElseBothReturn_YieldsTheBranchValue() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var node = new Block([
+            new IfStatement(new Constant(true), new Block([
+                new IfStatement(flag, new Return(new Constant(1L)), new Return(new Constant(2L)))
+            ])),
+            new Return(new Constant(99L))
+        ]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(node, result), s => s.SetArgs(false));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task EnumConstant_IntoEnumParameter_Unboxes() {
+        var node = new Invoke(
+            new Member(new ClrTypeReference(typeof(EnumProbe)), nameof(EnumProbe.Id)),
+            new Constant(EnumProbe.Value.A));
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, result));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(40);
+    }
+
+    [Test]
     public async Task NullableMember_PassedToMethod_IsTheValueNotTheHandle() {
         var arg = new Parameter("box", TypeReference.To<NullableProbe.Box>());
         var node = new Invoke(
@@ -194,6 +237,12 @@ public class ValueRepresentationEmitTests {
 
 public static class RepresentationProbe {
     public static int SeenAsObject(object value) => value is int i ? i : -1;
+}
+
+public static class EnumProbe {
+    public enum Value { A = 40 }
+
+    public static int Id(Value value) => (int)value;
 }
 
 public static class NullableProbe {

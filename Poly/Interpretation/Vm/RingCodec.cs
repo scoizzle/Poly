@@ -143,6 +143,11 @@ internal static class RingCodec {
         }
         if (targetType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
+        // An enum constant is boxed by EmitConstant (TryInlineConstant rejects it), so
+        // dereference before converting it to an inline enum target.
+        if (source is Constant constant && constant.Value is not null
+            && !TryInlineConstant(constant.Value, out _))
+            return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
         if (targetType.IsValueType && IsInline(targetType))
             return Convert(ringVal, targetType);
         // A scalar reaching an `object` parameter is boxed by its source type. A heap

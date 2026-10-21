@@ -25,8 +25,7 @@ public static class AnalyzerBuilderExtensions {
             .UseControlFlowAnalysis()
             .UseDefiniteAssignmentAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
+                .UseCallSiteCatalog()
             ;
 
     }

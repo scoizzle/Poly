@@ -2,11 +2,11 @@ using Poly.Interpretation.Vm;
 
 namespace Poly.Tests.Interpretation;
 
-/// <summary>Unit oracles for the pooled VM <see cref="ValueStack"/>.</summary>
+/// <summary>Unit oracles for the pooled VM <see cref="VmValueStack"/>.</summary>
 public class ValueStackTests {
     [Test]
     public async Task PushPop_RoundTrips() {
-        using var stack = new ValueStack(8);
+        using var stack = new VmValueStack(8);
         stack.Push(10L);
         stack.Push(20L);
         await Assert.That(stack.StackPointer).IsEqualTo(2);
@@ -17,13 +17,13 @@ public class ValueStackTests {
 
     [Test]
     public async Task Pop_Empty_ThrowsUnderflow() {
-        using var stack = new ValueStack(4);
+        using var stack = new VmValueStack(4);
         await Assert.That(() => stack.Pop()).Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task Drop_ReducesHeight() {
-        using var stack = new ValueStack(8);
+        using var stack = new VmValueStack(8);
         stack.Push(1L);
         stack.Push(2L);
         stack.Push(3L);
@@ -34,14 +34,14 @@ public class ValueStackTests {
 
     [Test]
     public async Task Drop_TooMany_ThrowsUnderflow() {
-        using var stack = new ValueStack(4);
+        using var stack = new VmValueStack(4);
         stack.Push(1L);
         await Assert.That(() => stack.Drop(2)).Throws<InvalidOperationException>();
     }
 
     [Test]
     public async Task Grow_BeyondInitialCapacity_PreservesValues() {
-        using var stack = new ValueStack(2);
+        using var stack = new VmValueStack(2);
         for (long i = 0; i < 64; i++)
             stack.Push(i);
         await Assert.That(stack.StackPointer).IsEqualTo(64);
@@ -51,7 +51,7 @@ public class ValueStackTests {
 
     [Test]
     public async Task Reset_ClearsHeightWithoutDispose() {
-        using var stack = new ValueStack(8);
+        using var stack = new VmValueStack(8);
         stack.Push(99L);
         stack.Reset();
         await Assert.That(stack.StackPointer).IsEqualTo(0);

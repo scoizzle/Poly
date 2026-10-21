@@ -53,10 +53,11 @@ public class CSharpScriptTests {
     }
 
     [Test]
-    public async Task Run_TypedLocal_DecimalWrite_FailsClosed() {
-        // A decimal slot is a heap handle; a raw scalar cannot be converted into it.
+    public async Task Run_TypedLocal_DecimalWrite_ConvertsToDecimal() {
+        // An int write to a decimal variable is an implicit numeric conversion.
         var result = CSharpScript.Run("decimal d = 1;\nd = 2;\nd");
-        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("2");
     }
 
     [Test]
@@ -610,11 +611,13 @@ public class CSharpScriptTests {
     }
 
     [Test]
-    public async Task Run_ForeachDeclaredInt_OverLongArray_Executes() {
+    public async Task Run_ForeachDeclaredInt_OverLongArray_FailsClosed() {
+        // C# has no implicit long-to-int conversion, so the loop variable type is
+        // rejected rather than truncated per item.
         var r = CSharpScript.Run(
             "var a = new long[2];\nvar t = 0;\nforeach (int d in a) { t = t + d; }\nt");
-        await Assert.That(r.Success).IsTrue();
-        await Assert.That(r.Value).IsEqualTo("0");
+        await Assert.That(r.Success).IsFalse();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot convert each element"))).IsTrue();
     }
 
     [Test]
@@ -628,9 +631,11 @@ public class CSharpScriptTests {
     public async Task Run_ForeachDeclaredObject_OverLongArray_FailsClosed() {
         // A value element with a reference loop type needs box-per-item, which the emitter
         // does not do yet, so the form fails closed rather than storing a wrong shape.
+        // C# allows boxing each element to object, but the emitter does not box per
+        // item yet, so the form fails closed at emit.
         var r = CSharpScript.Run("var a = new long[1];\nforeach (object o in a) { }\n1");
         await Assert.That(r.Success).IsFalse();
-        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot convert each element"))).IsTrue();
+        await Assert.That(r.Diagnostics.Any(d => d.Contains("cannot convert each"))).IsTrue();
     }
 
     [Test]
@@ -915,7 +920,7 @@ public class CSharpScriptTests {
 
     [Test]
     public async Task Run_ArrayIndex_ForeachSeesWrittenElement() {
-        var r = CSharpScript.Run("var a = new long[2];\na[0] = 7;\nvar t = 0;\nforeach (var x in a) { t = t + x; }\nt");
+        var r = CSharpScript.Run("var a = new long[2];\na[0] = 7;\nvar t = 0L;\nforeach (var x in a) { t = t + x; }\nt");
         await Assert.That(r.Success).IsTrue();
         await Assert.That(r.Value).IsEqualTo("7");
     }

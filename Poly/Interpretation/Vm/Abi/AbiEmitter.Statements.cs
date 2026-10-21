@@ -8,11 +8,11 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
 
-    private static Expression EmitAssignment(Assignment a, AbiCtx ctx) {
+    private static Expression EmitAssignment(Assignment a, Context ctx) {
         if (a.Destination is IndexAccess indexAccess) {
             var ring = ctx.OpenRing();
             int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
@@ -94,7 +94,10 @@ public static partial class DirectVmAbiEmitter {
         if (ctx.TryGetCapture(destVar, out int capIndex)) {
             var ring = ctx.OpenRing();
             int valSlot = ring.Add(CompileNode(a.Value, ctx));
-            var store = Assign(EmitCaptureCellValue(ctx, capIndex), ctx.RingVar(valSlot));
+            // A capture cell stores the destination's slot shape, so the same coercion
+            // as a plain store applies here (e.g. an int written to a captured double).
+            var store = Assign(EmitCaptureCellValue(ctx, capIndex),
+                CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(valSlot)));
             return ring.Then(store);
         }
 
@@ -112,7 +115,7 @@ public static partial class DirectVmAbiEmitter {
     /// <c>Int64BitsToDouble</c> first. Without this the raw value lands in a slot the
     /// other representation reads (e.g. <c>double x = 1; x = 2;</c>).
     /// </summary>
-    private static Expression CoerceSlotToDestination(AbiCtx ctx, Variable destination, Node value, Expression slot) {
+    private static Expression CoerceSlotToDestination(Context ctx, Variable destination, Node value, Expression slot) {
         bool destinationIsDouble = RingCodec.IsIeee(destination, ctx.Analysis);
         bool valueIsDouble = RingCodec.IsIeee(value, ctx.Analysis);
         if (destinationIsDouble == valueIsDouble)
@@ -122,7 +125,7 @@ public static partial class DirectVmAbiEmitter {
             : Convert(Call(BitConverterInt64BitsToDouble, slot), typeof(long));
     }
 
-    private static Expression EmitBlock(Block block, AbiCtx ctx) {
+    private static Expression EmitBlock(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
         foreach (var v in block.Variables) {
@@ -142,12 +145,15 @@ public static partial class DirectVmAbiEmitter {
         var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
+        // The block-exit snapshot is also what VmDebugger.GetLocals reads after
+        // execution, when no hook was ever attached, so it stays unconditional.
+        // Per-statement stores live inside the hook guard (CompileStatement).
         all.AddRange(stores);
         if (all.Count == 0) return Empty();
         return Block(all);
     }
 
-    private static Expression EmitIfStatement(IfStatement ifStmt, AbiCtx ctx) {
+    private static Expression EmitIfStatement(IfStatement ifStmt, Context ctx) {
         int d = ctx.RingDepth;
         var test = CompileConditionAsBool(ifStmt.Condition, ctx);
         ctx.RingDepth = d;
@@ -161,13 +167,13 @@ public static partial class DirectVmAbiEmitter {
         return IfThenElse(test, thenBody, elseBody);
     }
 
-    private static Expression EmitConditional(Conditional c, AbiCtx ctx) =>
+    private static Expression EmitConditional(Conditional c, Context ctx) =>
         SpillToRing(EmitConditionalValue(c, ctx), ctx);
 
-    private static Expression EmitCoalesce(Coalesce n, AbiCtx ctx) =>
+    private static Expression EmitCoalesce(Coalesce n, Context ctx) =>
         SpillToRing(EmitCoalesceValue(n, ctx), ctx);
 
-    private static Expression EmitSwitch(SwitchStatement sw, AbiCtx ctx) {
+    private static Expression EmitSwitch(SwitchStatement sw, Context ctx) {
         var ring = ctx.OpenRing();
         int valSlot = ring.Add(CompileNode(sw.Value, ctx));
         int savedDepth = ring.Base + 1;
@@ -206,7 +212,7 @@ public static partial class DirectVmAbiEmitter {
         return ring.Then(Block(rest, ctx.RingVar(outSlot)));
     }
 
-    private static Expression EmitWhileLoop(WhileLoop wl, AbiCtx ctx) {
+    private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) {
         int d = ctx.RingDepth;
         var breakLabel = Label("wl_break");
         var continueLabel = Label("wl_continue");
@@ -226,7 +232,7 @@ public static partial class DirectVmAbiEmitter {
         return result;
     }
 
-    private static Expression EmitLoopIterationGuard(AbiCtx ctx) {
+    private static Expression EmitLoopIterationGuard(Context ctx) {
         if (ctx.Mode == CompilationMode.NoDebug)
             return Empty();
         var max = Property(ctx.State, nameof(VmState.MaxLoopIterations));
@@ -241,7 +247,7 @@ public static partial class DirectVmAbiEmitter {
                         Constant("MaxLoopIterations exceeded."))))));
     }
 
-    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, AbiCtx ctx) {
+    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) {
         int d = ctx.RingDepth;
         var breakLabel = Label("dwl_break");
         var continueLabel = Label("dwl_continue");
@@ -261,7 +267,7 @@ public static partial class DirectVmAbiEmitter {
         return result;
     }
 
-    private static Expression EmitThrow(ThrowStatement ts, AbiCtx ctx) {
+    private static Expression EmitThrow(ThrowStatement ts, Context ctx) {
         // Preserve the operand instance (Constant / Variable / New / ThrowExpression value).
         // Match LINQ: Expression.Throw(CompileNode(exception)).
         var compiled = CompileNode(ts.Exception, ctx);
@@ -277,7 +283,7 @@ public static partial class DirectVmAbiEmitter {
             Throw(exVar));
     }
 
-    private static Expression EmitTryCatchFinally(TryCatchFinally tcf, AbiCtx ctx) {
+    private static Expression EmitTryCatchFinally(TryCatchFinally tcf, Context ctx) {
         var tryBody = CompileNode(tcf.TryBlock, ctx);
         Expression? finallyBody = null;
         if (tcf.FinallyBlock != null) {
@@ -325,7 +331,7 @@ public static partial class DirectVmAbiEmitter {
         return TryCatch(tryBody, catchBlocks.ToArray());
     }
 
-    private static Expression EmitSuspendNode(SuspendNode sn, AbiCtx ctx) {
+    private static Expression EmitSuspendNode(SuspendNode sn, Context ctx) {
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, sn);
         var resumeLabel = ctx.RegisterOrGetResumeLabel(step);
@@ -356,7 +362,7 @@ public static partial class DirectVmAbiEmitter {
             clearSuspended);
     }
 
-    private static Expression EmitParameter(Parameter p, AbiCtx ctx) {
+    private static Expression EmitParameter(Parameter p, Context ctx) {
         int slot = ctx.AllocSlot();
         if (ctx.TryGetCapture(p, out int capIndex)) {
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
@@ -364,7 +370,7 @@ public static partial class DirectVmAbiEmitter {
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
 
-    private static Expression ParameterValue(Parameter p, AbiCtx ctx) {
+    private static Expression ParameterValue(Parameter p, Context ctx) {
         if (ctx.TryGetInlineParameter(p, out int ringSlot))
             return ctx.RingVar(ringSlot);
         if (!ctx.TryGetParameterSlot(p, out int paramIdx))
@@ -382,18 +388,18 @@ public static partial class DirectVmAbiEmitter {
     /// After SetArgs, ThisReference is that handle. Declared parameters follow at
     /// slot 1+. Unset slot 0 is ABI null 0.
     /// </summary>
-    private static Expression EmitThis(AbiCtx ctx) {
+    private static Expression EmitThis(Context ctx) {
         int slot = ctx.AllocSlot();
         return Assign(ctx.RingVar(slot), ctx.InstanceHandle);
     }
 
-    private static Expression EmitCaptureCell(AbiCtx ctx, int capIndex) =>
+    private static Expression EmitCaptureCell(Context ctx, int capIndex) =>
         RingCodec.ClosureCell(ctx.HeapLocal, ctx.ClosureHandle, capIndex);
 
-    private static Expression EmitCaptureCellValue(AbiCtx ctx, int capIndex) =>
+    private static Expression EmitCaptureCellValue(Context ctx, int capIndex) =>
         ArrayAccess(EmitCaptureCell(ctx, capIndex), Constant(0));
 
-    private static Expression EmitUpvalueCellInit(Variable v, AbiCtx ctx) {
+    private static Expression EmitUpvalueCellInit(Variable v, Context ctx) {
         ctx.MarkCellBacked(v);
         var cellVar = Variable(typeof(long[]), "_upvalue");
         return Block(
@@ -404,7 +410,7 @@ public static partial class DirectVmAbiEmitter {
                 Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(cellVar, typeof(object))), typeof(long))));
     }
 
-    private static Expression EmitLambda(Lambda lambda, AbiCtx ctx) {
+    private static Expression EmitLambda(Lambda lambda, Context ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
         var captures = FindBodyCaptures(lambda, ctx.Analysis);
@@ -430,7 +436,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitLoadOrCreateUpvalueCell(
-        Capture cap, AbiCtx ctx, ParameterExpression cellVar) {
+        Capture cap, Context ctx, ParameterExpression cellVar) {
         if (ctx.TryGetCapture(cap.Binding, out int capIndex))
             return Assign(cellVar, EmitCaptureCell(ctx, capIndex));
         if (cap.Variable is { } v) {
@@ -444,7 +450,7 @@ public static partial class DirectVmAbiEmitter {
             Assign(ArrayAccess(cellVar, Constant(0)), ReadCaptureSource(cap, ctx)));
     }
 
-    private static void DeclareFreeParameters(Node node, AbiCtx ctx, HashSet<Parameter> ownParams) {
+    private static void DeclareFreeParameters(Node node, Context ctx, HashSet<Parameter> ownParams) {
         if (node is Parameter p
             && !ownParams.Contains(p)
             && ownParams.All(op => op.Name != p.Name)
@@ -465,25 +471,25 @@ public static partial class DirectVmAbiEmitter {
         return fromAnalysis;
     }
 
-    private static Expression ReadCaptureSource(Capture cap, AbiCtx ctx) {
+    private static Expression ReadCaptureSource(Capture cap, Context ctx) {
         if (cap.Variable is not null)
             return ctx.VariableRead(cap.Variable);
         return ParameterValue(cap.Parameter!, ctx);
     }
 
     /// <summary>Break statement: jump to the named loop, or the innermost if unlabeled.</summary>
-    private static Expression EmitBreakStatement(BreakStatement bs, AbiCtx ctx) =>
+    private static Expression EmitBreakStatement(BreakStatement bs, Context ctx) =>
         Goto(ctx.ResolveLoopLabels(bs.Label).breakLabel);
 
     /// <summary>Continue statement: jump to the named loop's continue, or the innermost if unlabeled.</summary>
-    private static Expression EmitContinueStatement(ContinueStatement cs, AbiCtx ctx) =>
+    private static Expression EmitContinueStatement(ContinueStatement cs, Context ctx) =>
         Goto(ctx.ResolveLoopLabels(cs.Label).continueLabel);
 
     /// <summary>
     /// ForLoop: lower to { init; while(condition) { body; increment; } }
     /// When condition is null, treat as 'while(true)'.
     /// </summary>
-    private static Expression EmitForLoop(ForLoop fl, AbiCtx ctx) {
+    private static Expression EmitForLoop(ForLoop fl, Context ctx) {
         var breakLabel = Label("for_break");
         var continueLabel = Label("for_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
@@ -544,7 +550,7 @@ public static partial class DirectVmAbiEmitter {
     /// bind each Current onto the loop variable via <c>BoxToAbi</c>, run the body.
     /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
-    private static Expression EmitForEachLoop(ForEachLoop fel, AbiCtx ctx) {
+    private static Expression EmitForEachLoop(ForEachLoop fel, Context ctx) {
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
@@ -596,7 +602,7 @@ public static partial class DirectVmAbiEmitter {
     /// element is unboxed to its element type, converted to the declared type, and encoded by that
     /// type's representation — a value widened into an IEEE slot would otherwise be mis-read, and a
     /// value stored where the declared type is a reference must become a heap handle.</summary>
-    private static Expression ForEachElementValue(ForEachLoop fel, ParameterExpression enumerator, AbiCtx ctx) {
+    private static Expression ForEachElementValue(ForEachLoop fel, ParameterExpression enumerator, Context ctx) {
         var current = Property(enumerator, EnumeratorCurrent);
         if (fel.DeclaredType is null)
             return Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
@@ -630,19 +636,19 @@ public static partial class DirectVmAbiEmitter {
         || (t.IsValueType && RingCodec.IsInline(t));
 
     /// <summary>Goto statement: jump to a named label.</summary>
-    private static Expression EmitGotoStatement(GotoStatement gs, AbiCtx ctx) {
+    private static Expression EmitGotoStatement(GotoStatement gs, Context ctx) {
         var target = ctx.GetLabel(gs.Target);
         return Goto(target);
     }
 
     /// <summary>Label declaration: emit a label marker in the expression tree.</summary>
-    private static Expression EmitLabelDeclaration(LabelDeclaration ld, AbiCtx ctx) {
+    private static Expression EmitLabelDeclaration(LabelDeclaration ld, Context ctx) {
         var label = ctx.GetLabel(ld.Name);
         return Block(Label(label), CompileNode(ld.Statement, ctx));
     }
 
     /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
-    private static Expression EmitUsingStatement(UsingStatement us, AbiCtx ctx) {
+    private static Expression EmitUsingStatement(UsingStatement us, Context ctx) {
         int d = ctx.RingDepth;
         var resourceExpr = CompileNode(us.Resource, ctx);
         int resSlot = ctx.RingDepth - 1;
@@ -661,7 +667,7 @@ public static partial class DirectVmAbiEmitter {
                     Call(Convert(resObj, typeof(IDisposable)), IDisposableDispose))));
     }
 
-    private static Type ResolveCatchClrType(Node? exceptionType, AbiCtx ctx) {
+    private static Type ResolveCatchClrType(Node? exceptionType, Context ctx) {
         if (exceptionType is null) return typeof(Exception);
         if (exceptionType is ClrTypeReference ctr
             && typeof(Exception).IsAssignableFrom(ctr.RuntimeType))
@@ -674,7 +680,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
-    private static Expression EmitReturn(Return ret, AbiCtx ctx) {
+    private static Expression EmitReturn(Return ret, Context ctx) {
         if (ret.Value is null) {
             if (ctx.AsyncReturn is not null)
                 return Block(

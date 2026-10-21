@@ -8,6 +8,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Expr = System.Linq.Expressions.Expression;
 using SN = Poly.Ast.Nodes;

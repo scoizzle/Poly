@@ -15,7 +15,7 @@ namespace Poly.Interpretation.LinqExpressions;
 /// Primarily useful for testing the analysis system and generating lambda
 /// expressions from interpreted code.</para>
 /// <para>New language semantics should land in analysis → direct lowering
-/// (<see cref="DirectVmAbiEmitter"/>) first. Parity tests may continue to
+/// (<see cref="AbiEmitter"/>) first. Parity tests may continue to
 /// use this path for cross-validation.</para>
 /// </remarks>
 public sealed partial class LinqExpressionGenerator {

@@ -642,7 +642,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             return true;
         }
         if (node is Invoke inv && !IsPure(context, inv)) {
-            return true; // non-pure call can mutate state (closures, ref params, globals, heap objects) including cond vars
+            return true; // non-pure call can mutate state (closures, ref params, globals, reference objects) including cond vars
         }
         if (node is SuspendNode) {
             return true; // suspend can interact with external state that affects cond vars

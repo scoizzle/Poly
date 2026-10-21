@@ -8,26 +8,25 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
 
-    public sealed class AbiCtx {
+    public sealed class Context {
         private readonly ParameterExpression _stateParam;
         private readonly List<ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
 
-        public AbiCtx() : this(8) { }
+        public Context() : this(8) { }
 
-        public AbiCtx(int registerCount) {
+        public Context(int registerCount) {
             _registerCount = Math.Clamp(registerCount, 8, MaxRegisterCount);
             _regUsed = new bool[_registerCount];
             _stateParam = Parameter(typeof(VmState), "state");
-            ProgramCounter = Variable(typeof(int), "_pc");
-            _locals.Add(ProgramCounter);
+            CurrentAstNodeExpr = Property(_stateParam, nameof(VmState.CurrentAstNode));
             SlotsLocal = Variable(typeof(long[]), "_slots");
             _locals.Add(SlotsLocal);
-            HeapLocal = Variable(typeof(Heap), "_heap");
+            HeapLocal = Variable(typeof(VmManagedObjectHeap), "_heap");
             _locals.Add(HeapLocal);
             FramePosLocal = Variable(typeof(int), "_fp");
             _locals.Add(FramePosLocal);
@@ -44,7 +43,6 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public ParameterExpression State => _stateParam;
-        public ParameterExpression ProgramCounter { get; }
         public ParameterExpression SlotsLocal { get; }
         public ParameterExpression HeapLocal { get; }
         public ParameterExpression FramePosLocal { get; }
@@ -52,8 +50,7 @@ public static partial class DirectVmAbiEmitter {
         public LabelTarget EntryLabel { get; }
         public LabelTarget ExitLabel { get; }
         public Expression? DebugHookProp { get; set; }
-        public Expression CurrentAstNodeExpr =>
-            Property(_stateParam, nameof(VmState.CurrentAstNode));
+        public Expression CurrentAstNodeExpr { get; }
         /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this
         /// rather than a live count, because sequential inner blocks reuse neither
         /// slot 0 nor a dense 0..live-1 prefix.</summary>
@@ -115,16 +112,33 @@ public static partial class DirectVmAbiEmitter {
         /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
         internal RingRegion OpenRing() => new(this);
 
+        private readonly Dictionary<Node, (ValueRepresentationKind Kind, Type? ClrType)> _representation = new();
+
+        /// <summary>The slot kind and CLR type of a node's effective runtime action.
+        /// Analysis replacements carry the real action's type, so this is a pure
+        /// read of the resolved type, memoized per emit.</summary>
+        public (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(Node node) {
+            if (_representation.TryGetValue(node, out var cached))
+                return cached;
+            var classified = ValueRepresentationClassifier.Classify(Analysis, node);
+            _representation[node] = classified;
+            return classified;
+        }
+
+        public ValueRepresentationKind KindOf(Node node) => RepresentationOf(node).Kind;
+
+        public Type? ClrTypeOf(Node node) => RepresentationOf(node).ClrType;
+
         /// <summary>Contiguous ring slots for a sequence of compiled operands.
         /// <see cref="Add"/> compacts each result to <c>Base + count</c>; any
         /// slots the caller allocates afterwards extend the depth normally.</summary>
         internal sealed class RingRegion {
-            private readonly AbiCtx _ctx;
+            private readonly Context _ctx;
             private readonly int _base;
             private readonly List<Expression> _steps = new();
             private int _count;
 
-            internal RingRegion(AbiCtx ctx) {
+            internal RingRegion(Context ctx) {
                 _ctx = ctx;
                 _base = ctx.RingDepth;
             }

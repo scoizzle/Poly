@@ -4,7 +4,7 @@ Generic **language VM** for programs expressed as `Poly.Ast` Syntax trees. Domai
 
 **Platform map:** [`docs/CORE.md`](../../docs/CORE.md) — boundaries, node replacement, direct AST→VM (read before inventing parallel paths).
 
-Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `DirectVmAbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**.
+Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `AbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**.
 
 The LINQ expression path (`BuildExpression` / `LinqExpressionGenerator`) is a **programmatic semantic checker** for that VM: the same Syntax tree must evaluate to the same result, and the expression tree is inspectable when debugging the custom VM. It is not a second language and not a replacement for `Interpreter.Compile`. C# emit is a projection of the same trees.
 
@@ -31,7 +31,7 @@ Domain constructs lower to generic Syntax nodes — no domain opcodes or domain 
 ## What this module does
 
 1. **Analyze** — Run ordered `INodeAnalyzer` passes; produce `AnalysisResult` (metadata + diagnostics).
-2. **Compile** — `DirectVmAbiEmitter` lowers the analyzed AST directly to a compiled `Action<VmState>` delegate (`VmProgram`). No intermediate primitive flattening.
+2. **Compile** — `AbiEmitter` lowers the analyzed AST directly to a compiled `Action<VmState>` delegate (`VmProgram`). No intermediate primitive flattening.
 3. **Execute** — Run the delegate on `VmState`; `InterpretResult` applies value-representation rules at the API boundary.
 
 ---
@@ -46,7 +46,7 @@ Domain constructs lower to generic Syntax nodes — no domain opcodes or domain 
   (14 passes)            metadata + diagnostics
        │
        ▼
-  DirectVmAbiEmitter ──►  VmProgram
+  AbiEmitter ──►  VmProgram
   (direct AST-to-ABI      (delegate, StepNodes, DebugInfo)
    lowering, no
    primitive expansion)
@@ -57,7 +57,7 @@ Domain constructs lower to generic Syntax nodes — no domain opcodes or domain 
 
 The cached standard pipeline lives in `Interpreter.cs`. Pass order and metadata contracts are documented in [`Analysis/README.md`](Analysis/README.md).
 
-Direct AST lowering is the sole compilation path. No primitive flattening or expansion step is used — the `DirectVmAbiEmitter` walks the analyzed AST directly and emits `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers, 2-value frame model, heap).
+Direct AST lowering is the sole compilation path. No primitive flattening or expansion step is used — the `AbiEmitter` walks the analyzed AST directly and emits `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers, 2-value frame model, heap).
 
 ---
 
@@ -120,7 +120,7 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 ## Direct AST Lowering
 
-The sole compilation path is `DirectVmAbiEmitter` which walks the analyzed AST and emits
+The sole compilation path is `AbiEmitter` which walks the analyzed AST and emits
 `System.Linq.Expressions` trees targeting the VM ABI (`VmState`, ring registers for temporaries,
 2-value frame model for user variables and call linkage, heap for objects). No primitive
 flattening or expansion step exists — the AST is the canonical lowering target.
@@ -164,42 +164,20 @@ compiled operands into consecutive slots, so callers do not hand-manage
 
 ## Value Representation
 
-The VM uses a uniform `long` representation on the evaluation stack, but the
-[`ValueRepresentationAnalyzer`](Analysis/Semantics/ValueRepresentationPass.cs)
-classifies every expression by how its value should be interpreted:
+The VM uses a uniform `long` representation on the evaluation stack.
+[`ValueRepresentationClassifier`](Vm/Abi/ValueRepresentation.cs) classifies each
+effective node during emit by its resolved CLR type:
 
 | Kind | Description | Example |
 |------|-------------|---------|
 | `StackScalar` | Inline word: a number, a boolean (0 = false, non-zero = true; the CLR type is `bool`), or an IEEE bit pattern | `2 + 3`, `a == b` |
 | `HeapRef` | Heap handle; the slot holds an index into `VmState.Heap` | `new Person()` |
 | `Void` | Statement/produces no value | `if (x) { }` |
-| `Unknown` | Could not be determined statically | Runtime dispatch |
+| `Unknown` | No resolved type (an unresolved expression) | — |
 
 The `RootValueKind` on `VmProgram` tells `InterpreterResult` how to correctly
 marshal the program's top-level result — whether to dereference a heap handle
 or return the raw scalar.
-
----
-
-## µop-level Tracing
-
-Every µop compiled in `Normal` or `Debug` mode carries a `SourceName` label.
-At compile time, `TraceBefore` inserts a `VmTrace.LogUop(pc, text, sp, fb, state)`
-call inside each µop's expression — **~1 ns overhead** when `state.Trace` is null
-(the default).
-
-Enable tracing by setting `state.Trace` to any `TextWriter`:
-
-```csharp
-using var exec = Interpreter.Execute(program, state => {
-    state.Trace = Console.Error;  // or StringWriter, etc.
-});
-```
-
-`CommentOp("; text")` markers alias section boundaries in the µop list for
-readability and generate zero code. Test files use `TestTraceWriter` which
-routes to `Console.Error` — visible in TUnit via `--show-stderr`.
-Active in all build configurations.
 
 ---
 
@@ -280,7 +258,7 @@ These read the **AST directly** and are not the conformance target for new featu
 - **C#** — `CSharpGenerator`; codegen and pretty-printing.
 - **Mermaid** — `MermaidAstGenerator`; docs and debugging.
 
-New language semantics should land in analysis → direct lowering → `DirectVmAbiEmitter` first.
+New language semantics should land in analysis → direct lowering → `AbiEmitter` first.
 
 ---
 
@@ -344,7 +322,7 @@ to `bool`, `int`, `short`, `byte`, and `object` automatically.
 ### Adding a New Primitive
 
 Primitives are defined in `Poly/Syntax/Primitives/Primitives.cs`. Add the record
-with a `StackEffect` override, then add the `case` arm in `DirectVmAbiEmitter`
+with a `StackEffect` override, then add the `case` arm in `AbiEmitter`
 to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 
 ---

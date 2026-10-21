@@ -6,19 +6,29 @@ namespace Poly.Interpretation.Vm;
 /// in a contiguous array indexed by handle. Handles are recycled via a
 /// free-list when objects are set to null.</summary>
 /// <remarks>Handle 0 is reserved as the ABI null/falsy sentinel and is never
-/// allocated to a live object. The backing array grows by doubling.</remarks>
-public sealed class Heap {
-    private object?[] _objects = new object?[256];
+/// allocated to a live object. The backing array is rented from
+/// <see cref="ArrayPool{T}.Shared"/> and grows by doubling; <see cref="Dispose"/>
+/// returns it cleared, so a short-lived execution allocates no heap buffer.</remarks>
+public sealed class VmManagedObjectHeap : IDisposable {
+    private object?[] _objects;
+    private bool _disposed;
     /// <summary>Next free handle index. Starts at 1 so handle 0 remains the
     /// ABI null / falsy sentinel (never allocated to a live object).</summary>
     private int _count = 1;
-    private readonly HashSet<int> _freeSlots = [];
+    private HashSet<int>? _freeSlots;
+
+    public VmManagedObjectHeap() : this(256) { }
+    public VmManagedObjectHeap(int initialSlots) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialSlots, nameof(initialSlots));
+        _objects = Rent(initialSlots);
+    }
 
     /// <summary>Total number of allocated slots (including free-list recycled slots).</summary>
     public int Count => _count;
 
     /// <summary>Direct access to the backing object array. Use with caution —
-    /// the array may contain null entries for free-list slots.</summary>
+    /// the array may contain null entries for free-list slots. Invalid after
+    /// <see cref="Dispose"/>.</summary>
     public object?[] RawSlots => _objects;
 
     /// <summary>Allocates an object on the heap and returns its handle.
@@ -27,18 +37,14 @@ public sealed class Heap {
     /// <returns>A non-zero handle that can be used to retrieve the object.</returns>
     public int Allocate(object? value) {
         if (value is null) return 0;
-        if (_freeSlots.Count > 0) {
+        if (_freeSlots is { Count: > 0 }) {
             int freeHandle = _freeSlots.First();
             _freeSlots.Remove(freeHandle);
             _objects[freeHandle] = value;
             return freeHandle;
         }
         int handle = _count;
-        if (handle >= _objects.Length) {
-            var newArr = new object?[_objects.Length * 2];
-            Array.Copy(_objects, newArr, _count);
-            _objects = newArr;
-        }
+        EnsureCapacity(handle);
         _objects[handle] = value;
         _count++;
         return handle;
@@ -87,12 +93,12 @@ public sealed class Heap {
     }
 
     private void Recycle(int handle, object? value) {
-        if (_freeSlots.Contains(handle))
+        if (_freeSlots?.Contains(handle) == true)
             throw new InvalidOperationException($"Heap handle {handle} is already free.");
         bool wasLive = _objects[handle] is not null;
         _objects[handle] = value;
         if (value is null && wasLive)
-            _freeSlots.Add(handle);
+            (_freeSlots ??= []).Add(handle);
     }
 
     /// <summary>Clears all objects and resets the free-list. Handle 0 remains
@@ -100,6 +106,31 @@ public sealed class Heap {
     public void Clear() {
         Array.Clear(_objects, 0, _count);
         _count = 1; // keep handle 0 reserved
-        _freeSlots.Clear();
+        _freeSlots?.Clear();
+    }
+
+    /// <summary>Returns the backing array to the shared pool, cleared so no
+    /// heap object stays reachable. The heap must not be used afterwards.</summary>
+    public void Dispose() {
+        if (_disposed)
+            return;
+        _disposed = true;
+        ArrayPool<object?>.Shared.Return(_objects, clearArray: true);
+    }
+
+    private void EnsureCapacity(int handle) {
+        if (handle < _objects.Length)
+            return;
+        var grown = Rent(Math.Max(handle + 1, _objects.Length * 2));
+        Array.Copy(_objects, grown, _count);
+        var previous = _objects;
+        _objects = grown;
+        ArrayPool<object?>.Shared.Return(previous, clearArray: true);
+    }
+
+    private static object?[] Rent(int size) {
+        var buffer = ArrayPool<object?>.Shared.Rent(size);
+        Array.Clear(buffer);
+        return buffer;
     }
 }

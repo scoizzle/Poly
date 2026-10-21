@@ -125,7 +125,7 @@ public class VmDebuggerTests {
 
     [Test]
     public async Task DebugHook_ReceivesHeapAndCanReadAllocations() {
-        Heap? seen = null;
+        VmManagedObjectHeap? seen = null;
         var program = Interpreter.Compile(new Constant("hi"));
         Interpreter.Execute(program, s => s.DebugHook = (_, _, heap) => seen = heap);
         await Assert.That(seen).IsNotNull();

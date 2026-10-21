@@ -47,14 +47,14 @@ The rest of this document marks, as an observation rather than a ranking, whethe
 - Expression and statement node types (the vocabulary of a snippet): `Poly/Ast/Nodes/` — among them `Constant.cs`, `Block.cs`, `Assignment.cs`, `IfStatement.cs`, `Invoke.cs`, `Member.cs`, `Lambda.cs`, `ThisReference.cs`, `SuspendNode.cs`, plus arithmetic, comparison, and loop nodes.
 - Type-shaped nodes the lowered domain becomes: `Poly/Ast/Nodes/TypeDefinitions/TypeDefinitionNode.cs`, `MethodDefinitionNode.cs`, `PrimitiveTypeReference.cs`, and `Poly/Ast/Nodes/CompilationUnitNode.cs`.
 - Primitive types the interpreter and printers understand (bool, integers, floats, text, dates, guid, bytes, and so on): `Poly/Introspection/PrimitiveType.cs`, `Poly/Introspection/TypeCategory.cs`. A syntax-tree reference to one of those: `Poly/Ast/Nodes/TypeDefinitions/PrimitiveTypeReference.cs`.
-- The interpreter façade — analyze, compile (errors stop compilation), execute: `Poly/Interpretation/Interpreter.cs`. Compile walks the analyzed tree and emits a delegate; there is no separate primitive-instruction flattening step: `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` (with `DirectVmAbiEmitter.Statements.cs`, `DirectVmAbiEmitter.Invoke.cs`). Runtime state (stack, heap, registers, current node): `Poly/Interpretation/Vm/VmState.cs`, `Poly/Interpretation/Vm/VmProgram.cs`, `Poly/Interpretation/Vm/Heap.cs`. Result plus inspectable state: `Poly/Interpretation/ExecutionResult.cs`.
+- The interpreter façade — analyze, compile (errors stop compilation), execute: `Poly/Interpretation/Interpreter.cs`. Compile walks the analyzed tree and emits a delegate; there is no separate primitive-instruction flattening step: `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` (with `AbiEmitter.Statements.cs`, `AbiEmitter.Invoke.cs`). Runtime state (stack, heap, registers, current node): `Poly/Interpretation/Vm/VmState.cs`, `Poly/Interpretation/Vm/VmProgram.cs`, `Poly/Interpretation/Vm/Heap.cs`. Result plus inspectable state: `Poly/Interpretation/ExecutionResult.cs`.
 - Types and members the analyzer can resolve, with the CLR as the first host: `Poly/Introspection/ITypeDefinition.cs`, `Poly/Introspection/CommonLanguageRuntime/ClrTypeDefinitionRegistry.cs`.
 
 **Roadmap phase.** Serves phase 1 (verify business behavior by simulation), phase 2 (agents review simulated outcomes), and phase 3 (heuristics extracted from model weights become trivial syntax trees the interpreter runs cheaply). The syntax tree and interpreter are **earning their place for phase 1**.
 
 **Observation:** Domain facts (`Domain`, `Entity`, `Action`, `Policy`, `Effect`, `DomainExpression`) are also `Node` subclasses (`Poly/DomainModeling/Ontology/DomainObject.cs`), so they can carry analysis metadata. They are not the syntax tree the interpreter compiles. Meaning for a running operation is supposed to be the lowered syntax tree; the author’s tree is the input to lowering.
 
-**Observation:** `Poly/Ast/Nodes/Comment.cs` is a no-op placeholder node whose own comment says it records “what was not lowered.” The emitter treats `Comment` as empty when used as a statement and rejects it as a value (`Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`). A comment is not a simulated operation.
+**Observation:** `Poly/Ast/Nodes/Comment.cs` is a no-op placeholder node whose own comment says it records “what was not lowered.” The emitter treats `Comment` as empty when used as a statement and rejects it as a value (`Poly/Interpretation/Vm/Abi/AbiEmitter.cs`). A comment is not a simulated operation.
 
 **Observation:** `LinqExpressionGenerator` (`Poly/Interpretation/LinqExpressions/LinqExpressionGenerator.cs`) compiles the same syntax tree to LINQ expression trees. The file states it is a test/reference path, not the canonical execution engine. A second compile path exists beside the interpreter.
 
@@ -71,8 +71,8 @@ The rest of this document marks, as an observation rather than a ranking, whethe
 **Where it lives in code.**
 
 - Compile mode: `Poly/Interpretation/Vm/CompilationMode.cs`. `Normal` (the default) includes debug-hook checks, AST-node tracking, and a loop-iteration sandbox. `NoDebug` omits that instrumentation.
-- Before each statement in `Normal` mode, the emitter can invoke a hook with the current syntax-tree node, a span of local slots, and the heap: `DirectVmAbiEmitter.CompileStatement` in `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`. The compiled program also stores `StepNodes` and `DebugInfo` on `Poly/Interpretation/Vm/VmProgram.cs` so a debugger can map a step back to a node and name locals.
-- Current node on the running state: `VmState.CurrentAstNode` in `Poly/Interpretation/Vm/VmState.cs`. Optional text trace of operations: `VmState.Trace` plus `Poly/Interpretation/Vm/VmTrace.cs`. Pause via `SuspendNode` (`Poly/Ast/Nodes/SuspendNode.cs`) and `InterpreterStatus.Suspended` / `ExecutionResult.IsSuspended`.
+- Before each statement in `Normal` mode, the emitter can invoke a hook with the current syntax-tree node, a span of local slots, and the heap: `AbiEmitter.CompileStatement` in `Poly/Interpretation/Vm/Abi/AbiEmitter.cs`. The compiled program also stores `StepNodes` and `DebugInfo` on `Poly/Interpretation/Vm/VmProgram.cs` so a debugger can map a step back to a node and name locals.
+- Current node on the running state: `VmState.CurrentAstNode` in `Poly/Interpretation/Vm/VmState.cs`. Pause via `SuspendNode` (`Poly/Ast/Nodes/SuspendNode.cs`) and `InterpreterStatus.Suspended` / `ExecutionResult.IsSuspended`.
 - Interactive stepper: `Poly/Interpretation/Vm/VmDebugger.cs`. Start pauses at the first statement; `StepOver` advances one statement boundary and reports the node plus named locals; `Continue` runs until completion or suspend. When nobody is stepping, the hook checks a flag and returns immediately.
 - Tests of the hook and stepper: `Poly.Tests/Interpretation/VmDebuggerTests.cs`.
 
@@ -104,7 +104,7 @@ Secondary context only (naming, not a source of principles): `docs/decisions/202
 
 **Observation:** The C# that Poly prints for a customer (entity classes, `{Domain}DbContext.cs`, `Program.cs`, `demo.http`) is generated output, not source kept in the repo. Changing it by hand changes only that copy; the next compile regenerates it from the domain.
 
-**Observation:** Some core files are large enough that editing them cold takes study, for example the emitter split across `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` and its partial files, and the lowering exporter split across `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` and its partial files.
+**Observation:** Some core files are large enough that editing them cold takes study, for example the emitter split across `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` and its partial files, and the lowering exporter split across `Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs` and its partial files.
 
 ---
 

@@ -1,6 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Tests.Interpretation;
 
@@ -15,7 +16,7 @@ public class InterpretResultIntegrationTests {
         // Pre-populate the heap with objects so handle 2 is a valid index.
         var node = new Add(new Constant(1), new Constant(1));
 
-        // Compile via standard pipeline (includes ValueRepresentationAnalysis)
+        // Compile via the standard pipeline; the root slot kind is recorded at emit.
         var program = Interpreter.Compile(node, CompilationMode.Normal);
 
         // Execute with heap pre-seeded so handle 2 would be a valid object reference.
@@ -86,8 +87,8 @@ public class InterpretResultIntegrationTests {
     }
 
     [Test]
-    public async Task NullConstant_ReturnsAsScalar() {
-        // Null constants are classified StackScalar (0L sentinel).
+    public async Task NullConstant_DecodesAsZero() {
+        // A null constant is the heap null sentinel; the scalar read of 0L stays supported.
         var node = new Constant(null);
 
         var program = Interpreter.Compile(node, CompilationMode.Normal);
@@ -99,7 +100,7 @@ public class InterpretResultIntegrationTests {
 
     [Test]
     public async Task StandardPipeline_SetsRootValueKind() {
-        // The standard pipeline always stamps ValueRepresentationMetadata,
+        // The standard pipeline records the root's slot kind at emit,
         // so VmProgram.RootValueKind must be set.
         var scalar = new Add(new Constant(1), new Constant(2));
         var progScalar = Interpreter.Compile(scalar, CompilationMode.Normal);

@@ -1,10 +1,12 @@
+using Poly.Interpretation.Vm.Abi;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Per-execution state for the Poly VM: value stack, heap,
 /// registers, program counter, debug hooks, and loop iteration limits.
 /// Created by <see cref="Interpreter.Execute"/> and exposed through
 /// <see cref="ExecutionResult.State"/> for inspection and resumption.</summary>
-/// <remarks>Owns a pooled <see cref="ValueStack"/> that must be disposed.
+/// <remarks>Owns a pooled <see cref="VmValueStack"/> and <see cref="VmManagedObjectHeap"/> that must be disposed.
 /// Use the <c>using</c> pattern: <c>using var result = Interpreter.Execute(program);</c></remarks>
 public sealed class VmState : IDisposable {
     /// <summary>The compiled program being executed.</summary>
@@ -12,7 +14,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>The pooled value stack for scalars and heap handles.
     /// Backed by <see cref="ArrayPool{long}"/>.</summary>
-    public ValueStack Stack { get; } = new();
+    public VmValueStack Stack { get; } = new();
 
     /// <summary>Current program counter (µop index) for debug/trace
     /// purposes. Updated by the compiled delegate in Debug/Normal mode.
@@ -31,39 +33,17 @@ public sealed class VmState : IDisposable {
 
     /// <summary>The VM heap for reference-type values.
     /// Uses a free-list to recycle handles of freed objects.</summary>
-    public Heap Heap { get; } = new();
+    public VmManagedObjectHeap Heap { get; } = new();
 
-    /// <summary>Optional trace writer for µop-level logging.
-    /// When set, the compiled delegate emits trace lines before each µop.
-    /// Null by default — zero overhead when null (single branch check).</summary>
-    public TextWriter? Trace { get; set; }
-
-    /// <summary>Debug interrupt callback.  When set, the compiled delegate
-    /// invokes this <em>before</em> each µop in Debug/Normal compilation mode,
-    /// with <see cref="ProgramCounter"/> set to the current PC.  The callback
-    /// can inspect state, set breakpoints externally, single-step, etc.</summary>
+    /// <summary>Legacy per-µop interrupt. The emitter does not invoke it; use
+    /// <see cref="DebugHook"/>. Kept for API compatibility.</summary>
     public Action<VmState>? DebugInterrupt { get; set; }
 
-    /// <summary>
-    /// Simplified debug hook invoked before each AST node in Debug/Normal compilation
-    /// mode (when non-null). Receives the current AST <see cref="Node"/>, a
-    /// <see cref="ReadOnlySpan{T}"/> over the current frame's local variables, and
-    /// the <see cref="Heap"/> instance.
-    ///
-    /// This is the preferred hook for new code — it's simpler than
-    /// <see cref="DebugInterrupt"/> (which passes the full <see cref="VmState"/>)
-    /// and has zero emitted overhead when null.
-    ///
-    /// The locals <see cref="ReadOnlySpan{T}"/> is built at compile time from the
-    /// frame model so no runtime iteration is needed.
-    /// </summary>
-    /// <summary>Simplified debug hook invoked before each AST node in
-    /// Debug/Normal compilation mode (when non-null). Receives the current
-    /// AST <see cref="Node"/>, a <see cref="ReadOnlySpan{T}"/> over the
-    /// current frame's local variables, and the <see cref="Heap"/> instance.
-    /// This is the preferred hook for new code — it's simpler than
-    /// <see cref="DebugInterrupt"/> and has zero emitted overhead when null.</summary>
-    public Action<Node, ReadOnlySpan<long>, Heap>? DebugHook { get; set; }
+    /// <summary>Invoked before each AST statement in Normal mode when non-null.
+    /// Receives the current <see cref="Node"/>, a <see cref="ReadOnlySpan{T}"/>
+    /// over the current frame's slots, and the <see cref="Heap"/>. The span is
+    /// built at compile time; the guard is a single null check.</summary>
+    public Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>? DebugHook { get; set; }
 
     /// <summary>Maximum number of loop iterations before the VM throws.
     /// Set to -1 (default) for unlimited iterations. Honored only in
@@ -97,7 +77,7 @@ public sealed class VmState : IDisposable {
     public NodeId? CurrentNodeId { get; set; }
 
     /// <summary>Creates a new VM execution state for the given program.
-    /// The state owns a pooled <see cref="ValueStack"/> and a
+    /// The state owns a pooled <see cref="VmValueStack"/> and a
     /// <see cref="Heap"/> — dispose when done to return pool buffers.</summary>
     /// <param name="program">The compiled program to execute.</param>
     public VmState(VmProgram program) {
@@ -146,5 +126,8 @@ public sealed class VmState : IDisposable {
     /// <summary>Releases the pooled value stack back to the
     /// <see cref="ArrayPool{long}"/>. After disposal,
     /// this state must not be used for execution.</summary>
-    public void Dispose() => Stack.Dispose();
+    public void Dispose() {
+        Stack.Dispose();
+        Heap.Dispose();
+    }
 }

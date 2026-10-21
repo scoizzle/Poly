@@ -26,6 +26,23 @@ public class HeapBoundsTests {
     }
 
     [Test]
+    public async Task Clear_ReusesTheBackingArray() {
+        var heap = new VmManagedObjectHeap();
+        var raw = heap.RawSlots;
+        heap.Allocate("x");
+        heap.Clear();
+        await Assert.That(ReferenceEquals(raw, heap.RawSlots)).IsTrue();
+    }
+
+    [Test]
+    public async Task Dispose_IsIdempotent() {
+        var heap = new VmManagedObjectHeap();
+        heap.Dispose();
+        heap.Dispose();
+        await Assert.That(heap.Count).IsEqualTo(1);
+    }
+
+    [Test]
     public async Task UnsafeSet_ThenUnsafeGet_RoundTrips() {
         var heap = new VmManagedObjectHeap();
         var handle = heap.Allocate("a");

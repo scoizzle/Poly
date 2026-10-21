@@ -17,7 +17,7 @@ delegates for fast execution via `AbiEmitter`.
 | `VmState.cs` | Per-execution state: stack, heap, frame, debug interrupt, loop limits |
 | `VmProgram.cs` | Compiled program record (delegate + max local depth) |
 | `VmValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |
-| `VmManagedObjectHeap.cs` | Object heap for reference-type values with free-list recycling |
+| `VmManagedObjectHeap.cs` | Pooled object heap for reference-type values with free-list recycling |
 | `CompilationMode.cs` | Debug vs. optimized mode enum |
 | `Ref.cs` (in `Poly/Introspection/CommonLanguageRuntime`) | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
 | `VmCall.cs` | The one call-frame protocol (2-word header, frame pointer, result slot) |
@@ -71,9 +71,10 @@ by doubling. All public members are aggressively inlined by the JIT. Key
 operations: `Push`, `Pop`, `Drop`, `Reserve`, `Reset`. Return to pool on `Dispose()`.
 
 ### `VmManagedObjectHeap`
-Contiguous object store indexed by handles. Handle 0 is the ABI null/falsy
-sentinel (never allocated). Free-list recycles handles of set-to-null objects.
-Grows by doubling. Methods: `Allocate`, `Get`, `Set`, `UnsafeGet`, `UnsafeSet`, `Clear`.
+Contiguous object store indexed by handles, rented from `ArrayPool<object?>.Shared`.
+Handle 0 is the ABI null/falsy sentinel (never allocated). Free-list recycles
+handles of set-to-null objects. Grows by doubling; `Dispose` returns the buffer
+cleared, so a short-lived execution allocates no heap buffer. Methods: `Allocate`, `Get`, `Set`, `UnsafeGet`, `UnsafeSet`, `Clear`.
 
 ### `VmDebugger`
 High-level step debugger:

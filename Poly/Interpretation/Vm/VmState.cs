@@ -6,7 +6,7 @@ namespace Poly.Interpretation.Vm;
 /// registers, program counter, debug hooks, and loop iteration limits.
 /// Created by <see cref="Interpreter.Execute"/> and exposed through
 /// <see cref="ExecutionResult.State"/> for inspection and resumption.</summary>
-/// <remarks>Owns a pooled <see cref="VmValueStack"/> that must be disposed.
+/// <remarks>Owns a pooled <see cref="VmValueStack"/> and <see cref="VmManagedObjectHeap"/> that must be disposed.
 /// Use the <c>using</c> pattern: <c>using var result = Interpreter.Execute(program);</c></remarks>
 public sealed class VmState : IDisposable {
     /// <summary>The compiled program being executed.</summary>
@@ -143,5 +143,8 @@ public sealed class VmState : IDisposable {
     /// <summary>Releases the pooled value stack back to the
     /// <see cref="ArrayPool{long}"/>. After disposal,
     /// this state must not be used for execution.</summary>
-    public void Dispose() => Stack.Dispose();
+    public void Dispose() {
+        Stack.Dispose();
+        Heap.Dispose();
+    }
 }

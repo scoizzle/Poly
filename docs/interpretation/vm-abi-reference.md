@@ -33,7 +33,9 @@ Reference-type values are stored in a contiguous `object?[]` array indexed by ha
 | 0 | Null/falsy sentinel (never allocated to a live object) |
 | 1..N | Valid heap handles |
 
-The heap uses a free-list to recycle handles when objects are set to null.
+The heap uses a free-list to recycle handles when objects are set to null. Its
+backing array is rented from `ArrayPool<object?>.Shared` and returned cleared on
+dispose, so short-lived executions do not allocate a heap buffer.
 
 ## Call Frame Layout
 

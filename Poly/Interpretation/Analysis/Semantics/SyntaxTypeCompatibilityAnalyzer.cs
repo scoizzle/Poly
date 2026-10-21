@@ -25,7 +25,7 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 ///
 /// Compatibility is checked at the CLR-type-category level. Unknown and null operands
 /// are skipped (the property bag is loosely typed; null comparisons are supported), and
-/// enum operands accept string constants (runtime stores enum values as strings).
+/// enum operands accept the enum's name as text.
 /// </summary>
 internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public const string Id = "SyntaxTypeCompatibility";
@@ -127,36 +127,55 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"cannot convert each element of type '{element.Name}' to the loop variable type '{declared.Name}'");
     }
 
-    /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs a per-item conversion
-    /// from the element type to <c>V</c>. Only types that live in a scalar slot are supported
-    /// (converted in slot space); a value element with a reference loop type, or a reference
-    /// element with a different reference loop type, fails closed. <c>decimal</c>/<c>IntPtr</c>
-    /// are <see cref="Cat.Number"/> but not slot scalars, so they are rejected too.</summary>
-    private static bool CanConvert(Type from, Type to) {
+    /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs an implicit
+    /// conversion from the element type to <c>V</c>, as in C#.</summary>
+    private static bool CanConvert(Type from, Type to) => IsImplicitlyConvertible(from, to);
+
+    /// <summary>True when C# converts <paramref name="from"/> to <paramref name="to"/>
+    /// implicitly: identity, reference/boxing, nullable lifting, or a built-in numeric
+    /// conversion. This is a language rule, not a storage rule.</summary>
+    private static bool IsImplicitlyConvertible(Type from, Type to) {
         if (from == to)
             return true;
-        return IsScalarSlot(from) && IsScalarSlot(to);
+        if (Nullable.GetUnderlyingType(to) is { } targetUnderlying) {
+            if (from == targetUnderlying)
+                return true;
+            if (Nullable.GetUnderlyingType(from) is { } sourceUnderlying)
+                return IsImplicitNumeric(sourceUnderlying, targetUnderlying);
+            return IsImplicitNumeric(from, targetUnderlying);
+        }
+        if (Nullable.GetUnderlyingType(from) is not null)
+            return false;
+        if (to.IsAssignableFrom(from))
+            return true;
+        return IsImplicitNumeric(from, to);
     }
 
-    private static bool IsScalarSlot(Type t) => IsInlineWord(Nullable.GetUnderlyingType(t) ?? t);
-
-    /// <summary>True for a CLR type the ring stores as an inline word. This is a
-    /// type fact, kept local so analysis does not reach into the VM codec.</summary>
-    private static bool IsInlineWord(Type t) =>
-        t.IsEnum || t == typeof(bool) || t == typeof(char)
-        || t == typeof(long) || t == typeof(int) || t == typeof(short)
-        || t == typeof(byte) || t == typeof(sbyte) || t == typeof(ushort)
-        || t == typeof(uint) || t == typeof(ulong)
-        || t == typeof(float) || t == typeof(double);
-
-    /// <summary>Analyze-time slot class for a write. A nullable or non-inline value
-    /// type is a heap handle; an inline word is a scalar; a missing type is Unknown;
-    /// <c>void</c> yields no value at all.</summary>
-    private static SlotClass ClassOf(Type? type) {
-        if (type == typeof(void)) return SlotClass.Void;
-        if (type is null) return SlotClass.Unknown;
-        if (Nullable.GetUnderlyingType(type) is not null) return SlotClass.Heap;
-        return type.IsValueType && IsInlineWord(type) ? SlotClass.Scalar : SlotClass.Heap;
+    private static bool IsImplicitNumeric(Type from, Type to) {
+        if (from.IsEnum || to.IsEnum || from.IsPointer || to.IsPointer)
+            return false;
+        return (Type.GetTypeCode(from), Type.GetTypeCode(to)) switch {
+            (TypeCode.SByte, TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Byte, TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32
+                or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int16, TypeCode.Int32 or TypeCode.Int64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.UInt16, TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64
+                or TypeCode.UInt64 or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int32, TypeCode.Int64 or TypeCode.Single or TypeCode.Double
+                or TypeCode.Decimal) => true,
+            (TypeCode.UInt32, TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
+                or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.UInt64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Char, TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32
+                or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
+                or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Single, TypeCode.Double) => true,
+            _ => false,
+        };
     }
 
 
@@ -507,22 +526,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return variable;
     }
 
-    /// <summary>
-    /// True for the numeric types a slot can hold directly. Scalar numeric writes share
-    /// one slot encoding (all <c>long</c>), so int↔long writes are fine; only a scalar
-    /// widening into an IEEE slot needs a conversion, which the emitter performs.
-    /// </summary>
-    private static bool IsNumericType(Type? type) =>
-        type is not null && NumericWidenRank(Type.GetTypeCode(type)) is not null;
-
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
         var binding = BindingOf(context, variable);
-        // A null literal is the heap null sentinel with no value type: assignable to
-        // a reference or nullable prior, rejected for a scalar slot.
         var isNullLiteral = assignment.Value is Constant { Value: null };
         var rhsType = isNullLiteral ? null : ClrTypeOf(context, assignment.Value);
-        var rhsClass = isNullLiteral ? SlotClass.Heap : ClassOf(rhsType);
-        if (rhsClass is SlotClass.Void) {
+        if (rhsType == typeof(void)) {
             Report(context, assignment,
                 $"cannot assign void to variable '{variable.Name}'");
             return;
@@ -534,90 +542,58 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (prior is null
             && binding is Parameter parameter
             && context.GetResolvedType(parameter)?.GetRuntimeType() is { } parameterType) {
-            prior = new VariableAssignedTypeMetadata(parameterType, ClassOf(parameterType));
+            prior = new VariableAssignedTypeMetadata(parameterType);
         }
-        if (rhsClass is SlotClass.Unknown) {
-            if (prior is null)
-                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null, SlotClass.Unknown));
-            else if (prior.Class is not SlotClass.Unknown)
+
+        // A null literal has no type; it is assignable to a reference or nullable prior.
+        if (isNullLiteral) {
+            if (prior?.ClrType is { } nullTarget
+                && nullTarget.IsValueType
+                && Nullable.GetUnderlyingType(nullTarget) is null) {
                 Report(context, assignment,
-                    $"cannot assign '{TypeLabel(rhsType, rhsClass)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Class)}')");
+                    $"cannot assign 'null' to variable '{variable.Name}' (incompatible with prior '{nullTarget.Name}')");
+            }
             return;
         }
 
-        if (rhsType is not null && CategoryOf(rhsType) is Cat.Null)
+        if (rhsType is null) {
+            if (prior is null)
+                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null));
+            else
+                Report(context, assignment,
+                    $"cannot assign an unresolved value to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType)}')");
             return;
+        }
 
         if (prior is null) {
-            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType, rhsClass));
+            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType));
             return;
         }
 
-        // Scalar numeric writes share one slot encoding (all `long`), so int↔long are
-        // fine by construction; a decimal/nullable/reference write does not share the
-        // scalar slot, and the IEEE-slot widening exemption is further down.
-        if (prior.Class != rhsClass) {
+        var priorType = prior.ClrType;
+        if (priorType is null) {
             Report(context, assignment,
-                $"cannot assign '{TypeLabel(rhsType, rhsClass)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Class)}')");
+                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with a prior write that has no resolved type)");
             return;
         }
-
-        if (prior.ClrType is null || rhsType is null || prior.ClrType == rhsType)
+        if (priorType == rhsType)
             return;
 
-        // char promotes implicitly to a wider numeric prior, as in C# — but only to
-        // ushort/int/uint/long/ulong. `byte`/`sbyte`/`short` would truncate (C# rejects
-        // them), and float/double take the IEEE branch below (which fails closed when the
-        // destination is captured, because the capture store does not coerce).
-        if (rhsType == typeof(char)
-            && prior.ClrType is { } priorType
-            && (priorType == typeof(ushort) || priorType == typeof(int) || priorType == typeof(uint)
-                || priorType == typeof(long) || priorType == typeof(ulong)))
-            return;
-
-        var destDef = context.TypeDefinitions.GetTypeDefinition(prior.ClrType);
+        var destDef = context.TypeDefinitions.GetTypeDefinition(priorType);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
-            RewriteAssignmentConversion(context, assignment, destDef, srcDef);
+        bool convertible = IsImplicitlyConvertible(rhsType, priorType)
+            || (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef));
+        if (convertible) {
+            if (destDef is not null && srcDef is not null)
+                RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
         }
 
-        if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
-            // A scalar widening into an IEEE slot is legal and converted on store
-            // (`double x = 1; x = 2;`). The reverse (double → scalar) truncates where
-            // C# rejects it, so it stays rejected. Scalar↔scalar writes are all the
-            // same slot encoding and were always allowed.
-            //
-            // The conversion happens only on the plain variable store. A captured
-            // variable is written through its closure cell, which the emitter does not
-            // coerce, so the widening there would store the raw scalar and mis-read it
-            // later; fail closed instead of accepting it.
-            if (IsIeeeScalar(prior.ClrType) && IsNumericType(rhsType) && !IsCaptured(context, variable))
-                return;
-            Report(context, assignment,
-                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
-            return;
-        }
-
-        var pc = CategoryOf(prior.ClrType);
-        var rc = CategoryOf(rhsType);
-        if (pc is Cat.Unknown || rc is Cat.Unknown || !Compatible(pc, prior.ClrType, rc, rhsType, destThenSource: true)) {
-            Report(context, assignment,
-                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
-        }
+        Report(context, assignment,
+            $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{priorType.Name}')");
     }
 
-    private static string TypeLabel(Type? type, SlotClass slot) =>
-        type?.Name ?? slot.ToString();
-
-    /// <summary>True when the assignment destination is a captured binding: its writes
-    /// go through a closure cell, which the emitter stores without a representation
-    /// conversion (only the plain variable path coerces).</summary>
-    private static bool IsCaptured(AnalysisContext context, Variable variable) =>
-        context.GetMetadata<VariableAnalysisMetadata>(variable)?.CapturedVariables.Contains(variable) == true;
-
-    private static bool IsIeeeScalar(Type type) =>
-        type == typeof(float) || type == typeof(double);
+    private static string TypeLabel(Type? type) => type?.Name ?? "unknown";
 
     private void CheckAssign(AnalysisContext context, Assignment assignment, Member destination) {
         var target = ClrTypeOf(context, destination);
@@ -815,7 +791,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
         if (parts.Count <= 4) {
             // A part that is not a string takes the object overload; the emitter boxes the
-            // scalar into the object argument (`"a" + x`, `x` an int).
+            // integer into the object argument (`"a" + x`, `x` an int).
             var objectDef = context.TypeDefinitions.GetTypeDefinition(typeof(object)) ?? stringDef;
             var argTypes = parts
                 .Select(p => ClrTypeOf(context, p) == typeof(string) ? stringDef : objectDef)
@@ -1109,10 +1085,5 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 }
 
 /// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.
-/// Later writes must be slot-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
-internal enum SlotClass { Void, Scalar, Heap, Unknown }
-
-internal sealed record VariableAssignedTypeMetadata(
-    Type? ClrType,
-    SlotClass Class
-) : IAnalysisMetadata;
+/// Later writes must be type-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
+internal sealed record VariableAssignedTypeMetadata(Type? ClrType) : IAnalysisMetadata;

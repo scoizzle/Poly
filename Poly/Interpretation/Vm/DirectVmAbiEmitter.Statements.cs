@@ -94,7 +94,10 @@ public static partial class DirectVmAbiEmitter {
         if (ctx.TryGetCapture(destVar, out int capIndex)) {
             var ring = ctx.OpenRing();
             int valSlot = ring.Add(CompileNode(a.Value, ctx));
-            var store = Assign(EmitCaptureCellValue(ctx, capIndex), ctx.RingVar(valSlot));
+            // A capture cell stores the destination's slot shape, so the same coercion
+            // as a plain store applies here (e.g. an int written to a captured double).
+            var store = Assign(EmitCaptureCellValue(ctx, capIndex),
+                CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(valSlot)));
             return ring.Then(store);
         }
 

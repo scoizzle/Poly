@@ -460,7 +460,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             // A write to a bound local takes the declaration's type; the use projects
             // through the binding. Only the declaration's own initializer stamps the
             // declared shape.
-            if (valueType != null && !IsBoundUse(context, variable))
+            // The declaration's type is its initializer's type. A later write to the
+            // same binding projects through the resolved declaration; it must not
+            // overwrite the declared shape with the value it happens to store.
+            if (valueType != null && !IsBoundUse(context, variable)
+                && context.GetResolvedType(variable) is null)
                 context.SetResolvedType(variable, valueType);
             if (assignment.Value is Lambda assignedLambda)
                 context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
@@ -563,8 +567,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var otherwise = DominatingReturnValue(context, ifStatement.ElseBranch);
         if (then is null || otherwise is null)
             return null;
-        // Both arms yield; only one slot kind can describe the block, so the arms
-        // must agree. Differing arms have no single runtime representation.
+        // Both arms yield; only one value type can describe the block, so the arms
+        // must agree. Differing arms have no single type.
         var thenType = ResolveNodeType(context, then)?.GetRuntimeType();
         var elseType = ResolveNodeType(context, otherwise)?.GetRuntimeType();
         return Equals(thenType, elseType) ? then : null;
@@ -696,8 +700,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     }
 }
 
-/// <summary>The node holds or produces a stored <see cref="Lambda"/> (closure handle).
-/// Invoke uses the lambda body type; the binding itself is a heap ref.</summary>
+/// <summary>The node holds or produces a stored <see cref="Lambda"/> (a delegate object).
+/// Invoke uses the lambda body type; the binding itself is a reference.</summary>
 internal sealed record StoredLambdaMetadata(Lambda Lambda) : IAnalysisMetadata;
 
 /// <summary>

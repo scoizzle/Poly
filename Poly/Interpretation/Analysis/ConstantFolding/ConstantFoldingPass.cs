@@ -93,14 +93,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
             // Comparison operations
-            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x > y), parameterValues),
-            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x >= y), parameterValues),
-            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x < y), parameterValues),
-            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x <= y), parameterValues),
+            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x > y), parameterValues),
+            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x >= y), parameterValues),
+            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x < y), parameterValues),
+            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x <= y), parameterValues),
 
-            // Equality operations — IEEE == for float/double (NaN != NaN), object.Equals otherwise.
-            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, IeeeEquals, parameterValues),
-            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !IeeeEquals(a, b), parameterValues),
+            // Equality operations — floating-point == for float/double (NaN != NaN), object.Equals otherwise.
+            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, FloatingEquals, parameterValues),
+            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !FloatingEquals(a, b), parameterValues),
 
             // Conditional with constant condition
             Conditional cond => FoldConditional(context, cond, parameterValues),
@@ -156,8 +156,8 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// the original type, and copy the resolved type onto the cast so
     /// downstream passes see consistent types.</summary>
     private static Node TypeMatchReplacement(Node original, Node replacement, AnalysisContext context) {
-        // A lowered non-constant node (shift, mask) performs the same runtime action
-        // as the original, so it carries the original's resolved type and emit can
+        // A lowered non-constant node (shift, mask) performs the same operation as
+        // the original, so it carries the original's resolved type and emit can
         // classify it from the type alone.
         if (replacement is not Constant) {
             // Identity folds return an operand that is already in the tree; stamping
@@ -701,7 +701,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         _ => null
     };
 
-    private static bool IeeeEquals(object? a, object? b) {
+    private static bool FloatingEquals(object? a, object? b) {
         if (a is not null && b is not null) {
             if ((a is double or float || b is double or float)
                 && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
@@ -728,7 +728,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
     }
 
-    private static bool IeeeCompare(object a, object b, Func<double, double, bool> op) {
+    private static bool FloatingCompare(object a, object b, Func<double, double, bool> op) {
         if (a is double or float || b is double or float) {
             if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
                 return op(da, db);

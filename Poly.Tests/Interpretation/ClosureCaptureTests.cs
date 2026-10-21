@@ -66,12 +66,9 @@ public class ClosureCaptureTests {
     }
 
     [Test]
-    public async Task Stored_DoubleCapture_AssignScalarInsideLambda_FailsClosed() {
-        // The captured variable is classified double, but a write from inside the
-        // closure goes through its capture cell, which the emitter stores without the
-        // scalar→IEEE conversion the plain path performs. Accepting that widening would
-        // store the raw scalar and mis-read it as a tiny double, so it is rejected:
-        // analysis must fail closed rather than emit a mis-executing program.
+    public async Task Stored_DoubleCapture_AssignScalarInsideLambda_ConvertsOnStore() {
+        // An int written to a captured double is an implicit conversion. The capture
+        // store performs the same slot coercion as a plain store, at emit.
         var captured = new Variable("captured");
         var fn = new Variable("fn");
         var node = new Block([
@@ -80,7 +77,8 @@ public class ClosureCaptureTests {
             new Invoke(fn),
             captured
         ], [captured, fn]);
-        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.0);
     }
 
     [Test]

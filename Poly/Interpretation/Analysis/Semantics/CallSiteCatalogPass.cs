@@ -107,7 +107,7 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     private void ProcessInvoke(AnalysisContext context, Invoke node, CallSiteCatalogState state) {
         var resolved = context.GetResolvedMember(node);
         if (resolved is ClrMethod clrMethod) {
-            // ArgCount includes instance receiver slot for instance methods,
+            // ArgCount includes the instance receiver position for instance methods,
             // matching the convention used by the direct emitter for CLR method calls.
             int argCount = clrMethod.MethodInfo.GetParameters().Length + (clrMethod.IsStatic ? 0 : 1);
             var entry = CreateEntry(

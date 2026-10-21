@@ -23,14 +23,14 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 ## Pass Ordering
 
-Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST-to-VM-ABI lowering; no primitive expansion. `Use*` registration **is** the run order.
+Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST lowering to the VM; no primitive expansion. `Use*` registration **is** the run order.
 
 ```
  1. TypeDefinitionNodeAnalyzer
- 2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
+ 2. ThisReferenceContext            (root this is legal as the first argument; TH0001 in static bodies)
  3. ScopeValidator                  (bindings; every use resolves to a declaration)
  4. TypeAndMemberResolver           (types projected from bindings)
- 5. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
+ 5. LambdaReturnTypeAnalyzer        (Invoke body type; a Lambda value is its delegate type)
  6. SideEffectAnalyzer
  7. ConstantFoldingPass
  8. JumpTargetAnalyzer

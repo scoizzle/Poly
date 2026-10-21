@@ -10,8 +10,9 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
         if (node is Invoke invoke) {
             ITypeDefinition? bodyType = invoke.Delegate switch {
                 Lambda invokedLambda => ResolveBodyType(context, invokedLambda.Body),
-                Variable or Parameter when context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate)
-                    is { } stored => ResolveBodyType(context, stored.Lambda.Body),
+                Variable or Parameter when StoredLambdaBinding.TryGet(
+                    context, invoke.Delegate, out var stored) && stored is not null
+                    => ResolveBodyType(context, stored.Lambda.Body),
                 _ => null
             };
             if (bodyType is not null) {

@@ -268,7 +268,8 @@ internal sealed class ValueRepresentationAnalyzer : INodeAnalyzer {
             return resolved;
         if (invoke.Delegate is Lambda lambda)
             return PropagateChild(context, lambda.Body);
-        if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored)
+        if (StoredLambdaBinding.TryGet(context, invoke.Delegate, out var stored)
+            && stored is not null)
             return PropagateChild(context, stored.Lambda.Body);
         if (invoke.Delegate is Member member
             && context.GetResolvedType(member.Value) is IClrTypeDefinition receiver) {

@@ -264,7 +264,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
         if (invoke.Delegate is Variable or Parameter) {
-            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored) {
+            if (StoredLambdaBinding.TryGet(context, invoke.Delegate, out var stored)
+                && stored is not null) {
                 CheckInvokeArity(context, invoke, stored.Lambda, allowZeroArgsAsSetArgs: false);
                 return;
             }
@@ -324,6 +325,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         AnalysisContext context, IParameter parameter, ITypeDefinition argType, Node arg) {
         var paramType = parameter.ParameterTypeDefinition;
         if (ReferenceEquals(paramType, argType) || paramType.IsAssignableFrom(argType))
+            return true;
+        var shape = arg as Lambda
+            ?? (StoredLambdaBinding.TryGet(context, arg, out var storedShape)
+                ? storedShape!.Lambda
+                : null);
+        if (shape is not null && MethodInvocationSemanticResolver.AcceptsLambdaArgument(context, shape, paramType))
             return true;
         if (IsNumericWidening(argType, paramType))
             return true;

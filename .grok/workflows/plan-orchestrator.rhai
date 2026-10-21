@@ -347,6 +347,7 @@ while iteration < max_iterations {
     impl_prompt += "- Prefer delete dual path over documenting it when the task allows.\n";
     impl_prompt += "- Fail closed when analysis is present and required metadata is missing.\n";
     impl_prompt += "- Stay inside this task's acceptance criteria only.\n";
+    impl_prompt += "- Test-first: write the failing test and run it red before the fix; put the red command/output and the green run in tests_run.\n";
     impl_prompt += "- Run the smallest relevant build/tests; put commands in tests_run.\n";
     impl_prompt += "- Use tools; do not claim success without evidence.\n";
     impl_prompt += "- If blocked, success=false and list blockers.\n";
@@ -380,11 +381,13 @@ while iteration < max_iterations {
     verify_prompt += "Adversarial verifier for task " + o.task_id + " (" + o.task_file + ").\n";
     verify_prompt += "Read-only tools. Assume the code may be wrong.\n\n";
     verify_prompt += "Implementer success=" + im.success.to_string() + " summary: " + im.summary + "\n";
+    verify_prompt += "Implementer tests_run (red and green evidence): " + im.tests_run + "\n";
     verify_prompt += "Files (re-check with git status/diff yourself):\n";
     for f in im.files_changed {
         verify_prompt += "- " + f + "\n";
     }
     verify_prompt += "\nCheck task acceptance criteria. Fail closed on missing evidence.\n";
+    verify_prompt += "Test-first: fail closed for a behavior change with no red test command/output in tests_run.\n";
     verify_prompt += "Sibling-path: dual paths both correct or incomplete.\n";
     verify_prompt += "severity: none|nit|suggestion|bug|blocker\n";
 
@@ -418,6 +421,7 @@ while iteration < max_iterations {
     record_prompt += "Suite README: " + suite_readme + "\n";
     record_prompt += "Suite gate: " + suite_gate + "\n\n";
     record_prompt += "Implement success: " + im.success.to_string() + "\n";
+    record_prompt += "Implementer tests_run (red and green evidence): " + im.tests_run + "\n";
     record_prompt += "Verify pass: " + verify_pass.to_string() + "\n";
     if ver_out != () {
         record_prompt += "Verify severity: " + ver_out.severity + "\n";
@@ -429,7 +433,8 @@ while iteration < max_iterations {
     record_prompt += "3) Update suite README status table for this task: " + suite_readme + "\n";
     record_prompt += "4) Do NOT mark suite gate complete unless all product tasks are truly [x].\n";
     record_prompt += "5) next_task_id = first still-open product task after your edits (or empty if none).\n";
-    record_prompt += "6) Only edit this suite's task files.\n";
+    record_prompt += "6) The task's Log row records the red test command/output and the green run for behavior changes.\n";
+    record_prompt += "7) Only edit this suite's task files.\n";
     record_prompt += "Markdown only; no production code.\n";
 
     let rec = agent(record_prompt, #{

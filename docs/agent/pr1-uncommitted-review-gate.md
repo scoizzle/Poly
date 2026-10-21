@@ -4,16 +4,18 @@
 
 ## Objective
 
-Before marking a suite or slice "Done" (shipped), run the **uncommitted-change review loop**: review dirty files, categorize findings, harden with three-layer defense and fail-closed posture, re-review, and only ship when no dirty file of **this task** remains (other dirty files are named, not counted) and findings are resolved.
+Before marking a suite or slice "Done" (shipped), run the **uncommitted-change review loop**: review dirty files, categorize findings, **land each finding's reported failing test**, harden with three-layer defense and fail-closed posture, turn the test green with the smallest fix, re-review, and only ship when no dirty file of **this task** remains (other dirty files are named, not counted) and findings are resolved.
+
+Review is read-only: the repro test arrives in the review report and enters this tree at fix time. Every finding enters the loop as a red test. A finding that is not red is not actionable, and a finding that cannot be made red is `open (unproven)` and blocks.
 
 ## Origin
 
 The following loop was exercised live during E3b + Q3′ on branch `rewrite/domainmodeling-from-scratch`. It was codified here as a repeatable pre-commit gate.
 
 ```
-Review ──→ Findings ──→ Harden ──→ Re-review ──→ Ship
-  ↑                                               │
-  └────────────────── Loop ────────────────────────┘
+Review ──→ Red test ──→ Fix ──→ Green ──→ Re-review ──→ Ship
+  ↑                                                    │
+  └──────────────────── Loop ───────────────────────────┘
 ```
 
 ## Required Reading
@@ -64,6 +66,8 @@ or 🟠 is fixed in this gate even when its category is Edge case or Hygiene.
 | **Edge case** | Off-by-one, empty set, null input, zero match | Fix or note as known gap |
 | **Hygiene** | Dead code, stale comment, inconsistent naming | Fix if small; else file as follow-up |
 
+Each finding must already carry its repro from review: the test source verbatim in the review note, or a runnable check (`rg`, `git show`, probe) for docs/config/plan findings. A supplied but not-yet-executed test is `pending red` until this gate runs it. If neither a test nor a check exists, label it `open (unproven)` — it blocks ship and cannot be closed. The test enters this tree at fix time, not during review.
+
 ### Step 3 — Apply three-layer defense
 
 When fixing a **Contract** or **Structure** finding, verify all three enforcement layers:
@@ -76,12 +80,16 @@ When fixing a **Contract** or **Structure** finding, verify all three enforcemen
 
 **Fail-closed posture:** Empty sets, missing matches, and invalid configurations **fail loud** (throw / return error). Vacuous success (e.g. `all` on empty collection returning true) is **banned** unless explicitly documented as a design choice.
 
-### Step 4 — Apply fixes
+**Test-first is the layer underneath this table:** the red test must fail at the layer that should catch the defect. If analyze-time should reject it and the test only fails at runtime, the finding is not closed — move the oracle up.
+
+### Step 4 — Fix red → green
 
 For each finding:
-1. Write or tighten **one** test that demonstrates the failure (a doc or config finding gets a verified pointer to the line it concerns, recorded in the finding list)
-2. Change production code with the **smallest** fix that makes it pass (per §4)
-3. Under green, remove duplication and special cases
+1. Land the reviewer's test in the owning test project **verbatim** (test code only) and run it. It must fail the same way the review reported. If it passes or fails differently, the finding is invalid or unproven — do not rewrite the test to match current behavior.
+2. Capture the exact command and failure in the finding list.
+3. Change production code with the **smallest** fix that makes it pass (per §4).
+4. Re-run the named test, then the full suite. Under green, remove duplication and special cases.
+5. Keep the repro: never delete, skip, weaken, or retarget it to match current behavior. If its expectation was wrong, dispose the finding `invalid` explicitly.
 
 ### Step 5 — Re-review
 
@@ -89,6 +97,8 @@ After all fixes are applied, collect the fix delta with the same evidence as
 Step 1 (status, diff, and untracked files) and re-read it:
 
 - No 🔴 or 🟠 finding remains open.
+- Each closed finding names its green repro; nothing is closed on a code read alone.
+- During the loop, the only failing tests are the filed repros.
 - 🟡 findings should be resolved or explicitly filed as follow-ups under `docs/` (phenomenal §5.2); they are evidence, not admitted work.
 - Hygiene findings should be clean unless deferred with a note
 
@@ -100,7 +110,8 @@ finding.
 
 Only mark the suite/slice "Done" when:
 - [ ] The Step 1 evidence (status, diff, and the contents of every untracked file) shows no dirty file belonging to **this task**, and every other dirty file is itemized in the finding list with its category — a preserved pre-existing edit, drift from an earlier task, or named next-task work; no dirty file is left unnamed. A review note or follow-ups written for this gate belong to this task and are **committed before this box is checked**, not left dirty and itemized as someone else's
-- [ ] All 🔴 and 🟠 findings resolved
+- [ ] All 🔴 and 🟠 findings resolved, each with a named green repro test
+- [ ] No finding is `open (unproven)` or `pending red`; no repro was deleted, skipped, weakened, or retargeted
 - [ ] 🟡 findings filed or resolved — filed means under `docs/` (phenomenal §5.2), which is evidence, not admitted work
 - [ ] Hygiene clean or deferred with a doc note
 - [ ] `dotnet build` passes
@@ -109,13 +120,14 @@ Only mark the suite/slice "Done" when:
 ## Verification (of this process)
 
 - [ ] The checklist in Step 6 is complete before any "Done" marker
+- [ ] Every finding has a captured red → green transcript for its named test/check
 - [ ] Three-layer defense is verified for each contract finding
 - [ ] No vacuous success paths are left unaddressed
 
 ## Output
 
-- Findings list (written to agent summary or task notes)
-- Fix commits (one or more)
+- Findings list (written to agent summary or task notes), each with its red repro output
+- Fix commits (one or more) that turn those repros green
 - Re-review confirmation
 - A suite or slice ships only after it passes the Step 6 gate
 

@@ -160,10 +160,16 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             }
         }
         else if (declaringScope is ForLoop forLoop) {
+            // Only the initializer is a single unconditional write; the condition and
+            // increment run repeatedly, so a lambda written there is not quotable.
             if (forLoop.Initializer is { } initializer)
                 Visit(initializer, true);
+            if (forLoop.Condition is { } condition)
+                Visit(condition, false);
             if (forLoop.Body is { } body)
                 Visit(body, false);
+            if (forLoop.Increment is { } increment)
+                Visit(increment, false);
         }
         else {
             Visit(declaringScope, true);
@@ -769,10 +775,11 @@ internal static class StoredLambdaBinding {
     }
 
     /// <summary>True when the node's stored lambda is the AST value at that position,
-    /// so an <c>Expression&lt;D&gt;</c> can quote it.</summary>
+    /// so an <c>Expression&lt;D&gt;</c> can quote it. Only a local declaration qualifies:
+    /// a parameter has no write history, and a produced closure is a call result.</summary>
     public static bool IsQuotable(INodeMetadataProvider provider, Node node) {
         var binding = BindingOf(provider, node);
-        return binding is not Parameter
+        return binding is Variable
             && provider.GetMetadata<StoredLambdaMetadata>(binding) is not null
             && provider.GetMetadata<UnquotableStoredLambdaMetadata>(binding) is null;
     }
@@ -838,14 +845,20 @@ internal static class MethodInvocationSemanticResolver {
             .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
             .ToList();
         // A lambda argument's natural type is its Func/Action shape, not the
-        // delegate or Expression<D> the parameter declares. When ordinary type
-        // matching finds nothing, fall back to the lambda bridge's rule: a
-        // delegate-typed parameter accepts a lambda whose parameter list agrees.
-        if (matches.Count == 0 && methodInv.Arguments.Any(argument =>
-                argument is Lambda
-                || StoredLambdaBinding.TryGet(context, argument, out _)))
-            matches = FindLambdaDelegateOverloads(
+        // delegate or Expression<D> the parameter declares. Ordinary matching may
+        // find nothing, or may bind the lambda to a wider non-delegate parameter
+        // (object). The bridge's rule wins whenever the ordinary winner cannot take
+        // the lambda as a delegate whose parameter list agrees.
+        bool hasLambdaArgument = methodInv.Arguments.Any(argument =>
+            argument is Lambda || StoredLambdaBinding.TryGet(context, argument, out _));
+        if (hasLambdaArgument
+            && (matches.Count == 0
+                || !LambdaArgumentsAreDelegates(context, matches[0], methodInv.Arguments))) {
+            var bridged = FindLambdaDelegateOverloads(
                 context, targetType, memberAccess.MemberName, methodInv.Arguments).ToList();
+            if (bridged.Count > 0)
+                matches = bridged;
+        }
         // A type-name receiver (`Person.Create(name)`) binds the static factory.
         // An instance host job of the same arity stays for `this.Create(...)`.
         // When no static overload matches, the instance method remains so the
@@ -860,6 +873,24 @@ internal static class MethodInvocationSemanticResolver {
 
     private static bool IsTypeName(Node node) => node is
         NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+
+    /// <summary>True when every lambda-shaped argument of <paramref name="method"/> is
+    /// accepted by its parameter as a delegate or <c>Expression&lt;D&gt;</c>.</summary>
+    private static bool LambdaArgumentsAreDelegates(
+        AnalysisContext context, ITypeMethod method, IReadOnlyList<Node> arguments) {
+        var parameters = method.Parameters?.ToArray() ?? [];
+        for (int i = 0; i < arguments.Count && i < parameters.Length; i++) {
+            var shape = arguments[i] as Lambda
+                ?? (StoredLambdaBinding.TryGet(context, arguments[i], out var stored)
+                    ? stored!.Lambda
+                    : null);
+            if (shape is null)
+                continue;
+            if (!AcceptsLambdaArgument(context, shape, parameters[i].ParameterTypeDefinition))
+                return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// Best-scoring overload when one or more arguments are lambdas bound to a
@@ -903,6 +934,18 @@ internal static class MethodInvocationSemanticResolver {
         for (int i = 0; i < arguments.Count; i++) {
             var argument = arguments[i];
             var parameterType = parameters[i].ParameterTypeDefinition;
+            var shape = argument as Lambda
+                ?? (StoredLambdaBinding.TryGet(context, argument, out var argumentStored)
+                    ? argumentStored!.Lambda
+                    : null);
+            if (shape is not null) {
+                // A lambda's Func/Action type is not its meaning: only a delegate or
+                // Expression<D> parameter receives it, never a wider object parameter.
+                if (!AcceptsLambdaArgument(context, shape, parameterType))
+                    return null;
+                score += 2;
+                continue;
+            }
             var argumentType = context.GetResolvedType(argument);
             if (argumentType is not null
                 && (ReferenceEquals(parameterType, argumentType)
@@ -911,12 +954,6 @@ internal static class MethodInvocationSemanticResolver {
                     score++;
                 continue;
             }
-            var shape = argument as Lambda
-                ?? (StoredLambdaBinding.TryGet(context, argument, out var argumentStored)
-                    ? argumentStored!.Lambda
-                    : null);
-            if (shape is not null && AcceptsLambdaArgument(context, shape, parameterType))
-                score += 2;
             else
                 return null;
         }

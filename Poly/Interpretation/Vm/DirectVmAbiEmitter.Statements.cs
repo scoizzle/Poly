@@ -434,6 +434,15 @@ public static partial class DirectVmAbiEmitter {
         if (ctx.TryGetCapture(cap.Binding, out int capIndex))
             return Assign(cellVar, EmitCaptureCell(ctx, capIndex));
         if (cap.Variable is { } v) {
+            // A reader emits a Variable for a module parameter use; the bind pass
+            // links it to the Parameter, which is captured by value into a fresh cell.
+            if (ctx.BoundParameter(v) is { } bound) {
+                if (ctx.TryGetCapture(bound, out int boundCap))
+                    return Assign(cellVar, EmitCaptureCell(ctx, boundCap));
+                return Block(
+                    Assign(cellVar, NewArrayBounds(typeof(long), Constant(1))),
+                    Assign(ArrayAccess(cellVar, Constant(0)), ParameterValue(bound, ctx)));
+            }
             if (!ctx.IsCellBacked(v))
                 throw new InvalidOperationException(
                     $"VM compile rejected: captured variable '{v.Name}' has no upvalue cell.");

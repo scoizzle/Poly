@@ -396,18 +396,110 @@ public class LambdaBridgeVmTests {
     [Test]
     public async Task ForInitStoredLambda_SoleLambdaAtExpressionPosition_IsQuoted() {
         var declaration = new Variable("pred");
+        var result = new Variable("result");
         var x = new Parameter("x", TypeReference.To<int>());
         var predicate = new Lambda([x], new GreaterThan(x, new Constant(1L)));
         var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
         var loop = new ForLoop(
             new Assignment(declaration, predicate),
-            new Constant(false),
+            new Constant(true),
             null,
-            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred")),
+            new Block([
+                new Assignment(result, new Invoke(
+                    Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred"))),
+                new BreakStatement()
+            ]),
+            DeclaredVariables: [declaration]);
+        var node = new Block([loop, result], [result]);
+
+        // A sole for-init lambda is the AST value at that position, so it quotes and
+        // the query provider runs the tree (not a closure handle).
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
+    }
+
+    [Test]
+    public async Task ForInitStoredLambda_ReassignedInIncrement_IsNotQuoted() {
+        var declaration = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var first = new Lambda([x], new GreaterThan(x, new Constant(100L)));
+        var second = new Lambda([x], new GreaterThan(x, new Constant(1L)));
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var loop = new ForLoop(
+            new Assignment(declaration, first),
+            new Constant(true),
+            new Assignment(new Variable("pred"), second),
+            new Block([
+                new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred")),
+                new BreakStatement()
+            ]),
             DeclaredVariables: [declaration]);
 
-        // A sole for-init lambda is the AST value at that position, so it quotes.
-        _ = Interpreter.Compile(loop);
+        await Assert.That(() => Interpreter.Compile(loop))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("reassigned or conditional");
+    }
+
+
+    [Test]
+    public async Task Overload_ObjectVsExpression_PrefersTheExpressionParameter() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var predicate = new Lambda([x], new GreaterThan(x, new Constant(1L)));
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Which)), predicate)));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ProducedClosureAtExpressionPosition_Throws() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var producer = new Lambda([], new Lambda([x], new GreaterThan(x, new Constant(1L))));
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var node = new Invoke(
+            Probe(nameof(LambdaBridgeProbe.Any)), query, new Invoke(producer));
+
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("produced by an expression");
+    }
+
+    [Test]
+    public async Task ModuleLambdaForwardedThroughExpressionParameter_Throws() {
+        var pred = new Parameter(
+            "pred", TypeReference.To<System.Linq.Expressions.Expression<Func<int, bool>>>());
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var body = new Lambda([pred], new Invoke(
+            Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred")));
+        var x = new Parameter("x", TypeReference.To<int>());
+        var argument = new Lambda([x], new GreaterThan(x, new Constant(1L)));
+
+        await Assert.That(() => Interpreter.Compile(new Invoke(body, argument)))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("cannot be quoted");
+    }
+
+    [Test]
+    public async Task StoredLambda_CapturingParameter_QuotesFromTheParameter() {
+        var threshold = new Parameter("threshold", TypeReference.To<int>());
+        var pred = new Variable("pred");
+        var x = new Parameter("x", TypeReference.To<int>());
+        var query = new Invoke(Probe(nameof(LambdaBridgeProbe.InMemoryQuery)));
+        var body = new Block([
+            new Assignment(pred, new Lambda(
+                [x], new GreaterThan(x, new Variable("threshold")))),
+            new Invoke(Probe(nameof(LambdaBridgeProbe.Any)), query, new Variable("pred"))
+        ], [pred]);
+        var outer = new Lambda([threshold], body);
+
+        // 3 > threshold is false only when the quote reads the captured parameter;
+        // a dropped capture compares against 0 and would return true.
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(new Invoke(outer, new Constant(3L))));
+
+        await Assert.That(exec.GetValue<bool>()).IsFalse();
     }
 
 
@@ -434,6 +526,10 @@ public class LambdaBridgeVmTests {
             IQueryable<int> source,
             System.Linq.Expressions.Expression<Func<int, bool>> predicate) =>
             source.Any(predicate);
+
+        public static int Which(object value) => 0;
+
+        public static int Which(System.Linq.Expressions.Expression<Func<int, bool>> predicate) => 1;
 
         public static System.Linq.Expressions.Expression<Func<int, bool>> HostExpression() =>
             x => x > 1;

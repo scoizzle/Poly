@@ -38,13 +38,8 @@ public static partial class DirectVmAbiEmitter {
         prelude = Empty();
         callArgument = null!;
 
-        if (!DelegateShape.IsDelegateOrExpression(parameterType)) {
+        if (!DelegateShape.TryGet(parameterType, out var delegateType, out _))
             return false;
-        }
-        if (!DelegateShape.TryGet(parameterType, out var delegateType, out _)) {
-            throw new InvalidOperationException(
-                $"VM compile rejected: delegate shape '{parameterType}' is not supported by the lambda bridge.");
-        }
         if (delegateType.ContainsGenericParameters)
             throw new InvalidOperationException(
                 $"VM compile rejected: open generic delegate '{delegateType}' is not supported by the lambda bridge.");
@@ -75,8 +70,11 @@ public static partial class DirectVmAbiEmitter {
                 return false;
             if (stored is not null) {
                 if (!quotable) {
-                    throw new InvalidOperationException(
-                        $"VM compile rejected: lambda bound to a reassigned or conditional variable cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary.");
+                    bool forwarded = ctx.Analysis is { } bindingAnalysis
+                        && StoredLambdaBinding.BindingOf(bindingAnalysis, argument) is Parameter;
+                    throw new InvalidOperationException(forwarded
+                        ? $"VM compile rejected: a lambda forwarded through a parameter cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary or declare the forwarding parameter as '{parameterType.Name}'."
+                        : $"VM compile rejected: lambda bound to a reassigned or conditional variable cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary.");
                 }
                 if (!CapturesResolve(stored.Lambda, ctx)) {
                     throw new InvalidOperationException(
@@ -88,6 +86,12 @@ public static partial class DirectVmAbiEmitter {
                 throw new InvalidOperationException(
                     $"VM compile rejected: a lambda forwarded through a delegate parameter cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary or declare the forwarding parameter as '{parameterType.Name}'.");
             }
+            // A closure produced by a call is not the AST at this position either.
+            if (ctx.Analysis is { } producedAnalysis
+                && StoredLambdaBinding.TryGet(producedAnalysis, argument, out _)) {
+                throw new InvalidOperationException(
+                    $"VM compile rejected: a closure produced by an expression cannot be quoted for '{parameterType!.Name}'; pass the lambda at the Expression<> boundary.");
+            }
             // A real host Expression<D> object — a method or member result, or null —
             // is already the CLR value the parameter wants.
             return false;
@@ -96,6 +100,8 @@ public static partial class DirectVmAbiEmitter {
         if (hasStored) {
             if (stored is not null)
                 CheckDelegateShape(stored.Lambda, delegateType, invokeMethod, ctx);
+            else
+                CheckForwardedDelegateShape(invokeMethod);
             return BuildDelegateArgument(stored?.Lambda, handle, delegateType, invokeMethod, ctx, out prelude, out callArgument);
         }
 
@@ -124,6 +130,17 @@ public static partial class DirectVmAbiEmitter {
         }
     }
 
+    /// <summary>A forwarded delegate has no lambda AST to check, but a by-ref Invoke
+    /// signature still cannot be expressed, so reject it before building the parameter.</summary>
+    private static void CheckForwardedDelegateShape(MethodInfo invokeMethod) {
+        foreach (var parameter in invokeMethod.GetParameters()) {
+            if (parameter.ParameterType.IsByRef) {
+                throw new InvalidOperationException(
+                    $"VM compile rejected: delegate parameter '{parameter.Name}' is by-ref; the lambda bridge supports value parameters only.");
+            }
+        }
+    }
+
     private static bool IsExpressionBridgeParameter(Type? type) =>
         DelegateShape.IsExpressionOfDelegate(type, out _);
 
@@ -142,8 +159,12 @@ public static partial class DirectVmAbiEmitter {
         var analysis = ctx.Analysis;
         Node? binding = analysis is null ? null : StoredLambdaBinding.BindingOf(analysis, argument);
 
-        if (binding is not null
-            && analysis is not null
+        // A closure produced by a call is not a binding: its value is a fresh handle,
+        // so the normal compile path must evaluate the call.
+        if (binding is not (Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter))
+            return false;
+
+        if (analysis is not null
             && StoredLambdaBinding.TryGet(analysis, argument, out var bindingMetadata)
             && bindingMetadata is not null) {
             stored = bindingMetadata;
@@ -155,9 +176,16 @@ public static partial class DirectVmAbiEmitter {
         // A reader emits a Variable for a module parameter use. Resolve the parameter
         // through the bind pass first; the name is a fallback for an unbound use.
         if (argument is Variable use) {
-            if (ctx.BoundParameter(use) is { } boundParameter
-                && TryReadParameter(boundParameter, ctx, out handle))
-                return true;
+            if (ctx.BoundParameter(use) is { } boundParameter) {
+                if (ctx.TryGetCapture(use, out int captureIndex)) {
+                    handle = EmitCaptureCellValue(ctx, captureIndex);
+                    return true;
+                }
+                if (TryReadParameter(boundParameter, ctx, out handle))
+                    return true;
+                throw new InvalidOperationException(
+                    $"VM compile rejected: bound parameter '{boundParameter.Name}' is not in any scope here.");
+            }
             if (ctx.TryGetInlineParameter(use.Name, out int ringSlot)) {
                 handle = ctx.RingVar(ringSlot);
                 return true;
@@ -194,6 +222,15 @@ public static partial class DirectVmAbiEmitter {
         return false;
     }
 
+    /// <summary>A reader emits a Variable for a module parameter use; the bind pass
+    /// links it to the Parameter, and the emitter can read that parameter's live slot
+    /// or capture cell by identity.</summary>
+    private static bool ParameterCaptureResolves(Variable use, AbiCtx ctx) =>
+        ctx.BoundParameter(use) is { } parameter
+        && (ctx.TryGetCapture(use, out _)
+            || ctx.TryGetInlineParameter(parameter, out _)
+            || ctx.TryGetParameterSlot(parameter, out _));
+
     /// <summary>Read a stored binding's current handle: its capture cell when this
     /// frame captured it, otherwise the variable/parameter slot.</summary>
     private static Expression ReadBindingValue(Node binding, AbiCtx ctx) => binding switch {
@@ -212,7 +249,8 @@ public static partial class DirectVmAbiEmitter {
     private static bool CapturesResolve(Lambda lambda, AbiCtx ctx) {
         foreach (var capture in FindBodyCaptures(lambda, ctx.Analysis)) {
             if (capture.Variable is { } variable) {
-                if (!ctx.IsDeclared(variable) && !ctx.TryGetCapture(variable, out _))
+                if (!ctx.IsDeclared(variable) && !ctx.TryGetCapture(variable, out _)
+                    && !ParameterCaptureResolves(variable, ctx))
                     return false;
             }
             else if (capture.Parameter is { } parameter) {
@@ -228,6 +266,10 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>True when the argument already carries the CLR value the parameter
     /// wants (`Expression&lt;D&gt;`), as a forwarded parameter or a host object.</summary>
     private static bool ArgumentAlreadyExpression(Node argument, Type parameterType, AbiCtx ctx) {
+        // A module closure's declared type is its delegate shape, not the Expression<D>
+        // the parameter wants; it must take the stored/forwarded path, never pass through.
+        if (ctx.Analysis is { } analysis && StoredLambdaBinding.TryGet(analysis, argument, out _))
+            return false;
         var resolved = argument switch {
             Variable v => ctx.Analysis?.GetResolvedType(v)?.GetRuntimeType(),
             Parameter p => ctx.Analysis?.GetResolvedType(p)?.GetRuntimeType(),

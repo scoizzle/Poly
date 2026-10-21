@@ -160,7 +160,10 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         // as the original, so it carries the original's resolved type and emit can
         // classify it from the type alone.
         if (replacement is not Constant) {
-            if (context.GetResolvedType(original) is { } originalType)
+            // Identity folds return an operand that is already in the tree; stamping
+            // the operation's type onto it would relabel a real value (0 + date).
+            if (context.GetResolvedType(original) is { } originalType
+                && !IsWithin(original, replacement))
                 context.SetResolvedType(replacement, originalType);
             return replacement;
         }
@@ -196,6 +199,18 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var cast = new TypeCast(replacement, new TypeReference(resolvedFullName));
         context.SetResolvedType(cast, resolvedType);
         return cast;
+    }
+
+    /// <summary>True when <paramref name="candidate"/> is the original node or one of
+    /// its descendants, i.e. an operand the fold kept rather than a new node.</summary>
+    private static bool IsWithin(Node root, Node candidate) {
+        if (ReferenceEquals(root, candidate))
+            return true;
+        foreach (var child in root.Children) {
+            if (child is not null && IsWithin(child, candidate))
+                return true;
+        }
+        return false;
     }
 
     private static bool IsPowerOf2(long n) => n > 0 && (n & (n - 1)) == 0;

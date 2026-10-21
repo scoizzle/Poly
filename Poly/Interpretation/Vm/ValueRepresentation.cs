@@ -56,7 +56,11 @@ internal static class ValueRepresentationClassifier {
             if (constant.Value is null)
                 return (ValueRepresentationKind.HeapRef, null);
             var valueType = constant.Value.GetType();
-            return (KindFor(valueType), valueType);
+            // Classify the slot the writer actually produces: TryInlineConstant is the
+            // constant encoder, and an enum constant is not inline there (it is boxed).
+            return (RingCodec.TryInlineConstant(constant.Value, out _)
+                ? ValueRepresentationKind.StackScalar
+                : ValueRepresentationKind.HeapRef, valueType);
         }
 
         var type = provider?.GetResolvedType(effective)?.GetRuntimeType()

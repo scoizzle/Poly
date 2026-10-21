@@ -36,9 +36,9 @@ Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_M
  8. JumpTargetAnalyzer
  9. ControlFlowAnalysisPass
 10. ExceptionRegionAnalyzer
-12. SyntaxTypeCompatibilityAnalyzer
-13. CallSiteCatalogAnalyzer
-14. DefiniteAssignmentAnalyzer
+11. SyntaxTypeCompatibilityAnalyzer
+12. CallSiteCatalogAnalyzer
+13. DefiniteAssignmentAnalyzer
 ```
 
 Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees still analyze.
@@ -49,7 +49,7 @@ Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees stil
 
 | Directory | Contents |
 |-----------|----------|
-| `Semantics/` | Type resolution, scoping, side-effect analysis, this-reference, jump targets, lambda returns, definite assignment, value representation, call site catalog, exception region analysis |
+| `Semantics/` | Type resolution, scoping, side-effect analysis, this-reference, jump targets, lambda returns, definite assignment, call site catalog, exception region analysis |
 | `ControlFlow/` | CFG construction, reachability, infinite-loop detection |
 | `ConstantFolding/` | Constant expression evaluation and algebraic simplification |
 

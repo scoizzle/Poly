@@ -16,9 +16,8 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 
 /// <summary>
 /// Validate pack on the lowered Syntax AST: operation type compatibility. The
-/// interpretation pipeline resolved types (TypeAndMemberResolver) and classified
-/// representations (ValueRepresentationAnalysis) but never rejected incompatible
-/// operations — a Text member compared to a Number constant, a bool in arithmetic,
+/// interpretation pipeline resolved types (TypeAndMemberResolver) but never
+/// rejected incompatible operations — a Text member compared to a Number constant, a bool in arithmetic,
 /// a non-Boolean operand to <c>not</c>. The VM then silently coerced garbage, and the
 /// C# export failed at compile. This pass reports the class at VM-compile time, so the
 /// runtime fails loud even for programmatically-constructed or MCP-driven expressions
@@ -740,7 +739,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         ITypeDefinition srcDef) {
         if (TryConversionInvoke(context, assignment.Value, destDef, srcDef, implicitOnly: true) is not { } converted)
             return;
-        Replace(context, assignment, assignment with { Value = converted });
+        var rewritten = assignment with { Value = converted };
+        context.SetResolvedType(rewritten, destDef);
+        Replace(context, assignment, rewritten);
     }
 
     private static bool RewriteOperatorConversion(

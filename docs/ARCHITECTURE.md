@@ -248,7 +248,6 @@ Invoke: resolved CLR `MethodInfo` is `Expression.Call`; unresolved `Invoke(Membe
 |---|---|---|
 | `TypeResolutionMetadata` | TypeAndMemberResolutionPass | Member/array/ctor type checks |
 | `MemberResolutionMetadata` | TypeAndMemberResolutionPass | CLR `MethodInfo` / property / ctor when present; otherwise `InvokeNamed` |
-
 | `NodeReplacementMetadata` | Any pass | Substitute folded/desugared nodes |
 
 Do not patch the ABI for one scenario — fix upstream (lower / analyze / replace). Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`).

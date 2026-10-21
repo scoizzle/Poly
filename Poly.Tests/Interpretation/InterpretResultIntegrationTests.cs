@@ -86,8 +86,8 @@ public class InterpretResultIntegrationTests {
     }
 
     [Test]
-    public async Task NullConstant_ReturnsAsScalar() {
-        // Null constants are classified StackScalar (0L sentinel).
+    public async Task NullConstant_DecodesAsZero() {
+        // A null constant is the heap null sentinel; the scalar read of 0L stays supported.
         var node = new Constant(null);
 
         var program = Interpreter.Compile(node, CompilationMode.Normal);

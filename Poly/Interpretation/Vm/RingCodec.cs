@@ -131,39 +131,47 @@ internal static class RingCodec {
     }
 
     /// <summary>Read a ring slot as a CLR value of <paramref name="targetType"/>.
-    /// A scalar reaching an <c>object</c> parameter is boxed by its source type,
-    /// never mistaken for a heap handle.</summary>
+    /// The source's slot kind decides: a heap handle is dereferenced (then unboxed
+    /// for a value-type target), a scalar reaching <c>object</c> is boxed by its
+    /// source type, and a scalar reaching a value type is converted in place.</summary>
     public static Expression ToClr(
         Expression ringVal, Type targetType, Node? source, AnalysisResult? analysis, Expression heap) {
+        var (sourceKind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
+        var dereferenced = Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int)));
+
         if (targetType == typeof(double) || targetType == typeof(float)) {
-            var srcType = ValueRepresentationClassifier.ClrTypeOf(analysis, source);
-            if (srcType is not null && IsIeee(srcType))
+            if (sourceKind is ValueRepresentationKind.HeapRef)
+                return Convert(dereferenced, targetType);
+            if (sourceClr is not null && IsIeee(sourceClr))
                 return Convert(Call(BitConverterInt64BitsToDouble, ringVal), targetType);
             return Convert(ringVal, targetType);
         }
-        if (targetType == typeof(bool))
+        if (targetType == typeof(bool)) {
+            if (sourceKind is ValueRepresentationKind.HeapRef)
+                return Convert(dereferenced, targetType);
             return NotEqual(ringVal, Constant(0L));
+        }
+        // A heap handle must be dereferenced before any target conversion: an enum
+        // constant, a nullable, or a non-inline value type lives on the heap even
+        // though its CLR type is a value type.
+        if (sourceKind is ValueRepresentationKind.HeapRef) {
+            return targetType == typeof(object)
+                ? dereferenced
+                : Convert(dereferenced, targetType);
+        }
         if (targetType.IsValueType && IsInline(targetType))
             return Convert(ringVal, targetType);
-        // A *scalar* argument reaching an `object` parameter must be boxed — its ring
-        // slot holds the raw value, not a handle. Anything else (a reference, or a
-        // value type that is a heap handle such as DateOnly/DateTime/decimal/nullable)
-        // is a handle and is dereferenced. The test is the argument's representation
-        // kind, not `IsValueType`: `int?` is a value type but its slot is a handle.
-        if (targetType == typeof(object) && source is not null) {
-            var (kind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
-            if (kind is ValueRepresentationKind.StackScalar) {
-                if (sourceClr is not null) {
-                    Expression scalar = IsIeee(sourceClr)
-                        ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
-                        : sourceClr == typeof(bool)
-                            ? NotEqual(ringVal, Constant(0L))
-                            : Convert(ringVal, sourceClr);
-                    return Convert(scalar, typeof(object));
-                }
-            }
+        // A scalar reaching an `object` parameter is boxed by its source type, never
+        // mistaken for a handle.
+        if (targetType == typeof(object) && source is not null && sourceClr is not null) {
+            Expression scalar = IsIeee(sourceClr)
+                ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
+                : sourceClr == typeof(bool)
+                    ? NotEqual(ringVal, Constant(0L))
+                    : Convert(ringVal, sourceClr);
+            return Convert(scalar, typeof(object));
         }
-        return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
+        return Convert(dereferenced, targetType);
     }
 
     /// <summary>Allocate a value on the heap and return its ring handle. Use for

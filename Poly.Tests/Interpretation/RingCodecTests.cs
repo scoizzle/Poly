@@ -66,14 +66,17 @@ public class RingCodecTests {
         await Assert.That(RingCodec.KindFor(typeof(int[]))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
+    private static ValueRepresentationKind ConstantKind(object? value) =>
+        ValueRepresentationClassifier.KindOf(null, new Constant(value));
+
     [Test]
-    public async Task KindFor_Constant_MatchesStoredSlot() {
-        await Assert.That(RingCodec.KindFor((object?)true)).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.KindFor((object?)1.5)).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.KindFor((object?)7L)).IsEqualTo(ValueRepresentationKind.StackScalar);
+    public async Task Constant_ClassifiesAsTheSlotTheWriterProduces() {
+        await Assert.That(ConstantKind(true)).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ConstantKind(1.5)).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ConstantKind(7L)).IsEqualTo(ValueRepresentationKind.StackScalar);
         // An enum constant is boxed by the emitter, not folded to an inline slot.
-        await Assert.That(RingCodec.KindFor((object?)DayOfWeek.Monday)).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.KindFor((object?)null)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ConstantKind(DayOfWeek.Monday)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ConstantKind(null)).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     [Test]

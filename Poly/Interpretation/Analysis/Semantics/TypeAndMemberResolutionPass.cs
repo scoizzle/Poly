@@ -135,7 +135,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveNodeType(context, bn.Operand),
-            PopCount pc => ResolveNodeType(context, pc.Operand),
+            PopCount => context.TypeDefinitions.GetTypeDefinition(typeof(int)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
             SwitchStatement swt => swt.Cases.Count > 0
@@ -508,10 +508,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (block.Nodes.Count == 0)
             return null;
         // A dominating valued return is what the emitter leaves, even when a later
-        // non-void tail is unreachable.
+        // non-void tail is unreachable. Prefer the unconditional return itself over
+        // the first return found in preorder (an earlier if-branch).
+        var dominantReturn = DominatingReturnValue(block);
+        if (dominantReturn is not null)
+            return ResolveNodeType(context, dominantReturn);
         var fromReturn = FindValuedReturnType(context, block);
-        if (HasDominatingValuedReturn(block))
-            return fromReturn ?? ResolveNodeType(context, block.Nodes[^1]);
         var last = block.Nodes[^1];
         var lastType = ResolveNodeType(context, last);
         if (lastType is not null && !IsVoidYieldNode(last))
@@ -524,17 +526,18 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             : lastType;
     }
 
-    /// <summary>True when a valued <c>return</c> is an unconditional statement of
-    /// this block, or of an <c>if (true)</c> branch, so it always yields.</summary>
-    private static bool HasDominatingValuedReturn(Block block) {
+    /// <summary>The value of the return that always yields from this block: an
+    /// unconditional valued return, or a return inside an <c>if (true)</c> branch.
+    /// Null when no return dominates.</summary>
+    private static Node? DominatingReturnValue(Block block) {
         foreach (var statement in block.Nodes) {
-            if (statement is Return { Value: not null })
-                return true;
+            if (statement is Return { Value: { } value })
+                return value;
             if (statement is IfStatement { Condition: Constant { Value: true } } ifTrue
-                && FindReturnValueNode(ifTrue.ThenBranch) is not null)
-                return true;
+                && FindReturnValueNode(ifTrue.ThenBranch) is { } fromTrue)
+                return fromTrue;
         }
-        return false;
+        return null;
     }
 
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {
@@ -635,7 +638,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (body is not Block block || block.Nodes.Count == 0)
             return body;
         // A dominating valued return is the node the emitter yields.
-        if (HasDominatingValuedReturn(block) && FindReturnValueNode(block) is { } dominating)
+        if (DominatingReturnValue(block) is { } dominating)
             return dominating;
         var last = block.Nodes[^1];
         if (!IsVoidYieldNode(last))

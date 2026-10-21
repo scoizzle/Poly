@@ -120,8 +120,8 @@ Per-node metadata is scoped to that specific AST node.
 1. TypeDefinitionNode (when present) before This/TypeAndMember so AST types exist.
 2. Variable scoping before side-effect analysis.
 3. Jump targets before CFG construction.
-4. Constant folding before CFG; ValueRepresentation, definite assignment, and EH after CFG.
-5. LambdaReturnType after TypeAndMember so Invoke nodes have body types before value representation. SyntaxTypeCompatibility and CallSiteCatalog after ValueRepresentation.
+4. Constant folding before CFG; definite assignment and EH after CFG.
+5. LambdaReturnType after TypeAndMember so Invoke nodes have body types. SyntaxTypeCompatibility and CallSiteCatalog after the type passes.
 
 ---
 

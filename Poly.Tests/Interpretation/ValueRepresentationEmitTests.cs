@@ -86,6 +86,50 @@ public class ValueRepresentationEmitTests {
     }
 
     [Test]
+    public async Task NestedDominatingReturn_BeatsALaterDeadTail() {
+        var node = new Block([
+            new Block([new Return(new Constant(1L))]),
+            new Return(new Constant("miss"))
+        ]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, result));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task IfTrue_NestedConditionalReturn_YieldsTheUnconditionalReturn() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var node = new Block([
+            new IfStatement(new Constant(true), new Block([
+                new IfStatement(flag, new Return(new Constant("s"))),
+                new Return(new Constant(1))
+            ]))
+        ]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(node, result), s => s.SetArgs(false));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task NullableMember_PassedToMethod_IsTheValueNotTheHandle() {
+        var arg = new Parameter("box", TypeReference.To<NullableProbe.Box>());
+        var node = new Invoke(
+            new Member(new ClrTypeReference(typeof(NullableProbe)), nameof(NullableProbe.Id)),
+            new Member(arg, nameof(NullableProbe.Box.N)));
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(node, result), s => s.SetArgs(new NullableProbe.Box { N = 5 }));
+
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(5);
+    }
+
+    [Test]
     public async Task StatementTail_WithNoValuedReturn_IsVoid() {
         var node = new Block([new Constant(1), new Comment("tail")]);
         var result = Analyze(node);
@@ -150,4 +194,12 @@ public class ValueRepresentationEmitTests {
 
 public static class RepresentationProbe {
     public static int SeenAsObject(object value) => value is int i ? i : -1;
+}
+
+public static class NullableProbe {
+    public sealed class Box {
+        public int? N { get; set; }
+    }
+
+    public static int Id(int? value) => value ?? -1;
 }

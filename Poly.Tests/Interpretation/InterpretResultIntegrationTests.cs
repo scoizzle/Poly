@@ -15,7 +15,7 @@ public class InterpretResultIntegrationTests {
         // Pre-populate the heap with objects so handle 2 is a valid index.
         var node = new Add(new Constant(1), new Constant(1));
 
-        // Compile via standard pipeline (includes ValueRepresentationAnalysis)
+        // Compile via the standard pipeline; the root slot kind is recorded at emit.
         var program = Interpreter.Compile(node, CompilationMode.Normal);
 
         // Execute with heap pre-seeded so handle 2 would be a valid object reference.
@@ -99,7 +99,7 @@ public class InterpretResultIntegrationTests {
 
     [Test]
     public async Task StandardPipeline_SetsRootValueKind() {
-        // The standard pipeline always records the root's slot kind at emit,
+        // The standard pipeline records the root's slot kind at emit,
         // so VmProgram.RootValueKind must be set.
         var scalar = new Add(new Constant(1), new Constant(2));
         var progScalar = Interpreter.Compile(scalar, CompilationMode.Normal);

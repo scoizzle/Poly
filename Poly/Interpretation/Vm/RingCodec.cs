@@ -131,39 +131,24 @@ internal static class RingCodec {
     }
 
     /// <summary>Read a ring slot as a CLR value of <paramref name="targetType"/>.
-    /// The source's slot kind decides: a heap handle is dereferenced (then unboxed
-    /// for a value-type target), a scalar reaching <c>object</c> is boxed by its
-    /// source type, and a scalar reaching a value type is converted in place.</summary>
+    /// An inline target converts the slot in place; a scalar reaching <c>object</c>
+    /// is boxed by its source type; everything else is dereferenced as a handle.</summary>
     public static Expression ToClr(
         Expression ringVal, Type targetType, Node? source, AnalysisResult? analysis, Expression heap) {
         var (sourceKind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
-        var dereferenced = Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int)));
-
         if (targetType == typeof(double) || targetType == typeof(float)) {
-            if (sourceKind is ValueRepresentationKind.HeapRef)
-                return Convert(dereferenced, targetType);
             if (sourceClr is not null && IsIeee(sourceClr))
                 return Convert(Call(BitConverterInt64BitsToDouble, ringVal), targetType);
             return Convert(ringVal, targetType);
         }
-        if (targetType == typeof(bool)) {
-            if (sourceKind is ValueRepresentationKind.HeapRef)
-                return Convert(dereferenced, targetType);
+        if (targetType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
-        }
-        // A heap handle must be dereferenced before any target conversion: an enum
-        // constant, a nullable, or a non-inline value type lives on the heap even
-        // though its CLR type is a value type.
-        if (sourceKind is ValueRepresentationKind.HeapRef) {
-            return targetType == typeof(object)
-                ? dereferenced
-                : Convert(dereferenced, targetType);
-        }
         if (targetType.IsValueType && IsInline(targetType))
             return Convert(ringVal, targetType);
-        // A scalar reaching an `object` parameter is boxed by its source type, never
-        // mistaken for a handle.
-        if (targetType == typeof(object) && source is not null && sourceClr is not null) {
+        // A scalar reaching an `object` parameter is boxed by its source type. A heap
+        // source (an enum constant, a reference, a non-inline value type) is dereferenced.
+        if (targetType == typeof(object) && source is not null
+            && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null) {
             Expression scalar = IsIeee(sourceClr)
                 ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
                 : sourceClr == typeof(bool)
@@ -171,7 +156,7 @@ internal static class RingCodec {
                     : Convert(ringVal, sourceClr);
             return Convert(scalar, typeof(object));
         }
-        return Convert(dereferenced, targetType);
+        return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
     }
 
     /// <summary>Allocate a value on the heap and return its ring handle. Use for

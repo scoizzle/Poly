@@ -533,9 +533,20 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         foreach (var statement in block.Nodes) {
             if (statement is Return { Value: { } value })
                 return value;
-            if (statement is IfStatement { Condition: Constant { Value: true } } ifTrue
-                && FindReturnValueNode(ifTrue.ThenBranch) is { } fromTrue)
-                return fromTrue;
+            // A nested block or a try body runs unconditionally; look inside it before
+            // a later sibling can yield.
+            if (statement is Block nested && DominatingReturnValue(nested) is { } fromBlock)
+                return fromBlock;
+            if (statement is TryCatchFinally { TryBlock: Block tryBlock }
+                && DominatingReturnValue(tryBlock) is { } fromTry)
+                return fromTry;
+            if (statement is IfStatement { Condition: Constant { Value: true } } ifTrue) {
+                if (ifTrue.ThenBranch is Block thenBlock
+                    && DominatingReturnValue(thenBlock) is { } fromThen)
+                    return fromThen;
+                if (ifTrue.ThenBranch is Return { Value: { } fromDirect })
+                    return fromDirect;
+            }
         }
         return null;
     }

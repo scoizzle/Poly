@@ -59,7 +59,7 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 /// This enables portable (serializable) call references without embedding
 /// CLR <see cref="MethodInfo"/> directly in the IR.
 ///
-/// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
+/// Placement: after constant folding and type compatibility.
 /// </summary>
 internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     public const string Id = "CallSiteCatalog";

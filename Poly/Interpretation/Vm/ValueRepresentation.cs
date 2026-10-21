@@ -50,8 +50,8 @@ internal static class ValueRepresentationClassifier {
             return Classify(provider, tryCatch.TryBlock);
 
         // A constant carries its value, not a declared type (folding runs after the
-        // type pass). Enums and inline value types are scalar words; the rest are
-        // heap handles; null is the null sentinel.
+        // type pass). Its slot is whatever the constant encoder produces: an inline
+        // word, or a boxed heap handle (an enum is boxed today); null is the sentinel.
         if (effective is Constant constant) {
             if (constant.Value is null)
                 return (ValueRepresentationKind.HeapRef, null);

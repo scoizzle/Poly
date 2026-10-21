@@ -84,6 +84,23 @@ public static partial class AbiEmitter {
         AnalysisResult analysis,
         CompilationMode mode = CompilationMode.Normal,
         IReadOnlyList<Parameter>? rootParameters = null) {
+        var built = Build(root, analysis, mode, rootParameters);
+        var del = (Action<VmState>)built.Expression.Compile();
+        return new VmProgram(del, built.MaxRingDepth,
+            RootValueKind: built.RootValueKind,
+            RootClrType: built.RootClrType,
+            StepNodes: built.StepNodes, DebugInfo: built.DebugInfo,
+            RootParameterClrTypes: built.RootParameterClrTypes);
+    }
+
+    /// <summary>Build the program's <see cref="LambdaExpression"/> and metadata
+    /// without compiling it. <see cref="Emit"/> compiles this expression; tests and
+    /// the VM README inspect it to show the produced body.</summary>
+    internal static BuiltVmProgram Build(
+        Node root,
+        AnalysisResult analysis,
+        CompilationMode mode = CompilationMode.Normal,
+        IReadOnlyList<Parameter>? rootParameters = null) {
 
         var ctx = new Context();
         ctx.Mode = mode;
@@ -141,10 +158,8 @@ public static partial class AbiEmitter {
                 Constant(0))));
         body.Add(Assign(ctx.InstanceHandle, ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal)));
 
-        if (mode != CompilationMode.NoDebug) {
-            body.Add(Assign(ctx.ProgramCounter, Constant(0)));
+        if (mode != CompilationMode.NoDebug)
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
-        }
 
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         var rootExpr = CompileStatement(root, ctx);
@@ -167,15 +182,21 @@ public static partial class AbiEmitter {
 
         var (rootKind, rootClr) = ctx.RepresentationOf(root);
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
-        var del = delegateExpr.Compile();
-        int registerScratchSize = ctx.MaxRingDepth;
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
-        return new VmProgram(del, registerScratchSize,
-            RootValueKind: rootKind is ValueRepresentationKind.Unknown ? null : rootKind,
-            RootClrType: rootClr,
-            StepNodes: ctx.StepNodes, DebugInfo: debugInfo,
-            RootParameterClrTypes: ctx.RootParameterClrTypes);
+        return new BuiltVmProgram(delegateExpr, ctx.MaxRingDepth,
+            rootKind is ValueRepresentationKind.Unknown ? null : rootKind,
+            rootClr, ctx.StepNodes, debugInfo, ctx.RootParameterClrTypes);
     }
+
+    /// <summary>The expression and metadata produced by <see cref="Build"/>.</summary>
+    internal sealed record BuiltVmProgram(
+        LambdaExpression Expression,
+        int MaxRingDepth,
+        ValueRepresentationKind? RootValueKind,
+        Type? RootClrType,
+        IReadOnlyList<Node>? StepNodes,
+        VmDebugInfo DebugInfo,
+        IReadOnlyList<Type?>? RootParameterClrTypes);
 
     private static Expression CompileNode(Node node, Context ctx) {
         if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
@@ -194,12 +215,11 @@ public static partial class AbiEmitter {
             : New(ReadOnlySpanLongSliceCtor,
                 ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
         var invoke = Block(
+            Block(stores),
             Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(node)),
             Invoke(ctx.DebugHookProp, Constant(node), spanExpr, ctx.HeapLocal));
         return Block(
-            Block(stores),
-            IfThen(NotEqual(ctx.DebugHookProp,
-                Constant(null, typeof(Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>))),
+            IfThen(NotEqual(ctx.DebugHookProp, Constant(null, ctx.DebugHookProp.Type)),
                 invoke),
             body);
     }

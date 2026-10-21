@@ -145,6 +145,9 @@ public static partial class AbiEmitter {
         var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
+        // The block-exit snapshot is also what VmDebugger.GetLocals reads after
+        // execution, when no hook was ever attached, so it stays unconditional.
+        // Per-statement stores live inside the hook guard (CompileStatement).
         all.AddRange(stores);
         if (all.Count == 0) return Empty();
         return Block(all);

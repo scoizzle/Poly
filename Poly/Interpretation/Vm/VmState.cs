@@ -35,31 +35,14 @@ public sealed class VmState : IDisposable {
     /// Uses a free-list to recycle handles of freed objects.</summary>
     public VmManagedObjectHeap Heap { get; } = new();
 
-    /// <summary>Debug interrupt callback.  When set, the compiled delegate
-    /// invokes this <em>before</em> each µop in Debug/Normal compilation mode,
-    /// with <see cref="ProgramCounter"/> set to the current PC.  The callback
-    /// can inspect state, set breakpoints externally, single-step, etc.</summary>
+    /// <summary>Legacy per-µop interrupt. The emitter does not invoke it; use
+    /// <see cref="DebugHook"/>. Kept for API compatibility.</summary>
     public Action<VmState>? DebugInterrupt { get; set; }
 
-    /// <summary>
-    /// Simplified debug hook invoked before each AST node in Debug/Normal compilation
-    /// mode (when non-null). Receives the current AST <see cref="Node"/>, a
-    /// <see cref="ReadOnlySpan{T}"/> over the current frame's local variables, and
-    /// the <see cref="Heap"/> instance.
-    ///
-    /// This is the preferred hook for new code — it's simpler than
-    /// <see cref="DebugInterrupt"/> (which passes the full <see cref="VmState"/>)
-    /// and has zero emitted overhead when null.
-    ///
-    /// The locals <see cref="ReadOnlySpan{T}"/> is built at compile time from the
-    /// frame model so no runtime iteration is needed.
-    /// </summary>
-    /// <summary>Simplified debug hook invoked before each AST node in
-    /// Debug/Normal compilation mode (when non-null). Receives the current
-    /// AST <see cref="Node"/>, a <see cref="ReadOnlySpan{T}"/> over the
-    /// current frame's local variables, and the <see cref="Heap"/> instance.
-    /// This is the preferred hook for new code — it's simpler than
-    /// <see cref="DebugInterrupt"/> and has zero emitted overhead when null.</summary>
+    /// <summary>Invoked before each AST statement in Normal mode when non-null.
+    /// Receives the current <see cref="Node"/>, a <see cref="ReadOnlySpan{T}"/>
+    /// over the current frame's slots, and the <see cref="Heap"/>. The span is
+    /// built at compile time; the guard is a single null check.</summary>
     public Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>? DebugHook { get; set; }
 
     /// <summary>Maximum number of loop iterations before the VM throws.

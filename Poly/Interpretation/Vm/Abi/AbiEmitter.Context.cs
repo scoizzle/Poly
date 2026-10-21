@@ -24,8 +24,6 @@ public static partial class AbiEmitter {
             _regUsed = new bool[_registerCount];
             _stateParam = Parameter(typeof(VmState), "state");
             CurrentAstNodeExpr = Property(_stateParam, nameof(VmState.CurrentAstNode));
-            ProgramCounter = Variable(typeof(int), "_pc");
-            _locals.Add(ProgramCounter);
             SlotsLocal = Variable(typeof(long[]), "_slots");
             _locals.Add(SlotsLocal);
             HeapLocal = Variable(typeof(VmManagedObjectHeap), "_heap");
@@ -45,7 +43,6 @@ public static partial class AbiEmitter {
         }
 
         public ParameterExpression State => _stateParam;
-        public ParameterExpression ProgramCounter { get; }
         public ParameterExpression SlotsLocal { get; }
         public ParameterExpression HeapLocal { get; }
         public ParameterExpression FramePosLocal { get; }

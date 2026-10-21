@@ -95,10 +95,10 @@ indexed by eval-stack position.
 
 ## Compilation Modes
 
-| Mode | DebugHook | DebugInterrupt | PC Tracking | Use Case |
-|------|-----------|----------------|-------------|----------|
-| `Normal` | Active | Active | Active | Development, debugging, stepping |
-| `NoDebug` | Omitted | Omitted | Omitted | Production, benchmarks |
+| Mode | DebugHook | Resume dispatch | Use Case |
+|------|-----------|----------------|----------|
+| `Normal` | Active | Only when a `SuspendNode` registered a step | Development, debugging, stepping |
+| `NoDebug` | Omitted | Omitted | Production, benchmarks |
 
 In `NoDebug` mode, the emitted expression tree omits all debug checks,
 producing a smaller and faster delegate.
@@ -107,11 +107,11 @@ producing a smaller and faster delegate.
 
 | Hook | Call Frequency | Arguments | Overhead When Null |
 |------|---------------|-----------|-------------------|
-| `DebugInterrupt` | Every µop (Normal) | `VmState` | Single null check |
-| `DebugHook` | Every AST node (Normal) | `Node`, `ReadOnlySpan<long>`, `VmManagedObjectHeap` | Single null check |
+| `DebugHook` | Every AST statement (Normal) | `Node`, `ReadOnlySpan<long>`, `VmManagedObjectHeap` | Single null check |
 
-`DebugHook` is preferred — it provides symbolic AST context without exposing
-the full state, and the locals span is built at compile time.
+`DebugHook` provides symbolic AST context without exposing the full state, and the
+locals span is built at compile time. `VmState.DebugInterrupt` is a legacy member
+the emitter does not invoke.
 
 ## Value Marshalling
 

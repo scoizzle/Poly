@@ -4,11 +4,11 @@ namespace Poly.Interpretation.Vm;
 /// Controls the level of debug instrumentation in the compiled delegate.
 /// </summary>
 public enum CompilationMode {
-    /// <summary>Full debug support (default). Includes DebugInterrupt checks,
+    /// <summary>Full debug support (default). Includes the <c>DebugHook</c> guard,
     /// AST node tracking, and the <c>MaxLoopIterations</c> / <c>LoopTicks</c> sandbox.</summary>
     Normal,
 
-    /// <summary>No debug instrumentation. Omit DebugInterrupt checks and loop-tick
-    /// guards for maximum execution speed. Suitable for production or benchmarks.</summary>
+    /// <summary>No debug instrumentation. Omits the debug hook and loop-tick guards
+    /// for maximum execution speed. Suitable for production or benchmarks.</summary>
     NoDebug,
 }

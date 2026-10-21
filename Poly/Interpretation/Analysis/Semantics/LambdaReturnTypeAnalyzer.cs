@@ -26,7 +26,7 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
     }
 
     private static ITypeDefinition? ResolveBodyType(AnalysisContext context, Node body) {
-        var yield = TypeAndMemberResolver.YieldNode(body);
+        var yield = TypeAndMemberResolver.YieldNode(context, body);
         return context.GetResolvedType(yield) ?? context.GetResolvedType(body);
     }
 }

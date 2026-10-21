@@ -510,7 +510,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         // A dominating valued return is what the emitter leaves, even when a later
         // non-void tail is unreachable. Prefer the unconditional return itself over
         // the first return found in preorder (an earlier if-branch).
-        var dominantReturn = DominatingReturnValue(block);
+        var dominantReturn = DominatingReturnValue(context, block);
         if (dominantReturn is not null)
             return ResolveNodeType(context, dominantReturn);
         var fromReturn = FindValuedReturnType(context, block);
@@ -529,7 +529,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     /// <summary>The value of the return that always yields from this block: an
     /// unconditional valued return, or a return inside an <c>if (true)</c> branch.
     /// Null when no return dominates.</summary>
-    private static Node? DominatingReturnValue(Node? node) {
+    private static Node? DominatingReturnValue(AnalysisContext context, Node? node) {
         switch (node) {
             case null:
                 return null;
@@ -537,14 +537,14 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                 return value;
             case Block block:
                 foreach (var statement in block.Nodes) {
-                    if (DominatingReturnValue(statement) is { } fromStatement)
+                    if (DominatingReturnValue(context, statement) is { } fromStatement)
                         return fromStatement;
                 }
                 return null;
             case TryCatchFinally { TryBlock: { } tryBlock }:
-                return DominatingReturnValue(tryBlock);
+                return DominatingReturnValue(context, tryBlock);
             case IfStatement ifStatement:
-                return DominatingReturnValue(ifStatement);
+                return DominatingReturnValue(context, ifStatement);
             default:
                 return null;
         }
@@ -552,21 +552,22 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 
     /// <summary>The return that always yields from an <c>if</c>: <c>if (true)</c> yields
     /// its then-branch, and a two-armed <c>if</c> yields only when both arms do.</summary>
-    private static Node? DominatingReturnValue(IfStatement ifStatement) {
+    private static Node? DominatingReturnValue(AnalysisContext context, IfStatement ifStatement) {
         if (ifStatement.Condition is Constant { Value: true })
-            return DominatingReturnValue(ifStatement.ThenBranch)
-                ?? FindReturnValueNode(ifStatement.ThenBranch);
-        if (ifStatement.Condition is Constant { Value: false }) {
-            return ifStatement.ElseBranch is null
-                ? null
-                : DominatingReturnValue(ifStatement.ElseBranch)
-                    ?? FindReturnValueNode(ifStatement.ElseBranch);
-        }
+            return DominatingReturnValue(context, ifStatement.ThenBranch);
+        if (ifStatement.Condition is Constant { Value: false })
+            return DominatingReturnValue(context, ifStatement.ElseBranch);
         if (ifStatement.ElseBranch is null)
             return null;
-        var then = DominatingReturnValue(ifStatement.ThenBranch);
-        var otherwise = DominatingReturnValue(ifStatement.ElseBranch);
-        return then is not null && otherwise is not null ? then : null;
+        var then = DominatingReturnValue(context, ifStatement.ThenBranch);
+        var otherwise = DominatingReturnValue(context, ifStatement.ElseBranch);
+        if (then is null || otherwise is null)
+            return null;
+        // Both arms yield; only one slot kind can describe the block, so the arms
+        // must agree. Differing arms have no single runtime representation.
+        var thenType = ResolveNodeType(context, then)?.GetRuntimeType();
+        var elseType = ResolveNodeType(context, otherwise)?.GetRuntimeType();
+        return Equals(thenType, elseType) ? then : null;
     }
 
     private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {
@@ -656,18 +657,18 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     }
 
     private static void NoteProducedLambda(AnalysisContext context, Node invoke, Node body) {
-        var value = YieldNode(body);
+        var value = YieldNode(context, body);
         if (value is Lambda lambda)
             context.SetMetadata(invoke, new StoredLambdaMetadata(lambda));
         else if (context.GetMetadata<StoredLambdaMetadata>(value) is { } produced)
             context.SetMetadata(invoke, produced);
     }
 
-    internal static Node YieldNode(Node body) {
+    internal static Node YieldNode(AnalysisContext context, Node body) {
         if (body is not Block block || block.Nodes.Count == 0)
             return body;
         // A dominating valued return is the node the emitter yields.
-        if (DominatingReturnValue(block) is { } dominating)
+        if (DominatingReturnValue(context, block) is { } dominating)
             return dominating;
         var last = block.Nodes[^1];
         if (!IsVoidYieldNode(last))

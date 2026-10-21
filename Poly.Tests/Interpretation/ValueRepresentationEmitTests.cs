@@ -147,6 +147,43 @@ public class ValueRepresentationEmitTests {
     }
 
     [Test]
+    public async Task IfTrue_WithFallThroughIf_DoesNotStealTheLaterReturn() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var a = new Variable("a");
+        var node = new Block([
+            new Assignment(a, new Constant("heap")),
+            new IfStatement(new Constant(true), new Block([
+                new IfStatement(flag, new Return(new Constant("s")))
+            ])),
+            new Return(new Constant(1L))
+        ], [a]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(node, result), s => s.SetArgs(false));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task IfElse_DifferentArmTypes_DoNotBecomeTheBlockType() {
+        var flag = new Parameter("flag", TypeReference.To<bool>());
+        var a = new Variable("a");
+        var node = new Block([
+            new Assignment(a, new Constant("heap")),
+            new IfStatement(flag,
+                new Return(new Constant(1L)), new Return(new Constant("no"))),
+            new Return(new Constant("tail"))
+        ], [a]);
+        var result = Analyze(node);
+
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(node, result), s => s.SetArgs(false));
+
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("no");
+    }
+
+    [Test]
     public async Task EnumConstant_IntoEnumParameter_Unboxes() {
         var node = new Invoke(
             new Member(new ClrTypeReference(typeof(EnumProbe)), nameof(EnumProbe.Id)),

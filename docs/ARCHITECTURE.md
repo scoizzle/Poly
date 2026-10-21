@@ -248,7 +248,7 @@ Invoke: resolved CLR `MethodInfo` is `Expression.Call`; unresolved `Invoke(Membe
 |---|---|---|
 | `TypeResolutionMetadata` | TypeAndMemberResolutionPass | Member/array/ctor type checks |
 | `MemberResolutionMetadata` | TypeAndMemberResolutionPass | CLR `MethodInfo` / property / ctor when present; otherwise `InvokeNamed` |
-| `ValueRepresentationMetadata` | ValueRepresentationAnalyzer | Stack scalar vs heap ref (invoke args, root result) |
+
 | `NodeReplacementMetadata` | Any pass | Substitute folded/desugared nodes |
 
 Do not patch the ABI for one scenario — fix upstream (lower / analyze / replace). Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`).
@@ -326,7 +326,7 @@ The VM is the **canonical semantics** — all backends (C# code gen, LINQ expres
 |---|---|---|---|---|
 | `TypeResolutionMetadata` | TypeAndMemberResolutionPass | Each node | Emitter, code gen |
 | `MemberResolutionMetadata` | TypeAndMemberResolutionPass | Invoke/Member/New nodes | Emitter (CLR members; else `InvokeNamed`) |
-| `ValueRepresentationMetadata` | ValueRepresentationAnalyzer | Each node | Emitter (scalar vs heap) |
+| Resolved CLR type | TypeAndMemberResolutionPass | Each node | Emitter (`ValueRepresentationClassifier`: scalar vs heap) |
 | `VariableAnalysisMetadata` | ScopeValidator | Root node (via `context.SetMetadata`) | Analysis / diagnostics |
 | `ConstantValueMetadata` | ConstantFoldingPass | Folded nodes | Replacement + diagnostics |
 | `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Lambda body nodes | Diagnostics |
@@ -354,7 +354,7 @@ Analysis Pipeline ──► AnalysisResult
 DirectVmAbiEmitter ──► VmProgram (Action<VmState>)
   │
   ├── CompileNode returns Expression; honors NodeReplacementMetadata
-  ├── Consumes Type/Member resolution + ValueRepresentationMetadata
+  ├── Consumes Type/Member resolution; derives slot kind from the effective node's type
   └── InvokeNamed for unresolved instance members; foreach is IList walk
 ```
 

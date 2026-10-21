@@ -164,16 +164,16 @@ compiled operands into consecutive slots, so callers do not hand-manage
 
 ## Value Representation
 
-The VM uses a uniform `long` representation on the evaluation stack, but the
-[`ValueRepresentationAnalyzer`](Analysis/Semantics/ValueRepresentationPass.cs)
-classifies every expression by how its value should be interpreted:
+The VM uses a uniform `long` representation on the evaluation stack.
+[`ValueRepresentationClassifier`](Vm/ValueRepresentation.cs) classifies each
+effective node during emit by its resolved CLR type:
 
 | Kind | Description | Example |
 |------|-------------|---------|
 | `StackScalar` | Inline word: a number, a boolean (0 = false, non-zero = true; the CLR type is `bool`), or an IEEE bit pattern | `2 + 3`, `a == b` |
 | `HeapRef` | Heap handle; the slot holds an index into `VmState.Heap` | `new Person()` |
 | `Void` | Statement/produces no value | `if (x) { }` |
-| `Unknown` | Could not be determined statically | Runtime dispatch |
+| `Unknown` | No resolved type (an unresolved expression) | — |
 
 The `RootValueKind` on `VmProgram` tells `InterpreterResult` how to correctly
 marshal the program's top-level result — whether to dereference a heap handle

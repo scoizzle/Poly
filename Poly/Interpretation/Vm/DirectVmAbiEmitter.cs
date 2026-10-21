@@ -165,13 +165,14 @@ public static partial class DirectVmAbiEmitter {
         }
         body.Add(Label(ctx.ExitLabel));
 
-        var rootMeta = analysis.GetMetadata<ValueRepresentationMetadata>(root);
+        var (rootKind, rootClr) = ctx.RepresentationOf(root);
         var delegateExpr = Lambda<Action<VmState>>(Block(ctx.Locals, body), ctx.State);
         var del = delegateExpr.Compile();
         int registerScratchSize = ctx.MaxRingDepth;
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
-        return new VmProgram(del, registerScratchSize, RootValueKind: rootMeta?.Kind,
-            RootClrType: rootMeta?.ClrType,
+        return new VmProgram(del, registerScratchSize,
+            RootValueKind: rootKind is ValueRepresentationKind.Unknown ? null : rootKind,
+            RootClrType: rootClr,
             StepNodes: ctx.StepNodes, DebugInfo: debugInfo,
             RootParameterClrTypes: ctx.RootParameterClrTypes);
     }
@@ -484,8 +485,7 @@ public static partial class DirectVmAbiEmitter {
     };
 
     private static Expression EmitIndexAccess(IndexAccess n, AbiCtx ctx) {
-        var indexKind = ctx.Analysis?.GetValueRepresentation(n.Value);
-        if (indexKind is ValueRepresentationKind.StackScalar)
+        if (ctx.KindOf(n.Value) is ValueRepresentationKind.StackScalar)
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
         var ring = ctx.OpenRing();
@@ -656,8 +656,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static bool IsValueRepresented(Node node, AbiCtx ctx) =>
-        ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.Kind
-            is ValueRepresentationKind.StackScalar;
+        ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
     private static Expression EmitCoalesceValue(Coalesce n, AbiCtx ctx) {
         var tmp = Variable(typeof(long), "_coal");
@@ -677,8 +676,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression UnboxIfHeapNullable(AbiCtx ctx, Node node, Expression handle) {
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        var clr = meta?.ClrType;
+        var clr = ctx.ClrTypeOf(node);
         var underlying = clr is null ? null : Nullable.GetUnderlyingType(clr);
         if (underlying is null || !RingCodec.IsInline(underlying))
             return handle;

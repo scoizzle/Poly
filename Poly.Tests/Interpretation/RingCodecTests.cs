@@ -95,11 +95,11 @@ public class RingCodecTests {
     }
 
     [Test]
-    public async Task IsInvokeArgumentScalar_StringConcatAdd_StaysScalarBoxed() {
+    public async Task IsInvokeArgumentScalar_StringConcatAdd_IsNotScalar() {
         var add = new Add(new Constant("a"), new Constant("b"));
         var analysis = Interpreter.Analyze(add);
-        await Assert.That(analysis.GetValueRepresentation(add)).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.IsInvokeArgumentScalar(add, analysis)).IsTrue();
+        await Assert.That(ValueRepresentationClassifier.KindOf(analysis, add)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(RingCodec.IsInvokeArgumentScalar(add, analysis)).IsFalse();
     }
 
     [Test]

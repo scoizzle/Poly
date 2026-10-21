@@ -115,6 +115,23 @@ public static partial class DirectVmAbiEmitter {
         /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
         internal RingRegion OpenRing() => new(this);
 
+        private readonly Dictionary<Node, (ValueRepresentationKind Kind, Type? ClrType)> _representation = new();
+
+        /// <summary>The slot kind and CLR type of a node's effective runtime action.
+        /// Analysis replacements carry the real action's type, so this is a pure
+        /// read of the resolved type, memoized per emit.</summary>
+        public (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(Node node) {
+            if (_representation.TryGetValue(node, out var cached))
+                return cached;
+            var classified = ValueRepresentationClassifier.Classify(Analysis, node);
+            _representation[node] = classified;
+            return classified;
+        }
+
+        public ValueRepresentationKind KindOf(Node node) => RepresentationOf(node).Kind;
+
+        public Type? ClrTypeOf(Node node) => RepresentationOf(node).ClrType;
+
         /// <summary>Contiguous ring slots for a sequence of compiled operands.
         /// <see cref="Add"/> compacts each result to <c>Base + count</c>; any
         /// slots the caller allocates afterwards extend the depth normally.</summary>

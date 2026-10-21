@@ -451,7 +451,6 @@ public class InterpretationStabilizationTests {
             JumpTargetAnalyzer.Id,
             ControlFlowAnalysisPass.Id,
             ExceptionRegionAnalyzer.Id,
-            ValueRepresentationAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,
             DefiniteAssignmentAnalyzer.Id,

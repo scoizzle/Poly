@@ -15,7 +15,6 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
 | `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`, `InfiniteLoopMetadata`, `MustExecuteMetadata` | `CF0001`-`CF0013` |
-| `ValueRepresentationAnalyzer` | `.UseValueRepresentationAnalysis()` | `ValueRepresentationMetadata` (stack scalar, heap ref, void, unknown) | (none) |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Invoke return types from lambda bodies (including stored closures); does not retarget the `Lambda` node itself | (none) |
@@ -37,7 +36,6 @@ Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_M
  8. JumpTargetAnalyzer
  9. ControlFlowAnalysisPass
 10. ExceptionRegionAnalyzer
-11. ValueRepresentationAnalyzer
 12. SyntaxTypeCompatibilityAnalyzer
 13. CallSiteCatalogAnalyzer
 14. DefiniteAssignmentAnalyzer

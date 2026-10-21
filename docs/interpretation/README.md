@@ -62,9 +62,13 @@ directly and emits `System.Linq.Expressions` trees that read/write `VmState`
 fields. No intermediate flattening or primitive expansion.
 
 ### Value Representation
-The `ValueRepresentationAnalyzer` classifies every expression by how its value
-should be interpreted: stack scalar (direct `long`), heap handle (dereference
-via index), boolean (zero/non-zero), or void.
+Representation is decided during emit, not by an analysis pass:
+`ValueRepresentationClassifier` (in `Poly/Interpretation/Vm/`) follows
+`NodeReplacementMetadata` and classifies the effective node's resolved CLR type
+— inline word (number, boolean 0/non-zero, IEEE bit pattern) or heap handle.
+Analysis replaces a node when the runtime action differs from the default
+semantics (`int + string` becomes `String.Concat`, `date + 1` becomes
+`AddDays`), and the replacement carries that action's type.
 
 ### Frame Model
 The VM uses a linked-frame ABI with a 2-word header (previousFP + savedSP),

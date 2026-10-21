@@ -61,18 +61,6 @@ internal static class RingCodec {
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
 
-    /// <summary>The slot kind a compile-time constant is stored as: derived from
-    /// <see cref="TryInlineConstant"/>, with one representational exception —
-    /// <c>null</c> is the heap null sentinel (it folds to 0 but is not a scalar
-    /// value). A <c>bool</c> constant is an ordinary inline word.</summary>
-    public static ValueRepresentationKind KindFor(object? constant) {
-        if (constant is null) return ValueRepresentationKind.HeapRef;
-        if (constant is bool) return ValueRepresentationKind.StackScalar;
-        return TryInlineConstant(constant, out _)
-            ? ValueRepresentationKind.StackScalar
-            : ValueRepresentationKind.HeapRef;
-    }
-
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
     /// uses an unchecked 64-bit bitcast so <c>ulong.MaxValue</c> round-trips.</summary>
@@ -96,25 +84,22 @@ internal static class RingCodec {
     }
 
     /// <summary>True when a node's value is an IEEE bit pattern (float/double).</summary>
-    public static bool IsIeee(Node node, AnalysisResult? analysis) {
-        var clr = analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.ClrType;
-        return clr is not null && IsIeee(clr);
-    }
+    public static bool IsIeee(Node node, AnalysisResult? analysis) =>
+        ValueRepresentationClassifier.ClrTypeOf(analysis, node) is { } clr && IsIeee(clr);
 
     /// <summary>True when a node's slot uses the ABI null sentinel: a literal
     /// null, a heap reference, or a nullable value type.</summary>
     public static bool UsesNullSentinel(Node node, AnalysisResult? analysis) {
-        if (node is Constant { Value: null }) return true;
-        var meta = analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.Kind == ValueRepresentationKind.HeapRef) return true;
-        return meta?.ClrType is Type t && Nullable.GetUnderlyingType(t) is not null;
+        var (kind, clr) = ValueRepresentationClassifier.Classify(analysis, node);
+        if (kind == ValueRepresentationKind.HeapRef) return true;
+        return clr is Type t && Nullable.GetUnderlyingType(t) is not null;
     }
 
     /// <summary>Whether a call argument sits in its slot as a raw scalar (not a
     /// heap handle). The value representation decides; without one, the
     /// argument's resolved type does.</summary>
     public static bool IsStackScalar(Node node, AnalysisResult? analysis) {
-        switch (analysis?.GetValueRepresentation(node)) {
+        switch (ValueRepresentationClassifier.KindOf(analysis, node)) {
             case ValueRepresentationKind.StackScalar:
                 return true;
             case ValueRepresentationKind.HeapRef:
@@ -128,19 +113,10 @@ internal static class RingCodec {
 
     /// <summary>Whether an argument to the name-dispatched invoke path sits in its
     /// ring slot as a scalar (boxed by its source type) rather than a heap handle.
-    /// Unlike <see cref="IsStackScalar"/>, a
-    /// <see cref="ValueRepresentationKind.HeapRef"/> classification does not
-    /// suppress the syntactic arm: a string-concat or decimal arithmetic node is
-    /// classified HeapRef yet is still scalar-boxed here. This predicate never
-    /// throws.</summary>
-    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) {
-        if (analysis?.GetValueRepresentation(node)
-            is ValueRepresentationKind.StackScalar)
-            return true;
-        return node is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
-            or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
-            || node is Constant { Value: long or int or bool or byte or short or sbyte };
-    }
+    /// The effective node's type decides: a replacement such as String.Concat is a
+    /// heap handle, not a boxed scalar. This predicate never throws.</summary>
+    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) =>
+        ValueRepresentationClassifier.KindOf(analysis, node) is ValueRepresentationKind.StackScalar;
 
     // ── Compile-time conversion ──────────────────────────────────
 
@@ -160,8 +136,7 @@ internal static class RingCodec {
     public static Expression ToClr(
         Expression ringVal, Type targetType, Node? source, AnalysisResult? analysis, Expression heap) {
         if (targetType == typeof(double) || targetType == typeof(float)) {
-            var srcType = source is Constant c ? c.Value?.GetType()
-                : analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType;
+            var srcType = ValueRepresentationClassifier.ClrTypeOf(analysis, source);
             if (srcType is not null && IsIeee(srcType))
                 return Convert(Call(BitConverterInt64BitsToDouble, ringVal), targetType);
             return Convert(ringVal, targetType);
@@ -176,14 +151,8 @@ internal static class RingCodec {
         // is a handle and is dereferenced. The test is the argument's representation
         // kind, not `IsValueType`: `int?` is a value type but its slot is a handle.
         if (targetType == typeof(object) && source is not null) {
-            var kind = source is Constant constant
-                ? KindFor(constant.Value)
-                : analysis?.GetValueRepresentation(source);
+            var (kind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
             if (kind is ValueRepresentationKind.StackScalar) {
-                var sourceClr = source is Constant c2 && c2.Value is not null
-                    ? c2.Value.GetType()
-                    : analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType
-                        ?? analysis?.GetResolvedType(source)?.GetRuntimeType();
                 if (sourceClr is not null) {
                     Expression scalar = IsIeee(sourceClr)
                         ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)

@@ -369,14 +369,11 @@ public static partial class DirectVmAbiEmitter {
     /// the reserved handle 0 as null, which Concat renders as the empty string.
     /// </summary>
     private static Expression HoleToClrObject(Node hole, Expression ringVal, AbiCtx ctx) {
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(hole)
-            ?? throw new InvalidOperationException(
-                $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
-        var clrType = meta.ClrType;
+        var (kind, clrType) = ctx.RepresentationOf(hole);
         if (clrType is null) {
-            if (meta.Kind is ValueRepresentationKind.StackScalar)
+            if (kind is ValueRepresentationKind.StackScalar)
                 clrType = typeof(long);
-            else if (meta.Kind is ValueRepresentationKind.HeapRef)
+            else if (kind is ValueRepresentationKind.HeapRef)
                 return Convert(
                     Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))), typeof(object));
             else
@@ -1029,8 +1026,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, AbiCtx ctx) {
         if (receiver is not Member member || IsTypeNameReceiver(member.Value, ctx))
             return null;
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(receiver);
-        if (meta is null || meta.Kind != ValueRepresentationKind.HeapRef)
+        if (ctx.KindOf(receiver) is not ValueRepresentationKind.HeapRef)
             return null;
         var ctor = typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)
             .GetConstructor([typeof(string)]);

@@ -1,6 +1,5 @@
 using System.Globalization;
 
-using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -140,9 +139,27 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return IsScalarSlot(from) && IsScalarSlot(to);
     }
 
-    private static bool IsScalarSlot(Type t) =>
-        t == typeof(double) || t == typeof(float) || t == typeof(bool)
-        || (t.IsValueType && RingCodec.IsInline(t));
+    private static bool IsScalarSlot(Type t) => IsInlineWord(Nullable.GetUnderlyingType(t) ?? t);
+
+    /// <summary>True for a CLR type the ring stores as an inline word. This is a
+    /// type fact, kept local so analysis does not reach into the VM codec.</summary>
+    private static bool IsInlineWord(Type t) =>
+        t.IsEnum || t == typeof(bool) || t == typeof(char)
+        || t == typeof(long) || t == typeof(int) || t == typeof(short)
+        || t == typeof(byte) || t == typeof(sbyte) || t == typeof(ushort)
+        || t == typeof(uint) || t == typeof(ulong)
+        || t == typeof(float) || t == typeof(double);
+
+    /// <summary>Analyze-time slot class for a write. A nullable or non-inline value
+    /// type is a heap handle; an inline word is a scalar; a missing type is Unknown;
+    /// <c>void</c> yields no value at all.</summary>
+    private static SlotClass ClassOf(Type? type) {
+        if (type == typeof(void)) return SlotClass.Void;
+        if (type is null) return SlotClass.Unknown;
+        if (Nullable.GetUnderlyingType(type) is not null) return SlotClass.Heap;
+        return type.IsValueType && IsInlineWord(type) ? SlotClass.Scalar : SlotClass.Heap;
+    }
+
 
     private void CheckComparison(AnalysisContext context, Node leftNode, Node rightNode) {
         var left = ClrTypeOf(context, leftNode);
@@ -223,8 +240,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             && typeDef is IClrTypeDefinition { RuntimeType.IsValueType: true }) {
             var replacement = new Default(created.Type);
             context.SetResolvedType(replacement, typeDef);
-            var (kind, clr) = RepresentationOf(typeDef);
-            context.SetMetadata(replacement, new ValueRepresentationMetadata(kind, clr));
             Replace(context, created, replacement);
             return;
         }
@@ -503,10 +518,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
         var binding = BindingOf(context, variable);
-        var rhsMeta = context.GetMetadata<ValueRepresentationMetadata>(assignment.Value);
-        if (rhsMeta is null)
-            return;
-        if (rhsMeta.Kind is ValueRepresentationKind.Void) {
+        // A null literal is the heap null sentinel with no value type: assignable to
+        // a reference or nullable prior, rejected for a scalar slot.
+        var isNullLiteral = assignment.Value is Constant { Value: null };
+        var rhsType = isNullLiteral ? null : ClrTypeOf(context, assignment.Value);
+        var rhsClass = isNullLiteral ? SlotClass.Heap : ClassOf(rhsType);
+        if (rhsClass is SlotClass.Void) {
             Report(context, assignment,
                 $"cannot assign void to variable '{variable.Name}'");
             return;
@@ -517,33 +534,32 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         // not stored on the parameter so every write is checked against the signature.
         if (prior is null
             && binding is Parameter parameter
-            && context.GetResolvedType(parameter)?.GetRuntimeType() is { } parameterType
-            && context.GetMetadata<ValueRepresentationMetadata>(parameter) is { } parameterMeta) {
-            prior = new VariableAssignedTypeMetadata(parameterType, parameterMeta.Kind);
+            && context.GetResolvedType(parameter)?.GetRuntimeType() is { } parameterType) {
+            prior = new VariableAssignedTypeMetadata(parameterType, ClassOf(parameterType));
         }
-        if (rhsMeta.Kind is ValueRepresentationKind.Unknown) {
+        if (rhsClass is SlotClass.Unknown) {
             if (prior is null)
-                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));
-            else if (prior.Kind is not ValueRepresentationKind.Unknown)
+                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null, SlotClass.Unknown));
+            else if (prior.Class is not SlotClass.Unknown)
                 Report(context, assignment,
-                    $"cannot assign '{TypeLabel(rhsMeta.ClrType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+                    $"cannot assign '{TypeLabel(rhsType, rhsClass)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Class)}')");
             return;
         }
 
-        var rhsType = rhsMeta.ClrType;
         if (rhsType is not null && CategoryOf(rhsType) is Cat.Null)
             return;
 
         if (prior is null) {
-            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
+            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType, rhsClass));
             return;
         }
 
         // Scalar numeric writes share one slot encoding (all `long`), so int↔long are
-        // fine by construction; the IEEE-slot widening exemption is further down.
-        if (prior.Kind != rhsMeta.Kind) {
+        // fine by construction; a decimal/nullable/reference write does not share the
+        // scalar slot, and the IEEE-slot widening exemption is further down.
+        if (prior.Class != rhsClass) {
             Report(context, assignment,
-                $"cannot assign '{TypeLabel(rhsType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+                $"cannot assign '{TypeLabel(rhsType, rhsClass)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Class)}')");
             return;
         }
 
@@ -592,8 +608,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static string TypeLabel(Type? type, ValueRepresentationKind kind) =>
-        type?.Name ?? kind.ToString();
+    private static string TypeLabel(Type? type, SlotClass slot) =>
+        type?.Name ?? slot.ToString();
 
     /// <summary>True when the assignment destination is a captured binding: its writes
     /// go through a closure cell, which the emitter stores without a representation
@@ -914,8 +930,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                     : null);
             if (offsetType is not null)
                 context.SetResolvedType(amount, offsetType);
-            if (context.GetMetadata<ValueRepresentationMetadata>(offset) is { } vr)
-                context.SetMetadata(amount, vr);
         }
         var coerced = CoerceTo(context, amount, paramType) ?? amount;
         var member = new Member(date, method.Name);
@@ -980,8 +994,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         context.SetNodeReplacement(original, replacement);
         if (context.GetResolvedType(replacement) is { } resolved)
             context.SetResolvedType(original, resolved);
-        if (context.GetMetadata<ValueRepresentationMetadata>(replacement) is { } vr)
-            context.SetMetadata(original, vr);
     }
 
     private static bool IsIeeeFloating(Type type) =>
@@ -1053,25 +1065,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         context.SetResolvedType(typeOrInstance, method.DeclaringTypeDefinition);
         context.SetResolvedMember(member, method);
         context.SetResolvedMember(invoke, method);
-        var (kind, clr) = RepresentationOf(method.MemberTypeDefinition);
-        context.SetMetadata(invoke, new ValueRepresentationMetadata(kind, clr));
-        context.SetMetadata(member, new ValueRepresentationMetadata(kind, clr));
-    }
-
-    private static (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(ITypeDefinition typeDef) {
-        if (typeDef is not IClrTypeDefinition clrType)
-            return (ValueRepresentationKind.HeapRef, null);
-        var rt = clrType.RuntimeType;
-        if (Nullable.GetUnderlyingType(rt) is not null)
-            return (ValueRepresentationKind.HeapRef, rt);
-        if (rt == typeof(bool))
-            return (ValueRepresentationKind.StackScalar, rt);
-        if (rt.IsValueType || rt.IsPrimitive) {
-            return RingCodec.IsInline(rt)
-                ? (ValueRepresentationKind.StackScalar, rt)
-                : (ValueRepresentationKind.HeapRef, rt);
-        }
-        return (ValueRepresentationKind.HeapRef, rt);
     }
 
     private void Report(AnalysisContext context, Node node, string message) =>
@@ -1079,8 +1072,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
 
-    private static Type? ClrTypeOf(AnalysisContext context, Node node) =>
-        context.GetMetadata<ValueRepresentationMetadata>(node)?.ClrType;
+    private static Type? ClrTypeOf(AnalysisContext context, Node node) {
+        var effective = context.GetNodeReplacement(node) ?? node;
+        return context.GetResolvedType(effective)?.GetRuntimeType()
+            ?? (effective is Constant { Value: not null } constant
+                ? constant.Value.GetType()
+                : null);
+    }
 
     private static Cat CategoryOf(Type type) {
         if (type == typeof(bool)) return Cat.Boolean;
@@ -1111,7 +1109,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
 /// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.
 /// Later writes must be slot-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
+internal enum SlotClass { Void, Scalar, Heap, Unknown }
+
 internal sealed record VariableAssignedTypeMetadata(
     Type? ClrType,
-    ValueRepresentationKind Kind
+    SlotClass Class
 ) : IAnalysisMetadata;

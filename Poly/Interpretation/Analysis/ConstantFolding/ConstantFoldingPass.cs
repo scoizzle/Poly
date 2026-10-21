@@ -156,8 +156,16 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// the original type, and copy the resolved type onto the cast so
     /// downstream passes see consistent types.</summary>
     private static Node TypeMatchReplacement(Node original, Node replacement, AnalysisContext context) {
-        // Only wrap Constant replacements whose value type doesn't match
-        if (replacement is not Constant c || c.Value is null)
+        // A lowered non-constant node (shift, mask) performs the same runtime action
+        // as the original, so it carries the original's resolved type and emit can
+        // classify it from the type alone.
+        if (replacement is not Constant) {
+            if (context.GetResolvedType(original) is { } originalType)
+                context.SetResolvedType(replacement, originalType);
+            return replacement;
+        }
+        var c = (Constant)replacement;
+        if (c.Value is null)
             return replacement;
 
         var resolvedType = context.GetResolvedType(original);

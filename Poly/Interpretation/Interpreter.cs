@@ -4,7 +4,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 
-using PrimValueKind = Poly.Interpretation.Analysis.Semantics.ValueRepresentationKind;
+using PrimValueKind = Poly.Interpretation.Vm.ValueRepresentationKind;
 
 namespace Poly.Interpretation;
 
@@ -29,7 +29,6 @@ public static class Interpreter {
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseExceptionRegionAnalysis()
-        .UseValueRepresentationAnalysis()
         .UseSyntaxTypeCompatibility()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
@@ -171,8 +170,8 @@ public static class Interpreter {
         long raw = state.Stack.RawSlots[sp - 1];
         int handle = (int)raw;
 
-        // Use ValueRepresentationMetadata from analysis when available to
-        // correctly distinguish heap handles from raw scalars (fixes INT-002).
+        // The emit-side classifier records the effective root's slot kind; it
+        // distinguishes heap handles from raw scalars (INT-002).
         var rootKind = state.Program.RootValueKind;
         var clr = state.Program.RootClrType;
 

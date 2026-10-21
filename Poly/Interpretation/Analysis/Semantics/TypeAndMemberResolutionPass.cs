@@ -88,7 +88,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => ResolveVariableType(context, v),
-            Add add => ResolveNumericArithmeticType(context, add.LeftHandValue, add.RightHandValue),
+            Add add => ResolveAddType(context, add.LeftHandValue, add.RightHandValue),
             Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
             Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
             Divide div => ResolveNumericArithmeticType(context, div.LeftHandValue, div.RightHandValue),
@@ -121,7 +121,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Default d => d.TargetType is null ? null : ResolveNodeType(context, d.TargetType),
             TypeIs => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             TypeAs asType => ResolveAsType(context, asType.TargetTypeReference),
-            Conditional cond => ResolveNodeType(context, cond.IfTrue),
+            Conditional cond => ResolveConditionalType(context, cond),
             Coalesce coal => ResolveNodeType(context, coal.RightHandValue),
             Block block => ResolveBlockType(context, block),
             Assignment assign => ResolveAssignmentType(context, assign),
@@ -135,6 +135,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveNodeType(context, bn.Operand),
+            PopCount pc => ResolveNodeType(context, pc.Operand),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
             SwitchStatement swt => swt.Cases.Count > 0
@@ -212,13 +213,28 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     private static ITypeDefinition? ResolveThisReferenceType(AnalysisContext context, ThisReference thisReference) =>
         context.GetResolvedType(thisReference);
 
+    /// <summary>Add is string concatenation when either operand is a string, so its
+    /// resolved type is the real runtime action (the compat pass lowers it to
+    /// <c>String.Concat</c>).</summary>
+    private static ITypeDefinition? ResolveAddType(AnalysisContext context, Node left, Node right) {
+        var leftType = ResolveNodeType(context, left);
+        var rightType = ResolveNodeType(context, right);
+        if (leftType?.GetRuntimeType() == typeof(string)
+            || rightType?.GetRuntimeType() == typeof(string))
+            return context.TypeDefinitions.GetTypeDefinition(typeof(string));
+        return PromoteNumeric(context, leftType, rightType);
+    }
+
     private static ITypeDefinition? ResolveNumericArithmeticType(
         AnalysisContext context,
         Node left,
-        Node right) {
-        var leftType = ResolveNodeType(context, left);
-        var rightType = ResolveNodeType(context, right);
+        Node right) =>
+        PromoteNumeric(context, ResolveNodeType(context, left), ResolveNodeType(context, right));
 
+    /// <summary>Promote two already-resolved operand types (C#-style). Callers resolve
+    /// each operand once; a deep chain must not re-resolve its subtree per parent.</summary>
+    private static ITypeDefinition? PromoteNumeric(
+        AnalysisContext context, ITypeDefinition? leftType, ITypeDefinition? rightType) {
         if (leftType == null || rightType == null)
             return null;
 
@@ -390,7 +406,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             var matchedIndexer = instanceType.FindMatchingIndexers(argumentTypes!).FirstOrDefault();
             if (matchedIndexer is not null)
                 context.SetResolvedMember(indexAccess, matchedIndexer);
-            return instanceType.GetElementType(argumentTypes!);
+            // An array's synthetic indexer takes Int32, but C# accepts any integral
+            // index; fall back to the element type when no indexer signature matches.
+            return instanceType.GetElementType(argumentTypes!) ?? instanceType.GetElementType();
         }
 
         var fallbackIndexer = instanceType.Properties
@@ -489,11 +507,41 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return ResolveNodeType(context, body);
         if (block.Nodes.Count == 0)
             return null;
+        // A dominating valued return is what the emitter leaves, even when a later
+        // non-void tail is unreachable.
+        var fromReturn = FindValuedReturnType(context, block);
+        if (HasDominatingValuedReturn(block))
+            return fromReturn ?? ResolveNodeType(context, block.Nodes[^1]);
         var last = block.Nodes[^1];
         var lastType = ResolveNodeType(context, last);
         if (lastType is not null && !IsVoidYieldNode(last))
             return lastType;
-        return FindValuedReturnType(context, block) ?? lastType;
+        if (fromReturn is not null)
+            return fromReturn;
+        // A statement tail yields nothing; the block is a statement, not a value.
+        return IsVoidYieldNode(last)
+            ? context.TypeDefinitions.GetTypeDefinition(typeof(void))
+            : lastType;
+    }
+
+    /// <summary>True when a valued <c>return</c> is an unconditional statement of
+    /// this block, or of an <c>if (true)</c> branch, so it always yields.</summary>
+    private static bool HasDominatingValuedReturn(Block block) {
+        foreach (var statement in block.Nodes) {
+            if (statement is Return { Value: not null })
+                return true;
+            if (statement is IfStatement { Condition: Constant { Value: true } } ifTrue
+                && FindReturnValueNode(ifTrue.ThenBranch) is not null)
+                return true;
+        }
+        return false;
+    }
+
+    private static ITypeDefinition? ResolveConditionalType(AnalysisContext context, Conditional cond) {
+        var ifTrue = ResolveNodeType(context, cond.IfTrue);
+        if (ifTrue is not null && ifTrue.GetRuntimeType() != typeof(void))
+            return ifTrue;
+        return ResolveNodeType(context, cond.IfFalse) ?? ifTrue;
     }
 
     private static bool IsVoidYieldNode(Node node) =>
@@ -586,6 +634,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     internal static Node YieldNode(Node body) {
         if (body is not Block block || block.Nodes.Count == 0)
             return body;
+        // A dominating valued return is the node the emitter yields.
+        if (HasDominatingValuedReturn(block) && FindReturnValueNode(block) is { } dominating)
+            return dominating;
         var last = block.Nodes[^1];
         if (!IsVoidYieldNode(last))
             return last;

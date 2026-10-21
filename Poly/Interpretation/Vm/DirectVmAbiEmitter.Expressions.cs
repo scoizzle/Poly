@@ -25,8 +25,8 @@ public static partial class DirectVmAbiEmitter {
             return cf == Equal ? ec : Not(ec);
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -56,8 +56,8 @@ public static partial class DirectVmAbiEmitter {
                                 cf == Equal ? Constant(0L) : Constant(1L));
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -106,8 +106,8 @@ public static partial class DirectVmAbiEmitter {
     /// should be compared by value rather than handle.</summary>
     private static bool AreHeapValues(AbiCtx ctx, Node left, Node right) {
         if (ctx.Analysis is not null) {
-            var leftRep = ctx.Analysis.GetValueRepresentation(left);
-            var rightRep = ctx.Analysis.GetValueRepresentation(right);
+            var leftRep = ctx.KindOf(left);
+            var rightRep = ctx.KindOf(right);
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
@@ -328,9 +328,9 @@ public static partial class DirectVmAbiEmitter {
         // answer (`1 is int` true, `1 is long` false — C# `is` tests the runtime type and
         // never widens). A heap operand is a handle (0 = null) tested at runtime, which
         // keeps `string s = null; s is string` false and resolves interfaces for free.
-        switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
+        switch (ctx.RepresentationOf(t.Operand).Kind) {
             case ValueRepresentationKind.StackScalar: {
-                    var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+                    var operandStatic = ctx.ClrTypeOf(t.Operand);
                     if (operandStatic is null) {
                         throw new InvalidOperationException(
                             $"VM compile rejected: cannot resolve the static type of '{t.Operand}' in '{t}'.");
@@ -473,7 +473,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeCast target type is unresolved.");
-        Type? sourceType = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+        Type? sourceType = ctx.ClrTypeOf(t.Operand);
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
         var ring = ctx.OpenRing();

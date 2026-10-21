@@ -99,7 +99,7 @@ public class InterpretResultIntegrationTests {
 
     [Test]
     public async Task StandardPipeline_SetsRootValueKind() {
-        // The standard pipeline always stamps ValueRepresentationMetadata,
+        // The standard pipeline always records the root's slot kind at emit,
         // so VmProgram.RootValueKind must be set.
         var scalar = new Add(new Constant(1), new Constant(2));
         var progScalar = Interpreter.Compile(scalar, CompilationMode.Normal);

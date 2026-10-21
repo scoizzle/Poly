@@ -1,10 +1,10 @@
 namespace Poly.Interpretation.Vm;
 
 /// <summary>
-/// Controls the level of debug/tracing instrumentation in the compiled delegate.
+/// Controls the level of debug instrumentation in the compiled delegate.
 /// </summary>
 public enum CompilationMode {
-    /// <summary>Full debug/tracing support (default). Includes DebugInterrupt checks,
+    /// <summary>Full debug support (default). Includes DebugInterrupt checks,
     /// AST node tracking, and the <c>MaxLoopIterations</c> / <c>LoopTicks</c> sandbox.</summary>
     Normal,
 

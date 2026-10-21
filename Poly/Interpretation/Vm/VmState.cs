@@ -1,10 +1,12 @@
+using Poly.Interpretation.Vm.Abi;
+
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Per-execution state for the Poly VM: value stack, heap,
 /// registers, program counter, debug hooks, and loop iteration limits.
 /// Created by <see cref="Interpreter.Execute"/> and exposed through
 /// <see cref="ExecutionResult.State"/> for inspection and resumption.</summary>
-/// <remarks>Owns a pooled <see cref="ValueStack"/> that must be disposed.
+/// <remarks>Owns a pooled <see cref="VmValueStack"/> that must be disposed.
 /// Use the <c>using</c> pattern: <c>using var result = Interpreter.Execute(program);</c></remarks>
 public sealed class VmState : IDisposable {
     /// <summary>The compiled program being executed.</summary>
@@ -12,7 +14,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>The pooled value stack for scalars and heap handles.
     /// Backed by <see cref="ArrayPool{long}"/>.</summary>
-    public ValueStack Stack { get; } = new();
+    public VmValueStack Stack { get; } = new();
 
     /// <summary>Current program counter (µop index) for debug/trace
     /// purposes. Updated by the compiled delegate in Debug/Normal mode.
@@ -31,12 +33,7 @@ public sealed class VmState : IDisposable {
 
     /// <summary>The VM heap for reference-type values.
     /// Uses a free-list to recycle handles of freed objects.</summary>
-    public Heap Heap { get; } = new();
-
-    /// <summary>Optional trace writer for µop-level logging.
-    /// When set, the compiled delegate emits trace lines before each µop.
-    /// Null by default — zero overhead when null (single branch check).</summary>
-    public TextWriter? Trace { get; set; }
+    public VmManagedObjectHeap Heap { get; } = new();
 
     /// <summary>Debug interrupt callback.  When set, the compiled delegate
     /// invokes this <em>before</em> each µop in Debug/Normal compilation mode,
@@ -63,7 +60,7 @@ public sealed class VmState : IDisposable {
     /// current frame's local variables, and the <see cref="Heap"/> instance.
     /// This is the preferred hook for new code — it's simpler than
     /// <see cref="DebugInterrupt"/> and has zero emitted overhead when null.</summary>
-    public Action<Node, ReadOnlySpan<long>, Heap>? DebugHook { get; set; }
+    public Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>? DebugHook { get; set; }
 
     /// <summary>Maximum number of loop iterations before the VM throws.
     /// Set to -1 (default) for unlimited iterations. Honored only in
@@ -97,7 +94,7 @@ public sealed class VmState : IDisposable {
     public NodeId? CurrentNodeId { get; set; }
 
     /// <summary>Creates a new VM execution state for the given program.
-    /// The state owns a pooled <see cref="ValueStack"/> and a
+    /// The state owns a pooled <see cref="VmValueStack"/> and a
     /// <see cref="Heap"/> — dispose when done to return pool buffers.</summary>
     /// <param name="program">The compiled program to execute.</param>
     public VmState(VmProgram program) {

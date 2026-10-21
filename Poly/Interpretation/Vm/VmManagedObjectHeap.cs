@@ -7,7 +7,7 @@ namespace Poly.Interpretation.Vm;
 /// free-list when objects are set to null.</summary>
 /// <remarks>Handle 0 is reserved as the ABI null/falsy sentinel and is never
 /// allocated to a live object. The backing array grows by doubling.</remarks>
-public sealed class Heap {
+public sealed class VmManagedObjectHeap {
     private object?[] _objects = new object?[256];
     /// <summary>Next free handle index. Starts at 1 so handle 0 remains the
     /// ABI null / falsy sentinel (never allocated to a live object).</summary>

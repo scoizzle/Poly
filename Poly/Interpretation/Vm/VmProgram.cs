@@ -1,8 +1,9 @@
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Interpretation.Vm;
 
-/// <summary>Compiled Poly VM program produced by <see cref="DirectVmAbiEmitter.Emit"/>.
+/// <summary>Compiled Poly VM program produced by <see cref="AbiEmitter.Emit"/>.
 /// Contains the executable delegate and debug metadata for step-through and
 /// variable inspection.</summary>
 /// <param name="Delegate">The compiled delegate that executes the program when

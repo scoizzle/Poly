@@ -7,36 +7,24 @@ convention.
 ## Overview
 
 The Poly VM ABI is designed for direct AST-to-delegate compilation via
-`DirectVmAbiEmitter`. There is no bytecode interpreter or intermediate primitive
+`AbiEmitter`. There is no bytecode interpreter or intermediate primitive
 representation — the ABI is the contract between the compiler (emitter) and the
 runtime (`VmState`).
 
-## Word
-
-The fundamental storage unit is `Word` — a wrapper around `long`:
-
-- **Positive values**: Stack scalars (integers, floating-point bit patterns, etc.)
-- **Negative values**: Heap handles (`Word.IsHandle == true`)
-- **Zero**: Null/false sentinel
-
-Implicit conversions exist between `Word` and `int`/`long`. The `int` conversion
-clamps to `int.MaxValue` for out-of-range values.
-
 ## Value Stack
 
-`ValueStack` stores `long` values in a pooled array (`ArrayPool<long>.Shared`):
+`VmValueStack` stores `long` values in a pooled array (`ArrayPool<long>.Shared`):
 
 | Operation | Description |
 |-----------|-------------|
 | `Push(value)` | Push a value; auto-grows by doubling |
 | `Pop()` | Pop and return the top value |
 | `Drop(n)` | Discard top `n` values |
-| `Reserve(n)` | Reserve `n` slots (no write) |
 | `RawSlots[i]` | Direct array access (unchecked) |
 
 The stack grows automatically when full. Disposal returns the buffer to the pool.
 
-## Heap
+## VmManagedObjectHeap
 
 Reference-type values are stored in a contiguous `object?[]` array indexed by handle:
 
@@ -103,14 +91,6 @@ The ring depth equals the maximum expression nesting depth at any point in the
 function. Each µop reads its inputs from and writes its output to ring slots
 indexed by eval-stack position.
 
-## Register File (`VmState.Registers`)
-
-A flat `long[]` array used for miscellaneous runtime state:
-
-- Allocated lazily (256 slots by default)
-- Set before the program delegate runs
-- Used for loop counters, temporary values, etc.
-
 ## Compilation Modes
 
 | Mode | DebugHook | DebugInterrupt | PC Tracking | Use Case |
@@ -118,29 +98,15 @@ A flat `long[]` array used for miscellaneous runtime state:
 | `Normal` | Active | Active | Active | Development, debugging, stepping |
 | `NoDebug` | Omitted | Omitted | Omitted | Production, benchmarks |
 
-In `NoDebug` mode, the emitted expression tree omits all debug/trace checks,
+In `NoDebug` mode, the emitted expression tree omits all debug checks,
 producing a smaller and faster delegate.
-
-## µop Tracing
-
-When `VmState.Trace` is non-null, the compiled delegate calls
-`VmTrace.LogUop(pc, text, sp, fb, state)` before each µop:
-
-```
-   0 add                        depth=0   fb=0
-   1 store local0               depth=1   fb=0
-   ...
-```
-
-Overhead is ~1 ns when `state.Trace` is null (default). Enabled regardless of
-compilation mode — the trace check is a single null branch.
 
 ## Debug Hooks
 
 | Hook | Call Frequency | Arguments | Overhead When Null |
 |------|---------------|-----------|-------------------|
 | `DebugInterrupt` | Every µop (Normal) | `VmState` | Single null check |
-| `DebugHook` | Every AST node (Normal) | `Node`, `ReadOnlySpan<long>`, `Heap` | Single null check |
+| `DebugHook` | Every AST node (Normal) | `Node`, `ReadOnlySpan<long>`, `VmManagedObjectHeap` | Single null check |
 
 `DebugHook` is preferred — it provides symbolic AST context without exposing
 the full state, and the locals span is built at compile time.

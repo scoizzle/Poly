@@ -1,32 +1,31 @@
 # VM Execution Engine (Interpretation/Vm/)
 
 The VM execution engine compiles analyzed AST nodes directly into LINQ Expression
-delegates for fast execution via `DirectVmAbiEmitter`.
+delegates for fast execution via `AbiEmitter`.
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `DirectVmAbiEmitter.cs` | **Primary compiler**: walks analyzed AST, emits `Action<VmState>` delegate |
-| `DirectVmAbiEmitter.AbiCtx.cs` | Compilation context (ring, frames, scopes) |
-| `DirectVmAbiEmitter.Expressions.cs` | Arithmetic, comparison, logic, members, types |
-| `DirectVmAbiEmitter.Statements.cs` | Assignment, blocks, branches, loops, EH, return |
-| `DirectVmAbiEmitter.Invoke.cs` | Invoke, lambda bodies, instance dispatch |
-| `VmState.cs` | Per-execution state: stack, heap, registers, debug interrupt, trace, loop limits |
+| `Abi/AbiEmitter.cs` | **Primary compiler**: walks analyzed AST, emits `Action<VmState>` delegate |
+| `Abi/AbiEmitter.Context.cs` | Compilation context (ring, frames, scopes) |
+| `Abi/AbiEmitter.Expressions.cs` | Arithmetic, comparison, logic, members, types |
+| `Abi/AbiEmitter.Statements.cs` | Assignment, blocks, branches, loops, EH, return |
+| `Abi/AbiEmitter.Invoke.cs` | Invoke, lambda bodies, instance dispatch |
+| `Abi/RingCodec.cs` | The ABI codec: value classification and both-direction conversion |
+| `Abi/ValueRepresentation.cs` | Emit-time slot-kind classification from the effective node's type |
+| `VmState.cs` | Per-execution state: stack, heap, frame, debug interrupt, loop limits |
 | `VmProgram.cs` | Compiled program record (delegate + max local depth) |
-| `ValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |
-| `Heap.cs` | Object heap for reference-type values with free-list recycling |
-| `CompilationMode.cs` | Debug/tracing vs. optimized mode enum |
-| `Closure.cs` | Closure representation (function index + captured values) |
-| `VmTrace.cs` | µop-level tracing infrastructure (gated by `state.Trace != null`) |
-| `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
-| `RingCodec.cs` | The ABI codec: value classification and both-direction conversion (compile-time and runtime) |
+| `VmValueStack.cs` | Pooled `long[]` stack backed by `ArrayPool<long>.Shared` |
+| `VmManagedObjectHeap.cs` | Object heap for reference-type values with free-list recycling |
+| `CompilationMode.cs` | Debug vs. optimized mode enum |
+| `Ref.cs` (in `Poly/Introspection/CommonLanguageRuntime`) | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …). Use these; do not add `typeof(T).GetMethod(...)` |
 | `VmCall.cs` | The one call-frame protocol (2-word header, frame pointer, result slot) |
 
 ## Pipeline
 
 ```
-Analyzed AST → DirectVmAbiEmitter.Emit() → VmProgram → Interpreter.Execute() → ExecutionResult
+Analyzed AST → AbiEmitter.Emit() → VmProgram → Interpreter.Execute() → ExecutionResult
 ```
 
 No intermediate primitive flattening: the emitter walks the analyzed AST directly
@@ -46,7 +45,7 @@ Structured EH uses native CLR `Expression.TryCatchFinally` — no side tables or
 handler dispatching. The emitter directly produces `TryCatch(Try(body), Catch(...),
 Finally(body))` expression trees for `TryCatchFinally` nodes.
 
-This is a secondary path — the direct AST lowering in `DirectVmAbiEmitter.cs`
+This is a secondary path — the direct AST lowering in `AbiEmitter.cs`
 handles structured EH natively via `Expression.TryCatchFinally`.
 
 ## Runtime Types
@@ -66,12 +65,12 @@ a parameter is read at `FramePos + index`, and the callee result is written to
 `slots[FramePos]`. `Invoke` runs a function in a new frame and restores FP,
 closure, and SP even when the body throws.
 
-### `ValueStack`
+### `VmValueStack`
 Pooled `long[]` stack backed by `ArrayPool<long>.Shared`. Automatically grows
 by doubling. All public members are aggressively inlined by the JIT. Key
 operations: `Push`, `Pop`, `Drop`, `Reserve`, `Reset`. Return to pool on `Dispose()`.
 
-### `Heap`
+### `VmManagedObjectHeap`
 Contiguous object store indexed by handles. Handle 0 is the ABI null/falsy
 sentinel (never allocated). Free-list recycles handles of set-to-null objects.
 Grows by doubling. Methods: `Allocate`, `Get`, `Set`, `UnsafeGet`, `UnsafeSet`, `Clear`.
@@ -89,7 +88,7 @@ Uses a background thread with blocking hooks. Zero overhead when not stepping.
 
 | Hook | Signature | When Called | Overhead When Null |
 |------|-----------|-------------|-------------------|
-| `DebugHook` | `Action<Node, ReadOnlySpan<long>, Heap>?` | Before each statement in Normal mode (`CompileStatement`) | Single null check |
+| `DebugHook` | `Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>?` | Before each statement in Normal mode (`CompileStatement`) | Single null check |
 | `DebugInterrupt` | `Action<VmState>?` | **Not emitted** | n/a |
 
 `DebugHook` fires for the program root and each `Block` child. Nested `If`/`While`/`Try` bodies are statement-hooked only when those bodies are `Block`s. `NoDebug` does not emit the hook.
@@ -97,20 +96,20 @@ Uses a background thread with blocking hooks. Zero overhead when not stepping.
 ## Value Marshalling
 
 `RingCodec` converts between VM representation (`long` scalars, heap handles) and
-CLR types. `DirectVmAbiEmitter` uses `FromClr` / `ToClr` when emitting external
+CLR types. `AbiEmitter` uses `FromClr` / `ToClr` when emitting external
 method and constructor calls; the emitted runtime helpers are `ToRing` (`object`
 → ring) and `Cast` / `TypeAs` / `UnboxNullable`.
 
 Stack scalars widen through `Convert`, booleans use `!= 0`, float and double use
-IEEE bit patterns, and heap references allocate through `Heap.Allocate` or
-dereference via `Heap.UnsafeGet`.
+IEEE bit patterns, and heap references allocate through `VmManagedObjectHeap.Allocate` or
+dereference via `VmManagedObjectHeap.UnsafeGet`.
 
 ## Key Design Decisions
 
 - **Ring-based register allocation**: Values produced by µops are stored in ring slots
   indexed by eval-stack depth, keeping local variable count bounded (~10-20) regardless
   of µop count. See `CompilationContext.ConfigureRingAllocation()`.
-- **ArrayPool-backed stack**: `ValueStack` uses `ArrayPool<long>.Shared` to minimize
+- **ArrayPool-backed stack**: `VmValueStack` uses `ArrayPool<long>.Shared` to minimize
   allocations during execution.
 - **Compiled delegates**: The `ProgramCompiler` emits LINQ Expressions and compiles
   them to `Action<VmState>` delegates. µop dispatch is via `Switch` on `_pc` in

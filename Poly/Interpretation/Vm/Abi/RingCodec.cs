@@ -3,16 +3,17 @@ using System.Reflection;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>
 /// The single definition of the VM's long-slot ABI: how a value is classified
 /// (inline word — numeric, boolean 0/non-zero, or IEEE bit pattern — and heap
 /// handle) and converted in both directions — at compile time (<see cref="Expression"/> factories) and at
-/// runtime (<see cref="ToRing(object?, Heap)"/> and friends).
+/// runtime (<see cref="ToRing(object?, VmManagedObjectHeap)"/> and friends).
 /// </summary>
 /// <remarks>
 /// Every ABI site delegates here. Analysis passes use <see cref="IsInline(Type)"/>
@@ -20,10 +21,10 @@ namespace Poly.Interpretation.Vm;
 /// null sentinel; it is never a live object.
 /// </remarks>
 internal static class RingCodec {
-    private static readonly MethodInfo HeapUnsafeGet = Ref<Heap>.Method(h => h.UnsafeGet(0));
-    private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(default!));
+    private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
+    private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
     private static readonly MethodInfo BoxToAbiInfo =
-        Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
+        Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => BoxToAbi(h, v)));
     private static readonly MethodInfo BitConverterInt64BitsToDouble =
         Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
     private static readonly MethodInfo BitConverterDoubleToInt64Bits =
@@ -174,7 +175,7 @@ internal static class RingCodec {
     /// <summary>Convert a runtime value to its ring slot — the single runtime
     /// implementation used by <see cref="VmState.SetArgs"/>, restoration, and
     /// the emitted boxing call.</summary>
-    public static long ToRing(object? value, Heap heap) => value switch {
+    public static long ToRing(object? value, VmManagedObjectHeap heap) => value switch {
         null => 0L,
         bool b => b ? 1L : 0L,
         byte b => b,
@@ -192,12 +193,12 @@ internal static class RingCodec {
     };
 
     /// <summary>Heap-first runtime conversion used by emitted calls and the
-    /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, Heap)"/>.</summary>
-    public static long BoxToAbi(Heap heap, object? value) => ToRing(value, heap);
+    /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, VmManagedObjectHeap)"/>.</summary>
+    public static long BoxToAbi(VmManagedObjectHeap heap, object? value) => ToRing(value, heap);
 
     /// <summary>Runtime cast of a heap handle to <paramref name="target"/>.
     /// A non-matching value fails closed as an <see cref="InvalidCastException"/>.</summary>
-    public static long Cast(Heap heap, long raw, Type target) {
+    public static long Cast(VmManagedObjectHeap heap, long raw, Type target) {
         if (raw == 0L) {
             if (target.IsValueType)
                 throw new InvalidCastException($"Cannot convert null to '{target}'.");
@@ -219,7 +220,7 @@ internal static class RingCodec {
     }
 
     /// <summary>Runtime unbox of a nullable inline value from its heap handle.</summary>
-    public static long UnboxNullable(Heap heap, long handle) {
+    public static long UnboxNullable(VmManagedObjectHeap heap, long handle) {
         if (handle == 0L) return 0L;
         var obj = heap.UnsafeGet((int)handle);
         if (obj is null) return 0L;
@@ -228,7 +229,7 @@ internal static class RingCodec {
 
     /// <summary>Runtime <c>as</c>: the same handle when the heap value is
     /// assignable to <paramref name="target"/>, otherwise the null sentinel.</summary>
-    public static long TypeAs(Heap heap, long raw, Type target) {
+    public static long TypeAs(VmManagedObjectHeap heap, long raw, Type target) {
         if (raw == 0L) return 0L;
         var obj = heap.UnsafeGet((int)raw);
         return obj is not null && target.IsInstanceOfType(obj) ? raw : 0L;
@@ -243,7 +244,7 @@ internal static class RingCodec {
     public const int FirstCaptureIndex = 1;
 
     /// <summary>Dereference a heap handle as an object — the one deref idiom used
-    /// by the emitter (see <see cref="Heap.UnsafeGet"/>).</summary>
+    /// by the emitter (see <see cref="VmManagedObjectHeap.UnsafeGet"/>).</summary>
     public static Expression DerefObject(Expression heap, Expression handle) =>
         Call(heap, HeapUnsafeGet, Convert(handle, typeof(int)));
 

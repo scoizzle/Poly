@@ -363,20 +363,20 @@ public class InterpretationStabilizationTests {
 
     [Test]
     public async Task Heap_AllocateNull_ReturnsZero() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         await Assert.That(heap.Allocate(null)).IsEqualTo(0);
         await Assert.That(heap.Get(0)).IsNull();
     }
 
     [Test]
     public async Task Heap_SetHandleZero_Throws() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         await Assert.That(() => heap.Set(0, "x")).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]
     public async Task Heap_SetNull_RecyclesOnce_DoubleFreeThrows() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         int h = heap.Allocate("a");
         heap.Set(h, null);
         await Assert.That(() => heap.Set(h, null)).Throws<InvalidOperationException>();

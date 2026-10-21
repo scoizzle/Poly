@@ -20,8 +20,8 @@ Mode: `until-done` (default) or `next`. Stop after `max_tasks` (default 8) even 
 ## Loop
 
 1. **Orient.** First `[ ]` task, respecting prereqs. If every task is done, run the suite gate. If the suite and gate are done, stop.
-2. **Implement.** Read only the task's required reading. Edit only files it owns. No `#region`. Tests with feature changes, TUnit style from `AGENTS.md`.
-3. **Verify.** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` then `dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false`. Filter when the task says so. Do not mark Done on a red build.
+2. **Implement.** Read only the task's required reading. Edit only files it owns. No `#region`. Write the failing test first and run it red before the production change; record the red command/output. Tests with feature changes, TUnit style from `AGENTS.md`.
+3. **Verify.** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` then `dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false`. Filter when the task says so. Do not mark Done on a red build. A behavior change is not Done if its test was never red; mechanical work uses the existing suite as its oracle.
 4. **Record.** Mark the task done in the suite README. Follow-ups go in a `docs/plans/` note, not only chat.
 5. **Continue** until the suite is done, `max_tasks` hits, or a blocker. `next` stops after one task.
 

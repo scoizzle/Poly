@@ -19,7 +19,7 @@ Agents run the heavy steps headless from fixed prompt templates. Bots only launc
 
 ## Record rules
 
-- **Task file:** every implement or fix commit adds its own Log row (date, who, mill, SHA, event, findings). Review verdicts are PR comments, and the next commit on the branch copies them into the Log. The merge row is added by the next slice's plan commit.
+- **Task file:** every implement or fix commit adds its own Log row (date, who, mill, SHA, event, findings). For a behavior change the row records the red test command/output and the green run; mechanical work cites the existing suite. Review verdicts are PR comments, and the next commit on the branch copies them into the Log. The merge row is added by the next slice's plan commit.
 - **Board:** the plan commit of each new slice moves that slice from Next to In flight and records the previous merge. There are no docs-only PRs just for bookkeeping.
 - **Review comments** start with one line, `ROLE | SHA | mill/model | SHIP or NOT SHIP | n open findings`, followed by one table `id | severity | file:line | finding | fix`.
 - **Hand-edit gate:** every review answers "could Scot change this by hand, opening the files cold, without an agent?" A "no" is a finding of severity suggestion or higher and blocks SHIP until fixed or waived by Scot.

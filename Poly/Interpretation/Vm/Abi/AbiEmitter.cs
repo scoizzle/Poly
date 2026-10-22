@@ -163,6 +163,7 @@ public static partial class AbiEmitter {
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
 
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
+        ctx.PromotableArrays = FindPromotableArrays(root, ctx);
         var rootExpr = CompileStatement(root, ctx);
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
@@ -487,8 +488,9 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 $"VM compile rejected: an array of '{elementClr?.Name ?? "?"}' is not supported.");
         }
-        // Always a heap array here. The frame-local small-array encoding was removed: it was
-        // not readable through a member access and no caller tracked its base offset.
+        // Always a heap array here. A promotable buffer never reaches this arm: its
+        // definition is lowered to a frame window in EmitAssignment, and every use is
+        // an element read or write of that window (FrameLocalArrays.cs).
         Type elemType = RingCodec.ArraySlotElementType(elementClr);
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
         var handle = Call(ctx.HeapLocal, HeapAllocate,
@@ -505,6 +507,8 @@ public static partial class AbiEmitter {
         if (ctx.KindOf(n.Value) is ValueRepresentationKind.StackScalar)
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
+        if (n.Value is Variable promoted && ctx.TryGetFrameWindow(promoted, out var window))
+            return SpillToRing(ReadFrameLocalArray(n, window, ctx), ctx);
         var ring = ctx.OpenRing();
         int arrSlot = ring.Add(CompileNode(n.Value, ctx));
         int idxSlot = ring.Add(CompileNode(
@@ -582,6 +586,8 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitIndexAccessValue(IndexAccess n, Context ctx) {
+        if (n.Value is Variable promoted && ctx.TryGetFrameWindow(promoted, out var window))
+            return ReadFrameLocalArray(n, window, ctx);
         return SpillRingRead(CompileNode(n, ctx), ctx);
     }
 

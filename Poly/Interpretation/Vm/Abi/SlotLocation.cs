@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using System.Reflection;
 
 using static System.Linq.Expressions.Expression;
 
@@ -8,12 +9,14 @@ namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>
 /// Where a value physically lives in the emitted body. The VM has one value
-/// representation (a <c>long</c> slot, inline word or heap handle) but four
+/// representation (a <c>long</c> slot, inline word or heap handle) but five
 /// storage locations, and before this type every site re-derived the address:
 /// <list type="bullet">
 /// <item><see cref="Ring"/> — a transient expression-stack local (<c>_rN</c>);</item>
 /// <item><see cref="Frame"/> — one frame slot, <c>_slots[_fp + n]</c> (a local,
 /// a parameter, or the result slot);</item>
+/// <item><see cref="Window"/> — <c>n</c> contiguous frame slots, a promoted
+/// small array, addressed by element;</item>
 /// <item><see cref="Local"/> — a plain CLR local (a <c>_regN</c> register or the
 /// instance handle);</item>
 /// <item><see cref="Cell"/> — a <c>long[1]</c> capture cell reached through a
@@ -62,5 +65,46 @@ internal abstract record SlotLocation {
 
         public override Expression Write(Context ctx, Expression value) =>
             Assign(ArrayAccess(Array, Constant(0)), value);
+    }
+
+    /// <summary><paramref name="Length"/> contiguous frame slots: a promoted
+    /// small array. A window has no single-slot value, so it is only read and
+    /// written by element; an index outside it fails the way a heap array does
+    /// rather than silently touching a neighbouring local. <paramref name="ElementClr"/>
+    /// is part of the window's contract — it fixes how a slot decodes — not a
+    /// duplicate of the value shape.</summary>
+    internal sealed record Window(int Base, int Length, Type ElementClr) : SlotLocation {
+        private static readonly ConstructorInfo IndexOutOfRangeConstructor =
+            typeof(IndexOutOfRangeException).GetConstructor(Type.EmptyTypes)!;
+
+        public override Expression Read(Context ctx) =>
+            throw new InvalidOperationException(
+                "VM compile rejected: a frame window is read by element, not as one slot.");
+
+        public override Expression Write(Context ctx, Expression value) =>
+            throw new InvalidOperationException(
+                "VM compile rejected: a frame window is written by element, not as one slot.");
+
+        public Expression ReadAt(Context ctx, Expression index) {
+            var i = Variable(typeof(int), "_ai");
+            return Block([i],
+                Assign(i, Convert(index, typeof(int))),
+                BoundsCheck(i),
+                ArrayAccess(ctx.SlotsLocal, Add(ctx.FramePosLocal, Add(Constant(Base), i))));
+        }
+
+        public Expression WriteAt(Context ctx, Expression index, Expression value) {
+            var i = Variable(typeof(int), "_ai");
+            return Block([i],
+                Assign(i, Convert(index, typeof(int))),
+                BoundsCheck(i),
+                Assign(ArrayAccess(ctx.SlotsLocal, Add(ctx.FramePosLocal, Add(Constant(Base), i))), value));
+        }
+
+        /// <summary>Preserve the heap path's failure for an index outside the window.</summary>
+        public Expression BoundsCheck(Expression index) =>
+            IfThen(
+                Or(LessThan(index, Constant(0)), GreaterThanOrEqual(index, Constant(Length))),
+                Throw(New(IndexOutOfRangeConstructor)));
     }
 }

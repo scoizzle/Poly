@@ -46,26 +46,43 @@ for the debug hook's local span.
 ### Storage locations
 
 A value has one representation (a `long` slot, inline word or heap handle) but
-lives in one of four places. `SlotLocation` names them, and a read or a write is
+lives in one of five places. `SlotLocation` names them, and a read or a write is
 one call instead of a per-site branch:
 
 | Location | Address | Used for |
 |----------|---------|----------|
 | `Ring` | `_rN` | transient expression-stack values |
 | `Frame` | `_slots[_fp + n]` | a local, a parameter, the result slot |
+| `Window` | `_slots[_fp + base + i]` | a promoted small array (bounds-checked) |
 | `Local` | a CLR local | a `_regN` register, `_this` |
 | `Cell` | `long[1]` element 0 | a capture cell, reached through a closure array or a slot handle |
 
 `Context.Resolve` is the one binding resolver: a closure capture cell first, then
 the bound-parameter / register / frame-slot ladder, wrapping a cell-backed local
 in its cell. `VariableReadRaw`/`VariableWriteRaw` resolve the binding's own
-storage without the capture indirection.
+storage without the capture indirection. A `Window` has no single-slot value, so
+it is only read and written by element, and an index outside it throws the way a
+heap array does.
 
 Shape is `RingCodec`'s job and is not stored on the location. Two classifiers
 answer two different questions: `RingCodec.UnderlyingKindFor` asks whether a
 type's *underlying* value is long-representable (it peels a nullable), while
 `ValueRepresentationClassifier.KindFor` asks what a *node* of that type puts in
 its slot (a nullable is a heap handle).
+
+### Promoted small arrays
+
+A local assigned `new T[n]` — `T` an inline slot type, `n` a constant in
+`[1, 16]` — keeps its elements in frame slots (`_slots[_fp + base + i]`) instead
+of a heap `long[]`; it resolves to a `SlotLocation.Window`. Promotion is an escape
+analysis (`FrameLocalArrays.cs`), not a stored handle: the variable's own slot is
+never read, so nothing can mistake a slot index for a heap handle. A candidate is
+promoted only when exactly one assignment targets it, every other reference is the
+receiver of an element read or write, all uses sit in the defining block after the
+definition inside the same lambdas, and its name is unique in the program.
+Anything else — aliasing, capture, `.Length`, an argument, a return, a
+reassignment, a larger or non-inline element — falls back to the heap array. The
+promoted path keeps the array-bounds failure.
 
 ### Where a result lives
 

@@ -123,10 +123,12 @@ CLR types (`FromClr`/`ToClr` at compile time, `ToRing`/`Cast`/`TypeAs`/
 `UnboxNullable` at runtime). `RingCodec.ToIeee`/`FromIeee` are the one writer and
 reader of the double/long bitcast.
 
-Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Local`, `Cell`);
-`Context.Resolve` maps a binding to one, so an emit site asks for the location
-instead of re-deriving `_slots[_fp + n]`. The value shape is not part of the
-location. Two classifiers answer two questions: `RingCodec.UnderlyingKindFor`
+Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Window`, `Local`,
+`Cell`); `Context.Resolve` maps a binding to one, so an emit site asks for the
+location instead of re-deriving `_slots[_fp + n]`. A `Window` is a promoted small
+array: `n` contiguous frame slots read and written by element, with the heap
+array's bounds failure, and no single-slot value. The value shape is not part of
+the location. Two classifiers answer two questions: `RingCodec.UnderlyingKindFor`
 (does the *underlying* type fit one slot as bits; peels `Nullable`) and
 `ValueRepresentationClassifier.KindFor` (what does a *node* of this type put in
 its slot; a nullable is a heap handle).

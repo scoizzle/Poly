@@ -50,16 +50,21 @@ public class RingLivenessTests {
     [Test, Timeout(10_000)]
     public async Task RingHighWater_IsTheDeepestStatement_NotTheSum(CancellationToken ct) {
         var arr = new Variable("arr");
+        var alias = new Variable("alias");
         var x = new Variable("x");
         var b = new Variable("b");
-        // An index access is the reliably deep statement: receiver, index, and result.
+        // An index access on a heap array is the reliably deep statement: receiver,
+        // index, and result. The array escapes through `alias`, so the escape scan
+        // keeps it on the heap — a promoted buffer is read straight from its frame
+        // window and needs one ring slot, which measures a different thing.
         var makeArray = new Assignment(arr, new NewArray(TypeReference.To<long>(), new Constant(4L)));
-        var deep = new Assignment(x, new IndexAccess(arr, new Constant(0L)));
+        var escape = new Assignment(alias, arr);
+        var deep = new Assignment(x, new IndexAccess(alias, new Constant(0L)));
         var shallow = new Assignment(b, new Constant(1L));
 
-        int deepAlone = RingLocalCount(Build(new Block([makeArray, deep], [arr, x])));
+        int deepAlone = RingLocalCount(Build(new Block([makeArray, escape, deep], [arr, alias, x])));
         int deepThenShallow = RingLocalCount(Build(new Block(
-            [makeArray, deep, shallow], [arr, x, b])));
+            [makeArray, escape, deep, shallow], [arr, alias, x, b])));
 
         await Assert.That(deepAlone).IsGreaterThanOrEqualTo(2);
         await Assert.That(deepThenShallow).IsEqualTo(deepAlone);

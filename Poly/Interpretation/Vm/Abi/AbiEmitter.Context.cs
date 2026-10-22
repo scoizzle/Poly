@@ -230,6 +230,34 @@ public static partial class AbiEmitter {
             return slot;
         }
 
+        /// <summary>Largest element count a promoted array may hold in frame slots.
+        /// The window is reserved per frame, so it stays small.</summary>
+        internal const int SmallArrayThreshold = 16;
+
+        private readonly Dictionary<Variable, SlotLocation.Window> _frameWindows =
+            new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>Variables whose <c>new T[n]</c> buffer never escapes, from
+        /// <see cref="FindPromotableArrays"/>. Only those may be promoted.</summary>
+        internal HashSet<Variable> PromotableArrays { get; set; } =
+            new(ReferenceEqualityComparer.Instance);
+
+        internal bool IsPromotableArray(Variable v) => PromotableArrays.Contains(v);
+
+        /// <summary>Reserve <paramref name="length"/> frame slots for an array's
+        /// elements. Frame-relative, so a nested frame cannot collide with it.</summary>
+        internal int AllocateFrameWindow(int length) {
+            int baseSlot = _nextFrameSlot;
+            _nextFrameSlot += length;
+            return baseSlot;
+        }
+
+        internal void TrackFrameWindow(Variable v, SlotLocation.Window window) =>
+            _frameWindows[v] = window;
+
+        internal bool TryGetFrameWindow(Variable v, out SlotLocation.Window window) =>
+            _frameWindows.TryGetValue(v, out window!);
+
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
         private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
         private readonly Stack<List<Variable>> _scopeVars = new();

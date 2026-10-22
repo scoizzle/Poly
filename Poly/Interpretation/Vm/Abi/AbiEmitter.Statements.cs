@@ -14,6 +14,10 @@ public static partial class AbiEmitter {
 
     private static Expression EmitAssignment(Assignment a, Context ctx) {
         if (a.Destination is IndexAccess indexAccess) {
+            if (indexAccess.Value is Variable promotedArray
+                && ctx.TryGetFrameWindow(promotedArray, out var window))
+                return WriteFrameLocalArray(indexAccess, window, a.Value, ctx);
+
             var ring = ctx.OpenRing();
             int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
             int idxSlot = ring.Add(CompileNode(
@@ -85,6 +89,20 @@ public static partial class AbiEmitter {
         if (a.Destination is not Variable destVar) {
             throw new InvalidOperationException(
                 $"VM compile rejected: assignment destination must be a Variable, Member, or IndexAccess, got {a.Destination.GetType().Name}.");
+        }
+
+        // A small value-type buffer whose every use is `v[i]` lives in frame
+        // slots: no heap array, no deref and cast per element. The escape scan
+        // (FrameLocalArrays.cs) proved that nothing can observe it as a handle.
+        if (a.Value is NewArray newArray
+            && ctx.IsPromotableArray(destVar)
+            && !ctx.NeedsCell(destVar)
+            && !ctx.TryGetCapture(destVar, out _)
+            && TrySmallInlineArrayShape(newArray, ctx, out int length, out Type elementClr)) {
+            var window = new SlotLocation.Window(
+                ctx.AllocateFrameWindow(length), length, elementClr);
+            ctx.TrackFrameWindow(destVar, window);
+            return Block(InitFrameLocalArray(window, ctx), ctx.VariableWrite(destVar, Constant(0L)));
         }
 
         var destination = ctx.Resolve(destVar)

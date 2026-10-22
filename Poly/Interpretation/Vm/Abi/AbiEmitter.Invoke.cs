@@ -523,6 +523,7 @@ public static partial class AbiEmitter {
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Compile body
+        fnCtx.PromotableArrays = FindPromotableArrays(body, fnCtx);
         var bodyCompiled = CompileNode(body, fnCtx);
         bodyExprs.Add(bodyCompiled);
 

@@ -52,6 +52,14 @@ public class CSharpWriterFailClosedTests {
             .WithMessageContaining(nameof(PopCount));
     }
 
+    [Test]
+    public async Task ForIncrement_StatementInsteadOfExpression_Rejects() {
+        var loop = new ForLoop(new Constant(0), new Constant(true), new Block(), new Block());
+        var error = Assert.Throws<InvalidOperationException>(() => CSharpLanguage.Write(loop));
+        await Assert.That(error.Message).Contains(nameof(Block));
+        await Assert.That(error.Message).Contains(loop.Increment!.Id.ToString());
+    }
+
     /// <summary>Every kind with no writer arm reaches the same rejection.</summary>
     [Test]
     public async Task KindsWithoutWriterArm_Throw_InsteadOfPrintingTheirToString() {

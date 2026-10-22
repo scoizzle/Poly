@@ -7,14 +7,14 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
     /// <summary>Comparison as a bool Expression (no 0/1 long).</summary>
     private static Expression CompileCompareTest(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        AbiCtx ctx) {
+        Context ctx) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
@@ -25,8 +25,8 @@ public static partial class DirectVmAbiEmitter {
             return cf == Equal ? ec : Not(ec);
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -37,14 +37,14 @@ public static partial class DirectVmAbiEmitter {
             return cf(cmp, Constant(0));
         }
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
+            return cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx));
         return cf(lv, rv);
     }
 
     private static Expression EmitComparisonValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        AbiCtx ctx, Node? cn = null) {
+        Context ctx, Node? cn = null) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
@@ -56,8 +56,8 @@ public static partial class DirectVmAbiEmitter {
                                 cf == Equal ? Constant(0L) : Constant(1L));
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -68,7 +68,7 @@ public static partial class DirectVmAbiEmitter {
             return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
         }
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
+            return Condition(cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx)),
                 Constant(1L), Constant(0L));
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
     }
@@ -79,7 +79,7 @@ public static partial class DirectVmAbiEmitter {
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
-        AbiCtx ctx) {
+        Context ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
@@ -93,7 +93,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>Converts a long value (heap handle or 0 for null) to an object
     /// reference suitable for comparison. Handle 0 maps to CLR null rather
     /// than being dereferenced via <c>Heap.UnsafeGet</c>.</summary>
-    private static Expression HeapValueToObject(Expression handle, AbiCtx ctx) {
+    private static Expression HeapValueToObject(Expression handle, Context ctx) {
         var intHandle = Convert(handle, typeof(int));
         var deref = Call(ctx.HeapLocal,
             HeapUnsafeGet, intHandle);
@@ -104,10 +104,10 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Check if both nodes likely produce heap reference values that
     /// should be compared by value rather than handle.</summary>
-    private static bool AreHeapValues(AbiCtx ctx, Node left, Node right) {
+    private static bool AreHeapValues(Context ctx, Node left, Node right) {
         if (ctx.Analysis is not null) {
-            var leftRep = ctx.Analysis.GetValueRepresentation(left);
-            var rightRep = ctx.Analysis.GetValueRepresentation(right);
+            var leftRep = ctx.KindOf(left);
+            var rightRep = ctx.KindOf(right);
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
@@ -127,7 +127,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Short-circuit AND: if left is false, skip right.</summary>
-    private static Expression EmitLogicalAnd(And and, AbiCtx ctx) {
+    private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
 
@@ -147,7 +147,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Short-circuit OR: if left is true, skip right.</summary>
-    private static Expression EmitLogicalOr(Or or, AbiCtx ctx) {
+    private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
 
@@ -167,7 +167,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Logical NOT: 0→1, anything else→0.</summary>
-    private static Expression EmitNot(Not not, AbiCtx ctx) {
+    private static Expression EmitNot(Not not, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(not.Value, ctx));
         var result = Assign(ctx.RingVar(slot),
@@ -176,7 +176,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Unary minus: negate value.</summary>
-    private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, AbiCtx ctx) {
+    private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
         Expression result;
@@ -191,14 +191,14 @@ public static partial class DirectVmAbiEmitter {
         return ring.Then(result);
     }
 
-    private static Expression EmitBitwiseNot(BitwiseNot n, AbiCtx ctx) {
+    private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(n.Operand, ctx));
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
-    private static Expression EmitPopCount(PopCount pc, AbiCtx ctx) {
+    private static Expression EmitPopCount(PopCount pc, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(pc.Operand, ctx));
         var call = Call(null, BitOperationsPopCount,
@@ -208,12 +208,12 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
-    private static bool IsTypeNameReceiver(Node node, AbiCtx ctx) =>
+    private static bool IsTypeNameReceiver(Node node, Context ctx) =>
         node is NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference
         || (ctx.Analysis?.GetNodeReplacement(node) is { } replaced && replaced != node
             && IsTypeNameReceiver(replaced, ctx));
 
-    private static Expression EmitMember(Member m, AbiCtx ctx) {
+    private static Expression EmitMember(Member m, Context ctx) {
         var ring = ctx.OpenRing();
         var resolved = ctx.Analysis?.GetResolvedMember(m);
 
@@ -267,7 +267,7 @@ public static partial class DirectVmAbiEmitter {
         ITypeMember resolved,
         Expression? instanceObj,
         int resultSlot,
-        AbiCtx ctx,
+        Context ctx,
         Expression instanceExpr) {
 
         // Polymorphic EmitRead — each ITypeMember implementation provides its
@@ -301,7 +301,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Convert a member access result (object?) to the ring ABI (long).</summary>
-    private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
+    private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
         var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
         return RingCodec.FromClr(readCall, clrType, ctx.HeapLocal);
@@ -310,7 +310,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>TypeIs: test the operand against the target type. A scalar operand is
     /// answered from its static type; a heap operand is tested against the target CLR
     /// type at runtime (so a null handle is false). An unresolvable target fails closed.</summary>
-    private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
+    private static Expression EmitTypeIs(TypeIs t, Context ctx) {
         var ring = ctx.OpenRing();
         int resultSlot = ring.Add(CompileNode(t.Operand, ctx));
 
@@ -328,9 +328,9 @@ public static partial class DirectVmAbiEmitter {
         // answer (`1 is int` true, `1 is long` false — C# `is` tests the runtime type and
         // never widens). A heap operand is a handle (0 = null) tested at runtime, which
         // keeps `string s = null; s is string` false and resolves interfaces for free.
-        switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
+        switch (ctx.RepresentationOf(t.Operand).Kind) {
             case ValueRepresentationKind.StackScalar: {
-                    var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+                    var operandStatic = ctx.ClrTypeOf(t.Operand);
                     if (operandStatic is null) {
                         throw new InvalidOperationException(
                             $"VM compile rejected: cannot resolve the static type of '{t.Operand}' in '{t}'.");
@@ -351,7 +351,7 @@ public static partial class DirectVmAbiEmitter {
         }
     }
 
-    private static Type? ResolveClrType(Node? typeRef, Node typedNode, AbiCtx ctx) {
+    private static Type? ResolveClrType(Node? typeRef, Node typedNode, Context ctx) {
         if (typeRef is ClrTypeReference ctr)
             return ctr.RuntimeType;
         if (typeRef is PrimitiveTypeReference ptr)
@@ -392,7 +392,7 @@ public static partial class DirectVmAbiEmitter {
     /// <c>Task</c> / <c>Task&lt;T&gt;</c> / <c>ValueTask</c> / <c>ValueTask&lt;T&gt;</c> run through the
     /// Ref-bound helpers; any other structurally awaitable type resolves
     /// <c>GetAwaiter</c> / <c>GetResult</c> through the type provider.</summary>
-    private static Expression EmitAwait(Await await, AbiCtx ctx) {
+    private static Expression EmitAwait(Await await, Context ctx) {
         var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType();
         if (operandType is null)
             throw new InvalidOperationException(
@@ -437,7 +437,7 @@ public static partial class DirectVmAbiEmitter {
     /// <c>GetResult</c> runs only after <c>IsCompleted</c>, blocking on
     /// <c>UnsafeOnCompleted</c> / <c>OnCompleted</c> when it is not.</summary>
     private static Expression EmitStructuralAwait(
-        Await await, Expression operandObj, AbiCtx.RingRegion ring, int slot, AbiCtx ctx) {
+        Await await, Expression operandObj, Context.RingRegion ring, int slot, Context ctx) {
         var operandTypeDef = ctx.Analysis?.GetResolvedType(await.Operand)
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved type.");
@@ -456,7 +456,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
-    private static Expression EmitTypeAs(TypeAs t, AbiCtx ctx) {
+    private static Expression EmitTypeAs(TypeAs t, Context ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeAs target type is unresolved.");
         if (targetType.IsValueType)
@@ -470,10 +470,10 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>TypeCast after analysis rewrites: identity, reference downcast, or unbox.
     /// Numeric and operator conversions are <c>Invoke</c> replacements.</summary>
-    private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
+    private static Expression EmitTypeCast(TypeCast t, Context ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeCast target type is unresolved.");
-        Type? sourceType = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+        Type? sourceType = ctx.ClrTypeOf(t.Operand);
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
         var ring = ctx.OpenRing();
@@ -487,7 +487,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
-    private static Expression EmitDefault(Default d, AbiCtx ctx) {
+    private static Expression EmitDefault(Default d, Context ctx) {
         int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
         if (target is null || (target.IsValueType && RingCodec.IsInline(target))
@@ -500,7 +500,7 @@ public static partial class DirectVmAbiEmitter {
                 Convert(Constant(instance, typeof(object)), typeof(object))), typeof(long)));
     }
 
-    private static Expression EmitTypeOf(TypeOf t, AbiCtx ctx) {
+    private static Expression EmitTypeOf(TypeOf t, Context ctx) {
         var runtime = ResolveClrType(t.Type, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
         int slot = ctx.AllocSlot();
@@ -510,7 +510,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
-    private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
+    private static Expression EmitStridedSetBits(StridedSetBits ssb, Context ctx) {
         var ring = ctx.OpenRing();
         int arrSlot = ring.Add(CompileNode(ssb.Array, ctx));
         int startSlot = ring.Add(CompileNode(ssb.StartValue, ctx));
@@ -543,7 +543,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>Variable reference: read from value stack or from
     /// closure capture array (if this is a captured upvalue).
     /// Leaving the value on the ring for expression chaining.</summary>
-    private static Expression EmitVariable(Variable v, AbiCtx ctx) {
+    private static Expression EmitVariable(Variable v, Context ctx) {
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));

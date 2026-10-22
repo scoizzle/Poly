@@ -15,6 +15,7 @@ public sealed class SessionBuilder {
     private readonly List<IArtifactContributor> _artifacts = [];
     private readonly List<INodeAnalyzer> _analyzers = [];
     private readonly HashSet<string> _analyzerPassNames = new(StringComparer.Ordinal);
+    private readonly List<IConstraintCompiler> _constraintCompilers = [];
     private readonly List<string> _loadedIds = [];
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
 
@@ -71,6 +72,24 @@ public sealed class SessionBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Records a compiler for constraints that produce AST and implied
+    /// parameters. Two compilers from the same library and CLR type fail closed.
+    /// Which constraint they own is decided by <see cref="IConstraintCompiler.Applies"/>.
+    /// </summary>
+    public SessionBuilder AddConstraintCompiler(IConstraintCompiler compiler) {
+        ArgumentNullException.ThrowIfNull(compiler);
+        if (string.IsNullOrWhiteSpace(compiler.LibraryId))
+            throw new ArgumentException("Library id must be non-empty.", nameof(compiler));
+        if (_constraintCompilers.Any(existing =>
+                string.Equals(existing.LibraryId, compiler.LibraryId, StringComparison.Ordinal)
+                && existing.GetType() == compiler.GetType()))
+            throw new InvalidOperationException(
+                $"Library '{compiler.LibraryId}' already registered constraint compiler '{compiler.GetType().Name}'.");
+        _constraintCompilers.Add(compiler);
+        return this;
+    }
+
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) {
         var annotations = new AnnotationRegistry(Annotations);
@@ -88,6 +107,7 @@ public sealed class SessionBuilder {
             Meaning,
             _artifacts,
             _analyzers,
-            _primitiveSeeds);
+            _primitiveSeeds,
+            _constraintCompilers.ToArray());
     }
 }

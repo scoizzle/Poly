@@ -7,14 +7,14 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
 
     /// <summary>
     /// Invoke: for Lambda targets, compile the body inline (no separate delegate).
     /// </summary>
-    private static Expression EmitInvoke(Invoke invoke, AbiCtx ctx) {
+    private static Expression EmitInvoke(Invoke invoke, Context ctx) {
         // Handle Invoke(Member(instance, "Method"), args) — resolve the method
         // and call it directly via CLR reflection, bypassing full lambda handling.
         if (invoke.Delegate is Member member) {
@@ -329,7 +329,7 @@ public static partial class DirectVmAbiEmitter {
         ParameterInfo[] methodParams,
         Invoke invoke,
         int[] argSlots,
-        AbiCtx ctx,
+        Context ctx,
         out Expression packed) {
         packed = null!;
         if (methodParams.Length != 1 || invoke.Arguments.Length <= 1)
@@ -360,7 +360,7 @@ public static partial class DirectVmAbiEmitter {
     /// converted by its CLR type, never mistaken for a heap handle the way
     /// <c>RingCodec.ToClr(..., typeof(object))</c> would (object is not a scalar kind).
     /// </summary>
-    private static Expression EmitInterpolatedString(InterpolatedString node, AbiCtx ctx) {
+    private static Expression EmitInterpolatedString(InterpolatedString node, Context ctx) {
         var parts = new List<Expression>(node.Literals.Count + node.Holes.Count);
         var seq = new List<Expression>();
         for (var i = 0; i < node.Literals.Count; i++) {
@@ -389,15 +389,12 @@ public static partial class DirectVmAbiEmitter {
     /// references / non-long value types are read from the heap. A null hole reads
     /// the reserved handle 0 as null, which Concat renders as the empty string.
     /// </summary>
-    private static Expression HoleToClrObject(Node hole, Expression ringVal, AbiCtx ctx) {
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(hole)
-            ?? throw new InvalidOperationException(
-                $"VM compile rejected: interpolation hole '{hole}' has no value representation.");
-        var clrType = meta.ClrType;
+    private static Expression HoleToClrObject(Node hole, Expression ringVal, Context ctx) {
+        var (kind, clrType) = ctx.RepresentationOf(hole);
         if (clrType is null) {
-            if (meta.Kind is ValueRepresentationKind.StackScalar)
+            if (kind is ValueRepresentationKind.StackScalar)
                 clrType = typeof(long);
-            else if (meta.Kind is ValueRepresentationKind.HeapRef)
+            else if (kind is ValueRepresentationKind.HeapRef)
                 return Convert(
                     Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))), typeof(object));
             else
@@ -407,7 +404,7 @@ public static partial class DirectVmAbiEmitter {
         return Convert(RingCodec.ToClr(ringVal, clrType, hole, ctx.Analysis, ctx.HeapLocal), typeof(object));
     }
 
-    private static Expression EmitInvokeIndirect(Invoke invoke, AbiCtx ctx) {
+    private static Expression EmitInvokeIndirect(Invoke invoke, Context ctx) {
         if (ctx.Analysis is { } analysis
             && StoredLambdaBinding.TryGet(analysis, invoke.Delegate, out var stored)
             && stored is not null
@@ -453,7 +450,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>Inline a small lambda with no captures and a single-expression body.
     /// Skips frame push, closure allocation, and ring save/restore — compiles
     /// arguments directly to the ring and maps parameter reads to argument slots.</summary>
-    private static Expression EmitInlineInvoke(Lambda lambda, Invoke invoke, AbiCtx ctx) {
+    private static Expression EmitInlineInvoke(Lambda lambda, Invoke invoke, Context ctx) {
         // Compile every argument before mapping any parameter: an argument
         // expression belongs to the caller's scope, so it must not see this
         // lambda's parameter names.
@@ -503,7 +500,7 @@ public static partial class DirectVmAbiEmitter {
         bool instanceSlot = false,
         Type? asyncReturn = null) {
 
-        var fnCtx = new AbiCtx();
+        var fnCtx = new Context();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
@@ -620,7 +617,7 @@ public static partial class DirectVmAbiEmitter {
     /// <paramref name="source"/> is the yielding node, for the ring's double/float un-bitting and
     /// for rejecting a body that yields a task where the element <c>T</c> is expected.
     /// </summary>
-    private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, AbiCtx ctx, Node? source) {
+    private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, Context ctx, Node? source) {
         if (asyncReturn == typeof(Task))
             return RingCodec.FromClr(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
         var resultType = asyncReturn.GetGenericArguments()[0];
@@ -647,7 +644,7 @@ public static partial class DirectVmAbiEmitter {
     [ThreadStatic] private static List<(Node Key, CompilationMode Mode, Action<VmState>[] Slot)>? _astPending;
 
     private static readonly MethodInfo InvokeAstFunctionInfo =
-        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeAstFunction),
+        typeof(AbiEmitter).GetMethod(nameof(InvokeAstFunction),
             BindingFlags.NonPublic | BindingFlags.Static)!;
 
     /// <summary>
@@ -673,7 +670,7 @@ public static partial class DirectVmAbiEmitter {
     /// </summary>
     private static List<Expression> EmitAstArguments(
         IReadOnlyList<Node> arguments, IReadOnlyList<Parameter> parameters,
-        string callee, List<Expression> seq, AbiCtx ctx) {
+        string callee, List<Expression> seq, Context ctx) {
         if (arguments.Count > parameters.Count)
             throw new InvalidOperationException(
                 $"VM compile rejected: {callee} has {parameters.Count} parameter(s) but the call has {arguments.Count} argument(s).");
@@ -706,7 +703,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static Expression EmitAstInvoke(
-        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, AbiCtx ctx) {
+        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, Context ctx) {
         var definition = method.DefinitionNode;
         bool isStatic = method.IsStatic;
         var seq = new List<Expression>();
@@ -752,7 +749,7 @@ public static partial class DirectVmAbiEmitter {
         Node body,
         IReadOnlyList<Parameter> parameters,
         ITypeDefinition declaring,
-        AbiCtx caller,
+        Context caller,
         bool instanceSlot,
         Type? asyncReturn = null) {
         var mode = caller.Mode;
@@ -913,7 +910,7 @@ public static partial class DirectVmAbiEmitter {
         return true;
     }
 
-    private static Expression ParameterDefaultLong(Parameter parameter, AbiCtx ctx) {
+    private static Expression ParameterDefaultLong(Parameter parameter, Context ctx) {
         if (parameter.DefaultValue is not Constant constant)
             return Constant(0L);
         if (RingCodec.TryInlineConstant(constant.Value, out long scalar))
@@ -923,58 +920,14 @@ public static partial class DirectVmAbiEmitter {
             typeof(long));
     }
 
-    // ── Helpers ────────────────────────────────────
-
-    /// <summary>
-    /// Wrap a compiled node expression with a simplified debug hook guard.
-    /// In NoDebug mode (<see cref="AbiCtx.DebugHookProp"/> is null),
-    /// returns the body unchanged — zero overhead.
-    ///
-    /// When a hook is set, emits code that snapshots the current frame's
-    /// locals into a <c>long[]</c> buffer (using compile-time known offsets),
-    /// then invokes <c>DebugHook(node, ReadOnlySpan&lt;long&gt;(buffer), heap)</c>.
-    ///
-    /// The <c>ProgramCounter</c> is also flushed to the current step for
-    /// legacy compatibility.
-    /// </summary>
-    private static Expression WithInterrupt(Expression body, AbiCtx ctx, int step) {
-        if (ctx.DebugHookProp is null) return body;
-
-        int localCount = ctx.FrameSlotHighWater;
-
-        // Build the hook invocation expression only when the hook is non-null.
-        // Emit: if (state.DebugHook != null) { snapshot + invoke }
-        var stmts = new List<Expression>();
-        var flush = ctx.EmitScopeStores();
-        if (flush.Count > 0)
-            stmts.Add(Block(flush));
-
-        // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
-        // This is a zero-allocation slice — no buffer copy needed.
-        // Cell-backed slots hold heap handles; VmDebugger.GetLocals derefs cell[0].
-        Expression spanExpr = localCount == 0
-            ? New(ReadOnlySpanLongArrayCtor,
-                NewArrayBounds(typeof(long), Constant(0)))
-            : New(ReadOnlySpanLongSliceCtor,
-                ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
-
-        stmts.Add(Invoke(ctx.DebugHookProp, ctx.CurrentAstNodeExpr, spanExpr, ctx.HeapLocal));
-
-        return Block(
-            IfThen(
-                NotEqual(ctx.DebugHookProp, Constant(null, typeof(Action<Node, ReadOnlySpan<long>, Heap>))),
-                Block(Assign(ctx.StatePcFlush, Constant(step)), Block(stmts))),
-            body);
-    }
-
     // ── Static property/method refs ─────────────────────────────────
 
     private static readonly PropertyInfo StateStackProperty =
         Ref<VmState>.Property(e => e.Stack);
     private static readonly PropertyInfo ValueStackRawSlotsProperty =
-        Ref<ValueStack>.Property(s => s.RawSlots);
+        Ref<VmValueStack>.Property(s => s.RawSlots);
     private static readonly PropertyInfo ValueStackStackPointerProperty =
-        Ref<ValueStack>.Property(s => s.StackPointer);
+        Ref<VmValueStack>.Property(s => s.StackPointer);
     private static readonly PropertyInfo StateClosureHandleProperty =
         Ref<VmState>.Property(e => e.ClosureHandle);
 
@@ -990,7 +943,7 @@ public static partial class DirectVmAbiEmitter {
         Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
             InvokeInstanceMethod(instance, name, args)));
     private static readonly MethodInfo InvokeHeapClosureInfo =
-        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeHeapClosure),
+        typeof(AbiEmitter).GetMethod(nameof(InvokeHeapClosure),
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
 
     /// <summary>
@@ -1060,11 +1013,10 @@ public static partial class DirectVmAbiEmitter {
     /// (<c>'Expiry' is not set</c>) instead of a raw null dereference.
     /// Scalars stay on the ring; only heap receivers are checked.
     /// </summary>
-    private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, AbiCtx ctx) {
+    private static Expression? UnsetReceiverGuard(Node receiver, Expression handle, Context ctx) {
         if (receiver is not Member member || IsTypeNameReceiver(member.Value, ctx))
             return null;
-        var meta = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(receiver);
-        if (meta is null || meta.Kind != ValueRepresentationKind.HeapRef)
+        if (ctx.KindOf(receiver) is not ValueRepresentationKind.HeapRef)
             return null;
         var ctor = typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)
             .GetConstructor([typeof(string)]);

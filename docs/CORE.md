@@ -74,7 +74,7 @@ TFM: `net10.0`, nullable on, zero external deps in core `Poly/`. Policy: [`docs/
 |---------|------|----------|
 | **Ast** | `Node`, `NodeId`, fluent API | Execution, domain shapes, analysis |
 | **Analysis** | Framework, metadata, **node replacement** | Execution, domain concepts, MCP |
-| **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
+| **Interpretation** | Semantic passes, `Interpreter`, `AbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
 | **Introspection** | Host-neutral type/member model (CLR = first provider) | Depending on Interpretation |
 | **DomainModeling** | Immutable `Domain`, evolution, DE→AST per op; contracts via `bind` | Domain opcodes; `Main`; growing `Comment` as meaning |
 | **Grammar** | Pattern-table engine (`Poly/Grammar/`) — decode / match / print | Product tables inside the engine — DSL tables live in `DomainModeling`, C# tables in `Interpretation`; parallel pattern engines |
@@ -110,7 +110,7 @@ Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Do
 
 | Piece | Location |
 |-------|----------|
-| Emitter | `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
+| Emitter | `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` |
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, … under `Poly/Interpretation/Vm/` |
 
@@ -126,6 +126,8 @@ No intermediate primitive IR. Keep the emitter a generic compiler of known nodes
 | Policy eval | `DomainEntityInstance.EvaluatePolicy` → lower → `Interpreter` |
 
 Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke / cross-entity / for-invoke / create / unique / clocks — shapes and residual debt: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md). ADR: [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](decisions/2026-06-08-domain-lowering-boundary.md). Named invoke runs module method bodies from `session.Lower` (same tree print uses). Do not add consumer-specific lowering flags or a second effect interpreter.
+
+**Constraint contributions.** A library may register an `IConstraintCompiler`; core places its AST at a semantic anchor (`ConstraintAnchor`), inserts contributed parameters before the method's first optional parameter, and threads them along the lowered call set. The storage libraries own `unique`: the guard calls the in-process `IStoragePort` (`Exists` = pending key or database), and the post-construction call records the pending key. The port is read-only — no writes and no `SaveChanges` — and is implemented by the generated `{Domain}DbContext` and by the simulator. The module never names a host context type, and there is no second persistence runtime.
 
 ### 3.5 Introspection
 

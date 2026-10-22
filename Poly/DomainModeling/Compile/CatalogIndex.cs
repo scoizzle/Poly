@@ -1,4 +1,5 @@
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Runtime;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -59,5 +60,28 @@ public sealed class CatalogIndex {
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// True when any lowered method in this catalog depends on the in-process
+    /// storage port. The host context implements the port only for those domains.
+    /// </summary>
+    public bool RequiresStoragePort {
+        get {
+            foreach (var artifact in _trees.Values) {
+                if (artifact.Payload is not IReadOnlyList<TypeDefinitionNode> types)
+                    continue;
+                foreach (var type in types) {
+                    foreach (var method in type.Methods ?? []) {
+                        foreach (var parameter in method.Parameters ?? []) {
+                            if (parameter.TypeReference is ClrTypeReference reference
+                                && typeof(IStoragePort).IsAssignableFrom(reference.RuntimeType))
+                                return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
     }
 }

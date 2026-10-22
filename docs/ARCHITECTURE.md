@@ -32,7 +32,7 @@ DomainModeling ──[DomainExpression lowering]──┐
                        │ analyzed AST + metadata
                        ▼
 ┌──────────────────────────────────────────────────────────┐
-│               DirectVmAbiEmitter                           │
+│               AbiEmitter                           │
 │                                                          │
 │  Compiles analyzed AST to Expression trees targeting     │
 │  VmState / ring / heap (no primitive IR). Honors         │
@@ -226,13 +226,13 @@ new AnalyzerBuilder()
 
 ## 3. Direct AST → VM ABI
 
-**Location:** `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs`
+**Location:** `Poly/Interpretation/Vm/Abi/AbiEmitter.cs`
 
-The `DirectVmAbiEmitter` compiles analyzed AST to Expression trees targeting `VmState` / ring / heap. There is no intermediate primitive flattening, no `VmInstruction` bytecode, and no `CallExternalOp`. This is the canonical compilation path for all AST-backed programs. Contract: [`docs/CORE.md`](CORE.md) §3.3.
+The `AbiEmitter` compiles analyzed AST to Expression trees targeting `VmState` / ring / heap. There is no intermediate primitive flattening, no `VmInstruction` bytecode, and no `CallExternalOp`. This is the canonical compilation path for all AST-backed programs. Contract: [`docs/CORE.md`](CORE.md) §3.3.
 
 ### Compilation Flow
 
-`DirectVmAbiEmitter.CompileNode` returns a LINQ `Expression` (not bytecode):
+`AbiEmitter.CompileNode` returns a LINQ `Expression` (not bytecode):
 
 1. **Replacement awareness**: before dispatch, honors `analysis.GetNodeReplacement(node)` — folding and other rewrite passes substitute nodes in analysis, not in the emitter.
 2. **Node dispatch**: each node type has a dedicated emit method (`EmitConstant`, `EmitInvoke`, `EmitForEachLoop`, …) that builds Expression nodes against ring locals and heap.
@@ -248,7 +248,6 @@ Invoke: resolved CLR `MethodInfo` is `Expression.Call`; unresolved `Invoke(Membe
 |---|---|---|
 | `TypeResolutionMetadata` | TypeAndMemberResolutionPass | Member/array/ctor type checks |
 | `MemberResolutionMetadata` | TypeAndMemberResolutionPass | CLR `MethodInfo` / property / ctor when present; otherwise `InvokeNamed` |
-| `ValueRepresentationMetadata` | ValueRepresentationAnalyzer | Stack scalar vs heap ref (invoke args, root result) |
 | `NodeReplacementMetadata` | Any pass | Substitute folded/desugared nodes |
 
 Do not patch the ABI for one scenario — fix upstream (lower / analyze / replace). Known-member `MethodInfo` / `PropertyInfo` / `ConstructorInfo`: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`).
@@ -260,7 +259,7 @@ Do not patch the ABI for one scenario — fix upstream (lower / analyze / replac
 Before the emitter runs, domain-level expressions (policies, rules, conditions) must be lowered to AST nodes. This pass expands `DomainExpression` trees — `PropertyAccess`, `RelationshipNavigation`, `And`, `Or`, `Exists`, `Literal`, arithmetic, date ops — into `Poly.Ast` node records. The AST is then analyzed and compiled via the standard path above.
 
 ```
-DomainExpression ──→ Ast nodes ──→ Analysis ──→ DirectVmAbiEmitter ──→ VM
+DomainExpression ──→ Ast nodes ──→ Analysis ──→ AbiEmitter ──→ VM
 ```
 
 Policy compilation/eval (`DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`) uses this path, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference (`PolicyEvaluator` is the test-only CLR-subject wrapper in `Poly.Tests/TestHelpers/`).
@@ -273,7 +272,7 @@ Policy compilation/eval (`DomainEntityInstance.EvaluatePolicy` → `DomainExpres
 
 **Location:** `Poly/Interpretation/Vm/VmProgram.cs`
 
-Product path is **not** a `VmInstruction` bytecode interpreter and not a primitive-IR flatten. `DirectVmAbiEmitter.Emit` compiles the analyzed AST to Expression trees targeting `VmState` / ring / heap and returns a `VmProgram` whose `Delegate` is `Action<VmState>`. `Interpreter.Execute` runs that delegate; there is no `EnsureCompiled` opcode dispatch loop.
+Product path is **not** a `VmInstruction` bytecode interpreter and not a primitive-IR flatten. `AbiEmitter.Emit` compiles the analyzed AST to Expression trees targeting `VmState` / ring / heap and returns a `VmProgram` whose `Delegate` is `Action<VmState>`. `Interpreter.Execute` runs that delegate; there is no `EnsureCompiled` opcode dispatch loop.
 
 Mechanisms: [`docs/CORE.md`](CORE.md) §3.3. Runtime types: `Poly/Interpretation/Vm/README.md`.
 
@@ -286,7 +285,7 @@ Mechanisms: [`docs/CORE.md`](CORE.md) §3.3. Runtime types: `Poly/Interpretation
 ### Execution Flow
 
 ```
-Interpreter.Compile(node) → DirectVmAbiEmitter.Emit → VmProgram
+Interpreter.Compile(node) → AbiEmitter.Emit → VmProgram
 Interpreter.Execute(program) → program.Delegate(VmState)
 ```
 
@@ -294,25 +293,23 @@ Interpreter.Execute(program) → program.Delegate(VmState)
 
 | File | Purpose |
 |---|---|
-| `DirectVmAbiEmitter.cs` | Compiles analyzed AST → Expression trees → `VmProgram` |
+| `Abi/AbiEmitter.cs` | Compiles analyzed AST → Expression trees → `VmProgram` |
 | `VmProgram.cs` | Compiled program: `Action<VmState> Delegate` (+ debug/function metadata) |
-| `VmState.cs` | Execution state: stack, heap, registers, `DebugHook`, status |
-| `ValueStack.cs` | `long[]` backed by `ArrayPool<long>.Shared` |
-| `Heap.cs` | Object heap with free-list recycling |
-| `Closure.cs` | Function index + captures array |
-| `Ref.cs` | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …) |
-| `RingCodec.cs` | The ABI codec: value classification and both-direction conversion |
+| `VmState.cs` | Execution state: stack, heap, frame, `DebugHook`, status |
+| `VmValueStack.cs` | `long[]` backed by `ArrayPool<long>.Shared` |
+| `VmManagedObjectHeap.cs` | Object heap with free-list recycling |
+| `Ref.cs` (in `Poly/Introspection/CommonLanguageRuntime`) | Compile-time `MemberInfo` lookups (`Ref.Method`, `Ref<T>.Property`, …) |
+| `Abi/RingCodec.cs` | The ABI codec: value classification and both-direction conversion |
 | `VmCall.cs` | The one call-frame protocol (2-word header, frame pointer, result slot) |
 
 ### Runtime State Model
 
 | Component | Purpose |
 |---|---|
-| `VmState` | Stack, heap, registers, `DebugHook`, status |
-| `ValueStack` | Pooled `long[]` slots |
-| `Heap` | Object store by handle; free-list recycles dead entries |
-| `Closure` | Function index + captured variable values |
-| `Ref<T>` | Compile-time known-member `MemberInfo` (not a heap cell) |
+| `VmState` | Stack, heap, frame, `DebugHook`, status |
+| `VmValueStack` | Pooled `long[]` slots |
+| `VmManagedObjectHeap` | Object store by handle; free-list recycles dead entries |
+| `Ref<T>` (Introspection) | Compile-time known-member `MemberInfo` (not a heap cell) |
 
 The VM is the **canonical semantics** — all backends (C# code gen, LINQ expressions) should produce behavior equivalent to the VM execution. Debug uses `VmState.DebugHook` (AST node + frame locals), not `NodeId` on bytecode.
 
@@ -326,7 +323,7 @@ The VM is the **canonical semantics** — all backends (C# code gen, LINQ expres
 |---|---|---|---|---|
 | `TypeResolutionMetadata` | TypeAndMemberResolutionPass | Each node | Emitter, code gen |
 | `MemberResolutionMetadata` | TypeAndMemberResolutionPass | Invoke/Member/New nodes | Emitter (CLR members; else `InvokeNamed`) |
-| `ValueRepresentationMetadata` | ValueRepresentationAnalyzer | Each node | Emitter (scalar vs heap) |
+| Resolved CLR type | TypeAndMemberResolutionPass | Each node | Emitter (`ValueRepresentationClassifier`: scalar vs heap) |
 | `VariableAnalysisMetadata` | ScopeValidator | Root node (via `context.SetMetadata`) | Analysis / diagnostics |
 | `ConstantValueMetadata` | ConstantFoldingPass | Folded nodes | Replacement + diagnostics |
 | `DefiniteAssignmentMetadata` | DefiniteAssignmentAnalyzer | Lambda body nodes | Diagnostics |
@@ -351,10 +348,10 @@ Analysis Pipeline ──► AnalysisResult
   │                     └── Diagnostics
   │
   ▼
-DirectVmAbiEmitter ──► VmProgram (Action<VmState>)
+AbiEmitter ──► VmProgram (Action<VmState>)
   │
   ├── CompileNode returns Expression; honors NodeReplacementMetadata
-  ├── Consumes Type/Member resolution + ValueRepresentationMetadata
+  ├── Consumes Type/Member resolution; derives slot kind from the effective node's type
   └── InvokeNamed for unresolved instance members; foreach is IList walk
 ```
 
@@ -364,7 +361,7 @@ DirectVmAbiEmitter ──► VmProgram (Action<VmState>)
 
 ### VM Backend (primary)
 
-The primary execution engine. Analyzed AST is compiled by `DirectVmAbiEmitter` into a `VmProgram` whose `Delegate` is `Action<VmState>` (Expression trees targeting ring/heap — no bytecode flatten). `Interpreter.Execute` invokes that delegate. Optimized for speed:
+The primary execution engine. Analyzed AST is compiled by `AbiEmitter` into a `VmProgram` whose `Delegate` is `Action<VmState>` (Expression trees targeting ring/heap — no bytecode flatten). `Interpreter.Execute` invokes that delegate. Optimized for speed:
 
 - Direct `long[]` stack via `ArrayPool<long>.Shared`
 - Native CLR Expression control flow (no opcode dispatch loop)
@@ -501,7 +498,7 @@ The domain model is an **immutable record graph** — the primary model for anal
 
 ### Interpretation
 - Analysis passes: `Poly/Interpretation/Analysis/` (semantics, CFG, constant folding)
-- VM/ABI: `Poly/Interpretation/Vm/` (DirectVmAbiEmitter, VmProgram, VmState, runtime)
+- VM/ABI: `Poly/Interpretation/Vm/` (AbiEmitter, VmProgram, VmState, runtime)
 - LINQ backend: `Poly/Interpretation/LinqExpressions/`
 - C# backend: `Poly/Interpretation/CSharp/`
 - Mermaid visualization: `Poly/Interpretation/Mermaid/`

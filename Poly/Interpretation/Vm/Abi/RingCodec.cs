@@ -3,16 +3,17 @@ using System.Reflection;
 
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>
 /// The single definition of the VM's long-slot ABI: how a value is classified
 /// (inline word — numeric, boolean 0/non-zero, or IEEE bit pattern — and heap
 /// handle) and converted in both directions — at compile time (<see cref="Expression"/> factories) and at
-/// runtime (<see cref="ToRing(object?, Heap)"/> and friends).
+/// runtime (<see cref="ToRing(object?, VmManagedObjectHeap)"/> and friends).
 /// </summary>
 /// <remarks>
 /// Every ABI site delegates here. Analysis passes use <see cref="IsInline(Type)"/>
@@ -20,10 +21,10 @@ namespace Poly.Interpretation.Vm;
 /// null sentinel; it is never a live object.
 /// </remarks>
 internal static class RingCodec {
-    private static readonly MethodInfo HeapUnsafeGet = Ref<Heap>.Method(h => h.UnsafeGet(0));
-    private static readonly MethodInfo HeapAllocate = Ref<Heap>.Method(h => h.Allocate(default!));
+    private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
+    private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
     private static readonly MethodInfo BoxToAbiInfo =
-        Ref.Method((Expression<Func<Heap, object?, long>>)((h, v) => BoxToAbi(h, v)));
+        Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => BoxToAbi(h, v)));
     private static readonly MethodInfo BitConverterInt64BitsToDouble =
         Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
     private static readonly MethodInfo BitConverterDoubleToInt64Bits =
@@ -61,18 +62,6 @@ internal static class RingCodec {
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
 
-    /// <summary>The slot kind a compile-time constant is stored as: derived from
-    /// <see cref="TryInlineConstant"/>, with one representational exception —
-    /// <c>null</c> is the heap null sentinel (it folds to 0 but is not a scalar
-    /// value). A <c>bool</c> constant is an ordinary inline word.</summary>
-    public static ValueRepresentationKind KindFor(object? constant) {
-        if (constant is null) return ValueRepresentationKind.HeapRef;
-        if (constant is bool) return ValueRepresentationKind.StackScalar;
-        return TryInlineConstant(constant, out _)
-            ? ValueRepresentationKind.StackScalar
-            : ValueRepresentationKind.HeapRef;
-    }
-
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
     /// uses an unchecked 64-bit bitcast so <c>ulong.MaxValue</c> round-trips.</summary>
@@ -96,25 +85,22 @@ internal static class RingCodec {
     }
 
     /// <summary>True when a node's value is an IEEE bit pattern (float/double).</summary>
-    public static bool IsIeee(Node node, AnalysisResult? analysis) {
-        var clr = analysis?.GetMetadata<ValueRepresentationMetadata>(node)?.ClrType;
-        return clr is not null && IsIeee(clr);
-    }
+    public static bool IsIeee(Node node, AnalysisResult? analysis) =>
+        ValueRepresentationClassifier.ClrTypeOf(analysis, node) is { } clr && IsIeee(clr);
 
     /// <summary>True when a node's slot uses the ABI null sentinel: a literal
     /// null, a heap reference, or a nullable value type.</summary>
     public static bool UsesNullSentinel(Node node, AnalysisResult? analysis) {
-        if (node is Constant { Value: null }) return true;
-        var meta = analysis?.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.Kind == ValueRepresentationKind.HeapRef) return true;
-        return meta?.ClrType is Type t && Nullable.GetUnderlyingType(t) is not null;
+        var (kind, clr) = ValueRepresentationClassifier.Classify(analysis, node);
+        if (kind == ValueRepresentationKind.HeapRef) return true;
+        return clr is Type t && Nullable.GetUnderlyingType(t) is not null;
     }
 
     /// <summary>Whether a call argument sits in its slot as a raw scalar (not a
     /// heap handle). The value representation decides; without one, the
     /// argument's resolved type does.</summary>
     public static bool IsStackScalar(Node node, AnalysisResult? analysis) {
-        switch (analysis?.GetValueRepresentation(node)) {
+        switch (ValueRepresentationClassifier.KindOf(analysis, node)) {
             case ValueRepresentationKind.StackScalar:
                 return true;
             case ValueRepresentationKind.HeapRef:
@@ -128,19 +114,10 @@ internal static class RingCodec {
 
     /// <summary>Whether an argument to the name-dispatched invoke path sits in its
     /// ring slot as a scalar (boxed by its source type) rather than a heap handle.
-    /// Unlike <see cref="IsStackScalar"/>, a
-    /// <see cref="ValueRepresentationKind.HeapRef"/> classification does not
-    /// suppress the syntactic arm: a string-concat or decimal arithmetic node is
-    /// classified HeapRef yet is still scalar-boxed here. This predicate never
-    /// throws.</summary>
-    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) {
-        if (analysis?.GetValueRepresentation(node)
-            is ValueRepresentationKind.StackScalar)
-            return true;
-        return node is Poly.Ast.Nodes.Add or Poly.Ast.Nodes.Subtract
-            or Poly.Ast.Nodes.Multiply or Poly.Ast.Nodes.Divide or Poly.Ast.Nodes.Modulo
-            || node is Constant { Value: long or int or bool or byte or short or sbyte };
-    }
+    /// The effective node's type decides: a replacement such as String.Concat is a
+    /// heap handle, not a boxed scalar. This predicate never throws.</summary>
+    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) =>
+        ValueRepresentationClassifier.KindOf(analysis, node) is ValueRepresentationKind.StackScalar;
 
     // ── Compile-time conversion ──────────────────────────────────
 
@@ -155,44 +132,35 @@ internal static class RingCodec {
     }
 
     /// <summary>Read a ring slot as a CLR value of <paramref name="targetType"/>.
-    /// A scalar reaching an <c>object</c> parameter is boxed by its source type,
-    /// never mistaken for a heap handle.</summary>
+    /// An inline target converts the slot in place; a scalar reaching <c>object</c>
+    /// is boxed by its source type; everything else is dereferenced as a handle.</summary>
     public static Expression ToClr(
         Expression ringVal, Type targetType, Node? source, AnalysisResult? analysis, Expression heap) {
+        var (sourceKind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
         if (targetType == typeof(double) || targetType == typeof(float)) {
-            var srcType = source is Constant c ? c.Value?.GetType()
-                : analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType;
-            if (srcType is not null && IsIeee(srcType))
+            if (sourceClr is not null && IsIeee(sourceClr))
                 return Convert(Call(BitConverterInt64BitsToDouble, ringVal), targetType);
             return Convert(ringVal, targetType);
         }
         if (targetType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
+        // An enum constant is boxed by EmitConstant (TryInlineConstant rejects it), so
+        // dereference before converting it to an inline enum target.
+        if (source is Constant constant && constant.Value is not null
+            && !TryInlineConstant(constant.Value, out _))
+            return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
         if (targetType.IsValueType && IsInline(targetType))
             return Convert(ringVal, targetType);
-        // A *scalar* argument reaching an `object` parameter must be boxed — its ring
-        // slot holds the raw value, not a handle. Anything else (a reference, or a
-        // value type that is a heap handle such as DateOnly/DateTime/decimal/nullable)
-        // is a handle and is dereferenced. The test is the argument's representation
-        // kind, not `IsValueType`: `int?` is a value type but its slot is a handle.
-        if (targetType == typeof(object) && source is not null) {
-            var kind = source is Constant constant
-                ? KindFor(constant.Value)
-                : analysis?.GetValueRepresentation(source);
-            if (kind is ValueRepresentationKind.StackScalar) {
-                var sourceClr = source is Constant c2 && c2.Value is not null
-                    ? c2.Value.GetType()
-                    : analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType
-                        ?? analysis?.GetResolvedType(source)?.GetRuntimeType();
-                if (sourceClr is not null) {
-                    Expression scalar = IsIeee(sourceClr)
-                        ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
-                        : sourceClr == typeof(bool)
-                            ? NotEqual(ringVal, Constant(0L))
-                            : Convert(ringVal, sourceClr);
-                    return Convert(scalar, typeof(object));
-                }
-            }
+        // A scalar reaching an `object` parameter is boxed by its source type. A heap
+        // source (an enum constant, a reference, a non-inline value type) is dereferenced.
+        if (targetType == typeof(object) && source is not null
+            && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null) {
+            Expression scalar = IsIeee(sourceClr)
+                ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
+                : sourceClr == typeof(bool)
+                    ? NotEqual(ringVal, Constant(0L))
+                    : Convert(ringVal, sourceClr);
+            return Convert(scalar, typeof(object));
         }
         return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
     }
@@ -207,7 +175,7 @@ internal static class RingCodec {
     /// <summary>Convert a runtime value to its ring slot — the single runtime
     /// implementation used by <see cref="VmState.SetArgs"/>, restoration, and
     /// the emitted boxing call.</summary>
-    public static long ToRing(object? value, Heap heap) => value switch {
+    public static long ToRing(object? value, VmManagedObjectHeap heap) => value switch {
         null => 0L,
         bool b => b ? 1L : 0L,
         byte b => b,
@@ -225,12 +193,12 @@ internal static class RingCodec {
     };
 
     /// <summary>Heap-first runtime conversion used by emitted calls and the
-    /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, Heap)"/>.</summary>
-    public static long BoxToAbi(Heap heap, object? value) => ToRing(value, heap);
+    /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, VmManagedObjectHeap)"/>.</summary>
+    public static long BoxToAbi(VmManagedObjectHeap heap, object? value) => ToRing(value, heap);
 
     /// <summary>Runtime cast of a heap handle to <paramref name="target"/>.
     /// A non-matching value fails closed as an <see cref="InvalidCastException"/>.</summary>
-    public static long Cast(Heap heap, long raw, Type target) {
+    public static long Cast(VmManagedObjectHeap heap, long raw, Type target) {
         if (raw == 0L) {
             if (target.IsValueType)
                 throw new InvalidCastException($"Cannot convert null to '{target}'.");
@@ -252,7 +220,7 @@ internal static class RingCodec {
     }
 
     /// <summary>Runtime unbox of a nullable inline value from its heap handle.</summary>
-    public static long UnboxNullable(Heap heap, long handle) {
+    public static long UnboxNullable(VmManagedObjectHeap heap, long handle) {
         if (handle == 0L) return 0L;
         var obj = heap.UnsafeGet((int)handle);
         if (obj is null) return 0L;
@@ -261,7 +229,7 @@ internal static class RingCodec {
 
     /// <summary>Runtime <c>as</c>: the same handle when the heap value is
     /// assignable to <paramref name="target"/>, otherwise the null sentinel.</summary>
-    public static long TypeAs(Heap heap, long raw, Type target) {
+    public static long TypeAs(VmManagedObjectHeap heap, long raw, Type target) {
         if (raw == 0L) return 0L;
         var obj = heap.UnsafeGet((int)raw);
         return obj is not null && target.IsInstanceOfType(obj) ? raw : 0L;
@@ -276,7 +244,7 @@ internal static class RingCodec {
     public const int FirstCaptureIndex = 1;
 
     /// <summary>Dereference a heap handle as an object — the one deref idiom used
-    /// by the emitter (see <see cref="Heap.UnsafeGet"/>).</summary>
+    /// by the emitter (see <see cref="VmManagedObjectHeap.UnsafeGet"/>).</summary>
     public static Expression DerefObject(Expression heap, Expression handle) =>
         Call(heap, HeapUnsafeGet, Convert(handle, typeof(int)));
 

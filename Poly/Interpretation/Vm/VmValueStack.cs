@@ -7,16 +7,14 @@ namespace Poly.Interpretation.Vm;
 /// All public members are inlined aggressively by the JIT. The stack grows
 /// by doubling when full and returns its buffer to the pool on <see cref="Dispose"/>.
 /// </remarks>
-public sealed class ValueStack(int initialSlots = 256) : IDisposable {
-    private long[] _slots = ClearRented(ArrayPool<long>.Shared.Rent(initialSlots));
+public sealed class VmValueStack : IDisposable {
+    private long[] _slots;
+    private bool _disposed;
 
-    private static long[] ClearRented(long[] buffer) {
-#if DEBUG
-        Array.Clear(buffer);
-#else
-        Array.Clear(buffer, 0, buffer.Length);
-#endif
-        return buffer;
+    public VmValueStack() : this(256) { }
+    public VmValueStack(int initialSlots) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialSlots, nameof(initialSlots));
+        _slots = Rent(initialSlots);
     }
 
     /// <summary>Current stack height (number of elements).</summary>
@@ -32,7 +30,10 @@ public sealed class ValueStack(int initialSlots = 256) : IDisposable {
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void GrowNoInline(long value) { Grow(); _slots[StackPointer++] = value; }
+    private void GrowNoInline(long value) {
+        EnsureCapacity(StackPointer + 1);
+        _slots[StackPointer++] = value;
+    }
 
     /// <summary>Pushes a 32-bit integer (widened to 64-bit).</summary>
     /// <param name="value">The value to push.</param>
@@ -64,25 +65,18 @@ public sealed class ValueStack(int initialSlots = 256) : IDisposable {
         StackPointer = sp;
     }
 
-    /// <summary>Reserves <paramref name="count"/> slots on the stack without
-    /// writing to them. Grows the backing array if needed.</summary>
-    /// <param name="count">Number of slots to reserve.</param>
-    [Obsolete("Unreferenced dead code; no callers. Slated for removal.")]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Reserve(int count) {
-        var sp = StackPointer + count;
-        if (sp > _slots.Length) Grow();
-        StackPointer += count;
-    }
-
     /// <summary>Direct access to the backing array for bulk operations.
     /// Use with caution — the array may be larger than <see cref="StackPointer"/>.</summary>
     public long[] RawSlots => _slots;
 
-    /// <summary>Sets the stack pointer to a specific value. Intended for
-    /// frame management in the emitted code.</summary>
+    /// <summary>Sets the stack pointer to a specific value, growing the backing
+    /// array when the value exceeds its length. Intended for frame management in
+    /// the emitted code.</summary>
     /// <param name="value">The new stack pointer value.</param>
-    public void SetStackPointer(int value) => StackPointer = value;
+    public void SetStackPointer(int value) {
+        EnsureCapacity(value);
+        StackPointer = value;
+    }
 
     /// <summary>Resets the stack pointer to 0 without clearing the backing array.
     /// Does not return the buffer to the pool — call <see cref="Dispose"/> for that.</summary>
@@ -91,17 +85,25 @@ public sealed class ValueStack(int initialSlots = 256) : IDisposable {
     /// <summary>Returns the backing array to the shared <see cref="ArrayPool{long}"/>.
     /// After disposal the stack must not be used.</summary>
     public void Dispose() {
-        if (_slots is not null) {
-            ArrayPool<long>.Shared.Return(_slots);
-            _slots = null!;
-        }
+        if (_disposed)
+            return;
+        _disposed = true;
+        ArrayPool<long>.Shared.Return(_slots, clearArray: true);
     }
 
-    private void Grow() {
-        var newSize = _slots.Length * 2;
-        var newSlots = ArrayPool<long>.Shared.Rent(newSize);
-        Array.Copy(_slots, newSlots, StackPointer);
-        ArrayPool<long>.Shared.Return(_slots);
-        _slots = newSlots;
+    private void EnsureCapacity(int required) {
+        if (required <= _slots.Length)
+            return;
+        var grown = Rent(Math.Max(required, _slots.Length * 2));
+        Array.Copy(_slots, grown, StackPointer);
+        var previous = _slots;
+        _slots = grown;
+        ArrayPool<long>.Shared.Return(previous, clearArray: true);
+    }
+
+    private static long[] Rent(int size) {
+        var buffer = ArrayPool<long>.Shared.Rent(size);
+        Array.Clear(buffer);
+        return buffer;
     }
 }

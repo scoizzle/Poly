@@ -149,6 +149,15 @@ internal static class RuntimeAnalysisCache {
             var module = DomainProgramProjection.ToSyntax(
                 domain, analysis, policyBodies, subscriptionBodies);
             var (module2, entryExit, entryExitSegments) = PopulateEntryExitMethods(domain, analysis, module);
+            var contributed = ConstraintCompilation.Apply(module2, domain, analysis, session.ConstraintCompilers);
+            module2 = contributed.Module;
+            if (contributed.ReplacedBodies.Count > 0) {
+                Retarget(entryExit, contributed.ReplacedBodies);
+                Retarget(entryExitSegments, contributed.ReplacedBodies);
+                Retarget(policyBodies, contributed.ReplacedBodies);
+                foreach (var byStage in subscriptionBodies.Values)
+                    Retarget(byStage, contributed.ReplacedBodies);
+            }
             holder.Module = module2;
             holder.SubscriptionBodies = subscriptionBodies;
             holder.EntryExitBodies = entryExit;
@@ -286,6 +295,22 @@ internal static class RuntimeAnalysisCache {
             types[i] = td with { Methods = [.. td.Methods ?? [], .. extras] };
         }
         return (types, entryExit, entryExitSegments);
+    }
+
+    private static void Retarget<TKey>(
+        Dictionary<TKey, Node> map,
+        IReadOnlyList<(Node From, Node To)> replaced) where TKey : notnull {
+        if (map.Count == 0)
+            return;
+        foreach (var key in map.Keys) {
+            var body = map[key];
+            foreach (var (from, to) in replaced) {
+                if (!ReferenceEquals(body, from))
+                    continue;
+                map[key] = to;
+                break;
+            }
+        }
     }
 
     /// <summary>

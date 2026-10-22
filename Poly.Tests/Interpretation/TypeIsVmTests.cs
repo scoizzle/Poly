@@ -19,7 +19,6 @@ public class TypeIsVmTests {
         .UseConstantFolding()
         .UseControlFlowAnalysis()
         .UseLambdaReturnTypeResolution()
-        .UseValueRepresentationAnalysis()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
         .UseExceptionRegionAnalysis()

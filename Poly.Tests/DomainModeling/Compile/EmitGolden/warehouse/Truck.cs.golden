@@ -75,7 +75,7 @@ public class Truck
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
-    public static DomainResult<Truck> Create(long maxLoad, string vin, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L)
+    public static DomainResult<Truck> Create(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L)
     {
         if (currentLoad < 0L)
         {
@@ -109,11 +109,16 @@ public class Truck
         {
             return DomainResult<Truck>.Failure("'Vin' does not match the required pattern.");
         }
+        if (Truck.ExistsWithVin(db, vin))
+        {
+            return DomainResult<Truck>.Failure("Unique constraint violated: 'Vin' value is already used on another 'Truck'.");
+        }
         var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad);
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);
         }
+        db.Record("Truck", "Vin", vin);
         return DomainResult<Truck>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
@@ -126,4 +131,5 @@ public class Truck
         }
         this.Status = assignValue0;
     }
+    public static System.Boolean ExistsWithVin(Poly.DomainModeling.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

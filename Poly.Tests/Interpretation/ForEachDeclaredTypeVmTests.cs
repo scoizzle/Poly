@@ -30,7 +30,7 @@ public class ForEachDeclaredTypeVmTests {
     }
 
     [Test]
-    public async Task ForEachDeclaredInt_OverLongArray_KeepsIntArithmetic() {
+    public async Task ForEachDeclaredInt_OverLongArray_FailsClosed() {
         var d = new Variable("d");
         var sum = new Variable("sum");
         var node = new Block([
@@ -40,8 +40,8 @@ public class ForEachDeclaredTypeVmTests {
                 DeclaredType: TypeReference.To<int>()),
             sum
         ], [sum]);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+        // C# has no implicit long-to-int conversion for the loop variable.
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 
     [Test]

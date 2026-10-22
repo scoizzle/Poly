@@ -72,6 +72,23 @@ public sealed class DomainInstanceStore {
     }
 
     /// <summary>
+    /// The database half the simulator's <see cref="InMemoryStoragePort"/> reads:
+    /// true when a registered instance of <paramref name="entity"/> already holds
+    /// <paramref name="value"/> in <paramref name="property"/>.
+    /// </summary>
+    internal bool ExistsValue(string entity, string property, string value) {
+        foreach (var other in _instances) {
+            if (!string.Equals(other.Entity.Name, entity, StringComparison.Ordinal))
+                continue;
+            if (!other.TryGetRaw(property, out var otherValue))
+                continue;
+            if (string.Equals(otherValue?.ToString(), value, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Allocates <paramref name="typeName"/>, registers it, and returns the child.
     /// Constraint failures and unique collisions are Failure without registering.
     /// Graph wiring (nav initializers) uses <see cref="Link"/> after TryAdd.

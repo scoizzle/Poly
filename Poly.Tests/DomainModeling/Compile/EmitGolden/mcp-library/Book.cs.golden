@@ -15,7 +15,7 @@ public class Book
     public long Copies { get; private set; }
     public string Isbn { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    public static DomainResult<Book> Create(string isbn, string title, long copies = 1L)
+    public static DomainResult<Book> Create(string isbn, string title, Poly.DomainModeling.Runtime.IStoragePort db, long copies = 1L)
     {
         if (copies < 0L)
         {
@@ -29,8 +29,14 @@ public class Book
         {
             return DomainResult<Book>.Failure("'Title' is required.");
         }
+        if (Book.ExistsWithIsbn(db, isbn))
+        {
+            return DomainResult<Book>.Failure("Unique constraint violated: 'Isbn' value is already used on another 'Book'.");
+        }
         var created = new Book(isbn, title, copies);
+        db.Record("Book", "Isbn", isbn);
         return DomainResult<Book>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public static System.Boolean ExistsWithIsbn(Poly.DomainModeling.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "Isbn", isbn);
 }

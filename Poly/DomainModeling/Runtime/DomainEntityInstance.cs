@@ -208,6 +208,8 @@ public sealed partial record DomainEntityInstance {
             var raw = TryFactoryValue(param.Name, values, out var supplied)
                 ? supplied
                 : FactoryDefault(param.DefaultValue);
+            if (raw is null && IsStoragePortParameter(param))
+                raw = new InMemoryStoragePort();
             setArgs[i + 1] = CoerceActionArgForSetArgs(param, raw);
         }
         using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
@@ -655,12 +657,16 @@ public sealed partial record DomainEntityInstance {
         if (action is null)
             return ReportUnresolvedAction(actionName);
 
-        var declared = action.Parameters
+        var accepted = action.Parameters
             .Select(p => p.Name)
             .ToHashSet(StringComparer.Ordinal);
+        if (method?.Parameters is not null) {
+            foreach (var parameter in method.Parameters)
+                accepted.Add(parameter.Name);
+        }
         if (args is { Count: > 0 }) {
             foreach (var key in args.Keys) {
-                if (!declared.Contains(key))
+                if (!accepted.Contains(key))
                     return ActionInvocationResult.InvalidArguments(actionName,
                         $"Unknown argument '{key}' for action '{actionName}'.");
             }
@@ -921,6 +927,8 @@ public sealed partial record DomainEntityInstance {
             var name = rootParameters[i].Name;
             if (actionArgs is not null && actionArgs.TryGetValue(name, out var arg))
                 setArgs[i + 1] = CoerceActionArgForSetArgs(rootParameters[i], arg);
+            else if (IsStoragePortParameter(rootParameters[i]))
+                setArgs[i + 1] = new InMemoryStoragePort(Store);
             else
                 throw new InvalidOperationException(
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");
@@ -1072,8 +1080,9 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// Keeps the printed static Create body. <c>new Entity(...)</c> becomes
     /// <see cref="DomainInstanceHostJobs.NewEntity"/> so simulate allocates a
-    /// <see cref="DomainEntityInstance"/>. The packed values are the method's
-    /// typed signature parameters. Checks and <c>Attach*</c> stay in the body.
+    /// <see cref="DomainEntityInstance"/>. The packed values are the leading
+    /// factory-slot parameters. A trailing contributed suffix is not a constructor
+    /// argument. Checks and <c>Attach*</c> stay in the body.
     /// </summary>
     private static MethodDefinitionNode BindConstructedNew(
         MethodDefinitionNode method, string typeName, Domain domain) {
@@ -1087,7 +1096,7 @@ public sealed partial record DomainEntityInstance {
         foreach (var node in block.Nodes) {
             if (node is Assignment { Destination: Variable { Name: "created" }, Value: New ctor } assign) {
                 nodes.Add(assign with {
-                    Value = ConstructedInstance(typeName, parameters, ctor.Arguments.Length, slots)
+                    Value = ConstructedInstance(typeName, parameters, ctor.Arguments.Length, slots, domain)
                 });
                 replaced = true;
                 continue;
@@ -1101,14 +1110,20 @@ public sealed partial record DomainEntityInstance {
     }
 
     private static Node ConstructedInstance(
-        string typeName, IReadOnlyList<Parameter> parameters, int argumentCount, IReadOnlyList<string> slots) {
-        if (parameters.Count != slots.Count || argumentCount != slots.Count)
+        string typeName, IReadOnlyList<Parameter> parameters, int argumentCount, IReadOnlyList<string> slots, Domain domain) {
+        // A trailing implied-parameter suffix is not a factory slot. With no
+        // constraint compilers the counts still have to match, so an accidental
+        // extra parameter still fails.
+        var suffix = parameters.Count - slots.Count;
+        var allowSuffix = suffix > 0
+            && RuntimeAnalysisCache.Session(domain).ConstraintCompilers.Count > 0;
+        if (argumentCount != slots.Count || suffix < 0 || (suffix > 0 && !allowSuffix))
             throw new InvalidOperationException(
                 $"Create '{typeName}' passes {argumentCount} constructor argument(s); "
                 + $"the structure has {parameters.Count} parameter(s) and {slots.Count} slot(s).");
         var host = new ClrTypeReference(typeof(DomainInstanceHostJobs));
         Node values = new Invoke(new Member(host, nameof(DomainInstanceHostJobs.Values)));
-        for (var i = 0; i < parameters.Count; i++) {
+        for (var i = 0; i < slots.Count; i++) {
             values = new Invoke(
                 new Member(host, nameof(DomainInstanceHostJobs.With)),
                 values, new Constant(slots[i]), parameters[i]);

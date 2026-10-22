@@ -4,7 +4,7 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
     public const string Id = "LambdaReturnType";
     public string PassName => Id;
     public void Analyze(AnalysisContext context, Node node) {
-        // A Lambda value is a closure (heap ref / object). Do not overwrite
+        // A Lambda value is a delegate object. Do not overwrite
         // that with the body type — Invoke uses the body, the binding does not.
 
         if (node is Invoke invoke) {
@@ -27,7 +27,7 @@ internal sealed class LambdaReturnTypeAnalyzer : INodeAnalyzer {
     }
 
     private static ITypeDefinition? ResolveBodyType(AnalysisContext context, Node body) {
-        var yield = TypeAndMemberResolver.YieldNode(body);
+        var yield = TypeAndMemberResolver.YieldNode(context, body);
         return context.GetResolvedType(yield) ?? context.GetResolvedType(body);
     }
 }

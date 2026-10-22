@@ -4,15 +4,16 @@ using System.Runtime.ExceptionServices;
 
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis;
+using Poly.Interpretation.Vm;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
     /// <summary>
     /// A module <see cref="Lambda"/> passed where a CLR parameter expects a delegate is
     /// not a VM closure value. Emit a real nested <see cref="LambdaExpression"/> in the
@@ -32,7 +33,7 @@ public static partial class DirectVmAbiEmitter {
     private static bool TryBuildLambdaBridgeArgument(
         Node argument,
         Type? parameterType,
-        AbiCtx ctx,
+        Context ctx,
         out Expression prelude,
         out Expression callArgument) {
         prelude = Empty();
@@ -112,7 +113,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>Arity, by-ref, and declared-parameter checks for a lambda against a
     /// delegate's Invoke signature.</summary>
     private static void CheckDelegateShape(
-        Lambda lambda, Type delegateType, MethodInfo invokeMethod, AbiCtx ctx) {
+        Lambda lambda, Type delegateType, MethodInfo invokeMethod, Context ctx) {
         var delegateParameters = invokeMethod.GetParameters();
         if (lambda.Parameters.Count != delegateParameters.Length) {
             throw new InvalidOperationException(
@@ -151,7 +152,7 @@ public static partial class DirectVmAbiEmitter {
     /// closure (a real host delegate/Expression object).
     /// </summary>
     private static bool TryResolveStoredLambda(
-        Node argument, AbiCtx ctx, out StoredLambdaMetadata? stored, out bool quotable, out Expression handle) {
+        Node argument, Context ctx, out StoredLambdaMetadata? stored, out bool quotable, out Expression handle) {
         stored = null;
         quotable = true;
         handle = null!;
@@ -209,7 +210,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Read a bound parameter's live slot: the inline ring slot when it is
     /// passed inline, otherwise the frame parameter.</summary>
-    private static bool TryReadParameter(Parameter parameter, AbiCtx ctx, out Expression handle) {
+    private static bool TryReadParameter(Parameter parameter, Context ctx, out Expression handle) {
         if (ctx.TryGetInlineParameter(parameter, out int ringSlot)) {
             handle = ctx.RingVar(ringSlot);
             return true;
@@ -225,7 +226,7 @@ public static partial class DirectVmAbiEmitter {
     /// <summary>A reader emits a Variable for a module parameter use; the bind pass
     /// links it to the Parameter, and the emitter can read that parameter's live slot
     /// or capture cell by identity.</summary>
-    private static bool ParameterCaptureResolves(Variable use, AbiCtx ctx) =>
+    private static bool ParameterCaptureResolves(Variable use, Context ctx) =>
         ctx.BoundParameter(use) is { } parameter
         && (ctx.TryGetCapture(use, out _)
             || ctx.TryGetInlineParameter(parameter, out _)
@@ -233,7 +234,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Read a stored binding's current handle: its capture cell when this
     /// frame captured it, otherwise the variable/parameter slot.</summary>
-    private static Expression ReadBindingValue(Node binding, AbiCtx ctx) => binding switch {
+    private static Expression ReadBindingValue(Node binding, Context ctx) => binding switch {
         Variable v => ctx.TryGetCapture(v, out int capIndex)
             ? EmitCaptureCellValue(ctx, capIndex)
             : ctx.VariableRead(v),
@@ -246,7 +247,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>True when a stored lambda's captures are all resolvable in this frame
     /// (required before quoting its body at the use site).</summary>
-    private static bool CapturesResolve(Lambda lambda, AbiCtx ctx) {
+    private static bool CapturesResolve(Lambda lambda, Context ctx) {
         foreach (var capture in FindBodyCaptures(lambda, ctx.Analysis)) {
             if (capture.Variable is { } variable) {
                 if (!ctx.IsDeclared(variable) && !ctx.TryGetCapture(variable, out _)
@@ -265,7 +266,7 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>True when the argument already carries the CLR value the parameter
     /// wants (`Expression&lt;D&gt;`), as a forwarded parameter or a host object.</summary>
-    private static bool ArgumentAlreadyExpression(Node argument, Type parameterType, AbiCtx ctx) {
+    private static bool ArgumentAlreadyExpression(Node argument, Type parameterType, Context ctx) {
         // A module closure's declared type is its delegate shape, not the Expression<D>
         // the parameter wants; it must take the stored/forwarded path, never pass through.
         if (ctx.Analysis is { } analysis && StoredLambdaBinding.TryGet(analysis, argument, out _))
@@ -286,7 +287,7 @@ public static partial class DirectVmAbiEmitter {
         Lambda lambda,
         Type delegateType,
         MethodInfo invokeMethod,
-        AbiCtx ctx,
+        Context ctx,
         out Expression prelude,
         out Expression callArgument) {
         var pure = new PureLambdaContext(lambda, delegateType, invokeMethod, ctx);
@@ -337,7 +338,7 @@ public static partial class DirectVmAbiEmitter {
         Expression? closureSource,
         Type delegateType,
         MethodInfo invokeMethod,
-        AbiCtx ctx,
+        Context ctx,
         out Expression prelude,
         out Expression callArgument) {
         var returnType = invokeMethod.ReturnType;
@@ -415,18 +416,18 @@ public static partial class DirectVmAbiEmitter {
     }
 
 
-    private static Type? ParameterClrType(Parameter parameter, AbiCtx ctx) =>
+    private static Type? ParameterClrType(Parameter parameter, Context ctx) =>
         ClrTypeResolution.Resolve(
             parameter.TypeReference, parameter, node => ctx.Analysis?.GetResolvedType(node));
 
     private static string CaptureName(Capture capture) =>
         capture.Variable?.Name ?? capture.Parameter!.Name;
 
-    private static bool TryCaptureClrType(Capture capture, AbiCtx ctx, out Type type) {
+    private static bool TryCaptureClrType(Capture capture, Context ctx, out Type type) {
         type = null!;
         if (capture.Variable is { } variable) {
             type = ctx.Analysis?.GetResolvedType(variable)?.GetRuntimeType()
-                ?? ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(variable)?.ClrType!;
+                ?? ctx.ClrTypeOf(variable)!;
             return type is not null;
         }
         if (capture.Parameter is { } parameter) {
@@ -772,7 +773,7 @@ public static partial class DirectVmAbiEmitter {
         }
 
         private static void RejectVmMember(Type? declaringType) {
-            if (declaringType == typeof(Heap) || declaringType == typeof(VmState)
+            if (declaringType == typeof(VmManagedObjectHeap) || declaringType == typeof(VmState)
                 || declaringType == typeof(RingCodec) || declaringType == typeof(VmCall))
                 throw new InvalidOperationException(
                     $"VM compile rejected: lambda bridge tree references VM state via '{declaringType.Name}'.");
@@ -780,7 +781,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private sealed class PureLambdaContext {
-        public PureLambdaContext(Lambda lambda, Type delegateType, MethodInfo invokeMethod, AbiCtx abi) {
+        public PureLambdaContext(Lambda lambda, Type delegateType, MethodInfo invokeMethod, Context abi) {
             Lambda = lambda;
             DelegateType = delegateType;
             InvokeMethod = invokeMethod;
@@ -800,7 +801,7 @@ public static partial class DirectVmAbiEmitter {
         public Lambda Lambda { get; }
         public Type DelegateType { get; }
         public MethodInfo InvokeMethod { get; }
-        public AbiCtx Abi { get; }
+        public Context Abi { get; }
         public List<ParameterExpression> ParameterExpressions { get; }
         public Dictionary<Parameter, ParameterExpression> ParametersByNode { get; } =
             new(ReferenceEqualityComparer.Instance);
@@ -824,7 +825,7 @@ public static partial class DirectVmAbiEmitter {
     /// Invoke a host delegate reached through a bridged parameter: a forwarded
     /// parameter may hold a real CLR delegate rather than a VM closure.
     /// </summary>
-    private static long InvokeHostDelegate(object? target, object?[] args, Heap heap) {
+    private static long InvokeHostDelegate(object? target, object?[] args, VmManagedObjectHeap heap) {
         if (target is null)
             throw new InvalidOperationException("VM: invoke of null.");
         if (target is not Delegate hostDelegate)
@@ -842,7 +843,7 @@ public static partial class DirectVmAbiEmitter {
     }
 
     private static readonly MethodInfo InvokeHostDelegateInfo =
-        typeof(DirectVmAbiEmitter).GetMethod(nameof(InvokeHostDelegate),
+        typeof(AbiEmitter).GetMethod(nameof(InvokeHostDelegate),
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
     private static readonly MethodInfo StringConcatInfo =

@@ -178,6 +178,20 @@ public class DirectVmAbiEmitterTests {
         await Assert.That(program.MaxRingDepth).IsLessThanOrEqualTo(4);
     }
 
+    [Test, Timeout(10_000)]
+    public async Task LargeLocalSet_RegisterAndFrameSlotVariablesCoexist(CancellationToken ct) {
+        // 40 simultaneous locals cross the 32-register cap: v0..v31 are register-backed,
+        // v32..v39 are slot-backed. The weights distinguish the last register from the
+        // first frame slot, so an off-by-one at the boundary changes the result.
+        var vars = Enumerable.Range(0, 40).Select(i => new Variable($"v{i}")).ToArray();
+        var nodes = vars.Select((v, i) => (Node)new Assignment(v, new Constant((long)(i + 1)))).ToList();
+        nodes.Add(new Add(
+            new Add(new Multiply(vars[0], new Constant(1_000_000L)),
+                    new Multiply(vars[31], new Constant(10_000L))),
+            new Add(new Multiply(vars[32], new Constant(100L)), vars[39])));
+        await Assert.That(ExecDirect(new Block(nodes, vars))).IsEqualTo(1_323_340L);
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // DebugHook tests (simplified hook — Node + ReadOnlySpan<long> + Heap)
     // ═══════════════════════════════════════════════════════════════

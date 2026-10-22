@@ -29,9 +29,9 @@ public class Warehouse
     {
         get => this._trucks;
     }
-    private DomainResult<Truck> CreateTrucks(long maxLoad, string vin, long currentLoad = 0L)
+    private DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, long currentLoad = 0L)
     {
-        var truckResult = Truck.Create(maxLoad, vin, this, new List<Delivery>(), currentLoad);
+        var truckResult = Truck.Create(maxLoad, vin, db, this, new List<Delivery>(), currentLoad);
         if (!truckResult.IsSuccess)
         {
             return DomainResult<Truck>.Failure(truckResult.ErrorMessage ?? "");
@@ -67,9 +67,9 @@ public class Warehouse
         this.Status = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult<Truck> RegisterTruck(string vin, long maxLoad)
+    public DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.DomainModeling.Runtime.IStoragePort db)
     {
-        var create0 = this.CreateTrucks(maxLoad, vin);
+        var create0 = this.CreateTrucks(maxLoad, vin, db);
         if (!create0.IsSuccess)
         {
             return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");
@@ -79,7 +79,7 @@ public class Warehouse
     }
     public bool IsOperational() => this.Capacity > 0L;
     public bool HasCapacity() => this.Capacity > 0L;
-    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, Poly.DomainModeling.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
     {
         if (capacity < 1L)
         {
@@ -133,8 +133,14 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
         }
+        if (Warehouse.ExistsWithCode(db, code))
+        {
+            return DomainResult<Warehouse>.Failure("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.");
+        }
         var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
+        db.Record("Warehouse", "Code", code);
         return DomainResult<Warehouse>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public static System.Boolean ExistsWithCode(Poly.DomainModeling.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

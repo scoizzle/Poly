@@ -15,6 +15,8 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 
 builder.Services.AddDbContext<CrmDbContext>(options => options.UseSqlite("Data Source=crm.db"));
 
+builder.Services.AddScoped<Poly.DomainModeling.Runtime.IStoragePort, CrmDbContext>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -29,7 +31,7 @@ app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListA
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Product product ? Results.Ok(product) : Results.NotFound()));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
-    var productResult = Product.Create(dto.ListPrice, dto.Name, dto.Sku);
+    var productResult = Product.Create(dto.ListPrice, dto.Name, dto.Sku, db);
     if (!productResult.IsSuccess)
     {
         return Results.Conflict(productResult.ErrorMessage);
@@ -44,7 +46,7 @@ app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync()
 app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Lead lead ? Results.Ok(lead) : Results.NotFound()));
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
-    var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, null);
+    var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, db, null);
     if (!leadResult.IsSuccess)
     {
         return Results.Conflict(leadResult.ErrorMessage);
@@ -383,7 +385,7 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var result = entity.AddContact(dto.name, dto.email);
+        var result = entity.AddContact(dto.name, dto.email, db);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -416,7 +418,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         {
             return Results.NotFound("Lead not found");
         }
-        var result = entity.ConvertLead(lead);
+        var result = entity.ConvertLead(lead, db);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -1318,12 +1320,12 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         return;
     }
-    var productResult = Product.Create(1, "Sample", "XXXXXXXX");
+    var productResult = Product.Create(1, "Sample", "XXXXXXXX", db);
     if (productResult.IsSuccess)
     {
         db.Add(productResult.Value);
     }
-    var leadResult = Lead.Create("Sample", "user@test.com", "Sample", null);
+    var leadResult = Lead.Create("Sample", "user@test.com", "Sample", db, null);
     if (leadResult.IsSuccess)
     {
         db.Add(leadResult.Value);

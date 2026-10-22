@@ -15,8 +15,7 @@ public class CallSiteCatalogTests {
             .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
+                .UseCallSiteCatalog()
             .Build()
             .Analyze(node);
     }
@@ -121,8 +120,7 @@ public class CallSiteCatalogTests {
             .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
+                .UseCallSiteCatalog()
             .Build();
 
         // Analyze tree A with a CLR invoke

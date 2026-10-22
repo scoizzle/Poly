@@ -2,6 +2,8 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -23,6 +25,7 @@ public sealed class MinimalApiGenerator {
     private readonly Dictionary<string, AggregateEntity> _aggregateLookup;
     private readonly Dictionary<string, EnumType> _enumLookup;
     private readonly Dictionary<string, EntityStructureMetadata> _entityStructureLookup;
+    private readonly CatalogIndex? _catalog;
 
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly DbmsPack _dbms;
@@ -33,10 +36,12 @@ public sealed class MinimalApiGenerator {
         BehaviorModel behaviorModel,
         AggregateModel aggregateModel,
         IStorageSyntaxEmitter? emitter = null,
-        DbmsPack dbms = DbmsPack.Generic) {
+        DbmsPack dbms = DbmsPack.Generic,
+        CatalogIndex? catalog = null) {
         ArgumentNullException.ThrowIfNull(analysis);
         _emitter = emitter;
         _dbms = dbms;
+        _catalog = catalog;
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
         _domainName = domain.Name;
@@ -296,6 +301,21 @@ public sealed class MinimalApiGenerator {
             TypeArguments = [new TypeReference(dbContextName)]
         });
 
+        // A route that carries the storage port names IStoragePort, not the
+        // context. The generated context implements the port, so register it
+        // as the scoped implementation.
+        if (_catalog?.RequiresStoragePort == true) {
+            topLevelStatements.Add(new Invoke(
+                new Member(
+                    new Member(new TypeReference(BuilderVar), "Services"),
+                    "AddScoped")) {
+                TypeArguments = [
+                    new ClrTypeReference(typeof(IStoragePort)),
+                    new TypeReference(dbContextName)
+                ]
+            });
+        }
+
         // ── Build + seed ──
         topLevelStatements.Add(Init(AppVar,
             new Invoke(new Member(new TypeReference(BuilderVar), "Build"))));
@@ -435,7 +455,7 @@ public sealed class MinimalApiGenerator {
             return;
         }
 
-        var createArgs = BuildCreateArgs(entity, GetConstructorOrder(entity),
+        var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity),
             prop => new Member(new Variable("dto"), prop.Name));
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
@@ -730,6 +750,7 @@ public sealed class MinimalApiGenerator {
                 }
                 else invokeArgs.Add(new Member(new Variable("dto"), param.Name));
             }
+            AppendContributedArguments(entity, ia, actionParams, invokeArgs);
             tryBody.Add(Init("result",
                 invokeArgs.Count > 0
                     ? new Invoke(new Member(new Variable("entity"), ia.Name), [.. invokeArgs])
@@ -766,6 +787,103 @@ public sealed class MinimalApiGenerator {
                 new Lambda([.. actionParams],
                     Stmts(bodyNodes))));
         }
+    }
+
+    /// <summary>
+    /// When a compiled constraint injected parameters, the lowered action lists
+    /// them after the DSL parameters. The lambda already has a matching name
+    /// (the host's <c>db</c>) or gains one. The entity call passes the same
+    /// suffix. The lowered catalog is the bind surface; the generator never
+    /// asks the runtime cache to lower again.
+    /// </summary>
+    private void AppendContributedArguments(
+        Entity entity,
+        BehaviorAction ia,
+        List<Parameter> actionParams,
+        List<Node> invokeArgs) {
+        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
+            return;
+        var method = ModuleMethod(entity, ia.Name);
+        if (method?.Parameters is not { Count: > 0 } parameters)
+            return;
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var param in ia.Parameters)
+            declared.Add(param.Name);
+        var arguments = new Dictionary<string, Node>(StringComparer.Ordinal);
+        for (var i = 0; i < ia.Parameters.Count && i < invokeArgs.Count; i++)
+            arguments[ia.Parameters[i].Name] = invokeArgs[i];
+        invokeArgs.Clear();
+        foreach (var parameter in parameters) {
+            if (declared.Contains(parameter.Name)) {
+                if (!arguments.TryGetValue(parameter.Name, out var argument))
+                    throw new InvalidOperationException(
+                        $"Action '{entity.Name}.{ia.Name}' carries module parameter '{parameter.Name}' "
+                        + "without a route argument.");
+                invokeArgs.Add(argument);
+                continue;
+            }
+            if (!actionParams.Exists(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal)))
+                actionParams.Add(new Parameter(parameter.Name, parameter.TypeReference));
+            invokeArgs.Add(new Variable(parameter.Name));
+        }
+    }
+
+    /// <summary>
+    /// Builds the positional arguments for a static <c>Create</c> call. A
+    /// contributed dependency sits where the lowered signature puts it (before
+    /// the first optional parameter), so it is woven into the constructor
+    /// arguments rather than appended.
+    /// </summary>
+    private List<Node> BuildCreateCallArgs(
+        Entity entity,
+        IReadOnlyList<ConstructorParameterOrder> order,
+        Func<Property, Node> scalar) {
+        var args = BuildCreateArgs(entity, order, scalar);
+        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
+            return args;
+        var method = ModuleMethod(entity, "Create");
+        if (method?.Parameters is not { Count: > 0 } parameters)
+            return args;
+
+        var declared = new Dictionary<string, Node>(StringComparer.Ordinal);
+        for (var i = 0; i < order.Count && i < args.Count; i++)
+            declared[ToCamelCase(order[i].Name)] = args[i];
+
+        var result = new List<Node>(parameters.Count);
+        foreach (var parameter in parameters) {
+            if (declared.TryGetValue(parameter.Name, out var argument)) {
+                result.Add(argument);
+                continue;
+            }
+            if (IsTrailingDefault(entity, parameter.Name))
+                continue;
+            if (!string.Equals(parameter.Name, "db", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Create on '{entity.Name}' requires contributed parameter '{parameter.Name}', "
+                    + "which the host cannot supply.");
+            result.Add(new Variable("db"));
+        }
+        return result;
+    }
+
+    private bool IsTrailingDefault(Entity entity, string parameterName) {
+        if (!_entityStructureLookup.TryGetValue(entity.Name, out var structure))
+            return false;
+        foreach (var property in entity.Properties) {
+            if (!string.Equals(ToCamelCase(property.Name), parameterName, StringComparison.Ordinal))
+                continue;
+            return property.Constraints.OfType<DefaultValueConstraint>().Any()
+                && !structure.EntryAssignedPropertyNames.Contains(property.Name);
+        }
+        return false;
+    }
+
+    private MethodDefinitionNode? ModuleMethod(Entity entity, string methodName) {
+        // The host contributor supplies the lowered catalog. Direct callers
+        // without one get the un-contributed shape rather than a false failure.
+        if (_catalog is null)
+            return null;
+        return _catalog.Method(entity.Name, methodName);
     }
 
     /// <summary>Builds Syntax IR for action DTO types.</summary>
@@ -1061,7 +1179,7 @@ public sealed class MinimalApiGenerator {
                 new Block(new Return(null))));
 
             foreach (var entity in seedableEntities) {
-                var createArgs = BuildCreateArgs(entity, GetConstructorOrder(entity), MakeSampleValue);
+                var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity), MakeSampleValue);
 
                 var dtoVar = ToCamelCase(entity.Name);
                 bodyNodes.Add(Init($"{dtoVar}Result",
@@ -1214,7 +1332,8 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         RequireHttpActionsInModule(domain, analysis, catalog);
 
         var dbContextName = $"{domain.Name}DbContext";
-        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms);
+        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms,
+            new CatalogIndex(catalog));
         var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
         var programUnit = apiGen.GenerateCompilationUnit(dbContextName);
         var programTree = GeneratedTree.Create(

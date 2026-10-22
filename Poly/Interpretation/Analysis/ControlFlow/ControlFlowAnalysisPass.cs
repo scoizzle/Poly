@@ -492,19 +492,9 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private static bool ContainsThrow(AnalysisContext context, Node node) {
+    private bool ContainsThrow(AnalysisContext context, Node node) {
         if (node is ThrowStatement) return true;
-        return AnyChild(context, node, static (ctx, ch) => ch is ThrowStatement);
-    }
-
-    private static bool AnyChild(AnalysisContext context, Node node, Func<AnalysisContext, Node, bool> predicate) {
-        foreach (var child in node.Children) {
-            if (child is null)
-                continue;
-            if (predicate(context, child!))
-                return true;
-        }
-        return false;
+        return this.AnyChild<ControlFlowMetadata>(context, node, static (_, ch) => ch is ThrowStatement);
     }
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
@@ -652,7 +642,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
                 return true; // volatile access has un-knowable impact
             }
         }
-        // Use AnyChild for "does any descendant mutate" -- fused walk per the AggregateChildren recommendation.
         return this.AnyChild<ControlFlowMetadata>(context, node, (ctx, ch) =>
             (ch is Assignment aa && ((aa.Destination is Variable vv && vars.Contains(vv.Name)) || (aa.Destination is Member mma && !HasCompileTimeConst(ctx, mma)) || aa.Destination is IndexAccess))
             || (ch is Invoke invv && !IsPure(ctx, invv))

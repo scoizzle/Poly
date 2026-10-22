@@ -971,10 +971,9 @@ public sealed class CSharpWriter {
             case Block block:
                 return BlockText(block, 0);
             case PopCount popCount:
-                return RenderFills("expr-primary", "popcount",
-                    Names(("popcount-system", "System"), ("popcount-numerics", "Numerics"),
-                        ("popcount-type", "BitOperations"), ("popcount-method", "PopCount")),
-                    Expr(popCount.Operand));
+                return Unprintable(popCount,
+                    "its only C# spelling is a fully-qualified static call, and the reader resolves "
+                    + "a qualified name to a value chain rather than a type (IS1c)");
             case NewArray newArray:
                 return RenderFills("expr-primary", "new-array", Names(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));
@@ -989,11 +988,11 @@ public sealed class CSharpWriter {
         }
     }
 
-    /// <summary>Fails closed for a kind with no C# surface form: naming the kind and
+    /// <summary>Fails closed for a kind with no faithful C# surface form: naming the kind and
     /// its id beats printing the type name as source.</summary>
-    private static string Unprintable(Node node) =>
+    private static string Unprintable(Node node, string? reason = null) =>
         throw new InvalidOperationException(
-            $"CSharpWriter rejected {node.GetType().Name} (NodeId {node.Id}): no C# surface form.");
+            $"CSharpWriter rejected {node.GetType().Name} (NodeId {node.Id}): {reason ?? "no C# surface form"}.");
 
     private static string IdentText(string name) =>
         RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));

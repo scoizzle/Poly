@@ -122,3 +122,17 @@ Reachable through `Write(Node)` → `WriteStatement` → `Expr` → `default`. A
 3. **`PrintedSubsetVmTests.cs` was edited, and it is not a named lane-A file.** The lane table's `Poly.Tests/Interpretation/*Vm*` glob puts it in lane C, but it is the print-form audit *of this writer* and it asserted the exact defect #256 removes (`StridedSetBits` prints `/* StridedSetBits */`). Left alone, the suite cannot be green. The edit is four lines: a `Rejected` print form, `StridedSetBits` mapped to it, and its comment assertion replaced by a rejection assertion. Revert only with a replacement audit for the rejected form.
 4. **`CSharpGeneratorTests` two facts** pinned the retired fallbacks: `StridedSetBits` printing the comment and `UnionTypeReference` printing its `ToString`. Both now assert the rejection; `Generate` for `PopCount` pins the printed text exactly.
 
+
+## Amendment 2026-10-22 — the `popcount` grammar pattern is withdrawn
+
+The first implementation made `PopCount` round-trip by adding a `popcount` pattern to `expr-primary` with four literal-text `Predicate` matches (`System`, `Numerics`, `BitOperations`, `PopCount`). Scot rejected it, correctly: it makes one library intrinsic a member of the language grammar, it does not generalize (the next intrinsic needs another pattern), and it puts four predicate matches in the path of every primary expression.
+
+Withdrawing it exposed the real gap, which is why the withdraw is a slice ([`IS1c`](IS1c.md)) rather than a revert:
+
+- the reader roots **every** postfix chain in `Variable` (`CSharpReader.cs:945`, `FoldPostfixTails:837`), so `System.Numerics.BitOperations.PopCount(x)` reads as a value chain, not a static call;
+- the reader parses `using` directives (`:44`) and never resolves them;
+- the VM already states the intended shape — a type name is "not a VM value; use it as a `Member`/`Invoke`/`New` receiver" (`AbiEmitter.cs:273,590`).
+
+What changed in this slice instead: `PopCount` now rejects through `Unprintable` with a message that names the gap and points at IS1c. It joins `StridedSetBits` in `PrintForm.Rejected`. Nothing in production constructs `PopCount` — `grep -rn "new PopCount"` hits only the reader arm removed here and tests — so no shipped path loses a capability.
+
+The card's shape-matrix row `PopCount_WriteRead_IsKindStable` is superseded by `PopCount_IsRejected_UntilQualifiedStaticCallsResolve`; IS1c restores the round trip once the surface can express a qualified static call.

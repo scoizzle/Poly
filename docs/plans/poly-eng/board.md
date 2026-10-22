@@ -97,6 +97,7 @@ Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysi
 | IS0f | type registry off the static analyzer (#261) | IS0c | [IS0f.md](../interpretation-simplification/tasks/IS0f.md) |
 | IS1 | one producer-capability table + totality test | IS0a, IS0b, IS0e | [IS1.md](../interpretation-simplification/tasks/IS1.md) |
 | IS1b | Mermaid reads the table | IS1 | [IS1b.md](../interpretation-simplification/tasks/IS1b.md) |
+| IS1c | qualified type names + using scope; a static call on a type is not expressible | IS0b, IS1 | [IS1c.md](../interpretation-simplification/tasks/IS1c.md) |
 | IS2a | writer→Roslyn differential over the corpus | IS1 | [IS2a.md](../interpretation-simplification/tasks/IS2a.md) |
 | IS2b | port the LINQ-oracle test consumers to VM execution | IS2a | [IS2b.md](../interpretation-simplification/tasks/IS2b.md) |
 | IS2c | delete `LinqExpressionGenerator` | IS2b | [IS2c.md](../interpretation-simplification/tasks/IS2c.md) |

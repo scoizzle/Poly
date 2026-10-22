@@ -40,6 +40,7 @@ public class PrintedSubsetVmTests {
         [typeof(TypeDefinitionReference)] = PrintForm.Name,
         [typeof(SuspendNode)] = PrintForm.Erased,
         [typeof(StridedSetBits)] = PrintForm.Rejected,
+        [typeof(PopCount)] = PrintForm.Rejected,
         [typeof(MethodDefinitionNode)] = PrintForm.Declaration,
         [typeof(Await)] = PrintForm.Live,
     };
@@ -89,6 +90,9 @@ public class PrintedSubsetVmTests {
                 new Constant(0L), new Constant(0L), new Constant(1L), new Constant(63L))))
             .Throws<InvalidOperationException>()
             .WithMessageContaining(nameof(StridedSetBits));
+        await Assert.That(() => CSharpLanguage.Write(new PopCount(new Constant(7L))))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining(nameof(PopCount));
     }
 
     [Test]

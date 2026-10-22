@@ -40,7 +40,7 @@ var body = new Invoke(new Lambda([], new Block(
     [n, i, len, maxLen, bestN])));
 
 var prepSw = System.Diagnostics.Stopwatch.StartNew();
-var program = Interpreter.Compile(body, CompilationMode.NoDebug);
+var program = Interpreter.Compile(body, debug ? CompilationMode.Normal : CompilationMode.NoDebug);
 // Absorb first-call JIT of the Expression.Compile() delegate into prep.
 using (var _ = Interpreter.Execute(program)) { }
 prepSw.Stop();
@@ -48,7 +48,7 @@ prepSw.Stop();
 long result;
 var sw = System.Diagnostics.Stopwatch.StartNew();
 if (debug) {
-    using var exec = Interpreter.Execute(program, s => s.Trace = Console.Error);
+    using var exec = Interpreter.Execute(program, s => s.DebugHook = (node, _, _) => Console.Error.WriteLine(node));
     result = exec.RawValue;
 } else {
     using var exec = Interpreter.Execute(program);

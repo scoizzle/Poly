@@ -730,6 +730,7 @@ public sealed class MinimalApiGenerator {
                 }
                 else invokeArgs.Add(new Member(new Variable("dto"), param.Name));
             }
+            AppendContributedArguments(entity, ia, actionParams, invokeArgs);
             tryBody.Add(Init("result",
                 invokeArgs.Count > 0
                     ? new Invoke(new Member(new Variable("entity"), ia.Name), [.. invokeArgs])
@@ -765,6 +766,35 @@ public sealed class MinimalApiGenerator {
                 new Constant(actionRoute),
                 new Lambda([.. actionParams],
                     Stmts(bodyNodes))));
+        }
+    }
+
+    /// <summary>
+    /// When a compiled constraint injected parameters, the lowered action lists
+    /// them after the DSL parameters. The lambda already has a matching name
+    /// (the host's <c>db</c>) or gains one. The entity call passes the same
+    /// suffix. No constraint compilers leaves this path unused.
+    /// </summary>
+    private void AppendContributedArguments(
+        Entity entity,
+        BehaviorAction ia,
+        List<Parameter> actionParams,
+        List<Node> invokeArgs) {
+        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
+            return;
+        RuntimeAnalysisCache.GetOrLower(_domain);
+        if (!RuntimeAnalysisCache.TryGetModuleMethod(_domain, entity.Name, ia.Name, out var method)
+            || method?.Parameters is not { Count: > 0 } parameters)
+            return;
+        var actionNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var param in ia.Parameters)
+            actionNames.Add(param.Name);
+        foreach (var param in parameters) {
+            if (actionNames.Contains(param.Name))
+                continue;
+            if (!actionParams.Exists(p => string.Equals(p.Name, param.Name, StringComparison.Ordinal)))
+                actionParams.Add(new Parameter(param.Name, param.TypeReference));
+            invokeArgs.Add(new Variable(param.Name));
         }
     }
 

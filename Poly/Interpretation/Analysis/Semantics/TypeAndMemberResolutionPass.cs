@@ -519,6 +519,14 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return ResolveNodeType(context, dominantReturn);
         var fromReturn = FindValuedReturnType(context, block);
         var last = block.Nodes[^1];
+        if (last is Variable tail && context.GetResolvedType(tail) is null) {
+            var declaration = DeclarationOf(context, tail);
+            if (context.GetResolvedType(declaration) is null
+                && FindAssignmentType(context, block, declaration) is { } tailType) {
+                context.SetResolvedType(declaration, tailType);
+                context.SetResolvedType(tail, tailType);
+            }
+        }
         var lastType = ResolveNodeType(context, last);
         if (lastType is not null && !IsVoidYieldNode(last))
             return lastType;
@@ -528,6 +536,38 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         return IsVoidYieldNode(last)
             ? context.TypeDefinitions.GetTypeDefinition(typeof(void))
             : lastType;
+    }
+
+    /// <summary>A block tail that reads a variable declared outside the block takes
+    /// its type from the first assignment in the block, including one inside a
+    /// nested statement. That assignment is a child, analyzed after the block's
+    /// yield under the pre-order pass, so resolve it here or the yield is unresolved.
+    /// Nested lambda bodies are a different scope and are not searched.</summary>
+    private static ITypeDefinition? FindAssignmentType(
+        AnalysisContext context, Node? node, Variable declaration) {
+        if (node is null or Lambda)
+            return null;
+        if (node is Assignment { Destination: Variable destination } assignment
+            && ReferenceEquals(DeclarationOf(context, destination), declaration)) {
+            var valueType = ResolveNodeType(context, assignment.Value);
+            if (valueType is not null && valueType.GetRuntimeType() != typeof(void))
+                return valueType;
+        }
+        foreach (var child in node.Children) {
+            if (FindAssignmentType(context, child, declaration) is { } found)
+                return found;
+        }
+        return null;
+    }
+
+    /// <summary>The declaration a variable node binds to; a declaration binds to
+    /// itself.</summary>
+    private static Variable DeclarationOf(AnalysisContext context, Variable variable) {
+        if (context.GetMetadata<VariableAnalysisMetadata>(variable) is { } metadata
+            && metadata.VariableReferences.TryGetValue(variable, out var declaration)
+            && declaration is not null)
+            return declaration;
+        return variable;
     }
 
     /// <summary>The value of the return that always yields from this block: an

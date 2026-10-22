@@ -59,7 +59,7 @@ internal sealed class CallSiteCatalogState : IAnalysisMetadata {
 /// This enables portable (serializable) call references without embedding
 /// CLR <see cref="MethodInfo"/> directly in the IR.
 ///
-/// Placement: after <c>ValueRepresentationAnalysis</c>, before <c>ConstantFolding</c>.
+/// Placement: after constant folding and type compatibility.
 /// </summary>
 internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     public const string Id = "CallSiteCatalog";
@@ -107,7 +107,7 @@ internal sealed class CallSiteCatalogAnalyzer : INodeAnalyzer {
     private void ProcessInvoke(AnalysisContext context, Invoke node, CallSiteCatalogState state) {
         var resolved = context.GetResolvedMember(node);
         if (resolved is ClrMethod clrMethod) {
-            // ArgCount includes instance receiver slot for instance methods,
+            // ArgCount includes the instance receiver position for instance methods,
             // matching the convention used by the direct emitter for CLR method calls.
             int argCount = clrMethod.MethodInfo.GetParameters().Length + (clrMethod.IsStatic ? 0 : 1);
             var entry = CreateEntry(

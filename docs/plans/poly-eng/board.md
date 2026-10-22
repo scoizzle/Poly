@@ -23,6 +23,7 @@ The next demo-quality gap after the walk is green is C8-web D3 and D4 (duplicate
 
 | PR | Slice | Branch |
 |----|-------|--------|
+| #246 | a boolean is an inline word ([task](tasks/bool-word.md)) | `slice/bool-word` |
 | #192 | docs: propose a multi-vendor storage layout | `docs/multi-vendor-storage` |
 | #194 (draft) | C8-tc2: typed probe + real `EnsureUnique` — plan commit only so far | `slice/c8-tc2` |
 | #196 (draft) | docs: analysis coverage audit 2026-10-16 | `spike/analysis-coverage` |
@@ -66,6 +67,20 @@ Design: [`docs/decisions/2026-10-16-async-interpreter-execution.md`](../../decis
 |---|-------|----------------|-----------|
 | A1 | async/await — `Await` executes by blocking, and the printed ⊆ simulatable audit | **merged** #193 `ecffcc4f` | [tasks/AA1.md](tasks/AA1.md) |
 | A2 | async/await — an `IsAsync` AST method returns a completed `Task` | **merged** #206 `3b29937b` | [tasks/AA1b.md](tasks/AA1b.md) |
+
+## Infra (admitted 2026-10-19; a separate lane, does not move row 4)
+
+VM ABI simplification: one codec (`RingCodec`), one frame protocol (`VmCall`), one
+ring discipline (`AbiCtx.RingRegion`), plus ~450 lines of dead ABI machinery removed.
+No behaviour change; the existing suite is the oracle.
+
+| # | Slice | Depends / hold | Task file |
+|---|-------|----------------|-----------|
+| ABI1 | VM ABI simplification (slices 0-3) | none; implemented on `9838889a`, uncommitted | [tasks/ABI1.md](tasks/ABI1.md) |
+| ABI2 | Dead ABI state + one scalar predicate | ABI1 | [tasks/ABI2.md](tasks/ABI2.md) |
+| ABI3 | Ring discipline completion + heap-shape accessor | ABI2 | [tasks/ABI3.md](tasks/ABI3.md) |
+| ABI4 | SetArgs ring-spill consolidation | ABI3 | [tasks/ABI4.md](tasks/ABI4.md) |
+| ABI5 | Register-file prune: lazy `_regN`, grow by one, dead surface | ABI4 | [tasks/ABI5.md](tasks/ABI5.md) |
 
 ## Swarm (probe findings; one card per agent)
 

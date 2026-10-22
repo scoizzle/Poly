@@ -8,8 +8,8 @@ public class VariableScopeTests {
     private static AnalysisResult Analyze(Node node) =>
         new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .Build()
             .Analyze(node);
 

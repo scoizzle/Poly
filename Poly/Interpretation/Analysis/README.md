@@ -9,13 +9,12 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 |------|-----------------|-------------------|-------------|
 | `TypeDefinitionNodeAnalyzer` | `.UseTypeDefinitionNodeAnalyzer()` | `TypeDefinitionMetadata`; also an `ITypeDefinitionProvider` | (none; member-type miss is fail-closed. Generic parameters and `NamedTypeReference` type arguments resolve.) |
 | `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
-| `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types + resolved members | Structural failures (missing members) |
-| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (block scopes, escapes, captured bindings), `LambdaCaptureMetadata` per `Lambda` | Scoping errors |
+| `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (bindings, parameter bindings, block scopes, writes, escapes, captures), `CatchBindingMetadata`, `LambdaCaptureMetadata`; resolves dotted CLR type names against the scope | Scoping errors |
+| `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types (projected through bindings) + resolved members | Structural failures (missing members) |
 | `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `ElisionMetadata`, `AssignmentValueUsedMetadata` | `DEAD_CODE_ELIDABLE` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
 | `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`, `InfiniteLoopMetadata`, `MustExecuteMetadata` | `CF0001`-`CF0013` |
-| `ValueRepresentationAnalyzer` | `.UseValueRepresentationAnalysis()` | `ValueRepresentationMetadata` (stack scalar, bool, heap ref, void, unknown) | (none) |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Invoke return types from lambda bodies (including stored closures); does not retarget the `Lambda` node itself | (none) |
@@ -24,23 +23,22 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 
 ## Pass Ordering
 
-Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST-to-VM-ABI lowering; no primitive expansion. `Use*` registration **is** the run order.
+Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline`). Direct AST lowering to the VM; no primitive expansion. `Use*` registration **is** the run order.
 
 ```
  1. TypeDefinitionNodeAnalyzer
- 2. ThisReferenceContext            (root this is legal SetArgs slot 0; TH0001 in static bodies)
- 3. TypeAndMemberResolver
- 4. LambdaReturnTypeAnalyzer        (Invoke body type; Lambda value stays heap/object)
- 5. ScopeValidator
+ 2. ThisReferenceContext            (root this is legal as the first argument; TH0001 in static bodies)
+ 3. ScopeValidator                  (bindings; every use resolves to a declaration)
+ 4. TypeAndMemberResolver           (types projected from bindings)
+ 5. LambdaReturnTypeAnalyzer        (Invoke body type; a Lambda value is its delegate type)
  6. SideEffectAnalyzer
  7. ConstantFoldingPass
  8. JumpTargetAnalyzer
  9. ControlFlowAnalysisPass
 10. ExceptionRegionAnalyzer
-11. ValueRepresentationAnalyzer
-12. SyntaxTypeCompatibilityAnalyzer
-13. CallSiteCatalogAnalyzer
-14. DefiniteAssignmentAnalyzer
+11. SyntaxTypeCompatibilityAnalyzer
+12. CallSiteCatalogAnalyzer
+13. DefiniteAssignmentAnalyzer
 ```
 
 Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees still analyze.
@@ -51,7 +49,7 @@ Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees stil
 
 | Directory | Contents |
 |-----------|----------|
-| `Semantics/` | Type resolution, scoping, side-effect analysis, this-reference, jump targets, lambda returns, definite assignment, value representation, call site catalog, exception region analysis |
+| `Semantics/` | Type resolution, scoping, side-effect analysis, this-reference, jump targets, lambda returns, definite assignment, call site catalog, exception region analysis |
 | `ControlFlow/` | CFG construction, reachability, infinite-loop detection |
 | `ConstantFolding/` | Constant expression evaluation and algebraic simplification |
 
@@ -122,8 +120,8 @@ Per-node metadata is scoped to that specific AST node.
 1. TypeDefinitionNode (when present) before This/TypeAndMember so AST types exist.
 2. Variable scoping before side-effect analysis.
 3. Jump targets before CFG construction.
-4. Constant folding before CFG; ValueRepresentation, definite assignment, and EH after CFG.
-5. LambdaReturnType after TypeAndMember so Invoke nodes have body types before value representation. SyntaxTypeCompatibility and CallSiteCatalog after ValueRepresentation.
+4. Constant folding before CFG; definite assignment and EH after CFG.
+5. LambdaReturnType after TypeAndMember so Invoke nodes have body types. SyntaxTypeCompatibility and CallSiteCatalog after the type passes.
 
 ---
 

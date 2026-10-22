@@ -102,7 +102,6 @@ public sealed class VmDebugger : IDisposable {
         if (_execution is not null)
             throw new InvalidOperationException("VM debugger has already been started.");
         _state.Status = InterpreterStatus.Running;
-        _state.Registers ??= new long[256];
         _state.DebugHook = DebugHookHandler;
 
         // Set step flag before launching so the first hook blocks immediately.
@@ -187,7 +186,7 @@ public sealed class VmDebugger : IDisposable {
 
     // ── Hook ─────────────────────────────────────────────────
 
-    private void DebugHookHandler(Node node, ReadOnlySpan<long> localsSpan, Heap heap) {
+    private void DebugHookHandler(Node node, ReadOnlySpan<long> localsSpan, VmManagedObjectHeap heap) {
         if (_disposed) return;
 
         // Pass-through: if nobody's stepping, return immediately.
@@ -249,7 +248,7 @@ public sealed class VmDebugger : IDisposable {
     /// Upvalue cells store a heap handle in the slot; <paramref name="heap"/>
     /// is used to present <c>cell[0]</c> instead of the handle.</summary>
     public static IReadOnlyList<(string Name, long Value)> GetLocals(
-        VmProgram program, ReadOnlySpan<long> localsSpan, Heap? heap = null) {
+        VmProgram program, ReadOnlySpan<long> localsSpan, VmManagedObjectHeap? heap = null) {
         var debugInfo = program.DebugInfo as VmDebugInfo;
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
@@ -281,7 +280,7 @@ public sealed class VmDebugger : IDisposable {
         return result;
     }
 
-    private static long DecodeLocal(VariableLayout layout, long raw, Heap? heap) {
+    private static long DecodeLocal(VariableLayout layout, long raw, VmManagedObjectHeap? heap) {
         if (!layout.IsUpvalueCell || heap is null || raw <= 0 || raw >= heap.Count)
             return raw;
         return heap.Get((int)raw) is long[] { Length: >= 1 } cell ? cell[0] : raw;

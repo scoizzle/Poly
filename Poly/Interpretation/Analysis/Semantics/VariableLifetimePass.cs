@@ -5,6 +5,7 @@ namespace Poly.Interpretation.Analysis;
 internal record VariableAnalysisMetadata(
     Dictionary<Block, HashSet<Variable>> BlockScopes,
     Dictionary<Variable, Variable?> VariableReferences,
+    Dictionary<Variable, Parameter> ParameterReferences,
     Dictionary<Block, ScopeVertex> ScopeVertices,
     Dictionary<Variable, Node> VariableDeclarationScope,
     Dictionary<Variable, int> AssignmentCount,
@@ -12,6 +13,10 @@ internal record VariableAnalysisMetadata(
     HashSet<Variable> CapturedVariables,
     HashSet<Parameter> CapturedParameters
 ) : IAnalysisMetadata;
+
+/// <summary>Links a catch clause body to the synthetic declaration the bind pass
+/// created for its variable, so the type pass can stamp the exception type.</summary>
+internal sealed record CatchBindingMetadata(Variable Declaration) : IAnalysisMetadata;
 
 /// <summary>One free binding of a <see cref="Lambda"/>, in tree-walk order.</summary>
 internal readonly record struct LambdaCaptureBinding(Variable? Variable, Parameter? Parameter);
@@ -29,7 +34,7 @@ internal sealed record ScopeState(
     VariableAnalysisMetadata Meta,
     List<Block> ScopeStack,
     // Names in scope, innermost last. Values are Variable declarations or
-    // lambda Parameter declarations — a parameter name registered for a lambda
+    // Parameter declarations — a parameter name registered for a lambda or method
     // body shadows an outer variable of the same name.
     Dictionary<string, Stack<Node>> VariablesByName
 );
@@ -41,7 +46,12 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         var state = new ScopeState(
             Meta: new(
                 BlockScopes: [],
+                // Every Node carries a stable NodeId that participates in record
+                // equality, so these maps already distinguish a shadowed declaration
+                // from its outer namesake. Key by the node's identity (Id), not by
+                // name, and not by instance reference.
                 VariableReferences: [],
+                ParameterReferences: [],
                 ScopeVertices: [],
                 VariableDeclarationScope: [],
                 AssignmentCount: [],
@@ -96,8 +106,25 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                 AnalyzeLambda(context, state, lambda);
                 break;
 
+            case MethodDefinitionNode method:
+                AnalyzeMethodDefinition(context, state, method);
+                break;
+
+            case ConstructorDefinitionNode constructor:
+                AnalyzeConstructorDefinition(context, state, constructor);
+                break;
+
             case Variable variable:
                 ValidateVariableReference(context, state, variable);
+                AnalyzeChildrenWithState(context, state, node);
+                break;
+
+            case Member member:
+                // A dotted CLR type name (`System.String`) is folded as a member chain
+                // over an identifier. Rewrite it here, where the scope is known, so a
+                // declared local named `System` wins over the type name.
+                if (TryRewriteDottedTypeName(context, state, member))
+                    return;
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 
@@ -108,13 +135,8 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                     && countStack.Peek() is Variable decl) {
                     state.Meta.AssignmentCount.TryGetValue(decl, out var count);
                     state.Meta.AssignmentCount[decl] = count + 1;
-                    // The destination carries the variable's declared type, not the
-                    // assigned value's type. The VM stores raw slots, so the emitter
-                    // must know the variable's representation to convert on write
-                    // (`double x = 1; x = 2;` would otherwise store the integer 2 where
-                    // the double path reads IEEE bits).
-                    if (context.GetResolvedType(decl) is { } declaredType)
-                        context.SetResolvedType(v, declaredType);
+                    // The declared type is projected by the type pass through the
+                    // binding; this pass only records the write count.
                 }
                 break;
 
@@ -149,6 +171,10 @@ internal sealed class ScopeValidator : INodeAnalyzer {
                     RegisterScopedVariable(context, state, catchVar);
                     state.Meta.VariableDeclarationScope[catchVar] =
                         state.ScopeStack.Count > 0 ? state.ScopeStack[^1] : tcf;
+                    // Link the synthetic declaration to the clause body so the type
+                    // pass can stamp it with the resolved exception type. The clause
+                    // itself is not a Node.
+                    context.SetMetadata(clause.Body, new CatchBindingMetadata(catchVar));
                 }
                 AnalyzeNode(context, state, clause.Body);
                 if (catchVar is not null)
@@ -157,6 +183,62 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         }
         if (tcf.FinallyBlock is not null)
             AnalyzeNode(context, state, tcf.FinallyBlock);
+    }
+
+    /// <summary>Register a method's value parameters before its body. Return type,
+    /// attributes, parameter declarations/defaults, and generic parameters are walked
+    /// first, outside the parameter scope.</summary>
+    private void AnalyzeMethodDefinition(
+        AnalysisContext context, ScopeState state, MethodDefinitionNode method) {
+        AnalyzeNode(context, state, method.ReturnType);
+        foreach (var attribute in method.Attributes)
+            AnalyzeNode(context, state, attribute);
+        if (method.Parameters is { } parameters) {
+            foreach (var parameter in parameters)
+                AnalyzeNode(context, state, parameter);
+        }
+        if (method.GenericParameters is { } genericParameters) {
+            foreach (var generic in genericParameters)
+                AnalyzeNode(context, state, generic);
+        }
+
+        if (method.Parameters is { } valueParameters) {
+            foreach (var parameter in valueParameters)
+                RegisterScopedParameter(state, parameter);
+        }
+        if (method.Body is { } body)
+            AnalyzeNode(context, state, body);
+        if (method.Parameters is { } declared) {
+            foreach (var parameter in declared)
+                UnregisterVariable(state, parameter.Name);
+        }
+    }
+
+    /// <summary>Register a constructor's value parameters before its body and
+    /// initializer; parameter declarations/defaults are walked outside the scope.</summary>
+    private void AnalyzeConstructorDefinition(
+        AnalysisContext context, ScopeState state, ConstructorDefinitionNode constructor) {
+        if (constructor.Parameters is { } parameters) {
+            foreach (var parameter in parameters)
+                AnalyzeNode(context, state, parameter);
+        }
+
+        if (constructor.Parameters is { } valueParameters) {
+            foreach (var parameter in valueParameters)
+                RegisterScopedParameter(state, parameter);
+        }
+        if (constructor.Body is { } body)
+            AnalyzeNode(context, state, body);
+        if (constructor.BaseConstructorInvocation is { } baseInvocation)
+            AnalyzeNode(context, state, baseInvocation);
+        if (constructor.BaseCall is { } baseCall) {
+            foreach (var argument in baseCall)
+                AnalyzeNode(context, state, argument);
+        }
+        if (constructor.Parameters is { } declared) {
+            foreach (var parameter in declared)
+                UnregisterVariable(state, parameter.Name);
+        }
     }
 
     /// <summary>Register the lambda's parameters before its body so a body
@@ -242,12 +324,12 @@ internal sealed class ScopeValidator : INodeAnalyzer {
             state.VariablesByName[variable.Name] = stack;
         }
         if (stack.Count > 0) {
-            // A local cannot shadow a lambda parameter: the emitter resolves parameter
+            // A local cannot shadow a parameter: the emitter resolves parameter
             // uses by name, so such a local could never be read or written (and C#
             // forbids it). Fail closed rather than mis-bind.
             if (stack.Peek() is Parameter)
                 context.ReportError(variable,
-                    $"Variable '{variable.Name}' cannot shadow a lambda parameter of the same name.");
+                    $"Variable '{variable.Name}' cannot shadow a parameter of the same name.");
             else
                 context.ReportWarning(variable, $"Variable '{variable.Name}' shadows outer scope variable");
         }
@@ -257,6 +339,26 @@ internal sealed class ScopeValidator : INodeAnalyzer {
     private static void UnregisterVariable(ScopeState state, string name) {
         if (state.VariablesByName.TryGetValue(name, out var stack) && stack.Count > 0)
             stack.Pop();
+    }
+
+    /// <summary>Rewrite a pure identifier spine that spells a CLR type, unless its
+    /// root is a declared name in scope (a local `System` shadows the type). Returns
+    /// true when the node was replaced; the caller must not descend then.</summary>
+    private static bool TryRewriteDottedTypeName(
+        AnalysisContext context, ScopeState state, Member member) {
+        if (context.GetNodeReplacement(member) is not null)
+            return false;
+        if (!DottedTypeNames.TryGetSpine(member, out var dotted, out var root))
+            return false;
+        // UnregisterVariable only pops; a name that has left scope keeps an empty
+        // stack in the map. Only a live declaration wins over the type name.
+        if (state.VariablesByName.TryGetValue(root.Name, out var rootStack) && rootStack.Count > 0)
+            return false;
+        if (!DottedTypeNames.TryResolveType(context, member, out var clr))
+            return false;
+        context.SetNodeReplacement(member, new ClrTypeReference(clr.RuntimeType));
+        context.SetResolvedType(member, clr);
+        return true;
     }
 
     private static void RegisterScopedParameter(ScopeState state, Parameter parameter) {
@@ -273,19 +375,13 @@ internal sealed class ScopeValidator : INodeAnalyzer {
         if (context.GetNodeReplacement(variable) is TypeReference or NamedTypeReference or PrimitiveTypeReference)
             return;
         if (state.VariablesByName.TryGetValue(variable.Name, out var stack) && stack.Count > 0) {
-            // A parameter declaration resolves the name but is not a Variable;
-            // its emit slot is recovered by the emitter's parameter maps.
-            if (stack.Peek() is Variable declaration) {
-                var metadata = GetOrCreateMetadata(context, state.Meta, variable);
+            // The declaration edge is the only type source for a use; the type pass
+            // projects through it. Attach the shared bag to the use either way.
+            var metadata = GetOrCreateMetadata(context, state.Meta, variable);
+            if (stack.Peek() is Variable declaration)
                 metadata.VariableReferences[variable] = declaration;
-                // A local's type is inferred once, on its declaration (ResolveBlockType);
-                // every use of the name is a distinct Variable node. Carry the declaration's
-                // resolved type onto the use, or type-directed decisions (string +, casts,
-                // arithmetic categories) never see a local's type.
-                if (context.GetResolvedType(variable) is null
-                    && context.GetResolvedType(declaration) is { } declaredType)
-                    context.SetResolvedType(variable, declaredType);
-            }
+            else if (stack.Peek() is Parameter parameter)
+                metadata.ParameterReferences[variable] = parameter;
         }
         else {
             context.ReportError(variable, $"Variable '{variable.Name}' is not declared in this scope");

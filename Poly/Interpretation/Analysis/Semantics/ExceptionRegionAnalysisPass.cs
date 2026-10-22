@@ -76,7 +76,7 @@ internal sealed class ExceptionRegionState : IAnalysisMetadata {
 /// and builds an <see cref="ExceptionRegionMetadata"/> table.
 ///
 /// Placement: after <c>LambdaReturnTypeResolution</c>
-/// (slot 12 in the pipeline).
+/// (position 12 in the pipeline).
 /// </summary>
 internal sealed class ExceptionRegionAnalyzer : INodeAnalyzer {
     public const string Id = "ExceptionRegion";

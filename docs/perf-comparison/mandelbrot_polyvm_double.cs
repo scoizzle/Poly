@@ -14,7 +14,7 @@ var iter = new Variable("iter"); var total = new Variable("total");
 
 // Double-precision mandelbrot: no fixed-point scaling, no shifts.
 // cx = (x - 64) / 32.0,  cy = (y - 64) / 32.0  → viewport [-2, 2]
-Node Cx(Node xv) => new Divide(new Subtract(new Convert(xv, typeof(double)), new Constant(64.0)), new Constant(32.0));
+Node Cx(Node xv) => new Divide(new Subtract(new TypeCast(xv, TypeReference.To<double>()), new Constant(64.0)), new Constant(32.0));
 Node Cy(Node yv) => Cx(yv);
 
 Node mandelPixel = new Block([
@@ -70,4 +70,4 @@ using var exec = Interpreter.Execute(program);
 long result = exec.RawValue;
 sw.Stop();
 // Same field layout as other Poly benches: language,size,result,us,prep_ms
-Console.WriteLine($"Poly VM double,{size},{result},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");
+Console.WriteLine($"Poly VM double (grid),{size},{result},{sw.Elapsed.TotalMicroseconds:F0},{prepSw.ElapsedMilliseconds}");

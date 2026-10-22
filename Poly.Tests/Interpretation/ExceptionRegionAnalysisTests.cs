@@ -8,8 +8,8 @@ public class ExceptionRegionAnalysisTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -152,8 +152,8 @@ public class ExceptionRegionAnalysisTests {
         // ANA-FIX-014: State isolation across sequential analyze calls.
         var analyzer = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

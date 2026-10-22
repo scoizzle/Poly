@@ -132,7 +132,7 @@ public class DirectVmAbiEmitterTests {
     public async Task RingDepth_SimpleConstant_StaysLow(CancellationToken ct) {
         var program = Interpreter.Compile(new Constant(42));
         // Single constant: ringDepth = 1
-        await Assert.That(program.MaxActiveLocalsDepth).IsEqualTo(1);
+        await Assert.That(program.MaxRingDepth).IsEqualTo(1);
     }
 
     [Test, Timeout(10_000)]
@@ -147,7 +147,7 @@ public class DirectVmAbiEmitterTests {
             new Constant(5));
         var program = Interpreter.Compile(expr);
         // Constant folding collapses the whole tree to Constant(15), ring depth 1.
-        await Assert.That(program.MaxActiveLocalsDepth).IsEqualTo(1);
+        await Assert.That(program.MaxRingDepth).IsEqualTo(1);
     }
 
     [Test, Timeout(10_000)]
@@ -160,7 +160,7 @@ public class DirectVmAbiEmitterTests {
             add(add(leaf(5), leaf(6)), add(leaf(7), leaf(8))));
         var program = Interpreter.Compile(expr);
         // With ring-based dispatch, balanced tree uses more ring slots.
-        await Assert.That(program.MaxActiveLocalsDepth).IsLessThanOrEqualTo(5);
+        await Assert.That(program.MaxRingDepth).IsLessThanOrEqualTo(5);
     }
 
     [Test, Timeout(10_000)]
@@ -175,7 +175,21 @@ public class DirectVmAbiEmitterTests {
             ], [x, y]));
         // Variables use value stack, not ring. Peak ring depth from CompileValue-based
         // arithmetic: constants are on eval stack, final Add spills 1 slot.
-        await Assert.That(program.MaxActiveLocalsDepth).IsLessThanOrEqualTo(4);
+        await Assert.That(program.MaxRingDepth).IsLessThanOrEqualTo(4);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task LargeLocalSet_RegisterAndFrameSlotVariablesCoexist(CancellationToken ct) {
+        // 40 simultaneous locals cross the 32-register cap: v0..v31 are register-backed,
+        // v32..v39 are slot-backed. The weights distinguish the last register from the
+        // first frame slot, so an off-by-one at the boundary changes the result.
+        var vars = Enumerable.Range(0, 40).Select(i => new Variable($"v{i}")).ToArray();
+        var nodes = vars.Select((v, i) => (Node)new Assignment(v, new Constant((long)(i + 1)))).ToList();
+        nodes.Add(new Add(
+            new Add(new Multiply(vars[0], new Constant(1_000_000L)),
+                    new Multiply(vars[31], new Constant(10_000L))),
+            new Add(new Multiply(vars[32], new Constant(100L)), vars[39])));
+        await Assert.That(ExecDirect(new Block(nodes, vars))).IsEqualTo(1_323_340L);
     }
 
     // ═══════════════════════════════════════════════════════════════

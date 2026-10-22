@@ -14,4 +14,4 @@ Default target is uncommitted local changes. Use a branch, PR, or path list when
 
 Reviewer only. Do not edit production or tests unless the user asks to harden afterward.
 
-Write the protocol's two docs: a review note under `docs/`, and checkable follow-ups under `docs/`. Then report verdict, counts, paths, and the top issues.
+Write the protocol's two docs: a review note under `docs/`, and checkable follow-ups under `docs/`. If this agent has no shell, return the text and let the parent write it. Then report verdict, counts, paths, and the top issues.

@@ -74,7 +74,7 @@ TFM: `net10.0`, nullable on, zero external deps in core `Poly/`. Policy: [`docs/
 |---------|------|----------|
 | **Ast** | `Node`, `NodeId`, fluent API | Execution, domain shapes, analysis |
 | **Analysis** | Framework, metadata, **node replacement** | Execution, domain concepts, MCP |
-| **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
+| **Interpretation** | Semantic passes, `Interpreter`, `AbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
 | **Introspection** | Host-neutral type/member model (CLR = first provider) | Depending on Interpretation |
 | **DomainModeling** | Immutable `Domain`, evolution, DE→AST per op; contracts via `bind` | Domain opcodes; `Main`; growing `Comment` as meaning |
 | **Grammar** | Pattern-table engine (`Poly/Grammar/`) — decode / match / print | Product tables inside the engine — DSL tables live in `DomainModeling`, C# tables in `Interpretation`; parallel pattern engines |
@@ -110,7 +110,7 @@ Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Do
 
 | Piece | Location |
 |-------|----------|
-| Emitter | `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
+| Emitter | `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` |
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, … under `Poly/Interpretation/Vm/` |
 

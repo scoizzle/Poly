@@ -7,14 +7,14 @@ using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
     /// <summary>Comparison as a bool Expression (no 0/1 long).</summary>
     private static Expression CompileCompareTest(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        AbiCtx ctx) {
+        Context ctx) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
@@ -25,8 +25,8 @@ public static partial class DirectVmAbiEmitter {
             return cf == Equal ? ec : Not(ec);
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -36,15 +36,15 @@ public static partial class DirectVmAbiEmitter {
             var cmp = Call(VmHeapCompare, lo, ro);
             return cf(cmp, Constant(0));
         }
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
-            return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
+        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
+            return cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx));
         return cf(lv, rv);
     }
 
     private static Expression EmitComparisonValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        AbiCtx ctx, Node? cn = null) {
+        Context ctx, Node? cn = null) {
         var lv = CompileValue(left, ctx);
         var rv = CompileValue(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
@@ -56,8 +56,8 @@ public static partial class DirectVmAbiEmitter {
                                 cf == Equal ? Constant(0L) : Constant(1L));
         }
         if (!eq && ctx.Analysis is not null
-            && ctx.Analysis.GetValueRepresentation(left) == ValueRepresentationKind.HeapRef
-            && ctx.Analysis.GetValueRepresentation(right) == ValueRepresentationKind.HeapRef) {
+            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
+            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
             // Relational comparison of heap-resident values (DateOnly/DateTime/
             // Guid/string/...): compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
@@ -67,83 +67,22 @@ public static partial class DirectVmAbiEmitter {
             var cmp = Call(VmHeapCompare, lo, ro);
             return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
         }
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
-            return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
+        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
+            return Condition(cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx)),
                 Constant(1L), Constant(0L));
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
     }
 
     // ── Ring-based expression helpers ──
-    // Retained for paths that still walk operands via CompileNode (Member, etc.).
-    // Pure expression dispatch uses CompileValue + SpillToRing instead.
-
-    /// <summary>Binary arithmetic — ring-based (operands through CompileNode).</summary>
-    private static Expression EmitBinaryArithmeticRing(
-        Node left, Node right,
-        Func<Expression, Expression, BinaryExpression> factory,
-        AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var leftCompiled = CompileNode(left, ctx);
-        int leftSlot = ctx.RingDepth - 1;
-        var rightCompiled = CompileNode(right, ctx);
-        int rightSlot = ctx.RingDepth - 1;
-
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
-            var resultBits = Call(BitConverterDoubleToInt64Bits,
-                factory(AsIeeeDouble(left, ctx.RingVar(leftSlot), ctx),
-                        AsIeeeDouble(right, ctx.RingVar(rightSlot), ctx)));
-            ctx.RingDepth = d + 1;
-            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), resultBits));
-        }
-
-        Expression rhs = ctx.RingVar(rightSlot);
-        if (factory == LeftShift || factory == RightShift)
-            rhs = Convert(rhs, typeof(int));
-        ctx.RingDepth = d + 1;
-        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d), factory(ctx.RingVar(leftSlot), rhs)));
-    }
-
-    /// <summary>Comparison — ring-based (operands through CompileNode).</summary>
-    private static Expression EmitComparisonRing(
-        Node left, Node right,
-        Func<Expression, Expression, BinaryExpression> cf,
-        AbiCtx ctx, Node? cn = null) {
-        int d = ctx.RingDepth;
-        var leftCompiled = CompileNode(left, ctx);
-        int leftSlot = ctx.RingDepth - 1;
-        var rightCompiled = CompileNode(right, ctx);
-        int rightSlot = ctx.RingDepth - 1;
-
-        bool eq = cf == Equal || cf == NotEqual;
-        if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = HeapValueToObject(ctx.RingVar(leftSlot), ctx);
-            var ro = HeapValueToObject(ctx.RingVar(rightSlot), ctx);
-            var ec = Call(ObjectEquals, lo, ro);
-            ctx.RingDepth = d + 1;
-            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
-                Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
-                              cf == Equal ? Constant(0L) : Constant(1L))));
-        }
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
-            ctx.RingDepth = d + 1;
-            return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
-                Condition(cf(Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftSlot)),
-                              Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightSlot))),
-                    Constant(1L), Constant(0L))));
-        }
-        ctx.RingDepth = d + 1;
-        return Block(leftCompiled, rightCompiled, Assign(ctx.RingVar(d),
-            Condition(cf(ctx.RingVar(leftSlot), ctx.RingVar(rightSlot)), Constant(1L), Constant(0L))));
-    }
 
     /// <summary>Binary arithmetic — uses CompileValue for operands,</summary>
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
-        AbiCtx ctx) {
+        Context ctx) {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right))
+        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
             return SpillToRing(Call(BitConverterDoubleToInt64Bits,
                 factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx))), ctx);
         var rhs = rightVal;
@@ -151,62 +90,10 @@ public static partial class DirectVmAbiEmitter {
         return SpillToRing(factory(leftVal, rhs), ctx);
     }
 
-    /// <summary>Comparison (eq, neq, lt, gt, etc.) → 0/1 long.
-    /// For Equal/NotEqual, heap reference values (strings, objects) are compared
-    /// using object.Equals at runtime rather than handle equality.</summary>
-    private static Expression EmitComparison(
-        Node left, Node right,
-        Func<Expression, Expression, BinaryExpression> comparisonFactory,
-        AbiCtx ctx,
-        Node? comparisonNode = null) {
-        int d = ctx.RingDepth;
-        var leftExpr = CompileNode(left, ctx);
-        int leftResult = ctx.RingDepth - 1;
-
-        var rightExpr = CompileNode(right, ctx);
-        int rightResult = ctx.RingDepth - 1;
-
-        // Detect string comparison: when Equal/NotEqual and both operands are
-        // heap references (strings), compare via object.Equals at runtime.
-        bool isEquality = comparisonFactory == Equal
-                       || comparisonFactory == NotEqual;
-        if (isEquality && AreHeapValues(ctx, left, right)) {
-            // Read both objects from heap and compare — handle 0 maps to null.
-            var leftObj = HeapValueToObject(ctx.RingVar(leftResult), ctx);
-            var rightObj = HeapValueToObject(ctx.RingVar(rightResult), ctx);
-            var equalCheck = Call(ObjectEquals,
-                leftObj, rightObj);
-            var result = Assign(ctx.RingVar(d),
-                comparisonFactory == Equal
-                    ? Condition(equalCheck, Constant(1L), Constant(0L))
-                    : Condition(equalCheck, Constant(0L), Constant(1L)));
-            ctx.RingDepth = d + 1;
-            return Block(leftExpr, rightExpr, result);
-        }
-
-        // Double/float comparison: reinterpret bits before comparing
-        if (IsDoubleValue(ctx, left) || IsDoubleValue(ctx, right)) {
-            var leftDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(leftResult));
-            var rightDbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(rightResult));
-            var result = Assign(ctx.RingVar(d),
-                Condition(comparisonFactory(leftDbl, rightDbl),
-                    Constant(1L), Constant(0L)));
-            ctx.RingDepth = d + 1;
-            return Block(leftExpr, rightExpr, result);
-        }
-
-        var simpleResult = Assign(
-            ctx.RingVar(d),
-            Condition(comparisonFactory(ctx.RingVar(leftResult), ctx.RingVar(rightResult)),
-                Constant(1L), Constant(0L)));
-        ctx.RingDepth = d + 1;
-        return Block(leftExpr, rightExpr, simpleResult);
-    }
-
     /// <summary>Converts a long value (heap handle or 0 for null) to an object
     /// reference suitable for comparison. Handle 0 maps to CLR null rather
     /// than being dereferenced via <c>Heap.UnsafeGet</c>.</summary>
-    private static Expression HeapValueToObject(Expression handle, AbiCtx ctx) {
+    private static Expression HeapValueToObject(Expression handle, Context ctx) {
         var intHandle = Convert(handle, typeof(int));
         var deref = Call(ctx.HeapLocal,
             HeapUnsafeGet, intHandle);
@@ -217,14 +104,14 @@ public static partial class DirectVmAbiEmitter {
 
     /// <summary>Check if both nodes likely produce heap reference values that
     /// should be compared by value rather than handle.</summary>
-    private static bool AreHeapValues(AbiCtx ctx, Node left, Node right) {
+    private static bool AreHeapValues(Context ctx, Node left, Node right) {
         if (ctx.Analysis is not null) {
-            var leftRep = ctx.Analysis.GetValueRepresentation(left);
-            var rightRep = ctx.Analysis.GetValueRepresentation(right);
+            var leftRep = ctx.KindOf(left);
+            var rightRep = ctx.KindOf(right);
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;
-            // Both representations known and neither is a heap ref (StackScalar/Bool) →
+            // Both representations known and neither is a heap ref (StackScalar) →
             // the comparison is scalar. Do NOT fall through to the Member heuristic:
             // a value-typed (e.g. long) member read produces a scalar, and treating it
             // as a heap handle reads garbage heap slots (broken `== 0` in quantifiers).
@@ -240,123 +127,94 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>Short-circuit AND: if left is false, skip right.</summary>
-    private static Expression EmitLogicalAnd(And and, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var leftExpr = CompileNode(and.LeftHandValue, ctx);
-        int leftSlot = ctx.RingDepth - 1;
-        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+    private static Expression EmitLogicalAnd(And and, Context ctx) {
+        var ring = ctx.OpenRing();
+        int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
 
-        int rightStart = ctx.RingDepth;
         var rightExpr = CompileNode(and.RightHandValue, ctx);
         int rightSlot = ctx.RingDepth - 1;
 
-        var result = Assign(ctx.RingVar(d),
-            Block(
-                leftExpr, foldLeft,
+        var result = Assign(ctx.RingVar(ring.Base),
+            ring.Then(
                 Condition(
                     Equal(ctx.RingVar(leftSlot), Constant(0L)),
                     Constant(0L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)
-                    )
-                )
-            ));
-        ctx.RingDepth = d + 1;
+                        ctx.RingVar(rightSlot)))));
+        ctx.RingDepth = ring.Base + 1;
         return result;
     }
 
     /// <summary>Short-circuit OR: if left is true, skip right.</summary>
-    private static Expression EmitLogicalOr(Or or, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var leftExpr = CompileNode(or.LeftHandValue, ctx);
-        int leftSlot = ctx.RingDepth - 1;
-        var foldLeft = FoldResultToSlot(ref leftSlot, d, ctx);
+    private static Expression EmitLogicalOr(Or or, Context ctx) {
+        var ring = ctx.OpenRing();
+        int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
 
-        int rightStart = ctx.RingDepth;
         var rightExpr = CompileNode(or.RightHandValue, ctx);
         int rightSlot = ctx.RingDepth - 1;
 
-        var result = Assign(ctx.RingVar(d),
-            Block(
-                leftExpr, foldLeft,
+        var result = Assign(ctx.RingVar(ring.Base),
+            ring.Then(
                 Condition(
                     NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
                     Constant(1L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)
-                    )
-                )
-            ));
-        ctx.RingDepth = d + 1;
+                        ctx.RingVar(rightSlot)))));
+        ctx.RingDepth = ring.Base + 1;
         return result;
     }
 
     /// <summary>Logical NOT: 0→1, anything else→0.</summary>
-    private static Expression EmitNot(Not not, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(not.Value, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
-        var result = Assign(ctx.RingVar(resultSlot),
-            Condition(Equal(ctx.RingVar(resultSlot), Constant(0L)), Constant(1L), Constant(0L)));
-        ctx.RingDepth = resultSlot + 1;
-        return Block(operandExpr, fold, result);
+    private static Expression EmitNot(Not not, Context ctx) {
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(not.Value, ctx));
+        var result = Assign(ctx.RingVar(slot),
+            Condition(Equal(ctx.RingVar(slot), Constant(0L)), Constant(1L), Constant(0L)));
+        return ring.Then(result);
     }
 
     /// <summary>Unary minus: negate value.</summary>
-    private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(unaryMinus.Operand, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+    private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
         Expression result;
-        if (IsDoubleValue(ctx, unaryMinus.Operand)) {
-            var dbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(resultSlot));
-            result = Assign(ctx.RingVar(resultSlot),
+        if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
+            var dbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(slot));
+            result = Assign(ctx.RingVar(slot),
                 Call(BitConverterDoubleToInt64Bits, Negate(dbl)));
         }
         else {
-            result = Assign(ctx.RingVar(resultSlot), Negate(ctx.RingVar(resultSlot)));
+            result = Assign(ctx.RingVar(slot), Negate(ctx.RingVar(slot)));
         }
-        ctx.RingDepth = resultSlot + 1;
-        return Block(operandExpr, fold, result);
+        return ring.Then(result);
     }
 
-    private static Expression EmitBitwiseNot(BitwiseNot n, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(n.Operand, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
-        var result = Assign(ctx.RingVar(resultSlot), Not(ctx.RingVar(resultSlot)));
-        ctx.RingDepth = resultSlot + 1;
-        return Block(operandExpr, fold, result);
+    private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(n.Operand, ctx));
+        return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
-    private static Expression EmitPopCount(PopCount pc, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(pc.Operand, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
-        var call = Call(null,
-            BitOperationsPopCount,
-            Convert(ctx.RingVar(resultSlot), typeof(ulong)));
-        var result = Assign(ctx.RingVar(resultSlot), Convert(call, typeof(long)));
-        ctx.RingDepth = resultSlot + 1;
-        return Block(operandExpr, fold, result);
+    private static Expression EmitPopCount(PopCount pc, Context ctx) {
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(pc.Operand, ctx));
+        var call = Call(null, BitOperationsPopCount,
+            Convert(ctx.RingVar(slot), typeof(ulong)));
+        return ring.Then(Assign(ctx.RingVar(slot), Convert(call, typeof(long))));
     }
 
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
     /// and emit a property getter, field read, or method call.</summary>
-    private static bool IsTypeNameReceiver(Node node, AbiCtx ctx) =>
+    private static bool IsTypeNameReceiver(Node node, Context ctx) =>
         node is NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference
         || (ctx.Analysis?.GetNodeReplacement(node) is { } replaced && replaced != node
             && IsTypeNameReceiver(replaced, ctx));
 
-    private static Expression EmitMember(Member m, AbiCtx ctx) {
-        int d = ctx.RingDepth;
+    private static Expression EmitMember(Member m, Context ctx) {
+        var ring = ctx.OpenRing();
         var resolved = ctx.Analysis?.GetResolvedMember(m);
 
         // Type-name receiver (`DateTime.UtcNow`): the left side is a type, not a value.
@@ -368,19 +226,17 @@ public static partial class DirectVmAbiEmitter {
             return EmitResolvedMember(resolved, null, slot, ctx, Empty());
         }
 
-        var instanceExpr = CompileNode(m.Value, ctx);
-        int instanceSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref instanceSlot, d, ctx);
+        int instanceSlot = ring.Add(CompileNode(m.Value, ctx));
 
         if (resolved?.LifetimeModifier == LifetimeModifier.Static) {
-            return EmitResolvedMember(resolved, null, d, ctx, Block(instanceExpr, fold));
+            return EmitResolvedMember(resolved, null, ring.Base, ctx, Block(ring.Steps));
         }
 
         if (resolved is not null) {
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
             bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
                 && clrDef.RuntimeType.IsValueType
-                && AbiValueTypes.IsLongRepresentable(clrDef.RuntimeType);
+                && RingCodec.IsInline(clrDef.RuntimeType);
 
             Expression instanceObj;
             if (isInlineValueType) {
@@ -391,13 +247,12 @@ public static partial class DirectVmAbiEmitter {
                     HeapUnsafeGet,
                     Convert(ctx.RingVar(instanceSlot), typeof(int)));
             }
-            var prelude = Block(
-                instanceExpr, fold,
+            var prelude = ring.Then(
                 IfThen(
                     Equal(instanceObj, Constant(null, typeof(object))),
                     Throw(New(InvalidOperationExceptionStringCtor,
                         Constant($"Member '{m.MemberName}' requires a non-null instance.")))));
-            return EmitResolvedMember(resolved, instanceObj, d, ctx, prelude);
+            return EmitResolvedMember(resolved, instanceObj, ring.Base, ctx, prelude);
         }
 
         throw new InvalidOperationException(
@@ -412,7 +267,7 @@ public static partial class DirectVmAbiEmitter {
         ITypeMember resolved,
         Expression? instanceObj,
         int resultSlot,
-        AbiCtx ctx,
+        Context ctx,
         Expression instanceExpr) {
 
         // Polymorphic EmitRead — each ITypeMember implementation provides its
@@ -445,85 +300,19 @@ public static partial class DirectVmAbiEmitter {
         return instanceExpr;
     }
 
-    /// <summary>Convert a member access result (object?) to the ring ABI (long).
-    /// Long-representable value types are unboxed to long; everything else
-    /// (reference types and non-numeric value types like DateTime/DateOnly/Guid)
-    /// is boxed and allocated on the heap, returning a heap handle.</summary>
-    private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, AbiCtx ctx) {
+    /// <summary>Convert a member access result (object?) to the ring ABI (long).</summary>
+    private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
         var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
-        return ConvertClrToRing(readCall, clrType, ctx);
+        return RingCodec.FromClr(readCall, clrType, ctx.HeapLocal);
     }
-
-    private static Expression ConvertClrToRing(Expression value, Type? clrType, AbiCtx ctx) {
-        if (clrType == typeof(float) || clrType == typeof(double)) {
-            return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
-        }
-        if (clrType is not null && clrType.IsValueType && AbiValueTypes.IsLongRepresentable(clrType)) {
-            return Convert(Convert(value, clrType), typeof(long));
-        }
-        return Call(null, BoxToAbiInfo, ctx.HeapLocal, Convert(value, typeof(object)));
-    }
-
-    private static Expression ConvertRingToClr(Expression ringVal, Type paramType, Node? source, AbiCtx ctx) {
-        if (paramType == typeof(double) || paramType == typeof(float)) {
-            var srcType = source is Constant c ? c.Value?.GetType()
-                : ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType;
-            if (srcType == typeof(double) || srcType == typeof(float))
-                return Convert(Call(BitConverterInt64BitsToDouble, ringVal), paramType);
-            return Convert(ringVal, paramType);
-        }
-        if (paramType == typeof(bool))
-            return NotEqual(ringVal, Constant(0L));
-        if (paramType.IsValueType && AbiValueTypes.IsLongRepresentable(paramType))
-            return Convert(ringVal, paramType);
-        // A *scalar* argument reaching an `object` parameter must be boxed — its ring slot
-        // holds the raw value, not a handle. Anything else (a reference, or a value type that
-        // is a heap handle such as DateOnly/DateTime/decimal/nullable) is a handle and is
-        // dereferenced. The test is the argument's representation kind, not `IsValueType`:
-        // `int?` is a value type but its slot is a handle.
-        if (paramType == typeof(object) && source is not null) {
-            ValueRepresentationKind? kind = source is Constant constant
-                ? ConstantSlotKind(constant.Value)
-                : ctx.Analysis?.GetValueRepresentation(source);
-            if (kind is ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool) {
-                var sourceClr = source is Constant c2 && c2.Value is not null
-                    ? c2.Value.GetType()
-                    : ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(source)?.ClrType
-                        ?? ctx.Analysis?.GetResolvedType(source)?.GetRuntimeType();
-                if (sourceClr is not null) {
-                    Expression scalar = sourceClr == typeof(double) || sourceClr == typeof(float)
-                        ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
-                        : sourceClr == typeof(bool)
-                            ? NotEqual(ringVal, Constant(0L))
-                            : Convert(ringVal, sourceClr);
-                    return Convert(scalar, typeof(object));
-                }
-            }
-        }
-        return Convert(
-            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ringVal, typeof(int))),
-            paramType);
-    }
-
-    /// <summary>The slot kind of a constant, matching what <c>EmitConstant</c> actually stores:
-    /// an integral/bool/char value or an IEEE bitcast is inline; everything else — including an
-    /// enum constant, which <c>TryValueToLong</c> does not accept — is a heap handle.</summary>
-    private static ValueRepresentationKind ConstantSlotKind(object? value) => value switch {
-        bool => ValueRepresentationKind.Bool,
-        int or long or short or byte or sbyte or ushort or uint or ulong or char
-            or double or float => ValueRepresentationKind.StackScalar,
-        _ => ValueRepresentationKind.HeapRef
-    };
 
     /// <summary>TypeIs: test the operand against the target type. A scalar operand is
     /// answered from its static type; a heap operand is tested against the target CLR
     /// type at runtime (so a null handle is false). An unresolvable target fails closed.</summary>
-    private static Expression EmitTypeIs(TypeIs t, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(t.Operand, ctx);
-        int resultSlot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref resultSlot, d, ctx);
+    private static Expression EmitTypeIs(TypeIs t, Context ctx) {
+        var ring = ctx.OpenRing();
+        int resultSlot = ring.Add(CompileNode(t.Operand, ctx));
 
         // The reader folds `x is T` to a primitive/named reference, not a ClrTypeReference,
         // and analysis resolves the TypeIs node itself to bool — so resolve the target from
@@ -539,22 +328,22 @@ public static partial class DirectVmAbiEmitter {
         // answer (`1 is int` true, `1 is long` false — C# `is` tests the runtime type and
         // never widens). A heap operand is a handle (0 = null) tested at runtime, which
         // keeps `string s = null; s is string` false and resolves interfaces for free.
-        switch (ctx.Analysis?.GetValueRepresentation(t.Operand)) {
-            case ValueRepresentationKind.StackScalar or ValueRepresentationKind.Bool: {
-                    var operandStatic = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+        switch (ctx.RepresentationOf(t.Operand).Kind) {
+            case ValueRepresentationKind.StackScalar: {
+                    var operandStatic = ctx.ClrTypeOf(t.Operand);
                     if (operandStatic is null) {
                         throw new InvalidOperationException(
                             $"VM compile rejected: cannot resolve the static type of '{t.Operand}' in '{t}'.");
                     }
                     var answer = Ast.Nodes.TypeIs.StaticTypeIsMatch(operandStatic, targetType) ? 1L : 0L;
-                    return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), Constant(answer)));
+                    return ring.Then(Assign(ctx.RingVar(resultSlot), Constant(answer)));
                 }
             case ValueRepresentationKind.HeapRef: {
                     var heapObj = Call(ctx.HeapLocal,
                         HeapUnsafeGet,
                         Convert(ctx.RingVar(resultSlot), typeof(int)));
                     var result = Condition(Expression.TypeIs(heapObj, targetType), Constant(1L), Constant(0L));
-                    return Block(operandExpr, fold, Assign(ctx.RingVar(resultSlot), result));
+                    return ring.Then(Assign(ctx.RingVar(resultSlot), result));
                 }
             default:
                 throw new InvalidOperationException(
@@ -562,7 +351,7 @@ public static partial class DirectVmAbiEmitter {
         }
     }
 
-    private static Type? ResolveClrType(Node? typeRef, Node typedNode, AbiCtx ctx) {
+    private static Type? ResolveClrType(Node? typeRef, Node typedNode, Context ctx) {
         if (typeRef is ClrTypeReference ctr)
             return ctr.RuntimeType;
         if (typeRef is PrimitiveTypeReference ptr)
@@ -603,16 +392,14 @@ public static partial class DirectVmAbiEmitter {
     /// <c>Task</c> / <c>Task&lt;T&gt;</c> / <c>ValueTask</c> / <c>ValueTask&lt;T&gt;</c> run through the
     /// Ref-bound helpers; any other structurally awaitable type resolves
     /// <c>GetAwaiter</c> / <c>GetResult</c> through the type provider.</summary>
-    private static Expression EmitAwait(Await await, AbiCtx ctx) {
+    private static Expression EmitAwait(Await await, Context ctx) {
         var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType();
         if (operandType is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved CLR type.");
 
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(await.Operand, ctx);
-        int slot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref slot, d, ctx);
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(await.Operand, ctx));
         // A reference awaitable (Task) or a boxed struct awaitable (ValueTask, custom)
         // both arrive as a heap handle; deref then convert to the awaitable type.
         var operandObj = Convert(
@@ -637,21 +424,20 @@ public static partial class DirectVmAbiEmitter {
         }
 
         if (helper is null)
-            return EmitStructuralAwait(await, operandObj, operandExpr, fold, slot, ctx);
+            return EmitStructuralAwait(await, operandObj, ring, slot, ctx);
 
         var call = Call(helper, operandObj);
         if (resultType is null) {
-            return Block(operandExpr, fold, call, Assign(ctx.RingVar(slot), Constant(0L)));
+            return ring.Then(Block(call, Assign(ctx.RingVar(slot), Constant(0L))));
         }
-        return Block(operandExpr, fold,
-            Assign(ctx.RingVar(slot), ConvertClrToRing(call, resultType, ctx)));
+        return ring.Then(Assign(ctx.RingVar(slot), RingCodec.FromClr(call, resultType, ctx.HeapLocal)));
     }
 
     /// <summary>Await of an awaitable that is not one of the well-known BCL shapes.
     /// <c>GetResult</c> runs only after <c>IsCompleted</c>, blocking on
     /// <c>UnsafeOnCompleted</c> / <c>OnCompleted</c> when it is not.</summary>
     private static Expression EmitStructuralAwait(
-        Await await, Expression operandObj, Expression operandExpr, Expression fold, int slot, AbiCtx ctx) {
+        Await await, Expression operandObj, Context.RingRegion ring, int slot, Context ctx) {
         var operandTypeDef = ctx.Analysis?.GetResolvedType(await.Operand)
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved type.");
@@ -663,54 +449,48 @@ public static partial class DirectVmAbiEmitter {
 
         var result = AwaitPattern.CompileGetResult(operandObj, binding);
         if (binding.GetResult.ReturnType == typeof(void)) {
-            return Block(operandExpr, fold, result, Assign(ctx.RingVar(slot), Constant(0L)));
+            return ring.Then(Block(result, Assign(ctx.RingVar(slot), Constant(0L))));
         }
-        return Block(operandExpr, fold,
-            Assign(ctx.RingVar(slot), ConvertClrToRing(result, binding.GetResult.ReturnType, ctx)));
+        return ring.Then(
+            Assign(ctx.RingVar(slot), RingCodec.FromClr(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
-    private static Expression EmitTypeAs(TypeAs t, AbiCtx ctx) {
+    private static Expression EmitTypeAs(TypeAs t, Context ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeAs target type is unresolved.");
         if (targetType.IsValueType)
             throw new InvalidOperationException($"VM compile rejected: TypeAs target '{targetType}' is a value type.");
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(t.Operand, ctx);
-        int slot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref slot, d, ctx);
-        return Block(
-            operandExpr, fold,
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(t.Operand, ctx));
+        return ring.Then(
             Assign(ctx.RingVar(slot),
                 Call(null, TypeAsAbiInfo, ctx.HeapLocal, ctx.RingVar(slot), Constant(targetType, typeof(Type)))));
     }
 
     /// <summary>TypeCast after analysis rewrites: identity, reference downcast, or unbox.
     /// Numeric and operator conversions are <c>Invoke</c> replacements.</summary>
-    private static Expression EmitTypeCast(TypeCast t, AbiCtx ctx) {
+    private static Expression EmitTypeCast(TypeCast t, Context ctx) {
         var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeCast target type is unresolved.");
-        Type? sourceType = ctx.Analysis?.GetMetadata<ValueRepresentationMetadata>(t.Operand)?.ClrType;
+        Type? sourceType = ctx.ClrTypeOf(t.Operand);
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
-        int d = ctx.RingDepth;
-        var operandExpr = CompileNode(t.Operand, ctx);
-        int slot = ctx.RingDepth - 1;
-        var fold = FoldResultToSlot(ref slot, d, ctx);
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
-            return Block(operandExpr, fold);
-        return Block(
-            operandExpr, fold,
+            return Block(ring.Steps);
+        return ring.Then(
             Assign(ctx.RingVar(slot),
                 Call(null, CastAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
                     Constant(targetType, typeof(Type)))));
     }
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
-    private static Expression EmitDefault(Default d, AbiCtx ctx) {
+    private static Expression EmitDefault(Default d, Context ctx) {
         int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
-        if (target is null || (target.IsValueType && AbiValueTypes.IsLongRepresentable(target))
+        if (target is null || (target.IsValueType && RingCodec.IsInline(target))
             || target == typeof(bool) || target == typeof(float) || target == typeof(double)
             || !target.IsValueType)
             return Assign(ctx.RingVar(slot), Constant(0L));
@@ -720,7 +500,7 @@ public static partial class DirectVmAbiEmitter {
                 Convert(Constant(instance, typeof(object)), typeof(object))), typeof(long)));
     }
 
-    private static Expression EmitTypeOf(TypeOf t, AbiCtx ctx) {
+    private static Expression EmitTypeOf(TypeOf t, Context ctx) {
         var runtime = ResolveClrType(t.Type, t, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
         int slot = ctx.AllocSlot();
@@ -730,63 +510,15 @@ public static partial class DirectVmAbiEmitter {
     }
 
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
-    private static Expression EmitStridedSetBits(StridedSetBits ssb, AbiCtx ctx) {
-        int d = ctx.RingDepth;
-
-        // Compile-time fast path: if the array is a tracked frame-local variable,
-        // access _slots[base + elemIdx] directly with no runtime dispatch.
-        if (ssb.Array is Variable arrVarS && ctx.TryGetFrameLocalBase(arrVarS) is int flBaseS) {
-            var startExprS = CompileNode(ssb.StartValue, ctx);
-            int startSlotS = ctx.RingDepth - 1;
-            var stepExprS = CompileNode(ssb.Step, ctx);
-            int stepSlotS = ctx.RingDepth - 1;
-            var limitExprS = CompileNode(ssb.Limit, ctx);
-            int limitSlotS = ctx.RingDepth - 1;
-
-            var foldStartS = FoldResultToSlot(ref startSlotS, d, ctx);
-            var foldStepS = FoldResultToSlot(ref stepSlotS, d + 1, ctx);
-            var foldLimitS = FoldResultToSlot(ref limitSlotS, d + 2, ctx);
-            ctx.RingDepth = d + 3;
-
-            var jS = Variable(typeof(long), "_bits_j");
-            var elemIdxS = Convert(RightShift(jS, Constant(6)), typeof(int));
-            var slotAddr = Add(Constant(flBaseS), elemIdxS);
-
-            var loopStartS = Label("_stride_loop_f");
-            var loopEndS = Label("_stride_done_f");
-            var loopBodyS = Block(
-                Assign(ArrayAccess(ctx.SlotsLocal, slotAddr),
-                    Or(ArrayAccess(ctx.SlotsLocal, slotAddr),
-                        LeftShift(Constant(1L), Convert(And(jS, Constant(63L)), typeof(int))))),
-                Assign(jS, Add(jS, ctx.RingVar(stepSlotS))),
-                IfThen(GreaterThan(jS, ctx.RingVar(limitSlotS)), Goto(loopEndS)),
-                Goto(loopStartS));
-            return Block(startExprS, stepExprS, limitExprS,
-                Block([jS],
-                    Assign(jS, ctx.RingVar(startSlotS)),
-                    Label(loopStartS), loopBodyS, Label(loopEndS)));
-        }
-
-        var arrExpr = CompileNode(ssb.Array, ctx);
-        int arrSlot = ctx.RingDepth - 1;
-        var startExpr = CompileNode(ssb.StartValue, ctx);
-        int startSlot = ctx.RingDepth - 1;
-        var stepExpr = CompileNode(ssb.Step, ctx);
-        int stepSlot = ctx.RingDepth - 1;
-        var limitExpr = CompileNode(ssb.Limit, ctx);
-        int limitSlot = ctx.RingDepth - 1;
-
-        // Fold all four operands to consecutive slots starting at d
-        var foldArr = FoldResultToSlot(ref arrSlot, d, ctx);
-        var foldStart = FoldResultToSlot(ref startSlot, d + 1, ctx);
-        var foldStep = FoldResultToSlot(ref stepSlot, d + 2, ctx);
-        var foldLimit = FoldResultToSlot(ref limitSlot, d + 3, ctx);
-        ctx.RingDepth = d + 4;
+    private static Expression EmitStridedSetBits(StridedSetBits ssb, Context ctx) {
+        var ring = ctx.OpenRing();
+        int arrSlot = ring.Add(CompileNode(ssb.Array, ctx));
+        int startSlot = ring.Add(CompileNode(ssb.StartValue, ctx));
+        int stepSlot = ring.Add(CompileNode(ssb.Step, ctx));
+        int limitSlot = ring.Add(CompileNode(ssb.Limit, ctx));
 
         // ABI-level strided set — heap array path (direct cast to long[]).
-        // Frame-local arrays are handled via the compile-time fast path above.
-        var arrObj = Convert(ArrayAccess(ctx.HeapRawSlots,
-            Convert(ctx.RingVar(arrSlot), typeof(int))), typeof(long[]));
+        var arrObj = RingCodec.LongArray(ctx.HeapLocal, ctx.RingVar(arrSlot));
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");
@@ -805,13 +537,13 @@ public static partial class DirectVmAbiEmitter {
             loopBody,
             Label(loopEnd)
         );
-        return Block(arrExpr, startExpr, stepExpr, limitExpr, result);
+        return ring.Then(result);
     }
 
     /// <summary>Variable reference: read from value stack or from
     /// closure capture array (if this is a captured upvalue).
     /// Leaving the value on the ring for expression chaining.</summary>
-    private static Expression EmitVariable(Variable v, AbiCtx ctx) {
+    private static Expression EmitVariable(Variable v, Context ctx) {
         if (ctx.TryGetCapture(v, out int capIndex)) {
             int slot = ctx.AllocSlot();
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));

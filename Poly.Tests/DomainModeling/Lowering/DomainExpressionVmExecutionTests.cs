@@ -259,8 +259,8 @@ public class DomainExpressionVmExecutionTests {
     private static InterpreterResult ExecuteViaLinq(Node node) {
         var analysis = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

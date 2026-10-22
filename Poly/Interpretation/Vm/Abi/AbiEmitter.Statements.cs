@@ -229,27 +229,98 @@ public static partial class AbiEmitter {
         return ring.Then(Block(rest, ctx.RingVar(outSlot)));
     }
 
-    private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) {
-        var breakLabel = Label("wl_break");
-        var continueLabel = Label("wl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, wl.Label);
+    /// <summary>Where a loop's test runs: at the top of each iteration, or after its
+    /// body — the difference that makes <c>do</c> run at least once.</summary>
+    private enum LoopTestPosition { BeforeBody, AfterBody }
+
+    /// <summary>
+    /// What one loop means, as opposed to how any loop is built: its test, the
+    /// statements that run once per iteration around the body, the body itself, and
+    /// what <c>continue</c> lands on. <see cref="EmitLoopScaffold"/> supplies the rest.
+    /// </summary>
+    private sealed record LoopPlan(
+        string LabelPrefix,
+        string? Name,
+        LoopTestPosition TestPosition,
+        Func<Context, Expression> Test,
+        Func<Context, Expression>? PerIteration,
+        Func<Context, Expression> Body,
+        Func<Context, Expression>? AfterContinue);
+
+    /// <summary>
+    /// The one loop shape all four loop emitters share: break/continue label pair, the
+    /// loop scope <c>break</c>/<c>continue</c> resolve in, the iteration guard, the
+    /// test's jump to the break label, the continue label, and the ring rewind around
+    /// each compile. Four hand-kept copies of this order is how #259 happened, so the
+    /// order lives here once and the emitters only describe their plan.
+    /// </summary>
+    private static Expression EmitLoopScaffold(LoopPlan plan, Context ctx) {
+        var breakLabel = Label($"{plan.LabelPrefix}_break");
+        var continueLabel = Label($"{plan.LabelPrefix}_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel, plan.Name);
+
+        // Test, per-iteration statements, body and after-continue each start from the
+        // loop's entry depth and their slots are dead afterwards; the scope restores it,
+        // so the cursor cannot drift.
         Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(wl.Condition, ctx);
+        Expression body;
+        if (plan.TestPosition == LoopTestPosition.BeforeBody) {
+            using (ctx.OpenRingScope()) {
+                test = plan.Test(ctx);
+            }
+            using (ctx.OpenRingScope()) {
+                body = plan.Body(ctx);
+            }
         }
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(wl.Body, ctx);
+        else {
+            using (ctx.OpenRingScope()) {
+                body = plan.Body(ctx);
+            }
+            using (ctx.OpenRingScope()) {
+                test = plan.Test(ctx);
+            }
         }
-        var loopBody = Block(
-            EmitLoopIterationGuard(ctx),
-            IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr,
-            Label(continueLabel));
-        var result = Loop(loopBody, breakLabel);
+        Expression? perIteration = null;
+        if (plan.PerIteration is not null) {
+            using (ctx.OpenRingScope()) {
+                perIteration = plan.PerIteration(ctx);
+            }
+        }
+        Expression? afterContinue = null;
+        if (plan.AfterContinue is not null) {
+            using (ctx.OpenRingScope()) {
+                afterContinue = plan.AfterContinue(ctx);
+            }
+        }
+
+        var loopBody = new List<Expression> { EmitLoopIterationGuard(ctx) };
+        if (plan.TestPosition == LoopTestPosition.BeforeBody)
+            loopBody.Add(IfThen(Not(test), Goto(breakLabel)));
+        if (perIteration is not null)
+            loopBody.Add(perIteration);
+        loopBody.Add(body);
+        loopBody.Add(Label(continueLabel));
+        if (afterContinue is not null)
+            loopBody.Add(afterContinue);
+        if (plan.TestPosition == LoopTestPosition.AfterBody)
+            loopBody.Add(IfThen(Not(test), Goto(breakLabel)));
+
+        var result = Loop(Block(loopBody), breakLabel);
         ctx.PopLoopScope();
         return result;
     }
+
+    private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) =>
+        EmitLoopScaffold(
+            new LoopPlan(
+                "wl",
+                wl.Label,
+                LoopTestPosition.BeforeBody,
+                Test: c => CompileConditionAsBool(wl.Condition, c),
+                PerIteration: null,
+                Body: c => CompileNode(wl.Body, c),
+                AfterContinue: null),
+            ctx);
 
     private static Expression EmitLoopIterationGuard(Context ctx) {
         if (ctx.Mode == CompilationMode.NoDebug)
@@ -266,27 +337,17 @@ public static partial class AbiEmitter {
                         Constant("MaxLoopIterations exceeded."))))));
     }
 
-    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) {
-        var breakLabel = Label("dwl_break");
-        var continueLabel = Label("dwl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, dwl.Label);
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(dwl.Body, ctx);
-        }
-        Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(dwl.Condition, ctx);
-        }
-        var loopBody = Block(
-            EmitLoopIterationGuard(ctx),
-            bodyExpr,
-            Label(continueLabel),
-            IfThen(Not(test), Goto(breakLabel)));
-        var result = Loop(loopBody, breakLabel);
-        ctx.PopLoopScope();
-        return result;
-    }
+    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) =>
+        EmitLoopScaffold(
+            new LoopPlan(
+                "dwl",
+                dwl.Label,
+                LoopTestPosition.AfterBody,
+                Test: c => CompileConditionAsBool(dwl.Condition, c),
+                PerIteration: null,
+                Body: c => CompileNode(dwl.Body, c),
+                AfterContinue: null),
+            ctx);
 
     private static Expression EmitThrow(ThrowStatement ts, Context ctx) {
         // Preserve the operand instance (Constant / Variable / New / ThrowExpression value).
@@ -513,10 +574,6 @@ public static partial class AbiEmitter {
     /// When condition is null, treat as 'while(true)'.
     /// </summary>
     private static Expression EmitForLoop(ForLoop fl, Context ctx) {
-        var breakLabel = Label("for_break");
-        var continueLabel = Label("for_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
-
         // A declaration initializer (`for (var i = 0; …)`) owns a scope: allocate its
         // variables before the initializer writes them, and release the slots when the
         // loop ends. The plain assignment form declares nothing here.
@@ -535,37 +592,20 @@ public static partial class AbiEmitter {
         }
         if (fl.Initializer != null)
             stmts.Add(CompileNode(fl.Initializer, ctx));
-        var condition = fl.Condition ?? new Constant(1L);
 
-        // Body, increment, and test each start from the loop's entry depth and their
-        // slots are dead afterwards; the scope restores it, so the cursor cannot drift.
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(fl.Body, ctx);
-        }
-        Expression? incrementExpr = null;
-        if (fl.Increment is not null) {
-            using (ctx.OpenRingScope()) {
-                incrementExpr = CompileNode(fl.Increment, ctx);
-            }
-        }
-        Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(condition, ctx);
-        }
+        stmts.Add(EmitLoopScaffold(
+            new LoopPlan(
+                "for",
+                fl.Label,
+                LoopTestPosition.BeforeBody,
+                Test: c => CompileConditionAsBool(fl.Condition ?? new Constant(1L), c),
+                PerIteration: null,
+                Body: c => CompileNode(fl.Body, c),
+                AfterContinue: fl.Increment is null ? null : c => CompileNode(fl.Increment, c)),
+            ctx));
 
-        var loopBody = new List<Expression> {
-            EmitLoopIterationGuard(ctx),
-            IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr,
-            Label(continueLabel)
-        };
-        if (incrementExpr != null) loopBody.Add(incrementExpr);
-
-        stmts.Add(Loop(Block(loopBody), breakLabel));
         if (scoped)
             ctx.PopScope();
-        ctx.PopLoopScope();
         return Block(stmts);
     }
 
@@ -578,9 +618,6 @@ public static partial class AbiEmitter {
         // A foreach yields no ring value: the collection slot and the body's slots are
         // dead when it completes, so the whole emission closes one ring scope.
         using var ringScope = ctx.OpenRingScope();
-        var breakLabel = Label("foreach_break");
-        var continueLabel = Label("foreach_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
         ctx.PushScope();
         ctx.DeclareVariable(fel.LoopVariable);
         Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
@@ -593,20 +630,17 @@ public static partial class AbiEmitter {
         var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
 
-        // The method-level scope already closes this region, so the body compiles in it.
-        var bodyExpr = CompileNode(fel.Body, ctx);
+        var loop = EmitLoopScaffold(
+            new LoopPlan(
+                "foreach",
+                fel.Label,
+                LoopTestPosition.BeforeBody,
+                Test: _ => Call(enumerator, EnumeratorMoveNext),
+                PerIteration: c => c.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, c)),
+                Body: c => CompileNode(fel.Body, c),
+                AfterContinue: null),
+            ctx);
 
-        var loop = Loop(
-            Block(
-                EmitLoopIterationGuard(ctx),
-                IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
-                    Goto(breakLabel)),
-                ctx.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, ctx)),
-                bodyExpr,
-                Label(continueLabel)),
-            breakLabel);
-
-        ctx.PopLoopScope();
         ctx.PopScope();
 
         return ring.Then(Block(

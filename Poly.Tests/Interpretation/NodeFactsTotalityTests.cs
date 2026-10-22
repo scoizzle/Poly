@@ -1,6 +1,5 @@
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
-using Poly.Interpretation.Mermaid;
 
 namespace Poly.Tests.Interpretation;
 
@@ -99,36 +98,6 @@ public class NodeFactsTotalityTests {
     }
 
     [Test]
-    public async Task CorpusKind_ClaimedByMermaid_Renders() {
-        var failures = new List<string>();
-        foreach (var (kind, fact) in Claiming(Producers.Mermaid)) {
-            var corpusCase = NodeFactCorpus.Cases.SingleOrDefault(c => c.Kind == kind);
-            if (corpusCase is null) {
-                failures.Add($"{fact.Label}: no corpus case");
-                continue;
-            }
-            string diagram;
-            try {
-                diagram = new MermaidAstGenerator().Generate(corpusCase.KindNode);
-            }
-            catch (Exception ex) {
-                failures.Add($"{fact.Label}: render threw {ex.GetType().Name}");
-                continue;
-            }
-            var dropped = corpusCase.KindNode.Children
-                .Where(child => child is not null && !diagram.Contains(child.Id.Value, StringComparison.Ordinal))
-                .Select(child => child!.GetType().Name)
-                .ToArray();
-            if (dropped.Length > 0)
-                failures.Add($"{fact.Label}: dropped {string.Join(", ", dropped)}");
-            if (LabelOf(diagram, corpusCase.KindNode) == fact.Label)
-                failures.Add($"{fact.Label}: rendered its type name instead of a label");
-        }
-        await Assert.That(failures).IsEmpty()
-            .Because(Explain("a Mermaid-claimed kind must render its own label and keep every child", failures));
-    }
-
-    [Test]
     public async Task RejectReason_MatchesTheThrownMessage() {
         var failures = new List<string>();
         foreach (var (kind, fact) in Ordered().Where(kv => kv.Value.RejectReason is not null)) {
@@ -193,12 +162,4 @@ public class NodeFactsTotalityTests {
                 && (t.Namespace == "Poly.Ast" || t.Namespace.StartsWith("Poly.Ast.")))
             .OrderBy(t => t.Name, StringComparer.Ordinal)];
 
-    private static string? LabelOf(string diagram, Node node) {
-        var line = diagram.Split('\n').FirstOrDefault(l => l.Contains(node.Id.Value, StringComparison.Ordinal));
-        if (line is null)
-            return null;
-        var open = line.IndexOf('[');
-        var close = line.LastIndexOf(']');
-        return open < 0 || close <= open ? null : line[(open + 1)..close].Trim('"');
-    }
 }

@@ -104,7 +104,7 @@ long handle = exec.RawValue;
 | [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
 | [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
 | [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Semantic parity + inspectable execution for the VM (not a second engine) |
-| [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
+| [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only; labels from `NodeFacts`, children from `Node.Children` |
 
 Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`, `NodeFacts.cs`.
 
@@ -258,7 +258,7 @@ These read the **AST directly** and are not the conformance target for new featu
 
 - **LINQ** — `LinqExpressionGenerator`; parity tests still exist for some scenarios.
 - **C#** — `CSharpGenerator`; codegen and pretty-printing.
-- **Mermaid** — `MermaidAstGenerator`; docs and debugging.
+- **Mermaid** — `MermaidAstGenerator`; docs and debugging. It reads `NodeFacts` for a kind's label and `Node.Children` for its children, so it re-derives no dispatch of its own.
 
 New language semantics should land in analysis → direct lowering → `AbiEmitter` first.
 

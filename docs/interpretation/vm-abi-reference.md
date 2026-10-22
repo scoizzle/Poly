@@ -117,7 +117,18 @@ the emitter does not invoke.
 
 `RingCodec` handles conversion between VM internal representation and
 CLR types (`FromClr`/`ToClr` at compile time, `ToRing`/`Cast`/`TypeAs`/
-`UnboxNullable` at runtime):
+`UnboxNullable` at runtime). `RingCodec.ToIeee`/`FromIeee` are the one writer and
+reader of the double/long bitcast.
+
+Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Local`, `Cell`);
+`Context.Resolve` maps a binding to one, so an emit site asks for the location
+instead of re-deriving `_slots[_fp + n]`. The value shape is not part of the
+location. Two classifiers answer two questions: `RingCodec.UnderlyingKindFor`
+(does the *underlying* type fit one slot as bits; peels `Nullable`) and
+`ValueRepresentationClassifier.KindFor` (what does a *node* of this type put in
+its slot; a nullable is a heap handle).
+
+The representation table:
 
 | CLR Type | VM Representation | Direction |
 |----------|-------------------|-----------|

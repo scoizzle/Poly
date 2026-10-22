@@ -361,28 +361,86 @@ public static partial class AbiEmitter {
 
         public int ParamSlotOffset { get; set; }
 
-        public Expression VariableRead(int varIndex) =>
-            ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(varIndex)));
+        /// <summary>One frame slot: <c>_slots[_fp + slot]</c>. The one address form
+        /// for locals, parameters, results, and a promoted array's window.</summary>
+        public Expression FrameSlotRead(int slot) =>
+            ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot)));
 
-        public Expression VariableRead(Variable v) {
-            var raw = VariableReadRaw(v);
-            if (!IsCellBacked(v))
-                return raw;
-            return RingCodec.CellRead(HeapLocal, raw);
-        }
+        public Expression VariableRead(int varIndex) => FrameSlotRead(varIndex);
 
         public Expression VariableWrite(int varIndex, Expression value) =>
-            Assign(VariableRead(varIndex), value);
+            Assign(FrameSlotRead(varIndex), value);
 
-        public Expression VariableWrite(Variable v, Expression value) {
-            if (IsCellBacked(v))
-                return RingCodec.CellWrite(HeapLocal, VariableReadRaw(v), value);
-            return VariableWriteRaw(v, value);
+        /// <summary>Resolve a binding the way a reader or a writer sees it: a
+        /// closure capture cell first, then its own storage. Capture precedence
+        /// matters — a captured parameter is read from the closure, not from a
+        /// parameter slot the closure body never declared.</summary>
+        internal SlotLocation? Resolve(Variable v) =>
+            TryGetCapture(v, out int captureIndex)
+                ? new SlotLocation.Cell(CaptureCellArray(captureIndex))
+                : ResolveStorage(v);
+
+        /// <summary>The binding's own storage: bound-parameter slot, register, or
+        /// frame slot, wrapped in its cell when the local is cell-backed. This is
+        /// <see cref="VariableReadRaw"/>'s rule — no closure capture indirection.</summary>
+        internal SlotLocation? ResolveStorage(Variable v) {
+            var raw = ResolveRaw(v);
+            if (raw is null)
+                return null;
+            return IsCellBacked(v)
+                ? new SlotLocation.Cell(RingCodec.CellArray(HeapLocal, raw.Read(this)))
+                : raw;
         }
 
+        /// <summary>Resolve a parameter's storage, declaring its slot on first use.
+        /// A pre-C1a root aliases parameter 0 to the instance handle.</summary>
+        internal SlotLocation Resolve(Parameter p) {
+            if (TryGetInlineParameter(p, out int inlineSlot))
+                return new SlotLocation.Ring(inlineSlot);
+            if (!TryGetParameterSlot(p, out int paramIndex))
+                paramIndex = DeclareParameter(p);
+            // Pre-C1a root programs: param 0 aliases SetArgs(this) via InstanceHandle.
+            if (paramIndex == 0 && ParamSlotOffset == 0 && !HasInlineParameters && !IsCompiledFunctionBody)
+                return new SlotLocation.Local(InstanceHandle);
+            return new SlotLocation.Frame(paramIndex - ParamSlotOffset);
+        }
+
+        /// <summary>The binding's own storage, before any cell indirection.</summary>
+        internal SlotLocation? ResolveRaw(Variable v) {
+            if (BoundParameter(v) is { } parameter) {
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return new SlotLocation.Ring(inlineSlot);
+                return TryGetParameterSlot(parameter, out int paramIndex)
+                    ? new SlotLocation.Frame(paramIndex - ParamSlotOffset)
+                    : null;
+            }
+            if (TryGetRegister(v, out int regIdx))
+                return new SlotLocation.Local(_regVars[regIdx]);
+            return TryGetVariable(v, out int slotIndex)
+                ? new SlotLocation.Frame(slotIndex)
+                : null;
+        }
+
+        /// <summary>The <c>long[1]</c> capture cell at <paramref name="captureIndex"/>
+        /// in the active closure array.</summary>
+        internal Expression CaptureCellArray(int captureIndex) =>
+            RingCodec.ClosureCell(HeapLocal, ClosureHandle, captureIndex);
+
+        public Expression VariableRead(Variable v) =>
+            ResolveStorage(v)?.Read(this) ?? throw Unresolved(v);
+
+        public Expression VariableWrite(Variable v, Expression value) =>
+            ResolveStorage(v)?.Write(this, value) ?? throw Unresolved(v);
+
+        /// <summary>The binding's name in the one fail-closed error, distinguishing a
+        /// bound parameter (which resolves through its slot) from a local.</summary>
+        private InvalidOperationException Unresolved(Variable v) =>
+            BoundParameter(v) is { } parameter
+                ? new InvalidOperationException($"Parameter '{parameter.Name}' not declared in any scope")
+                : new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
+
         public Expression ParameterRead(int paramIndex) =>
-            ArrayAccess(SlotsLocal,
-                Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
+            FrameSlotRead(paramIndex - ParamSlotOffset);
 
         private Dictionary<Parameter, int>? _inlineParameters;
         private readonly List<Dictionary<string, int>> _inlineParameterScopes = new();
@@ -556,40 +614,11 @@ public static partial class AbiEmitter {
                 : null;
         }
 
-        public Expression VariableReadRaw(Variable v) {
-            if (BoundParameter(v) is { } parameter) {
-                // Read the same storage the write path uses. ParameterValue's
-                // slot-0 InstanceHandle snapshot is for ThisReference; a bound
-                // parameter must see the live slot after a write.
-                if (TryGetInlineParameter(parameter, out int inlineSlot))
-                    return RingVar(inlineSlot);
-                if (TryGetParameterSlot(parameter, out int paramIndex))
-                    return ParameterRead(paramIndex);
-                throw new InvalidOperationException(
-                    $"Parameter '{parameter.Name}' not declared in any scope");
-            }
-            if (TryGetRegister(v, out int regIdx))
-                return _regVars[regIdx];
-            if (TryGetVariable(v, out int slotIndex))
-                return VariableRead(slotIndex);
-            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
-        }
+        public Expression VariableReadRaw(Variable v) =>
+            ResolveRaw(v)?.Read(this) ?? throw Unresolved(v);
 
-        public Expression VariableWriteRaw(Variable v, Expression value) {
-            if (BoundParameter(v) is { } parameter) {
-                if (TryGetInlineParameter(parameter, out int inlineSlot))
-                    return Assign(RingVar(inlineSlot), value);
-                if (TryGetParameterSlot(parameter, out int paramIndex))
-                    return Assign(ParameterRead(paramIndex), value);
-                throw new InvalidOperationException(
-                    $"Parameter '{parameter.Name}' not declared in any scope");
-            }
-            if (TryGetRegister(v, out int regIdx))
-                return Assign(_regVars[regIdx], value);
-            if (TryGetVariable(v, out int slotIndex))
-                return VariableWrite(slotIndex, value);
-            throw new InvalidOperationException($"Variable '{v.Name}' not declared in any scope");
-        }
+        public Expression VariableWriteRaw(Variable v, Expression value) =>
+            ResolveRaw(v)?.Write(this, value) ?? throw Unresolved(v);
 
         private readonly Dictionary<object, int> _capturedBindings = new(ReferenceEqualityComparer.Instance);
 

@@ -75,20 +75,13 @@ public static partial class AbiEmitter {
 
     // ── Ring-based expression helpers ──
 
-    /// <summary>Binary arithmetic — uses CompileValue for operands,</summary>
+    /// <summary>Binary arithmetic in ring form: the value form, spilled. Keeping
+    /// one body means the IEEE and shift rules cannot drift between the two.</summary>
     private static Expression EmitBinaryArithmetic(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
-        Context ctx) {
-        var leftVal = CompileValue(left, ctx);
-        var rightVal = CompileValue(right, ctx);
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return SpillToRing(Call(BitConverterDoubleToInt64Bits,
-                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx))), ctx);
-        var rhs = rightVal;
-        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
-        return SpillToRing(factory(leftVal, rhs), ctx);
-    }
+        Context ctx) =>
+        SpillToRing(EmitBinaryArithmeticValue(left, right, factory, ctx), ctx);
 
     /// <summary>Converts a long value (heap handle or 0 for null) to an object
     /// reference suitable for comparison. Handle 0 maps to CLR null rather
@@ -181,9 +174,9 @@ public static partial class AbiEmitter {
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
-            var dbl = Call(BitConverterInt64BitsToDouble, ctx.RingVar(slot));
+            var dbl = RingCodec.FromIeee(ctx.RingVar(slot));
             result = Assign(ctx.RingVar(slot),
-                Call(BitConverterDoubleToInt64Bits, Negate(dbl)));
+                RingCodec.ToIeee(Negate(dbl)));
         }
         else {
             result = Assign(ctx.RingVar(slot), Negate(ctx.RingVar(slot)));
@@ -526,16 +519,14 @@ public static partial class AbiEmitter {
         return ring.Then(result);
     }
 
-    /// <summary>Variable reference: read from value stack or from
-    /// closure capture array (if this is a captured upvalue).
-    /// Leaving the value on the ring for expression chaining.</summary>
+    /// <summary>Variable reference: reads whatever storage the binding resolves
+    /// to — a frame slot, a register, or a capture cell — and leaves the value
+    /// on the ring for expression chaining.</summary>
     private static Expression EmitVariable(Variable v, Context ctx) {
-        if (ctx.TryGetCapture(v, out int capIndex)) {
-            int slot = ctx.AllocSlot();
-            return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
-        }
-
-        int slot2 = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot2), ctx.VariableRead(v));
+        if (ctx.Resolve(v) is not { } location)
+            throw new InvalidOperationException(
+                $"VM compile rejected: variable '{v.Name}' is not declared in any scope.");
+        int slot = ctx.AllocSlot();
+        return Assign(ctx.RingVar(slot), location.Read(ctx));
     }
 }

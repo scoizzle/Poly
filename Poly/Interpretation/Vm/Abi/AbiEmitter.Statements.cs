@@ -87,23 +87,12 @@ public static partial class AbiEmitter {
                 $"VM compile rejected: assignment destination must be a Variable, Member, or IndexAccess, got {a.Destination.GetType().Name}.");
         }
 
-        // Arrays are always heap-allocated. The former frame-local small-array encoding
-        // (a base offset in the variable's slot) was not readable through a member access
-        // (`.Length`) and did not survive every use; the heap path is the one representation.
-
-        if (ctx.TryGetCapture(destVar, out int capIndex)) {
-            var ring = ctx.OpenRing();
-            int valSlot = ring.Add(CompileNode(a.Value, ctx));
-            // A capture cell stores the destination's slot shape, so the same coercion
-            // as a plain store applies here (e.g. an int written to a captured double).
-            var store = Assign(EmitCaptureCellValue(ctx, capIndex),
-                CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(valSlot)));
-            return ring.Then(store);
-        }
-
+        var destination = ctx.Resolve(destVar)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: assignment destination '{destVar.Name}' is not declared in any scope.");
         var value = ctx.OpenRing();
         int resultSlot = value.Add(CompileNode(a.Value, ctx));
-        var result = ctx.VariableWrite(destVar,
+        var result = destination.Write(ctx,
             CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
         return value.Then(result);
     }
@@ -121,8 +110,8 @@ public static partial class AbiEmitter {
         if (destinationIsDouble == valueIsDouble)
             return slot;
         return destinationIsDouble
-            ? Call(BitConverterDoubleToInt64Bits, Convert(slot, typeof(double)))
-            : Convert(Call(BitConverterInt64BitsToDouble, slot), typeof(long));
+            ? RingCodec.ToIeee(Convert(slot, typeof(double)))
+            : Convert(RingCodec.FromIeee(slot), typeof(long));
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
@@ -370,18 +359,8 @@ public static partial class AbiEmitter {
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
 
-    private static Expression ParameterValue(Parameter p, Context ctx) {
-        if (ctx.TryGetInlineParameter(p, out int ringSlot))
-            return ctx.RingVar(ringSlot);
-        if (!ctx.TryGetParameterSlot(p, out int paramIdx))
-            paramIdx = ctx.DeclareParameter(p);
-        // Pre-C1a root programs: param 0 aliases SetArgs(this) via InstanceHandle.
-        // C1a roots set IsCompiledFunctionBody and declare real params at slots 1+.
-        if (paramIdx == 0 && ctx.ParamSlotOffset == 0 && !ctx.HasInlineParameters
-            && !ctx.IsCompiledFunctionBody)
-            return ctx.InstanceHandle;
-        return ctx.ParameterRead(paramIdx);
-    }
+    private static Expression ParameterValue(Parameter p, Context ctx) =>
+        ctx.Resolve(p).Read(ctx);
 
     /// <summary>
     /// Domain programs bind the instance via <c>SetArgs(this, …)</c> at slot 0.
@@ -394,10 +373,10 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitCaptureCell(Context ctx, int capIndex) =>
-        RingCodec.ClosureCell(ctx.HeapLocal, ctx.ClosureHandle, capIndex);
+        ctx.CaptureCellArray(capIndex);
 
     private static Expression EmitCaptureCellValue(Context ctx, int capIndex) =>
-        ArrayAccess(EmitCaptureCell(ctx, capIndex), Constant(0));
+        new SlotLocation.Cell(ctx.CaptureCellArray(capIndex)).Read(ctx);
 
     private static Expression EmitUpvalueCellInit(Variable v, Context ctx) {
         ctx.MarkCellBacked(v);
@@ -634,8 +613,8 @@ public static partial class AbiEmitter {
         if (declaredIeee == elementIeee)
             return slot; // both scalars in the same slot encoding
         return declaredIeee
-            ? Call(BitConverterDoubleToInt64Bits, Convert(slot, typeof(double)))
-            : Convert(Call(BitConverterInt64BitsToDouble, slot), typeof(long));
+            ? RingCodec.ToIeee(Convert(slot, typeof(double)))
+            : Convert(RingCodec.FromIeee(slot), typeof(long));
     }
 
     /// <summary>True for a type that lives in a scalar ring slot (bool or a long-representable

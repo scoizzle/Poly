@@ -102,9 +102,10 @@ public static partial class AbiEmitter {
         CompilationMode mode = CompilationMode.Normal,
         IReadOnlyList<Parameter>? rootParameters = null) {
 
-        var ctx = new Context();
-        ctx.Mode = mode;
-        ctx.Analysis = analysis;
+        var ctx = new Context {
+            Mode = mode,
+            Analysis = analysis
+        };
         // C1a root module bodies (SetArgs(this, params…)): slot 0 = this, params at 1+.
         // Nested CompileFunctionBody uses a fresh Context and keeps slots from 0.
         // Locals must not reuse SetArgs slots — EmitScopeStores would wipe them.
@@ -594,7 +595,7 @@ public static partial class AbiEmitter {
         var leftVal = CompileValue(left, ctx);
         var rightVal = CompileValue(right, ctx);
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return Call(BitConverterDoubleToInt64Bits,
+            return RingCodec.ToIeee(
                 factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
@@ -603,7 +604,7 @@ public static partial class AbiEmitter {
 
     private static Expression AsIeeeDouble(Node node, Expression ringVal, Context ctx) =>
         RingCodec.IsIeee(node, ctx.Analysis)
-            ? Call(BitConverterInt64BitsToDouble, ringVal)
+            ? RingCodec.FromIeee(ringVal)
             : Convert(ringVal, typeof(double));
 
     private static Expression EmitNotValue(Not n, Context ctx) =>
@@ -612,7 +613,7 @@ public static partial class AbiEmitter {
     private static Expression EmitUnaryMinusValue(UnaryMinus n, Context ctx) {
         var v = CompileValue(n.Operand, ctx);
         return RingCodec.IsIeee(n.Operand, ctx.Analysis)
-            ? Call(BitConverterDoubleToInt64Bits, Negate(Call(BitConverterInt64BitsToDouble, v)))
+            ? RingCodec.ToIeee(Negate(RingCodec.FromIeee(v)))
             : Negate(v);
     }
 

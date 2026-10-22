@@ -357,6 +357,22 @@ public class InvalidProgramTests {
     }
 
     [Test]
+    public async Task StoredLambda_DistinctUseNode_TooFewArgs_AnalysisErrorAndCompileRejects() {
+        // A reader emits a fresh Variable per identifier; the callee is not the
+        // declaration node, so the arity check must resolve it through the binding.
+        var fn = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(fn, new Lambda([x], x)),
+            new Invoke(new Variable("fn"))
+        ], [fn]);
+        await AssertAnalysisThenCompileRejects(
+            node,
+            "parameter(s)",
+            SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+    }
+
+    [Test]
     public async Task Assignment_DateOnlyThenDateTime_AnalysisErrorAndCompileRejects() {
         var x = new Variable("x");
         var node = new Block([

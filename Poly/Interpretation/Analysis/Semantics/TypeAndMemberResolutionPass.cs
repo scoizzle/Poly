@@ -15,6 +15,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             AnalyzeTryCatchFinally(context, tcf);
             return;
         }
+        if (node is ForLoop loop)
+            ApplyForLoopStoredLambdas(context, loop);
 
         var resolvedType = ResolveNodeType(context, node);
 
@@ -23,6 +25,14 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         }
 
         this.AnalyzeChildren(context, node);
+
+        // A block's or lambda's yield can only be typed once its children are: the
+        // declaration a tail reads may be assigned inside a nested loop/block. The
+        // pre-order pass above resolves structure; this settles the yield.
+        if (node is Block block && ResolveYieldType(context, block) is { } blockType)
+            context.SetResolvedType(block, blockType);
+        else if (node is Lambda lambda && ResolveLambdaType(context, lambda) is { } lambdaType)
+            context.SetResolvedType(lambda, lambdaType);
     }
 
     /// <summary>Stamp the catch variable's synthetic declaration from the resolved
@@ -75,6 +85,117 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (metadata.ParameterReferences.TryGetValue(variable, out var parameter))
             return ResolveNodeType(context, parameter);
         return null;
+    }
+
+    /// <summary>True when a write to <paramref name="destination"/> reaches
+    /// <paramref name="declaration"/> through the bind pass. The declaration node is
+    /// its own binding; every other write is a use the bind pass linked to it.</summary>
+    private static bool BindsTo(AnalysisContext context, Variable destination, Variable declaration) {
+        if (ReferenceEquals(destination, declaration))
+            return true;
+        return context.GetMetadata<VariableAnalysisMetadata>(destination) is { } metadata
+            && metadata.VariableReferences.TryGetValue(destination, out var binding)
+            && ReferenceEquals(binding, declaration);
+    }
+
+    /// <summary>Attach a stored lambda's shape to its declaring binding and decide
+    /// whether the AST at that binding is the lambda itself. Only a single
+    /// unconditional syntactic lambda assignment is quotable; a nested, conditional,
+    /// produced, or copied closure keeps the shape for the delegate adapter but is
+    /// marked unquotable.</summary>
+    private static void ApplyStoredLambdaBinding(
+        AnalysisContext context, Node declaringScope, Variable declaration) {
+        var (assignments, singleLambda, direct, singleValueIsLambda) =
+            CountStoredLambdaAssignments(context, declaringScope, declaration);
+        if (singleLambda is null) {
+            context.Metadata.Remove<StoredLambdaMetadata>(declaration);
+            return;
+        }
+        context.SetMetadata(declaration, new StoredLambdaMetadata(singleLambda));
+        if (assignments != 1 || !direct || !singleValueIsLambda)
+            context.SetMetadata(declaration, new UnquotableStoredLambdaMetadata());
+    }
+
+    /// <summary>Count the writes that reach <paramref name="declaration"/> across its
+    /// declaring scope. <c>Direct</c> is true only for a statement of that scope (a
+    /// for-init write counts as direct for the variable the loop declares);
+    /// <c>SingleValueIsLambda</c> is true only when the value is syntactically a lambda,
+    /// so a produced or copied closure is never quoted.</summary>
+    private static (int Assignments, Lambda? SingleLambda, bool Direct, bool SingleValueIsLambda)
+        CountStoredLambdaAssignments(
+            AnalysisContext context, Node declaringScope, Variable declaration) {
+        int assignments = 0;
+        Lambda? singleLambda = null;
+        bool direct = false;
+        bool singleValueIsLambda = false;
+
+        void Visit(Node node, bool isDirectStatement) {
+            if (node is ForLoop loop) {
+                bool declares = loop.DeclaredVariables?.Contains(declaration) == true;
+                foreach (var child in loop.Children) {
+                    if (child is not null)
+                        Visit(child, isDirectStatement && declares
+                            && ReferenceEquals(child, loop.Initializer));
+                }
+                return;
+            }
+            if (node is Assignment assignment
+                && assignment.Destination is Variable destination
+                && BindsTo(context, destination, declaration)) {
+                assignments++;
+                direct |= isDirectStatement;
+                if (assignment.Value is Lambda assigned) {
+                    singleLambda = assigned;
+                    singleValueIsLambda = true;
+                }
+                else {
+                    if (StoredLambdaBinding.TryGet(context, assignment.Value, out var produced)
+                        && produced is not null)
+                        singleLambda = produced.Lambda;
+                    singleValueIsLambda = false;
+                }
+            }
+            foreach (var child in node.Children) {
+                if (child is not null)
+                    Visit(child, false);
+            }
+        }
+
+        if (declaringScope is Block block) {
+            foreach (var statement in block.Nodes) {
+                if (statement is not null)
+                    Visit(statement, true);
+            }
+        }
+        else if (declaringScope is ForLoop forLoop) {
+            // Only the initializer is a single unconditional write; the condition and
+            // increment run repeatedly, so a lambda written there is not quotable.
+            if (forLoop.Initializer is { } initializer)
+                Visit(initializer, true);
+            if (forLoop.Condition is { } condition)
+                Visit(condition, false);
+            if (forLoop.Body is { } body)
+                Visit(body, false);
+            if (forLoop.Increment is { } increment)
+                Visit(increment, false);
+        }
+        else {
+            Visit(declaringScope, true);
+        }
+        return (assignments, singleLambda, direct, singleValueIsLambda);
+    }
+
+    /// <summary>A for-init declaration is not a block variable, so its stored lambda's
+    /// shape and quotability are attached from its own initializer write.</summary>
+    private static void ApplyForLoopStoredLambdas(AnalysisContext context, ForLoop loop) {
+        if (loop.DeclaredVariables is not { } declared)
+            return;
+        foreach (var declaration in declared) {
+            if (loop.Initializer is Assignment initializer
+                && ReferenceEquals(initializer.Destination, declaration))
+                ResolveNodeType(context, initializer.Value);
+            ApplyStoredLambdaBinding(context, loop, declaration);
+        }
     }
 
     private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
@@ -336,7 +457,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return ResolveNodeType(context, lambda.Body);
         }
         else if (invoke.Delegate is Variable or Parameter) {
-            if (context.GetMetadata<StoredLambdaMetadata>(invoke.Delegate) is { } stored) {
+            if (StoredLambdaBinding.TryGet(context, invoke.Delegate, out var stored)
+                && stored is not null) {
                 BindLambdaArguments(context, stored.Lambda, invoke.Arguments);
                 NoteProducedLambda(context, invoke, stored.Lambda.Body);
                 return ResolveNodeType(context, stored.Lambda.Body);
@@ -466,12 +588,21 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             if (valueType != null && !IsBoundUse(context, variable)
                 && context.GetResolvedType(variable) is null)
                 context.SetResolvedType(variable, valueType);
-            if (assignment.Value is Lambda assignedLambda)
-                context.SetMetadata(variable, new StoredLambdaMetadata(assignedLambda));
-            else if (context.GetMetadata<StoredLambdaMetadata>(assignment.Value) is { } produced)
-                context.SetMetadata(variable, produced);
-            else
-                context.Metadata.Remove<StoredLambdaMetadata>(variable);
+            // The shape and its quotability live on the binding, never on this write's
+            // destination node. A closure produced or copied by the value keeps the
+            // shape for the delegate adapter but is not the AST at this position.
+            var binding = StoredLambdaBinding.BindingOf(context, variable);
+            if (assignment.Value is Lambda assignedLambda) {
+                context.SetMetadata(binding, new StoredLambdaMetadata(assignedLambda));
+            }
+            else if (StoredLambdaBinding.TryGet(context, assignment.Value, out var produced)
+                && produced is not null) {
+                context.SetMetadata(binding, produced);
+                context.SetMetadata(binding, new UnquotableStoredLambdaMetadata());
+            }
+            else if (context.GetMetadata<UnquotableStoredLambdaMetadata>(binding) is null) {
+                context.Metadata.Remove<StoredLambdaMetadata>(binding);
+            }
         }
 
         return valueType;
@@ -491,15 +622,14 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
                     resolved = ResolveNodeType(context, a.Value);
                     NoteDomainResultValue(context, a);
                     resolved = DomainResultValueType(context, a.Value) ?? resolved;
-                    if (a.Value is Lambda assignedLambda)
-                        context.SetMetadata(v, new StoredLambdaMetadata(assignedLambda));
-                    else if (context.GetMetadata<StoredLambdaMetadata>(a.Value) is { } produced)
-                        context.SetMetadata(v, produced);
                     break;
                 }
             }
             if (resolved != null)
                 context.SetResolvedType(v, resolved);
+            // A stored lambda's shape and its quotability both live on the
+            // declaration; each use projects through the binding.
+            ApplyStoredLambdaBinding(context, block, v);
         }
 
         if (n == 0) return null;
@@ -695,7 +825,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             var param = lambda.Parameters[i];
             if (arg is Lambda argLambda)
                 context.SetMetadata(param, new StoredLambdaMetadata(argLambda));
-            else if (context.GetMetadata<StoredLambdaMetadata>(arg) is { } produced)
+            else if (StoredLambdaBinding.TryGet(context, arg, out var produced)
+                && produced is not null)
                 context.SetMetadata(param, produced);
         }
     }
@@ -704,7 +835,8 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         var value = YieldNode(context, body);
         if (value is Lambda lambda)
             context.SetMetadata(invoke, new StoredLambdaMetadata(lambda));
-        else if (context.GetMetadata<StoredLambdaMetadata>(value) is { } produced)
+        else if (StoredLambdaBinding.TryGet(context, value, out var produced)
+            && produced is not null)
             context.SetMetadata(invoke, produced);
     }
 
@@ -743,6 +875,51 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
 /// <summary>The node holds or produces a stored <see cref="Lambda"/> (a delegate object).
 /// Invoke uses the lambda body type; the binding itself is a reference.</summary>
 internal sealed record StoredLambdaMetadata(Lambda Lambda) : IAnalysisMetadata;
+
+/// <summary>Marks a binding whose lambda is reassigned or conditionally assigned. The
+/// closure handle is still the value at a use, so delegate wrapping is sound, but the
+/// AST is not that value, so an <c>Expression&lt;D&gt;</c> quote must fail closed.</summary>
+internal sealed record UnquotableStoredLambdaMetadata : IAnalysisMetadata;
+
+/// <summary>The one rule for reading a stored lambda off a node: metadata lives on the
+/// binding the bind pass linked a use to, never on the use itself. A parameter binding
+/// is never quotable — it has no write history to prove the AST is its value.</summary>
+internal static class StoredLambdaBinding {
+    /// <summary>The declaration a node is bound to: a use projects through the bind
+    /// pass; a declaration, parameter, or any other node is its own binding.</summary>
+    public static Node BindingOf(INodeMetadataProvider provider, Node node) {
+        if (node is not Variable use)
+            return node;
+        if (provider.GetMetadata<VariableAnalysisMetadata>(use) is not { } metadata)
+            return use;
+        if (metadata.VariableReferences.TryGetValue(use, out var declaration)
+            && declaration is not null
+            && !ReferenceEquals(declaration, use))
+            return declaration;
+        if (metadata.ParameterReferences.TryGetValue(use, out var parameter))
+            return parameter;
+        return use;
+    }
+
+    /// <summary>True when the node holds a stored module lambda. Quotable only when the
+    /// binding is a local declaration whose AST really is that lambda.</summary>
+    public static bool TryGet(
+        INodeMetadataProvider provider, Node node, out StoredLambdaMetadata? stored) {
+        var binding = BindingOf(provider, node);
+        stored = provider.GetMetadata<StoredLambdaMetadata>(binding);
+        return stored is not null;
+    }
+
+    /// <summary>True when the node's stored lambda is the AST value at that position,
+    /// so an <c>Expression&lt;D&gt;</c> can quote it. Only a local declaration qualifies:
+    /// a parameter has no write history, and a produced closure is a call result.</summary>
+    public static bool IsQuotable(INodeMetadataProvider provider, Node node) {
+        var binding = BindingOf(provider, node);
+        return binding is Variable
+            && provider.GetMetadata<StoredLambdaMetadata>(binding) is not null
+            && provider.GetMetadata<UnquotableStoredLambdaMetadata>(binding) is null;
+    }
+}
 
 /// <summary>
 /// <c>DomainResult&lt;T&gt;</c> declared on an AST method. Closing that name
@@ -803,6 +980,21 @@ internal static class MethodInvocationSemanticResolver {
         var matches = targetType
             .FindMatchingMethodOverloads(memberAccess.MemberName, argumentTypes)
             .ToList();
+        // A lambda argument's natural type is its Func/Action shape, not the
+        // delegate or Expression<D> the parameter declares. Ordinary matching may
+        // find nothing, or may bind the lambda to a wider non-delegate parameter
+        // (object). The bridge's rule wins whenever the ordinary winner cannot take
+        // the lambda as a delegate whose parameter list agrees.
+        bool hasLambdaArgument = methodInv.Arguments.Any(argument =>
+            argument is Lambda || StoredLambdaBinding.TryGet(context, argument, out _));
+        if (hasLambdaArgument
+            && (matches.Count == 0
+                || !LambdaArgumentsAreDelegates(context, matches[0], methodInv.Arguments))) {
+            var bridged = FindLambdaDelegateOverloads(
+                context, targetType, memberAccess.MemberName, methodInv.Arguments).ToList();
+            if (bridged.Count > 0)
+                matches = bridged;
+        }
         // A type-name receiver (`Person.Create(name)`) binds the static factory.
         // An instance host job of the same arity stays for `this.Create(...)`.
         // When no static overload matches, the instance method remains so the
@@ -817,6 +1009,122 @@ internal static class MethodInvocationSemanticResolver {
 
     private static bool IsTypeName(Node node) => node is
         NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference;
+
+    /// <summary>True when every lambda-shaped argument of <paramref name="method"/> is
+    /// accepted by its parameter as a delegate or <c>Expression&lt;D&gt;</c>.</summary>
+    private static bool LambdaArgumentsAreDelegates(
+        AnalysisContext context, ITypeMethod method, IReadOnlyList<Node> arguments) {
+        var parameters = method.Parameters?.ToArray() ?? [];
+        for (int i = 0; i < arguments.Count && i < parameters.Length; i++) {
+            var shape = arguments[i] as Lambda
+                ?? (StoredLambdaBinding.TryGet(context, arguments[i], out var stored)
+                    ? stored!.Lambda
+                    : null);
+            if (shape is null)
+                continue;
+            if (!AcceptsLambdaArgument(context, shape, parameters[i].ParameterTypeDefinition))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Best-scoring overload when one or more arguments are lambdas bound to a
+    /// delegate or <c>Expression&lt;D&gt;</c> parameter. Parameter count and
+    /// parameter types must agree; the return type is checked by the emitter so a
+    /// value body against a void delegate fails with the bridge's own diagnostic.
+    /// </summary>
+    private static IEnumerable<ITypeMethod> FindLambdaDelegateOverloads(
+        AnalysisContext context,
+        ITypeDefinition targetType,
+        string name,
+        IReadOnlyList<Node> arguments) {
+        int? bestScore = null;
+        var best = new List<ITypeMethod>();
+        foreach (var candidate in targetType.Methods.WithName(name)) {
+            int? score = LambdaOverloadScore(context, candidate, arguments);
+            if (score is null)
+                continue;
+            if (bestScore is null || score < bestScore) {
+                bestScore = score;
+                best = [candidate];
+            }
+            else if (score == bestScore) {
+                best.Add(candidate);
+            }
+        }
+        return best;
+    }
+
+    private static int? LambdaOverloadScore(
+        AnalysisContext context, ITypeMethod candidate, IReadOnlyList<Node> arguments) {
+        var parameters = candidate.Parameters?.ToArray() ?? [];
+        if (arguments.Count > parameters.Length)
+            return null;
+        for (int i = arguments.Count; i < parameters.Length; i++) {
+            if (!parameters[i].IsOptional)
+                return null;
+        }
+
+        var score = 0;
+        for (int i = 0; i < arguments.Count; i++) {
+            var argument = arguments[i];
+            var parameterType = parameters[i].ParameterTypeDefinition;
+            var shape = argument as Lambda
+                ?? (StoredLambdaBinding.TryGet(context, argument, out var argumentStored)
+                    ? argumentStored!.Lambda
+                    : null);
+            if (shape is not null) {
+                // A lambda's Func/Action type is not its meaning: only a delegate or
+                // Expression<D> parameter receives it, never a wider object parameter.
+                if (!AcceptsLambdaArgument(context, shape, parameterType))
+                    return null;
+                score += 2;
+                continue;
+            }
+            var argumentType = context.GetResolvedType(argument);
+            if (argumentType is not null
+                && (ReferenceEquals(parameterType, argumentType)
+                    || parameterType.IsAssignableFrom(argumentType))) {
+                if (!ReferenceEquals(parameterType, argumentType))
+                    score++;
+                continue;
+            }
+            else
+                return null;
+        }
+        return score;
+    }
+
+    /// <summary>
+    /// True when <paramref name="parameterType"/> is a delegate <c>D</c> or
+    /// <c>Expression&lt;D&gt;</c> whose Invoke parameter list matches the lambda's
+    /// declared parameter list. Untyped lambda parameters take the delegate's types.
+    /// </summary>
+    internal static bool AcceptsLambdaArgument(
+        AnalysisContext context, Lambda lambda, ITypeDefinition parameterType) {
+        var parameterClr = parameterType.GetRuntimeType();
+        if (parameterClr is null)
+            return false;
+        if (!DelegateShape.TryGet(parameterClr, out var delegateType, out _))
+            return false;
+        var invoke = delegateType.GetMethod(nameof(Action.Invoke));
+        if (invoke is null)
+            return false;
+        var delegateParameters = invoke.GetParameters();
+        if (delegateParameters.Length != lambda.Parameters.Count)
+            return false;
+        for (int i = 0; i < delegateParameters.Length; i++) {
+            var declared = DeclaredParameterType(context, lambda.Parameters[i]);
+            if (declared is not null && declared != delegateParameters[i].ParameterType)
+                return false;
+        }
+        return true;
+    }
+
+    private static Type? DeclaredParameterType(AnalysisContext context, Parameter parameter) =>
+        ClrTypeResolution.Resolve(
+            parameter.TypeReference, parameter, context.GetResolvedType);
 }
 
 internal static class ConstructorInvocationSemanticResolver {

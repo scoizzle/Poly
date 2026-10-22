@@ -83,6 +83,29 @@ No behaviour change; the existing suite is the oracle.
 | ABI5 | Register-file prune: lazy `_regN`, grow by one, dead surface | ABI4 | [tasks/ABI5.md](tasks/ABI5.md) |
 | ABI6 | One storage-location model (`SlotLocation`), one IEEE codec, one classifier name | ABI5 | [tasks/ABI6.md](tasks/ABI6.md) |
 
+## Interpretation simplification (admitted 2026-10-22 by Scot; a separate lane, does not move row 4)
+
+Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysis/interpretation-simplification.md). Suite, lanes, waves and gate: [`IS-README.md`](../interpretation-simplification/IS-README.md). Defect fixes for #255–#261 land first; no abstraction is built on a path whose base is known-wrong.
+
+| # | Slice | Depends / hold | Task file |
+|---|-------|----------------|-----------|
+| IS0a | writer fails closed; kinds that print round-trip (#255, #256) | none | [IS0a.md](../interpretation-simplification/tasks/IS0a.md) |
+| IS0b | switch case terminates; printed switch reads back (#257) | IS0a | [IS0b.md](../interpretation-simplification/tasks/IS0b.md) |
+| IS0c | `AnyChild` means descendants (#258) | none | [IS0c.md](../interpretation-simplification/tasks/IS0c.md) |
+| IS0d | suspend outside the root body is a compile rejection (#259) | none | [IS0d.md](../interpretation-simplification/tasks/IS0d.md) |
+| IS0e | void CLR invoke writes its slot (#260) | IS0d | [IS0e.md](../interpretation-simplification/tasks/IS0e.md) |
+| IS0f | type registry off the static analyzer (#261) | IS0c | [IS0f.md](../interpretation-simplification/tasks/IS0f.md) |
+| IS1 | one producer-capability table + totality test | IS0a, IS0b, IS0e | [IS1.md](../interpretation-simplification/tasks/IS1.md) |
+| IS1b | Mermaid reads the table | IS1 | [IS1b.md](../interpretation-simplification/tasks/IS1b.md) |
+| IS2a | writer→Roslyn differential over the corpus | IS1 | [IS2a.md](../interpretation-simplification/tasks/IS2a.md) |
+| IS2b | port the LINQ-oracle test consumers to VM execution | IS2a | [IS2b.md](../interpretation-simplification/tasks/IS2b.md) |
+| IS2c | delete `LinqExpressionGenerator` | IS2b | [IS2c.md](../interpretation-simplification/tasks/IS2c.md) |
+| ISB | checked-in benchmark baseline for IS3/IS5 | none | [ISB.md](../interpretation-simplification/tasks/ISB.md) |
+| IS4 | one loop scaffold | IS1, IS0d | [IS4.md](../interpretation-simplification/tasks/IS4.md) |
+| IS3 | `CompileNode` total; delete `CompileValue` | IS2c, ISB | [IS3.md](../interpretation-simplification/tasks/IS3.md) |
+| IS5 | one invoke result convention | IS3 | [IS5.md](../interpretation-simplification/tasks/IS5.md) |
+| IS6 | one owner per analysis fact | IS0f | [IS6.md](../interpretation-simplification/tasks/IS6.md) |
+
 ## Swarm (probe findings; one card per agent)
 
 Offload queue for the open items in [`docs/probes/findings/evolve-2026-10-14.md`](../../probes/findings/evolve-2026-10-14.md). F27, F32, F33, and F34 are already on master (`06844e39`). U1 and U2 (printed `EnsureUnique`) stay on row 4. Rows 5–19 and THEN are unchanged.

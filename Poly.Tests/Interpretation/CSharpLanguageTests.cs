@@ -126,6 +126,45 @@ public class CSharpLanguageTests {
         await Assert.That(CompilationErrors(text)).IsEmpty();
     }
 
+    // ── for headers ──────────────────────────────────────────────────────────
+
+    private const string ForSource = "for (var i = 0; i < 3; i = i + 1) { }";
+
+    [Test]
+    public async Task ForIncrement_PrintsAsAnExpression() {
+        var text = CSharpLanguage.Write(CSharpLanguage.Read(ForSource));
+        await Assert.That(text).Contains("for (var i = 0; i < 3; i = i + 1)")
+            .Because("the increment slot holds an expression, so it must not declare the variable");
+        await Assert.That(text).DoesNotContain("var i = i");
+    }
+
+    [Test]
+    public async Task ForCondition_Assignment_PrintsAsAnExpression() {
+        var text = CSharpLanguage.Write(CSharpLanguage.Read("for (var i = 0; (ready = i < 3); i = i + 1) { }"));
+        await Assert.That(text).Contains("ready = i < 3");
+        await Assert.That(text).DoesNotContain("var ready");
+    }
+
+    [Test]
+    public async Task ForHeader_ParsesWithRoslyn() {
+        var text = CSharpLanguage.Write(CSharpLanguage.Read(ForSource));
+        await Assert.That(SyntaxErrors(text)).IsEmpty();
+    }
+
+    [Test]
+    public async Task ForLoop_WriteRead_RoundTrips() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read(ForSource));
+        var reread = CSharpLanguage.Read(printed);
+        await Assert.That(CSharpLanguage.Write(reread)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task ForBody_StillFusesTheDeclaration() {
+        var text = CSharpLanguage.Write(CSharpLanguage.Read("for (var i = 0; i < 3; i = i + 1) { total = i; }"));
+        await Assert.That(text).Contains("var total = i;")
+            .Because("the body keeps the statement rule that fuses an undeclared name into its declaration");
+    }
+
     // ── reader → Roslyn ──────────────────────────────────────────────────────
 
     [Test]

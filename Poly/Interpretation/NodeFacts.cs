@@ -57,7 +57,7 @@ public static class NodeFacts {
         [typeof(Equal)] = Fact<Equal>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(FieldDefinitionNode)] = Fact<FieldDefinitionNode>(Producers.Writer | Producers.Reader),
         [typeof(ForEachLoop)] = Fact<ForEachLoop>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(ForLoop)] = Fact<ForLoop>(Producers.Vm | Producers.Reader),
+        [typeof(ForLoop)] = Fact<ForLoop>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(GotoStatement)] = Fact<GotoStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(GreaterThan)] = Fact<GreaterThan>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(GreaterThanOrEqual)] = Fact<GreaterThanOrEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),

@@ -1,0 +1,6 @@
+#nullable enable
+
+for (var i = 0; i < 3; i = i + 1)
+{
+    System.Console.WriteLine(i);
+}

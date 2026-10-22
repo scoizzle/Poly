@@ -484,11 +484,31 @@ public sealed class CSharpWriter {
             init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
                 ? Expr(forLoop.Initializer) : null;
         }
-        var condition = forLoop.Condition != null ? Expr(forLoop.Condition) : null;
+        var condition = ForHeaderExpression(forLoop.Condition);
         var increment = forLoop.Increment != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Increment))
-            ? Expr(forLoop.Increment) : null;
+            ? ForHeaderExpression(forLoop.Increment) : null;
         return RenderFills("statement", "for", Names(("semi1", "; "), ("semi2", "; ")),
             init, condition, increment, BodyText(forLoop.Body, indent));
+    }
+
+    /// <summary>Prints a <c>for</c> header expression. The condition and increment slots hold
+    /// expressions, so the statement-level rule that fuses an undeclared name into a <c>var</c>
+    /// declaration is off there — a declaration does not parse inside the header — and a
+    /// statement-shaped node, which has no expression form, rejects. The body prints under the
+    /// enclosing rule, unchanged.</summary>
+    private string? ForHeaderExpression(Node? node) {
+        if (node is null)
+            return null;
+        if (node is Statement or Block)
+            return Unprintable(node, "a for header slot holds one expression, and a statement or block has no expression form");
+        var fuseUndeclaredName = _fuseUndeclaredName;
+        _fuseUndeclaredName = false;
+        try {
+            return Expr(node);
+        }
+        finally {
+            _fuseUndeclaredName = fuseUndeclaredName;
+        }
     }
 
     private string ForEachText(ForEachLoop forEach, int indent) =>

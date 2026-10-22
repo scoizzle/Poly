@@ -886,50 +886,6 @@ public static partial class AbiEmitter {
             typeof(long));
     }
 
-    // ── Helpers ────────────────────────────────────
-
-    /// <summary>
-    /// Wrap a compiled node expression with a simplified debug hook guard.
-    /// In NoDebug mode (<see cref="Context.DebugHookProp"/> is null),
-    /// returns the body unchanged — zero overhead.
-    ///
-    /// When a hook is set, emits code that snapshots the current frame's
-    /// locals into a <c>long[]</c> buffer (using compile-time known offsets),
-    /// then invokes <c>DebugHook(node, ReadOnlySpan&lt;long&gt;(buffer), heap)</c>.
-    ///
-    /// The <c>ProgramCounter</c> is also flushed to the current step for
-    /// legacy compatibility.
-    /// </summary>
-    private static Expression WithInterrupt(Expression body, Context ctx, int step) {
-        if (ctx.DebugHookProp is null) return body;
-
-        int localCount = ctx.FrameSlotHighWater;
-
-        // Build the hook invocation expression only when the hook is non-null.
-        // Emit: if (state.DebugHook != null) { snapshot + invoke }
-        var stmts = new List<Expression>();
-        var flush = ctx.EmitScopeStores();
-        if (flush.Count > 0)
-            stmts.Add(Block(flush));
-
-        // Create a ReadOnlySpan<long> directly over _slots[_fb .. _fb + localCount].
-        // This is a zero-allocation slice — no buffer copy needed.
-        // Cell-backed slots hold heap handles; VmDebugger.GetLocals derefs cell[0].
-        Expression spanExpr = localCount == 0
-            ? New(ReadOnlySpanLongArrayCtor,
-                NewArrayBounds(typeof(long), Constant(0)))
-            : New(ReadOnlySpanLongSliceCtor,
-                ctx.SlotsLocal, ctx.FramePosLocal, Constant(localCount));
-
-        stmts.Add(Invoke(ctx.DebugHookProp, ctx.CurrentAstNodeExpr, spanExpr, ctx.HeapLocal));
-
-        return Block(
-            IfThen(
-                NotEqual(ctx.DebugHookProp, Constant(null, typeof(Action<Node, ReadOnlySpan<long>, VmManagedObjectHeap>))),
-                Block(Assign(ctx.StatePcFlush, Constant(step)), Block(stmts))),
-            body);
-    }
-
     // ── Static property/method refs ─────────────────────────────────
 
     private static readonly PropertyInfo StateStackProperty =

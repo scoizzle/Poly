@@ -17,7 +17,7 @@ A lane is a **file-ownership group**, not a queue of similar work. One agent own
 
 | Lane | Owns | Slices in order |
 |---|---|---|
-| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1b → IS1c → IS2a → IS2b → IS2c |
+| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1d → IS1b → IS1c → IS2a → IS2b → IS2c |
 | **B `analysis`** | `Poly/Analysis/**`, `Poly/Interpretation/Analysis/**`, `Poly.Tests/Interpretation/*Analyzer*`, `Poly.Tests/Interpretation/*ControlFlow*`, `Poly.Tests/Interpretation/*SideEffect*`, `Poly.Tests/Interpretation/*Analysis*`, `Poly.Tests/Interpretation/*Const*`, `Poly.Tests/Interpretation/AnyChildTests.cs`, `Poly.Tests/Interpretation/AnalysisFactOwnershipTests.cs` | IS0c → IS0f → IS6 |
 | **C `vm`** | `Poly/Interpretation/Vm/**`, `Poly.Benchmarks/**`, `Poly.Tests/TestHelpers/VmTree.cs`, `Poly.Tests/Interpretation/*Vm*` (except `VmCorrectnessTests.cs`), `Poly.Tests/Interpretation/*Invoke*`, `Poly.Tests/Interpretation/*Lambda*`, `Poly.Tests/Interpretation/*Slot*`, `Poly.Tests/Interpretation/*Loop*` | IS0d → IS0e → ISB → IS4 → IS3 → IS5 |
 
@@ -37,7 +37,8 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS0d | suspend inside a compiled function body compiling to a resume label nothing dispatches (#259) | — | C | [tasks/IS0d.md](tasks/IS0d.md) |
 | [x] | IS0e | void CLR invoke leaving its result slot unwritten (#260) | IS0d | C | [tasks/IS0e.md](tasks/IS0e.md) |
 | [x] | IS0f | per-analysis type registry held on the process-wide static analyzer (#261) | IS0c | B | [tasks/IS0f.md](tasks/IS0f.md) |
-| [ ] | IS1 | five hand-kept producer switches and the `LanguageSurfaceTests.Kinds` dictionary; one capability table + one totality test | IS0a, IS0b, IS0e | A | [tasks/IS1.md](tasks/IS1.md) |
+| [x] | IS1 | five hand-kept producer switches and the `LanguageSurfaceTests.Kinds` dictionary; one capability table + one totality test | IS0a, IS0b, IS0e | A | [tasks/IS1.md](tasks/IS1.md) |
+| [ ] | IS1d | a `for` header prints its increment as a statement, so the output does not compile | IS1 | A | [tasks/IS1d.md](tasks/IS1d.md) |
 | [ ] | IS1b | Mermaid's two dispatch switches and its silent child drops | IS1 | A | [tasks/IS1b.md](tasks/IS1b.md) |
 | [ ] | IS1c | qualified type names and using scope; a static call on a type is not expressible | IS0b, IS1 | A | [tasks/IS1c.md](tasks/IS1c.md) |
 | [ ] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
@@ -58,7 +59,7 @@ Lanes start together; slices inside a lane do not. Cross-lane arrows are real ga
 | 0 | plan merged | IS0a | IS0c | IS0d |
 | 1 | lane's previous slice merged | IS0b | IS0f | IS0e, then ISB |
 | 2 | IS0e merged (for A) | IS1, then IS1b | IS6 | — |
-| 3 | IS1 merged (for C) | IS1b, IS1c, IS2a | — | IS4 |
+| 3 | IS1 merged (for C) | IS1d, then IS1b, IS1c, IS2a | — | IS4 |
 | 4 | IS2a merged | IS2b | — | — |
 | 5 | IS2b merged | IS2c | — | — |
 | 6 | IS2c and ISB merged | — | — | IS3 |

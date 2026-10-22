@@ -96,6 +96,7 @@ Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysi
 | IS0e | void CLR invoke writes its slot (#260) | IS0d | [IS0e.md](../interpretation-simplification/tasks/IS0e.md) |
 | IS0f | type registry off the static analyzer (#261) | IS0c | [IS0f.md](../interpretation-simplification/tasks/IS0f.md) |
 | IS1 | one producer-capability table + totality test | IS0a, IS0b, IS0e | [IS1.md](../interpretation-simplification/tasks/IS1.md) |
+| IS1d | a `for` header prints its increment as a statement (invalid C#) | IS1 | [IS1d.md](../interpretation-simplification/tasks/IS1d.md) |
 | IS1b | Mermaid reads the table | IS1 | [IS1b.md](../interpretation-simplification/tasks/IS1b.md) |
 | IS1c | qualified type names + using scope; a static call on a type is not expressible | IS0b, IS1 | [IS1c.md](../interpretation-simplification/tasks/IS1c.md) |
 | IS2a | writer→Roslyn differential over the corpus | IS1 | [IS2a.md](../interpretation-simplification/tasks/IS2a.md) |

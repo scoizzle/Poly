@@ -208,6 +208,8 @@ public sealed partial record DomainEntityInstance {
             var raw = TryFactoryValue(param.Name, values, out var supplied)
                 ? supplied
                 : FactoryDefault(param.DefaultValue);
+            if (raw is null && IsStoragePortParameter(param))
+                raw = new InMemoryStoragePort();
             setArgs[i + 1] = CoerceActionArgForSetArgs(param, raw);
         }
         using var exec = Interpreter.Execute(compiled, s => s.SetArgs(setArgs));
@@ -925,6 +927,8 @@ public sealed partial record DomainEntityInstance {
             var name = rootParameters[i].Name;
             if (actionArgs is not null && actionArgs.TryGetValue(name, out var arg))
                 setArgs[i + 1] = CoerceActionArgForSetArgs(rootParameters[i], arg);
+            else if (IsStoragePortParameter(rootParameters[i]))
+                setArgs[i + 1] = new InMemoryStoragePort(Store);
             else
                 throw new InvalidOperationException(
                     $"Missing SetArgs value for parameter '{name}' on '{Entity.Name}'.");

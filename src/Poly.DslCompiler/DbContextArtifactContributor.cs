@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.DslCompiler;
@@ -23,7 +24,9 @@ public sealed class DbContextArtifactContributor : IArtifactContributor {
 
         var dbContextName = $"{domain.Name}DbContext";
         var fileName = $"{dbContextName}.cs";
-        var unit = new DbContextGenerator(domain, storageModel).GenerateCompilationUnit();
+        var implementsStoragePort = new CatalogIndex(catalog).RequiresStoragePort;
+        var unit = new DbContextGenerator(domain, storageModel, implementsStoragePort: implementsStoragePort)
+            .GenerateCompilationUnit();
         var tree = GeneratedTree.Create(domain, fileName, unit, nameof(DbContextArtifactContributor));
         var source = new CSharpWriter().Write(unit);
         return [

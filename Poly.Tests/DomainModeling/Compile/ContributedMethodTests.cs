@@ -8,6 +8,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 using Poly.DslCompiler;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -63,6 +64,22 @@ public class ContributedMethodTests {
         }
         """;
 
+    private const string PolyRootUnique = """
+        domain Lab
+        Widget: entity {
+          Code: Text required unique
+        }
+        """;
+
+    private const string PolyRootUniqueWithNav = """
+        domain Lab
+        Widget: entity {
+          Code: Text required unique
+          tags: many Tag
+        }
+        Tag: entity { Label: Text }
+        """;
+
     [Test]
     public async Task CreateIn_ContributedParameter_ThreadsThroughCallersOnly() {
         var (domain, analysis, session) = Compile(Poly, new ProbeLibrary());
@@ -105,14 +122,14 @@ public class ContributedMethodTests {
         var store = new DomainInstanceStore();
         var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
         store.Add(lot);
-        var seen = new SeenCodes();
+        var seen = new InMemoryStoragePort();
 
         var first = lot.InvokeAction("Issue", new Dictionary<string, object?> {
             ["code"] = "A",
             ["db"] = seen
         });
         await Assert.That(first.Succeeded).IsTrue();
-        await Assert.That(seen.Has("A")).IsTrue();
+        await Assert.That(seen.Exists("Widget", "Code", "A")).IsTrue();
         await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
 
         var duplicate = lot.InvokeAction("Issue", new Dictionary<string, object?> {
@@ -137,15 +154,100 @@ public class ContributedMethodTests {
 
     [Test]
     public async Task Route_ContributedParameter_IsPassedOnTheActionThatUsesIt() {
-        var (domain, analysis, _) = Compile(Poly, new ProbeLibrary(), withPersistence: true);
+        var (domain, analysis, session) = Compile(Poly, new ProbeLibrary());
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
         var behavior = BehaviorMetadata.From(domain, analysis);
         var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
-        var source = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate)
+        session.Lower(domain, analysis);
+        var source = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate,
+                catalog: new CatalogIndex(session.ArtifactCatalog))
             .Generate("LabDbContext");
 
         await Assert.That(source.Contains("entity.Issue(dto.code, db)", StringComparison.Ordinal)).IsTrue();
         await Assert.That(source.Contains("entity.Touch(dto.label, db)", StringComparison.Ordinal)).IsFalse();
+        // The action lambda now takes the port, so the host must register it.
+        await Assert.That(source.Contains(
+            "AddScoped<Poly.DomainModeling.Runtime.IStoragePort", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateAndSeed_PassTheSameSuffixAsActionRoutes() {
+        var (domain, analysis, session) = Compile(PolyRootUnique, new ProbeLibrary());
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        session.Lower(domain, analysis);
+        var source = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate,
+                catalog: new CatalogIndex(session.ArtifactCatalog))
+            .Generate("LabDbContext");
+
+        await Assert.That(source.Contains("Widget.Create(dto.Code, db)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains("Widget.Create(\"Sample\", db)", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task CreateWithOptionalParameters_HostPassesDbBeforeTheFirstDefault() {
+        var (domain, analysis, session) = Compile(PolyRootUniqueWithNav, new ProbeLibrary());
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        session.Lower(domain, analysis);
+        var source = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate,
+                catalog: new CatalogIndex(session.ArtifactCatalog))
+            .Generate("LabDbContext");
+
+        await Assert.That(source.Contains(
+            "Widget.Create(dto.Code, db, Enumerable.Empty<Tag>())", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains(
+            "Widget.Create(\"Sample\", db, Enumerable.Empty<Tag>())", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task EntityWithoutStorageMapping_ThrowsNamedError() {
+        var (domain, analysis, session) = Compile(Poly, new ProbeLibrary(), withPersistence: false);
+        await Assert.That(() => session.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("has no storage mapping");
+    }
+
+    [Test]
+    public async Task Simulate_SuppliesStoragePort_WhenActionDoesNotNameIt() {
+        var (domain, _, _) = Compile(Poly, new ProbeLibrary());
+        var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
+        store.Add(lot);
+
+        var first = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        await Assert.That(first.Succeeded).IsTrue();
+        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+
+        var duplicate = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        await Assert.That(duplicate.Succeeded).IsFalse();
+        await Assert.That(duplicate.ErrorMessage ?? "").Contains("Unique constraint violated: 'Code'");
+        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task GeneratedDbContext_ImplementsTheStoragePort() {
+        var (domain, analysis, _) = Compile(PolyRootUnique, new ProbeLibrary());
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var unit = new DbContextGenerator(domain, storage, implementsStoragePort: true)
+            .GenerateCompilationUnit();
+        var context = unit.FindType("LabDbContext")!;
+        var contract = context.Interfaces!.OfType<ClrTypeReference>().Single();
+        await Assert.That(contract.RuntimeType).IsEqualTo(typeof(IStoragePort));
+
+        var exists = context.FindMethod("Exists")!;
+        await Assert.That(exists.Body).IsNotNull();
+        await Assert.That(Invokes(exists.Body!).Any(i =>
+            i.Delegate is Member { MemberName: "Any" })).IsTrue();
+        var record = context.FindMethod("Record")!;
+        await Assert.That(Invokes(record.Body!).Any(i =>
+            i.Delegate is Member { MemberName: "Add" })).IsTrue();
+
+        var source = new Poly.Interpretation.CSharp.CSharpWriter().Write(unit);
+        CompileGenerated(source + "\npublic class Widget { public int Id { get; set; } public string Code { get; set; } = \"\"; }\n");
     }
 
     [Test]
@@ -162,8 +264,8 @@ public class ContributedMethodTests {
         await Assert.That(parameters[dbIndex].DefaultValue).IsNull();
 
         var newAt = TopIndex(create, n => n is New);
-        var addAt = TopIndex(create, n => n is Invoke i && i.Delegate is Member { MemberName: "Add" });
-        await Assert.That(addAt).IsGreaterThan(newAt);
+        var recordAt = TopIndex(create, n => n is Invoke i && i.Delegate is Member { MemberName: "Record" });
+        await Assert.That(recordAt).IsGreaterThan(newAt);
 
         var createWidgets = Method(module, "Lot", "CreateWidgets");
         var invoke = Invokes(createWidgets.Body!).First(i => i.Delegate is Member { MemberName: "Create" });
@@ -197,6 +299,31 @@ public class ContributedMethodTests {
     public async Task DuplicateSupportingMethod_Throws() {
         var (domain, analysis, session) = Compile(Poly, new DuplicateSupportLibrary());
         await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    private static void CompileGenerated(string source) {
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator)
+            .Concat(Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
+            .Distinct(StringComparer.Ordinal)
+            .Where(File.Exists)
+            .Select(path => (Microsoft.CodeAnalysis.MetadataReference)
+                Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path))
+            .ToList();
+        var tree = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(
+            "#nullable enable\n" + source);
+        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
+            "GeneratedDbContextPort",
+            [tree],
+            references,
+            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
+                Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        if (!emit.Success)
+            throw new InvalidOperationException(string.Join("\n", emit.Diagnostics
+                .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error))
+                + "\n" + source);
     }
 
     private static MethodDefinitionNode Method(
@@ -247,12 +374,12 @@ public class ContributedMethodTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Compile(
-        string poly, IDomainLibrary library, bool withPersistence = false) {
+        string poly, IDomainLibrary library, bool withPersistence = true) {
         var builder = SessionBuilder.CreateEmpty();
         foreach (var id in ExtensionCatalog.ProductAuthoring)
             builder.Load(ExtensionCatalog.Core.Resolve(id));
-        // Storage mapping is what the route generator reads. The other proofs
-        // do not load it, so their modules stay free of that pass.
+        // The storage request facts need the persistence pass. A proof that the
+        // fail-closed error works opts out explicitly.
         if (withPersistence)
             builder.Load(new PersistenceEmitLibrary());
         builder.Load(library);
@@ -265,23 +392,6 @@ public class ContributedMethodTests {
                     .Where(d => d.Severity == DiagnosticSeverity.Error)
                     .Select(d => d.Message)));
         return (result.Root!, result.Analysis, session);
-    }
-
-    /// <summary>
-    /// Stand-in for the storage context. The VM calls <see cref="Contains"/> and
-    /// <see cref="Add"/> on the value the action was given. It is not EF.
-    /// </summary>
-    public sealed class SeenCodes {
-        private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
-
-        public bool Contains(string code) => code is not null && _seen.Contains(code);
-
-        public void Add(string code) {
-            if (code is not null)
-                _seen.Add(code);
-        }
-
-        public bool Has(string code) => _seen.Contains(code);
     }
 
     private sealed class ProbeLibrary : IDomainLibrary {
@@ -312,17 +422,24 @@ public class ContributedMethodTests {
         public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
-            var dbType = new ClrTypeReference(typeof(SeenCodes));
+            var storage = request.RequireStorage();
+            var dbType = new ClrTypeReference(typeof(IStoragePort));
             var text = new ClrTypeReference(typeof(string));
             var existsDb = new Parameter("db", dbType);
             var existsCode = new Parameter("code", text);
             var methodName = "ExistsWith" + request.Property.Name;
+            var entityName = storage.Name;
+            var propertyName = request.Property.Name;
             var exists = new MethodDefinitionNode(
                 methodName,
                 new ClrTypeReference(typeof(bool)),
                 Parameters: [existsDb, existsCode],
                 Body: new Block([
-                    new Return(new Invoke(new Member(existsDb, "Contains"), existsCode))
+                    new Return(new Invoke(
+                        new Member(existsDb, "Exists"),
+                        new Constant(entityName),
+                        new Constant(propertyName),
+                        existsCode))
                 ]),
                 IsStatic: true);
 
@@ -342,7 +459,11 @@ public class ContributedMethodTests {
                             new Constant(
                                 $"Unique constraint violated: '{request.Property.Name}' value is already used on another '{request.Entity.Name}'.")))
                     ])),
-                new Invoke(new Member(db, "Add"), code)
+                new Invoke(
+                    new Member(db, "Record"),
+                    new Constant(entityName),
+                    new Constant(propertyName),
+                    code)
             ];
             return new ConstraintContribution(
                 LibraryId,
@@ -424,7 +545,7 @@ public class ContributedMethodTests {
 
         public ConstraintContribution Compile(ConstraintCompileRequest request) {
             var type = request.Property.Name == "Code"
-                ? new ClrTypeReference(typeof(SeenCodes))
+                ? new ClrTypeReference(typeof(IStoragePort))
                 : new ClrTypeReference(typeof(string));
             var db = new Parameter("db", type);
             var value = request.ParameterOn("Create")
@@ -433,7 +554,11 @@ public class ContributedMethodTests {
                 LibraryId,
                 request.Entity.Name,
                 new ConstraintAnchor.Create(),
-                [new Invoke(new Member(db, "Contains"), value)],
+                [new Invoke(
+                    new Member(db, "Exists"),
+                    new Constant(request.Entity.Name),
+                    new Constant(request.Property.Name),
+                    value)],
                 [],
                 [new ImpliedParameter("db", type, ThreadToCallers: true)]);
         }

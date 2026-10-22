@@ -525,7 +525,9 @@ public static class CSharpReader {
                         var cases = new List<SwitchCase>();
                         Node? defaultCase = null;
                         foreach (var caseMatch in Children(match, "switch-case")) {
-                            if (caseMatch.PatternName == "default") {
+                            // A trailing `break` is the terminator a Poly case has by construction:
+                            // it is syntax, not a node, so it is consumed and dropped here.
+                            if (caseMatch.PatternName is "default" or "default-break") {
                                 defaultCase = FoldStatement(caseMatch.Children[0]);
                                 continue;
                             }

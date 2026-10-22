@@ -503,19 +503,34 @@ public sealed class CSharpWriter {
         foreach (var caseNode in switchStmt.Cases) {
             cases.Append('\n');
             cases.Append(Pad(indent + 1));
-            cases.Append(RenderFills("switch-case", "case", Names(("colon", ":")),
-                Expr(caseNode.Pattern), "\n" + StatementText(caseNode.Body, indent + 1)));
+            cases.Append(CaseText("case", "case-break", Expr(caseNode.Pattern), caseNode.Body, indent));
         }
         if (switchStmt.DefaultCase != null) {
             cases.Append('\n');
             cases.Append(Pad(indent + 1));
-            cases.Append(RenderFills("switch-case", "default", Names(("colon", ":")),
-                "\n" + StatementText(switchStmt.DefaultCase, indent + 1)));
+            cases.Append(CaseText("default", "default-break", null, switchStmt.DefaultCase, indent));
         }
         return RenderFills("statement", "switch",
             Names(("open", "\n" + Pad(indent) + "{"), ("close", "}")),
             Expr(switchStmt.Value), cases.Length == 0 ? null : cases + "\n" + Pad(indent));
     }
+
+    /// <summary>Prints a case, adding the terminating <c>break</c> the C# compiler requires
+    /// unless the body already leaves the switch.</summary>
+    private string CaseText(string pattern, string terminatingPattern, string? patternText, Node body, int indent) {
+        var terminates = Terminates(body);
+        var rule = terminates ? pattern : terminatingPattern;
+        var bodyText = "\n" + StatementText(body, indent + 1) + (terminates ? "" : "\n" + Pad(indent + 1));
+        return patternText is null
+            ? RenderFills("switch-case", rule, Names(("colon", ":")), bodyText)
+            : RenderFills("switch-case", rule, Names(("colon", ":")), patternText, bodyText);
+    }
+
+    private static bool Terminates(Node body) => body switch {
+        Return or ThrowStatement or BreakStatement or ContinueStatement or GotoStatement => true,
+        Block block => block.Nodes.Count > 0 && Terminates(block.Nodes[^1]),
+        _ => false,
+    };
 
     private string TryText(TryCatchFinally tryCatch, int indent) {
         var catches = new StringBuilder();

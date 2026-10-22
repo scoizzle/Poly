@@ -956,12 +956,13 @@ public sealed class CSharpWriter {
             case Block block:
                 return BlockText(block, 0);
             case PopCount popCount:
-                return "System.Numerics.BitOperations.PopCount((ulong)" + Expr(popCount.Operand) + ")";
-            case StridedSetBits:
-                return "/* StridedSetBits */";
+                return RenderFills("expr-primary", "popcount",
+                    Names(("popcount-system", "System"), ("popcount-numerics", "Numerics"),
+                        ("popcount-type", "BitOperations"), ("popcount-method", "PopCount")),
+                    Expr(popCount.Operand));
             case NewArray newArray:
-                return "(" + TypeText(newArray.ElementType) + "[])(new " + TypeText(newArray.ElementType)
-                    + "[" + Expr(newArray.Length) + "])";
+                return RenderFills("expr-primary", "new-array", Names(("open", "["), ("close", "]")),
+                    TypeText(newArray.ElementType), Expr(newArray.Length));
             case SuspendNode suspend:
                 return Expr(suspend.Inner);
             case BaseConstructorInvocationNode baseCtor:
@@ -969,9 +970,15 @@ public sealed class CSharpWriter {
             case Comment c:
                 return $"/* {c.Text} */";
             default:
-                return node.ToString() ?? "";
+                return Unprintable(node);
         }
     }
+
+    /// <summary>Fails closed for a kind with no C# surface form: naming the kind and
+    /// its id beats printing the type name as source.</summary>
+    private static string Unprintable(Node node) =>
+        throw new InvalidOperationException(
+            $"CSharpWriter rejected {node.GetType().Name} (NodeId {node.Id}): no C# surface form.");
 
     private static string IdentText(string name) =>
         RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));

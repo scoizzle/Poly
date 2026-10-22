@@ -83,6 +83,11 @@ cursor that every consumer re-derived as `RingDepth - 1`.
   high-water is the deepest statement, not the sum of all of them. A comment or a
   label emits nothing, so it must not release the pending result:
   `[return 7, comment]` still yields 7.
+- An emitter that compiles a sub-expression and discards its slots holds a
+  `Context.RingScope`: `using var scope = ctx.OpenRingScope();` for a whole body, or
+  a `using (…)` block around one compile. Disposal restores the depth, so an
+  alternate arm, a loop body, or a bridge handle cannot leak slots into the
+  enclosing region, and nothing writes the cursor back by hand.
 
 Before this, `RingDepth` was never reset between statements. nqueens emitted 23
 ring locals for a body whose deepest statement needs 13.

@@ -156,15 +156,21 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitIfStatement(IfStatement ifStmt, Context ctx) {
-        int d = ctx.RingDepth;
-        var test = CompileConditionAsBool(ifStmt.Condition, ctx);
-        ctx.RingDepth = d;
-        var thenBody = CompileNode(ifStmt.ThenBranch, ctx);
-        ctx.RingDepth = d;
+        // Every arm starts from the same depth and its slots are dead afterwards, so
+        // the scope restores it instead of a remembered reset after each arm.
+        Expression test;
+        using (ctx.OpenRingScope()) {
+            test = CompileConditionAsBool(ifStmt.Condition, ctx);
+        }
+        Expression thenBody;
+        using (ctx.OpenRingScope()) {
+            thenBody = CompileNode(ifStmt.ThenBranch, ctx);
+        }
         Expression elseBody = Empty();
         if (ifStmt.ElseBranch is not null) {
-            elseBody = CompileNode(ifStmt.ElseBranch, ctx);
-            ctx.RingDepth = d;
+            using (ctx.OpenRingScope()) {
+                elseBody = CompileNode(ifStmt.ElseBranch, ctx);
+            }
         }
         return IfThenElse(test, thenBody, elseBody);
     }
@@ -179,34 +185,43 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         int valSlot = ring.Add(CompileNode(sw.Value, ctx));
         int savedDepth = ring.Base + 1;
-        ctx.RingDepth = savedDepth;
 
         int outSlot = ctx.AllocSlot();
+        // Every arm is compiled from the slot after the value, and a scope restores to
+        // it, so one write bases the whole switch on the same region.
         ctx.RingDepth = savedDepth;
 
         Expression rest;
         if (sw.DefaultCase != null) {
-            var defBody = CompileNode(sw.DefaultCase, ctx);
-            int defSlot = ctx.RingDepth - 1;
-            rest = Block(defBody, Assign(ctx.RingVar(outSlot), ctx.RingVar(defSlot)));
+            CompiledNode def;
+            using (ctx.OpenRingScope()) {
+                def = Compile(sw.DefaultCase, ctx);
+            }
+            rest = Block(def.Code,
+                Assign(ctx.RingVar(outSlot), def.RequireResult(sw.DefaultCase).Read(ctx)));
         }
         else {
             rest = Assign(ctx.RingVar(outSlot), Constant(0L));
         }
 
         for (int i = sw.Cases.Count - 1; i >= 0; i--) {
-            ctx.RingDepth = savedDepth;
             var c = sw.Cases[i];
-            var pExpr = CompileNode(c.Pattern, ctx);
-            int pSlot = ctx.RingDepth - 1;
-            ctx.RingDepth = savedDepth;
-            var bExpr = CompileNode(c.Body, ctx);
-            int bSlot = ctx.RingDepth - 1;
+            // The arm's value is a named location, so the cursor never has to be
+            // read back as "the slot the last compile left".
+            CompiledNode pattern;
+            using (ctx.OpenRingScope()) {
+                pattern = Compile(c.Pattern, ctx);
+            }
+            CompiledNode body;
+            using (ctx.OpenRingScope()) {
+                body = Compile(c.Body, ctx);
+            }
             rest = Block(
-                pExpr,
+                pattern.Code,
                 IfThenElse(
-                    Equal(ctx.RingVar(valSlot), ctx.RingVar(pSlot)),
-                    Block(bExpr, Assign(ctx.RingVar(outSlot), ctx.RingVar(bSlot))),
+                    Equal(ctx.RingVar(valSlot), pattern.RequireResult(c.Pattern).Read(ctx)),
+                    Block(body.Code,
+                        Assign(ctx.RingVar(outSlot), body.RequireResult(c.Body).Read(ctx))),
                     rest));
         }
 
@@ -215,14 +230,17 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) {
-        int d = ctx.RingDepth;
         var breakLabel = Label("wl_break");
         var continueLabel = Label("wl_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, wl.Label);
-        var test = CompileConditionAsBool(wl.Condition, ctx);
-        ctx.RingDepth = d;
-        var bodyExpr = CompileNode(wl.Body, ctx);
-        ctx.RingDepth = d;
+        Expression test;
+        using (ctx.OpenRingScope()) {
+            test = CompileConditionAsBool(wl.Condition, ctx);
+        }
+        Expression bodyExpr;
+        using (ctx.OpenRingScope()) {
+            bodyExpr = CompileNode(wl.Body, ctx);
+        }
         var loopBody = Block(
             EmitLoopIterationGuard(ctx),
             IfThen(Not(test), Goto(breakLabel)),
@@ -230,7 +248,6 @@ public static partial class AbiEmitter {
             Label(continueLabel));
         var result = Loop(loopBody, breakLabel);
         ctx.PopLoopScope();
-        ctx.RingDepth = d;
         return result;
     }
 
@@ -250,14 +267,17 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) {
-        int d = ctx.RingDepth;
         var breakLabel = Label("dwl_break");
         var continueLabel = Label("dwl_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, dwl.Label);
-        var bodyExpr = CompileNode(dwl.Body, ctx);
-        ctx.RingDepth = d;
-        var test = CompileConditionAsBool(dwl.Condition, ctx);
-        ctx.RingDepth = d;
+        Expression bodyExpr;
+        using (ctx.OpenRingScope()) {
+            bodyExpr = CompileNode(dwl.Body, ctx);
+        }
+        Expression test;
+        using (ctx.OpenRingScope()) {
+            test = CompileConditionAsBool(dwl.Condition, ctx);
+        }
         var loopBody = Block(
             EmitLoopIterationGuard(ctx),
             bodyExpr,
@@ -265,7 +285,6 @@ public static partial class AbiEmitter {
             IfThen(Not(test), Goto(breakLabel)));
         var result = Loop(loopBody, breakLabel);
         ctx.PopLoopScope();
-        ctx.RingDepth = d;
         return result;
     }
 
@@ -514,21 +533,23 @@ public static partial class AbiEmitter {
         if (fl.Initializer != null)
             stmts.Add(CompileNode(fl.Initializer, ctx));
         var condition = fl.Condition ?? new Constant(1L);
-        int d = ctx.RingDepth;
 
-        int bodyDepth = ctx.RingDepth;
-        var bodyExpr = CompileNode(fl.Body, ctx);
-        ctx.RingDepth = bodyDepth;
-
-        Expression? incrementExpr = null;
-        if (fl.Increment != null) {
-            ctx.RingDepth = d;
-            incrementExpr = CompileNode(fl.Increment, ctx);
-            ctx.RingDepth = d;
+        // Body, increment, and test each start from the loop's entry depth and their
+        // slots are dead afterwards; the scope restores it, so the cursor cannot drift.
+        Expression bodyExpr;
+        using (ctx.OpenRingScope()) {
+            bodyExpr = CompileNode(fl.Body, ctx);
         }
-
-        var test = CompileConditionAsBool(condition, ctx);
-        ctx.RingDepth = d;
+        Expression? incrementExpr = null;
+        if (fl.Increment is not null) {
+            using (ctx.OpenRingScope()) {
+                incrementExpr = CompileNode(fl.Increment, ctx);
+            }
+        }
+        Expression test;
+        using (ctx.OpenRingScope()) {
+            test = CompileConditionAsBool(condition, ctx);
+        }
 
         var loopBody = new List<Expression> {
             EmitLoopIterationGuard(ctx),
@@ -542,7 +563,6 @@ public static partial class AbiEmitter {
         if (scoped)
             ctx.PopScope();
         ctx.PopLoopScope();
-        ctx.RingDepth = d;
         return Block(stmts);
     }
 
@@ -552,6 +572,9 @@ public static partial class AbiEmitter {
     /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, Context ctx) {
+        // A foreach yields no ring value: the collection slot and the body's slots are
+        // dead when it completes, so the whole emission closes one ring scope.
+        using var ringScope = ctx.OpenRingScope();
         var breakLabel = Label("foreach_break");
         var continueLabel = Label("foreach_continue");
         ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
@@ -567,9 +590,8 @@ public static partial class AbiEmitter {
         var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
 
-        int bodyDepth = ctx.RingDepth;
+        // The method-level scope already closes this region, so the body compiles in it.
         var bodyExpr = CompileNode(fel.Body, ctx);
-        ctx.RingDepth = bodyDepth;
 
         var loop = Loop(
             Block(
@@ -583,7 +605,6 @@ public static partial class AbiEmitter {
 
         ctx.PopLoopScope();
         ctx.PopScope();
-        ctx.RingDepth = ring.Base;
 
         return ring.Then(Block(
             [enumerator, colObj],
@@ -650,11 +671,12 @@ public static partial class AbiEmitter {
 
     /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
     private static Expression EmitUsingStatement(UsingStatement us, Context ctx) {
-        int d = ctx.RingDepth;
+        // A using yields nothing: the resource slot and the body's slots are dead when
+        // it completes, so the whole emission closes one ring scope.
+        using var ringScope = ctx.OpenRingScope();
         var resourceExpr = CompileNode(us.Resource, ctx);
         int resSlot = ctx.RingDepth - 1;
         var bodyExpr = CompileNode(us.Body, ctx);
-        ctx.RingDepth = d;
         var resObj = Variable(typeof(object), "_using");
         return Block(
             [resObj],

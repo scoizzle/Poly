@@ -367,12 +367,11 @@ public static partial class AbiEmitter {
             closureExpr = closureSource;
         }
         else {
-            // EmitLambda leaves the closure handle on the ring; keep the handle in
-            // the typed local and abandon the transient ring slot so the caller's
-            // region accounting stays exact.
-            int savedDepth = ctx.RingDepth;
-            closureExpr = EmitLambda(shape!, ctx);
-            ctx.RingDepth = savedDepth;
+            // EmitLambda leaves the closure handle on the ring; the typed local keeps
+            // it and the transient slot is dead, so the region closes here.
+            using (ctx.OpenRingScope()) {
+                closureExpr = EmitLambda(shape!, ctx);
+            }
         }
         var statements = new List<Expression> { Assign(closureLocal, closureExpr) };
         var targetLocal = ctx.DeclareBridgeLocal(typeof(object), "target");

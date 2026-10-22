@@ -112,3 +112,38 @@ Poly.Tests/Interpretation/DefiniteAssignmentTests.cs:95:        await Assert.Tha
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `4896dac3` | SHIP — one author per fact; the purity de-duplication is proven equivalent, not changed; the three unread predicates are gone | **No behaviour change was intended and none is claimed**: the card's premise correction was checked against the code and holds — `IsPure` and `HasSideEffects` are exact complements (for a non-null node both reduce to `metadata is not null && Kind == Pure`; for `null`, `IsPure` said `true` and `HasSideEffects` says `false`). The characterisation test `IsPureAndHasSideEffects_AreExactComplements` was **green before** the edit (1/1) and after it (4/4 in `AnalysisFactOwnershipTests`). **Elision precedence**, implemented and asserted: either reason makes a node elidable and every reason that applies is recorded (`Unreachable` from CFG, `NoObservableEffect` from side-effect analysis); `Unreachable` dominates because a node that never executes is elidable whatever its effects, while `NoObservableEffect` is only recorded for a node that does execute, whose result is unused and whose effects are at most a read. The §Needs Scot clause "a node CFG marks must-execute is never elided on the side-effect reason alone" is **vacuous under that guard** — no node the side-effect reason reaches can have observable effects — so no veto was added; against the deleted prefix heuristic it would have removed legitimate elisions, which is the one thing this card forbids. `BothElisionReasons_ArePreserved_AndPrecedenceIsRecorded` pins it. **Binding lookup** is `StoredLambdaBinding.BindingOf` alone; the three re-derivations are deleted. **Constant booleans**: `GetConstBool` → `bool?`, `null` = not known; `IsConstantTrue` (unknown → `false`) and `TryGetConstBool` are deleted. **Files**: 8 production/test files plus `Poly/Interpretation/Analysis/README.md` and `docs/technical/analysis-passes.md` (both described the deleted metadata). **Not touched**: `Interpreter.cs` — the pipeline order is unchanged, so the `DefiniteAssignmentAnalyzer` registration stays; deleting that pass needs a file outside lane B and is reported, not taken. Full suite `dotnet run --project Poly.Tests/Poly.Tests.csproj` → **4317 passed, 0 failed**; `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` → **0 warnings, 0 errors**. |
+
+### Evidence (2026-10-22)
+
+Characterisation first, before the production edit — green, as the card requires (there is no behaviour to make red):
+
+```
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/AnalysisFactOwnershipTests/*'
+Test run summary: Passed! - Poly.Tests.dll (net10.0|arm64)
+  total: 1
+  failed: 0
+  succeeded: 1
+```
+
+After the edit, the same filter with the four ownership tests:
+
+```
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/AnalysisFactOwnershipTests/*'
+  total: 4   failed: 0   succeeded: 4
+
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/*ControlFlow*/*'      → 27/27
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/DefiniteAssignmentTests/*' → 6/6
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/*SideEffect*/*'       → 7/7
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/*Analysis*/*'         → 247/247
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/*Const*/*'            → 136/136
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj                                                   → 4317 passed, 0 failed
+```
+
+Extinction of the deleted facts from `*.cs` (only test *names* remain, which are not reads):
+
+```
+$ grep -rn "IsPure(\|IsInfiniteLoop\|IsMustExecute\|IsDefinitelyAssigned\|MustExecuteMetadata\|InfiniteLoopMetadata\|TryGetConstBool\|IsConstantTrue\|IsBoundUse\|BindsTo(" --include=*.cs
+Poly.Tests/Interpretation/DefiniteAssignmentTests.cs:  public async Task LambdaBody_AfterAssignment_IsDefinitelyAssigned() {
+Poly.Tests/Interpretation/SideEffectAnalysisTests.cs:  public async Task Constant_IsPure() {
+```

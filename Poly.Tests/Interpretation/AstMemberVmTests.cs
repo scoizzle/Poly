@@ -7,7 +7,7 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>F14: Member/Assignment on dict-backed AST property/field via Interpreter.Compile.</summary>
 public class AstMemberVmTests {
-    private static TypeDefinitionNodeAnalyzer BuildItemType(bool field = false) {
+    private static ITypeDefinitionProvider BuildItemType(bool field = false) {
         TypeDefinitionNode typeNode = field
             ? new TypeDefinitionNode(
                 "Item", "Sample",
@@ -16,8 +16,9 @@ public class AstMemberVmTests {
                 "Item", "Sample",
                 Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
         var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
-        return tda;
+        var ctx = AnalysisContext.CreateDefault();
+        tda.Analyze(ctx, typeNode);
+        return ctx.TypeDefinitions;
     }
 
     [Test]
@@ -64,8 +65,7 @@ public class AstMemberVmTests {
                     ]))
             ],
             Properties: [new PropertyDefinitionNode("Count", new PrimitiveTypeReference(PrimitiveType.Int64))]);
-        var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
+        var tda = Analyze(typeNode);
         var program = Interpreter.Compile(new New(new TypeReference("Sample.Item"), new Constant(7L)), tda);
         using var exec = Interpreter.Execute(program);
         var bag = exec.GetValue<Dictionary<string, object?>>();
@@ -87,8 +87,7 @@ public class AstMemberVmTests {
                     ]))
             ],
             Properties: [new PropertyDefinitionNode("Child", new TypeReference("Sample.Item"))]);
-        var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
+        var tda = Analyze(typeNode);
         var typeRef = new TypeReference("Sample.Item");
         var program = Interpreter.Compile(new New(typeRef, new New(typeRef)), tda);
         using var exec = Interpreter.Execute(program);
@@ -112,8 +111,7 @@ public class AstMemberVmTests {
                         new Member(new ThisReference(), "Count"),
                         new Add(new Member(new ThisReference(), "Count"), new Constant(1L))))
             ]);
-        var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
+        var tda = Analyze(typeNode);
         var bag = new Dictionary<string, object?> { ["Count"] = 7L };
         var entity = new Parameter("entity", new TypeReference("Sample.Item"));
         var program = Interpreter.Compile(new Invoke(new Member(entity, "Inc")), tda);
@@ -171,10 +169,11 @@ public class AstMemberVmTests {
         await Assert.That(bag!["Count"]).IsEqualTo(41L);
     }
 
-    private static TypeDefinitionNodeAnalyzer Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
-        return tda;
+        var ctx = AnalysisContext.CreateDefault();
+        tda.Analyze(ctx, typeNode);
+        return ctx.TypeDefinitions;
     }
 
     private static readonly Parameter ObjectValue = new("v", TypeReference.To<object>());

@@ -37,7 +37,9 @@ public sealed class Analyzer(
             context.Diagnostics.ToList(),
             context.Settings,
             Options,
-            context.HasErrors);
+            context.HasErrors) {
+            TypeDefinitions = context.TypeDefinitions
+        };
     }
 
     /// <summary>

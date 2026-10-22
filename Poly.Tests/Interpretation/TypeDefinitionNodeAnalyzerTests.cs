@@ -290,7 +290,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?> { ["Count"] = 42 };
         var readExpr = prop.EmitRead(Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -311,7 +311,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?>(); // empty — no "Count" key
         var readExpr = prop.EmitRead(Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -331,7 +331,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var prop = analyzer.GetTypeDefinition("Sample.Item")!.Properties.Single();
+        var prop = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Properties.Single();
         var dict = new Dictionary<string, object?>();
         var readExpr = prop.EmitRead(Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -350,7 +350,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?> { ["Tag"] = 99L };
         var readExpr = field.EmitRead(Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -370,7 +370,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?>();
         var valueConst = Expression.Convert(Expression.Constant(77L), typeof(object));
         var writeExpr = field.EmitWrite(Expression.Constant(dict), valueConst);
@@ -390,7 +390,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = analyzer.GetTypeDefinition("Sample.Item")!.Fields.Single();
+        var field = ctx.TypeDefinitions.GetTypeDefinition("Sample.Item")!.Fields.Single();
         var dict = new Dictionary<string, object?> { ["Score"] = 7 };
         var readExpr = field.EmitRead(Expression.Constant(dict));
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
@@ -446,7 +446,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeNode);
 
-        var field = analyzer.GetTypeDefinition("PatronStatus")!.Fields.Single();
+        var field = ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.Fields.Single();
         var readExpr = field.EmitRead(null);
         var lambda = Expression.Lambda<Func<object>>(readExpr!);
         var result = lambda.Compile()();
@@ -454,7 +454,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(result).IsEqualTo("Active");
         await Assert.That(field.IsStatic).IsTrue();
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
-        await Assert.That(analyzer.GetTypeDefinition("PatronStatus")!.TypeCategory)
+        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.TypeCategory)
             .IsEqualTo(TypeCategory.Enumeration);
     }
 
@@ -491,8 +491,8 @@ public class TypeDefinitionNodeAnalyzerTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, new Block([plain, generic, holder]));
 
-        var plainDef = analyzer.GetTypeDefinition("DomainResult");
-        var genericDef = analyzer.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
+        var plainDef = ctx.TypeDefinitions.GetTypeDefinition("DomainResult");
+        var genericDef = ctx.TypeDefinitions.GetTypeDefinition(AstTypeRegistry.Key("DomainResult", 1));
         await Assert.That(plainDef).IsNotNull();
         await Assert.That(genericDef).IsNotNull();
         await Assert.That(plainDef).IsNotSameReferenceAs(genericDef);

@@ -69,7 +69,7 @@ public sealed partial record DomainEntityInstance {
     /// Builds a dictionary-backed type definition for <paramref name="entityName"/>
     /// with the given schema properties (and optional extra action parameters).
     /// </summary>
-    private static TypeDefinitionNodeAnalyzer BuildTypeDefAnalyzer(
+    private static ITypeDefinitionProvider BuildTypeDefAnalyzer(
         Entity entity,
         IEnumerable<Property>? extraProperties = null,
         Domain? domain = null) {
@@ -83,7 +83,7 @@ public sealed partial record DomainEntityInstance {
                 analyzer.Analyze(ctx, BuildTypeDefNode(other, extraProperties: null, domain));
             }
         }
-        return analyzer;
+        return ctx.TypeDefinitions;
     }
 
     private static readonly ClrTypeReference HostJobsType = new(typeof(DomainInstanceHostJobs));
@@ -301,7 +301,7 @@ public sealed partial record DomainEntityInstance {
     /// Type provider that includes entity properties plus the current action's
     /// parameters so bag-injected args resolve as members during effect compile.
     /// </summary>
-    private TypeDefinitionNodeAnalyzer BuildActionScopedTypeDefAnalyzer(
+    private ITypeDefinitionProvider BuildActionScopedTypeDefAnalyzer(
         Action action) =>
         BuildTypeDefAnalyzer(Entity, action.Parameters, Domain);
 

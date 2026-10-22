@@ -156,7 +156,7 @@ public class InterpretationStabilizationTests {
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, target);
         analyzer.Analyze(ctx, source);
-        var items = analyzer.GetTypeDefinition("Source")!.Properties.Single(p => p.Name == "Items");
+        var items = ctx.TypeDefinitions.GetTypeDefinition("Source")!.Properties.Single(p => p.Name == "Items");
         var element = items.MemberTypeDefinition.GetElementType();
         await Assert.That(element).IsNotNull();
         await Assert.That(element!.Name).IsEqualTo("Target");
@@ -173,12 +173,12 @@ public class InterpretationStabilizationTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, type);
-        var prop = analyzer.GetTypeDefinition("Holder")!.Properties.Single();
+        var prop = ctx.TypeDefinitions.GetTypeDefinition("Holder")!.Properties.Single();
         await Assert.That(() => _ = prop.MemberTypeDefinition)
             .Throws<InvalidOperationException>();
     }
 
-    private static TypeDefinitionNodeAnalyzer AnalyzePerson() => Analyze(PersonTypeDef());
+    private static ITypeDefinitionProvider AnalyzePerson() => Analyze(PersonTypeDef());
 
     private static TypeDefinitionNode PersonTypeDef() => new(
         "Person",
@@ -194,10 +194,11 @@ public class InterpretationStabilizationTests {
                 Getter: new PropertyGetterDefinitionNode())
         ]);
 
-    private static TypeDefinitionNodeAnalyzer Analyze(TypeDefinitionNode node) {
+    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode node) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
-        analyzer.Analyze(AnalysisContext.CreateDefault(), node);
-        return analyzer;
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, node);
+        return ctx.TypeDefinitions;
     }
 
     [Test]
@@ -302,7 +303,7 @@ public class InterpretationStabilizationTests {
 
     [Test]
     public async Task CompileChecked_RootThisReference_DoesNotThrow() {
-        var program = Interpreter.CompileChecked(new ThisReference(), new TypeDefinitionNodeAnalyzer());
+        var program = Interpreter.CompileChecked(new ThisReference(), AnalysisContext.CreateDefault().TypeDefinitions);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.RawValue).IsEqualTo(0L);
     }

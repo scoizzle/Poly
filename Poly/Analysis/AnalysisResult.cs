@@ -1,5 +1,7 @@
 namespace Poly.Analysis;
 
+using Poly.Introspection;
+
 /// <param name="HasErrors">True when any error-level diagnostic was reported; taken from the analysis context flag at construction (not re-scanned from <paramref name="Diagnostics"/>).</param>
 public sealed record AnalysisResult(
     INodeMetadataProvider Metadata,
@@ -9,6 +11,14 @@ public sealed record AnalysisResult(
     AnalysisOptions? Options = null,
     bool HasErrors = false
 ) : INodeMetadataProvider {
+    /// <summary>
+    /// The type provider of this analysis: its AST type table over the caller's
+    /// providers and the CLR fallback. Belongs to one analysis, so concurrent or
+    /// sequential analyses never answer for each other.
+    /// </summary>
+    public ITypeDefinitionProvider TypeDefinitions { get; init; } =
+        Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared;
+
     /// <summary>
     /// Gets metadata of the specified type for the given node.
     /// Returns null if no metadata of that type exists for the node.

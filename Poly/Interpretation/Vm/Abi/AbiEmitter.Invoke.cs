@@ -928,12 +928,6 @@ public static partial class AbiEmitter {
 
     // ── Float/double helpers ────────────────────────
 
-    private static readonly MethodInfo BitConverterInt64BitsToDouble =
-        Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
-
-    private static readonly MethodInfo BitConverterDoubleToInt64Bits =
-        Ref.Method((Expression<Func<double, long>>)(v => BitConverter.DoubleToInt64Bits(v)));
-
     private static readonly MethodInfo InvokeInstanceMethodInfo =
         Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
             InvokeInstanceMethod(instance, name, args)));

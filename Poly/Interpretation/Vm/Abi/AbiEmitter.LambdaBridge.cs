@@ -4,8 +4,8 @@ using System.Runtime.ExceptionServices;
 
 using Poly.Ast.Nodes;
 using Poly.Interpretation.Analysis;
-using Poly.Interpretation.Vm;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -405,7 +405,7 @@ public static partial class AbiEmitter {
         else if (shape is null && (returnType == typeof(double) || returnType == typeof(float))) {
             // A forwarded parameter has no body node to classify; the delegate's
             // declared return type carries the IEEE shape.
-            body = Convert(Call(BitConverterInt64BitsToDouble, raw), returnType);
+            body = Convert(RingCodec.FromIeee(raw), returnType);
         }
         else {
             body = RingCodec.ToClr(raw, returnType, shape?.Body, ctx.Analysis, ctx.HeapLocal);

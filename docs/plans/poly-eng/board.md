@@ -81,6 +81,7 @@ No behaviour change; the existing suite is the oracle.
 | ABI3 | Ring discipline completion + heap-shape accessor | ABI2 | [tasks/ABI3.md](tasks/ABI3.md) |
 | ABI4 | SetArgs ring-spill consolidation | ABI3 | [tasks/ABI4.md](tasks/ABI4.md) |
 | ABI5 | Register-file prune: lazy `_regN`, grow by one, dead surface | ABI4 | [tasks/ABI5.md](tasks/ABI5.md) |
+| ABI6 | One storage-location model (`SlotLocation`), one IEEE codec, one classifier name | ABI5 | [tasks/ABI6.md](tasks/ABI6.md) |
 
 ## Swarm (probe findings; one card per agent)
 

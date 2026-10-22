@@ -32,12 +32,17 @@ internal static class RingCodec {
 
     // ── Classification ───────────────────────────────────────────
 
-    /// <summary>The ring-slot representation of a CLR type. Nullable of an inline
-    /// type stays inline; enums are inline scalars; float and double are inline
+    /// <summary>The ring-slot shape of a type's <em>underlying</em> word: a
+    /// nullable is peeled, enums are inline scalars, and float/double are inline
     /// IEEE bit patterns (classified <see cref="ValueRepresentationKind.StackScalar"/>
     /// because they occupy one slot — <see cref="IsIeee(Type)"/> carries the
-    /// bit-pattern distinction).</summary>
-    public static ValueRepresentationKind KindFor(Type type) {
+    /// bit-pattern distinction).
+    /// <para>This answers "is the underlying value long-representable", which is
+    /// what boxing, array element shapes, and unboxing ask. It is <b>not</b> the
+    /// slot kind of a nullable <em>node</em>: a nullable is boxed into a heap
+    /// handle, which is <see cref="ValueRepresentationClassifier.KindFor(Type)"/>'s
+    /// rule. Keep the two questions apart — same signature, different meaning.</para></summary>
+    public static ValueRepresentationKind UnderlyingKindFor(Type type) {
         var t = Nullable.GetUnderlyingType(type) ?? type;
         if (t.IsEnum) return ValueRepresentationKind.StackScalar;
         // A boolean is an inline word (0 = false, non-zero = true); its CLR type is
@@ -51,16 +56,29 @@ internal static class RingCodec {
         return ValueRepresentationKind.HeapRef;
     }
 
-    /// <summary>True when the type's value lives inline in the ring slot rather
-    /// than on the heap as a handle.</summary>
+    /// <summary>True when the type's <em>underlying</em> value is an inline word
+    /// rather than a heap value. A nullable returns true: its underlying value is
+    /// a word, even though a nullable node's slot holds a handle. Callers that
+    /// mean "this slot holds the word" must ask
+    /// <see cref="ValueRepresentationClassifier.KindFor(Type)"/> instead.</summary>
     public static bool IsInline(Type type) =>
-        KindFor(type) is ValueRepresentationKind.StackScalar;
+        UnderlyingKindFor(type) is ValueRepresentationKind.StackScalar;
 
     /// <summary>True when the type stores its IEEE bit pattern in the slot.
     /// Exact <c>float</c>/<c>double</c> only; a nullable wraps the value in a
     /// heap cell, matching <see cref="FromClr"/>.</summary>
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
+
+    /// <summary>An IEEE <c>double</c> expression as its ring slot: the raw bit
+    /// pattern. The one writer of the double-to-long bitcast.</summary>
+    public static Expression ToIeee(Expression ieeeDouble) =>
+        Call(BitConverterDoubleToInt64Bits, ieeeDouble);
+
+    /// <summary>A ring slot holding IEEE bits, as a CLR <c>double</c>. The one
+    /// reader of the long-to-double bitcast.</summary>
+    public static Expression FromIeee(Expression ringVal) =>
+        Call(BitConverterInt64BitsToDouble, ringVal);
 
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
@@ -125,7 +143,7 @@ internal static class RingCodec {
     /// for float/double, widening for inline scalars, heap handle otherwise.</summary>
     public static Expression FromClr(Expression value, Type? clrType, Expression heap) {
         if (clrType == typeof(float) || clrType == typeof(double))
-            return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
+            return ToIeee(Convert(value, typeof(double)));
         if (clrType is not null && clrType.IsValueType && IsInline(clrType))
             return Convert(Convert(value, clrType), typeof(long));
         return Call(BoxToAbiInfo, heap, Convert(value, typeof(object)));
@@ -139,7 +157,7 @@ internal static class RingCodec {
         var (sourceKind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
         if (targetType == typeof(double) || targetType == typeof(float)) {
             if (sourceClr is not null && IsIeee(sourceClr))
-                return Convert(Call(BitConverterInt64BitsToDouble, ringVal), targetType);
+                return Convert(FromIeee(ringVal), targetType);
             return Convert(ringVal, targetType);
         }
         if (targetType == typeof(bool))
@@ -156,7 +174,7 @@ internal static class RingCodec {
         if (targetType == typeof(object) && source is not null
             && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null) {
             Expression scalar = IsIeee(sourceClr)
-                ? Convert(Call(BitConverterInt64BitsToDouble, ringVal), sourceClr)
+                ? Convert(FromIeee(ringVal), sourceClr)
                 : sourceClr == typeof(bool)
                     ? NotEqual(ringVal, Constant(0L))
                     : Convert(ringVal, sourceClr);
@@ -257,17 +275,11 @@ internal static class RingCodec {
     public static Expression LongArray(Expression heap, Expression handle) =>
         Convert(DerefObject(heap, handle), typeof(long[]));
 
-    /// <summary>The <c>long[1]</c> cell a captured variable's slot points at.</summary>
+    /// <summary>The <c>long[1]</c> cell a captured variable's slot points at, or a
+    /// closure's capture entry. <see cref="SlotLocation.Cell"/> is the one
+    /// read/write path for it.</summary>
     public static Expression CellArray(Expression heap, Expression handle) =>
         LongArray(heap, handle);
-
-    /// <summary>Read a captured variable's cell value.</summary>
-    public static Expression CellRead(Expression heap, Expression handle) =>
-        ArrayAccess(CellArray(heap, handle), Constant(0));
-
-    /// <summary>Write a captured variable's cell value.</summary>
-    public static Expression CellWrite(Expression heap, Expression handle, Expression value) =>
-        Assign(ArrayAccess(CellArray(heap, handle), Constant(0)), value);
 
     /// <summary>The capture cell at <paramref name="captureIndex"/> in a closure.
     /// The <see cref="FirstCaptureIndex"/> header offset is applied here.</summary>
@@ -364,6 +376,6 @@ internal static class RingCodec {
         if (!elementIeee)
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot store a floating-point value into a '{elementClr.Name}' array element.");
-        return Call(BitConverterDoubleToInt64Bits, Convert(value, typeof(double)));
+        return ToIeee(Convert(value, typeof(double)));
     }
 }

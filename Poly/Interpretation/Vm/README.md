@@ -43,6 +43,30 @@ compile-time naming discipline, not a runtime stack. Frame slots are only writte
 for values that outlive an expression (arguments, spilled locals, the result), and
 for the debug hook's local span.
 
+### Storage locations
+
+A value has one representation (a `long` slot, inline word or heap handle) but
+lives in one of four places. `SlotLocation` names them, and a read or a write is
+one call instead of a per-site branch:
+
+| Location | Address | Used for |
+|----------|---------|----------|
+| `Ring` | `_rN` | transient expression-stack values |
+| `Frame` | `_slots[_fp + n]` | a local, a parameter, the result slot |
+| `Local` | a CLR local | a `_regN` register, `_this` |
+| `Cell` | `long[1]` element 0 | a capture cell, reached through a closure array or a slot handle |
+
+`Context.Resolve` is the one binding resolver: a closure capture cell first, then
+the bound-parameter / register / frame-slot ladder, wrapping a cell-backed local
+in its cell. `VariableReadRaw`/`VariableWriteRaw` resolve the binding's own
+storage without the capture indirection.
+
+Shape is `RingCodec`'s job and is not stored on the location. Two classifiers
+answer two different questions: `RingCodec.UnderlyingKindFor` asks whether a
+type's *underlying* value is long-representable (it peels a nullable), while
+`ValueRepresentationClassifier.KindFor` asks what a *node* of that type puts in
+its slot (a nullable is a heap handle).
+
 ## What the emitted body looks like
 
 Worked example: `var x = 2; x + 1` (a block with one local and one expression).

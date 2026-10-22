@@ -933,9 +933,12 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_PopCount_StridedSetBits_NullForgiving_BitwiseNot_Await() {
         var g = new CSharpGenerator();
-        await Assert.That(g.Generate(new PopCount(new Constant(7L)))).Contains("PopCount");
-        await Assert.That(g.Generate(new StridedSetBits(
-            new Variable("a"), new Constant(1L), new Constant(2L), new Constant(3L)))).Contains("StridedSetBits");
+        await Assert.That(g.Generate(new PopCount(new Constant(7L))))
+            .IsEqualTo("System.Numerics.BitOperations.PopCount((ulong)7L);");
+        await Assert.That(() => g.Generate(new StridedSetBits(
+                new Variable("a"), new Constant(1L), new Constant(2L), new Constant(3L))))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining(nameof(StridedSetBits));
         await Assert.That(g.Generate(new NullForgiving(new Constant("x")))).Contains("!");
         await Assert.That(g.Generate(new BitwiseNot(new Constant(1L)))).Contains("~");
         await Assert.That(g.Generate(new Await(new Constant(1L)))).Contains("await");
@@ -954,9 +957,8 @@ public class CSharpGeneratorTests {
         ]);
         await Assert.That(g.Generate(optional)).Contains("?");
         await Assert.That(g.Generate(map)).Contains("Dictionary");
-        // Union has no dedicated WriteExpression arm — assert whatever Generate emits (ToString fallback).
-        var unionText = g.Generate(union);
-        await Assert.That(unionText).IsNotNull();
-        await Assert.That(unionText.Length).IsGreaterThan(0);
+        await Assert.That(() => g.Generate(union))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining(nameof(UnionTypeReference));
     }
 }

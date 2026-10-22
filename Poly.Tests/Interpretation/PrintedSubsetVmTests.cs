@@ -19,6 +19,7 @@ public class PrintedSubsetVmTests {
     public enum PrintForm {
         Live,
         Erased,
+        Rejected,
         Name,
         Declaration,
     }
@@ -26,7 +27,7 @@ public class PrintedSubsetVmTests {
     /// <summary>
     /// One entry per <see cref="LanguageSurfaceTests.Surface.CompileReject"/> kind — the only
     /// side the law can fail on, since an Executable kind is simulatable by definition — plus
-    /// samples that pin the Erased / Declaration / Live forms the audit leans on. Part 1
+    /// samples that pin the Erased / Rejected / Declaration / Live forms the audit leans on. Part 1
     /// §Enforcement asked for one entry per concrete node; part 2 §"What this removes from part 1"
     /// narrows it to this set.
     /// </summary>
@@ -38,7 +39,7 @@ public class PrintedSubsetVmTests {
         [typeof(PrimitiveTypeReference)] = PrintForm.Name,
         [typeof(TypeDefinitionReference)] = PrintForm.Name,
         [typeof(SuspendNode)] = PrintForm.Erased,
-        [typeof(StridedSetBits)] = PrintForm.Erased,
+        [typeof(StridedSetBits)] = PrintForm.Rejected,
         [typeof(MethodDefinitionNode)] = PrintForm.Declaration,
         [typeof(Await)] = PrintForm.Live,
     };
@@ -80,9 +81,14 @@ public class PrintedSubsetVmTests {
     public async Task ErasedKinds_PrintAsAChildOrAComment() {
         await Assert.That(CSharpLanguage.Write(new SuspendNode(new Constant(7L))))
             .IsEqualTo(CSharpLanguage.Write(new Constant(7L)));
-        await Assert.That(CSharpLanguage.Write(new StridedSetBits(
-            new Constant(0L), new Constant(0L), new Constant(1L), new Constant(63L))))
-            .Contains("/* StridedSetBits */");
+    }
+
+    [Test]
+    public async Task RejectedKinds_Throw() {
+        await Assert.That(() => CSharpLanguage.Write(new StridedSetBits(
+                new Constant(0L), new Constant(0L), new Constant(1L), new Constant(63L))))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining(nameof(StridedSetBits));
     }
 
     [Test]

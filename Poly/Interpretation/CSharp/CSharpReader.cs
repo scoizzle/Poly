@@ -943,6 +943,8 @@ public static class CSharpReader {
                     return new Constant(null);
                 case "ident":
                     return new Variable(Capture(match, "name"));
+                case "popcount":
+                    return new PopCount(FoldExpr(match.Children[0]));
                 case "this":
                     return new ThisReference();
                 case "base":

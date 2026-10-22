@@ -64,6 +64,68 @@ public class CSharpLanguageTests {
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(text))).IsEqualTo(text);
     }
 
+    // ── switch cases ─────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task SwitchCase_PrintsTerminatingBreak() {
+        var text = CSharpLanguage.Write(PlainSwitch());
+        await Assert.That(Occurrences(text, "break;")).IsEqualTo(3)
+            .Because("each case body and the default case need a terminator");
+        await Assert.That(text).Contains("case 1:");
+        await Assert.That(text).Contains("default:");
+    }
+
+    [Test]
+    public async Task Switch_WriteRead_RoundTrips() {
+        var original = PlainSwitch();
+        var printed = CSharpLanguage.Write(original);
+        await Assert.That(Occurrences(printed, "break;")).IsEqualTo(3)
+            .Because("the round trip must read back the terminating break the writer prints");
+        var reread = SingleSwitch(printed);
+        await Assert.That(Shape(reread)).IsEqualTo(Shape(original))
+            .Because("a trailing break is syntax, so it must not become a node or a block");
+        await Assert.That(Shape(reread)).DoesNotContain("BreakStatement");
+    }
+
+    [Test]
+    public async Task SwitchWithBreak_Reads_WithoutAddingANode() {
+        var reread = SingleSwitch(
+            "switch (x) { case 1: a(); break; default: b(); break; }");
+        await Assert.That(reread.Cases.Count).IsEqualTo(1);
+        await Assert.That(reread.Cases[0].Body).IsTypeOf<Invoke>();
+        await Assert.That(reread.DefaultCase).IsTypeOf<Invoke>();
+    }
+
+    [Test]
+    public async Task SwitchCase_EndingInReturn_GetsNoBreak() {
+        Node[] terminators = [
+            new Return(new Constant(2)),
+            new ThrowStatement(new Variable("error")),
+            new BreakStatement(),
+            new ContinueStatement(),
+            new GotoStatement("done"),
+        ];
+        foreach (var terminator in terminators) {
+            var text = CSharpLanguage.Write(
+                new SwitchStatement(new Variable("x"), [new SwitchCase(new Constant(1), terminator)], terminator));
+            await Assert.That(Occurrences(text, "break;")).IsEqualTo(terminator is BreakStatement ? 2 : 0)
+                .Because($"case body {terminator.GetType().Name} already terminates");
+        }
+    }
+
+    [Test]
+    public async Task PrintedSwitch_ParsesWithRoslyn() {
+        var switchText = CSharpLanguage.Write(new SwitchStatement(
+            new Variable("x"),
+            [
+                new SwitchCase(new Constant(1), ConsoleWrite(1)),
+                new SwitchCase(new Constant(2), ConsoleWrite(2)),
+            ],
+            ConsoleWrite(0)));
+        var text = $"class C {{ void M(int x) {{ {switchText} }} }}";
+        await Assert.That(CompilationErrors(text)).IsEmpty();
+    }
+
     // ── reader → Roslyn ──────────────────────────────────────────────────────
 
     [Test]
@@ -120,6 +182,71 @@ public class CSharpLanguageTests {
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
+
+    private static SwitchStatement PlainSwitch() => new(
+        new Variable("x"),
+        [
+            new SwitchCase(new Constant(1), new Invoke(new Variable("a"))),
+            new SwitchCase(new Constant(2), new Invoke(new Variable("b"))),
+        ],
+        new Invoke(new Variable("c")));
+
+    private static Invoke ConsoleWrite(object value) =>
+        new(new Member(new TypeReference("System.Console"), "WriteLine"), new Constant(value));
+
+    private static SwitchStatement SingleSwitch(string statementText) {
+        var unit = CSharpLanguage.Read($"class C {{ void M() {{ {statementText} }} }}");
+        var found = new List<SwitchStatement>();
+        Collect(unit);
+        return found.Count == 1
+            ? found[0]
+            : throw new InvalidOperationException($"Expected one switch, found {found.Count}.");
+
+        void Collect(Node node) {
+            if (node is SwitchStatement sw) {
+                found.Add(sw);
+                return;
+            }
+            foreach (var child in node.Children.OfType<Node>())
+                Collect(child);
+        }
+    }
+
+    private static string Shape(Node? node) {
+        if (node is null)
+            return "null";
+        var leaf = node switch {
+            Variable variable => variable.Name,
+            Constant constant => constant.ToString(),
+            _ => null,
+        };
+        if (leaf is not null)
+            return $"{node.GetType().Name}({leaf})";
+        var children = node.Children.OfType<Node>().Select(Shape);
+        return $"{node.GetType().Name}[{string.Join(",", children)}]";
+    }
+
+    private static int Occurrences(string text, string token) {
+        var count = 0;
+        for (var index = text.IndexOf(token, StringComparison.Ordinal); index >= 0;
+             index = text.IndexOf(token, index + token.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
+
+    private static IReadOnlyList<string> CompilationErrors(string text) {
+        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path));
+        var compilation = CSharpCompilation.Create(
+            "PrintedSwitch",
+            [CSharpSyntaxTree.ParseText(text)],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        return [.. compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .Select(d => $"{d.Id} {d.GetMessage()}")];
+    }
 
     private static IReadOnlyList<string> SyntaxErrors(string text) =>
         [.. CSharpSyntaxTree.ParseText(text)

@@ -1,0 +1,20 @@
+#nullable enable
+
+public class Router
+{
+    public long Route(long code)
+    {
+        switch (code)
+        {
+            case 1:
+                System.Console.WriteLine("one");
+                break;
+            case 2:
+                return 20L;
+            default:
+                System.Console.WriteLine("other");
+                break;
+        }
+        return 0L;
+    }
+}

@@ -97,7 +97,7 @@ Recommended and proceeding unless Scot objects: the provider surface moves off t
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-22 | agent | Copilot/VS Code | `SHA_PLACEHOLDER` | SHIP — the analyzer exposes only `Analyze`; one analysis owns its type table | RED first (below), GREEN after. `AstTypeRegistry` had to take over `ITypeDefinitionNodeProvider`, not just `ITypeDefinitionProvider`: returning the context's collection without it silently dropped the module declarations from `Interpreter.AnalysisRoot`, and 121 domain/MCP tests caught it. Full suite 4304/4304; build 0 warnings. |
+| 2026-10-22 | agent | Copilot/VS Code | `dceb4a58` | SHIP — the analyzer exposes only `Analyze`; one analysis owns its type table | RED first (below), GREEN after. `AstTypeRegistry` had to take over `ITypeDefinitionNodeProvider`, not just `ITypeDefinitionProvider`: returning the context's collection without it silently dropped the module declarations from `Interpreter.AnalysisRoot`, and 121 domain/MCP tests caught it. Full suite 4304/4304; build 0 warnings. |
 
 ### Evidence (2026-10-22)
 

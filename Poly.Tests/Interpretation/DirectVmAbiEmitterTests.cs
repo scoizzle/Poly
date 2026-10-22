@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Tests.Interpretation;
 
@@ -474,5 +475,38 @@ public class DirectVmAbiEmitterTests {
             )
         ], [x]);
         await Assert.That(ExecDirect(sw)).IsEqualTo(20);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // P2 — a void CLR invoke finishes its reserved slot
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>A CLR call that returns void still reserves a ring slot (the cursor
+    /// advances so the call is counted), so the slot must be written: the AST invoke
+    /// arm writes <c>0L</c> there. Slot 0 is the receiver, so the reserved slot is 1.</summary>
+    [Test, Timeout(10_000)]
+    public async Task VoidClrInvoke_AssignsItsReservedSlot(CancellationToken ct) {
+        var node = new Invoke(new Member(new New(TypeReference.To<List<long>>()), "Clear"));
+        var built = AbiEmitter.Build(node, Interpreter.Analyze(node), CompilationMode.NoDebug);
+        var scan = VmTree.Read(built.Expression);
+
+        await Assert.That(scan.RingIndexes).IsEquivalentTo([0, 1]);
+        await Assert.That(scan.AssignedRingIndexes).Contains(1);
+    }
+
+    /// <summary>Ring slots persist across the statements of a block, so a void call
+    /// that leaves its slot unwritten hands the next statement whatever the previous
+    /// one left there. Statement 1 leaves the result handle in slot 1 — the slot
+    /// statement 2's void call reserves — so the call reads as <c>0</c> only if the
+    /// void arm writes it.</summary>
+    [Test, Timeout(10_000)]
+    public async Task VoidClrInvoke_LeavesZero_ForTheNextStatement(CancellationToken ct) {
+        var node = new Block([
+            new Invoke(new Member(new Constant("abc"), "ToString")),
+            new Equal(
+                new Invoke(new Member(new New(TypeReference.To<List<long>>()), "Clear")),
+                new Constant(0L)),
+        ]);
+        await Assert.That(ExecDirect(node)).IsEqualTo(1L);
     }
 }

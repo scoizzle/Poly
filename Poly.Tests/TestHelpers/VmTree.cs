@@ -21,6 +21,7 @@ internal static class VmTree {
     internal sealed class Scan : ExpressionVisitor {
         private ParameterExpression? _slots;
         private readonly List<Expression> _slotIndexes = [];
+        private readonly List<int> _assignedRings = [];
         private readonly List<ParameterExpression> _declared = [];
         private readonly Dictionary<ParameterExpression, int> _occurrences =
             new(ReferenceEqualityComparer.Instance);
@@ -46,6 +47,10 @@ internal static class VmTree {
         }
 
         protected override Expression VisitBinary(BinaryExpression node) {
+            if (node.NodeType == ExpressionType.Assign
+                && node.Left is ParameterExpression assigned
+                && RingLocal.Match(assigned.Name ?? string.Empty) is { Success: true } ring)
+                _assignedRings.Add(int.Parse(ring.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
             if (node.NodeType == ExpressionType.ArrayIndex && node.Left == _slots)
                 _slotIndexes.Add(node.Right);
             return base.VisitBinary(node);
@@ -66,6 +71,11 @@ internal static class VmTree {
                 .Where(m => m.Success)
                 .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
                 .ToList();
+
+        /// <summary>Indexes of the <c>_rN</c> ring locals the body assigns. A slot the
+        /// emitter reserves without an assignment holds whatever a previous statement
+        /// left there, so a read of it is only defined once this covers it.</summary>
+        public IReadOnlyList<int> AssignedRingIndexes => _assignedRings;
 
         /// <summary>A <c>_slots[k]</c> access with a bare constant index: absolute
         /// frame addressing. Frame slots are addressed as <c>_slots[_fp + k]</c>, and

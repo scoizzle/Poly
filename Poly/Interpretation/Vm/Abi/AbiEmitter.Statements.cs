@@ -353,6 +353,9 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitSuspendNode(SuspendNode sn, Context ctx) {
+        if (!ctx.IsRootBody)
+            throw new UnresumableBodyRejection(
+                $"VM compile rejected: SuspendNode '{sn}' is only executable in the compilation-unit body; a compiled function or lambda body emits no resume dispatch.");
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, sn);
         var resumeLabel = ctx.RegisterOrGetResumeLabel(step);

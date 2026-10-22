@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;
 
@@ -29,6 +30,47 @@ public class SuspendResumeVmTests {
         using var resumed = exec.Resume();
         await Assert.That(resumed.IsSuspended).IsFalse();
         await Assert.That(resumed.Result.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task SuspendInFunctionBody_IsACompileRejection() {
+        var typeDef = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Tick",
+                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    Body: new Block([
+                        new SuspendNode(new Constant(0L), "mid"),
+                        new Constant(7L)
+                    ]))
+            ]);
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        analyzer.Analyze(AnalysisContext.CreateDefault(), typeDef);
+        var invoke = new Invoke(
+            new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Tick"));
+
+        await Assert.That(() => Interpreter.Compile(invoke, analyzer))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("SuspendNode");
+    }
+
+    [Test]
+    public async Task SuspendInLambda_IsACompileRejection() {
+        var declaration = new Variable("fn");
+        var x = new Parameter("x", TypeReference.To<long>());
+        var node = new Block([
+            new Assignment(declaration, new Lambda([x], new Block([
+                new SuspendNode(new Constant(0L), "mid"),
+                x
+            ]))),
+            new Invoke(new Variable("fn"), new Constant(6L))
+        ], [declaration]);
+
+        await Assert.That(() => Interpreter.Compile(node))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("SuspendNode");
     }
 
     [Test]

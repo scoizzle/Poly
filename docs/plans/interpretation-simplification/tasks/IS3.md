@@ -42,7 +42,7 @@ So every arm is a fresh judgement — "does this need a value form?" — answere
 
 - `CompileValue` is gone; every call site reads the ring slot.
 - A structural test asserts the rule over the corpus: after a `CompileNode` arm, `RingDepth - 1` has been written (via `VmTree.Scan`). It fails when an arm forgets.
-- Benchmark: `Min`/`Median` for the four ISB programs, recorded next to the ISB baseline. **Tolerance: no median regression above 2% on any program.** A higher ring high-water is acceptable only if it is recorded with the measured cost.
+- Benchmark: `Min`/`Median` for the four ISB programs, recorded next to the ISB baseline. Run with `--job medium` (ISB proved `--job short` varies up to 2.3x on one tree). **Tolerance: no median regression above 2% on any program.** A higher ring high-water is acceptable only if it is recorded with the measured cost.
 - `docs/interpretation/vm-abi-reference.md` matches the emitted shape.
 - Full suite green.
 

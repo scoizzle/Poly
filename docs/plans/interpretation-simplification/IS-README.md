@@ -43,7 +43,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [ ] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
 | [ ] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
 | [ ] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b | A | [tasks/IS2c.md](tasks/IS2c.md) |
-| [ ] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
+| [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [ ] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |
 | [ ] | IS3 | `CompileValue` and its 7 twins; the void special case in #260 | IS2c, ISB | C | [tasks/IS3.md](tasks/IS3.md) |
 | [ ] | IS5 | four result normalisations, three scalar predicates, hand-rolled frame save/restore | IS3 | C | [tasks/IS5.md](tasks/IS5.md) |
@@ -72,7 +72,7 @@ Run on the last slice and on any slice claiming "perf-neutral":
 
 1. `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` — 0 warnings.
 2. `dotnet run --project Poly.Tests/Poly.Tests.csproj` — full suite green; record the pass count in the card's Log.
-3. IS3 and IS5 only: `Min`/`Median` (the audit's `exec_min`/`exec_med`) for nqueens, sieve, mandelbrot, collatz against the baseline recorded in [tasks/ISB.md](tasks/ISB.md); record both numbers.
+3. IS3 and IS5 only: `Min`/`Median` for the four `ProgramBenchmarks` against the baseline in [tasks/ISB.md](tasks/ISB.md), using **`--job medium`**. `--job short` is not gateable: two short runs of the same tree differed by up to 2.3x, which ISB measured and recorded. Record the exact command and both numbers.
 4. [`pr1-uncommitted-review-gate.md`](../../agent/pr1-uncommitted-review-gate.md) — fail closed; 🔴 and 🟠 block.
 
 Extinction checks at the end of the program — each must return no hits outside this plan's history:

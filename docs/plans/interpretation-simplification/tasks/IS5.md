@@ -51,7 +51,7 @@ This is the highest-risk slice in the program and the last one deliberately: it 
 - One result function; no path normalises a call result itself.
 - One scalar predicate; the "unknown ⇒ silently not scalar" path is gone.
 - `VmCall.Invoke` is the only frame protocol.
-- The ISB benchmark is recorded: **no median regression above 2% on any of the four programs**; any regression inside tolerance is stated with its number.
+- The ISB benchmark is recorded: **no median regression above 2% on any of the four programs, measured with `--job medium`**; any regression inside tolerance is stated with its number.
 - Full suite green.
 
 ## SHIP if / NOT SHIP if

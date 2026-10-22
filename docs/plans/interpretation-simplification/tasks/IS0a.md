@@ -70,3 +70,55 @@ Recommended and proceeding unless Scot objects: `PopCount` gets a grammar patter
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `696f91a1` | SHIP — both defaults deleted; `NewArray`/`PopCount` kind-stable; `StridedSetBits` rejected | Nine kinds now reject (inventory below); goldens unchanged; full suite 4289/4289; build 0 warnings |
+
+### Evidence (2026-10-22)
+
+RED — `dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/CSharpWriterFailClosedTests/*'`:
+
+```
+failed UnknownKind_Throws_InsteadOfPrintingItsTypeName (24ms)
+  AssertionException: Expected InvalidOperationException but got AssertionException: Expected InvalidOperationException but no exception was thrown
+failed KindsWithoutWriterArm_Throw_InsteadOfPrintingTheirToString (24ms)
+  AssertionException: Expected InvalidOperationException but got AssertionException: Expected InvalidOperationException but no exception was thrown
+failed StridedSetBits_IsRejected (0ms)
+  AssertionException: Expected InvalidOperationException but got AssertionException: Expected InvalidOperationException but no exception was thrown
+failed NewArray_WriteRead_IsKindStable (29ms)
+  AssertionException: Expected to be equal to "new System.Int64[4L];"
+  but received "(System.Int64[])(new System.Int64[4L]);"
+failed PopCount_WriteRead_IsKindStable (113ms)
+  AssertionException: Expected to not be null
+  but received null
+Test run summary: Failed!  total: 5 / failed: 5 / succeeded: 0
+```
+
+(`PopCount` printed `System.Numerics.BitOperations.PopCount((ulong)7L)` before the change too, but the reader folded it to `Invoke`, so `Find<PopCount>` was null.)
+
+GREEN — same filter: `total: 5 / failed: 0 / succeeded: 5`.
+Full suite `dotnet run --project Poly.Tests/Poly.Tests.csproj`: `total: 4289, failed: 0, succeeded: 4289, skipped: 0`.
+`dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`: `0 Warning(s), 0 Error(s)`.
+Goldens: unchanged — no file under `Poly.Tests/DomainModeling/Compile/EmitGolden/` was modified, and both golden suites (read/round-trip and emit) pass.
+
+### Inventory: every kind that reached a writer default
+
+Reachable through `Write(Node)` → `WriteStatement` → `Expr` → `default`. An arm was added only for `NewArray` and `PopCount`; the rest reject.
+
+| Kind | Before | After | Why it does not get an arm |
+|---|---|---|---|
+| `ParameterReference` | printed `ParameterReference` | rejects | It is a `Member.Value` marker that `MemberAccessText` prints as the member's identifier; there is no standalone form. |
+| `AttributeNode` | printed `AttributeNode { … }` | rejects | Printed by `AttributeText` in attribute position; not a statement or expression. |
+| `PropertyGetterDefinitionNode` | printed `get;` | rejects | Printed by `PropertyText`; an accessor is not a standalone statement. |
+| `PropertySetterDefinitionNode` | printed `set` | rejects | Same. |
+| `PropertyInitializerDefinitionNode` | printed `= …` | rejects | Same. |
+| `UnionTypeReference` | printed `Int32 \| String` | rejects | Analysis collapses a union before print; a mixed option set has no C# spelling. |
+| `ResolvedTypeReference` | printed `ResolvedTypeReference { … }` | rejects | A type position only (`TypeText`); no expression or statement form. |
+| `CompilationUnitNode` | printed `CompilationUnitNode { … }` | rejects | Has the dedicated `Write(CompilationUnitNode)` overload; not a statement. |
+| `StridedSetBits` | `/* StridedSetBits */` | rejects | No faithful C# spelling; the old form was a comment that deleted a VM-executed operation. |
+
+### Deviations from the card
+
+1. **`Render` → `RenderFills`.** The card's `Render("expr-primary", "new-array", …)` cannot work: the pattern's brackets are named `open`/`close` `Value` positions, so `Render` throws `No print fill for 'open'`. The arms use `RenderFills(…, Names(("open", "["), ("close", "]")), …)`.
+2. **`NewArray` loses the redundant `(T[])` cast.** The `new-array` pattern is `new T[n]`, which is already `T[]`; the cast was the reason the old text re-read as `TypeCast(New)`. Printed length keeps the writer's constant spelling, so a literal length prints `4L`.
+3. **`PrintedSubsetVmTests.cs` was edited, and it is not a named lane-A file.** The lane table's `Poly.Tests/Interpretation/*Vm*` glob puts it in lane C, but it is the print-form audit *of this writer* and it asserted the exact defect #256 removes (`StridedSetBits` prints `/* StridedSetBits */`). Left alone, the suite cannot be green. The edit is four lines: a `Rejected` print form, `StridedSetBits` mapped to it, and its comment assertion replaced by a rejection assertion. Revert only with a replacement audit for the rejected form.
+4. **`CSharpGeneratorTests` two facts** pinned the retired fallbacks: `StridedSetBits` printing the comment and `UnionTypeReference` printing its `ToString`. Both now assert the rejection; `Generate` for `PopCount` pins the printed text exactly.
+

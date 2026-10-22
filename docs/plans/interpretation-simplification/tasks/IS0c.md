@@ -1,6 +1,6 @@
 # TASK IS0c - `AnyChild` means descendants, with stated boundaries
 
-Status: planned. Branch `slice/IS0c`. Lane B (`analysis`). Issue #258.
+Status: implemented 2026-10-22 (PR pending). Branch `slice/IS0c`. Lane B (`analysis`). Issue #258.
 Plan: [IS-README](../IS-README.md).
 
 ## Why
@@ -69,3 +69,4 @@ Recommended and proceeding unless Scot objects: lambdas and type declarations ar
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `141cac77` | Implemented; RED → GREEN | RED: `dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/ControlFlowAnalysisTests/*'` → 28 total, 3 failed — `NestedThrow_InsideIf_KeepsCatchReachable` (CF0010 present), `DeeperNestedThrow_IsFound` (CF0010 present), `LoopConditionPurity_SeesNestedMutation` (`IsInfiniteLoop` true); `--treenode-filter '/*/*/AnyChildTests/*'` → 6 total, 1 failed — `AnyChild_DeepDescendant_ReturnsTrue`. GREEN: same filters 28/28 and 6/6; full suite `dotnet run --project Poly.Tests/Poly.Tests.csproj` → **4293 passed, 0 failed**; `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` → 0 warnings. One descendant helper (`AnyDescendant`), private shadow deleted; `Lambda` and `TypeDefinitionNode` barriers asserted in `AnyChildTests`. |

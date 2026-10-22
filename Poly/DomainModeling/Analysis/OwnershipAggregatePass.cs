@@ -20,25 +20,16 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = BuildAggregate(domain, context, topology);
         context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate));
-
-        // ── Diagnostics (DMAGG001) ─────────────────────────────
-        var entities = domain.Types.OfType<Entity>().ToList();
-        foreach (var e in entities) {
-            var agg = aggregate.Entities.FirstOrDefault(a => a.Name == e.Name);
-            if (agg is null) continue;
-            if (!agg.IsRoot && agg.AggregateParentName is null && !OnlyOutboundSingular(e, context, domain)) {
-                context.ReportWarning(e,
-                    $"Entity '{e.Name}' is a non-root entity with no aggregate parent. " +
-                    "It may be orphaned — verify the relationship hierarchy or add a parent relationship.",
-                    DomainModelDiagnosticCodes.AggregateOrphan);
-            }
-        }
     }
 
     /// <summary>
     /// Builds <see cref="AggregateModel"/> — the cross-entity ownership hierarchy.
     /// Consumes <see cref="EntityStructureMetadata"/> for IsRoot detection and
     /// <see cref="EffectTopology"/> for create-in based parent prioritization.
+    ///
+    /// Invariant: a parentless entity is a root. An entity is never a non-root without a
+    /// parent (that state has no key and no HTTP endpoints), and following parents always
+    /// terminates at a root.
     /// </summary>
     internal static AggregateModel BuildAggregate(Domain domain, AnalysisContext? context, EffectTopology? topology = null) {
         var entities = domain.Types.OfType<Entity>().ToList();
@@ -68,21 +59,22 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
                 resolved[name] = new AggregateEntity(name, isRoot: true);
         }
 
-        foreach (var (name, isRoot) in drafts) {
-            if (isRoot) continue;
-            resolved[name] = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
-        }
-
-        // A grandchild declared before its non-root parent is unresolved on the
-        // first pass. Re-resolve until parent names settle. Stop at the entity
-        // count so a cycle cannot spin.
+        // Resolve every non-root; a pass that resolves with no parent IS a root, promoted
+        // immediately so a parentless owner (Member, which only references Plan) is
+        // visible as a root to the children that name it — otherwise they skip it and end
+        // up parentless too. Plain singulars never create parents here, so the only shapes
+        // that can still cycle are mutual collections, which DMDEP001 reports.
         for (var pass = 0; pass < drafts.Count; pass++) {
             var changed = false;
             foreach (var (name, isRoot) in drafts) {
                 if (isRoot) continue;
                 var next = ResolveChild(name, resolved, incomingRels, relationships, entityLookup, topology);
-                var prev = resolved[name];
-                if (string.Equals(prev.AggregateParentName, next.AggregateParentName, StringComparison.Ordinal)
+                if (next.AggregateParentName is null)
+                    next = new AggregateEntity(name, isRoot: true);
+                var prev = resolved.GetValueOrDefault(name);
+                if (prev is not null
+                    && prev.IsRoot == next.IsRoot
+                    && string.Equals(prev.AggregateParentName, next.AggregateParentName, StringComparison.Ordinal)
                     && string.Equals(prev.ParentRelationshipName, next.ParentRelationshipName, StringComparison.Ordinal))
                     continue;
                 resolved[name] = next;
@@ -106,10 +98,14 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         if (!incomingRels.TryGetValue(name, out var incoming))
             return new AggregateEntity(name, isRoot: false);
 
-        var createInRelNames = topo?.CreateInRelations
+        // Keyed by creator AND relationship name: two owners may declare the same name
+        // (`Member.bookings` and `Session.bookings`), and only the creator that actually
+        // runs `create in` wrote the edge — matching on the name alone credits whichever
+        // owner is declared first.
+        var createInEdges = topo?.CreateInRelations
             .Where(c => string.Equals(c.CreatedEntity, name, StringComparison.Ordinal))
-            .Select(c => c.RelationshipName)
-            .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>();
+            .Select(c => (c.CreatorEntity, c.RelationshipName))
+            .ToHashSet() ?? [];
 
         string? chosenParentName = null;
         string? chosenRelName = null;
@@ -129,7 +125,7 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
                 string.Equals(r.Source.TypeName, name, StringComparison.Ordinal) &&
                 string.Equals(r.Target.TypeName, parentEntity.Name, StringComparison.Ordinal) &&
                 r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
-            if (createInRelNames.Contains(rel.Name)) {
+            if (createInEdges.Contains((rel.Source.TypeName, rel.Name))) {
                 chosenParentName = parentAgg.Name;
                 chosenRelName = rel.Name;
                 chosenBackRef = backRef;
@@ -141,9 +137,20 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         }
 
         if (chosenParentName is null && incoming.Count > 0) {
+            // The source of an inbound singular points at this entity (`Booking.member`,
+            // `Schedule.doctor`), which reads as ownership for the classic 1:1 pair. Two
+            // guards stop it from inventing a cycle:
+            //  - a peer back-reference is the same edge declared twice (this entity
+            //    already owns the source through a collection), so it is not a parent
+            //    (Member.bookings + Booking.member made Member ⇄ Booking);
+            //  - a source that already resolves to this entity as its parent would close
+            //    a two-node loop (Doctor.schedule + Schedule.doctor), so it is skipped.
             var singular = incoming.FirstOrDefault(r =>
-                r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany));
-            if (singular is not null && entityLookup.ContainsKey(singular.Source.TypeName)) {
+                r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+                && entityLookup.ContainsKey(r.Source.TypeName)
+                && !OwnsViaCollection(name, r.Source.TypeName, relationships)
+                && !ResolvesTo(resolved, r.Source.TypeName, name));
+            if (singular is not null) {
                 chosenParentName = singular.Source.TypeName;
                 chosenRelName = singular.Name;
                 chosenBackRef = null;
@@ -167,22 +174,20 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Outbound singular navigations and no inbound collection are one owned
-    /// chain (Account → Subscription → Plan). That shape is not an orphan.
+    /// True when <paramref name="owner"/> declares a collection navigation to
+    /// <paramref name="target"/> — the target is owned through that collection, so a
+    /// singular nav in the other direction is the same edge, not a parent.
     /// </summary>
-    private static bool OnlyOutboundSingular(Entity entity, AnalysisContext context, Domain domain) {
-        var relationships = context.GetAllRelationships(domain);
-        var outbound = relationships.Where(r =>
-            string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal)).ToList();
-        if (outbound.Count == 0)
-            return false;
-        if (outbound.Any(r =>
-                r.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany))
-            return false;
-        return !relationships.Any(r =>
-            string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)
+    private static bool OwnsViaCollection(string owner, string target, List<Relationship> relationships) =>
+        relationships.Any(r =>
+            string.Equals(r.Source.TypeName, owner, StringComparison.Ordinal)
+            && string.Equals(r.Target.TypeName, target, StringComparison.Ordinal)
             && r.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany);
-    }
+
+    /// <summary>True when <paramref name="source"/> already resolves to <paramref name="owner"/> as its parent.</summary>
+    private static bool ResolvesTo(Dictionary<string, AggregateEntity> resolved, string source, string owner) =>
+        resolved.GetValueOrDefault(source)?.AggregateParentName is { } parent
+        && string.Equals(parent, owner, StringComparison.Ordinal);
 
     private static bool IsRootEntity(Entity entity, AnalysisContext? context,
         Dictionary<string, Entity> entityLookup, List<Relationship> relationships) {

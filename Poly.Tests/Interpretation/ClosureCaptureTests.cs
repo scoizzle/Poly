@@ -66,6 +66,38 @@ public class ClosureCaptureTests {
     }
 
     [Test]
+    public async Task Stored_DoubleCapture_AssignScalarInsideLambda_ConvertsOnStore() {
+        // An int written to a captured double is an implicit conversion. The capture
+        // store performs the same slot coercion as a plain store, at emit.
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1.5)),
+            new Assignment(fn, new Lambda([], new Assignment(captured, new Constant(2L)))),
+            new Invoke(fn),
+            captured
+        ], [captured, fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.0);
+    }
+
+    [Test]
+    public async Task Stored_DoubleCapture_AssignDoubleInsideLambda_SeesWrittenValue() {
+        // A capacity check on the capture write path: a double written to a captured
+        // double from inside the closure must store IEEE bits, exactly as it reads back.
+        var captured = new Variable("captured");
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(captured, new Constant(1.5)),
+            new Assignment(fn, new Lambda([], new Assignment(captured, new Constant(2.5)))),
+            new Invoke(fn),
+            captured
+        ], [captured, fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(2.5);
+    }
+
+    [Test]
     public async Task Stored_DecimalCapture_MutateAfterStore_SeesLatest() {
         var captured = new Variable("captured");
         var fn = new Variable("fn");

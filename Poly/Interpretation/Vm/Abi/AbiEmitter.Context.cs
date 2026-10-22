@@ -1,84 +1,49 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
 using static System.Linq.Expressions.Expression;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Interpretation.Vm.Abi;
 
-public static partial class DirectVmAbiEmitter {
+public static partial class AbiEmitter {
 
-    private static bool IsDoubleValue(AbiCtx ctx, Node node) {
-        if (ctx.Analysis is null) return false;
-        var meta = ctx.Analysis.GetMetadata<ValueRepresentationMetadata>(node);
-        if (meta?.ClrType is null) return false;
-        return meta.ClrType == typeof(double) || meta.ClrType == typeof(float);
-    }
-
-    public sealed class AbiCtx {
+    public sealed class Context {
         private readonly ParameterExpression _stateParam;
         private readonly List<ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
 
-        public AbiCtx() : this(8) { }
-
-        public AbiCtx(int registerCount) {
-            _registerCount = Math.Clamp(registerCount, 8, MaxRegisterCount);
-            _regUsed = new bool[_registerCount];
+        public Context() {
             _stateParam = Parameter(typeof(VmState), "state");
-            ProgramCounter = Variable(typeof(int), "_pc");
-            _locals.Add(ProgramCounter);
+            CurrentAstNodeExpr = Property(_stateParam, nameof(VmState.CurrentAstNode));
             SlotsLocal = Variable(typeof(long[]), "_slots");
             _locals.Add(SlotsLocal);
-            HeapLocal = Variable(typeof(Heap), "_heap");
+            HeapLocal = Variable(typeof(VmManagedObjectHeap), "_heap");
             _locals.Add(HeapLocal);
             FramePosLocal = Variable(typeof(int), "_fp");
             _locals.Add(FramePosLocal);
             InstanceHandle = Variable(typeof(long), "_this");
             _locals.Add(InstanceHandle);
-            SavedSp = Variable(typeof(int), "_savedSp");
-            _locals.Add(SavedSp);
-            ResultLocal = Variable(typeof(long), "_result");
-            _locals.Add(ResultLocal);
-            _regVars = new List<ParameterExpression>(_registerCount);
-            for (int i = 0; i < _registerCount; i++) {
-                var r = Variable(typeof(long), $"_reg{i}");
-                _regVars.Add(r);
-                _locals.Add(r);
-            }
             EntryLabel = Label("_entry");
             ExitLabel = Label("_exit");
         }
 
         public ParameterExpression State => _stateParam;
-        public ParameterExpression ProgramCounter { get; }
         public ParameterExpression SlotsLocal { get; }
         public ParameterExpression HeapLocal { get; }
         public ParameterExpression FramePosLocal { get; }
         public ParameterExpression InstanceHandle { get; }
-        public ParameterExpression SavedSp { get; }
-        public ParameterExpression ResultLocal { get; }
         public LabelTarget EntryLabel { get; }
         public LabelTarget ExitLabel { get; }
-        public int LabelCounter { get; set; }
         public Expression? DebugHookProp { get; set; }
-        public Expression CurrentAstNodeExpr =>
-            Property(_stateParam, nameof(VmState.CurrentAstNode));
-        public int CurrentLocalCount {
-            get {
-                int count = 0;
-                foreach (var scope in _scopeStack)
-                    count += scope.Count;
-                return count;
-            }
-        }
-
-        /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this,
-        /// not live <see cref="CurrentLocalCount"/>, because sequential inner blocks
-        /// reuse neither slot 0 nor a dense 0..live-1 prefix.</summary>
+        public Expression CurrentAstNodeExpr { get; }
+        /// <summary>Monotonic frame slot high-water. Debug-hook spans must cover this
+        /// rather than a live count, because sequential inner blocks reuse neither
+        /// slot 0 nor a dense 0..live-1 prefix.</summary>
         public int FrameSlotHighWater => _nextFrameSlot;
         public int StepCounter { get; set; }
 
@@ -109,30 +74,19 @@ public static partial class DirectVmAbiEmitter {
 
         public Expression StatePcFlush => Property(_stateParam, "ProgramCounter");
         public CompilationMode Mode { get; set; }
-        public int RegisterCount => _registerCount;
         public Expression? FunctionTableExpr { get; set; }
         public bool IsCompiledFunctionBody { get; set; }
         public AnalysisResult? Analysis { get; set; }
+        /// <summary>The declared <c>Task</c> / <c>Task&lt;T&gt;</c> return of an <c>IsAsync</c>
+        /// function body being compiled; <see cref="EmitReturn"/> wraps every return in a
+        /// completed task while it is set. Null for lambdas and non-async bodies.</summary>
+        public Type? AsyncReturn { get; set; }
         public IReadOnlyList<ParameterExpression> Locals => _locals;
-
-        internal const int SmallArrayThreshold = 16;
-        internal const int SmallArraySlotBase = 128;
-        private int _nextSmallArraySlot = SmallArraySlotBase;
-
-        public int AllocateSmallArray() {
-            int baseOffset = _nextSmallArraySlot;
-            _nextSmallArraySlot += SmallArrayThreshold;
-            return baseOffset;
-        }
 
         public Expression SlotsInitExpression =>
             Property(Property(_stateParam, StateStackProperty), ValueStackRawSlotsProperty);
         public Expression HeapInitExpression =>
             Property(_stateParam, "Heap");
-        public Expression Registers =>
-            Property(_stateParam, StateRegistersProperty);
-        public Expression HeapRawSlots =>
-            Property(HeapLocal, StateHeapRawSlotsProperty);
         public Expression ClosureHandle =>
             Property(_stateParam, StateClosureHandleProperty);
         public Expression SlotsStackPointer =>
@@ -141,6 +95,76 @@ public static partial class DirectVmAbiEmitter {
         public int RingDepth { get; set; }
         private int _maxDepth;
         public int MaxRingDepth => _maxDepth;
+
+        /// <summary>Open a scoped ring region. Each <see cref="RingRegion.Add"/>
+        /// folds its result into the next contiguous slot, so callers never
+        /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
+        internal RingRegion OpenRing() => new(this);
+
+        private readonly Dictionary<Node, (ValueRepresentationKind Kind, Type? ClrType)> _representation = new();
+
+        /// <summary>The slot kind and CLR type of a node's effective runtime action.
+        /// Analysis replacements carry the real action's type, so this is a pure
+        /// read of the resolved type, memoized per emit.</summary>
+        public (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(Node node) {
+            if (_representation.TryGetValue(node, out var cached))
+                return cached;
+            var classified = ValueRepresentationClassifier.Classify(Analysis, node);
+            _representation[node] = classified;
+            return classified;
+        }
+
+        public ValueRepresentationKind KindOf(Node node) => RepresentationOf(node).Kind;
+
+        public Type? ClrTypeOf(Node node) => RepresentationOf(node).ClrType;
+
+        /// <summary>Contiguous ring slots for a sequence of compiled operands.
+        /// <see cref="Add"/> compacts each result to <c>Base + count</c>; any
+        /// slots the caller allocates afterwards extend the depth normally.</summary>
+        internal sealed class RingRegion {
+            private readonly Context _ctx;
+            private readonly int _base;
+            private readonly List<Expression> _steps = new();
+            private int _count;
+
+            internal RingRegion(Context ctx) {
+                _ctx = ctx;
+                _base = ctx.RingDepth;
+            }
+
+            /// <summary>The first slot of the region.</summary>
+            public int Base => _base;
+
+            /// <summary>Number of live values accumulated.</summary>
+            public int Count => _count;
+
+            /// <summary>The expressions that produce and fold the accumulated values.</summary>
+            public IReadOnlyList<Expression> Steps => _steps;
+
+            /// <summary>Compile-time slot holding the value added at <paramref name="index"/>.</summary>
+            public int Slot(int index) => _base + index;
+
+            /// <summary>Add a compiled value: fold its result into the next contiguous
+            /// slot and leave <see cref="RingDepth"/> just past it. Returns its slot.</summary>
+            public int Add(Expression compiled) {
+                int result = _ctx.RingDepth - 1;
+                int target = _base + _count;
+                _steps.Add(compiled);
+                if (result != target)
+                    _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingVar(result)));
+                _count++;
+                _ctx.RingDepth = target + 1;
+                return target;
+            }
+
+            /// <summary>Run the accumulated steps, then <paramref name="body"/>.</summary>
+            public Expression Then(Expression body) {
+                var steps = new List<Expression>(_steps.Count + 1);
+                steps.AddRange(_steps);
+                steps.Add(body);
+                return Block(steps);
+            }
+        }
 
         public ParameterExpression RingVar(int absoluteIndex) {
             while (_ringVars.Count <= absoluteIndex) {
@@ -160,28 +184,13 @@ public static partial class DirectVmAbiEmitter {
             return slot;
         }
 
-        private Dictionary<Variable, int>? _frameLocalVars;
-
-        public void TrackFrameLocalArray(Variable v, int baseOffset) {
-            _frameLocalVars ??= new(ReferenceEqualityComparer.Instance);
-            _frameLocalVars[v] = baseOffset;
-        }
-
-        public void UntrackFrameLocalArray(Variable v) {
-            _frameLocalVars?.Remove(v);
-        }
-
-        public int? TryGetFrameLocalBase(Variable v) =>
-            _frameLocalVars is { } dict && dict.TryGetValue(v, out int baseOffset) ? baseOffset : null;
-
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
         private readonly Dictionary<Variable, int> _variableRegisters = new(ReferenceEqualityComparer.Instance);
         private readonly Stack<List<Variable>> _scopeVars = new();
         private int _nextFrameSlot;
         private const int MaxRegisterCount = 32;
-        private int _registerCount;
-        private readonly List<ParameterExpression> _regVars;
-        private bool[] _regUsed;
+        private readonly List<ParameterExpression> _regVars = new();
+        private readonly List<bool> _regUsed = new();
 
         public void PushScope() {
             _scopeStack.Push(new Dictionary<Variable, int>(ReferenceEqualityComparer.Instance));
@@ -216,21 +225,6 @@ public static partial class DirectVmAbiEmitter {
             return stores;
         }
 
-        public IReadOnlyList<Expression> EmitScopeLoads() {
-            if (_scopeVars.Count == 0 || _scopeStack.Count == 0) return Array.Empty<Expression>();
-            var vars = _scopeVars.Peek();
-            var scope = _scopeStack.Peek();
-            var loads = new List<Expression>(vars.Count);
-            foreach (var v in vars) {
-                if (_variableRegisters.TryGetValue(v, out int regIdx) && scope.TryGetValue(v, out int slot)) {
-                    loads.Add(Assign(
-                        _regVars[regIdx],
-                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot)))));
-                }
-            }
-            return loads;
-        }
-
         /// <summary>
         /// Keep locals from colliding with root SetArgs slots (slot 0 = this,
         /// slots 1..N = declared root parameters). EmitScopeStores writes
@@ -247,41 +241,32 @@ public static partial class DirectVmAbiEmitter {
                 throw new InvalidOperationException("No active scope");
             int slot = _nextFrameSlot++;
             _scopeStack.Peek()[v] = slot;
+
             int regIdx = -1;
-            while (regIdx < 0) {
-                for (int i = 0; i < _registerCount; i++) {
-                    if (!_regUsed[i]) { regIdx = i; break; }
-                }
-                if (regIdx < 0 && _registerCount < MaxRegisterCount) {
-                    GrowRegisterFile();
-                }
-                else {
-                    break;
-                }
+            for (int i = 0; i < _regUsed.Count; i++) {
+                if (!_regUsed[i]) { regIdx = i; break; }
             }
-            if (regIdx < 0) {
-                _scopeVars.Peek().Add(v);
-                _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
-                return;
-            }
-            _regUsed[regIdx] = true;
-            _variableRegisters[v] = regIdx;
+            if (regIdx < 0 && _regVars.Count < MaxRegisterCount)
+                regIdx = AddRegister();
+
             _scopeVars.Peek().Add(v);
             _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
+            if (regIdx < 0)
+                return;
+
+            _regUsed[regIdx] = true;
+            _variableRegisters[v] = regIdx;
         }
 
-        private void GrowRegisterFile() {
-            int old = _registerCount;
-            int grown = Math.Min(old + 8, MaxRegisterCount);
-            var newRegUsed = new bool[grown];
-            Array.Copy(_regUsed, newRegUsed, old);
-            _regUsed = newRegUsed;
-            for (int i = old; i < grown; i++) {
-                var r = Variable(typeof(long), $"_reg{i}");
-                _regVars.Add(r);
-                _locals.Add(r);
-            }
-            _registerCount = grown;
+        /// <summary>Create the next register local on first use. The delegate then
+        /// carries only the high-water of simultaneous register-backed variables.</summary>
+        private int AddRegister() {
+            int index = _regVars.Count;
+            var r = Variable(typeof(long), $"_reg{index}");
+            _regVars.Add(r);
+            _regUsed.Add(false);
+            _locals.Add(r);
+            return index;
         }
 
         private readonly List<VariableLayout> _variableLayouts = new();
@@ -291,10 +276,17 @@ public static partial class DirectVmAbiEmitter {
             _variableRegisters.ContainsKey(v) || TryGetVariable(v, out _);
 
         public bool TryGetVariable(Variable v, out int slot) {
+            // Identity first: a Variable node is its binding, so a node that is a
+            // declaration resolves to that declaration even when an inner scope
+            // shadows the name.
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))
                     return true;
-                // Name fallback: catch VariableName is a string; body refs are new Variable(name).
+            }
+            // Name fallback from the innermost scope outward: catch VariableName is
+            // a string and body refs are new Variable(name), and a shadowing
+            // declaration must beat an outer binding of the same name.
+            foreach (var scope in _scopeStack) {
                 foreach (var (key, s) in scope) {
                     if (key.Name == v.Name) {
                         slot = s;
@@ -307,12 +299,35 @@ public static partial class DirectVmAbiEmitter {
         }
 
         private bool TryGetRegister(Variable v, out int regIdx) {
+            // Identity first: a Variable node is its binding, so a node that is a
+            // declaration resolves to that declaration even when an inner scope
+            // shadows the name.
             if (_variableRegisters.TryGetValue(v, out regIdx))
                 return true;
-            foreach (var (key, idx) in _variableRegisters) {
-                if (key.Name == v.Name) {
-                    regIdx = idx;
-                    return true;
+            // If v is itself a declaration in some scope, the register fallback must not
+            // guess by name: a same-named inner binding could then shadow it here while
+            // the scope-aware TryGetVariable still resolves v by identity (reads and
+            // writes would disagree). Report not-found so the caller uses that path.
+            foreach (var scope in _scopeStack) {
+                if (scope.ContainsKey(v)) {
+                    regIdx = -1;
+                    return false;
+                }
+            }
+            // Name fallback from the innermost scope outward. A flat name scan over
+            // _variableRegisters is unordered and would let an outer shadowed binding
+            // win; the innermost declaration of the name is the correct binding.
+            foreach (var vars in _scopeVars) {
+                foreach (var key in vars) {
+                    if (!string.Equals(key.Name, v.Name, StringComparison.Ordinal))
+                        continue;
+                    // The innermost binding with this name decides. If it is
+                    // slot-backed (no free register), report not-found so the caller
+                    // falls through to the scope-aware TryGetVariable.
+                    if (_variableRegisters.TryGetValue(key, out regIdx))
+                        return true;
+                    regIdx = -1;
+                    return false;
                 }
             }
             regIdx = -1;
@@ -328,9 +343,7 @@ public static partial class DirectVmAbiEmitter {
             var raw = VariableReadRaw(v);
             if (!IsCellBacked(v))
                 return raw;
-            return ArrayAccess(
-                Convert(ArrayAccess(HeapRawSlots, Convert(raw, typeof(int))), typeof(long[])),
-                Constant(0));
+            return RingCodec.CellRead(HeapLocal, raw);
         }
 
         public Expression VariableWrite(int varIndex, Expression value) =>
@@ -338,7 +351,7 @@ public static partial class DirectVmAbiEmitter {
 
         public Expression VariableWrite(Variable v, Expression value) {
             if (IsCellBacked(v))
-                return Assign(VariableRead(v), value);
+                return RingCodec.CellWrite(HeapLocal, VariableReadRaw(v), value);
             return VariableWriteRaw(v, value);
         }
 
@@ -347,30 +360,77 @@ public static partial class DirectVmAbiEmitter {
                 Add(FramePosLocal, Constant(paramIndex - ParamSlotOffset)));
 
         private Dictionary<Parameter, int>? _inlineParameters;
+        private readonly List<Dictionary<string, int>> _inlineParameterScopes = new();
+        private readonly List<Dictionary<string, int>> _frameParameterScopes = new();
+
+        /// <summary>Enter an inline-lambda parameter scope. Names resolve
+        /// innermost-first, so an inner lambda parameter shadows an outer one or
+        /// an outer local of the same name.</summary>
+        public void PushInlineParameters() => _inlineParameterScopes.Add(new(StringComparer.Ordinal));
+
+        public void PopInlineParameters() {
+            if (_inlineParameterScopes.Count > 0)
+                _inlineParameterScopes.RemoveAt(_inlineParameterScopes.Count - 1);
+        }
 
         public void MapInlineParameter(Parameter parameter, int ringSlot) {
             _inlineParameters ??= new(ReferenceEqualityComparer.Instance);
             _inlineParameters[parameter] = ringSlot;
+            if (_inlineParameterScopes.Count > 0)
+                _inlineParameterScopes[^1][parameter.Name] = ringSlot;
         }
 
         public bool TryGetInlineParameter(Parameter parameter, out int ringSlot) {
-            if (_inlineParameters is { } map) {
-                if (map.TryGetValue(parameter, out ringSlot))
+            if (_inlineParameters is { } map && map.TryGetValue(parameter, out ringSlot))
+                return true;
+            // Fall back to the *live* parameter scopes by name. The flat map is never
+            // trimmed when a scope pops, so scanning it by name could bind a popped
+            // parameter to a ring slot the emitter has since reused.
+            return TryGetInlineParameter(parameter.Name, out ringSlot);
+        }
+
+        /// <summary>Resolve a body <see cref="Variable"/> whose name is an inline
+        /// lambda parameter to that parameter's argument ring slot. The reader
+        /// emits a fresh <see cref="Variable"/> per identifier, so name is the
+        /// only link between a lambda parameter and its uses.</summary>
+        public bool TryGetInlineParameter(string name, out int ringSlot) {
+            for (int i = _inlineParameterScopes.Count - 1; i >= 0; i--) {
+                if (_inlineParameterScopes[i].TryGetValue(name, out ringSlot))
                     return true;
-                foreach (var (p, slot) in map) {
-                    if (p.Name == parameter.Name) {
-                        ringSlot = slot;
-                        return true;
-                    }
-                }
             }
             ringSlot = 0;
             return false;
         }
 
-        public void ClearInlineParameters() => _inlineParameters = null;
+        public void ClearInlineParameters() {
+            _inlineParameters = null;
+            _inlineParameterScopes.Clear();
+        }
 
-        public bool HasInlineParameters => _inlineParameters is not null;
+        public bool HasInlineParameters => _inlineParameterScopes.Count > 0;
+
+        /// <summary>Enter a lambda-function parameter scope whose values live in
+        /// value-stack slots (<see cref="ParameterRead"/>), not ring registers.</summary>
+        public void PushFrameParameters() => _frameParameterScopes.Add(new(StringComparer.Ordinal));
+
+        public void PopFrameParameters() {
+            if (_frameParameterScopes.Count > 0)
+                _frameParameterScopes.RemoveAt(_frameParameterScopes.Count - 1);
+        }
+
+        /// <summary>Record a frame parameter's slot in the current scope. Callers pair
+        /// this with <see cref="PushFrameParameters"/>; indexing directly fails loud if
+        /// that pairing is ever broken (an auto-created scope would leak instead).</summary>
+        public void MapFrameParameter(Parameter parameter, int paramIndex) =>
+            _frameParameterScopes[^1][parameter.Name] = paramIndex;
+        public bool TryGetFrameParameter(string name, out int paramIndex) {
+            for (int i = _frameParameterScopes.Count - 1; i >= 0; i--) {
+                if (_frameParameterScopes[i].TryGetValue(name, out paramIndex))
+                    return true;
+            }
+            paramIndex = 0;
+            return false;
+        }
 
         private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
 
@@ -455,7 +515,28 @@ public static partial class DirectVmAbiEmitter {
 
         public void MarkCellBacked(Variable v) => _cellBacked.Add(v);
 
+        /// <summary>The parameter a use is bound to by the bind pass, or null for a
+        /// local or an unbound use. The binding is the identity edge; no name lookup.</summary>
+        public Parameter? BoundParameter(Variable variable) {
+            if (Analysis?.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
+                return null;
+            return metadata.ParameterReferences.TryGetValue(variable, out var parameter)
+                ? parameter
+                : null;
+        }
+
         public Expression VariableReadRaw(Variable v) {
+            if (BoundParameter(v) is { } parameter) {
+                // Read the same storage the write path uses. ParameterValue's
+                // slot-0 InstanceHandle snapshot is for ThisReference; a bound
+                // parameter must see the live slot after a write.
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return RingVar(inlineSlot);
+                if (TryGetParameterSlot(parameter, out int paramIndex))
+                    return ParameterRead(paramIndex);
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' not declared in any scope");
+            }
             if (TryGetRegister(v, out int regIdx))
                 return _regVars[regIdx];
             if (TryGetVariable(v, out int slotIndex))
@@ -464,6 +545,14 @@ public static partial class DirectVmAbiEmitter {
         }
 
         public Expression VariableWriteRaw(Variable v, Expression value) {
+            if (BoundParameter(v) is { } parameter) {
+                if (TryGetInlineParameter(parameter, out int inlineSlot))
+                    return Assign(RingVar(inlineSlot), value);
+                if (TryGetParameterSlot(parameter, out int paramIndex))
+                    return Assign(ParameterRead(paramIndex), value);
+                throw new InvalidOperationException(
+                    $"Parameter '{parameter.Name}' not declared in any scope");
+            }
             if (TryGetRegister(v, out int regIdx))
                 return Assign(_regVars[regIdx], value);
             if (TryGetVariable(v, out int slotIndex))
@@ -501,41 +590,5 @@ public static partial class DirectVmAbiEmitter {
             _stepNodes[step] = node;
         }
 
-        private readonly Stack<CompileTimeFrame> _ctFrames = new();
-        private int _ctSp;
-
-        private sealed class CompileTimeFrame {
-            public int ArgumentCount { get; }
-            public int LocalCount { get; }
-            public int BaseOffset { get; }
-            public int HeaderSize { get; }
-            public CompileTimeFrame(int args, int locals, int baseOffset, int headerSize) {
-                ArgumentCount = args;
-                LocalCount = locals;
-                BaseOffset = baseOffset;
-                HeaderSize = headerSize;
-            }
-        }
-
-        public void EnterActivation(int argumentCount, int localCount, int headerSize = 0) {
-            var frame = new CompileTimeFrame(argumentCount, localCount, _ctSp + headerSize, headerSize);
-            _ctFrames.Push(frame);
-            _ctSp += headerSize + argumentCount + localCount;
-        }
-
-        public void LeaveActivation() {
-            if (_ctFrames.Count == 0) throw new InvalidOperationException("No active frame");
-            var f = _ctFrames.Pop();
-            _ctSp -= f.HeaderSize + f.ArgumentCount + f.LocalCount;
-        }
-
-        public int GetCompileTimeVariableOffset(Variable v) {
-            if (!TryGetVariable(v, out int slotInScope))
-                throw new InvalidOperationException($"Variable '{v.Name}' has no slot");
-            return slotInScope;
-        }
-
-        public int GetCurrentFrameSize() =>
-            _ctFrames.Count == 0 ? 0 : _ctFrames.Peek().ArgumentCount + _ctFrames.Peek().LocalCount + 2;
     }
 }

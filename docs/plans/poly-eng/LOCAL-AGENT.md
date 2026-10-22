@@ -65,7 +65,7 @@ Out of the finish line and not listed: K3c, K3a, K3b and K5 come after C8d in §
 - MCP and the DSL enforce identical validation.
 - C6c: an owned child must keep its owner (min 1, unlink rejected). Non-owned links stay min 0 (Scot 2026-10-10).
 - Code is truth. Re-check every file:line in a task file against current master before editing (line numbers drift every merge).
-- Repo rules in [`AGENTS.md`](../../../AGENTS.md) win: minimal diffs, TUnit `async [Test]`, `Method_Condition_ExpectedResult` names, no `#region`, no drive-by comments. Use `git grep`, not `rg` (`rg` has hung in these clones).
+- Repo rules in [`AGENTS.md`](../../../AGENTS.md) win: minimal diffs, TUnit `async [Test]`, `Method_Condition_ExpectedResult` names, no new `#region`, no drive-by comments. Use `git grep`, not `rg` (`rg` has hung in these clones).
 
 ## 5. How to run one slice
 

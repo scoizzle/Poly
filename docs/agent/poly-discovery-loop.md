@@ -127,7 +127,7 @@ probes are the round's compile-fail targets.
    the template below with `<ROUND>`, `<SLICE>`, and the slice's probe target filled in.
 4. **Triage:** merge the per-agent `docs/probes/findings/<round>/<agent>.md`. Dedupe, rank
    🔴 compile → 🟠 divergence/silent → 🟡 sharp. Spot-verify each with `run-probe.sh`.
-5. **Fix:** per finding, write one regression test → smallest fix → green (agents only
+5. **Fix:** per finding, write one regression test → run it red → smallest fix → green (agents only
    propose patches; the coordinator applies them with the test-first loop).
 6. **Re-sweep:** re-run `scripts/discovery-round.sh <round>` and confirm the compile-fail
    baseline is cleared and nothing new regressed.

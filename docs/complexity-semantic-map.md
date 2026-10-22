@@ -34,7 +34,7 @@ Author (.poly / builders / MCP / evolution API)
   → DomainEvolution.Apply  [domain analysis gate]
   → lower DE → Ast
   → program analysis + node replacement
-  → DirectVmAbiEmitter → VM
+  → AbiEmitter → VM
 ```
 
 Everything else is either a **facet of that spine** or a **satellite** (export, packs, dead duals, docs process).
@@ -57,7 +57,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | Grammar | 1 100 | Pattern-table engine |
 | Docs (markdown) | ~535 files | Process + history (plans alone ~455) |
 
-**Largest single files (heat):** `DirectVmAbiEmitter` ~3k · `DomainToCSharpExporter` ~1.5k · `DomainEntityInstance` ~1.4k.
+**Largest single files (heat):** `AbiEmitter` ~3k · `DomainToCSharpExporter` ~1.5k · `DomainEntityInstance` ~1.4k.
 
 ---
 
@@ -73,7 +73,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | **Node replacement** | *Desugar/simplify is registered as original→replacement metadata; backends honor replacement.* | Yes | 1 |
 | **Program analysis passes** (types, members, CFG, side effects, folding, jumps, EH regions, …) | *Before execution, the program is classified for correctness and compilation.* | Yes | 2 — many passes; most domain path only needs a subset |
 | **Interpreter façade** | *Analyze / Compile / Execute is one entry surface for programs.* | Yes | 1 |
-| **DirectVmAbiEmitter** | *Ast (+ analysis) becomes a VM program without a primitive IR middle layer.* | Yes | 3 — size/complexity of one file |
+| **AbiEmitter** | *Ast (+ analysis) becomes a VM program without a primitive IR middle layer.* | Yes | 3 — size/complexity of one file |
 | **VmState / VmProgram** | *Canonical execution is a stateful VM (stack, heap, suspend/debug hooks).* | Yes | 2 |
 | **LinqExpressionGenerator** | *A second backend compiles Ast to CLR delegates for oracle/parity.* | Yes (tests / oracle) | **4 — dual evaluator** |
 | **CSharpGenerator** | *Ast (and domain export) can be printed as C# source.* | Yes (export / DslCompiler) | 1 |
@@ -268,7 +268,7 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
 | # | Demon | Symptom | Recommendation |
 |---|--------|---------|----------------|
 | **D12** | **DomainEntityInstance god-object** | ~1.4k LOC; policy + effects + rewrite | Split effect runner / policy preprocessor |
-| **D13** | **DirectVmAbiEmitter monolith** | ~3k LOC | Only touch with program needs; no domain forks |
+| **D13** | **AbiEmitter monolith** | ~3k LOC | Only touch with program needs; no domain forks |
 | **D14** | **DomainChange combinatorial surface** | 40+ change types | MCP unifies add/remove; don’t grow micro-changes casually |
 | **D15** | **Metadata bag sprawl** | ~20 domain metadata types | Catalog-first; refuse new bags without consumer |
 | **D16** | **Runtime DE rewrite + lower + VM** | Three stages for one policy | Document; simplify only with store-aware lower later |

@@ -104,6 +104,16 @@ public static class CSharpGrammar {
         CSharpTokenKind.Colon => ":",
         CSharpTokenKind.Question => "?",
         CSharpTokenKind.Assign => "=",
+        CSharpTokenKind.PlusAssign => "+=",
+        CSharpTokenKind.MinusAssign => "-=",
+        CSharpTokenKind.StarAssign => "*=",
+        CSharpTokenKind.SlashAssign => "/=",
+        CSharpTokenKind.PercentAssign => "%=",
+        CSharpTokenKind.AmpAssign => "&=",
+        CSharpTokenKind.PipeAssign => "|=",
+        CSharpTokenKind.CaretAssign => "^=",
+        CSharpTokenKind.QuestionQuestionAssign => "??=",
+        CSharpTokenKind.LtLtAssign => "<<=",
         CSharpTokenKind.Arrow => "=>",
         CSharpTokenKind.Plus => "+",
         CSharpTokenKind.Minus => "-",
@@ -301,7 +311,7 @@ public static class CSharpGrammar {
                 .Optional(R("for-init")).Value(CSharpTokenKind.Semicolon, "semi1").Optional(R("for-cond"))
                 .Value(CSharpTokenKind.Semicolon, "semi2").Optional(R("for-incr")).Kind(CSharpTokenKind.RParen).Ref("statement").Commit()
             .Pattern("foreach").Kind(CSharpTokenKind.KwForeach).Kind(CSharpTokenKind.LParen)
-                .Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
+                .Ref("foreach-decl").Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.KwIn).Ref("expr").Kind(CSharpTokenKind.RParen).Ref("statement").Commit()
             .Pattern("switch").Kind(CSharpTokenKind.KwSwitch).Kind(CSharpTokenKind.LParen).Ref("expr").Kind(CSharpTokenKind.RParen)
                 .Value(CSharpTokenKind.LBrace, "open").Repeat("switch-case", min: 0).Value(CSharpTokenKind.RBrace, "close").Commit()
@@ -317,14 +327,27 @@ public static class CSharpGrammar {
             .Pattern("label").Value(CSharpTokenKind.Identifier, "label").Value(CSharpTokenKind.Colon, "colon").Ref("statement").Commit()
             .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
                 .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("const-decl").Kind(CSharpTokenKind.KwConst).Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("typed-decl-bare").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("expr-stmt").Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("empty").Kind(CSharpTokenKind.Semicolon).Commit();
         b.Define("else")
             .Pattern("else").Kind(CSharpTokenKind.KwElse).Ref("statement").Commit();
+        b.Define("foreach-decl")
+            .Pattern("var").Kind(CSharpTokenKind.KwVar).Commit()
+            .Pattern("typed").Ref("type").Commit();
         b.Define("local-function")
             .Pattern("method").Optional(R("attributes")).Optional(R("modifiers")).Ref("type")
                 .Value(CSharpTokenKind.Identifier, "name").Optional(R("generic-params")).Ref("params").Ref("method-body").Commit();
         b.Define("for-init")
+            .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
+            .Pattern("typed-decl").Ref("type").Value(CSharpTokenKind.Identifier, "name")
+                .Kind(CSharpTokenKind.Assign).Ref("expr").Commit()
             .Pattern("init").Ref("expr").Commit();
         b.Define("for-cond")
             .Pattern("cond").Ref("expr").Commit();
@@ -351,9 +374,20 @@ public static class CSharpGrammar {
         b.Define("expr-assignment")
             .Pattern("assign").Ref("expr-conditional").Optional(R("assign-tail")).Commit();
         b.Define("assign-tail")
-            .Pattern("tail").Kind(CSharpTokenKind.Assign).Ref("expr-assignment").Commit();
+            .Pattern("tail").Kind(CSharpTokenKind.Assign).Ref("expr-assignment").Commit()
+            .Pattern("compound-add").Kind(CSharpTokenKind.PlusAssign).Ref("expr").Commit()
+            .Pattern("compound-sub").Kind(CSharpTokenKind.MinusAssign).Ref("expr").Commit()
+            .Pattern("compound-mul").Kind(CSharpTokenKind.StarAssign).Ref("expr").Commit()
+            .Pattern("compound-div").Kind(CSharpTokenKind.SlashAssign).Ref("expr").Commit()
+            .Pattern("compound-mod").Kind(CSharpTokenKind.PercentAssign).Ref("expr").Commit()
+            .Pattern("compound-and").Kind(CSharpTokenKind.AmpAssign).Ref("expr").Commit()
+            .Pattern("compound-or").Kind(CSharpTokenKind.PipeAssign).Ref("expr").Commit()
+            .Pattern("compound-xor").Kind(CSharpTokenKind.CaretAssign).Ref("expr").Commit()
+            .Pattern("compound-coalesce").Kind(CSharpTokenKind.QuestionQuestionAssign).Ref("expr").Commit()
+            .Pattern("compound-shift-left").Kind(CSharpTokenKind.LtLtAssign).Ref("expr").Commit();
         b.Define("expr-conditional")
-            .Pattern("conditional").Ref("expr-coalesce").Optional(R("cond-tail")).Commit();
+            .Pattern("conditional").Ref("expr-coalesce").Optional(R("cond-tail")).Commit()
+            .Pattern("throw").Kind(CSharpTokenKind.KwThrow).Ref("expr").Commit();
         b.Define("cond-tail")
             .Pattern("tail").Kind(CSharpTokenKind.Question).Ref("expr").Value(CSharpTokenKind.Colon, "colon").Ref("expr").Commit();
         b.Define("expr-coalesce").Pattern("coalesce").LeftAssoc("expr-or", CSharpTokenKind.QuestionQuestion).Commit();
@@ -387,6 +421,8 @@ public static class CSharpGrammar {
         b.Define("postfix-tail")
             .Pattern("member").Kind(CSharpTokenKind.Dot).Value(CSharpTokenKind.Identifier, "name").Commit()
             .Pattern("conditional-member").Kind(CSharpTokenKind.QuestionDot).Value(CSharpTokenKind.Identifier, "name").Commit()
+            .Pattern("conditional-index").Kind(CSharpTokenKind.Question).Value(CSharpTokenKind.LBracket, "open")
+                .Optional(R("arg-list")).Value(CSharpTokenKind.RBracket, "close").Commit()
             .Pattern("invoke").Ref("args").Commit()
             .Pattern("generic-invoke").Ref("type-args").Ref("args").Commit()
             .Pattern("index").Value(CSharpTokenKind.LBracket, "open").Optional(R("arg-list")).Value(CSharpTokenKind.RBracket, "close").Commit()
@@ -396,6 +432,7 @@ public static class CSharpGrammar {
         b.Define("expr-primary")
             .Pattern("number").Value(CSharpTokenKind.NumberLiteral, "value").Commit()
             .Pattern("string").Value(CSharpTokenKind.StringLiteral, "value").Commit()
+            .Pattern("interpolated").Value(CSharpTokenKind.InterpolatedStringLiteral, "value").Commit()
             .Pattern("char").Value(CSharpTokenKind.CharLiteral, "value").Commit()
             .Pattern("true").Kind(CSharpTokenKind.KwTrue).Commit()
             .Pattern("false").Kind(CSharpTokenKind.KwFalse).Commit()

@@ -23,10 +23,15 @@ public sealed class VmAnalyzerReportTests {
     private static readonly string[] SampleRoots = ["docs/probes", "demo/live"];
 
     // Invalid by design: the domain analyzer rejects these. The same list is in ParityTests.
-    private static readonly string[] InvalidProbes = ["nested-invoke-type-mismatch.poly"];
+    private static readonly string[] InvalidProbes = [
+        "nested-invoke-type-mismatch.poly",
+        "restaurant.poly",
+    ];
 
     // H1 @ 0ba89d58: 15 VM Errors, 1 domain Errors, 0 clean.
-    // 23 VM Errors after the 2026-10-14 from-scratch probes (8 added).
+    // 23 VM Errors after the 2026-10-14 from-scratch probes (8 added); 22 after T5
+    // moved restaurant.poly to InvalidProbes.
+    // 23 after the 2026-10-17 grep probe (1 added).
     private static readonly string[] VmErrorSamples = [
         "demo/live/checkout.poly",
         "demo/live/domain.poly",
@@ -42,18 +47,23 @@ public sealed class VmAnalyzerReportTests {
         "docs/probes/fleet-eval/09-transport/orders.poly",
         "docs/probes/fleet-eval/09-transport/warehouse.poly",
         "docs/probes/fleet-eval/12-mcp/mcp-library.poly",
+        "docs/probes/grep-2026-10-17/grep.poly",
         "docs/probes/scratch-2026-10-14/banking.poly",
         "docs/probes/scratch-2026-10-14/fleet.poly",
         "docs/probes/scratch-2026-10-14/gym.poly",
         "docs/probes/scratch-2026-10-14/insurance.poly",
         "docs/probes/scratch-2026-10-14/logistics.poly",
         "docs/probes/scratch-2026-10-14/payroll.poly",
-        "docs/probes/scratch-2026-10-14/restaurant.poly",
         "docs/probes/scratch-2026-10-14/roastery.poly",
         "docs/probes/smoke/smoke.poly",
     ];
 
-    private const string DomainErrorSample = "docs/probes/dogfood/nested-invoke-type-mismatch.poly";
+    // Rejected by domain analysis (not just VM analysis). restaurant.poly stores a
+    // domain `value` type as an entity property (DMSTR006).
+    private static readonly string[] DomainErrorSamples = [
+        "docs/probes/dogfood/nested-invoke-type-mismatch.poly",
+        "docs/probes/scratch-2026-10-14/restaurant.poly",
+    ];
 
     [Test]
     public async Task SampleDomains_FindsTheSamples() =>
@@ -72,7 +82,7 @@ public sealed class VmAnalyzerReportTests {
             .ToArray();
 
         await Assert.That(vmErrors).IsEquivalentTo(VmErrorSamples);
-        await Assert.That(domainErrors).IsEquivalentTo([DomainErrorSample]);
+        await Assert.That(domainErrors).IsEquivalentTo(DomainErrorSamples);
         await Assert.That(rows.All(r => r.Outcome is "VM Errors" or "domain has Errors")).IsTrue();
         await Assert.That(rows.Where(r => r.Outcome == "VM Errors").All(r => r.Errors > 0)).IsTrue();
     }

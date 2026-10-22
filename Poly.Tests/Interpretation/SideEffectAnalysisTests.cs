@@ -9,8 +9,8 @@ public class SideEffectAnalysisTests {
     private static Analyzer SideEffectAnalyzerPipeline() =>
         new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .Build();
 

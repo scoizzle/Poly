@@ -173,7 +173,7 @@ public sealed class HttpFileGenerator {
         sb.AppendLine();
     }
 
-    private static string Pluralize(string name) => name + "s";
+    private static string Pluralize(string name) => Pluralizer.Pluralize(name);
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
 
     private static string GetKeyExample(StorageEntity store) {

@@ -1,6 +1,8 @@
 using Poly.Interpretation;
+using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -19,9 +21,228 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Await_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Await(new Constant(1L))))
-            .Throws<InvalidOperationException>();
+    public async Task Await_CompletedTask_ReturnsResult() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_FaultedTask_ThrowsOriginalException() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Faulted))));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_NonGenericTask_IsVoid() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.VoidCompleted))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Await_NonAwaitable_CompileRejected() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Plain))));
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_InsideTry_Executes() {
+        var host = new AwaitHost();
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(0L)),
+            new TryCatchFinally(new Assignment(x,
+                new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed)))))),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_InsideStoredLambda_Executes() {
+        var host = new AwaitHost();
+        var fn = new Variable("fn");
+        var node = new Block([
+            new Assignment(fn, new Lambda([],
+                new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed)))))),
+            new Invoke(fn)
+        ], [fn]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_ValueTask_ReturnsResult() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskCompleted))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_FaultedValueTask_ThrowsOriginalException() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskFaulted))));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        }).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_NonGenericValueTask_IsVoid() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.ValueTaskVoid))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.Result.IsVoid).IsTrue();
+    }
+
+    [Test]
+    public async Task Await_CustomAwaitable_Executes() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Custom))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(77L);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task Await_IncompleteCustomAwaitable_WaitsForResult(CancellationToken ct) {
+        var node = new Await(new Constant(new PendingAwaitable()));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+    }
+
+    [Test, Timeout(10_000)]
+    public async Task Await_IncompleteCustomAwaitable_DoesNotPostBackToCallerContext(CancellationToken ct) {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DroppingSyncContext());
+        try {
+            var node = new Await(new Constant(new PendingAwaitable()));
+            using var exec = Interpreter.Execute(Interpreter.Compile(node));
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
+        }
+        finally {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    [Test]
+    public async Task Await_AwaiterWithoutIsCompleted_CompileRejected() {
+        var node = new Await(new Constant(new BareAwaitable()));
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Await_InsideTryCatch_CatchSeesFault() {
+        var host = new AwaitHost();
+        var caught = new Variable("caught");
+        var node = new Block([
+            new Assignment(caught, new Constant(0L)),
+            new TryCatchFinally(
+                new Assignment(caught,
+                    new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Faulted))))),
+                CatchClauses: [
+                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                        new Assignment(caught, new Constant(1L)))
+                ]),
+            caught
+        ], [caught]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Await_InsideTryCatch_SuccessKeepsAssignment() {
+        var host = new AwaitHost();
+        var x = new Variable("x");
+        var node = new Block([
+            new Assignment(x, new Constant(0L)),
+            new TryCatchFinally(
+                new Assignment(x,
+                    new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))))),
+                CatchClauses: [
+                    new CatchClause(TypeReference.To<InvalidOperationException>(), "ex",
+                        new Assignment(x, new Constant(1L)))
+                ]),
+            x
+        ], [x]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task Await_TaskLong_LinqCheckerCompiles() {
+        var host = new AwaitHost();
+        var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))));
+        var expr = new LinqExpressionGenerator(node.AnalyzeNode()).Compile(node).Expression;
+        var compiled = System.Linq.Expressions.Expression.Lambda<Func<long>>(expr).Compile();
+        await Assert.That(compiled()).IsEqualTo(42L);
+    }
+
+    private sealed class AwaitHost {
+        public long Plain() => 7L;
+        public Task<long> Completed() => Task.FromResult(42L);
+        public Task<long> Faulted() => Task.FromException<long>(new InvalidOperationException("boom"));
+        public Task VoidCompleted() => Task.CompletedTask;
+        public ValueTask<long> ValueTaskCompleted() => new(42L);
+        public ValueTask<long> ValueTaskFaulted() =>
+            new(Task.FromException<long>(new InvalidOperationException("vt-boom")));
+        public ValueTask ValueTaskVoid() => ValueTask.CompletedTask;
+        public CustomAwaitable Custom() => new();
+    }
+
+    // Not Task/ValueTask: any type with GetAwaiter() → awaiter with GetResult() is awaitable.
+    private sealed class CustomAwaitable {
+        public CustomAwaiter GetAwaiter() => new();
+    }
+
+    private struct CustomAwaiter : System.Runtime.CompilerServices.INotifyCompletion {
+        public bool IsCompleted => true;
+        public void OnCompleted(Action continuation) => continuation();
+        public long GetResult() => 77L;
+    }
+
+    private sealed class PendingAwaitable {
+        public PendingAwaiter GetAwaiter() => new(this);
+        public long Value = -1;
+    }
+
+    private struct PendingAwaiter : System.Runtime.CompilerServices.INotifyCompletion {
+        private readonly PendingAwaitable _owner;
+        public PendingAwaiter(PendingAwaitable owner) => _owner = owner;
+        public bool IsCompleted => _owner.Value >= 0;
+        public long GetResult() => _owner.Value;
+        public void OnCompleted(Action continuation) {
+            var owner = _owner;
+            var captured = SynchronizationContext.Current;
+            ThreadPool.QueueUserWorkItem(_ => {
+                owner.Value = 5L;
+                if (captured is not null)
+                    captured.Post(__ => continuation(), null);
+                else
+                    continuation();
+            });
+        }
+    }
+
+    private sealed class BareAwaitable {
+        public BareAwaiter GetAwaiter() => new();
+    }
+
+    private struct BareAwaiter {
+        public long GetResult() => 1L;
+    }
+
+    /// <summary>Posts are dropped. An awaiter that captures this context never resumes.</summary>
+    private sealed class DroppingSyncContext : SynchronizationContext {
+        public override void Post(SendOrPostCallback d, object? state) { }
     }
 
     [Test]
@@ -93,6 +314,79 @@ public class LanguageVmTests {
         var program = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(program, s => s.SetArgs("w", "x", "y", "y", "z"));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("wxyyz");
+    }
+
+    // ── interpolated strings ─────────────────────────────────────────────────
+
+    [Test]
+    public async Task InterpolatedString_LiteralAndArithmeticHole_Evaluates() {
+        var node = new InterpolatedString(["x = ", ""], [new Add(new Constant(1), new Constant(1))]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("x = 2");
+    }
+
+    [Test]
+    public async Task InterpolatedString_OnlyHole_Evaluates() {
+        var node = new InterpolatedString(["", ""], [new Multiply(new Constant(6L), new Constant(7L))]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("42");
+    }
+
+    [Test]
+    public async Task InterpolatedString_VariableHole_Evaluates() {
+        var y = new Variable("y");
+        var node = new Block([
+            new Assignment(y, new Constant(5L)),
+            new InterpolatedString(["y = ", ""], [y])
+        ], [y]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("y = 5");
+    }
+
+    [Test]
+    public async Task InterpolatedString_StringHole_Concatenates() {
+        var node = new InterpolatedString(["hello ", "!"], [new Constant("world")]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("hello world!");
+    }
+
+    [Test]
+    public async Task InterpolatedString_LiteralBraces_AreLiteral() {
+        var node = new InterpolatedString(["{braces}"], []);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("{braces}");
+    }
+
+    [Test]
+    public async Task InterpolatedString_NoHoles_IsPlainString() {
+        var node = new InterpolatedString(["plain"], []);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("plain");
+    }
+
+    [Test]
+    public async Task InterpolatedString_DoubleHole_BoxesIeeeBits() {
+        var node = new InterpolatedString(["v = ", ""], [new Constant(2.5)]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("v = 2.5");
+    }
+
+    [Test]
+    public async Task InterpolatedString_ReadFromSource_Executes() {
+        var unit = Poly.Interpretation.CSharp.CSharpLanguage.Read("$\"x = {1 + 1}\";");
+        using var exec = Interpreter.Execute(Interpreter.Compile(unit.TopLevelStatements![0]));
+        await Assert.That(exec.GetValue<string>()).IsEqualTo("x = 2");
+    }
+
+    [Test]
+    public async Task InterpolatedString_AssignedToVariable_ResolvesStringMember() {
+        var s = new Variable("s");
+        var node = new Block([
+            new Assignment(s, new InterpolatedString(["hi"], [])),
+            new Member(s, "Length")
+        ], [s]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
     }
 
     [Test]
@@ -583,6 +877,47 @@ public class LanguageVmTests {
         var node = new Conditional(new Constant(true), new Constant(1L), new Constant(2L));
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
+    }
+
+    // `a?.Length` desugars (CSharpReader) to `a == null ? null : a.Length`.
+    // These prove that desugared shape executes: null receiver yields null,
+    // non-null receiver reads the member.
+    [Test]
+    public async Task ConditionalAccess_NullReceiver_YieldsNull() {
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Equal(receiver, new Constant(null)),
+            new Constant(null),
+            new Member(receiver, "Length"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs((object?)null));
+        await Assert.That(exec.GetValue<object>()).IsNull();
+    }
+
+    [Test]
+    public async Task ConditionalAccess_NonNullReceiver_ReadsMember() {
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Equal(receiver, new Constant(null)),
+            new Constant(null),
+            new Member(receiver, "Length"));
+        using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs("hi"));
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task ConditionalAccess_NullReceiver_ValueMember_FailsClosed() {
+        // The reader's `?.` desugar puts the member on the true branch, so the
+        // conditional is classified as the member's scalar type. A null arm has no
+        // slot representation then: the form must throw rather than yield the 0
+        // sentinel (C#'s `a?.Length` is `int?`, which this subset cannot represent).
+        var receiver = new Parameter("a", TypeReference.To<string>());
+        var access = new Conditional(
+            new Not(new Equal(receiver, new Constant(null))),
+            new Member(receiver, "Length"),
+            new Constant(null));
+        await Assert.That(() => {
+            using var exec = Interpreter.Execute(Interpreter.Compile(access), s => s.SetArgs((object?)null));
+        }).Throws<InvalidOperationException>();
     }
 
     [Test]

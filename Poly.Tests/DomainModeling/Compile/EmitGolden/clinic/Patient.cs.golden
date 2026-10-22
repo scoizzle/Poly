@@ -25,23 +25,17 @@ public class Patient
     }
     public DomainResult CheckInAll()
     {
-        var matched1 = false;
         foreach (var target0 in this.Visits)
         {
             if (!(target0.CurrentStage == VisitStage.Scheduled))
             {
                 continue;
             }
-            matched1 = true;
-            var result2 = target0.CheckIn();
-            if (!result2.IsSuccess)
+            var result1 = target0.CheckIn();
+            if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result2.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.ErrorMessage ?? "");
             }
-        }
-        if (!matched1)
-        {
-            return DomainResult.Failure("for visits.CheckIn matched zero targets.");
         }
         return DomainResult.Success();
     }

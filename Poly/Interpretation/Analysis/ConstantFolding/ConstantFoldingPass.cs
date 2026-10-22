@@ -19,6 +19,21 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return;
         }
 
+        // `nameof(arg)` is the last identifier of `arg`. Fold it here — before the
+        // compatibility pass rejects the TypeReference callee — and publish it as a
+        // constant so a parent literal `Add` folds in this same pass.
+        if (node is Invoke { Delegate: TypeReference { TypeName: "nameof" } } nameOfInvoke) {
+            if (nameOfInvoke.Arguments.Length == 1
+                && NameOfArgument(context, nameOfInvoke.Arguments[0]) is { } name) {
+                context.SetMetadata(node, new ConstantValueMetadata(name));
+                context.SetNodeReplacement(node, TypeMatchReplacement(node, new Constant(name), context));
+            }
+            else {
+                context.ReportError(node, "nameof(...) requires a single name argument.");
+            }
+            return;
+        }
+
         // Post-order traversal: analyze children first, then fold parent
         this.AnalyzeChildren(context, node);
 
@@ -36,6 +51,27 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             var typed = TypeMatchReplacement(node, simplified, context);
             context.SetNodeReplacement(node, typed);
         }
+    }
+
+    /// <summary>The name a <c>nameof(arg)</c> yields: the last identifier of the argument,
+    /// following the argument's replacement (a dotted CLR type name is rewritten).</summary>
+    private static string? NameOfArgument(AnalysisContext context, Node argument) {
+        var effective = context.GetNodeReplacement(argument) ?? argument;
+        return effective switch {
+            Variable v => v.Name,
+            Parameter p => p.Name,
+            Member m => m.MemberName,
+            ClrTypeReference c => c.RuntimeType.Name,
+            NamedTypeReference n => LastNameSegment(n.FullName),
+            TypeReference t => LastNameSegment(t.TypeName),
+            PrimitiveTypeReference prim => prim.PrimitiveId.GetCSharpKeyword(),
+            _ => null
+        };
+    }
+
+    private static string LastNameSegment(string name) {
+        var dot = name.LastIndexOf('.');
+        return dot >= 0 ? name[(dot + 1)..] : name;
     }
 
     private FoldResult TryFold(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -57,14 +93,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
             // Comparison operations
-            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x > y), parameterValues),
-            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x >= y), parameterValues),
-            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x < y), parameterValues),
-            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => IeeeCompare(a, b, (x, y) => x <= y), parameterValues),
+            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x > y), parameterValues),
+            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x >= y), parameterValues),
+            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x < y), parameterValues),
+            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x <= y), parameterValues),
 
-            // Equality operations — IEEE == for float/double (NaN != NaN), object.Equals otherwise.
-            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, IeeeEquals, parameterValues),
-            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !IeeeEquals(a, b), parameterValues),
+            // Equality operations — floating-point == for float/double (NaN != NaN), object.Equals otherwise.
+            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, FloatingEquals, parameterValues),
+            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !FloatingEquals(a, b), parameterValues),
 
             // Conditional with constant condition
             Conditional cond => FoldConditional(context, cond, parameterValues),
@@ -120,8 +156,19 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// the original type, and copy the resolved type onto the cast so
     /// downstream passes see consistent types.</summary>
     private static Node TypeMatchReplacement(Node original, Node replacement, AnalysisContext context) {
-        // Only wrap Constant replacements whose value type doesn't match
-        if (replacement is not Constant c || c.Value is null)
+        // A lowered non-constant node (shift, mask) performs the same operation as
+        // the original, so it carries the original's resolved type and emit can
+        // classify it from the type alone.
+        if (replacement is not Constant) {
+            // Identity folds return an operand that is already in the tree; stamping
+            // the operation's type onto it would relabel a real value (0 + date).
+            if (context.GetResolvedType(original) is { } originalType
+                && !IsWithin(original, replacement))
+                context.SetResolvedType(replacement, originalType);
+            return replacement;
+        }
+        var c = (Constant)replacement;
+        if (c.Value is null)
             return replacement;
 
         var resolvedType = context.GetResolvedType(original);
@@ -152,6 +199,18 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var cast = new TypeCast(replacement, new TypeReference(resolvedFullName));
         context.SetResolvedType(cast, resolvedType);
         return cast;
+    }
+
+    /// <summary>True when <paramref name="candidate"/> is the original node or one of
+    /// its descendants, i.e. an operand the fold kept rather than a new node.</summary>
+    private static bool IsWithin(Node root, Node candidate) {
+        if (ReferenceEquals(root, candidate))
+            return true;
+        foreach (var child in root.Children) {
+            if (child is not null && IsWithin(child, candidate))
+                return true;
+        }
+        return false;
     }
 
     private static bool IsPowerOf2(long n) => n > 0 && (n & (n - 1)) == 0;
@@ -429,7 +488,14 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
 
-        return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
+        // A comparison of two constants the operation cannot handle declines to fold
+        // rather than failing the whole analysis (matches FoldComparison).
+        try {
+            return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException or FormatException or OverflowException or InvalidCastException) {
+            return FoldResult.NotFoldable;
+        }
     }
 
     private FoldResult FoldConditional(AnalysisContext context, Conditional cond, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -563,6 +629,15 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         (long x, int y) => x + y,
         (int x, double y) => x + y,
         (double x, int y) => x + y,
+        // C# promotes char arithmetic to int (and to the wider operand otherwise), so a
+        // char add folds to a number — which also lets a concat chain see a constant part.
+        (char x, char y) => x + y,
+        (char x, int y) => x + y,
+        (int x, char y) => x + y,
+        (char x, long y) => x + y,
+        (long x, char y) => x + y,
+        (char x, double y) => x + y,
+        (double x, char y) => x + y,
         (string x, string y) => x + y,
         _ => null
     };
@@ -626,15 +701,34 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         _ => null
     };
 
-    private static bool IeeeEquals(object? a, object? b) {
-        if (a is not null && b is not null
-            && (a is double or float || b is double or float)
-            && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
-            return da == db;
+    private static bool FloatingEquals(object? a, object? b) {
+        if (a is not null && b is not null) {
+            if ((a is double or float || b is double or float)
+                && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
+                return da == db;
+            if (TryConvertToDecimal(a, out var ma) && TryConvertToDecimal(b, out var mb))
+                return ma == mb;
+        }
         return object.Equals(a, b);
     }
 
-    private static bool IeeeCompare(object a, object b, Func<double, double, bool> op) {
+    /// <summary>Exact numeric comparison for integral, char or decimal operands. A char is
+    /// its code point, so `'a' == 97` folds true; <see cref="Convert.ToDecimal(object)"/>
+    /// throws for a char, hence the explicit arm.</summary>
+    private static bool TryConvertToDecimal(object value, out decimal result) {
+        switch (value) {
+            case char c: result = c; return true;
+            case decimal m: result = m; return true;
+            case int or long or short or byte or sbyte or ushort or uint or ulong:
+                result = Convert.ToDecimal(value);
+                return true;
+            default:
+                result = 0;
+                return false;
+        }
+    }
+
+    private static bool FloatingCompare(object a, object b, Func<double, double, bool> op) {
         if (a is double or float || b is double or float) {
             if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
                 return op(da, db);
@@ -661,9 +755,10 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             double d => d,
             float f => f,
             decimal m => (double)m,
+            char c => c,
             _ => 0
         };
-        return value is int or long or double or float or decimal;
+        return value is int or long or double or float or decimal or char;
     }
 
     private readonly struct FoldResult {

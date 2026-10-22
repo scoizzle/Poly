@@ -133,7 +133,7 @@ If you only have one agent: walk slices in plan order `0 → p → g0 → r → 
 |------|-----|
 | One failing TUnit test (or probe) **before** production edit | AGENTS §4 |
 | Names `Method_Condition_ExpectedResult` | AGENTS |
-| No `#region`, no new abstraction without a second consumer | AGENTS |
+| No new `#region`, no new abstraction without a second consumer | AGENTS |
 | Fail-closed — no vacuous success | pr1 |
 | Do not re-add Link/Unlink/Delete Effect IR | parent non-goal |
 | Do not start p1 temporal (`Now`, `days`) | L4 |

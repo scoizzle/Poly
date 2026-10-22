@@ -27,15 +27,15 @@ public class VariableMultiAssignTypeExperimentTests {
     }
 
     [Test]
-    public async Task SequentialIntThenLong_SameSlotEncoding_StillRuns() {
+    public async Task SequentialIntThenLong_LongWriteIsRejected() {
+        // C# has no implicit long-to-int conversion; a later wider write is an error.
         var x = new Variable("x");
         var node = new Block([
             new Assignment(x, new Constant(1)),
             new Assignment(x, new Constant(2L)),
             x
         ], [x]);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 
     [Test]

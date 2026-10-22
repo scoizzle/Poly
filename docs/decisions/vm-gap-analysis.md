@@ -80,7 +80,7 @@ If the `Div` or `Mod` opcode divides by zero, it throws a CLR `DivideByZeroExcep
 `Int` (vector=0) sets `state.Status = InterpreterStatus.Suspended`. The loop exits, and `ExtractResult` is NOT called. The returned result is `InterpreterResult.Suspend()`. However, if the loop exits for another reason (normal completion) simultaneously, `ExtractResult` processes the stack. There's a potential race or logic gap in the priority of status checks.
 
 ### `Await` blocks synchronously
-The `Await` node calls `GetAwaiter().GetResult()` via `CallExternal`. This blocks the entire VM thread. No state machine transformation, no continuation.
+The `Await` node now executes. `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` go through `Ref`-bound helpers that call `GetAwaiter().GetResult()`. Any other structurally awaitable type waits until `IsCompleted`, via `OnCompleted` / `UnsafeOnCompleted`, and then calls `GetResult`. The LINQ checker uses that same binding (`AwaitPattern.CompileGetResult`), not the ambiguous string `GetAwaiter` lookup. This blocks the VM thread by design — the sim is single-threaded and does not build a state machine, suspend, or schedule. Why: [`2026-10-16-async-interpreter-execution.md`](2026-10-16-async-interpreter-execution.md).
 
 ---
 

@@ -132,18 +132,18 @@
                         <span class="group">@ReportsGroupName</span>
                         @foreach (var artifact in _reports)
                         {
-                            <button class="artifact report-tab @(ReferenceEquals(artifact, _selected) ? "selected" : null)"
+                            <button class="artifact report-tab @(ReferenceEquals(artifact, _selectedReport) ? "selected" : null)"
                                     role="tab"
-                                    aria-selected="@(ReferenceEquals(artifact, _selected) ? "true" : "false")"
-                                    @onclick="() => Select(artifact)">
+                                    aria-selected="@(ReferenceEquals(artifact, _selectedReport) ? "true" : "false")"
+                                    @onclick="() => SelectReport(artifact)">
                                 <span class="artifact-type">@artifact.Type</span>
                                 <span class="artifact-path">@artifact.Path</span>
                             </button>
                         }
                     </div>
-                    @if (SelectedReport is not null)
+                    @if (_selectedReport is not null)
                     {
-                        <pre class="code">@SelectedReport.Text</pre>
+                        <pre class="code">@_selectedReport.Text</pre>
                     }
                     else
                     {
@@ -175,16 +175,13 @@
     private IdeCompileResult? _result;
     private IReadOnlyList<ArtifactGroup> _groups = [];
     private IReadOnlyList<IdeArtifact> _reports = [];
-    private IdeArtifact? _selected;
+    private IdeArtifact? _selected, _selectedReport;
     private CancellationTokenSource? _pending;
     private bool _isCompiling;
 
     private int FileCount => _result?.Artifacts.Count(artifact => artifact.Type == "file") ?? 0;
 
     private Orientation MainOrientation => _isMobile ? Orientation.Vertical : Orientation.Horizontal;
-
-    private IdeArtifact? SelectedReport =>
-        _reports.FirstOrDefault(report => ReferenceEquals(report, _selected));
 
     protected override void OnInitialized() => CompileNow();
 
@@ -229,19 +226,43 @@
     }
 
     private void CompileNow() {
+        // Artifact identity is (Type, Path): report payloads all share one Path
+        // (the domain name) and the module is registered as both a "file" and a
+        // "tree" with one Path, so Path alone would restore the wrong selection.
+        var previouslySelected = _selected;
+        var previouslySelectedReport = _selectedReport;
         var result = Compiler.Compile(_source, _mode, _dbms);
         _result = result;
         _isCompiling = false;
+        if (!result.Success) {
+            // A failed compile has no artifacts, and this runs on every keystroke.
+            // Clear the panes but keep the current selection, so a transient parse
+            // error does not permanently reset it.
+            _groups = [];
+            _reports = [];
+            StateHasChanged();
+            return;
+        }
         var groups = BuildGroups(result.Artifacts);
         _reports = groups.FirstOrDefault(group => group.Name == ReportsGroupName)?.Items ?? [];
         _groups = groups.Where(group => group.Name != ReportsGroupName).ToList();
-        var selectable = _groups.SelectMany(group => group.Items).Concat(_reports).ToList();
-        _selected = selectable.FirstOrDefault(artifact => artifact.Type == "file")
-            ?? selectable.FirstOrDefault();
+        var artifacts = _groups.SelectMany(group => group.Items).ToList();
+        _selected =
+            artifacts.FirstOrDefault(artifact => SameArtifact(artifact, previouslySelected))
+            ?? artifacts.FirstOrDefault(artifact => artifact.Type == "file")
+            ?? artifacts.FirstOrDefault();
+        _selectedReport = _reports.FirstOrDefault(report => SameArtifact(report, previouslySelectedReport))
+            ?? _reports.FirstOrDefault();
         StateHasChanged();
     }
 
     private void Select(IdeArtifact artifact) => _selected = artifact;
+    private void SelectReport(IdeArtifact artifact) => _selectedReport = artifact;
+
+    private static bool SameArtifact(IdeArtifact? candidate, IdeArtifact? target) =>
+        candidate is not null && target is not null
+        && candidate.Type == target.Type
+        && candidate.Path == target.Path;
 
     private static IReadOnlyList<ArtifactGroup> BuildGroups(IReadOnlyList<IdeArtifact> artifacts) =>
         GroupOrder

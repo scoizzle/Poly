@@ -8,8 +8,8 @@ public class JumpTargetAnalysisTests {
     private static AnalysisResult AnalyzeJumps(Node node) =>
         new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseJumpTargetResolution()
             .Build()
             .Analyze(node);

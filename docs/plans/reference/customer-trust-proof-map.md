@@ -3,7 +3,7 @@
 **Date:** 2026-08-07  
 **Status:** Design lock / living index — **not** an implementation suite  
 **Policy:** [`docs/decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](../../decisions/2026-07-11-platform-trust-bar-and-dogfood.md)  
-**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](../archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md`](../archive/v2-to-v3/simple-agent-tasks/pr1-uncommitted-review-gate.md) · index [`README.md`](../README.md)
+**Related:** [`instance-commit-and-outbox-design-lock.md`](instance-commit-and-outbox-design-lock.md) · [`mcp-mutation-safety.md`](../parked/mut-safety/mcp-mutation-safety.md) · grammar (archived [`archive/completed-2026-08-mid/grammar-integration.md`](../archive/completed-2026-08-mid/grammar-integration.md)) · pre-ship gate [`pr1-uncommitted-review-gate.md`](../../agent/pr1-uncommitted-review-gate.md) · index [`README.md`](../README.md)
 
 ---
 
@@ -52,7 +52,7 @@ Status legend: **Green** = evidence in tree · **Yellow** = partial / known gap 
 | Dual path ⇒ dual agreement | T1 | Dual-oracle / dual-run | Policy VM-primary + LINQ reference where dual; GI dual-path when live; C99 GIP `DualRun_*` | **Yellow** (partial surfaces green; not universal) |
 | Grammar structure dispatch matches RD handlers | T1→GI | Dual-run execute equality | `C99ParserInterpreterTests` DualRun_*; product GI dual-path planned | **Green** preflight; product cutover still dual until GI-7 |
 | Product DSL parse/print does not invent syntax | T1 | Round-trip + guide honesty | `PolyDslRoundTripTests`, annotation goldens, `poly-dsl-guide.md` | **Green** corpus; GI must keep corpus green |
-| Empty sets / missing matches do not vacuous-succeed | T1 | Fail-closed tests | Subscription/policy/effect analyzer tests | **Green** rule; re-check each suite |
+| Empty sets / missing matches do not vacuous-succeed (quantifiers, policy reads, analysis) | T1 | Fail-closed tests | Subscription/policy/effect analyzer tests | **Green** rule; re-check each suite. Exception since 2026-10-17: a `for` fan-out over zero records is a no-op, and DMREL002 is the dead-edge signal |
 
 ### 3.2 Vertical slices (layer 2)
 

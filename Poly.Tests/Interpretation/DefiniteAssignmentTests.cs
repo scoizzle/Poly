@@ -10,8 +10,8 @@ public class DefiniteAssignmentTests {
     private static AnalysisResult AnalyzeDa(Node node) =>
         new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()

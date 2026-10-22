@@ -62,14 +62,18 @@ directly and emits `System.Linq.Expressions` trees that read/write `VmState`
 fields. No intermediate flattening or primitive expansion.
 
 ### Value Representation
-The `ValueRepresentationAnalyzer` classifies every expression by how its value
-should be interpreted: stack scalar (direct `long`), heap handle (dereference
-via index), boolean (zero/non-zero), or void.
+Representation is decided during emit, not by an analysis pass:
+`ValueRepresentationClassifier` (in `Poly/Interpretation/Vm/`) follows
+`NodeReplacementMetadata` and classifies the effective node's resolved CLR type
+— inline word (number, boolean 0/non-zero, IEEE bit pattern) or heap handle.
+Analysis replaces a node when the runtime action differs from the default
+semantics (`int + string` becomes `String.Concat`, `date + 1` becomes
+`AddDays`), and the replacement carries that action's type.
 
 ### Frame Model
-The VM uses a linked-frame ABI with a 2-word header (previousFP + savedSP).
-Argument and local counts are known at compile time. The `CallStack` runtime
-provides typed accessors for debug hooks and resume.
+The VM uses a linked-frame ABI with a 2-word header (previousFP + savedSP),
+defined once in `VmCall` (`Vm/`). `VmCall.Invoke` owns the header, argument
+slots, frame pointer, and result slot; `FramePos` persists across suspend/resume.
 
 ### Debugging
 - `VmDebugger`: Step-over and continue on a background thread
@@ -90,8 +94,8 @@ Console.WriteLine(result.GetValue<int>()); // 5
 ### Custom Pipeline
 ```csharp
 var analyzer = new AnalyzerBuilder()
-    .UseTypeAndMemberResolver()
     .UseVariableScopeValidator()
+    .UseTypeAndMemberResolver()
     .UseSideEffectAnalysis()
     .Build();
 

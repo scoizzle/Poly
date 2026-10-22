@@ -308,7 +308,7 @@ public class ConstraintAssignLoweringTests {
                 new Dictionary<string, object?> { ["Status"] = "Bogus" },
                 domain: domain));
         await Assert.That(thrown!.Message)
-            .IsEqualTo("'Status' is not a valid member of PatronStatus.");
+            .IsEqualTo("'Bogus' is not a valid member of PatronStatus for property 'Status'.");
     }
 
     [Test]

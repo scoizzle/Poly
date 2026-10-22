@@ -8,15 +8,14 @@ public class CallSiteCatalogTests {
     private static AnalysisResult Analyze(Node node) {
         return new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
+                .UseCallSiteCatalog()
             .Build()
             .Analyze(node);
     }
@@ -114,15 +113,14 @@ public class CallSiteCatalogTests {
         // Use a single cached analyzer instance (mirrors Interpreter._analyzer reuse).
         var analyzer = new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
             .UseLambdaReturnTypeResolution()
-            .UseValueRepresentationAnalysis()
-            .UseCallSiteCatalog()
+                .UseCallSiteCatalog()
             .Build();
 
         // Analyze tree A with a CLR invoke

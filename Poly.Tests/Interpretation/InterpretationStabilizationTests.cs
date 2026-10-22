@@ -287,7 +287,7 @@ public class InterpretationStabilizationTests {
     [Test]
     public async Task MaxLoopIterations_Reset_ZerosLoopTicks() {
         var program = Interpreter.Compile(new WhileLoop(new Constant(true), new Constant(0L)));
-        var state = new VmState(program) { MaxLoopIterations = 5, Registers = new long[256] };
+        var state = new VmState(program) { MaxLoopIterations = 5 };
         state.Status = InterpreterStatus.Running;
         try {
             try { program.Delegate(state); } catch (InvalidOperationException) { }
@@ -363,20 +363,20 @@ public class InterpretationStabilizationTests {
 
     [Test]
     public async Task Heap_AllocateNull_ReturnsZero() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         await Assert.That(heap.Allocate(null)).IsEqualTo(0);
         await Assert.That(heap.Get(0)).IsNull();
     }
 
     [Test]
     public async Task Heap_SetHandleZero_Throws() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         await Assert.That(() => heap.Set(0, "x")).Throws<ArgumentOutOfRangeException>();
     }
 
     [Test]
     public async Task Heap_SetNull_RecyclesOnce_DoubleFreeThrows() {
-        var heap = new Heap();
+        var heap = new VmManagedObjectHeap();
         int h = heap.Allocate("a");
         heap.Set(h, null);
         await Assert.That(() => heap.Set(h, null)).Throws<InvalidOperationException>();
@@ -388,15 +388,6 @@ public class InterpretationStabilizationTests {
         await Assert.That(heap.Get(reused)).IsEqualTo("b");
         await Assert.That(heap.Get(next)).IsEqualTo("c");
     }
-
-#pragma warning disable CS0618 // Word is tagged dead; this test is slated for purge with it.
-    [Test]
-    public async Task Word_IsHandle_PositiveOnly() {
-        await Assert.That(new Word(0).IsHandle).IsFalse();
-        await Assert.That(new Word(1).IsHandle).IsTrue();
-        await Assert.That(new Word(-1).IsHandle).IsFalse();
-    }
-#pragma warning restore CS0618
 
     [Test]
     public async Task SetArgs_Double_StoresIeeeBits() {
@@ -452,15 +443,14 @@ public class InterpretationStabilizationTests {
         string[] expected = [
             TypeDefinitionNodeAnalyzer.Id,
             ThisReferenceContextAnalyzer.Id,
+            ScopeValidator.Id,
             TypeAndMemberResolver.Id,
             LambdaReturnTypeAnalyzer.Id,
-            ScopeValidator.Id,
             SideEffectAnalyzer.Id,
             ConstantFoldingPass.Id,
             JumpTargetAnalyzer.Id,
             ControlFlowAnalysisPass.Id,
             ExceptionRegionAnalyzer.Id,
-            ValueRepresentationAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,
             DefiniteAssignmentAnalyzer.Id,

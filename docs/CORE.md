@@ -74,7 +74,7 @@ TFM: `net10.0`, nullable on, zero external deps in core `Poly/`. Policy: [`docs/
 |---------|------|----------|
 | **Ast** | `Node`, `NodeId`, fluent API | Execution, domain shapes, analysis |
 | **Analysis** | Framework, metadata, **node replacement** | Execution, domain concepts, MCP |
-| **Interpretation** | Semantic passes, `Interpreter`, `DirectVmAbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
+| **Interpretation** | Semantic passes, `Interpreter`, `AbiEmitter`, VM | Domain concepts; ABI forks for one consumer |
 | **Introspection** | Host-neutral type/member model (CLR = first provider) | Depending on Interpretation |
 | **DomainModeling** | Immutable `Domain`, evolution, DE→AST per op; contracts via `bind` | Domain opcodes; `Main`; growing `Comment` as meaning |
 | **Grammar** | Pattern-table engine (`Poly/Grammar/`) — decode / match / print | Product tables inside the engine — DSL tables live in `DomainModeling`, C# tables in `Interpretation`; parallel pattern engines |
@@ -110,11 +110,11 @@ Facts live on nodes. Semantic consumers fail closed without `AnalysisResult`. Do
 
 | Piece | Location |
 |-------|----------|
-| Emitter | `Poly/Interpretation/Vm/DirectVmAbiEmitter.cs` |
+| Emitter | `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` |
 | Façade | `Poly/Interpretation/Interpreter.cs` |
 | Runtime | `VmState`, `VmProgram`, … under `Poly/Interpretation/Vm/` |
 
-No intermediate primitive IR. Keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace). Known members: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), not `typeof(T).GetMethod(...)`.
+No intermediate primitive IR. Keep the emitter a generic compiler of known nodes — fix upstream (lower / analyze / replace). Known members: `Ref` / `Ref<T>` (`Poly/Interpretation/Vm/Ref.cs`), not `typeof(T).GetMethod(...)`. `Await` executes by blocking on the operand. `Task` / `Task<T>` / `ValueTask` / `ValueTask<T>` run through `Ref`-bound helpers whose `GetResult` waits. Any other structurally awaitable type resolves `GetAwaiter`, `IsCompleted`, `OnCompleted` or `UnsafeOnCompleted`, and `GetResult` through the type provider, and blocks on the continuation when `IsCompleted` is false. Analysis types the result as `T` or void. An `IsAsync` AST method body yields a completed `Task<T>` (`Task.FromResult<T>`) or `Task` (`Task.CompletedTask`) at its return, so a caller's `Await` composes; a method that is not `IsAsync` is left alone. No state machine, no scheduler; the resume spine is for `SuspendNode`.
 
 ### 3.4 Domain lowering
 

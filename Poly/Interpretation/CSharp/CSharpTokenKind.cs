@@ -19,6 +19,10 @@ public enum CSharpTokenKind {
     NumberLiteral,
     StringLiteral,
     CharLiteral,
+    /// <summary>A plain interpolated string <c>$"…"</c>. Its text is the raw body
+    /// between the quotes (escapes and <c>{…}</c> holes undecoded); the reader
+    /// splits it into literals and holes.</summary>
+    InterpolatedStringLiteral,
 
     // Declaration nouns.
     KwUsing,
@@ -107,6 +111,16 @@ public enum CSharpTokenKind {
 
     // Operators.
     Assign,
+    PlusAssign,
+    MinusAssign,
+    StarAssign,
+    SlashAssign,
+    PercentAssign,
+    AmpAssign,
+    PipeAssign,
+    CaretAssign,
+    QuestionQuestionAssign,
+    LtLtAssign,
     Arrow,
     Plus,
     Minus,

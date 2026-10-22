@@ -12,14 +12,13 @@ namespace Poly.Tests.Interpretation;
 public class TypeIsVmTests {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseThisReferenceContext()
-        .UseTypeAndMemberResolver()
         .UseVariableScopeValidator()
+        .UseTypeAndMemberResolver()
         .UseSideEffectAnalysis()
         .UseJumpTargetResolution()
         .UseConstantFolding()
         .UseControlFlowAnalysis()
         .UseLambdaReturnTypeResolution()
-        .UseValueRepresentationAnalysis()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
         .UseExceptionRegionAnalysis()
@@ -60,5 +59,43 @@ public class TypeIsVmTests {
         var result = Interpreter.Compile(node, analysis);
         using var exec = Interpreter.Execute(result);
         await Assert.That(exec.RawValue).IsEqualTo(0L);
+    }
+
+    /// <summary>
+    /// A scalar operand is answered from its static type: an <c>int</c> constant is a
+    /// scalar in a ring slot, not a heap handle, so it is <c>is int</c>.
+    /// </summary>
+    [Test]
+    public async Task TypeIs_IntConstant_IsInt_ReturnsTrue() {
+        var node = new TypeIs(new Constant(1), TypeReference.To<int>());
+        var analysis = _analyzer.Analyze(node);
+        var result = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(result);
+        await Assert.That(exec.RawValue).IsEqualTo(1L);
+    }
+
+    /// <summary>
+    /// <c>is</c> never widens: an <c>int</c> constant is not a <c>long</c>.
+    /// </summary>
+    [Test]
+    public async Task TypeIs_IntConstant_IsLong_ReturnsFalse() {
+        var node = new TypeIs(new Constant(1), TypeReference.To<long>());
+        var analysis = _analyzer.Analyze(node);
+        var result = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(result);
+        await Assert.That(exec.RawValue).IsEqualTo(0L);
+    }
+
+    /// <summary>
+    /// A scalar operand boxes to its base type: an <c>int</c> constant is a
+    /// <see cref="ValueType"/>.
+    /// </summary>
+    [Test]
+    public async Task TypeIs_IntConstant_IsValueType_ReturnsTrue() {
+        var node = new TypeIs(new Constant(1), TypeReference.To<ValueType>());
+        var analysis = _analyzer.Analyze(node);
+        var result = Interpreter.Compile(node, analysis);
+        using var exec = Interpreter.Execute(result);
+        await Assert.That(exec.RawValue).IsEqualTo(1L);
     }
 }

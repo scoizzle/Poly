@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace Poly.Interpretation.Vm;
+namespace Poly.Introspection.CommonLanguageRuntime;
 
 /// <summary>Compile-time-safe <see cref="MethodInfo"/>, <see cref="PropertyInfo"/>,
 /// and <see cref="ConstructorInfo"/> lookups via expression tree lambdas.
@@ -11,11 +11,11 @@ namespace Poly.Interpretation.Vm;
 /// or BindingFlags — dead-member analysis can discover the references.
 /// Do not use <c>typeof(T).GetMethod(...)</c> / <c>GetProperty</c> for a known member.</summary>
 internal static class Ref {
-    /// <summary>No-argument void-returning method, e.g. <c>() => foo.Bar()</c>.</summary>
+    /// <summary>No-argument void-returning method, e.g. <c>() =&gt; foo.Bar()</c>.</summary>
     public static MethodInfo Method(Expression<Action> expr) =>
         ((MethodCallExpression)expr.Body).Method;
 
-    /// <summary>No-argument value-returning method (boxed to object?), e.g. <c>() => foo.Bar()</c>.</summary>
+    /// <summary>No-argument value-returning method (boxed to object?), e.g. <c>() =&gt; foo.Bar()</c>.</summary>
     public static MethodInfo Method(Expression<Func<object?>> expr) =>
         expr.Body is MethodCallExpression mce
             ? mce.Method
@@ -30,7 +30,9 @@ internal static class Ref {
     /// delegate type is required.
     /// </summary>
     public static MethodInfo Method<TDelegate>(Expression<TDelegate> expr) where TDelegate : Delegate =>
-        ((MethodCallExpression)expr.Body).Method;
+        expr.Body is MethodCallExpression mce
+            ? mce.Method
+            : ((MethodCallExpression)((UnaryExpression)expr.Body).Operand).Method;
 
     /// <summary>Constructor via <c>() => new T(args)</c>, e.g. <c>Ref.Constructor(() => new InvalidOperationException(""))</c>.
     /// Extract the <see cref="ConstructorInfo"/> from the <c>new</c> expression.</summary>
@@ -43,7 +45,7 @@ internal static class Ref {
 /// <c>Ref&lt;T&gt;.Method(x =&gt; x.Bar())</c> — not <c>typeof(T).GetMethod</c>.</summary>
 internal static class Ref<T> {
     /// <summary>Instance void-returning method on <typeparamref name="T"/>,
-    /// e.g. <c>Ref&lt;ValueStack&gt;.Method(s =&gt; s.SetStackPointer(0))</c>.</summary>
+    /// e.g. <c>Ref&lt;VmValueStack&gt;.Method(s =&gt; s.SetStackPointer(0))</c>.</summary>
     public static MethodInfo Method(Expression<Action<T>> expr) =>
         ((MethodCallExpression)expr.Body).Method;
 

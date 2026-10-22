@@ -3,8 +3,9 @@ using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Abi;
 
-using PrimValueKind = Poly.Interpretation.Analysis.Semantics.ValueRepresentationKind;
+using PrimValueKind = Poly.Interpretation.Vm.Abi.ValueRepresentationKind;
 
 namespace Poly.Interpretation;
 
@@ -19,15 +20,16 @@ public static class Interpreter {
     private static readonly Analyzer _analyzer = new AnalyzerBuilder()
         .UseTypeDefinitionNodeAnalyzer()
         .UseThisReferenceContext()
+        // Bindings precede type/member resolution so a use's type projects from its
+        // declaration; the bind pass resolves dotted type names against the scope.
+        .UseVariableScopeValidator()
         .UseTypeAndMemberResolver()
         .UseLambdaReturnTypeResolution()
-        .UseVariableScopeValidator()
         .UseSideEffectAnalysis()
         .UseConstantFolding()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
         .UseExceptionRegionAnalysis()
-        .UseValueRepresentationAnalysis()
         .UseSyntaxTypeCompatibility()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
@@ -52,7 +54,7 @@ public static class Interpreter {
     public static VmProgram Compile(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
         FailLoudOnAnalysisErrors(analysis);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+        return AbiEmitter.Emit(node, analysis, mode);
     }
 
     /// <summary>Alias of <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/>.</summary>
@@ -66,7 +68,7 @@ public static class Interpreter {
     public static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) {
         var analysis = _analyzer.Analyze(node);
         FailLoudOnAnalysisErrors(analysis);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+        return AbiEmitter.Emit(node, analysis, mode);
     }
 
     /// <summary>
@@ -86,7 +88,7 @@ public static class Interpreter {
     /// </summary>
     public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) {
         FailLoudOnAnalysisErrors(analysis);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode);
+        return AbiEmitter.Emit(node, analysis, mode);
     }
 
     /// <summary>
@@ -101,7 +103,7 @@ public static class Interpreter {
         CompilationMode mode = CompilationMode.Normal) {
         ArgumentNullException.ThrowIfNull(rootParameters);
         FailLoudOnAnalysisErrors(analysis);
-        return DirectVmAbiEmitter.Emit(node, analysis, mode, rootParameters);
+        return AbiEmitter.Emit(node, analysis, mode, rootParameters);
     }
 
     /// <summary>
@@ -125,15 +127,13 @@ public static class Interpreter {
     /// <summary>
     /// Execute a pre-compiled <paramref name="program"/> with state configuration
     /// before the compiled delegate runs.  The <paramref name="configure"/> callback
-    /// can set state properties (e.g. <c>Trace</c>, <c>MaxLoopIterations</c>) and
+    /// can set state properties (e.g. <c>MaxLoopIterations</c>) and
     /// call <c>state.SetArgs(...)</c> to seed arguments.
     /// </summary>
     public static ExecutionResult Execute(VmProgram program, Action<VmState> configure) {
         var state = new VmState(program);
         configure(state);
         state.Status = InterpreterStatus.Running;
-        // Registers array must be large enough for SP-based ring save indexing.
-        state.Registers ??= new long[256];
         state.Program.Delegate(state);
         return new ExecutionResult(state, InterpretResult(state));
     }
@@ -155,7 +155,6 @@ public static class Interpreter {
     /// </summary>
     internal static InterpreterResult Resume(VmState state, params IEnumerable<object?> args) {
         state.Status = InterpreterStatus.Resuming;
-        state.Registers ??= new long[256];
         state.SetArgs(args);
         state.Program.Delegate(state);
         return InterpretResult(state);
@@ -172,15 +171,15 @@ public static class Interpreter {
         long raw = state.Stack.RawSlots[sp - 1];
         int handle = (int)raw;
 
-        // Use ValueRepresentationMetadata from analysis when available to
-        // correctly distinguish heap handles from raw scalars (fixes INT-002).
+        // The emit-side classifier records the effective root's slot kind; it
+        // distinguishes heap handles from raw scalars (INT-002).
         var rootKind = state.Program.RootValueKind;
         var clr = state.Program.RootClrType;
 
         if (rootKind == PrimValueKind.Void)
             return InterpreterResult.Void;
 
-        if (rootKind == PrimValueKind.StackScalar || rootKind == PrimValueKind.Bool) {
+        if (rootKind == PrimValueKind.StackScalar) {
             if (clr == typeof(double) || clr == typeof(float))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
             return InterpreterResult.FromValue(raw);

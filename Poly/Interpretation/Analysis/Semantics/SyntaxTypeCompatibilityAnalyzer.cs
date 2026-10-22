@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.Semantics;
@@ -14,9 +16,8 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 
 /// <summary>
 /// Validate pack on the lowered Syntax AST: operation type compatibility. The
-/// interpretation pipeline resolved types (TypeAndMemberResolver) and classified
-/// representations (ValueRepresentationAnalysis) but never rejected incompatible
-/// operations — a Text member compared to a Number constant, a bool in arithmetic,
+/// interpretation pipeline resolved types (TypeAndMemberResolver) but never
+/// rejected incompatible operations — a Text member compared to a Number constant, a bool in arithmetic,
 /// a non-Boolean operand to <c>not</c>. The VM then silently coerced garbage, and the
 /// C# export failed at compile. This pass reports the class at VM-compile time, so the
 /// runtime fails loud even for programmatically-constructed or MCP-driven expressions
@@ -24,7 +25,7 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 ///
 /// Compatibility is checked at the CLR-type-category level. Unknown and null operands
 /// are skipped (the property bag is loosely typed; null comparisons are supported), and
-/// enum operands accept string constants (runtime stores enum values as strings).
+/// enum operands accept the enum's name as text.
 /// </summary>
 internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public const string Id = "SyntaxTypeCompatibility";
@@ -99,10 +100,84 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             case TypeCast tc:
                 CheckTypeCast(context, tc);
                 break;
+            case ForEachLoop loop:
+                CheckForEachLoop(context, loop);
+                break;
         }
 
         this.AnalyzeChildren(context, node);
     }
+
+    /// <summary>A declared <c>foreach (V x in …)</c> loop variable requires a conversion from
+    /// the collection's element type to <c>V</c> (C# allows an explicit one). When the
+    /// element type is known and no conversion exists, the loop cannot execute soundly.</summary>
+    private void CheckForEachLoop(AnalysisContext context, ForEachLoop loop) {
+        if (loop.DeclaredType is null)
+            return;
+        var declaredDef = context.GetResolvedType(loop.DeclaredType);
+        var declared = declaredDef?.GetRuntimeType();
+        if (declared is null) {
+            Report(context, loop, "cannot resolve the foreach loop variable's declared type");
+            return;
+        }
+        var element = context.GetMetadata<ForEachElementTypeMetadata>(loop)?.ElementType?.GetRuntimeType();
+        if (element is null || CanConvert(element, declared))
+            return;
+        Report(context, loop,
+            $"cannot convert each element of type '{element.Name}' to the loop variable type '{declared.Name}'");
+    }
+
+    /// <summary>A declared <c>foreach (V x in …)</c> loop variable needs an implicit
+    /// conversion from the element type to <c>V</c>, as in C#.</summary>
+    private static bool CanConvert(Type from, Type to) => IsImplicitlyConvertible(from, to);
+
+    /// <summary>True when C# converts <paramref name="from"/> to <paramref name="to"/>
+    /// implicitly: identity, reference/boxing, nullable lifting, or a built-in numeric
+    /// conversion. This is a language rule, not a storage rule.</summary>
+    private static bool IsImplicitlyConvertible(Type from, Type to) {
+        if (from == to)
+            return true;
+        if (Nullable.GetUnderlyingType(to) is { } targetUnderlying) {
+            if (from == targetUnderlying)
+                return true;
+            if (Nullable.GetUnderlyingType(from) is { } sourceUnderlying)
+                return IsImplicitNumeric(sourceUnderlying, targetUnderlying);
+            return IsImplicitNumeric(from, targetUnderlying);
+        }
+        if (Nullable.GetUnderlyingType(from) is not null)
+            return false;
+        if (to.IsAssignableFrom(from))
+            return true;
+        return IsImplicitNumeric(from, to);
+    }
+
+    private static bool IsImplicitNumeric(Type from, Type to) {
+        if (from.IsEnum || to.IsEnum || from.IsPointer || to.IsPointer)
+            return false;
+        return (Type.GetTypeCode(from), Type.GetTypeCode(to)) switch {
+            (TypeCode.SByte, TypeCode.Int16 or TypeCode.Int32 or TypeCode.Int64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Byte, TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32
+                or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int16, TypeCode.Int32 or TypeCode.Int64
+                or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.UInt16, TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64
+                or TypeCode.UInt64 or TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int32, TypeCode.Int64 or TypeCode.Single or TypeCode.Double
+                or TypeCode.Decimal) => true,
+            (TypeCode.UInt32, TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
+                or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Int64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.UInt64, TypeCode.Single or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Char, TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32
+                or TypeCode.Int64 or TypeCode.UInt64 or TypeCode.Single
+                or TypeCode.Double or TypeCode.Decimal) => true,
+            (TypeCode.Single, TypeCode.Double) => true,
+            _ => false,
+        };
+    }
+
 
     private void CheckComparison(AnalysisContext context, Node leftNode, Node rightNode) {
         var left = ClrTypeOf(context, leftNode);
@@ -111,6 +186,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var lc = CategoryOf(left);
         var rc = CategoryOf(right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
+        // A char compares with a numeric operand after promotion (`'a' > 96`).
+        if (IsNumericLike(left) && IsNumericLike(right))
+            return;
         if (!Compatible(lc, left, rc, right))
             Report(context, leftNode,
                 $"comparison between incompatible types '{left.Name}' and '{right.Name}'");
@@ -127,7 +205,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var rc = CategoryOf(right);
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
 
-        if (kind is ArithmeticKind.Add && lc is Cat.Text && rc is Cat.Text) {
+        // Add is string concatenation when an operand is a string (`"a" + 1`, `'a' + "b"`).
+        // `char + char` is numeric in C# (both are Cat.Text, so it is excluded here).
+        if (kind is ArithmeticKind.Add && (left == typeof(string) || right == typeof(string))) {
             if (!RewriteStringConcat(context, parent, leftNode, rightNode))
                 Report(context, leftNode, "string concatenation could not be resolved to String.Concat");
             return;
@@ -148,11 +228,16 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        bool ok = lc is Cat.Number && rc is Cat.Number;
+        bool ok = IsNumericLike(left) && IsNumericLike(right);
         if (!ok)
             Report(context, leftNode,
                 $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')");
     }
+
+    /// <summary>True when the type takes part in arithmetic as a number. <c>char</c> is
+    /// <see cref="Cat.Text"/> (string concatenation needs that) but promotes to <c>int</c>
+    /// in arithmetic and comparison, as in C#.</summary>
+    private static bool IsNumericLike(Type t) => t == typeof(char) || CategoryOf(t) is Cat.Number;
 
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
         var target = ClrTypeOf(context, typeAs)
@@ -173,8 +258,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             && typeDef is IClrTypeDefinition { RuntimeType.IsValueType: true }) {
             var replacement = new Default(created.Type);
             context.SetResolvedType(replacement, typeDef);
-            var (kind, clr) = RepresentationOf(typeDef);
-            context.SetMetadata(replacement, new ValueRepresentationMetadata(kind, clr));
             Replace(context, created, replacement);
             return;
         }
@@ -220,6 +303,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             }
             Report(context, invoke,
                 $"Invoke target must be a member, lambda, or stored closure, got {invoke.Delegate.GetType().Name}");
+            return;
+        }
+        if (invoke.Delegate is TypeReference { TypeName: "nameof" }) {
+            // Folded to a constant by the constant-folding pass; the callee is accepted here
+            // because the analyzer walks the original node, not the replacement.
             return;
         }
         Report(context, invoke,
@@ -420,70 +508,92 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"lambda has {nParams} parameter(s) but invoke has {nArgs} argument(s)");
     }
 
+    /// <summary>
+    /// A local's type is recorded on its declaring <see cref="Variable"/> node, but
+    /// every use (including each assignment destination) is a distinct node. Resolve
+    /// a use to the declaration the scope validator bound it to, so the prior type of
+    /// the <em>binding</em> — not of one assignment node — is what later writes check.
+    /// </summary>
+    private static Node BindingOf(AnalysisContext context, Variable variable) {
+        var meta = context.GetMetadata<VariableAnalysisMetadata>(variable);
+        if (meta is not null) {
+            if (meta.VariableReferences.TryGetValue(variable, out var declaration)
+                && declaration is not null)
+                return declaration;
+            if (meta.ParameterReferences.TryGetValue(variable, out var parameter))
+                return parameter;
+        }
+        return variable;
+    }
+
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
-        var rhsMeta = context.GetMetadata<ValueRepresentationMetadata>(assignment.Value);
-        if (rhsMeta is null)
-            return;
-        if (rhsMeta.Kind is ValueRepresentationKind.Void) {
+        var binding = BindingOf(context, variable);
+        var isNullLiteral = assignment.Value is Constant { Value: null };
+        var rhsType = isNullLiteral ? null : ClrTypeOf(context, assignment.Value);
+        if (rhsType == typeof(void)) {
             Report(context, assignment,
                 $"cannot assign void to variable '{variable.Name}'");
             return;
         }
 
-        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(variable);
-        if (rhsMeta.Kind is ValueRepresentationKind.Unknown) {
-            if (prior is null)
-                context.SetMetadata(variable, new VariableAssignedTypeMetadata(null, rhsMeta.Kind));
-            else if (prior.Kind is not ValueRepresentationKind.Unknown)
+        var prior = context.GetMetadata<VariableAssignedTypeMetadata>(binding);
+        // A parameter's declared type is its prior, even on the first write. It is
+        // not stored on the parameter so every write is checked against the signature.
+        if (prior is null
+            && binding is Parameter parameter
+            && context.GetResolvedType(parameter)?.GetRuntimeType() is { } parameterType) {
+            prior = new VariableAssignedTypeMetadata(parameterType);
+        }
+
+        // A null literal has no type; it is assignable to a reference or nullable prior.
+        if (isNullLiteral) {
+            if (prior?.ClrType is { } nullTarget
+                && nullTarget.IsValueType
+                && Nullable.GetUnderlyingType(nullTarget) is null) {
                 Report(context, assignment,
-                    $"cannot assign '{TypeLabel(rhsMeta.ClrType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+                    $"cannot assign 'null' to variable '{variable.Name}' (incompatible with prior '{nullTarget.Name}')");
+            }
             return;
         }
 
-        var rhsType = rhsMeta.ClrType;
-        if (rhsType is not null && CategoryOf(rhsType) is Cat.Null)
+        if (rhsType is null) {
+            if (prior is null)
+                context.SetMetadata(binding, new VariableAssignedTypeMetadata(null));
+            else
+                Report(context, assignment,
+                    $"cannot assign an unresolved value to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType)}')");
             return;
+        }
 
         if (prior is null) {
-            context.SetMetadata(variable, new VariableAssignedTypeMetadata(rhsType, rhsMeta.Kind));
+            context.SetMetadata(binding, new VariableAssignedTypeMetadata(rhsType));
             return;
         }
 
-        if (prior.Kind != rhsMeta.Kind) {
+        var priorType = prior.ClrType;
+        if (priorType is null) {
             Report(context, assignment,
-                $"cannot assign '{TypeLabel(rhsType, rhsMeta.Kind)}' to variable '{variable.Name}' (incompatible with prior '{TypeLabel(prior.ClrType, prior.Kind)}')");
+                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with a prior write that has no resolved type)");
             return;
         }
-
-        if (prior.ClrType is null || rhsType is null || prior.ClrType == rhsType)
+        if (priorType == rhsType)
             return;
 
-        var destDef = context.TypeDefinitions.GetTypeDefinition(prior.ClrType);
+        var destDef = context.TypeDefinitions.GetTypeDefinition(priorType);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
-        if (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef)) {
-            RewriteAssignmentConversion(context, assignment, destDef, srcDef);
+        bool convertible = IsImplicitlyConvertible(rhsType, priorType)
+            || (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef));
+        if (convertible) {
+            if (destDef is not null && srcDef is not null)
+                RewriteAssignmentConversion(context, assignment, destDef, srcDef);
             return;
         }
 
-        if (IsIeeeScalar(prior.ClrType) != IsIeeeScalar(rhsType)) {
-            Report(context, assignment,
-                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
-            return;
-        }
-
-        var pc = CategoryOf(prior.ClrType);
-        var rc = CategoryOf(rhsType);
-        if (pc is Cat.Unknown || rc is Cat.Unknown || !Compatible(pc, prior.ClrType, rc, rhsType, destThenSource: true)) {
-            Report(context, assignment,
-                $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{prior.ClrType.Name}')");
-        }
+        Report(context, assignment,
+            $"cannot assign '{rhsType.Name}' to variable '{variable.Name}' (incompatible with prior '{priorType.Name}')");
     }
 
-    private static string TypeLabel(Type? type, ValueRepresentationKind kind) =>
-        type?.Name ?? kind.ToString();
-
-    private static bool IsIeeeScalar(Type type) =>
-        type == typeof(float) || type == typeof(double);
+    private static string TypeLabel(Type? type) => type?.Name ?? "unknown";
 
     private void CheckAssign(AnalysisContext context, Assignment assignment, Member destination) {
         var target = ClrTypeOf(context, destination);
@@ -527,9 +637,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             var srcCat = source is not null ? CategoryOf(source) : Cat.Unknown;
             var destCat = dest is not null ? CategoryOf(dest)
                 : destDef is IClrTypeDefinition cd ? CategoryOf(cd.RuntimeType) : Cat.Unknown;
-            if ((srcCat is Cat.Number && destCat is Cat.Number)
-                || (srcCat is Cat.Enum && destCat is Cat.Number)
-                || (srcCat is Cat.Number && destCat is Cat.Enum)) {
+            bool srcNumeric = source is not null && IsNumericLike(source);
+            bool destNumeric = dest is not null && IsNumericLike(dest);
+            if ((srcNumeric && destNumeric)
+                || (srcCat is Cat.Enum && destNumeric)
+                || (srcNumeric && destCat is Cat.Enum)) {
                 if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                     return;
             }
@@ -603,7 +715,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         ITypeDefinition srcDef) {
         if (TryConversionInvoke(context, assignment.Value, destDef, srcDef, implicitOnly: true) is not { } converted)
             return;
-        Replace(context, assignment, assignment with { Value = converted });
+        var rewritten = assignment with { Value = converted };
+        context.SetResolvedType(rewritten, destDef);
+        Replace(context, assignment, rewritten);
     }
 
     private static bool RewriteOperatorConversion(
@@ -665,14 +779,29 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (parts.Count < 2)
             return false;
         ITypeMethod? method;
+        var allStrings = parts.All(p => ClrTypeOf(context, p) == typeof(string));
+        if (!allStrings && parts.All(p => p is Constant)) {
+            // Literal parts fold to one string constant (cheaper than a runtime call).
+            var text = "";
+            foreach (var p in parts)
+                text += Convert.ToString(((Constant)p).Value, CultureInfo.InvariantCulture);
+            Replace(context, parent, new Constant(text));
+            return true;
+        }
+
         if (parts.Count <= 4) {
-            var argTypes = Enumerable.Repeat(stringDef, parts.Count);
+            // A part that is not a string takes the object overload; the emitter boxes the
+            // integer into the object argument (`"a" + x`, `x` an int).
+            var objectDef = context.TypeDefinitions.GetTypeDefinition(typeof(object)) ?? stringDef;
+            var argTypes = parts
+                .Select(p => ClrTypeOf(context, p) == typeof(string) ? stringDef : objectDef)
+                .ToArray();
             method = stringDef.FindMatchingMethodOverloads("Concat", argTypes).FirstOrDefault();
         }
         else {
-            method = FindConcatEnumerable(stringDef);
+            method = FindConcatEnumerable(stringDef, allStrings ? typeof(string) : typeof(object));
         }
-        method ??= FindConcatEnumerable(stringDef);
+        method ??= FindConcatEnumerable(stringDef, allStrings ? typeof(string) : typeof(object));
         if (method is null)
             return false;
         var invoke = StampStaticInvoke(context, method, [.. parts]);
@@ -690,20 +819,23 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (effective is Add add
             && ClrTypeOf(context, add.LeftHandValue) is { } lt
             && ClrTypeOf(context, add.RightHandValue) is { } rt
-            && CategoryOf(lt) is Cat.Text
-            && CategoryOf(rt) is Cat.Text) {
+            && (lt == typeof(string) || rt == typeof(string))) {
             CollectStringConcatParts(context, add.LeftHandValue, parts);
             CollectStringConcatParts(context, add.RightHandValue, parts);
             return;
         }
-        parts.Add(node);
+        // Prefer the folded replacement (e.g. `1 + 2` -> Constant(3)) so a literal chain
+        // whose part is a folded add still counts as a constant.
+        parts.Add(effective);
     }
 
     private static bool IsStringConcatInvoke(Node node) =>
         node is Invoke { Delegate: Member { MemberName: "Concat", Value: ClrTypeReference { RuntimeType: var t } } }
         && t == typeof(string);
 
-    private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef) {
+    private static ITypeMethod? FindConcatEnumerable(ITypeDefinition stringDef, Type elementType) {
+        var arrayType = elementType.MakeArrayType();
+        var enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
         ITypeMethod? enumerable = null;
         foreach (var method in stringDef.Methods) {
             if (!method.IsStatic || !string.Equals(method.Name, "Concat", StringComparison.Ordinal))
@@ -712,9 +844,9 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             if (parameters.Length != 1)
                 continue;
             var paramType = parameters[0].ParameterTypeDefinition.GetRuntimeType();
-            if (paramType == typeof(string[]))
+            if (paramType == arrayType)
                 return method;
-            if (paramType == typeof(IEnumerable<string>))
+            if (paramType == enumerableType)
                 enumerable = method;
         }
         return enumerable;
@@ -775,8 +907,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                     : null);
             if (offsetType is not null)
                 context.SetResolvedType(amount, offsetType);
-            if (context.GetMetadata<ValueRepresentationMetadata>(offset) is { } vr)
-                context.SetMetadata(amount, vr);
         }
         var coerced = CoerceTo(context, amount, paramType) ?? amount;
         var member = new Member(date, method.Name);
@@ -841,8 +971,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         context.SetNodeReplacement(original, replacement);
         if (context.GetResolvedType(replacement) is { } resolved)
             context.SetResolvedType(original, resolved);
-        if (context.GetMetadata<ValueRepresentationMetadata>(replacement) is { } vr)
-            context.SetMetadata(original, vr);
     }
 
     private static bool IsIeeeFloating(Type type) =>
@@ -914,25 +1042,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         context.SetResolvedType(typeOrInstance, method.DeclaringTypeDefinition);
         context.SetResolvedMember(member, method);
         context.SetResolvedMember(invoke, method);
-        var (kind, clr) = RepresentationOf(method.MemberTypeDefinition);
-        context.SetMetadata(invoke, new ValueRepresentationMetadata(kind, clr));
-        context.SetMetadata(member, new ValueRepresentationMetadata(kind, clr));
-    }
-
-    private static (ValueRepresentationKind Kind, Type? ClrType) RepresentationOf(ITypeDefinition typeDef) {
-        if (typeDef is not IClrTypeDefinition clrType)
-            return (ValueRepresentationKind.HeapRef, null);
-        var rt = clrType.RuntimeType;
-        if (Nullable.GetUnderlyingType(rt) is not null)
-            return (ValueRepresentationKind.HeapRef, rt);
-        if (rt == typeof(bool))
-            return (ValueRepresentationKind.Bool, rt);
-        if (rt.IsValueType || rt.IsPrimitive) {
-            return AbiValueTypes.IsLongRepresentable(rt)
-                ? (ValueRepresentationKind.StackScalar, rt)
-                : (ValueRepresentationKind.HeapRef, rt);
-        }
-        return (ValueRepresentationKind.HeapRef, rt);
     }
 
     private void Report(AnalysisContext context, Node node, string message) =>
@@ -940,8 +1049,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private enum Cat { Text, Number, Boolean, Date, Enum, Guid, Null, Unknown }
 
-    private static Type? ClrTypeOf(AnalysisContext context, Node node) =>
-        context.GetMetadata<ValueRepresentationMetadata>(node)?.ClrType;
+    private static Type? ClrTypeOf(AnalysisContext context, Node node) {
+        var effective = context.GetNodeReplacement(node) ?? node;
+        return context.GetResolvedType(effective)?.GetRuntimeType()
+            ?? (effective is Constant { Value: not null } constant
+                ? constant.Value.GetType()
+                : null);
+    }
 
     private static Cat CategoryOf(Type type) {
         if (type == typeof(bool)) return Cat.Boolean;
@@ -971,8 +1085,5 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 }
 
 /// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.
-/// Later writes must be slot-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
-internal sealed record VariableAssignedTypeMetadata(
-    Type? ClrType,
-    ValueRepresentationKind Kind
-) : IAnalysisMetadata;
+/// Later writes must be type-compatible or <see cref="SyntaxTypeCompatibilityAnalyzer"/> errors.</summary>
+internal sealed record VariableAssignedTypeMetadata(Type? ClrType) : IAnalysisMetadata;

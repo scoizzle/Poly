@@ -8,6 +8,7 @@ using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
+using Poly.Introspection.CommonLanguageRuntime;
 
 using Expr = System.Linq.Expressions.Expression;
 using SN = Poly.Ast.Nodes;
@@ -20,8 +21,8 @@ public class VmCorrectnessTests {
     private static AnalysisResult LinqAnalyze(Node node) {
         return new AnalyzerBuilder()
             .UseThisReferenceContext()
-            .UseTypeAndMemberResolver()
             .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
             .UseSideEffectAnalysis()
             .UseJumpTargetResolution()
             .UseConstantFolding()
@@ -618,6 +619,20 @@ public class VmCorrectnessTests {
         using var sd = Interpreter.Execute(nd);
 
         await Assert.That(sd.RawValue).IsEqualTo(sn.RawValue);
+    }
+
+    [Test]
+    public async Task SetArgs_TwoParamsAndLocals_SecondParamSurvivesLocalStores() {
+        var x = new Parameter("x", TypeReference.To<long>());
+        var y = new Parameter("y", TypeReference.To<long>());
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var body = new Invoke(new Lambda([x, y], new Block(
+            [new Assignment(a, new Constant(20L)),
+             new Assignment(b, new Constant(99L)),
+             y], [a, b])));
+        var (_, result) = ExecVm(body, s => s.SetArgs(10L, 20L));
+        await Assert.That(result).IsEqualTo(20L);
     }
 
     [Test]

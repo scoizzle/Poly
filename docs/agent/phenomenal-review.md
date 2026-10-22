@@ -1,8 +1,8 @@
 # Phenomenal review protocol
 
 **Audience:** any agent or human.  
-**Mode:** review only by default — **do not modify production or test code** unless the user explicitly asks to harden afterward.  
-**Output:** structured findings **and** checkable follow-ups **in the repo docs** (not chat-only).
+**Mode:** review only — **do not modify the reviewed source, tests, or config**. The review note under `docs/` is the only artifact you write (a shell-less reviewer returns it in its reply; the parent writes it). You **must author each `bug`'s test in that note and prove it red in a disposable copy** (§3.10); the test is evidence, not a fix. Hardening still requires the user to ask.  
+**Output:** structured findings, a validated repro test per bug, and checkable follow-ups **in the repo docs** (not chat-only).
 
 This protocol optimizes for **correctness, contracts, and evidence**. It is not a maintainability / “code judo” pass (use a separate quality audit for that) and not the pre-ship **fix** loop (see pre-ship gate).
 
@@ -21,6 +21,10 @@ The caller names a **target** and optionally a **mode**. Defaults if omitted:
 | **PR** | Diff of the named PR if `gh` is available; else stop and say so |
 | **Paths** | Only the listed paths within the chosen target |
 
+The commands above and below need a shell. A reviewer without one works from the
+**review bundle** a parent gives it — status, diff, untracked contents, and
+baselines — and reports any baseline it lacks as uncertainty (§3.8).
+
 | Mode | Default | Meaning |
 |---|---|---|
 | **standard** | yes | One thorough adversarial pass (this agent is **reviewer only**) |
@@ -34,7 +38,7 @@ User may pass prior review docs to **re-verify**, not rubber-stamp.
 ```text
 Read docs/agent/phenomenal-review.md and execute it against <local | branch | pr N | paths…>
 [mode: standard | multi].
-Write findings and follow-up tasks into the docs as the protocol requires.
+Write findings and follow-up tasks into the docs as the protocol requires (a shell-less reviewer returns them in its reply; the parent writes them).
 Assume the code is wrong until evidence says otherwise.
 ```
 
@@ -51,10 +55,11 @@ From the Bun rewrite: the implementer wants the change accepted; the reviewer wa
 | Rule | Practice |
 |---|---|
 | **Reviewer is not implementer** | Do not defend the change. Do not invent reasons it “probably works.” |
+| **Finding is a failing test** | Do not file a prose-only `bug`. Author the smallest test, run it red in a disposable worktree or copy, and paste it verbatim plus the failure into the review (§3.10). The reviewed tree stays untouched. A bug you cannot make fail is `open (unproven)`, not resolved. |
 | **Prefer diff-first** | Start from the unified diff. Load surrounding source only to prove or disprove a failure mode — not to re-derive the author’s design story. |
 | **If you also wrote the code** | Prefer **mode: multi**: spawn (or ask for) a second review context that receives **only** the diff + this protocol + required project maps — **not** the session’s implementation chat. Merge both issue lists. |
 | **Multi-reviewer merge** | Deduplicate by (file, failure mode). Keep the stronger severity. Never drop a bug because another reviewer “liked” the approach. |
-| **Primary evidence only** | Do not chain-trust prior review quotes, chat summaries, or “~N” counts. Re-read current source, re-run greps, re-`git show` baselines yourself (§3.8). |
+| **Primary evidence only** | Do not chain-trust prior review quotes, chat summaries, or “~N” counts. Re-read current source, re-run greps, re-`git show` baselines yourself (§3.8) — greps need only `read`; `git show` needs a shell. |
 
 Default success metric is unchanged: a second engineer can implement fixes from the follow-ups doc alone.
 
@@ -65,6 +70,7 @@ Default success metric is unchanged: a second engineer can implement fixes from 
 - Do not invent issues to fill space.
 - Empty `## Issues` is allowed only after an honest adversarial pass.
 - Every issue needs `path:line` in the **post-change** tree.
+- Every `bug` needs a repro test **in the report** that you watched fail on the reviewed tree in a disposable copy (§3.10). No red test, no bug: file it `open (unproven)` and it cannot be closed.
 - Severity: **bug** | **suggestion** | **nit** (see §6).
 - Tone: direct, no emojis, no vague “consider improving” without a failure mode.
 - **Paragraph-long workaround comments** (or plan notes that justify residual danger as “OK for now” without a tracked follow-up) are a smell: prefer flagging the underlying wrongness (Bun’s review rule: if you need a long comment to justify a workaround, the code is wrong).
@@ -110,15 +116,17 @@ Flag changes that **delete, skip, or weaken** tests without replacing the oracle
 
 ### 3.1 Collect the diff
 
+With a shell, run:
+
 ```bash
 git status --porcelain
 git diff --stat HEAD          # local tracked
 git diff HEAD
-# untracked source: inspect or diff --no-index as needed; skip binaries / local DBs unless ship risk
+git ls-files --others --exclude-standard   # untracked files — read each in full; do not skip an untracked source file
 ```
 
 For branch/PR targets, use the merge-base or `gh pr diff` as appropriate.  
-**Size gate:** if the unified diff is multi‑MB of junk (e.g. untracked `node_modules`, datasets), stop and ask to ignore or clean — do not pretend to review it.
+**Size gate:** if the unified diff is multi‑MB of junk (e.g. untracked `node_modules`, datasets), stop and ask to ignore or clean — do not pretend to review it. A reviewer without a shell takes the same items from the review bundle.
 
 Note **scope drift**: files that do not belong to the claimed task (scratch demos, generated one-offs, local DBs).
 
@@ -208,7 +216,7 @@ If the diff updates task/gate docs:
 
 ### 3.6 Optional verification (read-only)
 
-If the environment allows, run the project’s standard build/test command and note failures **related to the change**. Do not “fix” them in review-only mode; file them as findings/follow-ups.
+If the environment allows, run the project’s standard build/test command **in a disposable copy (§3.10)** and note failures **related to the change**. Do not “fix” them in review-only mode; file them as findings/follow-ups.
 
 Treat compiler/analyzer errors and failing tests as a **queue of adversarial claims**: each item is either a confirmed bug, an environmental flake (say so), or out of scope (say so).
 
@@ -233,7 +241,7 @@ Target:
   <local | branch <name> | pr <n> | paths: …>
 
 Diff (primary evidence — start here):
-  <path to unified diff file, or: run git diff HEAD / gh pr diff N yourself>
+  <path to the review bundle directory, or for a reviewer with a shell: run git diff HEAD / gh pr diff N>
 
 Required maps (if present in repo):
   Agents.md (or AGENTS.md), docs/CORE.md if core machinery touched,
@@ -248,10 +256,14 @@ Hard rules:
     invariant on ALL siblings and whether tests force each sibling.
   - Reachability before severity: for any new throw/fail-loud, argue who can hit it
     on valid vs corrupt inputs before choosing bug vs suggestion vs nit.
-  - Primary evidence: recompute counts with your own greps; re-read current files;
-    if comparing to HEAD, run git show / git diff yourself — do not trust quoted
-    baselines from other reviews.
+  - Primary evidence: recompute counts with your own greps; re-read current files.
+    Greps and reads need no shell. If comparing to HEAD, git show / git diff need
+    a shell; without one, take the baseline from the bundle's `04-show` sections.
+    Do not trust quoted baselines from other reviews.
   - Invariant-stating comments are checklists: every sibling path must satisfy them.
+  - Every `bug` must be demonstrated: write the smallest failing test (or runnable
+    doc check) in a disposable copy, run it red for the stated reason, and return
+    the test verbatim plus the failure. Do not edit the reviewed tree.
 
 Deliverables for Pass B (return in your reply; parent will merge into docs/):
   ## Pass B Summary
@@ -259,9 +271,11 @@ Deliverables for Pass B (return in your reply; parent will merge into docs/):
   ## Pass B Issues
   ### Issue … -- Severity: bug|suggestion|nit
   - File: path:LINE
+  - Test: path::Method_Condition_ExpectedResult (or Check: command → output)
+  - Repro: command → observed failure
   - Description: …
   - Suggestion: …
-  - Status: open
+  - Status: open | open (unproven)
 
 Empty Issues only after an honest adversarial pass.
 ```
@@ -271,7 +285,7 @@ Empty Issues only after an honest adversarial pass.
 | Claim type | Required evidence |
 |---|---|
 | **“Still broken at line N”** | Your `read_file` / grep of **current** tree, not a quote from r1/r2/r3 |
-| **“HEAD used to throw X”** | `git show HEAD:path` or `git diff HEAD -- path` run **by you** this session |
+| **"HEAD used to throw X"** | `git show HEAD:path` or `git diff HEAD -- path`, run **by you** this session — needs a shell; without one, the baseline comes from the bundle's `04-show` sections |
 | **“~N markers / N call sites”** | Recompute: per-file greps, then **sum**; write the exact total (not “~36” from memory) |
 | **“Prior review said fixed”** | Re-verify against current source; disposition fixed/open/invalid yourself |
 | **Derived aggregates in plans** | Same — re-grep before repeating a number into the new review note |
@@ -286,11 +300,44 @@ When the diff adds or keeps comments of the form “always X”, “must Y”, �
 2. Run the **sibling-path check** (§3.2a) against that list.
 3. If any path violates the comment, file a **bug** (comment is false advertising) or require the comment be narrowed — do not leave a lying invariant.
 
+### 3.10 Every bug ships a valid test in the report
+
+A `bug` is a claim that the target tree produces a wrong outcome. The proof is a test that has been watched fail — by you in a disposable copy, or by the gate when your harness cannot execute. The test itself is supplied in the report, never written into the reviewed tree.
+
+| Finding kind | Required repro |
+|---|---|
+| Executable code (`Poly/`, VM, analysis, MCP, CSharp surface) | The test source, verbatim in the review note, in the shape of the owning test project (`Poly.Tests/…`), asserting the **expected-correct** behavior and validated red against the reviewed tree. |
+| Docs / plan status / naming / config | A runnable check (`rg`, `git show`, a probe script) whose captured output demonstrates the condition. Record the command and output. |
+| Anything else | No runnable repro is possible → file as `bug` with `Status: open (unproven)`. It still blocks ship and cannot be marked fixed. |
+
+Rules for the repro:
+
+1. **Smallest rung that can fail.** Prefer analyze/compile over runtime, VM over MCP, suite over probe (§2.1). It must exercise the real SUT path, not a copy.
+2. **Validate read-only.** Never edit the reviewed tree. When your harness can execute, validate in a disposable copy:
+   - Branch/PR: `git worktree add <temp> <reviewed-sha>`.
+   - Local uncommitted changes: add a worktree at `HEAD`, then apply `git diff HEAD` (plus untracked files) there.
+   - Add the test file in the copy only, run it with a narrow filter, capture the command and failure, then remove the worktree (`--force` when its untracked `bin/`/`obj/` block the delete).
+
+   A test you did not run is a hypothesis, not a repro. If your harness **cannot** execute (the pipeline's read-only reviewer), supply the test verbatim and mark the finding `pending red`; the gate must run it red before the fix. `pending red` blocks ship and cannot be closed without that run.
+3. **Red for the stated reason.** The failure must be the behavior the finding names. A compile, setup, or typo failure proves nothing unless the finding is itself a compile-class finding.
+4. **Report the test verbatim.** Full method plus any test-only helpers, in the finding block or the review's repro appendix. A description or sketch of a test is not a test.
+5. **Named for the finding.** Follow the repo convention (`Method_Condition_ExpectedResult`) and put the finding id (`F#`) beside the test so the fixer and re-verify can match them.
+6. **The fixer re-proves red.** The gate lands the reported test verbatim and confirms it fails the same way *before* changing production code. If it does not fail, the finding is invalid — do not adapt the test to current behavior.
+7. **It stays after green.** Never delete, skip, weaken, or retarget a landed repro. If the original expectation was wrong, dispose the finding `invalid` explicitly.
+
+**The author's test is the spec, not your oracle.** With test-first (§AGENTS.md), that test already passes on the reviewed tree. A finding needs a test that fails now; do not cite or recycle the author's green task test as its repro.
+
+**Suite state:** review leaves the tree and suite exactly as found; the red result exists only in the disposable copy. The test enters the real tree at fix time, goes red, then green.
+
+**Re-verify:** confirm the reported test was landed verbatim, still encodes the original expectation, and is green. If it never landed, the finding was never fixed.
+
 ---
 
 ## 4. What not to do
 
-- Do not implement fixes unless the user switches you to harden/pre-ship mode.
+- Do not implement fixes unless the user switches you to harden/pre-ship mode. Author the repro test in the report only (§3.10); never edit the reviewed tree.
+- Do not file a `bug` you have not watched fail.
+- Do not leave the reported test unvalidated, paraphrased, or untraceable to its finding.
 - Do not rubber-stamp a prior review: re-verify or mark fixed/invalid with evidence **you** collected.
 - Do not flood with nits when bugs exist — lead with bugs.
 - Do not expand scope into a full maintainability redesign unless the user asked for that skill.
@@ -307,7 +354,8 @@ When the diff adds or keeps comments of the form “always X”, “must Y”, �
 
 ### 5.1 Review note in docs
 
-Write under **`docs/`** (prefer a stable convention):
+Write under **`docs/`** (prefer a stable convention). A shell-less reviewer
+returns the note in its reply, and the parent writes it here:
 
 | Situation | Path |
 |---|---|
@@ -316,12 +364,13 @@ Write under **`docs/`** (prefer a stable convention):
 
 **Required structure:**
 
-```markdown
+````markdown
 # <Title> — YYYY-MM-DD
 
 - **Target**: local | branch <name> | PR <n> | paths …
 - **Mode**: standard | multi
 - **Issue counts**: N bugs, M suggestions, K nits
+- **Repro tests**: N validated in a disposable copy | none — no bug findings
 - **Verdict**: one line (adversarial: ship / not ship / ship only with F… closed)
 - **Process notes** (optional): process gaps that caused or would re-cause the bugs
 
@@ -334,19 +383,34 @@ Call out oracle strength (tests/types) and any multi-pass merge.
 
 ### Issue 1 -- Severity: bug
 - File: path/to/file.ext:LINE
+- Test: `Poly.Tests/…/File.cs::Method_Condition_ExpectedResult` (verbatim in Appendix A)
+- Repro: `<scratch-worktree command>` → `<observed failure>`
 - Description: what is wrong and why it matters (evidence / failure mode)
 - Suggestion: concrete fix (prefer moving detection earlier on the feedback ladder)
-- Status: open
+- Status: open | pending red | open (unproven)
+
+## Appendix A — Repro tests (verbatim)
+
+```csharp
+// F1 — Poly.Tests/…/File.cs
+[Test]
+public async Task Method_Condition_ExpectedResult()
+{
+    // ...
+}
 ```
+````
+
+Docs/config findings use `Check:` (command + captured output) instead of `Test:`. `pending red` means the test is supplied but not yet executed (read-only reviewer); `open (unproven)` means no repro exists and says why.
 
 ### 5.2 Follow-up tasks in docs
 
 **Chat is not the system of record.**
 
-1. Create or update a follow-ups file next to the suite (e.g. `<prefix>-followups-YYYY-MM-DD.md`) or under `docs/agent/reviews/`.
-2. Every open **bug** and material **suggestion** becomes a checkable task (`- [ ] **F#** — …`) with file, do-statement, and owning plan phase if any.
-3. Disposition prior open items: **fixed** / **still open** / **invalid** with one-line evidence.
-4. Update the suite README or plan status table if reopenings change phase/gate state — **do not** mark complete unless true.
+1. Create or update a follow-ups file next to the suite (e.g. `<prefix>-followups-YYYY-MM-DD.md`) or under `docs/agent/reviews/`. A shell-less reviewer returns this text in its reply; the parent writes it.
+2. Every open **bug** and material **suggestion** becomes a checkable task (`- [ ] **F#** — …`) with file, do-statement, owning plan phase if any, and the repro test/check from §3.10. The test source lives in the review note; the gate lands it at fix time.
+3. Disposition prior open items: **fixed** / **still open** / **invalid** with one-line evidence. `fixed` means the reported test was landed verbatim and is green; a bug with no repro stays `still open (unproven)` and is never disposed as fixed.
+4. Update the suite README or plan status table if reopenings change phase/gate state — **do not** mark complete unless true. A shell-less reviewer returns the needed status change in its reply; the parent applies it.
 5. If the suite states “all follow-ups go into the docs,” obey that rule literally.
 6. **Process follow-ups:** if the same bug class keeps recurring (e.g. metadata key mismatch, test theater), add an explicit task to tighten gates, tests, or this protocol — not only a one-off code fix.
 
@@ -354,7 +418,7 @@ Call out oracle strength (tests/types) and any multi-pass merge.
 
 ### 5.3 User-facing report
 
-In the conversation, give a short report: verdict, counts, path to review file, path to follow-ups, top 3–5 issues. Name the follow-ups path as evidence. Do not tell the next agent to execute those tasks unless they are already on `THEN`. If multi-mode, note both passes.
+In the conversation, give a short report: verdict, counts, path to review file, path to follow-ups, the repro appendix location for each bug, top 3–5 issues. Name the follow-ups path as evidence. Do not tell the next agent to execute those tasks unless they are already on `THEN`. If multi-mode, note both passes.
 
 ---
 
@@ -362,11 +426,25 @@ In the conversation, give a short report: verdict, counts, path to review file, 
 
 | Severity | Use when |
 |---|---|
-| **bug** | Wrong behavior, silent no-op, false-green test, contract regression, incorrect API/tool output under the intended path, UAF/leak/double-free class issues, same-shape-different-meaning regressions, **sibling path still wrong** after a claimed fix, invariant comment violated by another branch |
+| **bug** | Wrong behavior, silent no-op, false-green test, contract regression, incorrect API/tool output under the intended path, UAF/leak/double-free class issues, same-shape-different-meaning regressions, **sibling path still wrong** after a claimed fix, invariant comment violated by another branch — **demonstrated by a failing test or runnable check (§3.10)** |
 | **suggestion** | Incomplete fail-closed, incomplete coverage of a metadata/API surface, overstated plan status, missing test for a real risk, detection only at a late feedback rung when an earlier one is feasible, fail-loud that is **only** reachable on deliberately corrupt inputs (state that explicitly after reachability analysis) |
 | **nit** | Dead code, redundant work, naming drift, comment wrong — only if true; never as padding; unreachable-on-valid-tree throws with **proven** unreachability may land here or as suggestion, not as a triumphant contract bug |
 
+A `bug` with no runnable repro is still a blocker but is recorded `open (unproven)`; it cannot be disposed as fixed and does not count as proven. A bug whose test is supplied but not yet executed is `pending red`; the gate must run it red before the fix, and it cannot be closed before then.
+
 When unsure between **bug** and **suggestion** for a throw: complete §3.2b first; default to **bug** only if valid product inputs can hit a wrong outcome (including silent wrong success on a sibling path).
+
+The global OpenCode scale maps onto these labels, so a review from any tool
+agrees with this one:
+
+| Global | Here |
+|---|---|
+| 🔴 | bug |
+| 🟠 | bug |
+| 🟡 | suggestion |
+| 🟢 | nit |
+
+Blocking means 🔴 or 🟠. A 🟢 is a nit.
 
 ---
 
@@ -375,7 +453,7 @@ When unsure between **bug** and **suggestion** for a throw: complete §3.2b firs
 | Process | Difference |
 |---|---|
 | **This protocol** | Deep **adversarial** correctness review; docs artifacts; no fix by default; optional multi-pass split context |
-| **Pre-ship gate** | After (or instead of) review when shipping: categorize → **fix** 🔴/🟠 → re-review → green build/tests |
+| **Pre-ship gate** | After (or instead of) review when shipping: categorize → **fix** 🔴 and 🟠 → re-review → green build/tests |
 | **Implementer loop** | Write code; must not self-approve under this bar without a separate reviewer context |
 | **Maintainability / code-judo audit** | Structure, file size, abstraction quality — separate pass |
 | **Tool-specific “/review” UIs** | May collect diffs or post PR comments; they should still **execute this bar**, prefer **split-context** reviewers, and **land follow-ups in docs** |
@@ -413,13 +491,16 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 - [ ] Sibling-path check done for dual paths; tests force each sibling (§3.2a)
 - [ ] Fail-loud / throw changes have reachability → severity (§3.2b)
 - [ ] Invariant-stating comments checked against all siblings (§3.9)
-- [ ] Counts and HEAD baselines recomputed by you (§3.8) — no chain-trust of prior reviews
+- [ ] Counts and HEAD baselines recomputed by you (§3.8) — no chain-trust of prior reviews (greps need no shell; a `git show` baseline needs one, else the bundle's `04-show`)
 - [ ] Same-shape-different-meaning and cleanup/once-only considered where relevant
 - [ ] Fail-closed tests actually strip dependencies
+- [ ] Every `bug` has a verbatim test in the report (or runnable check); validated red in a disposable copy for the stated reason (§3.10)
+- [ ] Reviewed tree untouched by the review; red results came from the disposable copy
+- [ ] Unproven bugs are labeled `open (unproven)`, unexecuted ones `pending red`; repro paths/commands recorded in the review note
 - [ ] Oracles not weakened (no silent skip/delete/stub-to-green)
 - [ ] Plan/gate status matches residual work
-- [ ] Review file written under `docs/`
-- [ ] Follow-up tasks written under `docs/` with checkboxes (including process fixes if recurring)
+- [ ] Review file written under `docs/` (a shell-less reviewer returns it; the parent writes it)
+- [ ] Follow-up tasks written under `docs/` with checkboxes (including process fixes if recurring) — same writer rule
 - [ ] Prior follow-ups dispositioned from **current** source
 - [ ] Pass B used template §3.7.1 when mode is multi
 - [ ] User given paths + top issues
@@ -450,4 +531,5 @@ dotnet run --project Poly.Tests/Poly.Tests.csproj
 | **Recompute derived aggregates** | “~36” written without summing per-file greps | §3.8 |
 | **Re-verify HEAD baselines yourself** | Chain-trusted a prior review’s quote of old code | §3.8, §1.1 |
 | **Invariant comments = checklist** | Comment states invariant; sibling path violates it | §3.9, §3.2a |
+| **Prose-only bugs** | A finding was filed as an argument, never made to fail | §3.10, §5.1 |
 | **Reusable Pass B prompt** | Diff-only “assume wrong / don’t implement” works when templated | §3.7.1 |

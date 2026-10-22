@@ -17,11 +17,7 @@ public static partial class AbiEmitter {
         private readonly List<ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
 
-        public Context() : this(8) { }
-
-        public Context(int registerCount) {
-            _registerCount = Math.Clamp(registerCount, 8, MaxRegisterCount);
-            _regUsed = new bool[_registerCount];
+        public Context() {
             _stateParam = Parameter(typeof(VmState), "state");
             CurrentAstNodeExpr = Property(_stateParam, nameof(VmState.CurrentAstNode));
             SlotsLocal = Variable(typeof(long[]), "_slots");
@@ -32,12 +28,6 @@ public static partial class AbiEmitter {
             _locals.Add(FramePosLocal);
             InstanceHandle = Variable(typeof(long), "_this");
             _locals.Add(InstanceHandle);
-            _regVars = new List<ParameterExpression>(_registerCount);
-            for (int i = 0; i < _registerCount; i++) {
-                var r = Variable(typeof(long), $"_reg{i}");
-                _regVars.Add(r);
-                _locals.Add(r);
-            }
             EntryLabel = Label("_entry");
             ExitLabel = Label("_exit");
         }
@@ -84,7 +74,6 @@ public static partial class AbiEmitter {
 
         public Expression StatePcFlush => Property(_stateParam, "ProgramCounter");
         public CompilationMode Mode { get; set; }
-        public int RegisterCount => _registerCount;
         public Expression? FunctionTableExpr { get; set; }
         public bool IsCompiledFunctionBody { get; set; }
         public AnalysisResult? Analysis { get; set; }
@@ -200,9 +189,8 @@ public static partial class AbiEmitter {
         private readonly Stack<List<Variable>> _scopeVars = new();
         private int _nextFrameSlot;
         private const int MaxRegisterCount = 32;
-        private int _registerCount;
-        private readonly List<ParameterExpression> _regVars;
-        private bool[] _regUsed;
+        private readonly List<ParameterExpression> _regVars = new();
+        private readonly List<bool> _regUsed = new();
 
         public void PushScope() {
             _scopeStack.Push(new Dictionary<Variable, int>(ReferenceEqualityComparer.Instance));
@@ -253,41 +241,32 @@ public static partial class AbiEmitter {
                 throw new InvalidOperationException("No active scope");
             int slot = _nextFrameSlot++;
             _scopeStack.Peek()[v] = slot;
+
             int regIdx = -1;
-            while (regIdx < 0) {
-                for (int i = 0; i < _registerCount; i++) {
-                    if (!_regUsed[i]) { regIdx = i; break; }
-                }
-                if (regIdx < 0 && _registerCount < MaxRegisterCount) {
-                    GrowRegisterFile();
-                }
-                else {
-                    break;
-                }
+            for (int i = 0; i < _regUsed.Count; i++) {
+                if (!_regUsed[i]) { regIdx = i; break; }
             }
-            if (regIdx < 0) {
-                _scopeVars.Peek().Add(v);
-                _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
-                return;
-            }
-            _regUsed[regIdx] = true;
-            _variableRegisters[v] = regIdx;
+            if (regIdx < 0 && _regVars.Count < MaxRegisterCount)
+                regIdx = AddRegister();
+
             _scopeVars.Peek().Add(v);
             _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
+            if (regIdx < 0)
+                return;
+
+            _regUsed[regIdx] = true;
+            _variableRegisters[v] = regIdx;
         }
 
-        private void GrowRegisterFile() {
-            int old = _registerCount;
-            int grown = Math.Min(old + 8, MaxRegisterCount);
-            var newRegUsed = new bool[grown];
-            Array.Copy(_regUsed, newRegUsed, old);
-            _regUsed = newRegUsed;
-            for (int i = old; i < grown; i++) {
-                var r = Variable(typeof(long), $"_reg{i}");
-                _regVars.Add(r);
-                _locals.Add(r);
-            }
-            _registerCount = grown;
+        /// <summary>Create the next register local on first use. The delegate then
+        /// carries only the high-water of simultaneous register-backed variables.</summary>
+        private int AddRegister() {
+            int index = _regVars.Count;
+            var r = Variable(typeof(long), $"_reg{index}");
+            _regVars.Add(r);
+            _regUsed.Add(false);
+            _locals.Add(r);
+            return index;
         }
 
         private readonly List<VariableLayout> _variableLayouts = new();

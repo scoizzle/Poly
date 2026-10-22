@@ -17,15 +17,24 @@ public class VmExpressionShapeTests {
         ], [x]);
     }
 
-    private static AbiEmitter.BuiltVmProgram Build(CompilationMode mode) {
-        var node = Sample();
-        return AbiEmitter.Build(node, Interpreter.Analyze(node), mode);
-    }
+    private static AbiEmitter.BuiltVmProgram Build(CompilationMode mode) =>
+        Build(Sample(), mode);
+
+    private static AbiEmitter.BuiltVmProgram Build(Node node, CompilationMode mode = CompilationMode.Normal) =>
+        AbiEmitter.Build(node, Interpreter.Analyze(node), mode);
+
+    /// <summary>The register locals the compiled delegate carries. The count is the
+    /// high-water of simultaneous register-backed variables; a variable beyond
+    /// <c>MaxRegisterCount</c> stays in its frame slot instead.</summary>
+    private static int RegisterLocalCount(AbiEmitter.BuiltVmProgram built) =>
+        ((BlockExpression)built.Expression.Body).Variables
+            .Count(v => v.Name?.StartsWith("_reg", StringComparison.Ordinal) == true);
 
     private sealed class Collector : ExpressionVisitor {
         public List<MemberExpression> Members { get; } = [];
         public List<ConditionalExpression> Conditionals { get; } = [];
         public List<IndexExpression> IndexAssignments { get; } = [];
+        public List<IndexExpression> Indexes { get; } = [];
 
         protected override Expression VisitMember(MemberExpression node) {
             Members.Add(node);
@@ -42,6 +51,66 @@ public class VmExpressionShapeTests {
                 IndexAssignments.Add(index);
             return base.VisitBinary(node);
         }
+
+        protected override Expression VisitIndex(IndexExpression node) {
+            Indexes.Add(node);
+            return base.VisitIndex(node);
+        }
+    }
+
+    // ── Register-file allocation shape ─────────────────────────────
+
+    [Test]
+    public async Task NoVariables_EmitsNoRegisterLocals() {
+        var built = Build(new Constant(1L));
+        await Assert.That(RegisterLocalCount(built)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OneVariable_EmitsOnlyItsRegister() {
+        var built = Build(CompilationMode.Normal);
+        await Assert.That(RegisterLocalCount(built)).IsEqualTo(1);
+        await Assert.That(((BlockExpression)built.Expression.Body).Variables
+            .Count(v => v.Name == "_reg0")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SiblingScopes_ReuseOneRegisterLocal() {
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var built = Build(new Block([
+            new Block([new Assignment(a, new Constant(1L)), a], [a]),
+            new Block([new Assignment(b, new Constant(2L)), b], [b])
+        ], []));
+        await Assert.That(RegisterLocalCount(built)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task NineSimultaneousVariables_GrowByOne() {
+        var vars = Enumerable.Range(0, 9).Select(i => new Variable($"v{i}")).ToArray();
+        var nodes = vars.Select((v, i) => (Node)new Assignment(v, new Constant((long)i))).ToList();
+        var built = Build(new Block(nodes, vars));
+        await Assert.That(RegisterLocalCount(built)).IsEqualTo(9);
+    }
+
+    [Test]
+    public async Task ThirtyThreeSimultaneousVariables_FallBackToFrameSlots() {
+        var vars = Enumerable.Range(0, 33).Select(i => new Variable($"v{i}")).ToArray();
+        var nodes = vars.Select((v, i) => (Node)new Assignment(v, new Constant((long)i))).ToList();
+        nodes.Add(vars[32]);
+        var built = Build(new Block(nodes, vars));
+
+        await Assert.That(RegisterLocalCount(built)).IsEqualTo(32);
+        await Assert.That(built.DebugInfo.Variables.Count).IsEqualTo(33);
+
+        var all = new Collector();
+        all.Visit(built.Expression);
+        await Assert.That(all.Indexes.Any(i =>
+            i.Object is ParameterExpression { Name: "_slots" }
+            && i.Arguments is [BinaryExpression {
+                NodeType: ExpressionType.Add,
+                Right: ConstantExpression { Value: 32 }
+            }])).IsTrue();
     }
 
     [Test]

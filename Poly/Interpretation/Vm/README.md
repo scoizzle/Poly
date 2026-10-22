@@ -35,7 +35,7 @@ The compiled delegate keeps the hot state in locals:
 | `_fp` | `FramePos` — first argument slot of the current frame |
 | `_heap` | `state.Heap` |
 | `_this` | `_slots[_fp]` — instance handle for the frame |
-| `_regN` | register-backed local variables (`_reg0`, `_reg1`, …) |
+| `_regN` | register-backed local variables (`_reg0`, `_reg1`, …), created on demand |
 | `_rN` | ring slots for expression evaluation (`_r0`, `_r1`, …) |
 
 Ring slots are ordinary CLR locals, so the JIT enregisters them; the ring is a
@@ -46,8 +46,8 @@ for the debug hook's local span.
 ## What the emitted body looks like
 
 Worked example: `var x = 2; x + 1` (a block with one local and one expression).
-The body below is the actual tree from `AbiEmitter.Build`, with unused register/ring
-locals and empty `default(void)` dispatch nodes elided.
+The body below is the actual tree from `AbiEmitter.Build`, with empty
+`default(void)` dispatch nodes elided.
 
 ### `NoDebug`
 

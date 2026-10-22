@@ -37,7 +37,7 @@ public static partial class AbiEmitter {
             return cf(cmp, Constant(0));
         }
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv));
+            return cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx));
         return cf(lv, rv);
     }
 
@@ -68,7 +68,7 @@ public static partial class AbiEmitter {
             return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
         }
         if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return Condition(cf(Call(BitConverterInt64BitsToDouble, lv), Call(BitConverterInt64BitsToDouble, rv)),
+            return Condition(cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx)),
                 Constant(1L), Constant(0L));
         return Condition(cf(lv, rv), Constant(1L), Constant(0L));
     }

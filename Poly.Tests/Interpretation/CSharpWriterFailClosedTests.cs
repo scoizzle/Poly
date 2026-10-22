@@ -42,16 +42,14 @@ public class CSharpWriterFailClosedTests {
     }
 
     [Test]
-    public async Task PopCount_WriteRead_IsKindStable() {
-        var printed = CSharpLanguage.Write(new PopCount(new Constant(7L)));
-        await Assert.That(printed).IsEqualTo("System.Numerics.BitOperations.PopCount((ulong)7L);");
-
-        var source = $"class C {{ void M() {{ var a = {printed} }} }}";
-        await Assert.That(SyntaxErrors(source)).IsEmpty();
-
-        var unit = CSharpLanguage.Read(source);
-        await Assert.That(Find<PopCount>(unit)).IsNotNull();
-        await Assert.That(Find<Invoke>(unit)).IsNull();
+    public async Task PopCount_IsRejected_UntilQualifiedStaticCallsResolve() {
+        // PopCount's only faithful spelling is System.Numerics.BitOperations.PopCount((ulong)x).
+        // The reader roots that chain in a Variable, so a round trip loses the kind and cannot
+        // execute. The grammar must not carry a bespoke pattern for one library intrinsic;
+        // reject until IS1c gives the surface a real qualified-type receiver.
+        await Assert.That(() => CSharpLanguage.Write(new PopCount(new Constant(7L))))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining(nameof(PopCount));
     }
 
     /// <summary>Every kind with no writer arm reaches the same rejection.</summary>

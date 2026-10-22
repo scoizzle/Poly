@@ -16,6 +16,29 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_TypeDeclarationAndCall_ExecutesMethod() {
+        var result = CSharpScript.Run("class C { C() { } long N() { return 7; } } new C().N();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("7");
+    }
+
+    [Test]
+    public async Task Run_TypeDeclaration_BoolResult_IsBool() {
+        var result = CSharpScript.Run(
+            "class C { C() { } bool N() { return true; } } new C().N();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("true");
+        await Assert.That(result.ValueType).IsEqualTo("Boolean");
+    }
+
+    [Test]
+    public async Task Run_TypeDeclarationWithDirtyBody_FailsAnalysis() {
+        var result = CSharpScript.Run("class C { C() { } long N() { return this.Count; } } new C().N();");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.Contains("Count"))).IsTrue();
+    }
+
+    [Test]
     public async Task Run_VarDeclaration_ThenExpression_UsesLocal() {
         var result = CSharpScript.Run("var x = 2 + 3;\nx * 2");
         await Assert.That(result.Success).IsTrue();

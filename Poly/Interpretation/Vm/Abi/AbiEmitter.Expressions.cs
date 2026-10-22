@@ -351,23 +351,9 @@ public static partial class AbiEmitter {
         }
     }
 
-    private static Type? ResolveClrType(Node? typeRef, Node typedNode, Context ctx) {
-        if (typeRef is ClrTypeReference ctr)
-            return ctr.RuntimeType;
-        if (typeRef is PrimitiveTypeReference ptr)
-            return ptr.PrimitiveId.GetClrType();
-        // Patron? is the same reference type as Patron. The annotation is not a
-        // separate CLR type, and the cast node itself often has no resolution.
-        if (typeRef is OptionalTypeReference optional)
-            return ResolveClrType(optional.InnerType, optional.InnerType, ctx);
-        if (ctx.Analysis is not null) {
-            var fromNode = ctx.Analysis.GetResolvedType(typedNode)?.GetRuntimeType();
-            if (fromNode is not null) return fromNode;
-            if (typeRef is not null)
-                return ctx.Analysis.GetResolvedType(typeRef)?.GetRuntimeType();
-        }
-        return null;
-    }
+    private static Type? ResolveClrType(Node? typeRef, Node typedNode, Context ctx) =>
+        ctx.TryClrType(typedNode)
+        ?? (typeRef is null ? null : ctx.TryClrType(typeRef));
 
     // Well-known awaitables run through these Ref-bound helpers. Their bodies
     // statically reference the BCL GetAwaiter/GetResult, so trimming keeps those
@@ -457,7 +443,7 @@ public static partial class AbiEmitter {
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
     private static Expression EmitTypeAs(TypeAs t, Context ctx) {
-        var targetType = ResolveClrType(t.TargetTypeReference, t, ctx)
+        var targetType = ResolveClrType(t.TargetTypeReference, t.TargetTypeReference, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeAs target type is unresolved.");
         if (targetType.IsValueType)
             throw new InvalidOperationException($"VM compile rejected: TypeAs target '{targetType}' is a value type.");
@@ -501,7 +487,7 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitTypeOf(TypeOf t, Context ctx) {
-        var runtime = ResolveClrType(t.Type, t, ctx)
+        var runtime = ResolveClrType(t.Type, t.Type, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
         int slot = ctx.AllocSlot();
         return Assign(ctx.RingVar(slot),

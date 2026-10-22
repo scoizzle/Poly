@@ -49,12 +49,48 @@ public static class Interpreter {
         _analyzer.Analyze(node);
 
     /// <summary>
+    /// Analyze <paramref name="node"/> with the AST types its provider supplies.
+    /// The types and the root are one compilation unit, so every member body the
+    /// root can reach is analyzed in the same result. Emit never analyzes.
+    /// </summary>
+    public static AnalysisResult Analyze(
+        Node node,
+        ITypeDefinitionProvider typeDefinitions,
+        Action<AnalysisContext>? setup = null) {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(typeDefinitions);
+        return _analyzer.Analyze(
+            AnalysisRoot(node, typeDefinitions),
+            typeDefinitions: typeDefinitions,
+            setup: setup);
+    }
+
+    /// <summary>
     /// Analyze and compile a Syntax program. Analysis errors fail closed.
+    /// Diagnostics on AST member bodies the root does not contain are handled by
+    /// the emitter's callable path, not by the root gate.
     /// </summary>
     public static VmProgram Compile(Node node, ITypeDefinitionProvider typeDefinitions, CompilationMode mode = CompilationMode.Normal) {
-        var analysis = _analyzer.Analyze(node, typeDefinitions: typeDefinitions);
-        FailLoudOnAnalysisErrors(analysis);
+        var analysis = Analyze(node, typeDefinitions);
+        FailLoudOnAnalysisErrors(analysis, node);
         return AbiEmitter.Emit(node, analysis, mode);
+    }
+
+    /// <summary>The analyzed root: a compilation unit containing the provider's
+    /// AST type declarations and <paramref name="node"/> as its top-level
+    /// statement. A root that already is a unit or a type declaration is used as
+    /// is.</summary>
+    private static Node AnalysisRoot(Node node, ITypeDefinitionProvider typeDefinitions) {
+        if (node is CompilationUnitNode or TypeDefinitionNode)
+            return node;
+        if (typeDefinitions is not ITypeDefinitionNodeProvider provider)
+            return node;
+        var types = provider.GetTypeDefinitionNodes()
+            .Distinct<TypeDefinitionNode>(ReferenceEqualityComparer.Instance)
+            .ToArray();
+        return types.Length == 0
+            ? node
+            : new CompilationUnitNode([], null, types, [node]);
     }
 
     /// <summary>Alias of <see cref="Compile(Node, ITypeDefinitionProvider, CompilationMode)"/>.</summary>
@@ -82,12 +118,38 @@ public static class Interpreter {
         }
     }
 
+    /// <summary>Fail on an error that belongs to the root's own subtree. A
+    /// diagnostic on an AST member body outside the root is a callable concern:
+    /// the emitter compiles that body and either rejects the forwarder or falls
+    /// back.</summary>
+    private static void FailLoudOnAnalysisErrors(AnalysisResult analysis, Node root) {
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity != DiagnosticSeverity.Error)
+                continue;
+            if (diagnostic.Node is not { } node)
+                continue;
+            if (!ReferenceEquals(node, root) && !ContainsNode(root, node))
+                continue;
+            throw new InvalidOperationException($"VM compile rejected: {diagnostic.Message}");
+        }
+    }
+
+    private static bool ContainsNode(Node root, Node target) {
+        foreach (var child in root.Children) {
+            if (child is null)
+                continue;
+            if (ReferenceEquals(child, target) || ContainsNode(child, target))
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Compile a previously-analyzed node. Analysis errors on
     /// <paramref name="analysis"/> fail closed.
     /// </summary>
     public static VmProgram Compile(Node node, AnalysisResult analysis, CompilationMode mode = CompilationMode.Normal) {
-        FailLoudOnAnalysisErrors(analysis);
+        FailLoudOnAnalysisErrors(analysis, node);
         return AbiEmitter.Emit(node, analysis, mode);
     }
 
@@ -102,7 +164,7 @@ public static class Interpreter {
         IReadOnlyList<Parameter> rootParameters,
         CompilationMode mode = CompilationMode.Normal) {
         ArgumentNullException.ThrowIfNull(rootParameters);
-        FailLoudOnAnalysisErrors(analysis);
+        FailLoudOnAnalysisErrors(analysis, node);
         return AbiEmitter.Emit(node, analysis, mode, rootParameters);
     }
 

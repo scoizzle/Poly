@@ -678,13 +678,10 @@ public static partial class AbiEmitter {
 
     private static Type ResolveCatchClrType(Node? exceptionType, Context ctx) {
         if (exceptionType is null) return typeof(Exception);
-        if (exceptionType is ClrTypeReference ctr
-            && typeof(Exception).IsAssignableFrom(ctr.RuntimeType))
-            return ctr.RuntimeType;
-        var rt = ctx.Analysis?.GetResolvedType(exceptionType)?.GetRuntimeType();
-        if (rt is not null && typeof(Exception).IsAssignableFrom(rt))
-            return rt;
-        return typeof(Exception);
+        var resolved = ctx.TryClrType(exceptionType);
+        return resolved is not null && typeof(Exception).IsAssignableFrom(resolved)
+            ? resolved
+            : typeof(Exception);
     }
 
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.

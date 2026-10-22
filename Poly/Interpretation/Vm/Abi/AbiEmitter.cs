@@ -308,27 +308,14 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitNew(New n, Context ctx) {
-        Type? targetType = n.Type switch {
-            ClrTypeReference ctr => ctr.RuntimeType,
-            _ => null
-        };
-        if (targetType is null && ctx.Analysis is not null) {
-            var resolvedType = ctx.Analysis.GetResolvedType(n);
-            if (resolvedType is ClrTypeDefinition clrDef)
-                targetType = clrDef.RuntimeType;
-        }
-        ConstructorInfo? ctor = null;
-        ITypeMember? resolved = null;
-        if (ctx.Analysis is not null) {
-            resolved = ctx.Analysis.GetResolvedMember(n);
-            if (resolved is ClrConstructor clrCtor)
-                ctor = clrCtor.ConstructorInfo;
-        }
+        var resolved = ctx.Analysis?.GetResolvedMember(n);
         if (resolved is AstConstructorDefinition astCtor)
             return EmitAstNew(n, astCtor, ctx);
         if (resolved is AstCollectionParameterlessConstructor or AstCollectionCopyConstructor)
             return EmitSyntheticCollection(n, (AstCollectionTypeDefinition)resolved.DeclaringTypeDefinition, ctx);
 
+        ConstructorInfo? ctor = (resolved as ClrConstructor)?.ConstructorInfo;
+        Type? targetType = ctx.TryClrType(n);
         if (ctor is not null) {
             var args = ctx.OpenRing();
             int[] argSlots = new int[n.Arguments.Length];
@@ -443,7 +430,8 @@ public static partial class AbiEmitter {
         var definition = astCtor.Definition;
         var parameters = definition.Parameters ?? [];
         var seq = new List<Expression>();
-        var args = EmitAstArguments(n.Arguments, parameters, "constructor", seq, ctx);
+        var args = EmitAstArguments(n.Arguments, parameters, astCtor.Parameters.ToArray(),
+            "constructor", seq, ctx);
 
         int slot = ctx.AllocSlot();
         ctx.RingDepth = slot + 1;
@@ -455,7 +443,7 @@ public static partial class AbiEmitter {
             return Block(seq);
 
         var table = TryCompileAstCallable(
-            definition, definition.Body!, parameters, astCtor.DeclaringTypeDefinition, ctx, instanceSlot: true)
+            definition, definition.Body!, parameters, ctx, instanceSlot: true)
             ?? throw new InvalidOperationException(
                 "VM compile rejected: AST constructor body could not be compiled.");
         var inits = new List<Expression>(parameters.Count + 1) { ctx.RingVar(slot) };
@@ -476,10 +464,9 @@ public static partial class AbiEmitter {
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
         // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
-        Type elemType = RingCodec.ArraySlotElementType(ArrayElementClrType(n.ElementType, ctx));
-        // A value-type element that is not a ring slot (decimal, DateTime, Guid, or any
-        // nullable) is a heap handle, and a fresh array's zero slot would be the null handle,
-        // not default(T); reject rather than read null where C# gives the default value.
+        // A value-type element that is not a ring slot (decimal, DateTime, Guid) is a heap
+        // handle, and a fresh array's zero slot would be the null handle, not default(T);
+        // reject the optional spelling rather than read null where C# gives the default.
         var elementClr = ArrayElementClrType(n.ElementType, ctx);
         if (n.ElementType is OptionalTypeReference
             || (elementClr is { IsValueType: true } nonSlot && !RingCodec.IsInline(nonSlot))) {
@@ -488,19 +475,17 @@ public static partial class AbiEmitter {
         }
         // Always a heap array here. The frame-local small-array encoding was removed: it was
         // not readable through a member access and no caller tracked its base offset.
+        Type elemType = RingCodec.ArraySlotElementType(elementClr);
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
         var handle = Call(ctx.HeapLocal, HeapAllocate,
             Convert(arr, typeof(object)));
         return ring.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
 
-    /// <summary>The CLR type of an array's element from its type node, or null when it cannot
-    /// be resolved statically.</summary>
-    private static Type? ArrayElementClrType(Node elementType, Context ctx) => elementType switch {
-        ClrTypeReference c => c.RuntimeType,
-        PrimitiveTypeReference p => p.PrimitiveId.GetClrType(),
-        _ => ctx.Analysis?.GetResolvedType(elementType)?.GetRuntimeType()
-    };
+    /// <summary>The CLR type of an array's element from the type pass, or null when it
+    /// cannot be resolved statically.</summary>
+    private static Type? ArrayElementClrType(Node elementType, Context ctx) =>
+        ctx.TryClrType(elementType);
 
     private static Expression EmitIndexAccess(IndexAccess n, Context ctx) {
         if (ctx.KindOf(n.Value) is ValueRepresentationKind.StackScalar)

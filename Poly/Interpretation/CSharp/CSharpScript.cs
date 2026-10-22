@@ -34,8 +34,9 @@ public static class CSharpScript {
     /// </summary>
     public static ScriptResult Run(string snippet, long maxLoopIterations = DefaultMaxLoopIterations) {
         try {
-            var node = ReadProgram(snippet);
-            var analysis = Interpreter.Analyze(node);
+            var unit = ReadUnit(snippet);
+            var node = ProgramBlock(unit);
+            var analysis = Interpreter.Analyze(unit);
             var errors = Errors(analysis);
             if (errors.Count > 0)
                 return new ScriptResult(false, errors, null, null);
@@ -66,9 +67,17 @@ public static class CSharpScript {
     /// added unless the snippet already ends in <c>}</c>. A snippet ending in
     /// <c>}</c> is taken as a complete block and gets no trailing terminator, so
     /// an initializer or lambda whose text ends in <c>}</c> must supply its own
-    /// <c>;</c>. Throws <see cref="FormatException"/> on empty or unsupported input.
+    /// <c>;</c>. A snippet with type declarations is parsed as a compilation unit;
+    /// its top-level statements are wrapped in a block before analysis, and that
+    /// same block is returned. Throws <see cref="FormatException"/> on empty or
+    /// unsupported input.
     /// </summary>
-    public static Node ReadProgram(string snippet) {
+    public static Node ReadProgram(string snippet) => ProgramBlock(ReadUnit(snippet));
+
+    /// <summary>The parsed snippet as one compilation unit: the wrapper block is
+    /// the top-level statement and any type declarations stay in <c>Types</c>, so
+    /// analysis walks them with the block. Emit compiles the block.</summary>
+    internal static CompilationUnitNode ReadUnit(string snippet) {
         ArgumentNullException.ThrowIfNull(snippet);
         var body = snippet.Trim();
         if (body.Length == 0)
@@ -76,7 +85,31 @@ public static class CSharpScript {
         if (!body.EndsWith('}') && !body.EndsWith(';'))
             body += ";";
 
-        var unit = CSharpLanguage.Read("{ " + body + " }");
+        // Type declarations belong at unit scope. Parse the snippet as a unit
+        // when it has one; statement-only snippets keep the block wrapper that
+        // records their `var` locals.
+        try {
+            var unit = CSharpLanguage.Read(body);
+            if (unit.Types.Count > 0) {
+                // Wrap the top-level statements before analysis, not after:
+                // the emitted root must be the node the analysis stamped.
+                var statements = unit.TopLevelStatements;
+                if (statements is { Count: > 0 }
+                    && (statements.Count != 1 || statements[0] is not Block))
+                    unit = unit with {
+                        TopLevelStatements = [new Block(statements, Array.Empty<Node>())]
+                    };
+                return unit;
+            }
+        }
+        catch (FormatException) {
+            // Not a unit; the block wrapper below is the statement form.
+        }
+
+        return CSharpLanguage.Read("{ " + body + " }");
+    }
+
+    internal static Node ProgramBlock(CompilationUnitNode unit) {
         var statements = unit.TopLevelStatements;
         if (statements is null || statements.Count == 0)
             throw new FormatException(unit.Types.Count > 0
@@ -152,8 +185,9 @@ public sealed class ScriptDebugSession : IDisposable {
         long maxLoopIterations = CSharpScript.DefaultMaxLoopIterations) {
         diagnostics = [];
         try {
-            var node = CSharpScript.ReadProgram(snippet);
-            var analysis = Interpreter.Analyze(node);
+            var unit = CSharpScript.ReadUnit(snippet);
+            var node = CSharpScript.ProgramBlock(unit);
+            var analysis = Interpreter.Analyze(unit);
             var errors = CSharpScript.Errors(analysis);
             if (errors.Count > 0) {
                 diagnostics = errors;

@@ -1190,9 +1190,9 @@ public sealed partial record DomainEntityInstance {
         var entityType = types.GetTypeDefinition(entity.Name)
             ?? throw new InvalidOperationException(
                 $"Type '{entity.Name}' is missing from the type provider.");
-        var analysis = Interpreter.Analyzer.Analyze(
+        var analysis = Interpreter.Analyze(
             tree,
-            typeDefinitions: types,
+            types,
             setup: ctx => AnnotateThisReferences(ctx, tree, entityType));
         return rootParameters is { Count: > 0 }
             ? Interpreter.Compile(tree, analysis, rootParameters)

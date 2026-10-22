@@ -4,16 +4,16 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
 /// The "printed ⊆ simulatable" audit (async/await part 1 §Enforcement, reframed by part 2).
-/// <see cref="LanguageSurfaceTests"/> inventories a <see cref="LanguageSurfaceTests.Surface"/>
-/// per concrete node. This class adds the print form for every kind the law can fail on — a
-/// <see cref="LanguageSurfaceTests.Surface.CompileReject"/> kind — so a kind the printer emits
-/// as live code cannot ship without a VM execution.
+/// <see cref="NodeFacts"/> records which kinds the VM rejects on purpose. This class adds the
+/// print form for every such kind, so a kind the printer emits as live code cannot ship without
+/// a VM execution.
 /// </summary>
 public class PrintedSubsetVmTests {
     public enum PrintForm {
@@ -25,11 +25,11 @@ public class PrintedSubsetVmTests {
     }
 
     /// <summary>
-    /// One entry per <see cref="LanguageSurfaceTests.Surface.CompileReject"/> kind — the only
-    /// side the law can fail on, since an Executable kind is simulatable by definition — plus
-    /// samples that pin the Erased / Rejected / Declaration / Live forms the audit leans on. Part 1
-    /// §Enforcement asked for one entry per concrete node; part 2 §"What this removes from part 1"
-    /// narrows it to this set.
+    /// One entry per kind <see cref="NodeFacts"/> gives a reject reason — the only side the law
+    /// can fail on, since a Vm-claimed kind is simulatable by definition — plus samples that pin
+    /// the Erased / Rejected / Declaration / Live forms the audit leans on. Part 1 §Enforcement
+    /// asked for one entry per concrete node; part 2 §"What this removes from part 1" narrows it
+    /// to this set.
     /// </summary>
     public static readonly Dictionary<Type, PrintForm> Forms = new() {
         [typeof(ParameterReference)] = PrintForm.Name,
@@ -47,13 +47,13 @@ public class PrintedSubsetVmTests {
 
     [Test]
     public async Task EveryCompileRejectKind_HasPrintForm() {
-        var rejected = LanguageSurfaceTests.Kinds
-            .Where(kv => kv.Value == LanguageSurfaceTests.Surface.CompileReject)
+        var rejected = NodeFacts.All
+            .Where(kv => kv.Value.RejectReason is not null)
             .Select(kv => kv.Key)
             .OrderBy(t => t.Name)
             .ToArray();
         var missing = rejected.Where(t => !Forms.ContainsKey(t)).Select(t => t.Name).ToArray();
-        var extra = Forms.Keys.Where(t => !LanguageSurfaceTests.Kinds.ContainsKey(t))
+        var extra = Forms.Keys.Where(t => !NodeFacts.All.ContainsKey(t))
             .Select(t => t.Name).ToArray();
         await Assert.That(missing).IsEmpty();
         await Assert.That(extra).IsEmpty();
@@ -61,8 +61,8 @@ public class PrintedSubsetVmTests {
 
     [Test]
     public async Task LiveCompileReject_Fails() {
-        var violations = LanguageSurfaceTests.Kinds
-            .Where(kv => kv.Value == LanguageSurfaceTests.Surface.CompileReject
+        var violations = NodeFacts.All
+            .Where(kv => kv.Value.RejectReason is not null
                 && Forms.TryGetValue(kv.Key, out var form) && form == PrintForm.Live)
             .Select(kv => kv.Key.Name)
             .ToArray();
@@ -72,8 +72,8 @@ public class PrintedSubsetVmTests {
 
     [Test]
     public async Task Await_IsLiveAndExecutable() {
-        await Assert.That(LanguageSurfaceTests.Kinds[typeof(Await)])
-            .IsEqualTo(LanguageSurfaceTests.Surface.Executable);
+        await Assert.That(NodeFacts.All[typeof(Await)].Producers.HasFlag(Producers.Vm)).IsTrue();
+        await Assert.That(NodeFacts.All[typeof(Await)].RejectReason).IsNull();
         await Assert.That(Forms[typeof(Await)]).IsEqualTo(PrintForm.Live);
         await Assert.That(CSharpLanguage.Write(new Await(new Constant(1L)))).Contains("await");
     }

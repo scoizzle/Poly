@@ -106,7 +106,9 @@ long handle = exec.RawValue;
 | [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Semantic parity + inspectable execution for the VM (not a second engine) |
 | [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only |
 
-Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`.
+Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`, `NodeFacts.cs`.
+
+`NodeFacts.cs` is the one table of which producer honours which concrete `Node` kind — `Vm`, `Writer`, `Reader`, `Mermaid` — and the message a deliberate VM rejection carries. It is data, with no behaviour; `Poly.Tests/Interpretation/NodeFactsTotalityTests.cs` checks every row against a corpus of the C# this suite already carries, so a new kind without a row, a producer that loses an arm, or a rejection whose message drifts is a failing test that names the kind. Adding a node kind means adding its row.
 
 ---
 

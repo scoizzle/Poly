@@ -254,16 +254,6 @@ public static partial class AbiEmitter {
             var postBody = new List<Expression>();  // after inline body
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
 
-            // Save the caller's ring into per-invocation CLR locals. The inline body
-            // may reuse these ring slots and cannot reach the locals. (A resume inside
-            // the body skips this save; the root caller does not read its ring after
-            // the SetArgs result is written.)
-            var savedRing = new ParameterExpression[saveDepth];
-            for (int k = 0; k < saveDepth; k++) {
-                savedRing[k] = Variable(typeof(long), $"_save{k}");
-                preBody.Add(Assign(savedRing[k], ctx.RingVar(k)));
-            }
-
             var callSp = Variable(typeof(int), "_callSp");
             preBody.Add(Assign(callSp, spProp));
             // SetArgs seeded the arguments at slots[callSp + index]; the frame pointer
@@ -280,21 +270,14 @@ public static partial class AbiEmitter {
             var bodyExpr = CompileNode(lambda.Body, ctx);
             int bodyResultSlot = ctx.RingDepth - 1;
             preBody.Add(bodyExpr);
-            // Save result to a temp local BEFORE the ring restore.
-            var invokeResult = Variable(typeof(long), "_invokeResult");
-            preBody.Add(Assign(invokeResult, ctx.RingVar(bodyResultSlot)));
-            // The result belongs in the caller's first free slot (saveDepth), not slot 0:
-            // slot 0 may hold a caller value (an earlier interpolation hole, an inline
-            // parameter argument), and resetting the depth to 1 would discard the caller's
-            // live slots.
+            // No copy-out is needed: the body's block allocates from saveDepth upward
+            // and every emitter rewinds only to its own region base (the lowest is
+            // RingDepth = ring.Base inside an index access), so the caller's slots below
+            // saveDepth are never targets. The result belongs in the caller's first free
+            // slot, and moves only when it did not already land there.
             ctx.RingDepth = saveDepth + 1;
-
-            // Restore the caller's ring from the per-invocation locals.
-            for (int k = 0; k < saveDepth; k++)
-                postBody.Add(Assign(ctx.RingVar(k), savedRing[k]));
-
-            // Write saved result to the caller's result slot (ring now fully restored)
-            postBody.Add(Assign(ctx.RingVar(saveDepth), invokeResult));
+            if (bodyResultSlot != saveDepth)
+                postBody.Add(Assign(ctx.RingVar(saveDepth), ctx.RingVar(bodyResultSlot)));
             // This legacy SetArgs path restores the root frame sentinel 0. The old
             // OldFramePos field was never written, so that was always the value.
             postBody.Add(Assign(ctx.FramePosLocal, Constant(0)));
@@ -303,8 +286,7 @@ public static partial class AbiEmitter {
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopFrameParameters();
             ctx.PopScope();
-            var locals = new List<ParameterExpression> { callSp, invokeResult };
-            locals.AddRange(savedRing);
+            var locals = new List<ParameterExpression> { callSp };
             return Block(locals, Block(preBody.Concat(postBody)));
         }
 

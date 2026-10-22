@@ -139,10 +139,17 @@ public static partial class AbiEmitter {
             }
         }
         ctx.CapturedBindings = capturedBindings;
+        var inlineInvoked = new HashSet<Lambda>(ReferenceEqualityComparer.Instance);
+        CollectInlineInvokedLambdas(root, inlineInvoked);
         var functionTable = new Action<VmState>[lambdas.Count];
         ctx.FunctionTableExpr = Constant(functionTable);
         for (int i = 0; i < lambdas.Count; i++) {
             var lam = lambdas[i];
+            if (inlineInvoked.Contains(lam)) {
+                functionTable[i] = _ => throw new InvalidOperationException(
+                    "VM: a lambda invoked inline is emitted in the caller's frame and cannot be reached through the function table.");
+                continue;
+            }
             functionTable[i] = CompileFunctionBody(
                 lam.Body, lam.Parameters, FindBodyCaptures(lam, analysis), functionTable, mode, analysis,
                 capturedBindings);
@@ -162,6 +169,7 @@ public static partial class AbiEmitter {
         if (mode != CompilationMode.NoDebug)
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
 
+        ctx.IsRootBody = true;
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         var rootExpr = CompileStatement(root, ctx);
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
@@ -312,6 +320,10 @@ public static partial class AbiEmitter {
 
     private static Expression RejectCompile(string message) =>
         throw new InvalidOperationException($"VM compile rejected: {message}");
+
+    /// <summary>A rejection a nested-frame fallback must propagate, not swallow: the body
+    /// it rejected would otherwise compile into a frame no resume can re-enter.</summary>
+    private sealed class UnresumableBodyRejection(string message) : InvalidOperationException(message);
 
     private static Expression EmitConstant(Constant c, Context ctx) {
         int slot = ctx.AllocSlot();

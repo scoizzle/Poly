@@ -464,6 +464,18 @@ public static partial class AbiEmitter {
         }
     }
 
+    /// <summary>A lambda an <see cref="Invoke"/> names as its delegate is emitted in the
+    /// caller's frame, never materialized as a closure, so it needs no function-table entry.
+    /// </summary>
+    private static void CollectInlineInvokedLambdas(Node node, HashSet<Lambda> result) {
+        if (node is Invoke { Delegate: Lambda inlined })
+            result.Add(inlined);
+        foreach (var child in node.Children) {
+            if (child is not null)
+                CollectInlineInvokedLambdas(child, result);
+        }
+    }
+
     /// <summary>
     /// Compile a lambda body as a standalone <c>Action&lt;VmState&gt;</c> delegate.
     /// Parameters are read from value-stack slots.
@@ -807,6 +819,8 @@ public static partial class AbiEmitter {
             // Drop this slot and everything compiled under it: those bodies may
             // call this slot, which stays empty.
             pending.RemoveRange(start, pending.Count - start);
+            if (ex is UnresumableBodyRejection)
+                throw;
             if (ex is not (InvalidOperationException or NotSupportedException))
                 throw;
             // An IsAsync method's body must compile: falling back to a CLR lookup of the same

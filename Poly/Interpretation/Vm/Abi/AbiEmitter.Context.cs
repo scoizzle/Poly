@@ -76,6 +76,11 @@ public static partial class AbiEmitter {
         public CompilationMode Mode { get; set; }
         public Expression? FunctionTableExpr { get; set; }
         public bool IsCompiledFunctionBody { get; set; }
+        /// <summary>True only while emitting the compilation-unit body, the one body that
+        /// emits <see cref="EmitPcDispatch"/> and so the only one a resume can re-enter.
+        /// <see cref="CompileFunctionBody"/> emits into its own <see cref="Context"/>, where
+        /// this stays false.</summary>
+        public bool IsRootBody { get; set; }
         public AnalysisResult? Analysis { get; set; }
         /// <summary>The declared <c>Task</c> / <c>Task&lt;T&gt;</c> return of an <c>IsAsync</c>
         /// function body being compiled; <see cref="EmitReturn"/> wraps every return in a

@@ -1,6 +1,7 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -464,6 +465,87 @@ public class ControlFlowAnalysisTests {
         var result = CfAnalyze(ast);
         await Assert.That(result.CanElide(catchBody)).IsTrue();
         await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
+    }
+
+    [Test]
+    public async Task NestedThrow_InsideIf_KeepsCatchReachable() {
+        var catchBody = new Block(new Variable("a"));
+        var tryBlock = new Block(
+            new IfStatement(
+                new Variable("c"),
+                new Block(new ThrowStatement(new Variable("ex")))));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+        await Assert.That(result.CanElide(catchBody)).IsFalse();
+
+        var printed = new CSharpGenerator(result).Generate(ast);
+        await Assert.That(printed).Contains("a;");
+    }
+
+    [Test]
+    public async Task DeeperNestedThrow_IsFound() {
+        var catchBody = new Block(new Constant(1L));
+        var tryBlock = new Block(new Block(new Block(new ThrowStatement(new Variable("ex")))));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+        await Assert.That(result.CanElide(catchBody)).IsFalse();
+    }
+
+    [Test]
+    public async Task ThrowInsideLambda_IsNotATryScopeThrow() {
+        var catchBody = new Block(new Constant(1L));
+        var lambda = new Lambda([], new ThrowStatement(new Variable("ex")));
+        var tryBlock = new Block(new Assignment(new Variable("f"), lambda));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.CanElide(catchBody)).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
+    }
+
+    [Test]
+    public async Task LoopConditionPurity_SeesNestedMutation() {
+        var loop = new WhileLoop(
+            new Constant(true),
+            new Block(
+                new IfStatement(
+                    new Variable("c"),
+                    new Block(new Assignment(new Member(new Variable("obj"), "Value"), new Constant(1L))))));
+        var post = new Constant(99L);
+        var ast = new Block(loop, post);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.IsInfiniteLoop(loop)).IsFalse();
+        await Assert.That(result.CanElide(post)).IsFalse();
     }
 
     [Test]

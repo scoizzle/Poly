@@ -52,19 +52,40 @@ public static class NodeAnalyzerExtensions {
 
     /// <summary>
     /// Convenience for the common "does any child subtree satisfy a predicate" case
-    /// (short-circuits on first true).
+    /// (short-circuits on first true). The walk descends until the predicate holds; the
+    /// given node itself is never tested, only its descendants.
+    ///
+    /// Two node kinds are traversal barriers: a <see cref="Lambda"/> body and a
+    /// <see cref="TypeDefinitionNode"/> body are separate scopes, so a match inside one is
+    /// not a match at the enclosing declaration. The barrier node itself is still tested;
+    /// the walk just does not enter it.
+    ///
+    /// No visited set is needed: <see cref="Node"/> is a DAG of records, so a subtree
+    /// cannot cycle.
     /// </summary>
     public static bool AnyChild<TMetadata>(
         this INodeAnalyzer _,
         AnalysisContext context,
         Node node,
         Func<AnalysisContext, Node, bool> predicate)
-        where TMetadata : class, IAnalysisMetadata {
+        where TMetadata : class, IAnalysisMetadata =>
+        AnyDescendant(context, node, predicate);
+
+    private static bool AnyDescendant(
+        AnalysisContext context,
+        Node node,
+        Func<AnalysisContext, Node, bool> predicate) {
         foreach (var child in node.Children) {
             if (child is null)
                 continue;
 
             if (predicate(context, child))
+                return true;
+
+            if (child is Lambda or TypeDefinitionNode)
+                continue;
+
+            if (AnyDescendant(context, child, predicate))
                 return true;
         }
         return false;

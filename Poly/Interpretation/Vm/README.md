@@ -67,6 +67,26 @@ type's *underlying* value is long-representable (it peels a nullable), while
 `ValueRepresentationClassifier.KindFor` asks what a *node* of that type puts in
 its slot (a nullable is a heap handle).
 
+### Where a result lives
+
+`CompileNode` returns a `CompiledNode`: the code, and the `SlotLocation` its result
+occupies once that code has run. Naming the location is what lets a consumer
+release it, so the ring is a pool of result locations rather than an ambient
+cursor that every consumer re-derived as `RingDepth - 1`.
+
+- An expression leaves its result at the top of the ring, which is where
+  `CompiledNode.Result` points.
+- A node whose value leaves through another channel — a `return` inside an inlined
+  arm, or a statement with no value — reports no result, and `RequireResult` fails
+  closed for a consumer that needs one.
+- A block compiles each statement from the block's entry depth, so the ring
+  high-water is the deepest statement, not the sum of all of them. A comment or a
+  label emits nothing, so it must not release the pending result:
+  `[return 7, comment]` still yields 7.
+
+Before this, `RingDepth` was never reset between statements. nqueens emitted 23
+ring locals for a body whose deepest statement needs 13.
+
 ## What the emitted body looks like
 
 Worked example: `var x = 2; x + 1` (a block with one local and one expression).

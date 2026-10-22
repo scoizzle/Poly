@@ -118,6 +118,7 @@ public static partial class AbiEmitter {
                     var resultType = methodInfo.ReturnType;
                     if (resultType == typeof(void)) {
                         fullBody.Add(callExpr);
+                        fullBody.Add(Assign(ctx.RingVar(slot), Constant(0L)));
                         return Block(fullBody);
                     }
                     if (resultType.IsValueType) {

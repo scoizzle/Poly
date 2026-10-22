@@ -47,7 +47,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [ ] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |
 | [ ] | IS3 | `CompileValue` and its 7 twins; the void special case in #260 | IS2c, ISB | C | [tasks/IS3.md](tasks/IS3.md) |
 | [ ] | IS5 | four result normalisations, three scalar predicates, hand-rolled frame save/restore | IS3 | C | [tasks/IS5.md](tasks/IS5.md) |
-| [ ] | IS6 | elision and purity each authored twice; three facts with no reader | IS0f | B | [tasks/IS6.md](tasks/IS6.md) |
+| [x] | IS6 | elision and purity each authored twice; three facts with no reader | IS0f | B | [tasks/IS6.md](tasks/IS6.md) |
 
 ## Waves
 

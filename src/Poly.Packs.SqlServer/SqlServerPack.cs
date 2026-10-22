@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Libraries.Storage;
+
 namespace Poly.Packs.SqlServer;
 
 /// <summary>
@@ -20,6 +22,7 @@ public sealed class SqlServerLibrary : IDomainLibrary {
         builder.AddStorageConvention(new SqlServerIdentifierConvention());
         builder.AddAnalyzer(new StoragePass(builder.TypeMaps, builder.StorageConventions));
         builder.AddAnalyzer(new PersistenceSurfacePass());
+        builder.AddConstraintCompiler(new UniqueConstraintCompiler(Id));
         if (_contributor is not null)
             builder.AddArtifactContributor(_contributor);
     }

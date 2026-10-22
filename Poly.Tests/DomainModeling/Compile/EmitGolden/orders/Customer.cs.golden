@@ -59,7 +59,7 @@ public class Customer
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Customer> Create(string email, string name, IEnumerable<Order>? orders = null, string tier = "standard")
+    public static DomainResult<Customer> Create(string email, string name, Poly.DomainModeling.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
     {
         if (string.IsNullOrEmpty(email))
         {
@@ -77,8 +77,14 @@ public class Customer
         {
             return DomainResult<Customer>.Failure("'Name' must be at most 100 characters.");
         }
+        if (Customer.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Customer>.Failure("Unique constraint violated: 'Email' value is already used on another 'Customer'.");
+        }
         var created = new Customer(email, name, orders, tier);
+        db.Record("Customer", "Email", email);
         return DomainResult<Customer>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
 }

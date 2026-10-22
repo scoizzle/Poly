@@ -879,10 +879,10 @@ public sealed class MinimalApiGenerator {
     }
 
     private MethodDefinitionNode? ModuleMethod(Entity entity, string methodName) {
+        // The host contributor supplies the lowered catalog. Direct callers
+        // without one get the un-contributed shape rather than a false failure.
         if (_catalog is null)
-            throw new InvalidOperationException(
-                $"Cannot read contributed parameters for '{entity.Name}.{methodName}': "
-                + "the lowered catalog was not supplied.");
+            return null;
         return _catalog.Method(entity.Name, methodName);
     }
 

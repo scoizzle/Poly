@@ -28,7 +28,7 @@ public class Doctor
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Doctor> Create(string licenseNo, string name, Schedule? schedule = null)
+    public static DomainResult<Doctor> Create(string licenseNo, string name, Poly.DomainModeling.Runtime.IStoragePort db, Schedule? schedule = null)
     {
         if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}$"))
         {
@@ -46,8 +46,14 @@ public class Doctor
         {
             return DomainResult<Doctor>.Failure("'Name' must be at most 60 characters.");
         }
+        if (Doctor.ExistsWithLicenseNo(db, licenseNo))
+        {
+            return DomainResult<Doctor>.Failure("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.");
+        }
         var created = new Doctor(licenseNo, name, schedule);
+        db.Record("Doctor", "LicenseNo", licenseNo);
         return DomainResult<Doctor>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public static System.Boolean ExistsWithLicenseNo(Poly.DomainModeling.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

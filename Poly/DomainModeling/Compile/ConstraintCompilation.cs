@@ -16,9 +16,6 @@ internal static class ConstraintCompilation {
         Domain domain,
         AnalysisResult analysis,
         IReadOnlyList<IConstraintCompiler> compilers) {
-        if (compilers.Count == 0)
-            return new ContributedMethods.AppliedModule(module, []);
-
         var contributions = Compile(module, domain, analysis, compilers);
         if (contributions.Count == 0)
             return new ContributedMethods.AppliedModule(module, []);

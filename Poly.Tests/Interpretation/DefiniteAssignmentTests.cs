@@ -20,6 +20,12 @@ public class DefiniteAssignmentTests {
             .Build()
             .Analyze(node);
 
+    /// <summary>The pass's published result at a program point: the set of variables
+    /// assigned on every path reaching it.</summary>
+    private static DefiniteAssignmentMetadata AssignedAt(AnalysisResult result, Node point) =>
+        result.GetMetadata<DefiniteAssignmentMetadata>(point)
+            ?? throw new InvalidOperationException("no definite-assignment metadata at this point");
+
     [Test]
     public async Task LambdaBody_AfterAssignment_IsDefinitelyAssigned() {
         var x = new Variable("x");
@@ -29,7 +35,7 @@ public class DefiniteAssignmentTests {
         ], [x]);
         var lambda = new Lambda([], body);
         var result = AnalyzeDa(lambda);
-        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsTrue();
+        await Assert.That(AssignedAt(result, body).DefinitelyAssigned.Contains("x")).IsTrue();
     }
 
     [Test]
@@ -38,7 +44,7 @@ public class DefiniteAssignmentTests {
         var body = new Block([x], [x]);
         var lambda = new Lambda([], body);
         var result = AnalyzeDa(lambda);
-        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsFalse();
+        await Assert.That(AssignedAt(result, body).DefinitelyAssigned.Contains("x")).IsFalse();
     }
 
     [Test]
@@ -53,7 +59,7 @@ public class DefiniteAssignmentTests {
         ], [x]);
         var lambda = new Lambda([], body);
         var result = AnalyzeDa(lambda);
-        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsTrue();
+        await Assert.That(AssignedAt(result, body).DefinitelyAssigned.Contains("x")).IsTrue();
     }
 
     [Test]
@@ -68,7 +74,7 @@ public class DefiniteAssignmentTests {
         var lambda = new Lambda([], body);
         var result = AnalyzeDa(lambda);
         // Only then-branch assigns; join must not claim definite assignment.
-        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsFalse();
+        await Assert.That(AssignedAt(result, body).DefinitelyAssigned.Contains("x")).IsFalse();
     }
 
     [Test]
@@ -92,6 +98,6 @@ public class DefiniteAssignmentTests {
         var lambda = new Lambda([], body);
         var result = AnalyzeDa(lambda);
         // Loop assigns must not leak into post-loop definite assignment.
-        await Assert.That(result.IsDefinitelyAssigned(body, "x")).IsFalse();
+        await Assert.That(AssignedAt(result, body).DefinitelyAssigned.Contains("x")).IsFalse();
     }
 }

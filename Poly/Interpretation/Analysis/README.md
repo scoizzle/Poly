@@ -11,10 +11,10 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `ThisReferenceContextAnalyzer` | `.UseThisReferenceContext()` | `this` resolved type on `ThisReference` | `TH0001` (static body) |
 | `ScopeValidator` | `.UseVariableScopeValidator()` | `VariableAnalysisMetadata` (bindings, parameter bindings, block scopes, writes, escapes, captures), `CatchBindingMetadata`, `LambdaCaptureMetadata`; resolves dotted CLR type names against the scope | Scoping errors |
 | `TypeAndMemberResolver` | `.UseTypeAndMemberResolver()` | Resolved types (projected through bindings) + resolved members | Structural failures (missing members) |
-| `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `ElisionMetadata`, `AssignmentValueUsedMetadata` | `DEAD_CODE_ELIDABLE` |
+| `SideEffectAnalyzer` | `.UseSideEffectAnalysis()` | `SideEffectMetadata`, `AssignmentValueUsedMetadata`; contributes the `NoObservableEffect` elision reason | `DEAD_CODE_ELIDABLE` |
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
-| `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`, `InfiniteLoopMetadata`, `MustExecuteMetadata` | `CF0001`-`CF0013` |
+| `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`; contributes the `Unreachable` elision reason | `CF0001`-`CF0013` |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Invoke return types from lambda bodies (including stored closures); does not retarget the `Lambda` node itself | (none) |

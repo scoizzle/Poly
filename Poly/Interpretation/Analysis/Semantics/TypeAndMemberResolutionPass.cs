@@ -60,42 +60,13 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             context.SetResolvedType(tcf, tryType);
     }
 
-    /// <summary>True when <paramref name="variable"/> is a use bound to a different
-    /// declaration, not the declaration node itself.</summary>
-    private static bool IsBoundUse(AnalysisContext context, Variable variable) {
-        if (context.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
-            return false;
-        return (metadata.VariableReferences.TryGetValue(variable, out var declaration)
-                    && declaration is not null
-                    && !ReferenceEquals(declaration, variable))
-            || metadata.ParameterReferences.ContainsKey(variable);
-    }
-
     /// <summary>A use's type is its declaration's type, found through the binding.
     /// The analyzer stamps the use from this result.</summary>
     private static ITypeDefinition? ResolveVariableType(AnalysisContext context, Variable variable) {
         if (context.GetResolvedType(variable) is { } existing)
             return existing;
-        if (context.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
-            return null;
-        if (metadata.VariableReferences.TryGetValue(variable, out var declaration)
-            && declaration is not null
-            && !ReferenceEquals(declaration, variable))
-            return ResolveNodeType(context, declaration);
-        if (metadata.ParameterReferences.TryGetValue(variable, out var parameter))
-            return ResolveNodeType(context, parameter);
-        return null;
-    }
-
-    /// <summary>True when a write to <paramref name="destination"/> reaches
-    /// <paramref name="declaration"/> through the bind pass. The declaration node is
-    /// its own binding; every other write is a use the bind pass linked to it.</summary>
-    private static bool BindsTo(AnalysisContext context, Variable destination, Variable declaration) {
-        if (ReferenceEquals(destination, declaration))
-            return true;
-        return context.GetMetadata<VariableAnalysisMetadata>(destination) is { } metadata
-            && metadata.VariableReferences.TryGetValue(destination, out var binding)
-            && ReferenceEquals(binding, declaration);
+        var binding = StoredLambdaBinding.BindingOf(context, variable);
+        return ReferenceEquals(binding, variable) ? null : ResolveNodeType(context, binding);
     }
 
     /// <summary>Attach a stored lambda's shape to its declaring binding and decide
@@ -141,7 +112,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             }
             if (node is Assignment assignment
                 && assignment.Destination is Variable destination
-                && BindsTo(context, destination, declaration)) {
+                && ReferenceEquals(StoredLambdaBinding.BindingOf(context, destination), declaration)) {
                 assignments++;
                 direct |= isDirectStatement;
                 if (assignment.Value is Lambda assigned) {
@@ -585,7 +556,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             // The declaration's type is its initializer's type. A later write to the
             // same binding projects through the resolved declaration; it must not
             // overwrite the declared shape with the value it happens to store.
-            if (valueType != null && !IsBoundUse(context, variable)
+            if (valueType != null && ReferenceEquals(StoredLambdaBinding.BindingOf(context, variable), variable)
                 && context.GetResolvedType(variable) is null)
                 context.SetResolvedType(variable, valueType);
             // The shape and its quotability live on the binding, never on this write's

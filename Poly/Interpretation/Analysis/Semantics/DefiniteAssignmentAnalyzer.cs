@@ -170,11 +170,4 @@ public static class DefiniteAssignmentExtensions {
             return builder;
         }
     }
-
-    extension(INodeMetadataProvider provider) {
-        public bool IsDefinitelyAssigned(Node node, string variableName) {
-            return provider.GetMetadata<DefiniteAssignmentMetadata>(node)
-                ?.DefinitelyAssigned.Contains(variableName) ?? false;
-        }
-    }
 }

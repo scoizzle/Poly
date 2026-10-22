@@ -335,7 +335,11 @@ public class ControlFlowAnalysisTests {
             .Build()
             .Analyze(ast);
 
-        await Assert.That(result.IsInfiniteLoop(ast.Nodes[0])).IsTrue();
+        // The loop has no exit edge, so the statement after it cannot execute: it is
+        // elided on the unreachable reason alone.
+        var postElision = result.GetMetadata<ElisionMetadata>(post);
+        await Assert.That(postElision).IsNotNull();
+        await Assert.That(postElision!.Reasons).IsEqualTo(ElisionReason.Unreachable);
 
         var infDiags = result.Diagnostics.Where(d => d.Code == "CF0003").ToList();
         await Assert.That(infDiags.Count).IsGreaterThan(0);
@@ -397,31 +401,6 @@ public class ControlFlowAnalysisTests {
 
         var deadCaseDiags = result.Diagnostics.Where(d => d.Code == "CF0011" || d.Code == "CF0012").ToList();
         await Assert.That(deadCaseDiags.Count).IsGreaterThan(0);
-    }
-
-    [Test]
-    public async Task MustExecute_BasicEntryStmts() {
-        var ast = new Block(
-            new Constant(1),
-            new Constant(2)
-        );
-
-        var result = new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseVariableScopeValidator()
-            .UseTypeAndMemberResolver()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseConstantFolding()
-            .UseControlFlowAnalysis()
-            .Build()
-            .Analyze(ast);
-
-        await Assert.That(result.GetControlFlowGraph(ast)).IsNotNull();
-        await Assert.That(result.IsMustExecute(ast.Nodes[0])).IsTrue();
-        var meta = result.GetMetadata<MustExecuteMetadata>(ast.Nodes[0]);
-        await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.MustExecute).IsTrue();
     }
 
     [Test]
@@ -544,7 +523,9 @@ public class ControlFlowAnalysisTests {
 
         var result = CfAnalyze(ast);
 
-        await Assert.That(result.IsInfiniteLoop(loop)).IsFalse();
+        // The nested member write mutates state the condition depends on, so the loop is
+        // not statically infinite: it keeps its exit edge and the post-loop code stays live.
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0003")).IsFalse();
         await Assert.That(result.CanElide(post)).IsFalse();
     }
 

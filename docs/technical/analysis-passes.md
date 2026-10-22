@@ -31,9 +31,9 @@ DefiniteAssignmentAnalyzer (136 lines) — definitely-assigned tracking
 
 ### ControlFlowAnalysisPass (980 lines) — KEEP
 
-**What it does:** Builds a complete CFG with BasicBlocks, predecessors/successors, infinite loop detection, must-execute facts, reachability BFS, and dead-code elision.
+**What it does:** Builds a complete CFG with BasicBlocks, predecessors/successors, infinite loop detection, reachability BFS, and dead-code elision.
 
-**Consumed output:** `ElisionMetadata` on unreachable nodes — consumed by `LinqExpressionGenerator` and `CSharpGenerator` for dead code elimination. The CFG itself, `InfiniteLoopMetadata`, `MustExecuteMetadata`, and `ControlFlowGraph` objects are currently unqueried but part of the CFG data model.
+**Consumed output:** `ElisionMetadata` on unreachable nodes — consumed by `LinqExpressionGenerator` and `CSharpGenerator` for dead code elimination. The CFG itself and `ControlFlowGraph` objects are currently unqueried but part of the CFG data model.
 
 **Value statement:** The CFG is the foundation for any future flow-sensitive optimization: loop invariant hoisting, common subexpression elimination, code motion, data-flow analysis. Replacing it with a simple reachability walk would save ~780 lines today but block every flow-sensitive optimization later. The CFG is dormant infrastructure within a coherent control-flow analysis system, not dead code.
 

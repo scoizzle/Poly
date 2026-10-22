@@ -75,3 +75,57 @@ Recommended and proceeding unless Scot objects: the trailing `break` is treated 
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `8acbd5bc` | SHIP — `SwitchText` terminates every case; `switch-case` reads the printed form; trailing `break` dropped as syntax | RED 4/5 named tests fail (CS0163/CS8070 captured); GREEN `CSharpLanguageTests` 193/193; full suite 4309/4309; build 0 warnings; one hand-authored golden added |
+
+### Evidence (2026-10-22)
+
+RED — `dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/CSharpLanguageTests/*'`:
+
+```
+failed SwitchCase_PrintsTerminatingBreak (7ms)
+  AssertionException: Expected to be 3, because each case body and the default case need a terminator
+  but found 0
+failed SwitchWithBreak_Reads_WithoutAddingANode (4ms)
+  FormatException: Expected type declaration, got 'class' (line 1, col 1)
+     at Poly.Interpretation.CSharp.CSharpReader.Parser.Take(String rule, String context)
+failed Switch_WriteRead_RoundTrips (5ms)
+  AssertionException: Expected to be 3, because the round trip must read back the terminating break the writer prints
+  but found 0
+failed PrintedSwitch_ParsesWithRoslyn (1s 032ms)
+  AssertionException: Expected to be empty
+  but collection contains items: [CS0163 Control cannot fall through from one case label ('case 1:') to another,
+    CS0163 Control cannot fall through from one case label ('case 2:') to another,
+    CS8070 Control cannot fall out of switch from final case label ('default:')]
+Test run summary: Failed!  total: 190 / failed: 4 / succeeded: 186
+```
+
+`SwitchCase_EndingInReturn_GetsNoBreak` passed before the change, as it must: before the writer emitted any terminator there was nothing to suppress, and after the change it guards against adding one to a body that already leaves the switch.
+
+GREEN — same filter: `total: 193 / failed: 0 / succeeded: 193` (three more rows: the new golden × Roslyn-agrees / round-trip / parses).
+Full suite `dotnet run --project Poly.Tests/Poly.Tests.csproj`: `total: 4309, failed: 0, succeeded: 4309, skipped: 0`.
+`dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`: `0 Warning(s), 0 Error(s)`.
+
+Printed form now produced (and read back structurally identical):
+
+```
+switch (code)
+{
+    case 1:
+    System.Console.WriteLine("one");
+    break;
+    case 2:
+    return 20L;
+    default:
+    System.Console.WriteLine("other");
+    break;
+}
+```
+
+The case body and its terminator share `indent + 1`, which is the body indent the writer already used; the case label sits at the same column. Setting the body deeper is a formatting change the card does not ask for.
+
+### Deviations from the card
+
+1. **`PrintedSwitch_ParsesWithRoslyn` uses a compilation, not `ParseText`.** `CSharpSyntaxTree.ParseText` never reports CS0163 (it is a semantic diagnostic), so a parse-only assertion is vacuous and passes before the change — verified in the first RED run. The test compiles the printed switch against the shared-framework reference set (`TRUSTED_PLATFORM_ASSEMBLIES`) and asserts zero error diagnostics; the RED run reported CS0163 twice plus CS8070.
+2. **The golden lives in a new directory, `EmitGolden/handwritten/Switch.cs.golden`.** No existing golden contained a `switch`, and every existing directory under `EmitGolden/` is asserted 1:1 against a sample domain's emit (`Emit_MatchesGolden`); adding a file to one of them would break that assertion. `CSharpLanguageTests.GoldenFiles()` globs recursively, so the new file is covered by all three golden tests.
+3. **`--treenode-filter '/*/*/CSharpRoundTrip*/*'` runs zero tests in this tree.** There is no `CSharpRoundTrip` class yet (it arrives with IS2a); the named `CSharpLanguageTests` filter is the whole changed-area surface.
+4. **`SwitchText` now delegates each case to `CaseText`.** The terminator is one appended line plus the pattern choice (`case` vs `case-break`), and `Terminates` recurses into a `Block` body so a block ending in `return` prints without a break.

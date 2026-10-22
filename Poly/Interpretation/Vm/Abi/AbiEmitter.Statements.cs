@@ -125,9 +125,22 @@ public static partial class AbiEmitter {
                     : Assign(ctx.VariableRead(variable), Constant(0L)));
             }
         }
-        var stmtExprs = new List<Expression>();
+        // Each statement starts from the block's entry depth. A statement's result is
+        // observable only when it is the block's value, so the earlier ones must not
+        // hold ring slots after they run — that was the ambient RingDepth cursor
+        // carrying values past their death (nqueens emitted 23 ring locals for a body
+        // whose deepest statement needs a handful). The last statement keeps its depth,
+        // so the block's value stays at RingDepth - 1 and Compile reports it.
+        var stmtExprs = new List<Expression>(block.Nodes.Count);
+        int entryDepth = ctx.RingDepth;
         for (int i = 0; i < block.Nodes.Count; i++) {
-            stmtExprs.Add(CompileStatement(block.Nodes[i], ctx));
+            var statement = block.Nodes[i];
+            // A comment or a label emits no code and no value, so it must not release
+            // what the previous statement left: that value is still the block's result
+            // (`[return x, comment]` yields x).
+            if (statement is not (Comment or LabelDeclaration))
+                ctx.RingDepth = entryDepth;
+            stmtExprs.Add(CompileStatement(statement, ctx));
         }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();

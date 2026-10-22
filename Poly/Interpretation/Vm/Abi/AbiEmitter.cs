@@ -199,10 +199,23 @@ public static partial class AbiEmitter {
         VmDebugInfo DebugInfo,
         IReadOnlyList<Type?>? RootParameterClrTypes);
 
-    private static Expression CompileNode(Node node, Context ctx) {
+    private static Expression CompileNode(Node node, Context ctx) => Compile(node, ctx).Code;
+
+    /// <summary>Compile a node and report where its result lives. An expression
+    /// leaves its result at the top of the ring; a node whose value leaves through
+    /// another channel — a <c>return</c> inside an inlined arm, or a statement with
+    /// no value — has no ring location, and <see cref="CompiledNode.Result"/> is
+    /// null. A consumer that needs one asks with
+    /// <see cref="CompiledNode.RequireResult"/>, which fails closed.</summary>
+    private static CompiledNode Compile(Node node, Context ctx) {
         if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
-            return CompileNode(replacement, ctx);
-        return CompileNodeInner(node, ctx);
+            return Compile(replacement, ctx);
+        int entryDepth = ctx.RingDepth;
+        var code = CompileNodeInner(node, ctx);
+        var result = ctx.RingDepth > entryDepth
+            ? new SlotLocation.Ring(ctx.RingDepth - 1)
+            : null;
+        return new CompiledNode(code, result);
     }
 
     private static Expression CompileStatement(Node node, Context ctx) {
@@ -557,7 +570,7 @@ public static partial class AbiEmitter {
             Invoke inv => SpillRingRead(CompileNode(inv, ctx), ctx),
             InterpolatedString interp => SpillRingRead(CompileNode(interp, ctx), ctx),
             TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
-            SwitchStatement sw => SpillRingRead(CompileNode(sw, ctx), ctx),
+            SwitchStatement sw => Compile(sw, ctx).RequireResult(sw).Read(ctx),
             StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
             Assignment a => SpillRingRead(CompileNode(a, ctx), ctx),
             Comment => RejectCompile("Comment is not a VM value."),

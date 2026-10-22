@@ -84,14 +84,17 @@ that hold temporary values during expression evaluation:
 
 | Property | Value |
 |----------|-------|
-| Default slots | 8 |
-| Max slots | 32 |
-| Allocation | Inline during AST walk (no global pre-pass) |
+| Allocation | Inline during the AST walk, on demand (no pre-pass) |
+| High-water | The deepest statement in a block, not the block's total |
+| Release | A statement's slots return to the pool at the next statement |
 | JIT behavior | CLR JIT can enregister ring locals |
 
-The ring depth equals the maximum expression nesting depth at any point in the
-function. Each µop reads its inputs from and writes its output to ring slots
-indexed by eval-stack position.
+`CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
+its result, so nothing has to infer the result from slot depth. A block restarts
+each statement at the block's entry depth, so the high-water is the deepest single
+statement, and a result is kept only when it is the block's value. A node whose
+value leaves through another channel — a `return` in an inlined arm, or a
+statement with no value — has no ring location.
 
 ## Compilation Modes
 

@@ -1,6 +1,6 @@
 # TASK IS0f - the per-analysis type registry leaves the process-wide analyzer
 
-Status: planned. Branch `slice/IS0f`. Lane B (`analysis`). Issue #261.
+Status: implemented. Branch `slice/IS0f`. Lane B (`analysis`). Issue #261.
 Plan: [IS-README](../IS-README.md).
 
 ## Why
@@ -19,13 +19,42 @@ Production blast radius is small — `Interpreter.Compile` passes an explicit pr
 - Update the consumers: `Poly.Tests/Interpretation/InterpretationStabilizationTests.cs:159,176` and `Poly.Tests/Interpretation/TypeDefinitionNodeAnalyzerTests.cs:293,314,334,353,373,393,449,457`.
 - Check `AstTypeDefinition.ResolutionProvider` (`:146,159,178`) is the context's registry, not the deleted field.
 
+## Premise correction (2026-10-22)
+
+The claim that was false: the issue's "production blast radius today is small: `Interpreter.Compile` passes an explicit provider, so the field-backed queries are exercised mainly by tests." They are exercised in production. `DomainEntityInstance` keeps `TypeDefinitionNodeAnalyzer` as its type provider (`_typeDefAnalyzer`, `_bindingTypeProvider`, the `ExecuteEffectList` parameter, `BuildTypeDefAnalyzer`, `ModuleAwareTypeProvider`) and hands it to production compile paths. Removing the provider surface from the analyzer therefore breaks production, not just tests. Measured on the unmodified tree with only the design's lane-B half applied:
+
+```
+$ dotnet build Poly/Poly.csproj
+Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs(405,43): error CS1503: Argument 1: cannot convert from 'Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer' to 'Poly.Introspection.ITypeDefinitionProvider'
+Poly/DomainModeling/Runtime/DomainEntityInstance.cs(203,29): error CS1503: Argument 3: cannot convert from 'Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer' to 'Poly.Introspection.ITypeDefinitionProvider'
+Poly/DomainModeling/Runtime/DomainEntityInstance.cs(505,57): error CS1503: Argument 1: cannot convert from 'Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer' to 'Poly.Introspection.ITypeDefinitionProvider'
+Poly/DomainModeling/Runtime/DomainEntityInstance.cs(923,51): error CS1503: Argument 1: cannot convert from 'Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer' to 'Poly.Introspection.ITypeDefinitionProvider'
+Poly/DomainModeling/Runtime/DomainEntityInstance.cs(1046,53): error CS1503: Argument 1: cannot convert from 'Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer' to 'Poly.Introspection.ITypeDefinitionProvider'
+```
+
+Scope widened (Scot, 2026-10-22): the three `Poly/DomainModeling/Runtime/DomainEntityInstance*.cs` files and seven further test files join this slice. Retyping a field to `ITypeDefinitionProvider` is not a `Lower` or session-pipeline change and adds no capability to `DomainEntityInstance` — it removes a second owner of a per-analysis fact, which is this program's boundary.
+
+Five of the added test files fall under lane C's globs (`AstMemberVmTests`, `AsyncMethodVmTests`, `InterpreterBranchVmTests`, `ResolvedTypeVmTests` under `*Vm*`; `InvokeMemberInstanceTests` under `*Invoke*`) and are explicitly authorised for this slice. `AstConstructorDefinitionTests` and `ParameterBindingTests` are under no lane glob.
+
 ## Files
 
 - `Poly/Interpretation/Analysis/Semantics/TypeDefinitionNodeAnalyzer.cs`
 - `Poly/Analysis/AnalysisResult.cs` — the provider accessor.
+- `Poly/Analysis/Analyzer.cs` — fills it from the analysis context.
+- `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`
+- `Poly/DomainModeling/Runtime/DomainEntityInstance.Runtime.cs`
+- `Poly/DomainModeling/Runtime/DomainEntityInstance.HostAbi.cs`
 - `Poly.Tests/Interpretation/InterpretationStabilizationTests.cs`
 - `Poly.Tests/Interpretation/TypeDefinitionNodeAnalyzerTests.cs`
 - `Poly.Tests/Interpretation/TypeRegistryIsolationTests.cs` — new.
+- `Poly.Tests/Interpretation/AstConstructorDefinitionTests.cs`
+- `Poly.Tests/Interpretation/AstMemberVmTests.cs`
+- `Poly.Tests/Interpretation/AsyncMethodVmTests.cs`
+- `Poly.Tests/Interpretation/InterpreterBranchVmTests.cs`
+- `Poly.Tests/Interpretation/InvokeMemberInstanceTests.cs`
+- `Poly.Tests/Interpretation/ParameterBindingTests.cs`
+- `Poly.Tests/Interpretation/ResolvedTypeVmTests.cs`
+
 
 ## Shape matrix
 
@@ -68,3 +97,46 @@ Recommended and proceeding unless Scot objects: the provider surface moves off t
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `dceb4a58` | SHIP — the analyzer exposes only `Analyze`; one analysis owns its type table | RED first (below), GREEN after. `AstTypeRegistry` had to take over `ITypeDefinitionNodeProvider`, not just `ITypeDefinitionProvider`: returning the context's collection without it silently dropped the module declarations from `Interpreter.AnalysisRoot`, and 121 domain/MCP tests caught it. Full suite 4304/4304; build 0 warnings. |
+
+### Evidence (2026-10-22)
+
+RED — after the rebase, before any production change. The test routed provider queries through the shared analyzer, because the analysis exposed no provider of its own yet:
+
+```
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/TypeRegistryIsolationTests/*'
+failed ParallelAnalyses_EachSeeTheirOwnTypes (35ms)
+  TUnit.Engine.Exceptions.TestFailedException: [Test Failure] AssertionException: Expected to not be null
+    at Poly.Tests.Interpretation.TypeRegistryIsolationTests.ParallelAnalyses_EachSeeTheirOwnTypes() … TypeRegistryIsolationTests.cs:44
+failed TwoAnalyses_DoNotShareTypeRegistries (35ms)
+  TUnit.Engine.Exceptions.TestFailedException: [Test Failure] AssertionException: Expected to not be null
+    at Poly.Tests.Interpretation.TypeRegistryIsolationTests.TwoAnalyses_DoNotShareTypeRegistries() … TypeRegistryIsolationTests.cs:27
+  total: 3
+  failed: 2
+  succeeded: 1
+```
+
+`TwoAnalyses_DoNotShareTypeRegistries` failed exactly as the issue predicted: after Beta's analysis, the shared instance answered `GetTypeDefinition("Alpha")` with null.
+
+GREEN — same filter, now reading `AnalysisResult.TypeDefinitions`:
+
+```
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/TypeRegistryIsolationTests/*'
+  total: 3 / failed: 0 / succeeded: 3
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/TypeDefinitionNodeAnalyzerTests/*'
+  total: 17 / failed: 0 / succeeded: 17
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/InterpretationStabilizationTests/*'
+  total: 42 / failed: 0 / succeeded: 42
+$ dotnet run --project Poly.Tests/Poly.Tests.csproj
+  total: 4304 / failed: 0 / succeeded: 4304
+$ dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj
+  0 Warning(s), 0 Error(s)
+```
+
+### Deviations from the card
+
+1. **The provider surface is a collection, not the bare registry.** `AnalysisContext.TypeDefinitions` already stacks the AST table over the caller's providers and the CLR fallback, and still answers `GetTypeDefinition(Type)`. `AnalysisResult.TypeDefinitions` returns that collection, so one object answers name, `Type`, and node-shaped questions.
+2. **`AstTypeRegistry` gains `ITypeDefinitionNodeProvider` as well as `ITypeDefinitionProvider`.** The analyzer's node-provider role was load-bearing, not incidental: `Interpreter.AnalysisRoot` asks the compile's provider for its declarations. A collection holding only the type-provider interface silently compiled the domain bodies without their type declarations — 121 domain/MCP failures whose message was `Member 'Create' on a type name is not a resolved static method`. The registry owns both halves now, because it is the per-analysis table.
+3. **Eight test files pass the analyzer as a provider, not seven.** `SuspendResumeVmTests` was missed when the widened list was drawn up; it is the same one-line helper flip.
+4. **`AstConstructorDefinitionTests` drops `typeDefinitions: tda`.** It was passing the same instance that the builder runs as a pass; before the pass ran, the field-backed provider answered null, so the argument carried nothing. `.Analyze(root)` is the honest call.
+5. **One full-suite run of three reported a single failure** (4303/4304) before the registry took the node-provider role; the two runs after that fix were 4304/4304. The failed run's report was overwritten, so the case is unnamed; the suite runs four tests at once (`TestParallelLimit`).

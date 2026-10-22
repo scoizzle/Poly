@@ -1,5 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -47,11 +48,12 @@ public class SuspendResumeVmTests {
                     ]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
-        analyzer.Analyze(AnalysisContext.CreateDefault(), typeDef);
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeDef);
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Tick"));
 
-        await Assert.That(() => Interpreter.Compile(invoke, analyzer))
+        await Assert.That(() => Interpreter.Compile(invoke, ctx.TypeDefinitions))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("SuspendNode");
     }

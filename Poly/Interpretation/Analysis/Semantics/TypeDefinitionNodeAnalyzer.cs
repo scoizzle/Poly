@@ -9,12 +9,11 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// <summary>
 /// Analyzer that extracts ITypeDefinition instances from TypeDefinitionNode AST nodes.
 /// Stores the extracted type definitions in the analysis context for use by other analyzers.
-/// Also acts as an ITypeDefinitionProvider for the analyzed types.
+/// The table belongs to one analysis; query it through <see cref="Poly.Analysis.AnalysisResult.TypeDefinitions"/>.
 /// </summary>
-public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionProvider, ITypeDefinitionNodeProvider {
+public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer {
     public const string Id = "TypeDefinitionNode";
     public string PassName => Id;
-    private AstTypeRegistry? _registry;
 
     public void Analyze(AnalysisContext context, Node node) {
         var registry = context.GetMetadata<AstTypeRegistry>(default);
@@ -22,7 +21,6 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
             registry = new AstTypeRegistry();
             context.SetMetadata(default, registry);
             context.TypeDefinitions.Add(registry);
-            _registry = registry;
         }
 
         if (node is TypeDefinitionNode typeDef) {
@@ -49,26 +47,6 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 
         this.AnalyzeChildren(context, node);
     }
-
-    public ITypeDefinition? GetTypeDefinition(string typeName) =>
-        _registry?.GetTypeDefinition(typeName);
-
-    public ITypeDefinition? GetTypeDefinition(Type type) =>
-        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
-
-    public IEnumerable<ITypeDefinition> GetTypeDefinitions() =>
-        _registry?.GetTypeDefinitions() ?? [];
-
-    public IEnumerable<TypeDefinitionNode> GetTypeDefinitionNodes() =>
-        _registry?.GetTypeDefinitions()
-            .OfType<AstTypeDefinition>()
-            .Select(static type => type.Syntax)
-        ?? [];
-
-    public ITypeDefinition? GetTypeDefinition(TypeDefinitionNode node) =>
-        _registry?.GetTypeDefinitions()
-            .OfType<AstTypeDefinition>()
-            .FirstOrDefault(type => ReferenceEquals(type.Syntax, node));
 }
 
 /// <summary>
@@ -76,7 +54,7 @@ public sealed class TypeDefinitionNodeAnalyzer : INodeAnalyzer, ITypeDefinitionP
 /// shared <see cref="Interpreter.Analyzer"/> instance cannot leak or clear
 /// types across concurrent analyses.
 /// </summary>
-internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetadata {
+internal sealed class AstTypeRegistry : ITypeDefinitionProvider, ITypeDefinitionNodeProvider, IAnalysisMetadata {
     private readonly Dictionary<string, AstTypeDefinition> _types = new(StringComparer.Ordinal);
 
     /// <summary>CLR arity suffix so <c>DomainResult</c> and <c>DomainResult&lt;T&gt;</c> both stay registered.</summary>
@@ -88,6 +66,17 @@ internal sealed class AstTypeRegistry : ITypeDefinitionProvider, IAnalysisMetada
     }
 
     public IEnumerable<ITypeDefinition> GetTypeDefinitions() => _types.Values;
+
+    /// <summary>The declarations this analysis registered, so a compile can put
+    /// them and the root in one unit.</summary>
+    public IEnumerable<TypeDefinitionNode> GetTypeDefinitionNodes() =>
+        _types.Values.Select(static type => type.Syntax);
+
+    /// <summary>The definition built for exactly <paramref name="node"/>, or null.
+    /// Node identity, not name: a domain can hold two definitions with the same
+    /// name (module and runtime shapes).</summary>
+    public ITypeDefinition? GetTypeDefinition(TypeDefinitionNode node) =>
+        _types.Values.FirstOrDefault(type => ReferenceEquals(type.Syntax, node));
 
     public ITypeDefinition? GetTypeDefinition(string typeName) {
         if (_types.TryGetValue(typeName, out var def))

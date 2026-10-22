@@ -20,10 +20,11 @@ public class ParameterBindingTests {
 
     public static Func<int, bool> HostPredicate() => value => value > 0;
 
-    private static TypeDefinitionNodeAnalyzer Analyze(TypeDefinitionNode type) {
+    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode type) {
         var analyzer = new TypeDefinitionNodeAnalyzer();
-        analyzer.Analyze(AnalysisContext.CreateDefault(), type);
-        return analyzer;
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, type);
+        return ctx.TypeDefinitions;
     }
 
     [Test]

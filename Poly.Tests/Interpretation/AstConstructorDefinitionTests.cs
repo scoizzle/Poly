@@ -62,7 +62,7 @@ public class AstConstructorDefinitionTests {
             .UseThisReferenceContext()
             .UseTypeAndMemberResolver()
             .Build()
-            .Analyze(root, typeDefinitions: tda);
+            .Analyze(root);
         var resolvedConstructor = analysis.GetResolvedMember(newNode) as ITypeConstructor;
         var resolvedType = analysis.GetResolvedType(newNode);
 
@@ -84,7 +84,7 @@ public class AstConstructorDefinitionTests {
         var ctx = AnalysisContext.CreateDefault();
         tda.Analyze(ctx, typeNode);
         var newNode = new New(new TypeReference("Sample.Widget"));
-        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, tda));
+        using var exec = Interpreter.Execute(Interpreter.Compile(newNode, ctx.TypeDefinitions));
         var bag = exec.GetValue<Dictionary<string, object?>>();
         await Assert.That(bag).IsNotNull();
         await Assert.That(bag!.Count).IsEqualTo(0);

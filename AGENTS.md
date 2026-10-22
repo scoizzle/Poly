@@ -2,7 +2,7 @@
 
 Authoritative always-on policy. User-wide agent defaults are a baseline; this file wins. Open [`docs/CORE.md`](docs/CORE.md) before changing platform machinery.
 
-**Before you edit, check:** Is this a CORE mechanism change (then update `docs/CORE.md` in the same change)? Does the board's `CURRENT` admit the work? Does a new `Node` need a `LanguageSurfaceTests.Kinds` entry plus a `CompileNodeInner` arm in lockstep? Does the file already carry edits you did not make — then preserve them; never revert, stage, or clean them up.
+**Before you edit, check:** Is this a CORE mechanism change (then update `docs/CORE.md` in the same change)? Does the board's `CURRENT` admit the work? Does a new `Node` need a `NodeFacts` row plus a `CompileNodeInner` arm in lockstep? Does the file already carry edits you did not make — then preserve them; never revert, stage, or clean them up.
 
 ## Core tenets
 
@@ -65,7 +65,7 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 `Poly/Interpretation/CSharp/` is a reader *and* a writer, and everything it accepts must execute on the VM.
 
 - One grammar table drives reader and writer. A pattern-shape change updates the writer's positional fills in the same change.
-- A new `Node` lands in lockstep with its `LanguageSurfaceTests.Kinds` entry and its `DirectVmAbiEmitter.CompileNodeInner` arm (plus a `CompileValue` arm if it is a value).
+- A new `Node` lands in lockstep with its `NodeFacts` row and its `DirectVmAbiEmitter.CompileNodeInner` arm (plus a `CompileValue` arm if it is a value).
 - Console-only work leaves the DSL parser, the exporter, and the golden corpus untouched.
 - Fail closed: a form that cannot execute soundly throws a positioned error; it never folds to a wrong shape.
 - Tests ship with the feature, `Write(Read(x))` stays idempotent, and every feature gets its fail-closed case.

@@ -31,12 +31,12 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 
 | State | ID | What it removes | Depends | Lane | Card |
 |---|---|---|---|---|---|
-| [ ] | IS0a | writer fallback that prints a type name; three kinds that lose their kind on round-trip (#255, #256) | — | A | [tasks/IS0a.md](tasks/IS0a.md) |
+| [x] | IS0a | writer fallback that prints a type name; three kinds that lose their kind on round-trip (#255, #256) | — | A | [tasks/IS0a.md](tasks/IS0a.md) |
 | [ ] | IS0b | switch cases printed without a terminator; `case`/`break` asymmetry with the reader (#257) | IS0a | A | [tasks/IS0b.md](tasks/IS0b.md) |
-| [ ] | IS0c | `AnyChild`'s descendant promise vs one-level walk; catch-body elision (#258) | — | B | [tasks/IS0c.md](tasks/IS0c.md) |
-| [ ] | IS0d | suspend inside a compiled function body compiling to a resume label nothing dispatches (#259) | — | C | [tasks/IS0d.md](tasks/IS0d.md) |
-| [ ] | IS0e | void CLR invoke leaving its result slot unwritten (#260) | IS0d | C | [tasks/IS0e.md](tasks/IS0e.md) |
-| [ ] | IS0f | per-analysis type registry held on the process-wide static analyzer (#261) | IS0c | B | [tasks/IS0f.md](tasks/IS0f.md) |
+| [x] | IS0c | `AnyChild`'s descendant promise vs one-level walk; catch-body elision (#258) | — | B | [tasks/IS0c.md](tasks/IS0c.md) |
+| [x] | IS0d | suspend inside a compiled function body compiling to a resume label nothing dispatches (#259) | — | C | [tasks/IS0d.md](tasks/IS0d.md) |
+| [~] | IS0e | void CLR invoke leaving its result slot unwritten (#260) | IS0d | C | [tasks/IS0e.md](tasks/IS0e.md) |
+| [~] | IS0f | per-analysis type registry held on the process-wide static analyzer (#261) | IS0c | B | [tasks/IS0f.md](tasks/IS0f.md) |
 | [ ] | IS1 | five hand-kept producer switches and the `LanguageSurfaceTests.Kinds` dictionary; one capability table + one totality test | IS0a, IS0b, IS0e | A | [tasks/IS1.md](tasks/IS1.md) |
 | [ ] | IS1b | Mermaid's two dispatch switches and its silent child drops | IS1 | A | [tasks/IS1b.md](tasks/IS1b.md) |
 | [ ] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |

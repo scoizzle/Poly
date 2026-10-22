@@ -101,6 +101,27 @@ public static partial class AbiEmitter {
         /// hand-manage <see cref="RingDepth"/> or the fold.</summary>
         internal RingRegion OpenRing() => new(this);
 
+        /// <summary>Open a ring region that closes when it is disposed: the depth returns
+        /// to the caller's, so a sub-expression's slots cannot leak into the enclosing
+        /// region and no emitter writes the cursor back by hand.</summary>
+        internal RingScope OpenRingScope() => new(this, RingDepth);
+
+        /// <summary>A ring region that restores the depth it opened at. It is a type
+        /// rather than a callback so an emitter can hold it for a whole body
+        /// (<c>using var scope = ctx.OpenRingScope();</c>) or for one compile.</summary>
+        internal readonly struct RingScope : IDisposable {
+            private readonly Context _context;
+            private readonly int _callerDepth;
+
+            internal RingScope(Context context, int baseDepth) {
+                _context = context;
+                _callerDepth = context.RingDepth;
+                context.RingDepth = baseDepth;
+            }
+
+            public void Dispose() => _context.RingDepth = _callerDepth;
+        }
+
         private readonly Dictionary<Node, (ValueRepresentationKind Kind, Type? ClrType)> _representation = new();
 
         /// <summary>The slot kind and CLR type of a node's effective runtime action.

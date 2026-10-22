@@ -86,7 +86,7 @@ that hold temporary values during expression evaluation:
 |----------|-------|
 | Allocation | Inline during the AST walk, on demand (no pre-pass) |
 | High-water | The deepest statement in a block, not the block's total |
-| Release | A statement's slots return to the pool at the next statement |
+| Release | An emitter holds a `Context.RingScope`; disposal restores the depth, and a block restarts each statement at its entry depth |
 | JIT behavior | CLR JIT can enregister ring locals |
 
 `CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds

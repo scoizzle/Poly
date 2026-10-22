@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 
+using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Tests.TestHelpers;
@@ -18,18 +19,125 @@ namespace Poly.Tests.TestHelpers;
 internal static class VmTree {
     private static readonly Regex RingLocal = new("^_r(\\d+)$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// One emitted loop: the break target its test jumps to and the top-level items of
+    /// the body the scaffold assembled, in emission order. A loop's own meaning — its
+    /// test, its per-iteration binding, its body and what <c>continue</c> lands on — is
+    /// what sits between the markers; the markers themselves are the scaffold.
+    /// </summary>
+    internal sealed class LoopShape {
+        internal LoopShape(LabelTarget? breakTarget, IReadOnlyList<Expression> steps, bool inTryFinally) {
+            BreakTarget = breakTarget;
+            Steps = steps;
+            InTryFinally = inTryFinally;
+        }
+
+        public LabelTarget? BreakTarget { get; }
+
+        /// <summary>The loop body's top-level items: the guard, the test's jump, the
+        /// loop's own statements, and the continue label — in the scaffold's order.</summary>
+        public IReadOnlyList<Expression> Steps { get; }
+
+        /// <summary>The loop sits inside a <c>try</c>: the <c>foreach</c> shape, whose
+        /// enumerator the enclosing finally disposes.</summary>
+        public bool InTryFinally { get; }
+
+        /// <summary>Where the iteration guard sits: the first step of every scaffold.</summary>
+        public int GuardIndex => IndexOf(IsIterationGuard);
+
+        /// <summary>Where the test's jump to the break label sits. Before the body for
+        /// <c>while</c>/<c>for</c>/<c>foreach</c>, after it for <c>do</c>.</summary>
+        public int BreakTestIndex => IndexOf(IsBreakTest);
+
+        /// <summary>Where the continue label sits: what <c>continue</c> jumps to.</summary>
+        public int ContinueLabelIndex => IndexOf(IsContinueLabel);
+
+        public LabelTarget? ContinueTarget =>
+            ContinueLabelIndex < 0 ? null : ((LabelExpression)Steps[ContinueLabelIndex]).Target;
+
+        /// <summary>How many guards the scaffold emitted: one. A second would be a second
+        /// scaffold inside one loop, which is what a hand-kept copy looks like.</summary>
+        public int GuardCount => Count(IsIterationGuard);
+
+        public int BreakTestCount => Count(IsBreakTest);
+
+        public int ContinueLabelCount => Count(IsContinueLabel);
+
+        private bool IsIterationGuard(Expression step) =>
+            step is ConditionalExpression condition && ReferencesMaxLoopIterations(condition.Test);
+
+        /// <summary>The scaffold's jump always has a negated test, which keeps a body's own
+        /// <c>if (x) break;</c> from reading as one.</summary>
+        private bool IsBreakTest(Expression step) =>
+            step is ConditionalExpression { Test.NodeType: ExpressionType.Not, IfTrue: GotoExpression jump }
+            && jump.Target == BreakTarget;
+
+        private bool IsContinueLabel(Expression step) =>
+            step is LabelExpression label && label.Target != BreakTarget;
+
+        private int IndexOf(Func<Expression, bool> predicate) {
+            for (int i = 0; i < Steps.Count; i++) {
+                if (predicate(Steps[i]))
+                    return i;
+            }
+            return -1;
+        }
+
+        private int Count(Func<Expression, bool> predicate) => Steps.Count(predicate);
+
+        private static bool ReferencesMaxLoopIterations(Expression expression) {
+            var finder = new MaxLoopIterationsFinder();
+            finder.Visit(expression);
+            return finder.Found;
+        }
+
+        private sealed class MaxLoopIterationsFinder : ExpressionVisitor {
+            public bool Found { get; private set; }
+
+            protected override Expression VisitMember(MemberExpression node) {
+                if (node.Member.Name == nameof(VmState.MaxLoopIterations))
+                    Found = true;
+                return base.VisitMember(node);
+            }
+        }
+    }
+
     internal sealed class Scan : ExpressionVisitor {
         private ParameterExpression? _slots;
         private readonly List<Expression> _slotIndexes = [];
         private readonly List<int> _assignedRings = [];
         private readonly List<ParameterExpression> _declared = [];
+        private readonly List<LoopShape> _loops = [];
         private readonly Dictionary<ParameterExpression, int> _occurrences =
             new(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<ParameterExpression, int> _declarations =
             new(ReferenceEqualityComparer.Instance);
+        private int _tryDepth;
 
         /// <summary>Every local declared in any block, in tree order.</summary>
         public IReadOnlyList<ParameterExpression> Declared => _declared;
+
+        /// <summary>Every emitted loop, in tree order.</summary>
+        public IReadOnlyList<LoopShape> Loops => _loops;
+
+        protected override Expression VisitLoop(LoopExpression node) {
+            var steps = node.Body switch {
+                BlockExpression block => (IReadOnlyList<Expression>)block.Expressions,
+                var single => [single],
+            };
+            _loops.Add(new LoopShape(node.BreakLabel, steps, _tryDepth > 0));
+            return base.VisitLoop(node);
+        }
+
+        protected override Expression VisitTry(TryExpression node) {
+            _tryDepth++;
+            try {
+                return base.VisitTry(node);
+            }
+            finally {
+                _tryDepth--;
+            }
+        }
 
         protected override Expression VisitBlock(BlockExpression node) {
             foreach (var variable in node.Variables) {

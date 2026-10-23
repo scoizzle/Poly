@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -100,7 +99,6 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task Equal_NaN_IsFalse() {
         var node = new Equal(new Constant(double.NaN), new Constant(double.NaN));
-        await AssertLinqBool(node, false);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
@@ -108,7 +106,6 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task NotEqual_NaN_IsTrue() {
         var node = new NotEqual(new Constant(double.NaN), new Constant(double.NaN));
-        await AssertLinqBool(node, true);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
     }
@@ -116,7 +113,6 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task LessThan_NaN_IsFalse() {
         var node = new LessThan(new Constant(double.NaN), new Constant(0.0));
-        await AssertLinqBool(node, false);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
@@ -139,7 +135,6 @@ public class InterpreterLanguageGotchaTests {
     [Test]
     public async Task Divide_NegativeInts_TruncatesTowardZero() {
         var node = new Divide(new Constant(-7L), new Constant(2L));
-        await AssertLinqLong(node, -3L);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(-3L);
     }
@@ -148,7 +143,6 @@ public class InterpreterLanguageGotchaTests {
     public async Task Add_LongOverflow_WrapsUnchecked() {
         var node = new Add(new Constant(long.MaxValue), new Constant(1L));
         var expected = unchecked(long.MaxValue + 1L);
-        await AssertLinqLong(node, expected);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(expected);
     }
@@ -505,16 +499,6 @@ public class InterpreterLanguageGotchaTests {
             new LessThan(new Constant(1L), new Constant(2L)),
             new Constant(3L));
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
-    }
-
-    private static async Task AssertLinqLong(Node node, long expected) {
-        var compiled = Expression.Lambda<Func<long>>(node.BuildExpression()).Compile();
-        await Assert.That(compiled()).IsEqualTo(expected);
-    }
-
-    private static async Task AssertLinqBool(Node node, bool expected) {
-        var compiled = Expression.Lambda<Func<bool>>(node.BuildExpression()).Compile();
-        await Assert.That(compiled()).IsEqualTo(expected);
     }
 
     private sealed class TrackingDisposable : IDisposable {

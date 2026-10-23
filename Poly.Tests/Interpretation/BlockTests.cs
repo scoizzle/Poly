@@ -1,9 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -14,13 +11,9 @@ public class BlockTests {
         var node = new Block(Wrap(42));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
@@ -30,13 +23,9 @@ public class BlockTests {
         var node = new Block(Wrap(10), Wrap(20), Wrap(99));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(99);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
@@ -48,13 +37,9 @@ public class BlockTests {
         var node = new Block([assignNode, varNode], [varNode]);
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(50);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
@@ -68,13 +53,9 @@ public class BlockTests {
         );
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(100);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
@@ -85,13 +66,9 @@ public class BlockTests {
         var node = new Block(conditional);
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(55);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(55L);
     }
 
@@ -104,13 +81,9 @@ public class BlockTests {
         );
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 

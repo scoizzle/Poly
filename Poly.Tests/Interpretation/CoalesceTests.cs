@@ -1,7 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,14 +9,9 @@ public class CoalesceTests {
         var node = new Coalesce(Wrap(null as int?), Wrap(42));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
@@ -29,14 +21,9 @@ public class CoalesceTests {
         var node = new Coalesce(Wrap(100 as int?), Wrap(42));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(100);
-
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(100L);
     }
 
@@ -47,13 +34,9 @@ public class CoalesceTests {
         var node = new Coalesce(param, Wrap(99));
 
         // Act
-        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
+        var program = Interpreter.Compile(node);
 
         // Assert
-        await Assert.That(compiled(50)).IsEqualTo(50);
-        await Assert.That(compiled(null)).IsEqualTo(99);
-
-        var program = Interpreter.Compile(node);
         using (var exec = Interpreter.Execute(program, s => s.SetArgs(50)))
             await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
         using (var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { null })))
@@ -69,14 +52,9 @@ public class CoalesceTests {
         );
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(10);
-
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
@@ -86,14 +64,9 @@ public class CoalesceTests {
         var node = new Coalesce(Wrap(null as string), Wrap("default"));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<string>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo("default");
-
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("default");
     }
 
@@ -101,8 +74,6 @@ public class CoalesceTests {
     public async Task Coalesce_NullableZero_IsValueNotNull() {
         var param = new Parameter("x", TypeReference.To<int?>());
         var node = new Coalesce(param, Wrap(100));
-        var compiled = node.CompileLambda<Func<int?, int>>((param, typeof(int?)));
-        await Assert.That(compiled(0)).IsEqualTo(0);
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(0));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);

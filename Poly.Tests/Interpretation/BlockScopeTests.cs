@@ -1,7 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -18,13 +15,9 @@ public class BlockScopeTests {
         var outerBlock = new Block([outerAssign, innerBlock], [outerVar]);
 
         // Act
-        var expr = outerBlock.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
 
         // Assert - inner block returns 50, but outer scope still has its variable at 100
-        await Assert.That(result).IsEqualTo(50);
-        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
@@ -41,13 +34,9 @@ public class BlockScopeTests {
         var outerBlock = new Block([outerAssign, innerBlock], [outerVar]);
 
         // Act
-        var expr = outerBlock.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
 
         // Assert
-        await Assert.That(result).IsEqualTo(50);
-        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(50L);
     }
 
@@ -63,13 +52,9 @@ public class BlockScopeTests {
         var node = new Block([assign1, assign2, var2], [var1, var2]);
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert - last expression should be var2 = 20
-        await Assert.That(result).IsEqualTo(20);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 
@@ -83,13 +68,9 @@ public class BlockScopeTests {
         var outerBlock = new Block([outerAssign, addExpr], [outerVar]);
 
         // Act
-        var expr = outerBlock.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
 
         // Assert
-        await Assert.That(result).IsEqualTo(150);
-        using var exec = Interpreter.Execute(Interpreter.Compile(outerBlock));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(150L);
     }
 
@@ -108,13 +89,9 @@ public class BlockScopeTests {
         var combined = new Block(block1, block2);
 
         // Act
-        var expr = combined.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(combined));
 
         // Assert - should return last block's value
-        await Assert.That(result).IsEqualTo(20);
-        using var exec = Interpreter.Execute(Interpreter.Compile(combined));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 }

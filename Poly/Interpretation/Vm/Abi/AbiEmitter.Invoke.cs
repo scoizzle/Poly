@@ -650,6 +650,110 @@ public static partial class AbiEmitter {
         return VmCall.Invoke(state, function, args);
     }
 
+    /// <summary>The widest call frame passed word by word. A wider frame keeps the
+    /// <c>long[]</c> form — the same protocol, only the plumbing differs.</summary>
+    private const int MaxDirectFrameWords = 8;
+
+    /// <summary>The <see cref="InvokeAstFrame"/> overload for each direct arity, indexed by
+    /// word count minus one. Resolution is by parameter count, so a missing overload fails
+    /// at type load rather than emitting a frame the runtime cannot fill.</summary>
+    private static readonly MethodInfo[] InvokeAstFrameArities = ResolveInvokeAstFrameArities();
+
+    private static MethodInfo[] ResolveInvokeAstFrameArities() {
+        var overloads = typeof(AbiEmitter)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(method => method.Name == nameof(InvokeAstFrame))
+            .ToArray();
+        return Enumerable.Range(1, MaxDirectFrameWords)
+            .Select(words => overloads.Single(
+                method => method.GetParameters().Length == 2 + words))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// <see cref="InvokeAstFunction"/> with the frame's words named one by one, so the
+    /// call site allocates nothing. Same frame protocol: word <c>i</c> becomes
+    /// <c>slots[FramePos + i]</c> either way.
+    /// </summary>
+    private static long InvokeAstFrame(VmState state, Action<VmState> function, long a0) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(VmState state, Action<VmState> function, long a0, long a1) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function, long a0, long a1, long a2) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function, long a0, long a1, long a2, long a3) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2, a3);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function, long a0, long a1, long a2, long a3, long a4) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2, a3, a4);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function,
+        long a0, long a1, long a2, long a3, long a4, long a5) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2, a3, a4, a5);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function,
+        long a0, long a1, long a2, long a3, long a4, long a5, long a6) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2, a3, a4, a5, a6);
+    }
+
+    /// <inheritdoc cref="InvokeAstFrame(VmState, Action{VmState}, long)"/>
+    private static long InvokeAstFrame(
+        VmState state, Action<VmState> function,
+        long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7) {
+        if (function is null)
+            throw new InvalidOperationException("VM: AST member is not compiled.");
+        return VmCall.Invoke(state, function, a0, a1, a2, a3, a4, a5, a6, a7);
+    }
+
+    /// <summary>
+    /// The call site for a compiled AST member: <paramref name="function"/> with its
+    /// argument words, receiver first. A narrow frame names its words directly; a wider
+    /// one travels as a <c>long[]</c>. Both land in the same frame layout.
+    /// </summary>
+    private static Expression EmitCallFrame(
+        Expression function, IReadOnlyList<Expression> words, Context ctx) {
+        if (words.Count is > 0 and <= MaxDirectFrameWords) {
+            var arguments = new List<Expression>(words.Count + 2) { ctx.State, function };
+            arguments.AddRange(words);
+            return Call(null, InvokeAstFrameArities[words.Count - 1], arguments);
+        }
+        return Call(null, InvokeAstFunctionInfo, ctx.State, function, NewArrayInit(typeof(long), words));
+    }
+
     private static bool HasExecutableBody(Node? body) =>
         body is not null && body is not Block { Nodes.Count: 0 };
 
@@ -747,10 +851,8 @@ public static partial class AbiEmitter {
         ctx.RingDepth = result + 1;
         // The callee already left the ring word at slots[FramePos] (VmCall.Invoke's
         // contract, void included), so the caller only moves it into its own slot.
-        seq.Add(Assign(ctx.RingVar(result), Call(
-            null, InvokeAstFunctionInfo, ctx.State,
-            ArrayIndex(Constant(table), Constant(0)),
-            NewArrayInit(typeof(long), inits))));
+        seq.Add(Assign(ctx.RingVar(result), EmitCallFrame(
+            ArrayIndex(Constant(table), Constant(0)), inits, ctx)));
         return Block(seq);
     }
 

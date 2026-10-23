@@ -25,6 +25,70 @@ internal static class VmCall {
     /// <summary>Total stack slots a frame starting at <paramref name="callSp"/> needs.</summary>
     public static int Extent(int argumentCount) => HeaderSize + ArgumentSlots(argumentCount);
 
+    /// <summary>The frame protocol with its argument words named one by one, so a call
+    /// site allocates nothing to make the call. One overload per arity the emitter passes
+    /// directly; the words are stack-allocated into the span the core already takes.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(VmState state, Action<VmState> function, long a0) {
+        ReadOnlySpan<long> args = [a0];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(VmState state, Action<VmState> function, long a0, long a1) {
+        ReadOnlySpan<long> args = [a0, a1];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(VmState state, Action<VmState> function, long a0, long a1, long a2) {
+        ReadOnlySpan<long> args = [a0, a1, a2];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(VmState state, Action<VmState> function, long a0, long a1, long a2, long a3) {
+        ReadOnlySpan<long> args = [a0, a1, a2, a3];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(
+        VmState state, Action<VmState> function, long a0, long a1, long a2, long a3, long a4) {
+        ReadOnlySpan<long> args = [a0, a1, a2, a3, a4];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(
+        VmState state, Action<VmState> function, long a0, long a1, long a2, long a3, long a4, long a5) {
+        ReadOnlySpan<long> args = [a0, a1, a2, a3, a4, a5];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(
+        VmState state, Action<VmState> function,
+        long a0, long a1, long a2, long a3, long a4, long a5, long a6) {
+        ReadOnlySpan<long> args = [a0, a1, a2, a3, a4, a5, a6];
+        return Invoke(state, function, args);
+    }
+
+    /// <inheritdoc cref="Invoke(VmState, Action{VmState}, long)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static long Invoke(
+        VmState state, Action<VmState> function,
+        long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7) {
+        ReadOnlySpan<long> args = [a0, a1, a2, a3, a4, a5, a6, a7];
+        return Invoke(state, function, args);
+    }
+
     /// <summary>Run <paramref name="function"/> in a new frame and return the result
     /// it wrote at <c>slots[FramePointer]</c>. Restores the frame pointer, closure,
     /// and stack pointer even when the body throws.</summary>
@@ -48,14 +112,22 @@ internal static class VmCall {
         int framePos = FramePointer(callSp);
         state.FramePos = framePos;
         state.ClosureHandle = closureHandle;
+        // A catch-and-rethrow rather than try/finally: the restore then runs inline on the
+        // normal path, which is the only path a hot loop takes. A finally is emitted as a
+        // funclet call even when nothing threw — a second prologue and epilogue per frame.
         try {
             function(state);
-            return slots[framePos];
         }
-        finally {
+        catch {
             state.FramePos = savedFp;
             state.ClosureHandle = savedClosure;
             stack.SetStackPointer(callSp);
+            throw;
         }
+        long result = slots[framePos];
+        state.FramePos = savedFp;
+        state.ClosureHandle = savedClosure;
+        stack.SetStackPointer(callSp);
+        return result;
     }
 }

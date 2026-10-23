@@ -253,6 +253,15 @@ a parameter is read at `FramePos + index`, and the callee result is written to
 `slots[FramePos]`. `Invoke` runs a function in a new frame and restores FP,
 closure, and SP even when the body throws.
 
+An `Invoke` overload takes the frame's words one at a time (`Invoke(state,
+function, long a0, …)`). The emitter calls those for any frame of eight words or
+fewer, so a call site allocates nothing to make the call; a wider frame keeps the
+`ReadOnlySpan<long>` form, which is the same protocol with different plumbing.
+
+The restore is a catch-and-rethrow, not a `try`/`finally`. A `finally` is emitted
+as a funclet call on the normal path — a second prologue and epilogue per frame —
+whereas the catch only costs anything when something throws.
+
 ### `VmValueStack`
 Pooled `long[]` stack backed by `ArrayPool<long>.Shared`. Grows by doubling,
 `SetStackPointer` grows on demand, and `Dispose` returns the buffer cleared.
@@ -330,6 +339,11 @@ Slot[FP + n]:      result          (written by the callee)
 runs the callee, reads the result from `slots[FramePos]`, then restores FP, the
 closure handle, and the stack pointer. A parameterless callee still reserves one
 argument slot so its result has somewhere to go (`ArgumentSlots`).
+
+The words reach `Invoke` as parameters rather than as a `long[]`: the emitter calls
+one `InvokeAstFrame` overload per arity up to eight words, and only a wider frame
+falls back to the array form. The layout above is identical either way — the array
+was plumbing, not protocol.
 
 Inside a compiled function body, `FramePos` is the first argument slot: a
 parameter resolves at `FramePos + index` and `return` writes `slots[FramePos]`

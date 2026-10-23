@@ -533,10 +533,7 @@ public static partial class AbiEmitter {
         inits.AddRange(args);
 
         var ignored = Variable(typeof(long), "_astCtor");
-        seq.Add(Assign(ignored, Call(
-            null, InvokeAstFunctionInfo, ctx.State,
-            ArrayIndex(Constant(table), Constant(0)),
-            NewArrayInit(typeof(long), inits))));
+        seq.Add(Assign(ignored, EmitCallFrame(ArrayIndex(Constant(table), Constant(0)), inits, ctx)));
         return Block([ignored], seq);
     }
 

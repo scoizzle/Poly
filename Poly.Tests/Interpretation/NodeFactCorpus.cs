@@ -61,6 +61,17 @@ internal static class NodeFactCorpus {
         ("ThrowExpression", "var e = new System.InvalidOperationException(); var y = true ? 1L : throw e;"),
         ("ForEachLoop", "var a = new long[2]; foreach (var v in a) { var w = v; }"),
         ("IndexAccess", "var a = new long[2]; var y = a[0];"),
+        ("And", "true && false;"),
+        ("Or", "true || false;"),
+        ("Not", "!true;"),
+        ("Equal", "1L == 2L;"),
+        ("NotEqual", "1L != 2L;"),
+        ("LessThanOrEqual", "1L <= 2L;"),
+        ("GreaterThan", "1L > 2L;"),
+        ("GreaterThanOrEqual", "1L >= 2L;"),
+        ("Conditional", "true ? 1L : 2L;"),
+        ("Lambda", "{ var f = (long v) => v; }"),
+        ("Parameter", "{ var f = (long v) => v; }"),
     ];
 
     private static readonly (IReadOnlyList<(string Source, CompilationUnitNode Unit)> Units,

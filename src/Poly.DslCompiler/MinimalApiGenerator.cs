@@ -252,18 +252,6 @@ public sealed class MinimalApiGenerator {
             _ => _enumLookup.ContainsKey(domainType),
         };
 
-    /// <summary>CLR-representable numeric bounds for a DTO member type — used to cap open
-    /// range constraints so <c>[Range(min, max)]</c> never emits a raw double.MaxValue.</summary>
-    private static (double Min, double Max) ClrNumericBounds(string clrType) => clrType switch {
-        "byte" => (byte.MinValue, byte.MaxValue),
-        "short" => (short.MinValue, short.MaxValue),
-        "int" => (int.MinValue, int.MaxValue),
-        "long" => (long.MinValue, long.MaxValue),
-        "float" => (float.MinValue, float.MaxValue),
-        "decimal" => (double.MinValue, double.MaxValue),
-        _ => (double.MinValue, double.MaxValue),
-    };
-
     /// <summary>Generates the Minimal API Program.cs as a Syntax IR compilation unit.</summary>
     public CompilationUnitNode GenerateCompilationUnit(string dbContextName) {
         var dtoTypes = new List<TypeDefinitionNode>();
@@ -1062,12 +1050,10 @@ public sealed class MinimalApiGenerator {
                 case RangeConstraint r when IsNumericClrType(clrType):
                     // Open bounds (range(0, ) / range(, 100)) cap at the CLR type's
                     // representable range — the DTO member can never exceed it — instead
-                    // of emitting a raw double.MaxValue literal.
-                    var (minBound, maxBound) = ClrNumericBounds(clrType);
-                    attrs.Add(new AttributeNode("Range", new List<Expression> {
-                        new Constant(r.Minimum is not null ? Convert.ToDouble(r.Minimum) : minBound),
-                        new Constant(r.Maximum is not null ? Convert.ToDouble(r.Maximum) : maxBound)
-                    }));
+                    // of emitting a raw double.MaxValue literal. The integral-vs-double
+                    // constructor choice lives in RangeAttributeArguments.
+                    var (rangeMin, rangeMax) = RangeAttributeArguments.Build(clrType, r.Minimum, r.Maximum);
+                    attrs.Add(new AttributeNode("Range", [rangeMin, rangeMax]));
                     break;
                 case LengthConstraint l when clrType == "string":
                     attrs.Add(new AttributeNode("MinLength", [new Constant(l.MinLength)]));

@@ -9,6 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The [Range] argument rule is internal; Poly.Tests proves it directly across the
+         CLR numeric types, including short/byte targets the DSL cannot name. -->
+    <InternalsVisibleTo Include="Poly.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../Poly/Poly.csproj" />
     <ProjectReference Include="../Poly.Packs.Product/Poly.Packs.Product.csproj" />
   </ItemGroup>

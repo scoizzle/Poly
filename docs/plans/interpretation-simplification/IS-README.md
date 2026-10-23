@@ -49,6 +49,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS7a | IEEE ring slots are `long`, so every double op pays a bitcast (1.8x measured) | IS5 | C | [tasks/IS7a.md](tasks/IS7a.md) |
 | [x] | IS7b | typed register/frame storage - where the FP win actually lives | IS7a | C | [tasks/IS7b.md](tasks/IS7b.md) |
 | [x] | IS7c | integer width is a representation; folded and unfolded `Int32` overflow agree (#289) | IS7b | C | [tasks/IS7c.md](tasks/IS7c.md) |
+| [ ] | IS7d | an array held through the heap costs 1.40 ns per element; cache it in a typed local | IS7c | C | [tasks/IS7d.md](tasks/IS7d.md) |
 | [r] | IS2e | a dual-dispatch proof on a shipped grammar — **retired**: no shipped grammar has two dispatch paths | IS2c | A | [tasks/IS2e.md](tasks/IS2e.md) |
 | [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [x] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |

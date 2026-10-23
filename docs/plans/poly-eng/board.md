@@ -99,6 +99,7 @@ Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysi
 | IS1d | a `for` header prints its increment as a statement (invalid C#) | IS1 | [IS1d.md](../interpretation-simplification/tasks/IS1d.md) |
 | IS1b | Mermaid reads the table | IS1 | [IS1b.md](../interpretation-simplification/tasks/IS1b.md) |
 | IS1c | qualified type names + using scope; a static call on a type is not expressible | IS0b, IS1 | [IS1c.md](../interpretation-simplification/tasks/IS1c.md) |
+| IS2f | `[Range]` picks the attribute constructor the constraint calls for (#281) | IS2d | [IS2f.md](../interpretation-simplification/tasks/IS2f.md) |
 | IS2a | writer→Roslyn differential over the corpus | IS1 | [IS2a.md](../interpretation-simplification/tasks/IS2a.md) |
 | IS2b | port the LINQ-oracle test consumers to VM execution | IS2a | [IS2b.md](../interpretation-simplification/tasks/IS2b.md) |
 | IS2d | the 11 writer defect classes the differential found (#279) | IS2a | [IS2d.md](../interpretation-simplification/tasks/IS2d.md) |

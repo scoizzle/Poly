@@ -90,11 +90,14 @@ that hold temporary values during expression evaluation:
 | JIT behavior | CLR JIT can enregister ring locals |
 
 `CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
-its result, so nothing has to infer the result from slot depth. A block restarts
-each statement at the block's entry depth, so the high-water is the deepest single
-statement, and a result is kept only when it is the block's value. A node whose
-value leaves through another channel — a `return` in an inlined arm, or a
-statement with no value — has no ring location.
+its result, so nothing has to infer the result from slot depth. Every arm leaves its
+result at `RingDepth - 1` — a value node leaves its value, and a node with no value
+(a loop, a branch, a jump, a throw) leaves `0L` — so a caller reads a node's result
+without first asking what kind of node produced it, and there is no second value
+compiler. A `Comment` emits nothing and keeps the previous statement's result, so it
+is the one node with no ring location; a consumer that asks for one fails closed. A
+block restarts each statement at the block's entry depth, so the high-water is the
+deepest single statement, and a result is kept only when it is the block's value.
 
 ## Compilation Modes
 

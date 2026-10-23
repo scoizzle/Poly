@@ -15,8 +15,8 @@ public static partial class AbiEmitter {
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
         Context ctx) {
-        var lv = CompileValue(left, ctx);
-        var rv = CompileValue(right, ctx);
+        var lv = ValueOf(left, ctx);
+        var rv = ValueOf(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
@@ -41,37 +41,20 @@ public static partial class AbiEmitter {
         return cf(lv, rv);
     }
 
+    /// <summary>Comparison as a ring value: the bool test the condition path already uses,
+    /// materialised as 0/1. One body means the two forms cannot drift apart.</summary>
     private static Expression EmitComparisonValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        Context ctx, Node? cn = null) {
-        var lv = CompileValue(left, ctx);
-        var rv = CompileValue(right, ctx);
-        bool eq = cf == Equal || cf == NotEqual;
-        if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
-            var ec = Call(ObjectEquals, lo, ro);
-            return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
-                                cf == Equal ? Constant(0L) : Constant(1L));
-        }
-        if (!eq && ctx.Analysis is not null
-            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
-            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
-            // Relational comparison of heap-resident values (DateOnly/DateTime/
-            // Guid/string/...): compare the boxed values, not the raw handles.
-            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
-            // (Unknown) keep the scalar path.
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
-            var cmp = Call(VmHeapCompare, lo, ro);
-            return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
-        }
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return Condition(cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx)),
-                Constant(1L), Constant(0L));
-        return Condition(cf(lv, rv), Constant(1L), Constant(0L));
-    }
+        Context ctx) =>
+        Condition(CompileCompareTest(left, right, cf, ctx), Constant(1L), Constant(0L));
+
+    /// <summary>Comparison in ring form: the value form, spilled.</summary>
+    private static Expression EmitComparison(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        Context ctx) =>
+        SpillToRing(EmitComparisonValue(left, right, cf, ctx), ctx);
 
     // ── Ring-based expression helpers ──
 
@@ -119,7 +102,8 @@ public static partial class AbiEmitter {
         return false;
     }
 
-    /// <summary>Short-circuit AND: if left is false, skip right.</summary>
+    /// <summary>Short-circuit AND: if left is false, skip right. Answers in the left
+    /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
@@ -139,7 +123,8 @@ public static partial class AbiEmitter {
         return result;
     }
 
-    /// <summary>Short-circuit OR: if left is true, skip right.</summary>
+    /// <summary>Short-circuit OR: if left is true, skip right. Answers in the left
+    /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
@@ -159,7 +144,8 @@ public static partial class AbiEmitter {
         return result;
     }
 
-    /// <summary>Logical NOT: 0→1, anything else→0.</summary>
+    /// <summary>Logical NOT: 0→1, anything else→0, in the operand's own ring slot — an
+    /// in-place shape, not a spill of a value form.</summary>
     private static Expression EmitNot(Not not, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(not.Value, ctx));
@@ -168,7 +154,8 @@ public static partial class AbiEmitter {
         return ring.Then(result);
     }
 
-    /// <summary>Unary minus: negate value.</summary>
+    /// <summary>Unary minus: negate the operand in its own ring slot — an in-place shape,
+    /// not a spill of a value form.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
@@ -184,13 +171,16 @@ public static partial class AbiEmitter {
         return ring.Then(result);
     }
 
+    /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
+    /// of a value form.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(n.Operand, ctx));
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
 
-    /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
+    /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
+    /// ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitPopCount(PopCount pc, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(pc.Operand, ctx));

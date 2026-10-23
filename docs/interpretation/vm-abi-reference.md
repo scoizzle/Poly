@@ -33,9 +33,13 @@ Reference-type values are stored in a contiguous `object?[]` array indexed by ha
 | 0 | Null/falsy sentinel (never allocated to a live object) |
 | 1..N | Valid heap handles |
 
-The heap uses a free-list to recycle handles when objects are set to null. Its
-backing array is rented from `ArrayPool<object?>.Shared` and returned cleared on
-dispose, so short-lived executions do not allocate a heap buffer.
+A handle is stable for the heap's lifetime. A stored null is a value, not a free:
+`Set` and `UnsafeSet` keep the handle live, so a store can never hand a slot to a later
+allocation that another holder still points at. `Recycle(handle)` is the one call that
+releases a handle — the caller proves the object can never be observed again — and it
+fails closed on a double recycle (`InvalidOperationException`), on handle 0, and on a
+handle the heap never issued. Its backing array is rented from `ArrayPool<object?>.Shared`
+and returned cleared on dispose, so short-lived executions do not allocate a heap buffer.
 
 ## Call Frame Layout
 
@@ -234,11 +238,23 @@ across sibling scopes, a surviving local would let a later block read the *previ
 block's array through a fresh binding; the clear makes that fail closed
 (`NullReferenceException`) instead of silently returning the wrong buffer.
 
-It does **not** release the array. `VmManagedObjectHeap` recycles a handle only through
-`Set`/`UnsafeSet`, and no emitter site calls either, so `_objects[handle]` keeps the
-array for the heap's lifetime whatever the local holds. Nulling buys no GC today; it is
-lifetime hygiene that becomes load-bearing the moment the heap gains recycling.
-`ArrayLocalCacheTests.SiblingBlock_SlotReuse_ReadsNullNotStaleArray` is the test.
+**The exit also releases the handle** (`EmitBlock` emits `heap.Recycle(slot)`
+beside the clear, reading the handle from the variable's slot before clearing the
+local). The promotion predicate is the VM's only proof that a heap object can never be
+observed again — not returned, not passed, not aliased, not captured, and every other
+reference an `IndexAccess` receiver — so it is the only place a handle is recycled.
+A definition that is itself the block's **value** is the one case the predicate cannot
+see, because the value it produces *is* the handle; that handle stays live
+(`HeapLifetimeTests.BlockValueArray_IsNotRecycled`). Everything the VM cannot prove dead
+is retained for the heap's lifetime.
+
+That is what bounds a loop that allocates: ten thousand iterations of a block-local
+`new long[4]` keep the heap's high-water mark at the working set instead of growing it
+once per iteration (`HeapLifetimeTests.ArrayInLoopBody_HeapStaysBounded`). An array that
+escapes as a return value, an argument, or an alias is not promoted and is never recycled
+(`HeapLifetimeTests.EscapingArray_IsNotRecycled`).
+`ArrayLocalCacheTests.SiblingBlock_SlotReuse_ReadsNullNotStaleArray` is the test for the
+slot reuse the clear makes safe.
 
 ## Compilation Modes
 

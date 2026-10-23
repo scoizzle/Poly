@@ -3,12 +3,15 @@ using System.Runtime.CompilerServices;
 namespace Poly.Interpretation.Vm;
 
 /// <summary>Object heap for the Poly VM. Reference-type values are stored
-/// in a contiguous array indexed by handle. Handles are recycled via a
-/// free-list when objects are set to null.</summary>
+/// in a contiguous array indexed by handle. A handle is stable for the heap's
+/// lifetime: only <see cref="Recycle"/> makes one reusable.</summary>
 /// <remarks>Handle 0 is reserved as the ABI null/falsy sentinel and is never
 /// allocated to a live object. The backing array is rented from
 /// <see cref="ArrayPool{T}.Shared"/> and grows by doubling; <see cref="Dispose"/>
-/// returns it cleared, so a short-lived execution allocates no heap buffer.</remarks>
+/// returns it cleared, so a short-lived execution allocates no heap buffer.
+/// <para>A stored null is a value, never a free: <see cref="Set"/> and
+/// <see cref="UnsafeSet"/> keep the handle live, so a store cannot hand a slot to a
+/// later allocation that another holder still points at.</para></remarks>
 public sealed class VmManagedObjectHeap : IDisposable {
     private object?[] _objects;
     private bool _disposed;
@@ -63,18 +66,22 @@ public sealed class VmManagedObjectHeap : IDisposable {
         return _objects[handle];
     }
 
-    /// <summary>Sets the value at the given handle. If the new value is null,
-    /// the handle is recycled via the free-list.</summary>
+    /// <summary>Sets the value at the given handle. A null value is stored as null:
+    /// the handle stays live, so <see cref="Get"/> reads null and no later allocation
+    /// can take the slot.</summary>
     /// <param name="handle">The heap handle to update.</param>
-    /// <param name="value">The new object value (null to free the slot).</param>
+    /// <param name="value">The new object value (null stored as null).</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the handle
     /// is 0 (reserved) or outside the valid range.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the handle has already
+    /// been recycled: a freed handle stays freed until <see cref="Allocate"/> reissues it.</exception>
     public void Set(int handle, object? value) {
         if (handle == 0)
             throw new ArgumentOutOfRangeException(nameof(handle), "Handle 0 is reserved for null");
         if ((uint)handle >= (uint)_count)
             throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
-        Recycle(handle, value);
+        RejectRecycled(handle);
+        _objects[handle] = value;
     }
 
     /// <summary>Unsafe get — skips bounds checking. Only use when the handle
@@ -84,21 +91,38 @@ public sealed class VmManagedObjectHeap : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? UnsafeGet(int handle) => _objects[handle];
 
-    /// <summary>Unsafe set — skips bounds checking. If the value is null and
-    /// the handle is not 0, the slot is added to the free-list.</summary>
+    /// <summary>Unsafe set — skips bounds checking. A null value is stored as null:
+    /// the handle stays live and the slot is not added to the free-list.</summary>
     /// <param name="handle">The heap handle.</param>
     /// <param name="value">The new object value.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the handle has already
+    /// been recycled.</exception>
     public void UnsafeSet(int handle, object? value) {
-        Recycle(handle, value);
+        RejectRecycled(handle);
+        _objects[handle] = value;
     }
 
-    private void Recycle(int handle, object? value) {
+    /// <summary>Releases a handle so the next <see cref="Allocate"/> may reuse its slot.
+    /// The caller proves the object can never be observed again.</summary>
+    /// <param name="handle">The handle to release (must be a live, previously issued handle).</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the handle is 0 or was
+    /// never issued.</exception>
+    /// <exception cref="InvalidOperationException">Thrown on a double recycle: releasing one
+    /// handle twice would put two allocations in one slot, the same silent alias as a
+    /// use-after-free.</exception>
+    public void Recycle(int handle) {
+        if (handle == 0)
+            throw new ArgumentOutOfRangeException(nameof(handle), "Handle 0 is reserved for null");
+        if ((uint)handle >= (uint)_count)
+            throw new ArgumentOutOfRangeException(nameof(handle), "Invalid heap handle");
+        RejectRecycled(handle);
+        _objects[handle] = null;
+        (_freeSlots ??= []).Add(handle);
+    }
+
+    private void RejectRecycled(int handle) {
         if (_freeSlots?.Contains(handle) == true)
             throw new InvalidOperationException($"Heap handle {handle} is already free.");
-        bool wasLive = _objects[handle] is not null;
-        _objects[handle] = value;
-        if (value is null && wasLive)
-            (_freeSlots ??= []).Add(handle);
     }
 
     /// <summary>Clears all objects and resets the free-list. Handle 0 remains

@@ -278,6 +278,8 @@ public static partial class AbiEmitter {
         private const int MaxRegisterCount = 32;
         private readonly Dictionary<(int Index, Type Representation), ParameterExpression> _regVars = new();
         private readonly List<bool> _regUsed = new();
+        private readonly Dictionary<(bool Register, int Index, Type ElementType), ParameterExpression> _arrayLocals = new();
+        private readonly Dictionary<(bool Register, int Index), ParameterExpression> _promotedArrays = new();
 
         /// <summary>A register index and the representation the variable bound to it needs.
         /// The index is what a scope releases; the representation is what the local holds.</summary>
@@ -290,11 +292,15 @@ public static partial class AbiEmitter {
 
         public void PopScope() {
             if (_scopeVars.Count > 0) {
+                var frame = _scopeStack.Peek();
                 foreach (var v in _scopeVars.Peek()) {
                     if (_variableRegisters.TryGetValue(v, out var reg)) {
                         _regUsed[reg.Index] = false;
                         _variableRegisters.Remove(v);
+                        _promotedArrays.Remove((true, reg.Index));
                     }
+                    if (frame.TryGetValue(v, out int slot))
+                        _promotedArrays.Remove((false, slot));
                 }
             }
             _scopeStack.Pop();
@@ -397,6 +403,62 @@ public static partial class AbiEmitter {
                 : representation == typeof(float) ? $"_freg{index}"
                 : representation == typeof(int) ? $"_ireg{index}"
                 : $"_reg{index}";
+
+        /// <summary>Bind a promoted variable's array to the typed CLR local that caches it,
+        /// and return that local so the declaring block can clear it at scope exit.
+        /// <para>The local is keyed by <c>(slot, element type)</c>, not by the variable:
+        /// the rest of the emitter resolves bindings by slot, and a slot is released when
+        /// its block ends and handed to the next sibling scope's variable. Two element
+        /// types never share one local, because a <c>long[]</c> and an <c>object[]</c>
+        /// cannot be assigned to the same <see cref="ParameterExpression"/>.</para></summary>
+        public ParameterExpression PromoteArray(Variable v, Type elementType) {
+            if (!TryOwnSlot(v, out var slot))
+                throw Unresolved(v);
+            var key = (slot.Register, slot.Index, elementType);
+            if (!_arrayLocals.TryGetValue(key, out var local)) {
+                local = Variable(elementType, ArrayLocalName(slot));
+                _arrayLocals[key] = local;
+                _locals.Add(local);
+            }
+            _promotedArrays[(slot.Register, slot.Index)] = local;
+            return local;
+        }
+
+        /// <summary>The cache local for the storage <paramref name="v"/> resolves to, or
+        /// false when that storage was not promoted. The lookup goes through the same slot
+        /// resolution a read or write uses, so a use that names the binding rather than
+        /// being the declaring node still finds its cache.</summary>
+        public bool TryArrayCache(Variable v, out ParameterExpression local) {
+            if (TryOwnSlot(v, out var slot)
+                && _promotedArrays.TryGetValue((slot.Register, slot.Index), out var found)) {
+                local = found;
+                return true;
+            }
+            local = null!;
+            return false;
+        }
+
+        /// <summary>The storage slot a variable's own value lives in — the register index
+        /// or the frame slot — which is what an array cache is keyed by. A use bound to a
+        /// parameter resolves to that parameter's slot first (as
+        /// <see cref="ResolveRaw"/> does), so it has no local storage to cache.</summary>
+        private bool TryOwnSlot(Variable v, out (bool Register, int Index) slot) {
+            slot = default;
+            if (BoundParameter(v) is not null)
+                return false;
+            if (TryGetRegister(v, out var reg)) {
+                slot = (true, reg.Index);
+                return true;
+            }
+            if (TryGetVariable(v, out int index)) {
+                slot = (false, index);
+                return true;
+            }
+            return false;
+        }
+
+        private static string ArrayLocalName((bool Register, int Index) slot) =>
+            slot.Register ? $"_arr{slot.Index}" : $"_farr{slot.Index}";
 
         private readonly List<VariableLayout> _variableLayouts = new();
         public IReadOnlyList<VariableLayout> VariableLayouts => _variableLayouts;

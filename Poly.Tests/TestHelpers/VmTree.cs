@@ -19,6 +19,7 @@ namespace Poly.Tests.TestHelpers;
 internal static class VmTree {
     private static readonly Regex RingLocal = new("^_[rdfi](\\d+)$", RegexOptions.Compiled);
     private static readonly Regex VariableRegister = new("^_(?:d|f|i)?reg(\\d+)$", RegexOptions.Compiled);
+    private static readonly Regex ArrayCacheLocal = new("^_f?arr(\\d+)$", RegexOptions.Compiled);
 
     /// <summary>
     /// One emitted loop: the break target its test jumps to and the top-level items of
@@ -112,6 +113,10 @@ internal static class VmTree {
         private readonly HashSet<Expression> _bitcastArguments = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<Expression> _boundaryBitcasts = new(ReferenceEqualityComparer.Instance);
         private readonly List<MethodCallExpression> _registerBitcasts = [];
+        private readonly List<MethodCallExpression> _heapDerefs = [];
+        private readonly List<MethodCallExpression> _heapAllocations = [];
+        private readonly List<Expression> _arrayCacheAccesses = [];
+        private readonly List<(ParameterExpression Local, string Value)> _arrayCacheStores = [];
         private readonly List<ParameterExpression> _declared = [];
         private readonly List<LoopShape> _loops = [];
         private readonly Dictionary<ParameterExpression, int> _occurrences =
@@ -155,6 +160,15 @@ internal static class VmTree {
             return base.VisitBlock(node);
         }
 
+        /// <summary>An element access is an <see cref="IndexExpression"/> whenever the
+        /// index is a conversion rather than a bare <c>int</c>, which is the normal shape
+        /// of a VM index.</summary>
+        protected override Expression VisitIndex(IndexExpression node) {
+            if (node.Object is ParameterExpression receiver && IsArrayCacheLocal(receiver))
+                _arrayCacheAccesses.Add(node);
+            return base.VisitIndex(node);
+        }
+
         protected override Expression VisitParameter(ParameterExpression node) {
             _occurrences[node] = _occurrences.GetValueOrDefault(node) + 1;
             return base.VisitParameter(node);
@@ -182,6 +196,15 @@ internal static class VmTree {
                 && node.Right is MethodCallExpression conversion
                 && IsBitcastCall(conversion))
                 _registerBitcasts.Add(conversion);
+            if (node.NodeType == ExpressionType.Assign
+                && node.Left is ParameterExpression storedCache
+                && IsArrayCacheLocal(storedCache))
+                _arrayCacheStores.Add((storedCache,
+                    node.Right is ConstantExpression { Value: null } ? "null" : "array"));
+            if (node.NodeType == ExpressionType.ArrayIndex
+                && node.Left is ParameterExpression cacheReceiver
+                && IsArrayCacheLocal(cacheReceiver))
+                _arrayCacheAccesses.Add(node);
             if (IsIeeeArithmetic(node))
                 _ieeeArithmetic.Add(node);
             if (node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
@@ -192,6 +215,12 @@ internal static class VmTree {
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression node) {
+            if (node.Method.DeclaringType == typeof(VmManagedObjectHeap)) {
+                if (node.Method.Name == nameof(VmManagedObjectHeap.UnsafeGet))
+                    _heapDerefs.Add(node);
+                else if (node.Method.Name == nameof(VmManagedObjectHeap.Allocate))
+                    _heapAllocations.Add(node);
+            }
             if (IsBitcastCall(node)) {
                 foreach (var argument in node.Arguments)
                     _bitcastArguments.Add(argument);
@@ -294,6 +323,35 @@ internal static class VmTree {
         /// only the constant form is a violation.</summary>
         public IReadOnlyList<Expression> AbsoluteSlotAccesses =>
             _slotIndexes.Where(i => i is ConstantExpression).ToList();
+
+        /// <summary>The locals that cache a promoted array's object — the emitter's
+        /// <c>_arrN</c> (register slot) / <c>_farrN</c> (frame slot) convention, in
+        /// declaration order.</summary>
+        public IReadOnlyList<ParameterExpression> ArrayCacheLocals =>
+            _declared.Where(IsArrayCacheLocal).ToList();
+
+        /// <summary>Every store to an array-cache local, in tree order, with the kind of
+        /// value stored: the array at its definition (<c>array</c>) or the scope-exit
+        /// clear (<c>null</c>). The order is what says a cleared local cannot reach the
+        /// next block that reuses the slot.</summary>
+        public IReadOnlyList<(ParameterExpression Local, string Value)> ArrayCacheStores =>
+            _arrayCacheStores;
+
+        /// <summary>Element accesses (<c>_arrN[i]</c>) through a cache local, in tree
+        /// order. A promoted read or write is one of these and carries no heap deref.</summary>
+        public IReadOnlyList<Expression> ArrayCacheAccesses => _arrayCacheAccesses;
+
+        /// <summary>Every <c>heap.UnsafeGet</c> call in the body: the deref a promoted
+        /// array access must not have.</summary>
+        public IReadOnlyList<MethodCallExpression> HeapDerefs => _heapDerefs;
+
+        /// <summary>Every <c>heap.Allocate</c> call in the body. One array definition is
+        /// one allocation, so a promoted definition does not add a second.</summary>
+        public IReadOnlyList<MethodCallExpression> HeapAllocations => _heapAllocations;
+
+        internal static bool IsArrayCacheLocal(Expression expression) =>
+            expression is ParameterExpression parameter
+            && ArrayCacheLocal.IsMatch(parameter.Name ?? string.Empty);
     }
 
     public static Scan Read(Expression body) {

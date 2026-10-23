@@ -383,6 +383,12 @@ internal static class RingCodec {
     public static Type ArraySlotElementType(Type? elementClr) =>
         elementClr is { IsValueType: true } ? typeof(long) : typeof(object);
 
+    /// <summary>The CLR array type a VM array of <paramref name="elementClr"/> is created
+    /// as: <c>long[]</c> when the element is a slot word, <c>object[]</c> when it is a
+    /// handle. One definition, so a promoted local's type cannot disagree with creation.</summary>
+    public static Type ArrayClrType(Type? elementClr) =>
+        ArraySlotElementType(elementClr).MakeArrayType();
+
     /// <summary>Read one element of a VM array. A null
     /// <paramref name="elementClr"/> means the element type is unknown at compile
     /// time, so the arm dispatches on the runtime array shape (<c>long[]</c> vs
@@ -462,5 +468,32 @@ internal static class RingCodec {
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot store a floating-point value into a '{elementClr.Name}' array element.");
         return ToIeee(Convert(value, typeof(double)));
+    }
+
+    /// <summary>Read one element through a promoted array's typed CLR local: the array
+    /// object itself is indexed, so there is no handle deref and no <c>castclass</c>. The
+    /// local's own type is the array shape the heap holds — <c>long[]</c> for a value-type
+    /// element (its slot word), <c>object[]</c> for a reference element — so this answers
+    /// exactly what <see cref="ArrayElementRead"/> answers, without the deref.</summary>
+    public static Expression CachedElementRead(
+        Expression arrayLocal, Expression index, Expression heap) {
+        var idx = Convert(index, typeof(int));
+        return arrayLocal.Type == typeof(long[])
+            ? ArrayAccess(arrayLocal, idx)
+            : Call(BoxToAbiInfo, heap, ArrayAccess(Convert(arrayLocal, typeof(object[])), idx));
+    }
+
+    /// <summary>Store one element through a promoted array's typed CLR local. The element
+    /// coercion is <see cref="CoerceIndexStore"/>'s, unchanged, so a promoted write encodes
+    /// the same bits the heap path wrote.</summary>
+    public static Expression CachedElementWrite(
+        Expression arrayLocal, Expression index, Expression value,
+        Type? elementClr, bool valueIsIeee) {
+        var idx = Convert(index, typeof(int));
+        if (arrayLocal.Type == typeof(long[]))
+            return Assign(ArrayAccess(arrayLocal, idx),
+                elementClr is null ? value : CoerceIndexStore(value, elementClr, valueIsIeee));
+        return Assign(ArrayAccess(Convert(arrayLocal, typeof(object[])), idx),
+            Convert(value, typeof(object)));
     }
 }

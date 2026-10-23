@@ -59,6 +59,8 @@ So the array representation costs up to 3.6x native before the VM's own per-acce
 
 Remaining headroom after #262: roughly 0.98 ns per access against a native ~0.2 ns, so about 35 us of the 41 us is still per-access ceremony - the temp local, an explicit window bounds check, and the CLR's own `_slots` bounds check. That is the next lever, not the heap deref.
 
+A cheaper alternative to windowing is measuring: cache the array object in a typed CLR local at its definition, so an element access is one bounds check and nothing else. The hand-written shape costs **6.5 us** against the window's 41-44 us. Design, conditions and soundness: [`docs/analysis/array-access-representation.md`](../analysis/array-access-representation.md).
+
 This section measures the *VM*, not the cross-language table; the 1.40 ns figure is from the same machine on which the table's Poly rows were taken, and the native columns remain cross-environment (see above).
 
 ## What the table does and does not support

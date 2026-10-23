@@ -98,8 +98,8 @@ Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed
 
 ## Ring Register Model
 
-The emitter uses ring registers during compilation — local variables `_r0.._rN`
-that hold temporary values during expression evaluation:
+The emitter uses ring registers during compilation — locals `_rN` (word), `_dN`
+(double), `_fN` (float) that hold temporary values during expression evaluation:
 
 | Property | Value |
 |----------|-------|
@@ -108,12 +108,54 @@ that hold temporary values during expression evaluation:
 | Release | An emitter holds a `Context.RingScope`; disposal restores the depth, and a block restarts each statement at its entry depth |
 | JIT behavior | CLR JIT can enregister ring locals |
 
+### A slot carries a representation
+
+A ring slot is keyed by **(index, representation)**, not by index alone
+(`Context.RingVar(int, Type)`). Ring depth rewinds after every statement, so absolute
+index 3 holds a `double` in one statement and a `long` in the next; one local per index
+would have to be assigned a value of the wrong type, and `Expression.Assign` rejects a
+mismatched type rather than coercing. Distinct locals per representation keep every
+assignment type-correct.
+
+| Value | Slot local | Contents |
+|-------|-----------|----------|
+| `double` | `_dN` | the value itself |
+| `float` | `_fN` | the value itself, 32-bit |
+| every other scalar, a handle, or an unresolved representation | `_rN` | the `long` word |
+
+An IEEE arm stores into and reads from the local of its own type, so an arithmetic
+chain — `zx*zx + zy*zy` — contains no `BitConverter` call between its operands. The
+**word is the fallback**: a representation analysis cannot resolve is not an error, and
+integer programs keep their local count unchanged.
+
+**Bitcasts only at a word boundary.** `BitConverter.DoubleToInt64Bits` /
+`Int64BitsToDouble` (wrapped once, in `RingCodec.ToIeee` / `FromIeee`) appear only where
+a value must move as a word:
+
+| Boundary | Why |
+|----------|-----|
+| `_slots[_fp + n]` read/write | a frame slot is a `long` word |
+| `_regN` and `long[1]` capture cells | storage is one `long` |
+| `VmCall.Invoke` result and CLR call results | a call answers in the caller's word |
+| a `RingRegion` slot | regions are word-addressed, and every region consumer reads a word |
+| the root copy-out | the program's result is a word |
+
+Those are per statement, per call, or per region — not per operation. A `float` stays
+`float` throughout an expression and widens only when it becomes a word, because the
+word form of both IEEE widths is a `double`'s bits.
+
+The tree rule is checked structurally: `VmTree.Scan.IeeeArithmeticWithBitcasts` lists
+every IEEE arithmetic node whose operand or result converts at the operation, and
+`IeeeRingSlotTests` fails if that list is non-empty.
+
 `CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
 its result, so nothing has to infer the result from slot depth. Every arm leaves its
 result at `RingDepth - 1` — a value node leaves its value, and a node with no value
 (a loop, a branch, a jump, a throw) leaves `0L` — so a caller reads a node's result
 without first asking what kind of node produced it, and there is no second value
-compiler. A `Comment` emits nothing and keeps the previous statement's result, so it
+compiler. The reported location takes its representation from the arm's own expression
+type, so producer and consumer cannot disagree about which local was written. A
+`Comment` emits nothing and keeps the previous statement's result, so it
 is the one node with no ring location; a consumer that asks for one fails closed. A
 block restarts each statement at the block's entry depth, so the high-water is the
 deepest single statement, and a result is kept only when it is the block's value.

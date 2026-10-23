@@ -129,6 +129,17 @@ The null-at-scope-exit is in, keyed by (slot, element type), with the sibling-re
 
 **Residual, recorded not fixed:** a `break`/`continue`/`return` out of a block skips the trailing clear, exactly as it skips the pre-existing `_slots` snapshot stores. No stale buffer is reachable because the promotion predicate requires the definition to precede every use - the clear is what keeps that true if the predicate is ever relaxed, and what becomes necessary if the heap gains recycling.
 
+## Outcome of the recycle work (2026-10-23)
+
+[IS7e](../plans/interpretation-simplification/tasks/IS7e.md) landed `Recycle(handle)` and removed recycle-on-null. Measured:
+
+- **`heap.Count` after 10,000 loop-body array definitions: 10,001 -> 2.** The heap is now bounded by the live set rather than by the iteration count.
+- `Set`/`UnsafeSet` store a null instead of freeing, so no stray store can hand a live handle to a later allocation - the silent alias the old contract allowed (`Allocate` reuses free-list handles).
+- A double `Recycle` throws, matching the existing use-after-free contract.
+- **An escape the predicate did not cover was found and fixed while implementing:** a definition that is the block's *value* (`{ cols = new long[4]; }` yields the handle) was being recycled, dangling it. `IsBlockValue` now keeps such a handle live, guarded by `BlockValueArray_IsNotRecycled`.
+
+Allocation sites that are still append-only, and therefore still grow under a per-iteration heap value: string concatenation, boxing for a call taking `object`, capture cells, closures, the exception object for a `catch`, and `typeof(x)` - that last one allocates a handle for a compile-time-constant `Type` on *every* evaluation, which is a bug rather than a design gap.
+
 ## Status of the window (#262)
 
 With the cache landed, the window's remaining justifications are narrow: a buffer allocated *inside a hot loop* (the cache does not avoid the 20 ns allocation) and literal-indexed access (a window folds to a local access). Neither has a measured workload in this repository. #262 should be re-measured against the cache before it merges; if no case appears, it retires with evidence.

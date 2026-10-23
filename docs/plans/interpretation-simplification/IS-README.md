@@ -40,7 +40,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS1 | five hand-kept producer switches and the `LanguageSurfaceTests.Kinds` dictionary; one capability table + one totality test | IS0a, IS0b, IS0e | A | [tasks/IS1.md](tasks/IS1.md) |
 | [x] | IS1d | a `for` header prints its increment as a statement, so the output does not compile | IS1 | A | [tasks/IS1d.md](tasks/IS1d.md) |
 | [x] | IS1b | Mermaid's two dispatch switches and its silent child drops | IS1 | A | [tasks/IS1b.md](tasks/IS1b.md) |
-| [ ] | IS1c | qualified type names and using scope; a static call on a type is not expressible | IS0b, IS1 | A | [tasks/IS1c.md](tasks/IS1c.md) |
+| [x] | IS1c | qualified type names and using scope; a static call on a type is not expressible | IS0b, IS1 | A | [tasks/IS1c.md](tasks/IS1c.md) |
 | [x] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
 | [x] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
 | [x] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b, IS2d | A | [tasks/IS2c.md](tasks/IS2c.md) |

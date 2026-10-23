@@ -75,3 +75,82 @@ none.
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-23 | agent | Copilot/VS Code | `64de3576` | **RED.** `--treenode-filter '/*/*/*Qualified*/*'`: 14 tests, 3 failed, 11 passed. | The compile row was **not** red, and the card's premise is wrong: `-9223372036854775808L` compiles and is typed `long`. The real defect is the reader overflow. Details below. |
+| 2026-10-23 | agent | Copilot/VS Code | `64de3576` | **SHIP.** Qualified form printed and folded; full suite **4,541 passed / 0 failed / 0 skipped**; `Poly.Benchmarks` build 0 warnings. | `NodeFacts` untouched — `Constant` already claimed `Writer | Reader`, and the change makes that claim true for these values instead of weakening it. |
+
+### Red first (2026-10-23)
+
+Three failures, all real:
+
+1. `LongMinValue_PrintsTheQualifiedForm` — expected `_ = long.MinValue;`, received
+   `_ = -9223372036854775808L;`.
+2. `LongMinValue_RoundTripsToTheSameConstant` —
+   `OverflowException: Value was either too large or too small for an Int64.` at
+   `CSharpReader.FoldNumber` (`CSharpReader.cs:1141`, the `long.Parse` on `9223372036854775808L`),
+   reached through `FoldPrimary` ← `FoldPostfix` ← `FoldUnary`. **This is the real defect:** the
+   reader overflowed on the text the writer had just produced, so `Read(Write(x))` threw.
+3. `NaN_PrintsAndFolds` — expected 1 `Constant`, found 0. `double.NaN` printed but read back as
+   `Member`, so the same `Writer` claim was false for it too. Same bug, fixed by the same mechanism.
+
+Four tests were green before the change and stay green: `LongMinValue_PrintedTextCompiles`,
+`LongMinValue_YieldsTheSameValue`, `IntMinValue_UnchangedOrQualified`,
+`EveryConstantKind_PrintedTextCompiles`. They are guards, not discriminators — see the premise
+correction.
+
+### Premise correction: CS0266 did not reproduce (2026-10-23)
+
+The card says `-9223372036854775808L` is CS0266 and "the printed program does not compile". Compiling
+says otherwise, so the fix is justified by the round-trip, not by a compile failure. Roslyn compiles
+the emitted text with TPA references:
+
+| Probe | Diagnostics | Semantic type |
+|---|---|---|
+| `_ = -9223372036854775808L;` | none | `long` |
+| `long v = -9223372036854775808L;` | none | `long` |
+| `long v = long.MinValue;` | none | `long` |
+| `long v = 9223372036854775808L;` (control) | **CS0266** | — |
+| `var v = 9223372036854775808L;` | none (it is `ulong`) | `ulong` |
+| `double v = double.NaN;` | none | `double` |
+| `long[] v = new long[] { -9223372036854775808L };` | none | `long[]` |
+
+The control proves the probe detects CS0266; the negated form is accepted because the positive
+literal is only `ulong` **on its own**, and Roslyn's negated-literal rule types
+`-9223372036854775808L` as `long`. So the digits spelling is legal C# that the writer's own reader
+could not read — the `Writer` claim was broken by the *read* direction, which is the half the card
+required anyway.
+
+### Compile results per constant type (2026-10-23)
+
+Thirty boundary values, each compiled in a method body (`CSharpCompilation.GetDiagnostics()`, errors
+only): `long.MinValue/MaxValue/0`, `int.MinValue/MaxValue`, `short.MinValue/MaxValue`,
+`sbyte.MinValue/MaxValue`, `byte.MaxValue`, `ushort.MaxValue`, `uint.MaxValue`, `ulong.MaxValue`,
+`decimal.MinValue/MaxValue`, `double` NaN/±∞/MinValue/MaxValue, `float` NaN/±∞/MinValue/MaxValue,
+`bool`, `string`, `char`, and `long.MinValue` inside a 1-D array and inside a `List<long>`.
+All zero diagnostics, before and after — **only `long.MinValue` changed.** The array and `List`
+rows embed the element text through `LiteralText`, so they gained the qualified form for free.
+
+Only `long.MinValue` needed a qualified form. `int.MinValue` keeps `-2147483648` (legal at the
+negated-literal position); `ulong`, `uint`, `short`, `sbyte`, `byte`, `decimal` and the float specials
+all compile as they are, so none was given one. Two harness-only findings: `_ = null;` is CS8183
+(a discard cannot infer a type, which says nothing about the literal) and a `List` literal needs its
+`using`, so the sweep supplies one.
+
+### Mechanism (2026-10-23)
+
+Writer: `LiteralText`'s `long` arm calls `LongLiteral`, which prints `long.MinValue` for that one
+value and `<digits>L` otherwise — the precedent `DoubleLiteral` set for values with no literal.
+Reader: `FoldPostfixTails`' `member` case routes through a new `QualifiedConstant(receiver, member)`
+that folds `(PrimitiveId, member)` for exactly `(Int64, MinValue)` and `Float64`/`Float32` ×
+{`NaN`, `PositiveInfinity`, `NegativeInfinity`}. No grammar change, so ordinary `a.b` parses exactly
+as before; `int.MaxValue` and `long.MaxValue` deliberately stay `Member` because the writer never
+emits them and folding them would change a meaning the writer does not rely on.
+
+### Green (2026-10-23)
+
+`/*/*/*Qualified*/*` 14/14 · `CSharpLanguageTests` 201/201 · `RangeAttributeArgumentsTests` 19/19 ·
+`NodeFactsTotalityTests` 8/8 · `AstParityTests` **146/146** · full suite **4,541 passed / 0 failed /
+0 skipped** (4,534 before this change, +7 new tests) · `dotnet build Poly.Benchmarks` 0 warnings,
+0 errors.
+
+`AstParityTests` holds **146**, not the card's 145; that count was already 146 before this change and
+no parity test was added.

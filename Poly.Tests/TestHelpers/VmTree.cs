@@ -17,7 +17,8 @@ namespace Poly.Tests.TestHelpers;
 /// block.
 /// </summary>
 internal static class VmTree {
-    private static readonly Regex RingLocal = new("^_r(\\d+)$", RegexOptions.Compiled);
+    private static readonly Regex RingLocal = new("^_[rdf](\\d+)$", RegexOptions.Compiled);
+    private static readonly Regex VariableRegister = new("^_(?:d|f)?reg(\\d+)$", RegexOptions.Compiled);
 
     /// <summary>
     /// One emitted loop: the break target its test jumps to and the top-level items of
@@ -106,6 +107,11 @@ internal static class VmTree {
         private ParameterExpression? _slots;
         private readonly List<Expression> _slotIndexes = [];
         private readonly List<int> _assignedRings = [];
+        private readonly List<BinaryExpression> _ieeeArithmetic = [];
+        private readonly List<BinaryExpression> _comparisons = [];
+        private readonly HashSet<Expression> _bitcastArguments = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<Expression> _boundaryBitcasts = new(ReferenceEqualityComparer.Instance);
+        private readonly List<MethodCallExpression> _registerBitcasts = [];
         private readonly List<ParameterExpression> _declared = [];
         private readonly List<LoopShape> _loops = [];
         private readonly Dictionary<ParameterExpression, int> _occurrences =
@@ -161,8 +167,63 @@ internal static class VmTree {
                 _assignedRings.Add(int.Parse(ring.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
             if (node.NodeType == ExpressionType.ArrayIndex && node.Left == _slots)
                 _slotIndexes.Add(node.Right);
+            // The block-exit snapshot store is the frame boundary: a register written into
+            // _slots converts once there, by design.
+            if (node.NodeType == ExpressionType.Assign
+                && node.Left is BinaryExpression { NodeType: ExpressionType.ArrayIndex } target
+                && target.Left == _slots
+                && IsBitcastCall(node.Right))
+                _boundaryBitcasts.Add(node.Right);
+            // A register stored through a bitcast is the write half of the same per-access
+            // conversion: a typed register stores the value itself.
+            if (node.NodeType == ExpressionType.Assign
+                && node.Left is ParameterExpression stored
+                && IsVariableRegister(stored)
+                && node.Right is MethodCallExpression conversion
+                && IsBitcastCall(conversion))
+                _registerBitcasts.Add(conversion);
+            if (IsIeeeArithmetic(node))
+                _ieeeArithmetic.Add(node);
+            if (node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
+                or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+                or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual)
+                _comparisons.Add(node);
             return base.VisitBinary(node);
         }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node) {
+            if (IsBitcastCall(node)) {
+                foreach (var argument in node.Arguments)
+                    _bitcastArguments.Add(argument);
+            }
+            else {
+                // A call argument is a word boundary too: the callee wants the CLR value.
+                foreach (var argument in node.Arguments) {
+                    if (IsBitcastCall(argument))
+                        _boundaryBitcasts.Add(argument);
+                }
+            }
+            if (IsBitcastCall(node)
+                && !_boundaryBitcasts.Contains(node)
+                && node.Arguments.Any(IsVariableRegister)
+                && !_registerBitcasts.Contains(node))
+                _registerBitcasts.Add(node);
+            return base.VisitMethodCall(node);
+        }
+
+        /// <summary>True for a register local: a variable's own storage, <c>_regN</c>
+        /// word, <c>_dregN</c> double, or <c>_fregN</c> float.</summary>
+        internal static bool IsVariableRegister(Expression expression) =>
+            expression is ParameterExpression parameter
+            && VariableRegister.IsMatch(parameter.Name ?? string.Empty);
+
+        internal static bool IsBitcastCall(Expression expression) =>
+            VmTree.IsBitcastCall(expression);
+
+        private static bool IsIeeeArithmetic(BinaryExpression node) =>
+            node.NodeType is ExpressionType.Add or ExpressionType.Subtract
+                or ExpressionType.Multiply or ExpressionType.Divide or ExpressionType.Modulo
+            && (node.Type == typeof(double) || node.Type == typeof(float));
 
         /// <summary>Locals that never appear anywhere in the body: allocation that
         /// nothing uses, which is always waste rather than a budget to tune. Uses are
@@ -173,17 +234,59 @@ internal static class VmTree {
                 _occurrences.GetValueOrDefault(d) - _declarations.GetValueOrDefault(d) == 0)
                 .ToList();
 
-        /// <summary>Indexes of the <c>_rN</c> ring locals, in declaration order.</summary>
+        /// <summary>Indexes of the ring locals (<c>_rN</c> word, <c>_dN</c> double,
+        /// <c>_fN</c> float), distinct and in declaration order. A slot index can
+        /// declare more than one local — one per representation — because the ring
+        /// depth rewinds between statements.</summary>
         public IReadOnlyList<int> RingIndexes =>
             _declared.Select(d => RingLocal.Match(d.Name ?? string.Empty))
                 .Where(m => m.Success)
                 .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
+                .Distinct()
+                .OrderBy(index => index)
                 .ToList();
 
-        /// <summary>Indexes of the <c>_rN</c> ring locals the body assigns. A slot the
-        /// emitter reserves without an assignment holds whatever a previous statement
-        /// left there, so a read of it is only defined once this covers it.</summary>
+        /// <summary>Indexes of the ring locals the body assigns, in assignment order.</summary>
         public IReadOnlyList<int> AssignedRingIndexes => _assignedRings;
+
+        /// <summary>Ring locals declared for one index, one per representation.</summary>
+        public IReadOnlyList<ParameterExpression> RingLocalsAt(int index) =>
+            _declared.Where(d => RingLocal.Match(d.Name ?? string.Empty) is { Success: true } m
+                && int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) == index)
+                .ToList();
+
+        /// <summary>The variable registers the body declares, in tree order. A register
+        /// index can declare more than one local — one per representation — for the same
+        /// reason a ring slot can: the index is reused by a later scope.</summary>
+        public IReadOnlyList<ParameterExpression> Registers =>
+            _declared.Where(IsVariableRegister).ToList();
+
+        /// <summary>Bitcasts at a variable's own register boundary: a bitcast that reads a
+        /// register local, or is the value assigned to one. The two sanctioned word
+        /// boundaries are excluded — the block-exit <c>_slots</c> snapshot store and a CLR
+        /// call argument — because those convert once per crossing rather than per access.
+        /// A typed variable has none of these; a word-backed one has one per access.</summary>
+        public IReadOnlyList<MethodCallExpression> RegisterBitcasts => _registerBitcasts;
+
+        /// <summary>Comparison nodes, in tree order. The emitter's own frame-pointer
+        /// and status tests are comparisons too, so a consumer filters by shape.</summary>
+        public IReadOnlyList<BinaryExpression> Comparisons => _comparisons;
+
+        /// <summary>Every IEEE-typed arithmetic node (<c>+ - * / %</c> on
+        /// <c>float</c>/<c>double</c>) in the body. A typed ring slot reads its operands
+        /// as doubles, so these have a shape to check: their operands must not need a
+        /// word.</summary>
+        public IReadOnlyList<BinaryExpression> IeeeArithmetic => _ieeeArithmetic;
+
+        /// <summary>The IEEE arithmetic nodes that convert at the operation itself: an
+        /// operand is a bitcast call, or the node's own result is the direct argument of
+        /// one. A typed ring slot reads its operand as the value, so these are the
+        /// per-operation round trips the representation rule removes.</summary>
+        public IReadOnlyList<BinaryExpression> IeeeArithmeticWithBitcasts =>
+            _ieeeArithmetic.Where(operation =>
+                IsBitcastCall(operation.Left)
+                || IsBitcastCall(operation.Right)
+                || _bitcastArguments.Contains(operation)).ToList();
 
         /// <summary>A <c>_slots[k]</c> access with a bare constant index: absolute
         /// frame addressing. Frame slots are addressed as <c>_slots[_fp + k]</c>, and
@@ -199,6 +302,32 @@ internal static class VmTree {
         return scan;
     }
 
+    /// <summary>True for a <c>BitConverter</c> long↔double bitcast call: the word form of
+    /// an IEEE value, and the only conversion the representation rule still allows —
+    /// at a word boundary, never between two operations.</summary>
+    public static bool IsBitcastCall(Expression expression) =>
+        expression is MethodCallExpression call
+        && call.Method.DeclaringType == typeof(BitConverter)
+        && call.Method.Name is nameof(BitConverter.Int64BitsToDouble)
+            or nameof(BitConverter.DoubleToInt64Bits);
+
+    /// <summary>How many long↔double bitcasts a subtree carries.</summary>
+    public static int BitcastCount(Expression expression) {
+        var finder = new BitcastFinder();
+        finder.Visit(expression);
+        return finder.Count;
+    }
+
+    private sealed class BitcastFinder : ExpressionVisitor {
+        public int Count { get; private set; }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node) {
+            if (IsBitcastCall(node))
+                Count++;
+            return base.VisitMethodCall(node);
+        }
+    }
+
     /// <summary>Fail loudly on any tree-wide violation.</summary>
     public static void AssertInvariants(AbiEmitter.BuiltVmProgram built) {
         var scan = Read(built.Expression);
@@ -209,8 +338,8 @@ internal static class VmTree {
             problems.Add($"declared but unused: {string.Join(", ", dead)}");
 
         var rings = scan.RingIndexes;
-        if (rings.Count != built.MaxRingDepth)
-            problems.Add($"declared {rings.Count} ring locals but MaxRingDepth is {built.MaxRingDepth}");
+        if (rings.Count > 0 && rings[^1] + 1 != built.MaxRingDepth)
+            problems.Add($"deepest ring local is {rings[^1]} but MaxRingDepth is {built.MaxRingDepth}");
         for (int i = 0; i < rings.Count; i++) {
             if (rings[i] != i) {
                 problems.Add($"ring locals are not the prefix 0..n: [{string.Join(",", rings)}]");

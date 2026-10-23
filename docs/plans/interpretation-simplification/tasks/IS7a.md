@@ -72,11 +72,6 @@ The slot table is one dictionary and one method; a reader can see that a double 
 
 none.
 
-## Log
-
-| Date | Who | Mill | SHA | Verdict / event | Findings |
-|------|-----|------|-----|-----------------|----------|
-
 ## Outcome (2026-10-23) — the win is one layer lower
 
 Delivered and green, but the FP benchmark did **not** improve, so this does not ship on its own:
@@ -100,4 +95,4 @@ What did land: the slot table keyed by (index, representation), `_dN`/`_fN` loca
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-23 | agent | Copilot/VS Code | `3ff83e7d` | **DELIVERED, HELD.** Slot table by (index, representation); `_dN`/`_fN` locals; structural bitcast test red-then-green; Sieve held; suite 4,499 green. FP benchmark flat, so the card's SHIP criterion fails. | The measured 1.9x lives in `_regN`/`_slots`, not the ring. Also fixed en route: `EmitBlock`'s trailing snapshot store, `CompileFunctionBody`'s result flush, and the inline-lambda copy-out all read the word local across a representation boundary. |
+| 2026-10-23 | agent | Copilot/VS Code | `6bbf9376` | **DELIVERED, HELD.** Slot table by (index, representation); `_dN`/`_fN` locals; structural bitcast test red-then-green; Sieve held; suite 4,499 green. FP benchmark flat, so the card's SHIP criterion fails. | The measured 1.9x lives in `_regN`/`_slots`, not the ring. Also fixed en route: `EmitBlock`'s trailing snapshot store, `CompileFunctionBody`'s result flush, and the inline-lambda copy-out all read the word local across a representation boundary. |

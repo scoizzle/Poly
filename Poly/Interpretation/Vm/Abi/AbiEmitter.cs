@@ -181,10 +181,12 @@ public static partial class AbiEmitter {
         if (rootArgCount > 0)
             body.Add(Assign(ctx.SlotsStackPointer, Constant(ctx.FrameSlotHighWater)));
         body.Add(rootExpr);
-        var rootResult = ctx.RingDepth > 0 ? new SlotLocation.Ring(ctx.RingDepth - 1) : null;
+        var rootResult = ctx.RingDepth > 0
+            ? new SlotLocation.Ring(ctx.RingDepth - 1, rootExpr.Type)
+            : null;
         if (rootResult is not null) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
-                rootResult.Read(ctx)));
+                RingCodec.ToWord(rootResult.Read(ctx))));
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
@@ -244,8 +246,11 @@ public static partial class AbiEmitter {
             return Compile(replacement, ctx);
         int entryDepth = ctx.RingDepth;
         var code = CompileNodeInner(node, ctx);
+        // The arm's own type names the local it wrote: an IEEE arm assigns the value
+        // itself, every other arm the word. Reading the reported result from the code
+        // rather than from the analysis keeps producer and consumer in one answer.
         var result = ctx.RingDepth > entryDepth
-            ? new SlotLocation.Ring(ctx.RingDepth - 1)
+            ? new SlotLocation.Ring(ctx.RingDepth - 1, code.Type)
             : null;
         return new CompiledNode(code, result);
     }
@@ -358,6 +363,10 @@ public static partial class AbiEmitter {
 
     private static Expression EmitConstant(Constant c, Context ctx) {
         int slot = ctx.AllocSlot();
+        if (c.Value is double d)
+            return Assign(ctx.RingVar(slot, typeof(double)), Constant(d));
+        if (c.Value is float f)
+            return Assign(ctx.RingVar(slot, typeof(float)), Constant(f));
         if (RingCodec.TryInlineConstant(c.Value, out long val))
             return Assign(ctx.RingVar(slot), Constant(val));
         return Assign(ctx.RingVar(slot),
@@ -564,7 +573,9 @@ public static partial class AbiEmitter {
     private static Expression SpillToRing(Expression value, Context ctx) {
         int slot = ctx.AllocSlot();
         ctx.RingDepth = slot + 1;
-        return Assign(ctx.RingVar(slot), value);
+        // An IEEE value keeps its own local: that is the whole point of the typed
+        // slot, and the reason an all-IEEE expression needs no bitcast between operands.
+        return Assign(ctx.RingVar(slot, RingCodec.SlotTypeOf(value.Type)), value);
     }
 
     private static Expression EmitBinaryArithmeticValue(
@@ -573,25 +584,52 @@ public static partial class AbiEmitter {
         Context ctx) {
         var leftVal = ValueOf(left, ctx);
         var rightVal = ValueOf(right, ctx);
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return RingCodec.ToIeee(
-                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
+        bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
+        bool rightIeee = RingCodec.IsIeee(right, ctx.Analysis);
+        if (leftIeee || rightIeee) {
+            var target = IeeeArithmeticType(
+                leftIeee ? ctx.ClrTypeOf(left) : null,
+                rightIeee ? ctx.ClrTypeOf(right) : null);
+            return factory(
+                AsIeee(left, leftVal, target, ctx),
+                AsIeee(right, rightVal, target, ctx));
+        }
         var rhs = rightVal;
         if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
         return factory(leftVal, rhs);
     }
 
-    private static Expression AsIeeeDouble(Node node, Expression ringVal, Context ctx) =>
-        RingCodec.IsIeee(node, ctx.Analysis)
-            ? RingCodec.FromIeee(ringVal)
-            : Convert(ringVal, typeof(double));
+    /// <summary>The type an IEEE arithmetic result takes: <c>double</c> as soon as
+    /// either operand is one, otherwise <c>float</c> — C#'s own promotion, which keeps
+    /// a <c>float</c> expression 32-bit.</summary>
+    private static Type IeeeArithmeticType(Type? left, Type? right) =>
+        left == typeof(double) || right == typeof(double) ? typeof(double) : typeof(float);
+
+    /// <summary>An operand at <paramref name="target"/>. A typed slot is already the
+    /// value; a word that holds IEEE bits is bitcast, and a word that is a plain
+    /// integer is converted.</summary>
+    private static Expression AsIeee(Node node, Expression value, Type target, Context ctx) {
+        if (value.Type == typeof(long))
+            value = RingCodec.IsIeee(node, ctx.Analysis)
+                ? RingCodec.FromIeee(value)
+                : Convert(value, target);
+        return value.Type == target ? value : Convert(value, target);
+    }
 
     private static Expression EmitConditionalValue(Conditional c, Context ctx) {
         var test = CompileConditionAsBool(c.Condition, ctx);
         var ifTrue = CompileConditionalBranch(c, c.IfTrue, ctx);
         var ifFalse = CompileConditionalBranch(c, c.IfFalse, ctx);
-        if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void))
+        if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void)) {
+            // An IEEE arm keeps the value, so the arms must agree on one width before
+            // Expression.Condition can take them.
+            if (ifTrue.Type != ifFalse.Type) {
+                var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
+                ifTrue = Convert(ifTrue, target);
+                ifFalse = Convert(ifFalse, target);
+            }
             return Condition(test, ifTrue, ifFalse);
+        }
 
         // A `throw` arm compiles to a void block, and Expression.Condition rejects a
         // void arm. Give the void arm the other arm's type so the ternary still
@@ -624,10 +662,19 @@ public static partial class AbiEmitter {
     private static bool IsValueRepresented(Node node, Context ctx) =>
         ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
+    /// <summary>The one type two arms of a value can share: <c>double</c> if either is
+    /// one, else <c>float</c> if either is one, else the left type unchanged.</summary>
+    private static Type ValueTypeOf(Type left, Type right) =>
+        left == typeof(double) || right == typeof(double) ? typeof(double)
+            : left == typeof(float) || right == typeof(float) ? typeof(float)
+            : left;
+
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
         var tmp = Variable(typeof(long), "_coal");
         var leftVal = ValueOf(n.LeftHandValue, ctx);
-        var rightVal = ValueOf(n.RightHandValue, ctx);
+        // A coalesce answers in the word: its left side is a nullable heap handle, so
+        // an IEEE right arm crosses the boundary here rather than widening the result.
+        var rightVal = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));
         Expression whenLeft = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;

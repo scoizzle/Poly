@@ -80,6 +80,46 @@ internal static class RingCodec {
     public static Expression FromIeee(Expression ringVal) =>
         Call(BitConverterInt64BitsToDouble, ringVal);
 
+    /// <summary>The CLR type of a ring local holding a value of
+    /// <paramref name="clrType"/>: <c>double</c> and <c>float</c> keep their own type,
+    /// and every other shape — an integer, a handle, or a type analysis could not
+    /// resolve — uses the <c>long</c> word.</summary>
+    public static Type SlotTypeOf(Type? clrType) =>
+        clrType == typeof(float) || clrType == typeof(double) ? clrType : typeof(long);
+
+    /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
+    public static bool IsTypedSlot(Type slotType) => IsIeee(slotType);
+
+    /// <summary>A typed slot expression as the word. The one place an expression-level
+    /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
+    /// form of both IEEE widths is a <c>double</c>'s bits.</summary>
+    public static Expression ToWord(Expression value) =>
+        IsTypedSlot(value.Type) ? ToIeee(Convert(value, typeof(double))) : value;
+
+    /// <summary>The word as a typed slot expression: the mirror of
+    /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
+    public static Expression FromWord(Expression word, Type slotType) =>
+        slotType == typeof(float) ? Convert(FromIeee(word), typeof(float))
+            : slotType == typeof(double) ? FromIeee(word)
+            : word;
+
+    /// <summary><paramref name="value"/> at <paramref name="representation"/>: the value
+    /// itself when it is already there, otherwise the bit-pattern conversion — one bitcast
+    /// when exactly one side is the word. This is what a storage boundary asks for, so no
+    /// access converts more than once.</summary>
+    public static Expression AsRepresentation(Expression value, Type representation) =>
+        value.Type == representation ? value : FromWord(ToWord(value), representation);
+
+    /// <summary><paramref name="value"/> at <paramref name="representation"/> as the
+    /// <em>number</em> it denotes, not its bit pattern: a word widens to a double, a
+    /// double truncates to the word. A typed storage means the destination's own type
+    /// decides the conversion, so it is the numeric one.</summary>
+    public static Expression NumericTo(Expression value, Type representation) =>
+        value.Type == representation ? value
+            : representation == typeof(double) ? Convert(value, typeof(double))
+            : representation == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
+            : Convert(Convert(value, typeof(double)), typeof(long));
+
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
     /// uses an unchecked 64-bit bitcast so <c>ulong.MaxValue</c> round-trips.</summary>

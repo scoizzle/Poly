@@ -36,8 +36,16 @@ public static partial class AbiEmitter {
             var cmp = Call(VmHeapCompare, lo, ro);
             return cf(cmp, Constant(0));
         }
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx));
+        bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
+        bool rightIeee = RingCodec.IsIeee(right, ctx.Analysis);
+        if (leftIeee || rightIeee) {
+            var target = IeeeArithmeticType(
+                leftIeee ? ctx.ClrTypeOf(left) : null,
+                rightIeee ? ctx.ClrTypeOf(right) : null);
+            return cf(
+                AsIeee(left, lv, target, ctx),
+                AsIeee(right, rv, target, ctx));
+        }
         return cf(lv, rv);
     }
 
@@ -459,8 +467,10 @@ public static partial class AbiEmitter {
     private static Expression EmitDefault(Default d, Context ctx) {
         int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
+        if (target == typeof(double) || target == typeof(float))
+            return Assign(ctx.RingVar(slot, target), Default(target));
         if (target is null || (target.IsValueType && RingCodec.IsInline(target))
-            || target == typeof(bool) || target == typeof(float) || target == typeof(double)
+            || target == typeof(bool)
             || !target.IsValueType)
             return Assign(ctx.RingVar(slot), Constant(0L));
         var instance = Activator.CreateInstance(target);
@@ -511,12 +521,16 @@ public static partial class AbiEmitter {
 
     /// <summary>Variable reference: reads whatever storage the binding resolves
     /// to — a frame slot, a register, or a capture cell — and leaves the value
-    /// on the ring for expression chaining.</summary>
+    /// on the ring for expression chaining. An IEEE register holds the value itself, so
+    /// the read is a copy; a word-backed storage (frame slot, capture cell) converts once
+    /// here, at the storage boundary, instead of once per use inside the expression that
+    /// follows.</summary>
     private static Expression EmitVariable(Variable v, Context ctx) {
-        if (ctx.Resolve(v) is not { } location)
+        if (ctx.Resolve(v) is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: variable '{v.Name}' is not declared in any scope.");
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), location.Read(ctx));
+        var slotType = ctx.SlotTypeOf(v);
+        return Assign(ctx.RingVar(slot, slotType), ctx.VariableReadAs(v, slotType));
     }
 }

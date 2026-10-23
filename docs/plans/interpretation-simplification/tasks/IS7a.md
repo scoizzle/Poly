@@ -92,7 +92,6 @@ What did land: the slot table keyed by (index, representation), `_dN`/`_fN` loca
 **Why it is still held rather than closed.** Typed variables without a typed ring gains little: an expression over typed `double` variables would still spill its result into a `long` ring slot, reintroducing one bitcast per expression. The two changes pay only together. So this stays open and lands with [IS7b](IS7b.md), measured as a pair.
 
 ## Log
-## Log
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|

@@ -7,8 +7,8 @@ namespace Poly.Tests.Interpretation;
 /// The writer, checked by Roslyn, over the AST corpus the suite already carries.
 /// <para>
 /// The corpus is the existing programs: every program in <c>Poly.Tests/Integration</c> and
-/// <c>Poly.Tests/Interpretation</c> that goes through <c>NodeTestHelpers.BuildExpression</c>, rebuilt
-/// here one row per program so the differential can run without the LINQ oracle. The
+/// <c>Poly.Tests/Interpretation</c> that the suite already asserted, rebuilt here one row per
+/// program so the differential can run without the LINQ oracle. The
 /// <c>ArithmeticParserEvaluatorTests</c> rows are the expressions that file's own parser consumes —
 /// its parser is private, so the same text is read with <see cref="CSharpLanguage.Read"/>.
 /// </para>
@@ -498,28 +498,6 @@ public class AstParityTests {
             .Because("a divergence with no contradicting row is a stale finding, not a skip");
     }
 
-    /// <summary>The corpus is not a favourites list: it covers every test file that builds a LINQ expression.</summary>
-    [Test]
-    public async Task Corpus_CoversEveryTestFileThatBuildsAnExpression() {
-        var sources = Directory
-            .GetFiles(Path.Combine(RepoRoot(), "Poly.Tests", "Interpretation"), "*.cs")
-            .Concat(Directory.GetFiles(Path.Combine(RepoRoot(), "Poly.Tests", "Integration"), "*.cs"))
-            .Where(path => File.ReadAllText(path).Contains(".BuildExpression()", StringComparison.Ordinal))
-            .Select(path => Path.GetFileNameWithoutExtension(path))
-            .Where(name => name != nameof(AstParityTests))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
-        var covered = Programs
-            .Select(c => c.Label.Split('.')[0])
-            .Distinct()
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
-        await Assert.That(covered.Except(sources)).IsEmpty()
-            .Because("a corpus label must name a file that builds an expression");
-        await Assert.That(sources.Except(covered)).IsEmpty()
-            .Because("every file that builds a LINQ expression must have corpus rows");
-    }
-
     /// <summary>The kinds the writer cannot print, with the disposal each side must have today.</summary>
     static Dictionary<Type, PrintDisposition> Samples() => new() {
         // The writer prints a comment, so both sides execute as void.
@@ -546,14 +524,4 @@ public class AstParityTests {
         _ when kind == typeof(SuspendNode) => new SuspendNode(new Constant(7L)),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "no sample"),
     };
-
-    static string RepoRoot() {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null) {
-            if (File.Exists(Path.Combine(dir, "docs", "CORE.md")))
-                return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        throw new InvalidOperationException("Could not find the repository root from " + AppContext.BaseDirectory);
-    }
 }

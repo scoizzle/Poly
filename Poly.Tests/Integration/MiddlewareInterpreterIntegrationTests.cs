@@ -1,6 +1,4 @@
-using System.Linq.Expressions;
-
-using Poly.Tests.TestHelpers;
+using Poly.Interpretation;
 
 namespace Poly.Tests.Integration;
 
@@ -21,19 +19,19 @@ public class MiddlewareInterpreterIntegrationTests {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
 
-        // Act - Interpret first AST: x + 10
-        var add10 = new Add(x, Wrap(10));
-        var compiled1 = add10.CompileLambda<Func<int, int>>((x, typeof(int)));
+        // Act - interpret the first AST (x + 10), then a second (x * 2)
+        var program1 = Interpreter.Compile(new Add(x, Wrap(10)));
+        var program2 = Interpreter.Compile(new Multiply(x, Wrap(2)));
 
-        // Interpret second AST: x * 2
-        var mul2 = new Multiply(x, Wrap(2));
-        var compiled2 = mul2.CompileLambda<Func<int, int>>((x, typeof(int)));
-
-        // Assert
-        await Assert.That(compiled1(5)).IsEqualTo(15);  // 5 + 10 = 15
-        await Assert.That(compiled2(5)).IsEqualTo(10);  // 5 * 2 = 10
-        await Assert.That(compiled1(10)).IsEqualTo(20); // 10 + 10 = 20
-        await Assert.That(compiled2(10)).IsEqualTo(20); // 10 * 2 = 20
+        // Assert - one parameter binding serves both fragments
+        using (var exec = Interpreter.Execute(program1, s => s.SetArgs(5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(15L);
+        using (var exec = Interpreter.Execute(program2, s => s.SetArgs(5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+        using (var exec = Interpreter.Execute(program1, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
+        using (var exec = Interpreter.Execute(program2, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 
     /// <summary>
@@ -45,13 +43,14 @@ public class MiddlewareInterpreterIntegrationTests {
         var x = new Parameter("x", TypeReference.To<int>());
         var y = new Parameter("y", TypeReference.To<int>());
 
-        // Act - Build AST: x + y
-        var ast = new Add(x, y);
-        var compiled = ast.CompileLambda<Func<int, int, int>>((x, typeof(int)), (y, typeof(int)));
+        // Act
+        var program = Interpreter.Compile(new Add(x, y));
 
         // Assert
-        await Assert.That(compiled(3, 7)).IsEqualTo(10);
-        await Assert.That(compiled(15, 5)).IsEqualTo(20);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(3, 7)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(15, 5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(20L);
     }
 
     /// <summary>
@@ -64,12 +63,10 @@ public class MiddlewareInterpreterIntegrationTests {
         var ast = new Add(Wrap(10), Wrap(20));
 
         // Act
-        var expr = ast.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
-        // Assert - Should evaluate to constant 30
-        await Assert.That(result).IsEqualTo(30);
+        // Assert - the constant expression folds to 30
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(30L);
     }
 
     /// <summary>
@@ -84,12 +81,10 @@ public class MiddlewareInterpreterIntegrationTests {
         var ast = new Add(left, right);           // 30 + 8 = 38
 
         // Act
-        var expr = ast.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(38);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(38L);
     }
 
     /// <summary>
@@ -104,23 +99,31 @@ public class MiddlewareInterpreterIntegrationTests {
         // Act - Build and interpret: (x + 10) * 2
         var addTen = new Add(x, Wrap(10));
         var timesTwo = new Multiply(addTen, Wrap(2));
-        var compiled = timesTwo.CompileLambda<Func<int, int>>((x, typeof(int)));
 
-        await Assert.That(compiled(5)).IsEqualTo(30);   // (5 + 10) * 2 = 30
-        await Assert.That(compiled(10)).IsEqualTo(40);  // (10 + 10) * 2 = 40
+        // Act
+        var program = Interpreter.Compile(timesTwo);
+
+        // Assert
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(30L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(40L);
     }
 
     /// <summary>
-    /// Test type mismatch detection.
-    /// Verifies that incompatible type operations throw during code generation.
+    /// Mixed operand types, not a type error: <c>+</c> with an int and a string concatenates, as it
+    /// does in C#. The LINQ generator refused this tree, so the assertion could not see the meaning.
     /// </summary>
     [Test]
-    public async Task IncompatibleTypes_IntPlusString_ThrowsDuringCodeGeneration() {
+    public async Task MixedTypes_IntPlusString_ConcatenatesAsCSharpDoes() {
         // Arrange
         var ast = new Add(Wrap(5), Wrap("hello"));
 
-        // Act & Assert - Code generator should throw for incompatible types
-        await Assert.That(() => ast.BuildExpression()).Throws<Exception>();
+        // Act
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
+
+        // Assert
+        await Assert.That(exec.GetValue<object>()).IsEqualTo("5hello");
     }
 
     /// <summary>
@@ -133,12 +136,10 @@ public class MiddlewareInterpreterIntegrationTests {
         var ast = new Add(Wrap(10), Wrap(5.5));
 
         // Act
-        var expr = ast.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(15.5);
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(15.5);
     }
 
     /// <summary>
@@ -151,12 +152,10 @@ public class MiddlewareInterpreterIntegrationTests {
         var ast = new Multiply(Wrap(10), Wrap(2.5));
 
         // Act
-        var expr = ast.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(25.0);
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(25.0);
     }
 
     /// <summary>
@@ -171,12 +170,17 @@ public class MiddlewareInterpreterIntegrationTests {
         var addFive = new Add(x, Wrap(5));
         var timesTwo = new Multiply(addFive, Wrap(2));
         var minusThree = new Subtract(timesTwo, Wrap(3));
-        var compiled = minusThree.CompileLambda<Func<int, int>>((x, typeof(int)));
+
+        // Act
+        var program = Interpreter.Compile(minusThree);
 
         // Assert
-        await Assert.That(compiled(0)).IsEqualTo(7);    // ((0 + 5) * 2) - 3 = 7
-        await Assert.That(compiled(5)).IsEqualTo(17);   // ((5 + 5) * 2) - 3 = 17
-        await Assert.That(compiled(10)).IsEqualTo(27);  // ((10 + 5) * 2) - 3 = 27
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(0)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(5)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(17L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(27L);
     }
 
     /// <summary>
@@ -189,12 +193,17 @@ public class MiddlewareInterpreterIntegrationTests {
 
         // Act - Build: x ?? 42
         var ast = new Coalesce(x, Wrap(42));
-        var compiled = ast.CompileLambda<Func<int?, int>>((x, typeof(int?)));
+
+        // Act
+        var program = Interpreter.Compile(ast);
 
         // Assert
-        await Assert.That(compiled(null)).IsEqualTo(42);
-        await Assert.That(compiled(10)).IsEqualTo(10);
-        await Assert.That(compiled(0)).IsEqualTo(0);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs([null])))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(10)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
+        using (var exec = Interpreter.Execute(program, s => s.SetArgs(0)))
+            await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
     /// <summary>
@@ -204,13 +213,12 @@ public class MiddlewareInterpreterIntegrationTests {
     public async Task UnaryMinus_WithPositiveValue_ReturnsNegated() {
         // Act - Build: -42
         var ast = new UnaryMinus(Wrap(42));
-        var expr = ast.BuildExpression();
 
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        // Act
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(-42);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(-42L);
     }
 
     /// <summary>
@@ -220,31 +228,28 @@ public class MiddlewareInterpreterIntegrationTests {
     public async Task TypeCast_IntToDouble_CastsCorrectly() {
         // Act - Build: (double)42
         var ast = new TypeCast(Wrap(42), TypeReference.To<double>());
-        var expr = ast.BuildExpression();
 
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        // Act
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42.0);
+        await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
     /// <summary>
     /// Test that parameter expressions are consistent across multiple calls.
     /// </summary>
     [Test]
-    public async Task ContextPreservation_MultipleParameterAccess_UsesSameParameterExpression() {
+    public async Task ContextPreservation_MultipleParameterAccess_UsesSameValue() {
         // Arrange
         var x = new Parameter("x", TypeReference.To<int>());
         var node = new Add(x, x);
 
         // Act
-        var (expr, parameters) = node.BuildExpressionWithParameters((x, typeof(int)));
-        var binary = (BinaryExpression)expr;
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), s => s.SetArgs(6));
 
-        // Assert - Interpreter should reuse the same ParameterExpression instance
-        await Assert.That(ReferenceEquals(binary.Left, binary.Right)).IsTrue();
-        await Assert.That(ReferenceEquals(binary.Left, parameters[0])).IsTrue();
+        // Assert - both references read the one argument
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(12L);
     }
 
     /// <summary>
@@ -257,13 +262,12 @@ public class MiddlewareInterpreterIntegrationTests {
             Wrap(10),
             Wrap(20),
             Wrap(30));
-        var expr = ast.BuildExpression();
 
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        // Act
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(30);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(30L);
     }
 
     /// <summary>
@@ -273,12 +277,11 @@ public class MiddlewareInterpreterIntegrationTests {
     public async Task Modulo_TenModThree_ReturnsOne() {
         // Act - Build: 10 % 3
         var ast = new Modulo(Wrap(10), Wrap(3));
-        var expr = ast.BuildExpression();
 
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        // Act
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
 
         // Assert
-        await Assert.That(result).IsEqualTo(1);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
     }
 }

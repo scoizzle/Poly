@@ -1,7 +1,7 @@
 using System.Globalization;
 
 using Poly.Grammar;
-using Poly.Tests.TestHelpers;
+using Poly.Interpretation;
 
 namespace Poly.Tests.Integration;
 
@@ -174,13 +174,8 @@ public class ArithmeticParserEvaluatorTests {
     /// </summary>
     private static T Evaluate<T>(string expression) {
         var ast = ParseAst(expression);
-        return EvaluateWithLinq<T>(ast);
-    }
-
-    private static T EvaluateWithLinq<T>(Node ast) {
-        var expr = ast.BuildExpression();
-        var lambda = Expression.Lambda<Func<T>>(expr);
-        return lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
+        return exec.GetValue<T>()!;
     }
 
     private static Node ParseAst(string expression) {

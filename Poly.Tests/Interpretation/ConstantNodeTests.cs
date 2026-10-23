@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -13,13 +12,9 @@ public class ConstantNodeTests {
         var node = new Constant(42);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
@@ -29,13 +24,9 @@ public class ConstantNodeTests {
         var node = new Constant("hello");
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<string>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo("hello");
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
 
@@ -45,13 +36,9 @@ public class ConstantNodeTests {
         var node = new Constant(3.14);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(3.14);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(3.14);
     }
 
@@ -61,13 +48,9 @@ public class ConstantNodeTests {
         var node = new Constant(true);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<bool>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsTrue();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
@@ -77,13 +60,9 @@ public class ConstantNodeTests {
         var node = new Constant(false);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<bool>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsFalse();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<bool>()).IsFalse();
     }
 
@@ -93,13 +72,9 @@ public class ConstantNodeTests {
         var node = new Constant(null);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<object?>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsNull();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
@@ -109,13 +84,9 @@ public class ConstantNodeTests {
         var node = new Constant(99.99m);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<decimal>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(99.99m);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo(99.99m);
     }
 
@@ -126,13 +97,9 @@ public class ConstantNodeTests {
         var node = new Constant(expected);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<DateTime>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(expected);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<DateTime>()).IsEqualTo(expected);
     }
 
@@ -143,14 +110,9 @@ public class ConstantNodeTests {
         var node = new Constant(expected);
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = System.Linq.Expressions.Expression.Lambda<Func<List<int>>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(expected);
-        await Assert.That(result.Count).IsEqualTo(3);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<List<int>>()).IsEqualTo(expected);
         await Assert.That(exec.GetValue<List<int>>()!.Count).IsEqualTo(3);
     }

@@ -2,9 +2,6 @@ using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Tests.Introspection;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -15,13 +12,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(42), TypeReference.To<double>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42.0);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
@@ -31,13 +24,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(3.14), TypeReference.To<int>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(3);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(3);
     }
 
@@ -47,13 +36,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(9999L), TypeReference.To<int>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(9999);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(9999);
     }
 
@@ -64,13 +49,10 @@ public class TypeCastTests {
         var node = new TypeCast(param, TypeReference.To<double>());
 
         // Act
-        var compiled = node.CompileLambda<Func<int, double>>((param, typeof(int)));
-        var result = compiled(42);
-
-        // Assert
-        await Assert.That(result).IsEqualTo(42.0);
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(42));
+
+        // Assert
         await Assert.That(exec.GetValue<double>()).IsEqualTo(42.0);
     }
 
@@ -80,13 +62,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap("hello"), TypeReference.To<object>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<object>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo("hello");
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<object>()).IsEqualTo("hello");
     }
 
@@ -97,13 +75,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(obj), TypeReference.To<string>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<string>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo("world");
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("world");
     }
 
@@ -113,13 +87,9 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(42 as int?), TypeReference.To<int>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
 
@@ -129,14 +99,10 @@ public class TypeCastTests {
         var node = new TypeCast(Wrap(42), TypeReference.To<int?>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int?>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
-        await Assert.That(exec.Result.HasValue).IsTrue();
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
 
     [Test]
@@ -173,13 +139,9 @@ public class TypeCastTests {
         var node = new TypeIs(value, TypeReference.To<string>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsTrue();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
@@ -190,13 +152,9 @@ public class TypeCastTests {
         var node = new TypeIs(value, TypeReference.To<int>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<bool>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsFalse();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<bool>()).IsFalse();
     }
 
@@ -207,13 +165,9 @@ public class TypeCastTests {
         var node = new TypeAs(value, TypeReference.To<string>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo("hello");
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("hello");
     }
 
@@ -224,13 +178,9 @@ public class TypeCastTests {
         var node = new TypeAs(value, TypeReference.To<string>());
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<string?>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsNull();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<object>()).IsNull();
     }
 
@@ -263,18 +213,12 @@ public class TypeCastTests {
     }
 
     [Test]
-    public async Task TypeAs_ObjectToNonNullableValueType_ReturnsNullableValue() {
+    public async Task TypeAs_ObjectToNonNullableValueType_RejectsAtCompile() {
         // Arrange
         var value = Wrap((object)42);
         var node = new TypeAs(value, TypeReference.To<int>());
 
-        // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int?>>(expr).Compile();
-        var result = compiled();
-
-        // Assert
-        await Assert.That(result).IsEqualTo(42);
+        // Act & Assert - a lifted `as` to a non-nullable value type cannot be represented, so the VM refuses it
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
 

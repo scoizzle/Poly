@@ -1,9 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -39,12 +36,6 @@ public class NewNodeTests {
     public async Task New_ParameterlessConstructor_CompilesAndCreatesInstance() {
         var node = new New(TypeReference.To<Widget>());
 
-        var expression = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<Widget>>(expression).Compile();
-        var result = compiled();
-
-        await Assert.That(result.Name).IsEqualTo("default");
-        await Assert.That(result.Count).IsEqualTo(-1);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
         await Assert.That(vmResult).IsNotNull();
@@ -56,12 +47,6 @@ public class NewNodeTests {
     public async Task New_WithOptionalParameter_UsesDefaultValueWhenOmitted() {
         var node = new New(TypeReference.To<Widget>(), Wrap("alpha"));
 
-        var expression = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<Widget>>(expression).Compile();
-        var result = compiled();
-
-        await Assert.That(result.Name).IsEqualTo("alpha");
-        await Assert.That(result.Count).IsEqualTo(0);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
         await Assert.That(vmResult).IsNotNull();
@@ -73,12 +58,6 @@ public class NewNodeTests {
     public async Task New_WithExplicitArguments_BindsAllConstructorParameters() {
         var node = new New(TypeReference.To<Widget>(), Wrap("beta"), Wrap(42));
 
-        var expression = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<Widget>>(expression).Compile();
-        var result = compiled();
-
-        await Assert.That(result.Name).IsEqualTo("beta");
-        await Assert.That(result.Count).IsEqualTo(42);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));
         var vmResult = exec.GetValue<Widget>();
         await Assert.That(vmResult).IsNotNull();

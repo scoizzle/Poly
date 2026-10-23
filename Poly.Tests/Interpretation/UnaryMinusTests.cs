@@ -1,7 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,13 +9,9 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(Wrap(42));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(-42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(-42L);
     }
 
@@ -28,13 +21,9 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(Wrap(-99));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(99);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(99L);
     }
 
@@ -44,13 +33,9 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(Wrap(0));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<int>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(0);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
@@ -60,13 +45,9 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(Wrap(3.14));
 
         // Act
-        var expr = node.BuildExpression();
-        var compiled = Expr.Lambda<Func<double>>(expr).Compile();
-        var result = compiled();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(-3.14);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(-3.14);
     }
 
@@ -77,18 +58,14 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(param);
 
         // Act
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
-
-        // Assert
-        await Assert.That(compiled(10)).IsEqualTo(-10);
-        await Assert.That(compiled(-5)).IsEqualTo(5);
-        await Assert.That(compiled(0)).IsEqualTo(0);
         var program = Interpreter.Compile(node);
         using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
-        await Assert.That(exec10.GetValue<long>()).IsEqualTo(-10L);
         using var execNeg = Interpreter.Execute(program, s => s.SetArgs(-5));
-        await Assert.That(execNeg.GetValue<long>()).IsEqualTo(5L);
         using var exec0 = Interpreter.Execute(program, s => s.SetArgs(0));
+
+        // Assert
+        await Assert.That(exec10.GetValue<long>()).IsEqualTo(-10L);
+        await Assert.That(execNeg.GetValue<long>()).IsEqualTo(5L);
         await Assert.That(exec0.GetValue<long>()).IsEqualTo(0L);
     }
 
@@ -99,15 +76,12 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(new UnaryMinus(param));
 
         // Act
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
-
-        // Assert
-        await Assert.That(compiled(42)).IsEqualTo(42);
-        await Assert.That(compiled(-7)).IsEqualTo(-7);
         var program = Interpreter.Compile(node);
         using var exec42 = Interpreter.Execute(program, s => s.SetArgs(42));
-        await Assert.That(exec42.GetValue<long>()).IsEqualTo(42L);
         using var execNeg = Interpreter.Execute(program, s => s.SetArgs(-7));
+
+        // Assert
+        await Assert.That(exec42.GetValue<long>()).IsEqualTo(42L);
         await Assert.That(execNeg.GetValue<long>()).IsEqualTo(-7L);
     }
 
@@ -118,20 +92,19 @@ public class UnaryMinusTests {
         var node = new UnaryMinus(new Add(param, Wrap(5)));
 
         // Act
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
-
-        // Assert
-        await Assert.That(compiled(10)).IsEqualTo(-15);
-        await Assert.That(compiled(-3)).IsEqualTo(-2);
         var program = Interpreter.Compile(node);
         using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
-        await Assert.That(exec10.GetValue<long>()).IsEqualTo(-15L);
         using var execNeg = Interpreter.Execute(program, s => s.SetArgs(-3));
+
+        // Assert
+        await Assert.That(exec10.GetValue<long>()).IsEqualTo(-15L);
         await Assert.That(execNeg.GetValue<long>()).IsEqualTo(-2L);
     }
 
     [Test]
     public async Task UnaryMinus_NestedInAddition_EvaluatesCorrectly() {
-        await new Add(Wrap(10), new UnaryMinus(Wrap(5))).AssertDualOracleInt(5);
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Add(Wrap(10), new UnaryMinus(Wrap(5)))));
+
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
 }

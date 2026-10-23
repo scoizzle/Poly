@@ -103,6 +103,97 @@ So IS7a/IS7b/IS7c cost ~5 %, and later slices recovered about half of it.
 
 **The larger cost in this program was older and unrelated, and is now fixed (IS7h).** The strided mark loop used to re-dereference the heap **twice per iteration**, because `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask` and each `a[i]` re-dereferenced and re-cast - `StridedSetBits` received the array as an *argument*, so the array cache declined to promote it. Treating the intrinsic's array operand as a receiver (it is never handed on, only indexed) promotes it: the loop is now `_arr0[i] | mask` with zero derefs, and `sieve_polyvm.cs` goes **3,379 -> 2,995 us min** (-11 %), which also erases the regression recorded above.
 
+## The call frame (2026-10-23)
+
+Nqueens is call-heavy and the other three are not, so the call frame was measured on
+its own. Counting executed statements through `VmState.DebugHook` (counts only — the
+`Normal` hook changes the emitted code, so it cannot time anything) gives 8,393
+`Place` invocations in a nqueens(9) run of 66,096 statement visits. A micro-probe — two
+programs differing by exactly one operation, differenced over 400k iterations — priced
+one call at **8.5 ns marginal**, against 0.25-0.75 ns for every other operation
+measured (add, multiply, divide, double multiply, array read, array write, if/else).
+
+Two changes came out of that, each kept only after an interleaved A/B:
+
+| Change | Why | nqueens |
+|---|---|---|
+| Frame words passed as parameters, not a `long[]` | the call allocated an array per invocation; the protocol never needed one | **-20 %** |
+| Restore is catch-and-rethrow, not `try`/`finally` | a `finally` is a funclet **call** on the normal path | **-36 %** total |
+
+The per-call marginal cost went 8.5 -> 4.75 ns. Sieve, mandelbrot and collatz are flat
+within noise, as expected for programs with one or two call sites.
+
+Two things were measured and **rejected**: copying the frame words through
+`slots.AsSpan(callSp, n)` instead of a bounded loop (one bounds check instead of *n*,
+but a `memmove` call costs more than a handful of stores: 124.3/126.5 us median against
+123.9/124.5), and a within-process A/B that rewrote the emitted tree back to the array
+form — it reuses one GC heap, so the array variant's allocation was still collected
+during the direct variant's runs and hid most of the win. Both shapes must be measured
+in separate processes.
+
+Machine note: these runs shared a host at load average ~5 (another user), so absolute
+microseconds drift between sessions by up to 40 %. Every figure above is a ratio from
+an interleaved A/B on one binary, not a cross-session comparison.
+
+### Should every function body be inlined into one expression?
+
+The next architectural lever is to stop emitting each AST function as its own
+`Action<VmState>` and instead put every body in one expression, so a call is argument
+slots plus a jump to a label and a `return` is a jump back. That removes the delegate
+dispatch and the per-frame prologue, which is the bulk of what is left in the 4.75 ns.
+
+Two facts were checked before answering:
+
+- **Expression trees permit it.** A `Return`/`Goto` from inside a `TryCatch` or
+  `TryFinally` to a label in an enclosing block is accepted — both validate *and* compile
+  and run. So `try` around a call does not block the design. (C# the *language* forbids
+  jumping into a block, so the emitted form must keep every label at the top level, or be
+  a flat pc dispatch; that is a shape constraint, not a blocker.)
+- **The shape is genuinely faster, in native code.** The same nqueens(9) kernel, three
+  ways, median of 41 runs, two passes:
+
+  | Shape | min | median |
+  |---|---:|---:|
+  | recursive C# methods (floor for "a call is a call") | 80.7 us | 81.0 us |
+  | one method, calls are a pc jump — the proposal | 64.6 us | 67.6 us |
+  | explicit stack, no calls at all | 24.7 us | 25.5 us |
+
+  The jump shape is **16.5 % faster than recursion** on native code, where a call is
+  already as cheap as a call gets. So the idea is sound.
+
+**Why it was not done here.** Two independent estimates agree on the prize and it is
+smaller than the change: the frame protocol is 8,393 calls x 4.75 ns = 40 us of a 128 us
+run (31 %), but the proposal keeps the slot writes and the FP save and only removes
+dispatch and prologue — recovery is roughly 16-21 % on nqueens, and **zero on the other
+three programs**, which have one or two call sites. The two changes above already took
+nqueens 182 -> 129 us (-29 %). Against that, inlining all bodies into one lambda has to
+re-derive what the frame protocol gives for free: recursive bodies can no longer share
+one set of `_regN` locals (they would collide across overlapping invocations, so every
+local becomes a frame-slot spill), `try` regions nest differently, closure capture and
+the per-statement debug hook all change, and one giant lambda risks the JIT's size budget
+and instruction cache where a per-function delegate does not. That is a board-level
+change to the ABI, not a slice.
+
+**Correction: the gap between the first two columns and the third is call mechanics, not
+algorithm.** An earlier draft of this note said the recursive shape "re-derives masks" and
+that the fix was to carry `tried` per depth. That was wrong: `avail` in the recursive
+source is a frame local that survives the call, so it is computed once per frame. The
+iterative form is a *different* nqueens formulation — it keeps `tried[d]` and recomputes
+`full & ~(cols|diag|anti|tried[d])` every iteration, which is *more* mask work per
+iteration, and it is still 3.2x faster. So the entire 81.0 -> 25.5 us difference is the
+call: 8,393 calls, 55.5 us of it, **6.6 ns per call in plain C#** — 68 % of the recursive
+run. Call mechanics really do dominate this kernel, which is the strongest argument for
+the inlining idea.
+
+What blocks it in the VM is that the same accounting does not hold. A VM frame costs
+4.75 ns of the 128 us (40 us); the other 88 us is per-frame body ceremony — 66,096
+statements at ~1.3 ns each, 3.5x the native body cost — which comes from register and
+slot traffic in the emitted code. Inlining all bodies into one lambda does not reduce that
+88 us; it *adds* to it, because recursive bodies would no longer share one set of `_regN`
+locals and every local would become a frame-slot spill. Removing 40 us of call cost while
+adding spill traffic to 88 us of body work is not a win to assume — it needs the box
+measured before it is believed, which is what a prototype would be for.
+
 ## What the table does and does not support
 
 **It supports:** sustained-work throughput of the Poly VM against native and managed runtimes, and — because every language must print the same checksum — that the VM computes the same answer as C, C++, Rust and C# on these four programs. Within the host group, Poly versus `C# native` is the fair comparison.

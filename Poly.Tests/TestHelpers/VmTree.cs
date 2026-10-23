@@ -114,6 +114,8 @@ internal static class VmTree {
         private readonly HashSet<Expression> _boundaryBitcasts = new(ReferenceEqualityComparer.Instance);
         private readonly List<MethodCallExpression> _registerBitcasts = [];
         private readonly List<MethodCallExpression> _heapDerefs = [];
+        private readonly List<MethodCallExpression> _callFrames = [];
+        private readonly List<MethodCallExpression> _callFramesWithArgumentArray = [];
         private readonly List<MethodCallExpression> _heapAllocations = [];
         private readonly List<Expression> _arrayCacheAccesses = [];
         private readonly List<(ParameterExpression Local, string Value)> _arrayCacheStores = [];
@@ -215,6 +217,11 @@ internal static class VmTree {
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression node) {
+            if (IsCallFrame(node)) {
+                _callFrames.Add(node);
+                if (node.Arguments.Any(argument => argument.NodeType == ExpressionType.NewArrayInit))
+                    _callFramesWithArgumentArray.Add(node);
+            }
             if (node.Method.DeclaringType == typeof(VmManagedObjectHeap)) {
                 if (node.Method.Name == nameof(VmManagedObjectHeap.UnsafeGet))
                     _heapDerefs.Add(node);
@@ -348,6 +355,20 @@ internal static class VmTree {
         /// <summary>Every <c>heap.Allocate</c> call in the body. One array definition is
         /// one allocation, so a promoted definition does not add a second.</summary>
         public IReadOnlyList<MethodCallExpression> HeapAllocations => _heapAllocations;
+
+        /// <summary>A call frame: the emitter's <c>InvokeAstFrame</c> / <c>InvokeAstFunction</c>
+        /// hop, whatever its arity. Its argument words are the frame's parameters.</summary>
+        internal static bool IsCallFrame(MethodCallExpression call) =>
+            call.Method.DeclaringType == typeof(AbiEmitter)
+            && call.Method.Name is "InvokeAstFrame" or "InvokeAstFunction";
+
+        /// <summary>Every emitted call frame, in tree order.</summary>
+        public IReadOnlyList<MethodCallExpression> CallFrames => _callFrames;
+
+        /// <summary>The call frames that materialise a <c>long[]</c> to carry their
+        /// arguments. A frame should name its words one by one instead.</summary>
+        public IReadOnlyList<MethodCallExpression> CallFramesWithArgumentArray =>
+            _callFramesWithArgumentArray;
 
         internal static bool IsArrayCacheLocal(Expression expression) =>
             expression is ParameterExpression parameter

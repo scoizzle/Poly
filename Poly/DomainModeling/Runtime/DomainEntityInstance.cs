@@ -17,14 +17,14 @@ namespace Poly.DomainModeling.Runtime;
 
 public sealed partial record DomainEntityInstance {
     private readonly Dictionary<string, object?> _values;
-    private readonly TypeDefinitionNodeAnalyzer _typeDefAnalyzer;
+    private readonly ITypeDefinitionProvider _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
     private int _invokeDepth;
     private int _transitionDepth;
     private int _notifyDepth;
     private HashSet<string>? _automaticStageChain;
     private readonly HashSet<string> _exitsRunning = new(StringComparer.Ordinal);
-    private TypeDefinitionNodeAnalyzer? _bindingTypeProvider;
+    private ITypeDefinitionProvider? _bindingTypeProvider;
     /// <summary>Max nested <see cref="InvokeAction"/> depth (self-invoke / re-entrancy).</summary>
     public const int MaxInvokeDepth = 16;
     /// <summary>Max nested <see cref="TransitionStage"/> depth (OnEntry/OnExit re-entrancy).</summary>
@@ -36,7 +36,7 @@ public sealed partial record DomainEntityInstance {
     private DomainEntityInstance(
         Entity entity,
         Dictionary<string, object?> values,
-        TypeDefinitionNodeAnalyzer typeDefAnalyzer,
+        ITypeDefinitionProvider typeDefAnalyzer,
         string? currentStage,
         Domain? domain = null) {
         Entity = entity;
@@ -834,7 +834,7 @@ public sealed partial record DomainEntityInstance {
     /// </summary>
     private DomainResult? ExecuteEffectList(
         IReadOnlyList<Effect> effects,
-        TypeDefinitionNodeAnalyzer typeProvider,
+        ITypeDefinitionProvider typeProvider,
         string? actionName = null,
         string? entryStageName = null,
         string? exitStageName = null,
@@ -1043,7 +1043,7 @@ public sealed partial record DomainEntityInstance {
                 };
         }
         moduleTypes.Analyze(ctx, runtimeEntity);
-        return new TypeDefinitionProviderCollection(moduleTypes, wrapped);
+        return ctx.TypeDefinitions;
     }
 
     [ThreadStatic]

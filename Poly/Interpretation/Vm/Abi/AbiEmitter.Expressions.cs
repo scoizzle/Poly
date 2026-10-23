@@ -15,8 +15,8 @@ public static partial class AbiEmitter {
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
         Context ctx) {
-        var lv = CompileValue(left, ctx);
-        var rv = CompileValue(right, ctx);
+        var lv = ValueOf(left, ctx);
+        var rv = ValueOf(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
@@ -36,42 +36,38 @@ public static partial class AbiEmitter {
             var cmp = Call(VmHeapCompare, lo, ro);
             return cf(cmp, Constant(0));
         }
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx));
-        return cf(lv, rv);
+        bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
+        bool rightIeee = RingCodec.IsIeee(right, ctx.Analysis);
+        if (leftIeee || rightIeee) {
+            var target = IeeeArithmeticType(
+                leftIeee ? ctx.ClrTypeOf(left) : null,
+                rightIeee ? ctx.ClrTypeOf(right) : null);
+            return cf(
+                AsIeee(left, lv, target, ctx),
+                AsIeee(right, rv, target, ctx));
+        }
+        // The operands must compare at one width: `Expression.Equal(int, long)` has no
+        // such overload. Two ints compare as ints; one long makes it a 64-bit compare.
+        var width = lv.Type == rv.Type ? lv.Type
+            : lv.Type == typeof(int) || rv.Type == typeof(int) ? typeof(long)
+            : lv.Type;
+        return cf(RingCodec.AsRepresentation(lv, width), RingCodec.AsRepresentation(rv, width));
     }
 
+    /// <summary>Comparison as a ring value: the bool test the condition path already uses,
+    /// materialised as 0/1. One body means the two forms cannot drift apart.</summary>
     private static Expression EmitComparisonValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
-        Context ctx, Node? cn = null) {
-        var lv = CompileValue(left, ctx);
-        var rv = CompileValue(right, ctx);
-        bool eq = cf == Equal || cf == NotEqual;
-        if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
-            var ec = Call(ObjectEquals, lo, ro);
-            return Condition(ec, cf == Equal ? Constant(1L) : Constant(0L),
-                                cf == Equal ? Constant(0L) : Constant(1L));
-        }
-        if (!eq && ctx.Analysis is not null
-            && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
-            && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
-            // Relational comparison of heap-resident values (DateOnly/DateTime/
-            // Guid/string/...): compare the boxed values, not the raw handles.
-            // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
-            // (Unknown) keep the scalar path.
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
-            var cmp = Call(VmHeapCompare, lo, ro);
-            return Condition(cf(cmp, Constant(0)), Constant(1L), Constant(0L));
-        }
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return Condition(cf(AsIeeeDouble(left, lv, ctx), AsIeeeDouble(right, rv, ctx)),
-                Constant(1L), Constant(0L));
-        return Condition(cf(lv, rv), Constant(1L), Constant(0L));
-    }
+        Context ctx) =>
+        Condition(CompileCompareTest(left, right, cf, ctx), Constant(1L), Constant(0L));
+
+    /// <summary>Comparison in ring form: the value form, spilled.</summary>
+    private static Expression EmitComparison(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        Context ctx) =>
+        SpillToRing(EmitComparisonValue(left, right, cf, ctx), ctx);
 
     // ── Ring-based expression helpers ──
 
@@ -119,7 +115,8 @@ public static partial class AbiEmitter {
         return false;
     }
 
-    /// <summary>Short-circuit AND: if left is false, skip right.</summary>
+    /// <summary>Short-circuit AND: if left is false, skip right. Answers in the left
+    /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
@@ -134,12 +131,13 @@ public static partial class AbiEmitter {
                     Constant(0L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)))));
+                        ctx.RingWord(rightSlot, rightExpr.Type)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
 
-    /// <summary>Short-circuit OR: if left is true, skip right.</summary>
+    /// <summary>Short-circuit OR: if left is true, skip right. Answers in the left
+    /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
@@ -154,12 +152,13 @@ public static partial class AbiEmitter {
                     Constant(1L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)))));
+                        ctx.RingWord(rightSlot, rightExpr.Type)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
 
-    /// <summary>Logical NOT: 0→1, anything else→0.</summary>
+    /// <summary>Logical NOT: 0→1, anything else→0, in the operand's own ring slot — an
+    /// in-place shape, not a spill of a value form.</summary>
     private static Expression EmitNot(Not not, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(not.Value, ctx));
@@ -168,7 +167,8 @@ public static partial class AbiEmitter {
         return ring.Then(result);
     }
 
-    /// <summary>Unary minus: negate value.</summary>
+    /// <summary>Unary minus: negate the operand in its own ring slot — an in-place shape,
+    /// not a spill of a value form.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
@@ -184,13 +184,16 @@ public static partial class AbiEmitter {
         return ring.Then(result);
     }
 
+    /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
+    /// of a value form.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(n.Operand, ctx));
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
 
-    /// <summary>PopCount via System.Numerics.BitOperations.PopCount.</summary>
+    /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
+    /// ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitPopCount(PopCount pc, Context ctx) {
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(pc.Operand, ctx));
@@ -469,8 +472,10 @@ public static partial class AbiEmitter {
     private static Expression EmitDefault(Default d, Context ctx) {
         int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
+        if (target == typeof(double) || target == typeof(float))
+            return Assign(ctx.RingVar(slot, target), Default(target));
         if (target is null || (target.IsValueType && RingCodec.IsInline(target))
-            || target == typeof(bool) || target == typeof(float) || target == typeof(double)
+            || target == typeof(bool)
             || !target.IsValueType)
             return Assign(ctx.RingVar(slot), Constant(0L));
         var instance = Activator.CreateInstance(target);
@@ -482,10 +487,11 @@ public static partial class AbiEmitter {
     private static Expression EmitTypeOf(TypeOf t, Context ctx) {
         var runtime = ResolveClrType(t.Type, t.Type, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
+        // The Type is known here, so its heap entry is seeded once per program (Build) and this
+        // arm is a local read. Allocating inline made a typeof in a loop one heap entry per
+        // iteration, and nothing recycles a type object.
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot),
-            Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(runtime, typeof(object)), typeof(object))),
-                typeof(long)));
+        return Assign(ctx.RingVar(slot), ctx.TypeHandleLocal(runtime));
     }
 
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
@@ -521,12 +527,16 @@ public static partial class AbiEmitter {
 
     /// <summary>Variable reference: reads whatever storage the binding resolves
     /// to — a frame slot, a register, or a capture cell — and leaves the value
-    /// on the ring for expression chaining.</summary>
+    /// on the ring for expression chaining. An IEEE register holds the value itself, so
+    /// the read is a copy; a word-backed storage (frame slot, capture cell) converts once
+    /// here, at the storage boundary, instead of once per use inside the expression that
+    /// follows.</summary>
     private static Expression EmitVariable(Variable v, Context ctx) {
-        if (ctx.Resolve(v) is not { } location)
+        if (ctx.Resolve(v) is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: variable '{v.Name}' is not declared in any scope.");
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), location.Read(ctx));
+        var slotType = ctx.SlotTypeOf(v);
+        return Assign(ctx.RingVar(slot, slotType), ctx.VariableReadAs(v, slotType));
     }
 }

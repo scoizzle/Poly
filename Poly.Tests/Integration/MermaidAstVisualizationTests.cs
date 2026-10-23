@@ -25,7 +25,7 @@ public class MermaidAstVisualizationTests {
         // Assert
         await Assert.That(mermaid).IsNotNull();
         await Assert.That(mermaid).Contains("graph TB");
-        await Assert.That(mermaid).Contains("Add (+)");
+        await Assert.That(mermaid).Contains("Add");
         await Assert.That(mermaid).Contains("Constant");
     }
 
@@ -43,8 +43,8 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(multiply);
 
         // Assert
-        await Assert.That(mermaid).Contains("Multiply (*)");
-        await Assert.That(mermaid).Contains("Add (+)");
+        await Assert.That(mermaid).Contains("Multiply");
+        await Assert.That(mermaid).Contains("Add");
         await Assert.That(mermaid).Contains("left");
         await Assert.That(mermaid).Contains("right");
     }
@@ -64,7 +64,7 @@ public class MermaidAstVisualizationTests {
 
         // Assert - Should generate valid diagram even with analysis
         await Assert.That(mermaid).Contains("graph TB");
-        await Assert.That(mermaid).Contains("Add (+)");
+        await Assert.That(mermaid).Contains("Add");
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public class MermaidAstVisualizationTests {
 
         // Assert
         await Assert.That(mermaid).Contains("Parameter");
-        await Assert.That(mermaid).Contains("x");
+        await Assert.That(mermaid).Contains(x.Id.Value);
     }
 
     /// <summary>
@@ -99,8 +99,8 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(negate);
 
         // Assert
-        await Assert.That(mermaid).Contains("Negate (-)");
-        await Assert.That(mermaid).Contains("Add (+)");
+        await Assert.That(mermaid).Contains("UnaryMinus");
+        await Assert.That(mermaid).Contains("Add");
     }
 
     /// <summary>
@@ -116,7 +116,7 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(ast);
 
         // Assert
-        await Assert.That(mermaid).Contains("Conditional (?:)");
+        await Assert.That(mermaid).Contains("Conditional");
         await Assert.That(mermaid).Contains("condition");
         await Assert.That(mermaid).Contains("true");
         await Assert.That(mermaid).Contains("false");
@@ -161,11 +161,11 @@ public class MermaidAstVisualizationTests {
         Console.WriteLine("--- End Diagram ---\n");
 
         // Assert
-        await Assert.That(mermaid).Contains("Subtract (-)");
-        await Assert.That(mermaid).Contains("Multiply (*)");
-        await Assert.That(mermaid).Contains("Add (+)");
-        await Assert.That(mermaid).Contains("Constant 4");
-        await Assert.That(mermaid).Contains("Constant 1");
+        await Assert.That(mermaid).Contains("Subtract");
+        await Assert.That(mermaid).Contains("Multiply");
+        await Assert.That(mermaid).Contains("Add");
+        var constantCount = mermaid.Split("\"Constant\"").Length - 1;
+        await Assert.That(constantCount).IsEqualTo(4);
     }
 
     /// <summary>
@@ -210,11 +210,11 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(subtract);
 
         // Assert - Should contain all operations
-        await Assert.That(mermaid).Contains("Subtract (-)");
-        await Assert.That(mermaid).Contains("Multiply (*)");
+        await Assert.That(mermaid).Contains("Subtract");
+        await Assert.That(mermaid).Contains("Multiply");
 
         // Count number of Add nodes (should be 2)
-        var addCount = mermaid.Split("Add (+)").Length - 1;
+        var addCount = mermaid.Split("\"Add\"").Length - 1;
         await Assert.That(addCount).IsEqualTo(2);
     }
 
@@ -232,7 +232,7 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(ast);
 
         // Assert
-        await Assert.That(mermaid).Contains("Coalesce (??)");
+        await Assert.That(mermaid).Contains("Coalesce");
         await Assert.That(mermaid).Contains("value");
         await Assert.That(mermaid).Contains("default");
     }
@@ -250,8 +250,8 @@ public class MermaidAstVisualizationTests {
         var mermaid = generator.Generate(ast);
 
         // Assert
-        await Assert.That(mermaid).Contains("Cast to");
-        await Assert.That(mermaid).Contains("Double");
+        await Assert.That(mermaid).Contains("TypeCast");
+        await Assert.That(mermaid).Contains(ast.Operand.Id.Value);
     }
 
     #region Helper classes from ArithmeticParserEvaluatorTests

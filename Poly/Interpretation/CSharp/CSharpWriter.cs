@@ -17,8 +17,9 @@ namespace Poly.Interpretation.CSharp;
 /// </summary>
 public sealed class CSharpWriter {
     private readonly AnalysisResult? _analysisResult;
-    private readonly Stack<HashSet<string>> _declScopes = new();
+    private readonly Stack<LocalScope> _declScopes = new();
     private bool _fuseUndeclaredName;
+    private bool _insideUnchecked;
 
     /// <summary>Creates a writer without analysis metadata. Some type-aware
     /// features (e.g. resolved member names) may be unavailable.</summary>
@@ -108,23 +109,67 @@ public sealed class CSharpWriter {
     private string WithDeclScope(Func<string> write) {
         _declScopes.Clear();
         _fuseUndeclaredName = false;
-        _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
+        _insideUnchecked = false;
+        _declScopes.Push(new LocalScope());
         try {
             return write();
         }
         finally {
             _declScopes.Clear();
             _fuseUndeclaredName = false;
+            _insideUnchecked = false;
         }
     }
 
-    private bool DeclaredHere(string name) =>
-        _declScopes.Count > 0 && _declScopes.Peek().Contains(name);
+    /// <summary>One lexical scope of printed locals: source name to the name it prints as. A block
+    /// may shadow an outer local in this AST and not in C# (CS0136), so a declaration whose name an
+    /// enclosing scope already uses prints a deterministic suffix instead.</summary>
+    private sealed class LocalScope {
+        public Dictionary<string, string> Names { get; } = new(StringComparer.Ordinal);
+    }
 
-    private void MarkDeclared(string name) {
+    private bool DeclaredHere(string name) =>
+        _declScopes.Count > 0 && _declScopes.Peek().Names.ContainsKey(name);
+
+    private void MarkDeclared(string name) => MarkDeclared(name, name);
+
+    private void MarkDeclared(string name, string printed) {
         if (_declScopes.Count == 0)
-            _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
-        _declScopes.Peek().Add(name);
+            _declScopes.Push(new LocalScope());
+        _declScopes.Peek().Names[name] = printed;
+    }
+
+    /// <summary>Records a local's declaration in the current scope and returns the name it prints
+    /// as: the source name, or <c>name_2</c>, <c>name_3</c>… when an enclosing scope already uses
+    /// the name. The VM executes the shadowing, so the writer renames rather than refusing.</summary>
+    private string DeclareLocal(string name) {
+        var printed = name;
+        if (Visible(name)) {
+            var ordinal = 2;
+            while (Visible(name + "_" + ordinal))
+                ordinal++;
+            printed = name + "_" + ordinal;
+        }
+        MarkDeclared(name, printed);
+        return printed;
+    }
+
+    private bool Visible(string name) {
+        foreach (var scope in _declScopes) {
+            if (scope.Names.ContainsKey(name))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>The name a local prints as: the nearest declaring scope's mapping, or the source
+    /// name when no printed local declares it (a parameter, a field, an undeclared name).</summary>
+    private string LocalText(string name) {
+        foreach (var scope in _declScopes) {
+            if (scope.Names.TryGetValue(name, out var printed))
+                return printed;
+        }
+        return name;
     }
 
     // ── printer plumbing ─────────────────────────────────────────────────────
@@ -258,7 +303,7 @@ public sealed class CSharpWriter {
                 return;
             case Variable variable:
                 sb.Append(Pad(indent));
-                sb.AppendLine(Render("statement", "expr-stmt", EscapeIdent(variable.Name)));
+                sb.AppendLine(ExpressionStatementText(variable));
                 return;
             case Comment c:
                 sb.Append(Pad(indent));
@@ -266,9 +311,22 @@ public sealed class CSharpWriter {
                 return;
             default:
                 sb.Append(Pad(indent));
-                sb.AppendLine(Render("statement", "expr-stmt", Expr(node)));
+                sb.AppendLine(ExpressionStatementText(node));
                 return;
         }
+    }
+
+    /// <summary>An expression in statement position, where its value is discarded. A
+    /// statement-expression prints bare; any other value prints as a discard assignment, which
+    /// evaluates it even though C# has no statement form for it. A lambda is the exception: a
+    /// discard gives it no type to convert to, so it fails closed.</summary>
+    private string ExpressionStatementText(Node node) {
+        if (node is Lambda)
+            return Unprintable(node, "a lambda has no statement form; its value needs a consumer that gives it a type");
+        return Render("statement", "expr-stmt",
+            node is Assignment or Invoke or New or NewArray or Await or ThrowExpression
+                ? Expr(node)
+                : "_ = " + Expr(node));
     }
 
     private string StatementText(Node node, int indent) {
@@ -286,11 +344,12 @@ public sealed class CSharpWriter {
 
     private string BlockInner(Block block, int indent) {
         var inner = new StringBuilder();
-        _declScopes.Push(new HashSet<string>(StringComparer.Ordinal));
-        var fuse = new HashSet<Variable>(ReferenceEqualityComparer.Instance);
+        _declScopes.Push(new LocalScope());
+        var fused = new Dictionary<Variable, string>(ReferenceEqualityComparer.Instance);
         foreach (var v in block.Variables) {
             if (v is not Variable variable)
                 continue;
+            var printed = DeclareLocal(variable.Name);
             var assignIndex = -1;
             for (var i = 0; i < block.Nodes.Count; i++) {
                 if (block.Nodes[i] is Assignment a && ReferenceEquals(a.Destination, variable)) {
@@ -299,10 +358,10 @@ public sealed class CSharpWriter {
                 }
             }
             if (assignIndex >= 0 && !MentionsVariableBefore(block, variable, assignIndex))
-                fuse.Add(variable);
+                fused[variable] = printed;
             else {
                 inner.Append(Pad(indent + 1));
-                inner.AppendLine(DeclaredLocalText(variable, block));
+                inner.AppendLine(DeclaredLocalText(variable, block, printed));
             }
         }
         for (var i = 0; i < block.Nodes.Count; i++) {
@@ -311,12 +370,11 @@ public sealed class CSharpWriter {
                 continue;
             if (node is Assignment a
                 && a.Destination is Variable dest
-                && fuse.Remove(dest)
+                && fused.Remove(dest, out var printed)
                 && !MentionsVariableBefore(block, dest, i)) {
                 inner.Append(Pad(indent + 1));
-                inner.Append(RenderFills("statement", "var-decl", Names(("name", EscapeIdent(dest.Name))), Expr(a.Value)));
+                inner.Append(RenderFills("statement", "var-decl", Names(("name", EscapeIdent(printed))), Expr(a.Value)));
                 inner.AppendLine();
-                MarkDeclared(dest.Name);
                 continue;
             }
             WriteStatement(inner, node, indent + 1);
@@ -325,11 +383,8 @@ public sealed class CSharpWriter {
         return inner.ToString();
     }
 
-    private string DeclaredLocalText(Variable variable, Block block) {
-        var typeName = TypeNameForVariable(variable, block);
-        MarkDeclared(variable.Name);
-        return $"var {EscapeIdent(variable.Name)} = default({typeName});";
-    }
+    private string DeclaredLocalText(Variable variable, Block block, string printed) =>
+        $"var {EscapeIdent(printed)} = default({TypeNameForVariable(variable, block)});";
 
     private static bool MentionsVariableBefore(Block block, Variable variable, int exclusiveEnd) {
         for (var i = 0; i < exclusiveEnd; i++) {
@@ -435,9 +490,13 @@ public sealed class CSharpWriter {
             TypeCode.Decimal => "decimal",
             TypeCode.Char => "char",
             TypeCode.String => "string",
-            _ => type == typeof(object) ? "object" : type.Name,
+            _ => type == typeof(object) ? "object" : ClrTypeName(type),
         };
     }
+
+    /// <summary>A CLR type's own name with the reflection nesting separator written as the dot
+    /// C# requires: <c>Outer+Inner</c> is <c>Outer.Inner</c>.</summary>
+    private static string ClrTypeName(Type type) => (type.FullName ?? type.Name).Replace('+', '.');
 
     private string IfText(IfStatement ifStmt, int indent) {
         var body = _analysisResult is null || !_analysisResult.CanElide(ifStmt.ThenBranch)
@@ -470,52 +529,101 @@ public sealed class CSharpWriter {
             Expr(doWhile.Condition));
 
     private string ForText(ForLoop forLoop, int indent) {
-        // A declaration initializer (`for (var i = 0; …)`) owns a loop-local variable and
-        // prints through the for-init declaration pattern; a plain assignment initializer
-        // writes one declared in an enclosing scope and prints as an expression.
-        string? init;
-        if (forLoop.DeclaredVariables is { Count: > 0 } declared
-            && forLoop.Initializer is Assignment { Destination: Variable v } declaration
-            && declared.Any(d => ReferenceEquals(d, v))) {
-            init = RenderFills("for-init", "var-decl",
-                Names(("name", EscapeIdent(v.Name))), Expr(declaration.Value));
+        _declScopes.Push(new LocalScope());
+        try {
+            // A declaration initializer (`for (var i = 0; …)`) owns a loop-local variable and
+            // prints through the for-init declaration pattern; a plain assignment initializer
+            // writes one declared in an enclosing scope and prints as an expression.
+            string? init;
+            if (forLoop.DeclaredVariables is { Count: > 0 } declared
+                && forLoop.Initializer is Assignment { Destination: Variable v } declaration
+                && declared.Any(d => ReferenceEquals(d, v))) {
+                init = RenderFills("for-init", "var-decl",
+                    Names(("name", EscapeIdent(DeclareLocal(v.Name)))), Expr(declaration.Value));
+            }
+            else {
+                init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
+                    ? Expr(forLoop.Initializer) : null;
+            }
+            var condition = ForHeaderExpression(forLoop.Condition);
+            var increment = forLoop.Increment != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Increment))
+                ? ForHeaderExpression(forLoop.Increment) : null;
+            return RenderFills("statement", "for", Names(("semi1", "; "), ("semi2", "; ")),
+                init, condition, increment, BodyText(forLoop.Body, indent));
         }
-        else {
-            init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
-                ? Expr(forLoop.Initializer) : null;
+        finally {
+            _declScopes.Pop();
         }
-        var condition = forLoop.Condition != null ? Expr(forLoop.Condition) : null;
-        var increment = forLoop.Increment != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Increment))
-            ? Expr(forLoop.Increment) : null;
-        return RenderFills("statement", "for", Names(("semi1", "; "), ("semi2", "; ")),
-            init, condition, increment, BodyText(forLoop.Body, indent));
     }
 
-    private string ForEachText(ForEachLoop forEach, int indent) =>
-        RenderFills("statement", "foreach", Names(("name", EscapeIdent(forEach.LoopVariable.Name))),
-            forEach.DeclaredType is null
-                ? Render("foreach-decl", "var")
-                : Render("foreach-decl", "typed", TypeText(forEach.DeclaredType)),
-            Expr(forEach.Collection), BodyText(forEach.Body, indent));
+    /// <summary>Prints a <c>for</c> header expression. The condition and increment slots hold
+    /// expressions, so the statement-level rule that fuses an undeclared name into a <c>var</c>
+    /// declaration is off there — a declaration does not parse inside the header — and a
+    /// statement-shaped node, which has no expression form, rejects. The body prints under the
+    /// enclosing rule, unchanged.</summary>
+    private string? ForHeaderExpression(Node? node) {
+        if (node is null)
+            return null;
+        if (node is Statement or Block)
+            return Unprintable(node, "a for header slot holds one expression, and a statement or block has no expression form");
+        var fuseUndeclaredName = _fuseUndeclaredName;
+        _fuseUndeclaredName = false;
+        try {
+            return Expr(node);
+        }
+        finally {
+            _fuseUndeclaredName = fuseUndeclaredName;
+        }
+    }
+
+    private string ForEachText(ForEachLoop forEach, int indent) {
+        _declScopes.Push(new LocalScope());
+        try {
+            return RenderFills("statement", "foreach",
+                Names(("name", EscapeIdent(DeclareLocal(forEach.LoopVariable.Name)))),
+                forEach.DeclaredType is null
+                    ? Render("foreach-decl", "var")
+                    : Render("foreach-decl", "typed", TypeText(forEach.DeclaredType)),
+                Expr(forEach.Collection), BodyText(forEach.Body, indent));
+        }
+        finally {
+            _declScopes.Pop();
+        }
+    }
 
     private string SwitchText(SwitchStatement switchStmt, int indent) {
         var cases = new StringBuilder();
         foreach (var caseNode in switchStmt.Cases) {
             cases.Append('\n');
             cases.Append(Pad(indent + 1));
-            cases.Append(RenderFills("switch-case", "case", Names(("colon", ":")),
-                Expr(caseNode.Pattern), "\n" + StatementText(caseNode.Body, indent + 1)));
+            cases.Append(CaseText("case", "case-break", Expr(caseNode.Pattern), caseNode.Body, indent));
         }
         if (switchStmt.DefaultCase != null) {
             cases.Append('\n');
             cases.Append(Pad(indent + 1));
-            cases.Append(RenderFills("switch-case", "default", Names(("colon", ":")),
-                "\n" + StatementText(switchStmt.DefaultCase, indent + 1)));
+            cases.Append(CaseText("default", "default-break", null, switchStmt.DefaultCase, indent));
         }
         return RenderFills("statement", "switch",
             Names(("open", "\n" + Pad(indent) + "{"), ("close", "}")),
             Expr(switchStmt.Value), cases.Length == 0 ? null : cases + "\n" + Pad(indent));
     }
+
+    /// <summary>Prints a case, adding the terminating <c>break</c> the C# compiler requires
+    /// unless the body already leaves the switch.</summary>
+    private string CaseText(string pattern, string terminatingPattern, string? patternText, Node body, int indent) {
+        var terminates = Terminates(body);
+        var rule = terminates ? pattern : terminatingPattern;
+        var bodyText = "\n" + StatementText(body, indent + 1) + (terminates ? "" : "\n" + Pad(indent + 1));
+        return patternText is null
+            ? RenderFills("switch-case", rule, Names(("colon", ":")), bodyText)
+            : RenderFills("switch-case", rule, Names(("colon", ":")), patternText, bodyText);
+    }
+
+    private static bool Terminates(Node body) => body switch {
+        Return or ThrowStatement or BreakStatement or ContinueStatement or GotoStatement => true,
+        Block block => block.Nodes.Count > 0 && Terminates(block.Nodes[^1]),
+        _ => false,
+    };
 
     private string TryText(TryCatchFinally tryCatch, int indent) {
         var catches = new StringBuilder();
@@ -830,21 +938,32 @@ public sealed class CSharpWriter {
     // ── expressions ──────────────────────────────────────────────────────────
 
     private string Expr(Node node) {
+        if (!_insideUnchecked && IsConstantIntegral(node) && FoldCanOverflow(node)) {
+            _insideUnchecked = true;
+            try {
+                return "unchecked(" + Expr(node) + ")";
+            }
+            finally {
+                _insideUnchecked = false;
+            }
+        }
         switch (node) {
             case Constant constant:
                 return ConstantText(constant);
             case InterpolatedString interpolated:
                 return InterpolatedText(interpolated);
             case Variable variable:
-                return IdentText(variable.Name);
+                return IdentText(LocalText(variable.Name));
             case Parameter parameter:
-                return IdentText(parameter.Name);
+                return IdentText(LocalText(parameter.Name));
             case ThisReference:
                 return Render("expr-primary", "this");
             case TypeOf typeOf:
                 return Render("expr-primary", "typeof", TypeText(typeOf.Type));
             case ClrTypeReference clr when clr.RuntimeType.IsGenericType || clr.RuntimeType == typeof(object):
                 return ToCSharpTypeName(clr.RuntimeType);
+            case ClrTypeReference clr:
+                return EscapeTypeName(ClrTypeName(clr.RuntimeType));
             case TypeReference typeRef:
                 // Callee position stays raw: nameof(...) and string.Concat.
                 return typeRef.TypeName;
@@ -863,12 +982,9 @@ public sealed class CSharpWriter {
             case MapTypeReference map:
                 return "Dictionary<" + TypeText(map.KeyType) + ", " + TypeText(map.ValueType) + ">";
             case UnaryMinus minus:
-                return Render("expr-unary", "unary-minus", Expr(minus.Operand));
+                return Render("expr-unary", "unary-minus", PrefixOperandText(minus.Operand));
             case Not not:
-                var notNeedsParens = not.Value is not (Constant or Variable or Parameter or ThisReference
-                    or Member or IndexAccess or Invoke or New
-                    or TypeCast or TypeIs or TypeAs);
-                return Render("expr-unary", "not", notNeedsParens ? "(" + Expr(not.Value) + ")" : Expr(not.Value));
+                return Render("expr-unary", "not", PrefixOperandText(not.Value));
             case NullForgiving nf:
                 return Expr(nf.Operand) + Render("postfix-tail", "forgiving");
             case Default def:
@@ -912,9 +1028,9 @@ public sealed class CSharpWriter {
             case Or or:
                 return BinaryChain(or, "expr-or", "or", " || ");
             case Coalesce coalesce:
-                return BinaryChain(coalesce, "expr-coalesce", "coalesce", " ?? ");
+                return CoalesceText(coalesce);
             case BitwiseNot bitwiseNot:
-                return Render("expr-unary", "bitwise-not", Expr(bitwiseNot.Operand));
+                return Render("expr-unary", "bitwise-not", PrefixOperandText(bitwiseNot.Operand));
             case ThrowExpression throwExpression:
                 return Render("expr-conditional", "throw", " " + Expr(throwExpression.Value));
             case Conditional cond:
@@ -935,7 +1051,7 @@ public sealed class CSharpWriter {
                     ? RenderFills("type-args", "list", Names(("open", "<"), ("close", ">")),
                         string.Join(", ", invoke.TypeArguments.Select(TypeText)))
                     : "";
-                return Expr(invoke.Delegate) + typeArgs + Render("postfix-tail", "invoke", ArgsText(invoke.Arguments));
+                return InvokeCalleeText(invoke) + typeArgs + Render("postfix-tail", "invoke", ArgsText(invoke.Arguments));
             case New @new:
                 return Render("expr-primary", "new", TypeText(@new.Type), ArgsText(@new.Arguments));
             case TypeCast cast:
@@ -945,23 +1061,30 @@ public sealed class CSharpWriter {
                 if ((operand.StartsWith('-') || operand.StartsWith('+'))
                     && CastOfSignedOperandIsSubtraction(type))
                     operand = "(" + operand + ")";
+                // (Func<int>)(x => x + 1): without the brackets the cast takes `(x)`.
+                else if (cast.Operand is Lambda)
+                    operand = "(" + operand + ")";
                 return "(" + type + ")" + operand;
             case TypeIs typeIs:
                 return Expr(typeIs.Operand) + " is " + TypeText(typeIs.TargetTypeReference)
                     + (typeIs.VariableName != null ? " " + EscapeIdent(typeIs.VariableName) : "");
             case TypeAs typeAs:
-                return Expr(typeAs.Operand) + " as " + TypeText(typeAs.TargetTypeReference);
+                // `as` is a runtime try-cast in the VM; on a value-typed operand it only compiles
+                // once the value is boxed, and then yields null where the cast cannot succeed.
+                return BoxedOperandText(typeAs.Operand) + " as " + TypeText(typeAs.TargetTypeReference);
             case Lambda lambda:
                 return LambdaText(lambda);
             case Block block:
                 return BlockText(block, 0);
             case PopCount popCount:
-                return "System.Numerics.BitOperations.PopCount((ulong)" + Expr(popCount.Operand) + ")";
-            case StridedSetBits:
-                return "/* StridedSetBits */";
+                // Its only faithful spelling is the library call: the operand converted to the
+                // parameter type, on the fully-qualified type the VM binds.
+                return Expr(new Invoke(
+                    new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
+                    new TypeCast(popCount.Operand, new PrimitiveTypeReference(PrimitiveType.UInt64))));
             case NewArray newArray:
-                return "(" + TypeText(newArray.ElementType) + "[])(new " + TypeText(newArray.ElementType)
-                    + "[" + Expr(newArray.Length) + "])";
+                return RenderFills("expr-primary", "new-array", Names(("open", "["), ("close", "]")),
+                    TypeText(newArray.ElementType), Expr(newArray.Length));
             case SuspendNode suspend:
                 return Expr(suspend.Inner);
             case BaseConstructorInvocationNode baseCtor:
@@ -969,9 +1092,15 @@ public sealed class CSharpWriter {
             case Comment c:
                 return $"/* {c.Text} */";
             default:
-                return node.ToString() ?? "";
+                return Unprintable(node);
         }
     }
+
+    /// <summary>Fails closed for a kind with no faithful C# surface form: naming the kind and
+    /// its id beats printing the type name as source.</summary>
+    private static string Unprintable(Node node, string? reason = null) =>
+        throw new InvalidOperationException(
+            $"CSharpWriter rejected {node.GetType().Name} (NodeId {node.Id}): {reason ?? "no C# surface form"}.");
 
     private static string IdentText(string name) =>
         RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));
@@ -994,13 +1123,21 @@ public sealed class CSharpWriter {
     }
 
     private string LambdaText(Lambda lambda) {
-        var async = BodyContainsAwait(lambda.Body) ? Render("async-kw", "async") + " " : null;
-        if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null)
-            return RenderFills("expr-primary", "lambda-ident",
-                Names(("param", EscapeIdent(lambda.Parameters[0].Name))),
-                async, Expr(lambda.Body));
-        return Render("expr-primary", "lambda-parens",
-            async, string.Join(", ", lambda.Parameters.Select(ParamText)), Expr(lambda.Body));
+        _declScopes.Push(new LocalScope());
+        try {
+            foreach (var parameter in lambda.Parameters)
+                DeclareLocal(parameter.Name);
+            var async = BodyContainsAwait(lambda.Body) ? Render("async-kw", "async") + " " : null;
+            if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null)
+                return RenderFills("expr-primary", "lambda-ident",
+                    Names(("param", EscapeIdent(LocalText(lambda.Parameters[0].Name)))),
+                    async, Expr(lambda.Body));
+            return Render("expr-primary", "lambda-parens",
+                async, string.Join(", ", lambda.Parameters.Select(ParamText)), Expr(lambda.Body));
+        }
+        finally {
+            _declScopes.Pop();
+        }
     }
 
     private static bool BodyContainsAwait(Node node) {
@@ -1068,6 +1205,8 @@ public sealed class CSharpWriter {
     };
 
     private string BinaryOperand(Node node, string op, bool isRight) {
+        if (isRight && op.Trim() is "/" or "%" && NonConstantZeroDivisor(node) is { } zero)
+            return zero;
         if (node is Coalesce or Conditional)
             return "(" + Expr(node) + ")";
 
@@ -1082,6 +1221,127 @@ public sealed class CSharpWriter {
             || (sameRank && !isRight && trimmed is "??");
         return parenthesize ? "(" + Expr(node) + ")" : Expr(node);
     }
+
+    /// <summary>
+    /// A constant zero divisor prints as a zero the compiler cannot fold: `x / 0` is CS0020 at
+    /// compile time, while the VM divides at runtime and throws <see cref="DivideByZeroException"/>.
+    /// A floating-point zero is left alone — it divides to ±∞ on both sides.
+    /// </summary>
+    private static string? NonConstantZeroDivisor(Node divisor) =>
+        divisor switch {
+            Constant { Value: int i and 0 } => "System.Convert.ToInt32(0)",
+            Constant { Value: long l and 0 } => "System.Convert.ToInt64(0)",
+            Constant { Value: uint ui and 0 } => "System.Convert.ToUInt32(0)",
+            Constant { Value: ulong ul and 0 } => "System.Convert.ToUInt64(0)",
+            Constant { Value: short s and 0 } => "System.Convert.ToInt32(0)",
+            Constant { Value: ushort us and 0 } => "System.Convert.ToInt32(0)",
+            Constant { Value: byte b and 0 } => "System.Convert.ToInt32(0)",
+            Constant { Value: sbyte sb and 0 } => "System.Convert.ToInt32(0)",
+            Constant { Value: decimal m and 0 } => "System.Convert.ToDecimal(0)",
+            _ => null,
+        };
+
+    /// <summary>True when the node is arithmetic over nothing but integral constants — the shape
+    /// C# folds at compile time.</summary>
+    private static bool IsConstantIntegral(Node node) => node switch {
+        Add n => IsConstantIntegralOperand(n.LeftHandValue) && IsConstantIntegralOperand(n.RightHandValue),
+        Subtract n => IsConstantIntegralOperand(n.LeftHandValue) && IsConstantIntegralOperand(n.RightHandValue),
+        Multiply n => IsConstantIntegralOperand(n.LeftHandValue) && IsConstantIntegralOperand(n.RightHandValue),
+        Divide n => IsConstantIntegralOperand(n.LeftHandValue) && IsConstantIntegralOperand(n.RightHandValue),
+        Modulo n => IsConstantIntegralOperand(n.LeftHandValue) && IsConstantIntegralOperand(n.RightHandValue),
+        UnaryMinus n => IsConstantIntegralOperand(n.Operand),
+        _ => false,
+    };
+
+    /// <summary>True when that fold can overflow its operand type, which is what a checked context
+    /// refuses: <c>+</c>, <c>-</c> and <c>*</c> on integral constants. A negated literal cannot
+    /// overflow, and neither can <c>/</c> or <c>%</c> except at <c>MinValue / -1</c>, which still
+    /// fails loudly rather than silently.</summary>
+    private static bool FoldCanOverflow(Node node) => node is Add or Subtract or Multiply;
+
+    private static bool IsConstantIntegralOperand(Node node) =>
+        node is Constant { Value: int or long or uint or ulong or short or ushort or byte or sbyte }
+        || IsConstantIntegral(node);
+
+    /// <summary>
+    /// A prefix operator binds looser than anything but a primary: `-(a + b)` is not `-a + b`,
+    /// and the negation of a negative literal is `- -99`, not the `--` decrement.
+    /// </summary>
+    private string PrefixOperandText(Node operand) {
+        var text = Expr(operand);
+        return BindsTighterThanAPrefix(operand) && !text.StartsWith('-') && !text.StartsWith('+')
+            ? text
+            : "(" + text + ")";
+    }
+
+    private static bool BindsTighterThanAPrefix(Node node) => node is
+        Constant or Variable or Parameter or ThisReference or Member or IndexAccess or Invoke
+        or New or TypeCast or TypeIs or TypeAs or Await or NullForgiving or Default
+        or UnaryMinus or Not or BitwiseNot;
+
+    /// <summary>A callee that is not a primary expression needs brackets, and a lambda needs more:
+    /// a lambda has no type until something gives it one, so it prints as a cast to the delegate
+    /// type its parameters and resolved result describe.</summary>
+    private string InvokeCalleeText(Invoke invoke) => invoke.Delegate is Lambda lambda
+        ? LambdaCalleeText(lambda, invoke)
+        : CalleeText(invoke.Delegate);
+
+    private string LambdaCalleeText(Lambda lambda, Invoke invoke) {
+        var arguments = new List<string>();
+        foreach (var parameter in lambda.Parameters) {
+            if (parameter.TypeReference is null)
+                return Unprintable(lambda,
+                    "a lambda used as a callee needs a delegate type to cast to, and this one has an untyped parameter");
+            arguments.Add(TypeText(parameter.TypeReference));
+        }
+        if (_analysisResult?.GetResolvedType(invoke)?.GetRuntimeType() is not { } result)
+            return Unprintable(lambda,
+                "a lambda used as a callee needs a delegate type to cast to, and its result type did not resolve");
+        var @void = result == typeof(void);
+        if (!@void)
+            arguments.Add(ToCSharpTypeName(result));
+        var name = @void ? "System.Action" : "System.Func";
+        var delegateType = arguments.Count == 0 ? name : name + "<" + string.Join(", ", arguments) + ">";
+        return "((" + delegateType + ")(" + Expr(lambda) + "))";
+    }
+
+    /// <summary>A callee that is not a primary expression needs brackets: <c>(f ?? g)(1)</c> is not
+    /// <c>f ?? g(1)</c>.</summary>
+    private string CalleeText(Node node) => node switch {
+        Coalesce or Assignment or TypeCast or TypeAs => "(" + Expr(node) + ")",
+        _ => Expr(node),
+    };
+
+    /// <summary>
+    /// <c>??</c> needs a nullable left operand. The VM's coalesce is a null test on whatever the
+    /// left holds, so a non-nullable value type — or an untyped <c>null</c> whose right operand is
+    /// one — prints through that type's nullable form.
+    /// </summary>
+    private string CoalesceText(Coalesce coalesce) {
+        var left = Expr(coalesce.LeftHandValue);
+        if (left is "null" && NullableTypeName(RuntimeTypeOf(coalesce.RightHandValue)) is { } rightNullable)
+            left = $"({rightNullable})null";
+        else if (NullableTypeName(RuntimeTypeOf(coalesce.LeftHandValue)) is { } nullable)
+            left = $"({nullable}){left}";
+        return Render("expr-coalesce", "coalesce",
+            left + " ?? " + BinaryOperand(coalesce.RightHandValue, " ?? ", isRight: true), null);
+    }
+
+    /// <summary>A value-typed operand of <c>as</c> prints boxed: the VM's is a runtime try-cast,
+    /// and `42 as string` is CS0039 while `(object)42 as string` yields null.</summary>
+    private string BoxedOperandText(Node operand) =>
+        RuntimeTypeOf(operand) is { IsValueType: true } ? "(object)" + Expr(operand) : Expr(operand);
+
+    /// <summary>The nullable spelling of a non-nullable value type; null when the type already
+    /// accepts <c>??</c> and <c>as</c> as it stands.</summary>
+    private static string? NullableTypeName(Type? type) =>
+        type is { IsValueType: true } && Nullable.GetUnderlyingType(type) is null
+            ? ToCSharpTypeName(type) + "?"
+            : null;
+
+    private Type? RuntimeTypeOf(Node node) =>
+        _analysisResult?.GetResolvedType(node)?.GetRuntimeType()
+        ?? (node is Constant { Value: { } value } ? value.GetType() : null);
 
     private static int BinaryNodePrecedence(Node node) => node switch {
         Multiply or Divide or Modulo => 9,
@@ -1123,18 +1383,94 @@ public sealed class CSharpWriter {
             return RenderFills("expr-primary", "string", Names(("value", StringLiteral(s))));
         if (constant.Value is char c)
             return RenderFills("expr-primary", "char", Names(("value", CharLiteral(c))));
-        return NumberLiteral(constant.Value);
+        return LiteralText(constant.Value)
+            ?? Unprintable(constant, $"a {constant.Value.GetType().Name} constant has no faithful C# literal");
     }
 
-    private static string NumberLiteral(object value) => value switch {
-        float f => f.ToString("G", CultureInfo.InvariantCulture) + "f",
-        double d => d.ToString("G", CultureInfo.InvariantCulture),
-        decimal m => m.ToString("G", CultureInfo.InvariantCulture) + "m",
-        long l => l.ToString(CultureInfo.InvariantCulture) + "L",
-        uint ui => ui.ToString(CultureInfo.InvariantCulture) + "u",
+    /// <summary>
+    /// <c>long.MinValue</c> prints in its qualified form. The digits-plus-suffix spelling is a
+    /// negated <em>positive</em> literal, and it does not re-read: <c>9223372036854775808</c> is
+    /// outside a <c>long</c>, so the reader overflows on the text the writer just produced.
+    /// </summary>
+    private static string LongLiteral(long value) =>
+        value == long.MinValue
+            ? "long.MinValue"
+            : value.ToString(CultureInfo.InvariantCulture) + "L";
+
+    /// <summary>
+    /// A constant's C# literal, or null when the value has no faithful one — the writer refuses
+    /// rather than printing <c>ToString()</c>, which is source only by accident.
+    /// </summary>
+    private static string? LiteralText(object value) => value switch {
+        float f => FloatLiteral(f),
+        double d => DoubleLiteral(d),
+        decimal m => m.ToString(CultureInfo.InvariantCulture) + "m",
+        long l => LongLiteral(l),
         ulong ul => ul.ToString(CultureInfo.InvariantCulture) + "UL",
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "null",
+        uint ui => ui.ToString(CultureInfo.InvariantCulture) + "u",
+        int or short or sbyte or byte or ushort => Convert.ToString(value, CultureInfo.InvariantCulture),
+        DateTime dateTime => DateTimeLiteral(dateTime),
+        Array array => ArrayLiteral(array),
+        System.Collections.IList list => CollectionLiteral(value.GetType(), list),
+        _ => null,
     };
+
+    /// <summary>
+    /// A whole-valued <c>double</c> prints with its decimal point: <c>7</c> would re-read as an
+    /// <c>int</c>, which turns division into integer division and silently changes the answer.
+    /// The digits come from the round-trip format, so the literal re-reads as the same value.
+    /// </summary>
+    private static string DoubleLiteral(double value) {
+        if (double.IsNaN(value))
+            return "double.NaN";
+        if (double.IsPositiveInfinity(value))
+            return "double.PositiveInfinity";
+        if (double.IsNegativeInfinity(value))
+            return "double.NegativeInfinity";
+        var text = value.ToString("R", CultureInfo.InvariantCulture);
+        return text.AsSpan().IndexOfAny('.', 'E', 'e') >= 0 ? text : text + ".0";
+    }
+
+    private static string FloatLiteral(float value) {
+        if (float.IsNaN(value))
+            return "float.NaN";
+        if (float.IsPositiveInfinity(value))
+            return "float.PositiveInfinity";
+        if (float.IsNegativeInfinity(value))
+            return "float.NegativeInfinity";
+        return value.ToString("R", CultureInfo.InvariantCulture) + "f";
+    }
+
+    private static string DateTimeLiteral(DateTime value) =>
+        $"new System.DateTime({value.Ticks.ToString(CultureInfo.InvariantCulture)}L, System.DateTimeKind.{value.Kind})";
+
+    private static string? ArrayLiteral(Array array) {
+        if (array.Rank != 1 || array.GetType().GetElementType() is not { } element)
+            return null;
+        return Elements(array) is { } items
+            ? $"new {ToCSharpTypeName(element)}[] {{ {items} }}"
+            : null;
+    }
+
+    private static string? CollectionLiteral(Type type, System.Collections.IList items) =>
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)
+        && Elements(items) is { } elements
+            ? $"new {ToCSharpTypeName(type)} {{ {elements} }}"
+            : null;
+
+    private static string? Elements(System.Collections.IEnumerable items) {
+        var printed = new List<string>();
+        foreach (var item in items) {
+            if (item is null) {
+                printed.Add("null");
+                continue;
+            }
+            if (LiteralText(item) is not { } text)
+                return null;
+            printed.Add(text);
+        }
+        return string.Join(", ", printed);
+    }
 
     private static string StringLiteral(string value) {
         var sb = new StringBuilder("\"");
@@ -1204,6 +1540,7 @@ public sealed class CSharpWriter {
     private string TypeText(Node type) => type switch {
         PrimitiveTypeReference p => p.PrimitiveId.GetCSharpKeyword() + (p.IsNullable ? "?" : ""),
         ClrTypeReference c when c.RuntimeType.IsGenericType || c.RuntimeType == typeof(object) => ToCSharpTypeName(c.RuntimeType),
+        ClrTypeReference c => EscapeTypeName(ClrTypeName(c.RuntimeType)),
         TypeDefinitionReference t => EscapeTypeName(t.TypeName),
         TypeReference t => EscapeTypeName(t.TypeName),
         NamedTypeReference n => EscapeTypeName(n.FullName) + (n.TypeArguments is { Count: > 0 }
@@ -1228,7 +1565,7 @@ public sealed class CSharpWriter {
 
     private string ParamText(Parameter param) =>
         (param.TypeReference != null ? TypeText(param.TypeReference) + " " : "")
-        + EscapeIdent(param.Name)
+        + EscapeIdent(LocalText(param.Name))
         + (param.DefaultValue != null ? " = " + Expr(param.DefaultValue) : "");
 
     private string ArgsText(IReadOnlyList<Node> arguments) =>

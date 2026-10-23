@@ -145,9 +145,10 @@ public class ResolvedTypeVmTests {
         await Assert.That(exec.GetValue<string>()).IsEqualTo("p");
     }
 
-    private static TypeDefinitionNodeAnalyzer Analyze(TypeDefinitionNode typeNode) {
+    private static ITypeDefinitionProvider Analyze(TypeDefinitionNode typeNode) {
         var tda = new TypeDefinitionNodeAnalyzer();
-        tda.Analyze(AnalysisContext.CreateDefault(), typeNode);
-        return tda;
+        var ctx = AnalysisContext.CreateDefault();
+        tda.Analyze(ctx, typeNode);
+        return ctx.TypeDefinitions;
     }
 }

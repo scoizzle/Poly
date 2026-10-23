@@ -392,7 +392,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Open max caps at the CLR type bound (long.MaxValue as double), never 0.
-        await Assert.That(prog).Contains("[Range(0, 9.223372036854776E+18)]");
+        await Assert.That(prog).Contains("[Range(0.0, 9.223372036854776E+18)]");
         await Assert.That(prog).DoesNotContain("[Range(0, 0)]");
     }
 

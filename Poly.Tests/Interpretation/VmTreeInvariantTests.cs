@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 
 using Poly.Ast.Nodes;
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Tests.TestHelpers;
@@ -81,5 +82,97 @@ public class VmTreeInvariantTests {
         var scan = VmTree.Read(Block(new ParameterExpression[] { slots }, ArrayIndex(slots, Constant(3))));
 
         await Assert.That(scan.AbsoluteSlotAccesses.Count).IsEqualTo(1);
+    }
+
+    /// <summary>Every <c>CompileNodeInner</c> arm leaves its result at <c>RingDepth - 1</c>.
+    /// A statement arm leaves <c>0L</c> there, so a consumer reads the result slot without
+    /// first asking what kind of node produced it.
+    /// <para>The check is structural — it reads the emitted tree, not the emit-time cursor —
+    /// because a slot the emitter reserves and never writes reads whatever the previous
+    /// statement left there, and the cursor cannot tell the two apart. It runs over the
+    /// parity corpus (real programs) and over one program per statement arm, whose root is
+    /// that arm. An arm that forgets shows up as a program with no ring result, and a
+    /// reserve-without-write shows up as a slot nothing assigns.</para>
+    /// </summary>
+    [Test, Timeout(120_000)]
+    public async Task EveryCompileNodeArm_LeavesItsResultInTheRing(CancellationToken ct) {
+        var problems = new List<string>();
+        foreach (var (label, program) in ArmCases) {
+            var analysis = Interpreter.Analyze(program);
+            // A folded or rewritten case would check the replacement's arm, not this one.
+            if (analysis.GetNodeReplacement(program) is { } replaced && !ReferenceEquals(replaced, program)) {
+                problems.Add(
+                    $"{label}: analysis replaced the node with {replaced.GetType().Name}, "
+                    + "so the case does not exercise its arm");
+                continue;
+            }
+            if (TryBuild(program, analysis) is { } built)
+                problems.AddRange(CheckRingResult(label, built));
+        }
+        foreach (var (label, program) in AstParityTests.Corpus()
+            .Select(corpusCase => (corpusCase.Label, corpusCase.Program))) {
+            if (TryBuild(program, Interpreter.Analyze(program)) is { } built)
+                problems.AddRange(CheckRingResult(label, built));
+        }
+
+        await Assert.That(problems).IsEmpty()
+            .Because(string.Join(Environment.NewLine, problems));
+    }
+
+    /// <summary>The emitted program, or null when compiling it is a recorded rejection:
+    /// there is no body to scan.</summary>
+    private static AbiEmitter.BuiltVmProgram? TryBuild(Node program, AnalysisResult analysis) {
+        try {
+            return AbiEmitter.Build(program, analysis, CompilationMode.NoDebug);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException) {
+            return null;
+        }
+    }
+
+    /// <summary>One program per statement arm, each the root of its own program: a statement
+    /// that was never the root of anything would otherwise go unchecked.</summary>
+    private static IEnumerable<(string Label, Node Program)> ArmCases {
+        get {
+            var item = new Variable("item");
+            yield return ("IfStatement", new IfStatement(
+                new New(TypeReference.To<AstParityTests.ParityWidget>()), new Constant(2L)));
+            yield return ("WhileLoop", new WhileLoop(new Constant(false), new Constant(1L)));
+            yield return ("DoWhileLoop", new DoWhileLoop(new Constant(1L), new Constant(false)));
+            yield return ("ForLoop", new ForLoop(null, new Constant(false), null, new Constant(1L)));
+            yield return ("ForEachLoop",
+                new ForEachLoop(item, new Constant(new[] { 1, 2 }), new Assignment(item, item)));
+            yield return ("Return_WithValue", new Return(new Constant(7L)));
+            yield return ("Return_Void", new Return());
+            yield return ("BreakStatement",
+                new WhileLoop(new Constant(true), new Block([new BreakStatement()])));
+            yield return ("ContinueStatement",
+                new WhileLoop(new Constant(false), new Block([new ContinueStatement()])));
+            yield return ("GotoStatement",
+                new Block([new LabelDeclaration("end", new Constant(1L)), new GotoStatement("end")]));
+            yield return ("LabelDeclaration", new LabelDeclaration("start", new Constant(1L)));
+            yield return ("ThrowStatement",
+                new ThrowStatement(new New(TypeReference.To<InvalidOperationException>())));
+            yield return ("TryCatchFinally",
+                new TryCatchFinally(new Constant(1L), null, new Constant(2L)));
+            yield return ("UsingStatement",
+                new UsingStatement(new New(TypeReference.To<MemoryStream>()), new Constant(1L)));
+            yield return ("SuspendNode", new SuspendNode(new Constant(1L)));
+        }
+    }
+
+    /// <summary>What the arm left behind in the emitted body: a result slot, a write to it,
+    /// and a write to every other slot the body declares.</summary>
+    private static IEnumerable<string> CheckRingResult(string label, AbiEmitter.BuiltVmProgram built) {
+        var scan = VmTree.Read(built.Expression);
+        var written = scan.AssignedRingIndexes.ToHashSet();
+        if (built.RootResult is not SlotLocation.Ring result) {
+            yield return $"{label}: the arm left no ring result";
+            yield break;
+        }
+        if (!written.Contains(result.Slot))
+            yield return $"{label}: _r{result.Slot} is the result slot and nothing writes it";
+        foreach (var slot in scan.RingIndexes.Where(index => !written.Contains(index)))
+            yield return $"{label}: _r{slot} is declared but never written";
     }
 }

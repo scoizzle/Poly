@@ -9,21 +9,6 @@ namespace Poly.Interpretation.Analysis.ControlFlow;
 public sealed record ControlFlowMetadata(ControlFlowGraph Graph) : IAnalysisMetadata;
 
 /// <summary>
-/// Indicates that a loop is statically known to be infinite (non-terminating)
-/// under the conditions detected by side-effect/purity analysis (pure condition
-/// with no mutation to its variables in body/iteration).
-/// HasObservableEffects distinguishes pure-infinite (can treat as no-op hang in some elision contexts)
-/// from effectful-infinite (must preserve for side effects).
-/// </summary>
-public sealed record InfiniteLoopMetadata(bool IsInfinite, bool HasObservableEffects = true) : IAnalysisMetadata;
-
-/// <summary>
-/// Indicates a node (typically a statement or branch) that must execute on every path
-/// (post-dominates entry or loop header). Useful for guaranteed side-effects.
-/// </summary>
-public sealed record MustExecuteMetadata(bool MustExecute) : IAnalysisMetadata;
-
-/// <summary>
 /// Builds a control flow graph from an AST and performs reachability analysis.
 /// </summary>
 public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
@@ -66,10 +51,8 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         // Tag dead/unreachable nodes with Elidable
         foreach (var deadNode in state.Cfg.DeadCode) {
-            context.SetMetadata(deadNode, ElidableFlyweight);
+            ElisionFacts.Mark(context, deadNode, ElisionReason.Unreachable);
         }
-
-        ComputeMustExecuteFacts(context, state.Cfg);
 
         // Store CFG as metadata on root node
         context.SetMetadata(node, new ControlFlowMetadata(state.Cfg));
@@ -299,8 +282,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
         else if (isInfinite) {
             conditionBlock.AddSuccessor(bodyBlock);
-            bool hasEffects = !IsPure(context, whileLoop.Body);
-            context.SetMetadata(whileLoop, hasEffects ? EffectfulInfiniteFlyweight : PureInfiniteFlyweight);
             context.ReportDiagnostic(whileLoop, DiagnosticSeverity.Information,
                 "Infinite loop detected", "CF0003");
         }
@@ -346,8 +327,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             conditionBlock.AddSuccessor(exitBlock);
         }
         if (IsStaticallyInfinite(doWhileLoop, context)) {
-            bool hasEffects = !IsPure(context, doWhileLoop.Body);
-            context.SetMetadata(doWhileLoop, hasEffects ? EffectfulInfiniteFlyweight : PureInfiniteFlyweight);
             context.ReportDiagnostic(doWhileLoop, DiagnosticSeverity.Information, "Infinite loop detected", "CF0003");
         }
 
@@ -382,8 +361,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             MarkSubtreeElidable(context, forLoop.Body, "CF0006", "For body is unreachable because condition is constantly false");
         }
         else if (isInfinite) {
-            bool hasEffects = !IsPure(context, forLoop.Body) || (forLoop.Initializer != null && !IsPure(context, forLoop.Initializer)) || (forLoop.Increment != null && !IsPure(context, forLoop.Increment));
-            context.SetMetadata(forLoop, hasEffects ? EffectfulInfiniteFlyweight : PureInfiniteFlyweight);
             context.ReportDiagnostic(forLoop, DiagnosticSeverity.Information, "Infinite loop detected", "CF0003");
         }
         else {
@@ -492,19 +469,9 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private static bool ContainsThrow(AnalysisContext context, Node node) {
+    private bool ContainsThrow(AnalysisContext context, Node node) {
         if (node is ThrowStatement) return true;
-        return AnyChild(context, node, static (ctx, ch) => ch is ThrowStatement);
-    }
-
-    private static bool AnyChild(AnalysisContext context, Node node, Func<AnalysisContext, Node, bool> predicate) {
-        foreach (var child in node.Children) {
-            if (child is null)
-                continue;
-            if (predicate(context, child!))
-                return true;
-        }
-        return false;
+        return this.AnyChild<ControlFlowMetadata>(context, node, static (_, ch) => ch is ThrowStatement);
     }
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
@@ -516,7 +483,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         state.LoopContexts.Push((Continue: switchBlock, Break: exitBlock));
 
-        object? switchConst = IsPure(context, switchStmt.Value) ? GetConstValue(context, switchStmt.Value) : null;
+        object? switchConst = context.HasSideEffects(switchStmt.Value) ? null : GetConstValue(context, switchStmt.Value);
         bool hasConstValue = switchConst != null;
         bool sawExactMatch = false;
 
@@ -569,14 +536,14 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     // --- Infinite loop / termination helpers (migrated from SideEffectAnalyzer) ---
     // These use purity facts (HasSideEffects) from prior passes (e.g. SideEffectAnalysis)
     // and simple mutation checks. They enable precise CFG (no impossible exit edges)
-    // and InfiniteLoopMetadata for consumers (elision, diagnostics, etc.).
+    // and the CF0003 diagnostic.
 
     private bool IsStaticallyInfinite(WhileLoop loop, AnalysisContext context) {
         if (loop.Condition == null) return false;
         var condVars = CollectVariables(context, loop.Condition);
-        bool condPure = IsPure(context, loop.Condition);
+        bool condPure = !context.HasSideEffects(loop.Condition);
         bool mutates = HasMutationToVars(context, loop.Body, condVars);
-        if (condPure && !mutates && TryGetConstBool(context, loop.Condition, out bool v)) {
+        if (condPure && !mutates && GetConstBool(context, loop.Condition) is { } v) {
             return v;
         }
         return false;
@@ -585,9 +552,9 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     private bool IsStaticallyInfinite(DoWhileLoop loop, AnalysisContext context) {
         if (loop.Condition == null) return false;
         var condVars = CollectVariables(context, loop.Condition);
-        bool condPure = IsPure(context, loop.Condition);
+        bool condPure = !context.HasSideEffects(loop.Condition);
         bool mutates = HasMutationToVars(context, loop.Body, condVars);
-        if (condPure && !mutates && TryGetConstBool(context, loop.Condition, out bool v)) {
+        if (condPure && !mutates && GetConstBool(context, loop.Condition) is { } v) {
             return v;
         }
         return false;
@@ -600,12 +567,12 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
             return true;
         }
         var condVars = CollectVariables(context, loop.Condition);
-        bool condPure = IsPure(context, loop.Condition);
+        bool condPure = !context.HasSideEffects(loop.Condition);
         bool mutates = HasMutationToVars(context, loop.Body, condVars);
         if (loop.Increment != null) {
             mutates |= HasMutationToVars(context, loop.Increment, condVars);
         }
-        if (condPure && !mutates && TryGetConstBool(context, loop.Condition, out bool v)) {
+        if (condPure && !mutates && GetConstBool(context, loop.Condition) is { } v) {
             return v;
         }
         return false;
@@ -641,7 +608,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         if (node is Assignment a3 && a3.Destination is IndexAccess) {
             return true;
         }
-        if (node is Invoke inv && !IsPure(context, inv)) {
+        if (node is Invoke inv && context.HasSideEffects(inv)) {
             return true; // non-pure call can mutate state (closures, ref params, globals, reference objects) including cond vars
         }
         if (node is SuspendNode) {
@@ -652,16 +619,11 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
                 return true; // volatile access has un-knowable impact
             }
         }
-        // Use AnyChild for "does any descendant mutate" -- fused walk per the AggregateChildren recommendation.
         return this.AnyChild<ControlFlowMetadata>(context, node, (ctx, ch) =>
             (ch is Assignment aa && ((aa.Destination is Variable vv && vars.Contains(vv.Name)) || (aa.Destination is Member mma && !HasCompileTimeConst(ctx, mma)) || aa.Destination is IndexAccess))
-            || (ch is Invoke invv && !IsPure(ctx, invv))
+            || (ch is Invoke invv && ctx.HasSideEffects(invv))
             || ch is SuspendNode
             || (ch is Member mm && HasVolatileAccess(ctx, mm)));
-    }
-
-    private static bool IsConstantTrue(Node? node) {
-        return node is Constant c && c.Value is bool b && b;
     }
 
     private static bool HasVolatileAccess(AnalysisContext context, Member m) {
@@ -672,50 +634,27 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         return context.GetResolvedMember(m)?.Mutability.HasFlag(Mutability.CompileTimeConst) == true;
     }
 
-    private static readonly ElisionMetadata ElidableFlyweight = new(true);
-    private static readonly MustExecuteMetadata MustExecuteFlyweight = new(true);
-    private static readonly InfiniteLoopMetadata PureInfiniteFlyweight = new(true, false);
-    private static readonly InfiniteLoopMetadata EffectfulInfiniteFlyweight = new(true, true);
-
-    private static bool IsPure(AnalysisContext ctx, Node? n) {
-        if (n == null) return true;
-        return ctx.GetMetadata<SideEffectMetadata>(n)?.Kind == SideEffectKind.Pure;
-    }
-
-    private static bool TryGetConstBool(AnalysisContext ctx, Node? n, out bool value) {
-        value = false;
-        if (n == null) return false;
-        if (n is Constant c && c.Value is bool b) {
-            value = b;
-            return true;
-        }
-        var folded = ctx.GetMetadata<ConstantValueMetadata>(n);
-        if (folded?.Value is bool fb) {
-            value = fb;
-            return true;
-        }
-        return false;
-    }
-
-    private static object? GetConstValue(AnalysisContext ctx, Node? n) {
+    /// <summary>The node's constant value, or <c>null</c> when it is not known: a
+    /// <see cref="Constant"/> literal or what constant folding published for the node.</summary>
+    internal static object? GetConstValue(INodeMetadataProvider provider, Node? n) {
         if (n == null) return null;
         if (n is Constant c) return c.Value;
-        var folded = ctx.GetMetadata<ConstantValueMetadata>(n);
-        return folded?.Value;
+        return provider.GetMetadata<ConstantValueMetadata>(n)?.Value;
     }
 
-    private static bool IsStaticallyConstantTrue(AnalysisContext ctx, Node? cond) {
-        if (!IsPure(ctx, cond)) return false;
-        return TryGetConstBool(ctx, cond, out bool v) && v;
-    }
+    /// <summary>The node's constant boolean value, or <c>null</c> when it is not known.
+    /// Unknown is never <c>false</c>: every consumer distinguishes the two.</summary>
+    internal static bool? GetConstBool(INodeMetadataProvider provider, Node? n) =>
+        GetConstValue(provider, n) as bool?;
 
-    private static bool IsStaticallyConstantFalse(AnalysisContext ctx, Node? cond) {
-        if (!IsPure(ctx, cond)) return false;
-        return TryGetConstBool(ctx, cond, out bool v) && !v;
-    }
+    private static bool IsStaticallyConstantTrue(AnalysisContext ctx, Node? cond) =>
+        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
+
+    private static bool IsStaticallyConstantFalse(AnalysisContext ctx, Node? cond) =>
+        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
 
     private static void MarkElidable(AnalysisContext ctx, Node node, string code, string message) {
-        ctx.SetMetadata(node, ElidableFlyweight);
+        ElisionFacts.Mark(ctx, node, ElisionReason.Unreachable);
         ctx.ReportInformation(node, message, code);
     }
 
@@ -773,35 +712,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         return false;
     }
-
-    /// <summary>
-    /// Lightweight post-dominance / must-execute computation.
-    /// Marks nodes that are guaranteed to run on all paths from entry (straight-line prefixes,
-    /// finally blocks in some cases, etc.). Consumer: tests + future guaranteed-effect insight.
-    /// </summary>
-    private static void ComputeMustExecuteFacts(AnalysisContext context, ControlFlowGraph cfg) {
-        if (cfg.Blocks.Count == 0) return;
-        // Simple: entry block statements before any branch are must-execute.
-        var entry = cfg.Entry;
-        bool sawBranch = false;
-        foreach (var stmt in entry.Statements) {
-            if (!sawBranch) {
-                context.SetMetadata(stmt, MustExecuteFlyweight);
-            }
-            // rough: if stmt is If/Loop/Switch/Try it introduces choice, subsequent in entry not must
-            if (stmt is IfStatement or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop or SwitchStatement or TryCatchFinally) {
-                sawBranch = true;
-            }
-        }
-        // Finally blocks are typically must-execute if the try region is entered.
-        // For simplicity, mark statements in finally blocks as must (if the finally block itself is reachable).
-        foreach (var block in cfg.Blocks) {
-            if (!block.IsReachable) continue;
-            // Heuristic: if block has only finally-like (no good signal), or we can look for Try in predecessors.
-            // For now, if a block is successor of a try and is the finally path, mark its stmts.
-            // (Leave simple; full post-dom would be future if needed.)
-        }
-    }
 }
 
 public static class ControlFlowAnalysisExtensions {
@@ -823,23 +733,6 @@ public static class ControlFlowAnalysisExtensions {
         public ControlFlowGraph? GetControlFlowGraph(Node rootNode) {
             var metadata = context.GetMetadata<ControlFlowMetadata>(rootNode);
             return metadata?.Graph;
-        }
-
-        /// <summary>
-        /// Returns whether the given loop node is statically infinite (non-terminating).
-        /// </summary>
-        public bool IsInfiniteLoop(Node? loopNode) {
-            if (loopNode == null) return false;
-            var meta = context.GetMetadata<InfiniteLoopMetadata>(loopNode);
-            return meta?.IsInfinite ?? false;
-        }
-
-        /// <summary>
-        /// Returns whether a node is known to always execute (must-execute / post-dominates entry on all paths).
-        /// </summary>
-        public bool IsMustExecute(Node? node) {
-            if (node == null) return false;
-            return context.GetMetadata<MustExecuteMetadata>(node)?.MustExecute ?? false;
         }
     }
 }

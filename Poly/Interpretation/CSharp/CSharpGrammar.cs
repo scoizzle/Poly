@@ -354,7 +354,11 @@ public static class CSharpGrammar {
         b.Define("for-incr")
             .Pattern("incr").Ref("expr").Commit();
         b.Define("switch-case")
+            .Pattern("case-break").Kind(CSharpTokenKind.KwCase).Ref("expr").Value(CSharpTokenKind.Colon, "colon")
+                .Ref("statement").Kind(CSharpTokenKind.KwBreak).Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("case").Kind(CSharpTokenKind.KwCase).Ref("expr").Value(CSharpTokenKind.Colon, "colon").Ref("statement").Commit()
+            .Pattern("default-break").Kind(CSharpTokenKind.KwDefault).Value(CSharpTokenKind.Colon, "colon")
+                .Ref("statement").Kind(CSharpTokenKind.KwBreak).Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("default").Kind(CSharpTokenKind.KwDefault).Value(CSharpTokenKind.Colon, "colon").Ref("statement").Commit();
         b.Define("catch")
             .Pattern("catch").Kind(CSharpTokenKind.KwCatch).Kind(CSharpTokenKind.LParen).Optional(R("catch-decl")).Kind(CSharpTokenKind.RParen).Ref("block").Commit();

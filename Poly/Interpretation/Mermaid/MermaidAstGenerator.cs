@@ -60,7 +60,7 @@ public sealed class MermaidAstGenerator {
         foreach (var paramNode in parameterNodes) {
             var nodeId = GetNodeId(paramNode);
             var shape = GetNodeShape(paramNode);
-            AppendNodeDefinition(paramNode, nodeId, shape);
+            AppendNodeDefinition(paramNode, nodeId, shape, LabelFor(FactFor(paramNode)));
 
             // Add styling annotations if analysis result is available
             if (_analysisResult != null) {
@@ -97,12 +97,12 @@ public sealed class MermaidAstGenerator {
     }
 
     private string GenerateNode(Node node) {
+        var fact = FactFor(node);
         var nodeId = GetNodeId(node);
 
         // Skip definition for Parameter nodes as they were already defined at the beginning
         if (!(node is Parameter)) {
-            var shape = GetNodeShape(node);
-            AppendNodeDefinition(node, nodeId, shape);
+            AppendNodeDefinition(node, nodeId, GetNodeShape(node), LabelFor(fact));
 
             // Add styling annotations if analysis result is available
             if (_analysisResult != null) {
@@ -110,27 +110,30 @@ public sealed class MermaidAstGenerator {
             }
         }
 
-        // Process children
         foreach (var (child, edgeLabel) in GetChildren(node)) {
-            var childId = GenerateNode(child);
-            var edgeKey = $"{nodeId}->{childId}";
-
-            if (!_visitedEdges.Contains(edgeKey)) {
-                _visitedEdges.Add(edgeKey);
-
-                if (!string.IsNullOrEmpty(edgeLabel)) {
-                    _output.AppendLine($"    {nodeId} -->|{edgeLabel}| {childId}");
-                }
-                else {
-                    _output.AppendLine($"    {nodeId} --> {childId}");
-                }
-            }
+            AppendEdge(nodeId, GenerateNode(child), edgeLabel);
         }
 
         return nodeId;
     }
 
-    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape) {
+    private static string LabelFor(NodeFact fact) =>
+        fact.Producers.HasFlag(Producers.Mermaid) ? fact.Label : $"unclaimed: {fact.Label}";
+
+    private void AppendEdge(string nodeId, string childId, string edgeLabel) {
+        if (!_visitedEdges.Add($"{nodeId}->{childId}")) {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(edgeLabel)) {
+            _output.AppendLine($"    {nodeId} -->|{edgeLabel}| {childId}");
+        }
+        else {
+            _output.AppendLine($"    {nodeId} --> {childId}");
+        }
+    }
+
+    private void AppendNodeDefinition(Node node, string nodeId, NodeShape shape, string label) {
         _scratch.Clear();
         // Add type information to label if available
         if (_analysisResult != null) {
@@ -141,7 +144,7 @@ public sealed class MermaidAstGenerator {
             }
         }
 
-        AppendNodeLabel(_scratch, node);
+        _scratch.Append(label);
 
         _output.Append("    ");
         _output.Append(nodeId);
@@ -232,190 +235,10 @@ public sealed class MermaidAstGenerator {
         return node.Id.Value;
     }
 
-    private void AppendNodeLabel(StringBuilder builder, Node node) {
-        switch (node) {
-            // Leaf nodes with values
-            case Constant constant:
-                builder.Append("Constant ");
-                AppendValue(builder, constant.Value);
-                break;
-            case Parameter param:
-                builder.Append("Parameter ");
-                builder.Append(param.Name);
-                break;
-            case Variable variable:
-                builder.Append("Variable ");
-                builder.Append(variable.Name);
-                break;
-            case ThisReference:
-                builder.Append("This");
-                break;
-            case PropertyGetterDefinitionNode:
-                builder.Append("Property Getter");
-                break;
-            case PropertySetterDefinitionNode setter:
-                builder.Append("Property Setter");
-                if (setter.ValueParameter != null) {
-                    builder.Append(" (");
-                    builder.Append(setter.ValueParameter.Name);
-                    builder.Append(')');
-                }
-                break;
-            case PropertyInitializerDefinitionNode:
-                builder.Append("Property Initializer");
-                break;
-
-            // Binary arithmetic
-            case Add:
-                builder.Append("Add (+)");
-                break;
-            case Subtract:
-                builder.Append("Subtract (-)");
-                break;
-            case Multiply:
-                builder.Append("Multiply (*)");
-                break;
-            case Divide:
-                builder.Append("Divide (/)");
-                break;
-            case Modulo:
-                builder.Append("Modulo (%)");
-                break;
-
-            // Unary operations
-            case UnaryMinus:
-                builder.Append("Negate (-)");
-                break;
-            case Not:
-                builder.Append("Not (!)");
-                break;
-
-            // Comparison
-            case Equal:
-                builder.Append("Equal (==)");
-                break;
-            case NotEqual:
-                builder.Append("Not Equal (!=)");
-                break;
-            case LessThan:
-                builder.Append("Less Than (<)");
-                break;
-            case LessThanOrEqual:
-                builder.Append("Less Than or Equal (<=)");
-                break;
-            case GreaterThan:
-                builder.Append("Greater Than (>)");
-                break;
-            case GreaterThanOrEqual:
-                builder.Append("Greater Than or Equal (>=)");
-                break;
-
-            // Boolean operations
-            case And:
-                builder.Append("And (&&)");
-                break;
-            case Or:
-                builder.Append("Or (||)");
-                break;
-
-            // Other operations
-            case Conditional:
-                builder.Append("Conditional (?:)");
-                break;
-            case Coalesce:
-                builder.Append("Coalesce (??)");
-                break;
-            case TypeCast cast:
-                builder.Append("Cast to ");
-                builder.Append(cast.TargetTypeReference);
-                break;
-            case TypeIs typeIs:
-                builder.Append("Type Is ");
-                builder.Append(typeIs.TargetTypeReference);
-                break;
-            case TypeAs typeAs:
-                builder.Append("Type As ");
-                builder.Append(typeAs.TargetTypeReference);
-                break;
-            case Member member:
-                builder.Append("Member Access .");
-                builder.Append(member.MemberName);
-                break;
-            case IndexAccess:
-                builder.Append("Index Access");
-                break;
-            case Invoke method:
-                builder.Append("Method Call ");
-                if (method.Delegate is Member ma)
-                    builder.Append(ma.MemberName);
-                builder.Append("()");
-                break;
-            case New:
-                builder.Append("New");
-                break;
-
-            // Control flow
-            case Block:
-                builder.Append("Block");
-                break;
-            case IfStatement:
-                builder.Append("If Statement");
-                break;
-            case WhileLoop:
-                builder.Append("While Loop");
-                break;
-            case DoWhileLoop:
-                builder.Append("Do-While Loop");
-                break;
-            case ForLoop:
-                builder.Append("For Loop");
-                break;
-            case SwitchStatement:
-                builder.Append("Switch");
-                break;
-
-            // Assignments
-            case Assignment:
-                builder.Append("Assignment (=)");
-                break;
-
-            // Jumps
-            case BreakStatement:
-                builder.Append("Break");
-                break;
-            case ContinueStatement:
-                builder.Append("Continue");
-                break;
-            case Return:
-                builder.Append("Return");
-                break;
-            case GotoStatement goto_:
-                builder.Append("Goto ");
-                builder.Append(goto_.Target);
-                break;
-            case LabelDeclaration label:
-                builder.Append("Label ");
-                builder.Append(label.Name);
-                break;
-
-            // Exception handling
-            case ThrowStatement:
-                builder.Append("Throw");
-                break;
-            case TryCatchFinally:
-                builder.Append("Try-Catch-Finally");
-                break;
-
-            // Resource management
-            case UsingStatement:
-                builder.Append("Using");
-                break;
-
-            default:
-                builder.Append(node.GetType().Name);
-                break;
-        }
-    }
+    private static NodeFact FactFor(Node node) =>
+        NodeFacts.All.TryGetValue(node.GetType(), out var fact)
+            ? fact
+            : throw new InvalidOperationException($"{node.GetType().Name} has no NodeFacts row.");
 
     private NodeShape GetNodeShape(Node node) {
         return node switch {
@@ -434,6 +257,25 @@ public sealed class MermaidAstGenerator {
     }
 
     private IEnumerable<(Node Child, string EdgeLabel)> GetChildren(Node node) {
+        var labelled = BespokeEdgeLabels(node).ToArray();
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            yield return (child, EdgeLabelFor(labelled, child));
+        }
+    }
+
+    private static string EdgeLabelFor((Node Child, string EdgeLabel)[] labelled, Node child) {
+        foreach (var (candidate, label) in labelled) {
+            if (ReferenceEquals(candidate, child))
+                return label;
+        }
+        return string.Empty;
+    }
+
+    /// <summary>Edge labels for the kinds whose relationships a reader can name; a kind without
+    /// an entry still renders every child, on an unlabeled edge.</summary>
+    private static IEnumerable<(Node Child, string EdgeLabel)> BespokeEdgeLabels(Node node) {
         return node switch {
             // Binary operations
             Add add => [(add.LeftHandValue, "left"), (add.RightHandValue, "right")],
@@ -532,33 +374,8 @@ public sealed class MermaidAstGenerator {
                 (usingStmt.Body, "body")
             },
 
-            // Default: no children
-            _ => Array.Empty<(Node, string)>()
+            _ => []
         };
-    }
-
-    private static void AppendValue(StringBuilder builder, object? value) {
-        switch (value) {
-            case null:
-                builder.Append("null");
-                break;
-            case string s:
-                builder.Append("\\\"");
-                builder.Append(s);
-                builder.Append("\\\"");
-                break;
-            case char c:
-                builder.Append("\\'");
-                builder.Append(c);
-                builder.Append("\\'");
-                break;
-            case bool b:
-                builder.Append(b ? "true" : "false");
-                break;
-            default:
-                builder.Append(value.ToString() ?? "null");
-                break;
-        }
     }
 
     private static void AppendTypeName(StringBuilder builder, ITypeDefinition type) {

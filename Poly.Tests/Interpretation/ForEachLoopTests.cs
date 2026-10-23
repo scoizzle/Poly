@@ -1,9 +1,6 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -38,10 +35,6 @@ public class ForEachLoopTests {
             [sum]
         );
 
-        var expr = node.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-        await Assert.That(result).IsEqualTo(10);
-
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(10L);
@@ -62,11 +55,6 @@ public class ForEachLoopTests {
             ],
             [sum]
         );
-
-        var expr = node.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(5);
 
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
@@ -91,11 +79,6 @@ public class ForEachLoopTests {
             [outerItem, lastSeen]
         );
 
-        var expr = node.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(103);
-
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(103L);
@@ -108,9 +91,6 @@ public class ForEachLoopTests {
             new ForEachLoop(loopItem, new Constant(new[] { 1 }), new Constant(0)),
             loopItem
         );
-
-        await Assert.That(() => node.BuildExpression())
-            .Throws<InvalidOperationException>();
 
         await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
     }
@@ -134,11 +114,6 @@ public class ForEachLoopTests {
             ],
             [sum]
         );
-
-        var expr = node.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(4);
 
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);
@@ -164,11 +139,6 @@ public class ForEachLoopTests {
             ],
             [sum]
         );
-
-        var expr = node.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(6);
 
         var program = Interpreter.Compile(node);
         using var exec = Interpreter.Execute(program);

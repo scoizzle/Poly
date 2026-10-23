@@ -14,7 +14,6 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
     public const string Id = "SideEffect";
     public string PassName => Id;
     private static readonly SideEffectMetadata PureMeta = new(SideEffectKind.Pure);
-    private static readonly ElisionMetadata Elidable = new(true);
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Block block) {
             foreach (var v in block.Variables) {
@@ -44,7 +43,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 }
 
                 if (i < n - 1 && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)) {
-                    context.SetMetadata(child, Elidable);
+                    ElisionFacts.Mark(context, child, ElisionReason.NoObservableEffect);
                     if (emitDiags) {
                         context.ReportInformation(
                             child,
@@ -80,7 +79,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
             if (node is ForLoop forLoop) {
                 var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
                 if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {
-                    context.SetMetadata(forLoop.Initializer, Elidable);
+                    ElisionFacts.Mark(context, forLoop.Initializer!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Initializer is not null) {
                         context.ReportInformation(
                             forLoop.Initializer,
@@ -90,7 +89,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 }
                 var incMeta = forLoop.Increment is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Increment) : null;
                 if (incMeta is not null && (incMeta.Kind == SideEffectKind.Pure || incMeta.Kind == SideEffectKind.Read)) {
-                    context.SetMetadata(forLoop.Increment, Elidable);
+                    ElisionFacts.Mark(context, forLoop.Increment!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Increment is not null) {
                         context.ReportInformation(
                             forLoop.Increment,
@@ -139,11 +138,38 @@ public enum SideEffectKind {
 
 public sealed record SideEffectMetadata(SideEffectKind Kind) : IAnalysisMetadata;
 
+/// <summary>Why a node may be elided. The reasons accumulate on one
+/// <see cref="ElisionMetadata"/> so a reader can see every reason that applies.</summary>
+[Flags]
+public enum ElisionReason {
+    None = 0,
+    /// <summary>The node cannot execute: the control flow graph proved it unreachable.</summary>
+    Unreachable = 1,
+    /// <summary>The node executes, its result is unused, and its effects are at most a read.</summary>
+    NoObservableEffect = 2,
+}
+
 /// <summary>
 /// Metadata indicating that a node's execution (and subtree) can be safely elided
 /// during interpretation or lowering without changing observable behavior or results.
 /// </summary>
-public sealed record ElisionMetadata(bool CanElide) : IAnalysisMetadata;
+public sealed record ElisionMetadata(ElisionReason Reasons) : IAnalysisMetadata {
+    public bool CanElide => Reasons != ElisionReason.None;
+}
+
+/// <summary>
+/// The only writer of <see cref="ElisionMetadata"/>: both analysis passes contribute a
+/// reason here, so the precedence rule has one home. Precedence: either reason makes a
+/// node elidable and every reason that applies is recorded; <see cref="ElisionReason.Unreachable"/>
+/// dominates, because a node that never executes is elidable whatever its effects, while
+/// <see cref="ElisionReason.NoObservableEffect"/> is only a reason for a node that does execute.
+/// </summary>
+public static class ElisionFacts {
+    public static void Mark(AnalysisContext context, Node node, ElisionReason reason) {
+        var reasons = (context.GetMetadata<ElisionMetadata>(node)?.Reasons ?? ElisionReason.None) | reason;
+        context.SetMetadata(node, new ElisionMetadata(reasons));
+    }
+}
 
 /// <summary>
 /// Metadata indicating whether an <see cref="Assignment"/> node's value is consumed

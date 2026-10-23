@@ -2,6 +2,7 @@ using System.Globalization;
 
 using Poly.Grammar;
 using Poly.Introspection;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.CSharp;
 
@@ -26,8 +27,12 @@ public static class CSharpReader {
     private sealed class Parser {
         private readonly CSharpTokenizer _reader;
         private readonly Matcher<CSharpToken, CSharpTokenKind> _matcher;
+        private readonly string _text;
+        private readonly List<string> _usings = [];
+        private HashSet<string>? _valueNames;
 
         public Parser(string text) {
+            _text = text;
             _reader = new CSharpTokenizer(text);
             _matcher = new Matcher<CSharpToken, CSharpTokenKind>(CSharpGrammar.Table, _reader);
         }
@@ -35,14 +40,13 @@ public static class CSharpReader {
         private CSharpToken Current => _reader.Peek(0);
 
         internal CompilationUnitNode ReadUnit() {
-            var usings = new List<string>();
             var types = new List<TypeDefinitionNode>();
             var statements = new List<Node>();
             string? ns = null;
 
             while (Current.Kind != CSharpTokenKind.EndOfFile) {
                 if (TryTake("using", out var usingMatch)) {
-                    usings.Add(FoldName(Child(usingMatch, "name")));
+                    _usings.Add(FoldName(Child(usingMatch, "name")));
                     continue;
                 }
                 if (TryTake("namespace", out var nsMatch)) {
@@ -55,7 +59,25 @@ public static class CSharpReader {
                 }
                 statements.Add(FoldStatement(Take("statement", "statement")));
             }
-            return new CompilationUnitNode(usings, ns, types, statements.Count > 0 ? statements : null);
+            return new CompilationUnitNode(_usings, ns, types, statements.Count > 0 ? statements : null);
+        }
+
+        /// <summary>Names the text also spells somewhere other than before a <c>.</c> — a
+        /// declaration or a value use. Every declaration form in the exported subset leaves its
+        /// name before a non-<c>.</c> token (<c>x =</c>, <c>x;</c>, <c>x,</c>, <c>x)</c>,
+        /// <c>x in</c>, <c>x =&gt;</c>), so a declared name is always in this set and a local, field
+        /// or parameter can never be mistaken for a type. A name the text spells only as a
+        /// receiver may name a type.</summary>
+        private static HashSet<string> ValueNames(string text) {
+            var scanner = new CSharpTokenizer(text);
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            while (scanner.Peek(0).Kind != CSharpTokenKind.EndOfFile) {
+                var token = scanner.Peek(0);
+                if (token.Kind == CSharpTokenKind.Identifier && scanner.Peek(1).Kind != CSharpTokenKind.Dot)
+                    names.Add(token.Text);
+                scanner.Consume(1);
+            }
+            return names;
         }
 
         private bool AtTypeDeclaration() => Current.Kind is
@@ -525,7 +547,9 @@ public static class CSharpReader {
                         var cases = new List<SwitchCase>();
                         Node? defaultCase = null;
                         foreach (var caseMatch in Children(match, "switch-case")) {
-                            if (caseMatch.PatternName == "default") {
+                            // A trailing `break` is the terminator a Poly case has by construction:
+                            // it is syntax, not a node, so it is consumed and dropped here.
+                            if (caseMatch.PatternName is "default" or "default-break") {
                                 defaultCase = FoldStatement(caseMatch.Children[0]);
                                 continue;
                             }
@@ -817,7 +841,30 @@ public static class CSharpReader {
         private Node FoldPostfix(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var acc = FoldExpr(match.Children[0]);
             var tails = match.Children.Skip(1).ToArray();
+            if (tails.Length > 0 && tails[0].PatternName == "member")
+                acc = UsingScopedType(acc);
             return FoldPostfixTails(acc, tails, 0);
+        }
+
+        /// <summary>Binds a receiver that names a type imported by a <c>using</c> directive to
+        /// that type, so <c>using System.Numerics;</c> and <c>BitOperations.PopCount(x)</c> reach
+        /// the same static call its qualified spelling does. Using scope is read from the unit's
+        /// own directives; a name the text also spells as a value is left alone, so a local,
+        /// field or parameter always wins over the imported type. The first directive naming the
+        /// type wins, as a C# namespace import does; alias usings are not in the grammar. A type
+        /// reference is not a value: analysis binds it as the receiver of the access above it.</summary>
+        private Node UsingScopedType(Node receiver) {
+            if (_usings.Count == 0 || receiver is not Variable variable)
+                return receiver;
+            var valueNames = _valueNames ??= ValueNames(_text);
+            if (valueNames.Contains(variable.Name))
+                return receiver;
+            foreach (var ns in _usings) {
+                if (ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(ns + "." + variable.Name) is null)
+                    continue;
+                return new NamedTypeReference(variable.Name, ns);
+            }
+            return receiver;
         }
 
         /// <summary>Folds the postfix tails from <paramref name="index"/> onto
@@ -834,7 +881,7 @@ public static class CSharpReader {
             var tail = tails[index];
             switch (tail.PatternName) {
                 case "member":
-                    return FoldPostfixTails(new Member(acc, Capture(tail, "name")), tails, index + 1);
+                    return FoldPostfixTails(QualifiedConstant(acc, Capture(tail, "name")), tails, index + 1);
                 case "invoke":
                     return FoldPostfixTails(
                         new Invoke(ChainNameof(acc), [.. FoldArgList(tail.Children[0])]), tails, index + 1);
@@ -860,6 +907,30 @@ public static class CSharpReader {
 
         private static Node ChainNameof(Node acc) =>
             acc is Variable { Name: "nameof" } ? new TypeReference("nameof") : acc;
+
+        /// <summary>
+        /// A value with no C# literal prints in a qualified form — <c>long.MinValue</c>,
+        /// <c>double.NaN</c> — so exactly those spellings fold back to the constant they name.
+        /// <c>NodeFacts</c> claims <c>Writer</c> for <see cref="Constant"/> on the printed text
+        /// re-reading as the same kind, and the digits-plus-suffix spelling of
+        /// <c>long.MinValue</c> does not re-read at all. Every other <c>type.Member</c> stays a
+        /// member access.
+        /// </summary>
+        private static Node QualifiedConstant(Node receiver, string member) {
+            if (receiver is not PrimitiveTypeReference type)
+                return new Member(receiver, member);
+            var value = (type.PrimitiveId, member) switch {
+                (PrimitiveType.Int64, "MinValue") => (object)long.MinValue,
+                (PrimitiveType.Float64, "NaN") => double.NaN,
+                (PrimitiveType.Float64, "PositiveInfinity") => double.PositiveInfinity,
+                (PrimitiveType.Float64, "NegativeInfinity") => double.NegativeInfinity,
+                (PrimitiveType.Float32, "NaN") => float.NaN,
+                (PrimitiveType.Float32, "PositiveInfinity") => float.PositiveInfinity,
+                (PrimitiveType.Float32, "NegativeInfinity") => float.NegativeInfinity,
+                _ => null,
+            };
+            return value is null ? new Member(receiver, member) : new Constant(value);
+        }
 
         /// <summary>Folds <c>recv?.member</c> onto the single conditional-chain fold in
         /// <see cref="FoldConditionalChain"/>.</summary>

@@ -5,6 +5,7 @@ using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Vm;
+using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation;
 
@@ -44,7 +45,7 @@ public class InvokeMemberInstanceTests {
         IEnumerator IEnumerable.GetEnumerator() => _values.GetEnumerator();
     }
 
-    private static TypeDefinitionNodeAnalyzer BuildNotifyTypeDef(string typeName = "Person") {
+    private static ITypeDefinitionProvider BuildNotifyTypeDef(string typeName = "Person") {
         var typeDef = new TypeDefinitionNode(
             Name: typeName,
             Properties: [
@@ -68,7 +69,7 @@ public class InvokeMemberInstanceTests {
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
         analyzer.Analyze(ctx, typeDef);
-        return analyzer;
+        return ctx.TypeDefinitions;
     }
 
     private static Invoke NotifyInvoke(string typeName = "Person") =>
@@ -148,12 +149,69 @@ public class InvokeMemberInstanceTests {
                     Body: new Constant(7L))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
-        analyzer.Analyze(AnalysisContext.CreateDefault(), typeDef);
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeDef);
         var bag = new Dictionary<string, object?>();
         var invoke = new Invoke(
             new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
-        var program = Interpreter.Compile(invoke, analyzer);
+        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
         using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { bag }));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task AstInvoke_ResultIsInTheRing() {
+        var typeDef = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Ping",
+                    new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int64),
+                    Body: new Constant(7L))
+            ]);
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeDef);
+        var invoke = new Invoke(
+            new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Ping"));
+        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
+        // The callee writes its result word at slots[FramePos]; the caller moves it.
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
+    }
+
+    [Test]
+    public async Task VoidInvoke_LeavesZero() {
+        var list = new List<string> { "a" };
+        var invoke = new Invoke(
+            new Member(new Parameter("list", TypeReference.To<List<string>>()), "Clear"));
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(invoke), s => s.SetArgs(new object?[] { list }));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
+        await Assert.That(list).IsEmpty();
+    }
+
+    [Test]
+    public async Task VoidAstInvoke_LeavesZero() {
+        // A body that yields no value still leaves a result word, so the caller's slot
+        // is never unwritten.
+        var typeDef = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Reset",
+                    new TypeReference("void"),
+                    Body: new Block([new Comment("nothing to do")]))
+            ]);
+        var analyzer = new TypeDefinitionNodeAnalyzer();
+        var ctx = AnalysisContext.CreateDefault();
+        analyzer.Analyze(ctx, typeDef);
+        var invoke = new Invoke(
+            new Member(new Parameter("entity", new TypeReference("Sample.Widget")), "Reset"));
+        var program = Interpreter.Compile(invoke, ctx.TypeDefinitions);
+        using var exec = Interpreter.Execute(program, s => s.SetArgs(new object?[] { new Dictionary<string, object?>() }));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 }

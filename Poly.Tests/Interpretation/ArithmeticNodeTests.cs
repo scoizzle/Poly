@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -14,13 +13,9 @@ public class ArithmeticNodeTests {
         var node = new Add(new Constant(5), new Constant(3));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(8);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(8L);
     }
 
@@ -29,15 +24,14 @@ public class ArithmeticNodeTests {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Add(param, new Constant(10));
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
-        // Assert
-        await Assert.That(compiled(5)).IsEqualTo(15);
-        await Assert.That(compiled(20)).IsEqualTo(30);
+        // Act
         var program = Interpreter.Compile(node);
         using var exec5 = Interpreter.Execute(program, s => s.SetArgs(5));
-        await Assert.That(exec5.GetValue<long>()).IsEqualTo(15L);
         using var exec20 = Interpreter.Execute(program, s => s.SetArgs(20));
+
+        // Assert
+        await Assert.That(exec5.GetValue<long>()).IsEqualTo(15L);
         await Assert.That(exec20.GetValue<long>()).IsEqualTo(30L);
     }
 
@@ -47,13 +41,9 @@ public class ArithmeticNodeTests {
         var node = new Add(new Constant(3.5), new Constant(2.5));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(6.0);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(6.0);
     }
 
@@ -63,13 +53,9 @@ public class ArithmeticNodeTests {
         var node = new Add(new Constant(5), new Constant(3.5));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(8.5);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(8.5);
     }
 
@@ -80,13 +66,9 @@ public class ArithmeticNodeTests {
         var node = new Subtract(new Constant(10), new Constant(3));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(7);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(7L);
     }
 
@@ -95,15 +77,14 @@ public class ArithmeticNodeTests {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Subtract(param, new Constant(5));
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
-        // Assert
-        await Assert.That(compiled(15)).IsEqualTo(10);
-        await Assert.That(compiled(8)).IsEqualTo(3);
+        // Act
         var program = Interpreter.Compile(node);
         using var exec15 = Interpreter.Execute(program, s => s.SetArgs(15));
-        await Assert.That(exec15.GetValue<long>()).IsEqualTo(10L);
         using var exec8 = Interpreter.Execute(program, s => s.SetArgs(8));
+
+        // Assert
+        await Assert.That(exec15.GetValue<long>()).IsEqualTo(10L);
         await Assert.That(exec8.GetValue<long>()).IsEqualTo(3L);
     }
 
@@ -113,13 +94,9 @@ public class ArithmeticNodeTests {
         var node = new Subtract(new Constant(5), new Constant(10));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(-5);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(-5L);
     }
 
@@ -130,13 +107,9 @@ public class ArithmeticNodeTests {
         var node = new Multiply(new Constant(6), new Constant(7));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(42);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
@@ -145,15 +118,14 @@ public class ArithmeticNodeTests {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Multiply(param, new Constant(3));
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
-        // Assert
-        await Assert.That(compiled(4)).IsEqualTo(12);
-        await Assert.That(compiled(10)).IsEqualTo(30);
+        // Act
         var program = Interpreter.Compile(node);
         using var exec4 = Interpreter.Execute(program, s => s.SetArgs(4));
-        await Assert.That(exec4.GetValue<long>()).IsEqualTo(12L);
         using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
+
+        // Assert
+        await Assert.That(exec4.GetValue<long>()).IsEqualTo(12L);
         await Assert.That(exec10.GetValue<long>()).IsEqualTo(30L);
     }
 
@@ -163,13 +135,9 @@ public class ArithmeticNodeTests {
         var node = new Multiply(new Constant(4), new Constant(2.5));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(10.0);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(10.0);
     }
 
@@ -180,13 +148,9 @@ public class ArithmeticNodeTests {
         var node = new Divide(new Constant(20), new Constant(4));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(5);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
 
@@ -196,13 +160,9 @@ public class ArithmeticNodeTests {
         var node = new Divide(new Constant(7), new Constant(2));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(3);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
     }
 
@@ -212,13 +172,9 @@ public class ArithmeticNodeTests {
         var node = new Divide(new Constant(7.0), new Constant(2.0));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<double>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(3.5);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<double>()).IsEqualTo(3.5);
     }
 
@@ -227,15 +183,14 @@ public class ArithmeticNodeTests {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Divide(param, new Constant(2));
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
-        // Assert
-        await Assert.That(compiled(10)).IsEqualTo(5);
-        await Assert.That(compiled(21)).IsEqualTo(10);
+        // Act
         var program = Interpreter.Compile(node);
         using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
-        await Assert.That(exec10.GetValue<long>()).IsEqualTo(5L);
         using var exec21 = Interpreter.Execute(program, s => s.SetArgs(21));
+
+        // Assert
+        await Assert.That(exec10.GetValue<long>()).IsEqualTo(5L);
         await Assert.That(exec21.GetValue<long>()).IsEqualTo(10L);
     }
 
@@ -246,13 +201,9 @@ public class ArithmeticNodeTests {
         var node = new Modulo(new Constant(10), new Constant(3));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(1);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(1L);
     }
 
@@ -262,13 +213,9 @@ public class ArithmeticNodeTests {
         var node = new Modulo(new Constant(15), new Constant(5));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(0);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(0L);
     }
 
@@ -277,15 +224,14 @@ public class ArithmeticNodeTests {
         // Arrange
         var param = new Parameter("x", TypeReference.To<int>());
         var node = new Modulo(param, new Constant(7));
-        var compiled = node.CompileLambda<Func<int, int>>((param, typeof(int)));
 
-        // Assert
-        await Assert.That(compiled(15)).IsEqualTo(1);
-        await Assert.That(compiled(20)).IsEqualTo(6);
+        // Act
         var program = Interpreter.Compile(node);
         using var exec15 = Interpreter.Execute(program, s => s.SetArgs(15));
-        await Assert.That(exec15.GetValue<long>()).IsEqualTo(1L);
         using var exec20 = Interpreter.Execute(program, s => s.SetArgs(20));
+
+        // Assert
+        await Assert.That(exec15.GetValue<long>()).IsEqualTo(1L);
         await Assert.That(exec20.GetValue<long>()).IsEqualTo(6L);
     }
 
@@ -297,13 +243,9 @@ public class ArithmeticNodeTests {
         var node = new Multiply(add, new Constant(2));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(16);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(16L);
     }
 
@@ -314,13 +256,9 @@ public class ArithmeticNodeTests {
         var node = new Add(multiply, new Constant(4));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(10);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(10L);
     }
 
@@ -332,13 +270,9 @@ public class ArithmeticNodeTests {
         var node = new Subtract(multiply, new Constant(3));
 
         // Act
-        var expr = node.BuildExpression();
-        var lambda = Expression.Lambda<Func<int>>(expr);
-        var result = lambda.Compile()();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
 
         // Assert
-        await Assert.That(result).IsEqualTo(27);
-        using var exec = Interpreter.Execute(Interpreter.Compile(node));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(27L);
     }
 }

@@ -1,6 +1,7 @@
 using Poly.Interpretation.Analysis.ConstantFolding;
 using Poly.Interpretation.Analysis.ControlFlow;
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Interpretation;
 
@@ -334,7 +335,11 @@ public class ControlFlowAnalysisTests {
             .Build()
             .Analyze(ast);
 
-        await Assert.That(result.IsInfiniteLoop(ast.Nodes[0])).IsTrue();
+        // The loop has no exit edge, so the statement after it cannot execute: it is
+        // elided on the unreachable reason alone.
+        var postElision = result.GetMetadata<ElisionMetadata>(post);
+        await Assert.That(postElision).IsNotNull();
+        await Assert.That(postElision!.Reasons).IsEqualTo(ElisionReason.Unreachable);
 
         var infDiags = result.Diagnostics.Where(d => d.Code == "CF0003").ToList();
         await Assert.That(infDiags.Count).IsGreaterThan(0);
@@ -399,31 +404,6 @@ public class ControlFlowAnalysisTests {
     }
 
     [Test]
-    public async Task MustExecute_BasicEntryStmts() {
-        var ast = new Block(
-            new Constant(1),
-            new Constant(2)
-        );
-
-        var result = new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseVariableScopeValidator()
-            .UseTypeAndMemberResolver()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseConstantFolding()
-            .UseControlFlowAnalysis()
-            .Build()
-            .Analyze(ast);
-
-        await Assert.That(result.GetControlFlowGraph(ast)).IsNotNull();
-        await Assert.That(result.IsMustExecute(ast.Nodes[0])).IsTrue();
-        var meta = result.GetMetadata<MustExecuteMetadata>(ast.Nodes[0]);
-        await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.MustExecute).IsTrue();
-    }
-
-    [Test]
     public async Task Goto_UnknownLabel_ReportsCF0001() {
         var ast = new GotoStatement("missing");
         var result = CfAnalyze(ast);
@@ -464,6 +444,89 @@ public class ControlFlowAnalysisTests {
         var result = CfAnalyze(ast);
         await Assert.That(result.CanElide(catchBody)).IsTrue();
         await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
+    }
+
+    [Test]
+    public async Task NestedThrow_InsideIf_KeepsCatchReachable() {
+        var catchBody = new Block(new Variable("a"));
+        var tryBlock = new Block(
+            new IfStatement(
+                new Variable("c"),
+                new Block(new ThrowStatement(new Variable("ex")))));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+        await Assert.That(result.CanElide(catchBody)).IsFalse();
+
+        var printed = new CSharpGenerator(result).Generate(ast);
+        await Assert.That(printed).Contains("a;");
+    }
+
+    [Test]
+    public async Task DeeperNestedThrow_IsFound() {
+        var catchBody = new Block(new Constant(1L));
+        var tryBlock = new Block(new Block(new Block(new ThrowStatement(new Variable("ex")))));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+        await Assert.That(result.CanElide(catchBody)).IsFalse();
+    }
+
+    [Test]
+    public async Task ThrowInsideLambda_IsNotATryScopeThrow() {
+        var catchBody = new Block(new Constant(1L));
+        var lambda = new Lambda([], new ThrowStatement(new Variable("ex")));
+        var tryBlock = new Block(new Assignment(new Variable("f"), lambda));
+        var ast = new TryCatchFinally(
+            tryBlock,
+            CatchClauses: [
+                new CatchClause(
+                    new ClrTypeReference(typeof(InvalidOperationException)),
+                    null,
+                    catchBody)
+            ]);
+
+        var result = CfAnalyze(ast);
+
+        await Assert.That(result.CanElide(catchBody)).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
+    }
+
+    [Test]
+    public async Task LoopConditionPurity_SeesNestedMutation() {
+        var loop = new WhileLoop(
+            new Constant(true),
+            new Block(
+                new IfStatement(
+                    new Variable("c"),
+                    new Block(new Assignment(new Member(new Variable("obj"), "Value"), new Constant(1L))))));
+        var post = new Constant(99L);
+        var ast = new Block(loop, post);
+
+        var result = CfAnalyze(ast);
+
+        // The nested member write mutates state the condition depends on, so the loop is
+        // not statically infinite: it keeps its exit edge and the post-loop code stays live.
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "CF0003")).IsFalse();
+        await Assert.That(result.CanElide(post)).IsFalse();
     }
 
     [Test]

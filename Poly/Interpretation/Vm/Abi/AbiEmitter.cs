@@ -46,6 +46,7 @@ public static partial class AbiEmitter {
     // Cached reflection lookups
     private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
     private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
+    private static readonly MethodInfo HeapRecycle = Ref<VmManagedObjectHeap>.Method(h => h.Recycle(0));
     private static readonly ConstructorInfo AstDictionaryCtor =
         typeof(Dictionary<string, object?>).GetConstructor([typeof(IEqualityComparer<string>)])!;
     private static readonly MethodInfo ObjectEquals = Ref.Method(
@@ -139,10 +140,17 @@ public static partial class AbiEmitter {
             }
         }
         ctx.CapturedBindings = capturedBindings;
+        var inlineInvoked = new HashSet<Lambda>(ReferenceEqualityComparer.Instance);
+        CollectInlineInvokedLambdas(root, inlineInvoked);
         var functionTable = new Action<VmState>[lambdas.Count];
         ctx.FunctionTableExpr = Constant(functionTable);
         for (int i = 0; i < lambdas.Count; i++) {
             var lam = lambdas[i];
+            if (inlineInvoked.Contains(lam)) {
+                functionTable[i] = _ => throw new InvalidOperationException(
+                    "VM: a lambda invoked inline is emitted in the caller's frame and cannot be reached through the function table.");
+                continue;
+            }
             functionTable[i] = CompileFunctionBody(
                 lam.Body, lam.Parameters, FindBodyCaptures(lam, analysis), functionTable, mode, analysis,
                 capturedBindings);
@@ -162,8 +170,20 @@ public static partial class AbiEmitter {
         if (mode != CompilationMode.NoDebug)
             ctx.DebugHookProp = Property(ctx.State, nameof(VmState.DebugHook));
 
+        ctx.IsRootBody = true;
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         var rootExpr = CompileStatement(root, ctx);
+        // Seed one heap entry per distinct typeof type before anything can read it. Guarded so a
+        // resume (which re-enters above the PC dispatch) reuses the handle it already allocated
+        // instead of leaking one per resume.
+        foreach (var (runtimeType, local) in ctx.TypeHandles) {
+            body.Add(IfThen(
+                Equal(local, Constant(0L)),
+                Assign(local, Convert(
+                    Call(ctx.HeapLocal, HeapAllocate,
+                        Convert(Constant(runtimeType, typeof(object)), typeof(object))),
+                    typeof(long)))));
+        }
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
         // StackPointer. SetArgs writes this+params at slots[0..] without
@@ -173,9 +193,12 @@ public static partial class AbiEmitter {
         if (rootArgCount > 0)
             body.Add(Assign(ctx.SlotsStackPointer, Constant(ctx.FrameSlotHighWater)));
         body.Add(rootExpr);
-        if (ctx.RingDepth > 0) {
+        var rootResult = ctx.RingDepth > 0
+            ? new SlotLocation.Ring(ctx.RingDepth - 1, rootExpr.Type)
+            : null;
+        if (rootResult is not null) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
-                ctx.RingVar(ctx.RingDepth - 1)));
+                RingCodec.ToWord(rootResult.Read(ctx))));
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
@@ -186,10 +209,12 @@ public static partial class AbiEmitter {
         var debugInfo = new VmDebugInfo(ctx.VariableLayouts);
         return new BuiltVmProgram(delegateExpr, ctx.MaxRingDepth,
             rootKind is ValueRepresentationKind.Unknown ? null : rootKind,
-            rootClr, ctx.StepNodes, debugInfo, ctx.RootParameterClrTypes);
+            rootClr, ctx.StepNodes, debugInfo, ctx.RootParameterClrTypes, rootResult);
     }
 
-    /// <summary>The expression and metadata produced by <see cref="Build"/>.</summary>
+    /// <summary>The expression and metadata produced by <see cref="Build"/>.
+    /// <c>RootResult</c> is where the root's result lives — the slot the program copies
+    /// out — or null for a root that leaves none (a <c>Comment</c>).</summary>
     internal sealed record BuiltVmProgram(
         LambdaExpression Expression,
         int MaxRingDepth,
@@ -197,23 +222,47 @@ public static partial class AbiEmitter {
         Type? RootClrType,
         IReadOnlyList<Node>? StepNodes,
         VmDebugInfo DebugInfo,
-        IReadOnlyList<Type?>? RootParameterClrTypes);
+        IReadOnlyList<Type?>? RootParameterClrTypes,
+        SlotLocation? RootResult);
 
     private static Expression CompileNode(Node node, Context ctx) => Compile(node, ctx).Code;
 
-    /// <summary>Compile a node and report where its result lives. An expression
-    /// leaves its result at the top of the ring; a node whose value leaves through
-    /// another channel — a <c>return</c> inside an inlined arm, or a statement with
-    /// no value — has no ring location, and <see cref="CompiledNode.Result"/> is
-    /// null. A consumer that needs one asks with
+    /// <summary>A node's value: its code, then a read of the slot that code left the result
+    /// in. Every arm leaves one, so this is the only way a value is reached — there is no
+    /// second value compiler, and an arm that leaves nothing fails closed here.</summary>
+    private static Expression ValueOf(Node node, Context ctx) {
+        var compiled = Compile(node, ctx);
+        return Block(compiled.Code, compiled.RequireResult(node).Read(ctx));
+    }
+
+    /// <summary>A statement's ring answer: <c>0L</c> at <c>RingDepth - 1</c>. A node with no
+    /// value — a loop, a branch, a jump, a throw — answers the same way a value does, so a
+    /// caller never has to ask which kind of node it read. <paramref name="code"/> is a
+    /// delegate so the slot is reserved before the statement compiles: the statement's own
+    /// slots sit above its result instead of leaving a branch's value behind as it.</summary>
+    private static Expression Statement(Context ctx, Func<Expression> code) {
+        int slot = ctx.AllocSlot();
+        var body = code();
+        ctx.RingDepth = slot + 1;
+        return Block(body, Assign(ctx.RingVar(slot), Constant(0L)));
+    }
+
+    /// <summary>Compile a node and report where its result lives. Every arm of
+    /// <see cref="CompileNodeInner"/> leaves its result at the top of the ring — a node
+    /// with no value leaves <c>0L</c> — so <see cref="CompiledNode.Result"/> is the slot a
+    /// consumer reads. Only a node that emits no code at all (<see cref="Comment"/>) has no
+    /// location, and a consumer that needs one asks with
     /// <see cref="CompiledNode.RequireResult"/>, which fails closed.</summary>
     private static CompiledNode Compile(Node node, Context ctx) {
         if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
             return Compile(replacement, ctx);
         int entryDepth = ctx.RingDepth;
         var code = CompileNodeInner(node, ctx);
+        // The arm's own type names the local it wrote: an IEEE arm assigns the value
+        // itself, every other arm the word. Reading the reported result from the code
+        // rather than from the analysis keeps producer and consumer in one answer.
         var result = ctx.RingDepth > entryDepth
-            ? new SlotLocation.Ring(ctx.RingDepth - 1)
+            ? new SlotLocation.Ring(ctx.RingDepth - 1, code.Type)
             : null;
         return new CompiledNode(code, result);
     }
@@ -251,48 +300,55 @@ public static partial class AbiEmitter {
             BitwiseXor n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
             ShiftLeft n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
             ShiftRight n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
-            Equal n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, Equal, ctx, n), ctx),
-            NotEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n), ctx),
-            LessThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThan, ctx), ctx),
-            LessThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx), ctx),
-            GreaterThan n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx), ctx),
-            GreaterThanOrEqual n => SpillToRing(EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx), ctx),
+            Equal n => EmitComparison(n.LeftHandValue, n.RightHandValue, Equal, ctx),
+            NotEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, NotEqual, ctx),
+            LessThan n => EmitComparison(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
+            LessThanOrEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
+            GreaterThan n => EmitComparison(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
+            GreaterThanOrEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
             Variable v => EmitVariable(v, ctx),
             Default d => EmitDefault(d, ctx),
             ThisReference _ => EmitThis(ctx),
             ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
             NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference =>
                 RejectCompile("Type name is not a VM value; use it as a Member/Invoke/New receiver."),
-            NullForgiving n => SpillToRing(CompileValue(n, ctx), ctx),
+            NullForgiving n => CompileNode(n.Operand, ctx),
             TypeAs t => EmitTypeAs(t, ctx),
             TypeCast t => EmitTypeCast(t, ctx),
             Await aw => EmitAwait(aw, ctx),
             TypeOf t => EmitTypeOf(t, ctx),
             ThrowExpression te => EmitThrow(new ThrowStatement(te.Value), ctx),
-            Not n => SpillToRing(EmitNotValue(n, ctx), ctx),
-            UnaryMinus n => SpillToRing(EmitUnaryMinusValue(n, ctx), ctx),
-            BitwiseNot n => SpillToRing(EmitBitwiseNotValue(n, ctx), ctx),
-            Conditional c => SpillToRing(EmitConditionalValue(c, ctx), ctx),
-            Coalesce n => SpillToRing(EmitCoalesceValue(n, ctx), ctx),
-            And n => SpillToRing(EmitLogicalAndValue(n, ctx), ctx),
-            Or n => SpillToRing(EmitLogicalOrValue(n, ctx), ctx),
-            PopCount pc => SpillToRing(EmitPopCountValue(pc, ctx), ctx),
+            Not n => EmitNot(n, ctx),
+            UnaryMinus n => EmitUnaryMinus(n, ctx),
+            BitwiseNot n => EmitBitwiseNot(n, ctx),
+            Conditional c => EmitConditional(c, ctx),
+            Coalesce n => EmitCoalesce(n, ctx),
+            And n => EmitLogicalAnd(n, ctx),
+            Or n => EmitLogicalOr(n, ctx),
+            PopCount pc => EmitPopCount(pc, ctx),
             Member m => EmitMember(m, ctx),
             TypeIs t => EmitTypeIs(t, ctx),
-            Return r => EmitReturn(r, ctx),
-            IfStatement ifStmt => EmitIfStatement(ifStmt, ctx),
-            WhileLoop wl => EmitWhileLoop(wl, ctx),
-            DoWhileLoop dwl => EmitDoWhileLoop(dwl, ctx),
-            ForLoop fl => EmitForLoop(fl, ctx),
-            ForEachLoop fel => EmitForEachLoop(fel, ctx),
-            BreakStatement bs => EmitBreakStatement(bs, ctx),
-            ContinueStatement cs => EmitContinueStatement(cs, ctx),
-            GotoStatement gs => EmitGotoStatement(gs, ctx),
+            Return r => Statement(ctx, () => EmitReturn(r, ctx)),
+            IfStatement ifStmt => Statement(ctx, () => EmitIfStatement(ifStmt, ctx)),
+            WhileLoop wl => Statement(ctx, () => EmitWhileLoop(wl, ctx)),
+            DoWhileLoop dwl => Statement(ctx, () => EmitDoWhileLoop(dwl, ctx)),
+            ForLoop fl => Statement(ctx, () => EmitForLoop(fl, ctx)),
+            ForEachLoop fel => Statement(ctx, () => EmitForEachLoop(fel, ctx)),
+            BreakStatement bs => Statement(ctx, () => EmitBreakStatement(bs, ctx)),
+            ContinueStatement cs => Statement(ctx, () => EmitContinueStatement(cs, ctx)),
+            GotoStatement gs => Statement(ctx, () => EmitGotoStatement(gs, ctx)),
+            // A label is a marker over its statement and answers with that statement's
+            // result, so it adds no slot of its own.
             LabelDeclaration ld => EmitLabelDeclaration(ld, ctx),
-            ThrowStatement ts => EmitThrow(ts, ctx),
+            ThrowStatement ts => Statement(ctx, () => EmitThrow(ts, ctx)),
+            // A try answers with its try block's result, so it adds no slot of its own —
+            // the classifier reads a TryCatchFinally as what its try block yields.
             TryCatchFinally tcf => EmitTryCatchFinally(tcf, ctx),
-            UsingStatement us => EmitUsingStatement(us, ctx),
-            SuspendNode sn => EmitSuspendNode(sn, ctx),
+            UsingStatement us => Statement(ctx, () => EmitUsingStatement(us, ctx)),
+            SuspendNode sn => Statement(ctx, () => EmitSuspendNode(sn, ctx)),
+            // Transparent, not a statement: a comment emits nothing and leaves whatever the
+            // previous statement put on the ring, so `[x, comment]` still yields x. It is the
+            // one arm with no ring location, and a consumer that asks for one fails closed.
             Comment => Empty(),
             Assignment a => EmitAssignment(a, ctx),
             Block b => EmitBlock(b, ctx),
@@ -313,8 +369,21 @@ public static partial class AbiEmitter {
     private static Expression RejectCompile(string message) =>
         throw new InvalidOperationException($"VM compile rejected: {message}");
 
+    /// <summary>A rejection a nested-frame fallback must propagate, not swallow: the body
+    /// it rejected would otherwise compile into a frame no resume can re-enter.</summary>
+    private sealed class UnresumableBodyRejection(string message) : InvalidOperationException(message);
+
     private static Expression EmitConstant(Constant c, Context ctx) {
         int slot = ctx.AllocSlot();
+        if (c.Value is double d)
+            return Assign(ctx.RingVar(slot, typeof(double)), Constant(d));
+        if (c.Value is float f)
+            return Assign(ctx.RingVar(slot, typeof(float)), Constant(f));
+        // An int literal is an int: its boxed CLR type is the width analysis resolves for
+        // the constant, so the slot carries the same width and an all-int expression pays
+        // no conversion between a variable and a literal.
+        if (c.Value is int i)
+            return Assign(ctx.RingVar(slot, typeof(int)), Constant(i));
         if (RingCodec.TryInlineConstant(c.Value, out long val))
             return Assign(ctx.RingVar(slot), Constant(val));
         return Assign(ctx.RingVar(slot),
@@ -471,7 +540,13 @@ public static partial class AbiEmitter {
         return Block([ignored], seq);
     }
 
-    private static Expression EmitNewArray(NewArray n, Context ctx) {
+    private static Expression EmitNewArray(NewArray n, Context ctx) =>
+        EmitNewArray(n, ctx, cacheLocal: null);
+
+    /// <summary>Create an array. When <paramref name="cacheLocal"/> is supplied the one
+    /// array built here is bound to it <em>and</em> to the heap: a promoted definition
+    /// allocates once, so the local and the variable's slot hold the same object.</summary>
+    private static Expression EmitNewArray(NewArray n, Context ctx, ParameterExpression? cacheLocal) {
         var ring = ctx.OpenRing();
         int lenSlot = ring.Add(CompileNode(n.Length, ctx));
         int slot = ctx.AllocSlot();
@@ -491,8 +566,10 @@ public static partial class AbiEmitter {
         // not readable through a member access and no caller tracked its base offset.
         Type elemType = RingCodec.ArraySlotElementType(elementClr);
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
-        var handle = Call(ctx.HeapLocal, HeapAllocate,
-            Convert(arr, typeof(object)));
+        if (cacheLocal is not null)
+            ring.AddUncounted(Assign(cacheLocal, arr));
+        Expression source = cacheLocal is null ? arr : cacheLocal;
+        var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(source, typeof(object)));
         return ring.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
 
@@ -506,6 +583,16 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
         var ring = ctx.OpenRing();
+        // A promoted array is the CLR local the definition bound, so the element is the
+        // array object indexed — one bounds check, no heap deref, no cast.
+        if (n.Value is Variable cached && ctx.TryArrayCache(cached, out var arrayLocal)) {
+            int cachedIdxSlot = ring.Add(CompileNode(
+                n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
+            int cachedOutSlot = ctx.AllocSlot();
+            var cachedRead = RingCodec.CachedElementRead(
+                arrayLocal, ctx.RingVar(cachedIdxSlot), ctx.HeapLocal);
+            return ring.Then(Assign(ctx.RingVar(cachedOutSlot), cachedRead));
+        }
         int arrSlot = ring.Add(CompileNode(n.Value, ctx));
         int idxSlot = ring.Add(CompileNode(
             n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
@@ -518,131 +605,96 @@ public static partial class AbiEmitter {
         return ring.Then(Assign(ctx.RingVar(outSlot), read));
     }
 
-    private static Expression CompileValue(Node node, Context ctx) {
-        if (ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node)
-            return CompileValue(replacement, ctx);
-        return node switch {
-            Constant c when RingCodec.TryInlineConstant(c.Value, out _)
-                => EmitConstantValue(c),
-            Constant c => SpillRingRead(EmitConstant(c, ctx), ctx),
-            Variable v => ctx.TryGetCapture(v, out _)
-                ? SpillRingRead(EmitVariable(v, ctx), ctx)
-                : ctx.VariableRead(v),
-            Add n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Add, ctx),
-            Subtract n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
-            Multiply n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
-            Divide n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Divide, ctx),
-            Modulo n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
-            BitwiseAnd n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, And, ctx),
-            BitwiseOr n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, Or, ctx),
-            BitwiseXor n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
-            ShiftLeft n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
-            ShiftRight n => EmitBinaryArithmeticValue(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
-            Equal n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, Equal, ctx, n),
-            NotEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, NotEqual, ctx, n),
-            LessThan n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
-            LessThanOrEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, LessThanOrEqual, ctx),
-            GreaterThan n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThan, ctx),
-            GreaterThanOrEqual n => EmitComparisonValue(n.LeftHandValue, n.RightHandValue, GreaterThanOrEqual, ctx),
-            Not n => EmitNotValue(n, ctx),
-            UnaryMinus n => EmitUnaryMinusValue(n, ctx),
-            BitwiseNot n => EmitBitwiseNotValue(n, ctx),
-            PopCount pc => EmitPopCountValue(pc, ctx),
-            Conditional c => EmitConditionalValue(c, ctx),
-            Coalesce n => EmitCoalesceValue(n, ctx),
-            And n => EmitLogicalAndValue(n, ctx),
-            Or n => EmitLogicalOrValue(n, ctx),
-            Default d => SpillRingRead(EmitDefault(d, ctx), ctx),
-            ThisReference => SpillRingRead(EmitThis(ctx), ctx),
-            ParameterReference => RejectCompile("ParameterReference is not a VM value; bind a Parameter."),
-            NullForgiving n => CompileValue(n.Operand, ctx),
-            TypeAs ta => SpillRingRead(EmitTypeAs(ta, ctx), ctx),
-            TypeCast tc => SpillRingRead(EmitTypeCast(tc, ctx), ctx),
-            Await aw => SpillRingRead(EmitAwait(aw, ctx), ctx),
-            TypeOf t => SpillRingRead(EmitTypeOf(t, ctx), ctx),
-            ThrowExpression te => EmitThrow(new ThrowStatement(te.Value), ctx),
-            IndexAccess n => EmitIndexAccessValue(n, ctx),
-            Block b => SpillRingRead(CompileNode(b, ctx), ctx),
-            Member m => SpillRingRead(CompileNode(m, ctx), ctx),
-            New n => SpillRingRead(CompileNode(n, ctx), ctx),
-            NewArray n => SpillRingRead(CompileNode(n, ctx), ctx),
-            Parameter p => SpillRingRead(CompileNode(p, ctx), ctx),
-            Invoke inv => SpillRingRead(CompileNode(inv, ctx), ctx),
-            InterpolatedString interp => SpillRingRead(CompileNode(interp, ctx), ctx),
-            TypeIs t => SpillRingRead(CompileNode(t, ctx), ctx),
-            SwitchStatement sw => Compile(sw, ctx).RequireResult(sw).Read(ctx),
-            StridedSetBits ssb => SpillRingRead(CompileNode(ssb, ctx), ctx),
-            Assignment a => SpillRingRead(CompileNode(a, ctx), ctx),
-            Comment => RejectCompile("Comment is not a VM value."),
-            NamedTypeReference or TypeReference or PrimitiveTypeReference or TypeDefinitionReference =>
-                RejectCompile("Type name is not a VM value; use it as a Member/Invoke/New receiver."),
-            _ => throw new NotSupportedException(
-                $"CompileValue: unhandled {node.GetType().Name}")
-        };
-    }
-
-    private static Expression EmitIndexAccessValue(IndexAccess n, Context ctx) {
-        return SpillRingRead(CompileNode(n, ctx), ctx);
-    }
-
     private static Expression SpillToRing(Expression value, Context ctx) {
         int slot = ctx.AllocSlot();
         ctx.RingDepth = slot + 1;
-        return Assign(ctx.RingVar(slot), value);
-    }
-
-    private static Expression SpillRingRead(Expression compiled, Context ctx) {
-        int slot = ctx.RingDepth - 1;
-        return Block(compiled, ctx.RingVar(slot));
-    }
-
-    private static Expression EmitConstantValue(Constant c) {
-        if (RingCodec.TryInlineConstant(c.Value, out long val)) return Constant(val);
-        return Constant(0L);
+        // An IEEE value keeps its own local: that is the whole point of the typed
+        // slot, and the reason an all-IEEE expression needs no bitcast between operands.
+        return Assign(ctx.RingVar(slot, RingCodec.SlotTypeOf(value.Type)), value);
     }
 
     private static Expression EmitBinaryArithmeticValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
         Context ctx) {
-        var leftVal = CompileValue(left, ctx);
-        var rightVal = CompileValue(right, ctx);
-        if (RingCodec.IsIeee(left, ctx.Analysis) || RingCodec.IsIeee(right, ctx.Analysis))
-            return RingCodec.ToIeee(
-                factory(AsIeeeDouble(left, leftVal, ctx), AsIeeeDouble(right, rightVal, ctx)));
-        var rhs = rightVal;
-        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
-        return factory(leftVal, rhs);
+        var leftVal = ValueOf(left, ctx);
+        var rightVal = ValueOf(right, ctx);
+        bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
+        bool rightIeee = RingCodec.IsIeee(right, ctx.Analysis);
+        if (leftIeee || rightIeee) {
+            var target = IeeeArithmeticType(
+                leftIeee ? ctx.ClrTypeOf(left) : null,
+                rightIeee ? ctx.ClrTypeOf(right) : null);
+            return factory(
+                AsIeee(left, leftVal, target, ctx),
+                AsIeee(right, rightVal, target, ctx));
+        }
+        // A shift's result width is its left operand's; its count is always an int in C#.
+        if (factory == LeftShift || factory == RightShift)
+            return factory(
+                RingCodec.AsRepresentation(leftVal, IntegerWidthOf(left, ctx)),
+                RingCodec.AsRepresentation(rightVal, typeof(int)));
+        // Every other integer operator — bitwise included — runs at the width analysis
+        // resolved for its operands, so `Expression.Add(int, int)` wraps at 32 bits because
+        // the CLR does, and an all-int expression needs no conversion between operations.
+        var width = IntegerArithmeticWidthOf(left, right, ctx);
+        return factory(
+            RingCodec.AsRepresentation(leftVal, width),
+            RingCodec.AsRepresentation(rightVal, width));
     }
 
-    private static Expression AsIeeeDouble(Node node, Expression ringVal, Context ctx) =>
-        RingCodec.IsIeee(node, ctx.Analysis)
-            ? RingCodec.FromIeee(ringVal)
-            : Convert(ringVal, typeof(double));
+    /// <summary>The width an integer operation runs at, from the operand types analysis
+    /// resolved. An operand whose width is unresolved is a compile rejection that names it:
+    /// falling back to the word is how
+    /// [#289](https://github.com/scoizzle/Poly/issues/289) arose.</summary>
+    private static Type IntegerArithmeticWidthOf(Node left, Node right, Context ctx) =>
+        RingCodec.IntegerArithmeticWidth(
+            ResolvedOperandType(left, ctx), ResolvedOperandType(right, ctx));
 
-    private static Expression EmitNotValue(Not n, Context ctx) =>
-        Condition(Equal(CompileValue(n.Value, ctx), Constant(0L)), Constant(1L), Constant(0L));
+    /// <summary>The width one operand's own arithmetic runs at: <c>int</c> for the types C#
+    /// promotes to 32 bits, the word otherwise.</summary>
+    private static Type IntegerWidthOf(Node node, Context ctx) =>
+        RingCodec.IsInt32Width(ResolvedOperandType(node, ctx)) ? typeof(int) : typeof(long);
 
-    private static Expression EmitUnaryMinusValue(UnaryMinus n, Context ctx) {
-        var v = CompileValue(n.Operand, ctx);
-        return RingCodec.IsIeee(n.Operand, ctx.Analysis)
-            ? RingCodec.ToIeee(Negate(RingCodec.FromIeee(v)))
-            : Negate(v);
+    /// <summary>The CLR type analysis resolved for an arithmetic operand, or a rejection
+    /// that names the operand.</summary>
+    private static Type ResolvedOperandType(Node node, Context ctx) =>
+        ctx.ClrTypeOf(node)
+        ?? throw new InvalidOperationException(
+            "VM compile rejected: cannot resolve the integer width of "
+            + $"'{node}' ({node.GetType().Name}).");
+
+    /// <summary>The type an IEEE arithmetic result takes: <c>double</c> as soon as
+    /// either operand is one, otherwise <c>float</c> — C#'s own promotion, which keeps
+    /// a <c>float</c> expression 32-bit.</summary>
+    private static Type IeeeArithmeticType(Type? left, Type? right) =>
+        left == typeof(double) || right == typeof(double) ? typeof(double) : typeof(float);
+
+    /// <summary>An operand at <paramref name="target"/>. A typed slot is already the
+    /// value; a word that holds IEEE bits is bitcast, and a word that is a plain
+    /// integer is converted.</summary>
+    private static Expression AsIeee(Node node, Expression value, Type target, Context ctx) {
+        if (value.Type == typeof(long))
+            value = RingCodec.IsIeee(node, ctx.Analysis)
+                ? RingCodec.FromIeee(value)
+                : Convert(value, target);
+        return value.Type == target ? value : Convert(value, target);
     }
-
-    private static Expression EmitBitwiseNotValue(BitwiseNot n, Context ctx) =>
-        Not(CompileValue(n.Operand, ctx));
-
-    private static Expression EmitPopCountValue(PopCount pc, Context ctx) =>
-        Convert(Call(null, BitOperationsPopCount,
-            Convert(CompileValue(pc.Operand, ctx), typeof(ulong))), typeof(long));
 
     private static Expression EmitConditionalValue(Conditional c, Context ctx) {
         var test = CompileConditionAsBool(c.Condition, ctx);
         var ifTrue = CompileConditionalBranch(c, c.IfTrue, ctx);
         var ifFalse = CompileConditionalBranch(c, c.IfFalse, ctx);
-        if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void))
+        if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void)) {
+            // An IEEE arm keeps the value, so the arms must agree on one width before
+            // Expression.Condition can take them.
+            if (ifTrue.Type != ifFalse.Type) {
+                var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
+                ifTrue = Convert(ifTrue, target);
+                ifFalse = Convert(ifFalse, target);
+            }
             return Condition(test, ifTrue, ifFalse);
+        }
 
         // A `throw` arm compiles to a void block, and Expression.Condition rejects a
         // void arm. Give the void arm the other arm's type so the ternary still
@@ -669,16 +721,27 @@ public static partial class AbiEmitter {
                 Throw(New(InvalidOperationExceptionStringCtor,
                     Constant("Conditional access on a null receiver has no value in this subset."))),
                 Constant(0L));
-        return CompileValue(branch, ctx);
+        return ValueOf(branch, ctx);
     }
 
     private static bool IsValueRepresented(Node node, Context ctx) =>
         ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
+    /// <summary>The one type two arms of a value can share: <c>double</c> if either is
+    /// one, else <c>float</c> if either is one, else <c>long</c> if either is one, else the
+    /// left type unchanged.</summary>
+    private static Type ValueTypeOf(Type left, Type right) =>
+        left == typeof(double) || right == typeof(double) ? typeof(double)
+            : left == typeof(float) || right == typeof(float) ? typeof(float)
+            : left == typeof(long) || right == typeof(long) ? typeof(long)
+            : left;
+
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
         var tmp = Variable(typeof(long), "_coal");
-        var leftVal = CompileValue(n.LeftHandValue, ctx);
-        var rightVal = CompileValue(n.RightHandValue, ctx);
+        var leftVal = ValueOf(n.LeftHandValue, ctx);
+        // A coalesce answers in the word: its left side is a nullable heap handle, so
+        // an IEEE right arm crosses the boundary here rather than widening the result.
+        var rightVal = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));
         Expression whenLeft = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;
@@ -700,16 +763,6 @@ public static partial class AbiEmitter {
         return Call(null, UnboxNullableToLongInfo, ctx.HeapLocal, handle);
     }
 
-    private static Expression EmitLogicalAndValue(And n, Context ctx) =>
-        Condition(Equal(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
-            Constant(0L),
-            CompileValue(n.RightHandValue, ctx));
-
-    private static Expression EmitLogicalOrValue(Or n, Context ctx) =>
-        Condition(NotEqual(CompileValue(n.LeftHandValue, ctx), Constant(0L)),
-            Constant(1L),
-            CompileValue(n.RightHandValue, ctx));
-
     private static Expression CompileConditionAsBool(Node node, Context ctx) =>
         node switch {
             Equal n => CompileCompareTest(n.LeftHandValue, n.RightHandValue, Equal, ctx),
@@ -723,6 +776,11 @@ public static partial class AbiEmitter {
                 CompileConditionAsBool(n.RightHandValue, ctx)),
             Or n => OrElse(CompileConditionAsBool(n.LeftHandValue, ctx),
                 CompileConditionAsBool(n.RightHandValue, ctx)),
-            _ => NotEqual(CompileValue(node, ctx), Constant(0L))
+            _ => IsNonZero(ValueOf(node, ctx))
         };
+
+    /// <summary>Truthiness at the value's own width: an <c>int</c> slot compares with an
+    /// <c>int</c> zero, a word with the word's.</summary>
+    private static Expression IsNonZero(Expression value) =>
+        value.Type == typeof(int) ? NotEqual(value, Constant(0)) : NotEqual(value, Constant(0L));
 }

@@ -15,7 +15,11 @@ public static partial class AbiEmitter {
     private static Expression EmitAssignment(Assignment a, Context ctx) {
         if (a.Destination is IndexAccess indexAccess) {
             var ring = ctx.OpenRing();
-            int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
+            // A promoted array's element store is the CLR local indexed, mirroring the read.
+            ParameterExpression? cachedArray = null;
+            bool cachedStore = indexAccess.Value is Variable cached
+                && ctx.TryArrayCache(cached, out cachedArray);
+            int arrSlot = cachedStore ? -1 : ring.Add(CompileNode(indexAccess.Value, ctx));
             int idxSlot = ring.Add(CompileNode(
                 indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
             int valSlot = ring.Add(CompileNode(a.Value, ctx));
@@ -23,12 +27,19 @@ public static partial class AbiEmitter {
             Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
                 ? clrElem.RuntimeType
                 : null;
-            var store = RingCodec.ArrayElementWrite(
-                ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
-                elemType, RingCodec.IsIeee(a.Value, ctx.Analysis));
+            bool valueIsIeee = RingCodec.IsIeee(a.Value, ctx.Analysis);
+            Expression store;
+            if (cachedStore)
+                store = RingCodec.CachedElementWrite(
+                    cachedArray!, ctx.RingVar(idxSlot), ctx.RingVar(valSlot), elemType, valueIsIeee);
+            else
+                store = RingCodec.ArrayElementWrite(
+                    ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
+                    elemType, valueIsIeee);
 
-            ctx.RingDepth = arrSlot + 1;
-            return ring.Then(Block(store, Assign(ctx.RingVar(arrSlot), ctx.RingVar(valSlot))));
+            ctx.RingDepth = (cachedStore ? idxSlot : arrSlot) + 1;
+            return ring.Then(Block(store, Assign(
+                ctx.RingVar(cachedStore ? idxSlot : arrSlot), ctx.RingVar(valSlot))));
         }
 
         if (a.Destination is Member member) {
@@ -91,38 +102,71 @@ public static partial class AbiEmitter {
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: assignment destination '{destVar.Name}' is not declared in any scope.");
         var value = ctx.OpenRing();
-        int resultSlot = value.Add(CompileNode(a.Value, ctx));
-        var result = destination.Write(ctx,
-            CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
+        var compiled = CacheDefinition(a, destVar, ctx) ?? CompileNode(a.Value, ctx);
+        int valueIndex = ctx.RingDepth - 1;
+        value.Add(compiled);
+        var result = destination.Write(ctx, AssignedValue(ctx, destVar, a.Value, valueIndex, compiled));
         return value.Then(result);
     }
 
+    /// <summary>A promoted array's definition: the array is created once and bound to both
+    /// the typed local and the variable's slot, which keeps the handle. This is the one
+    /// site that supplies <see cref="EmitNewArray(NewArray, Context, ParameterExpression?)"/>
+    /// with a cache, so promotion and its allocation cannot drift apart.</summary>
+    private static Expression? CacheDefinition(Assignment a, Variable destVar, Context ctx) =>
+        a.Value is NewArray newArray
+        && !IsReplaced(newArray, ctx)
+        && ctx.TryArrayCache(destVar, out var cache)
+            ? EmitNewArray(newArray, ctx, cache)
+            : null;
+
+    /// <summary>True when analysis replaced <paramref name="node"/> with another node, which
+    /// is what <see cref="Compile"/> follows. A replaced definition is not the array it
+    /// names, so it keeps the general path.</summary>
+    private static bool IsReplaced(Node node, Context ctx) =>
+        ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node;
+
     /// <summary>
-    /// Convert a compiled value into the destination variable's slot representation.
-    /// Doubles and floats live in slots as IEEE bit patterns, so a scalar value needs
-    /// <c>DoubleToInt64Bits</c>, and a double value assigned to a scalar variable needs
-    /// <c>Int64BitsToDouble</c> first. Without this the raw value lands in a slot the
-    /// other representation reads (e.g. <c>double x = 1; x = 2;</c>).
+    /// The compiled value at the variable's own representation. The emitter's own type
+    /// says how the value was <em>encoded</em> (<c>double</c>, <c>float</c>, or the word),
+    /// while the value's analysis type says what it <em>means</em>: a word encoding of a
+    /// double is its bit pattern, an integer word is the number. The numeric conversion
+    /// between the two width classes happens once here — an integer assigned to a
+    /// <c>double</c> variable widens, a <c>double</c> assigned to an integer truncates —
+    /// and the storage then takes the value as the word if the storage is a word (a
+    /// cell-backed local, whose register holds the cell handle).
     /// </summary>
-    private static Expression CoerceSlotToDestination(Context ctx, Variable destination, Node value, Expression slot) {
-        bool destinationIsDouble = RingCodec.IsIeee(destination, ctx.Analysis);
-        bool valueIsDouble = RingCodec.IsIeee(value, ctx.Analysis);
-        if (destinationIsDouble == valueIsDouble)
-            return slot;
-        return destinationIsDouble
-            ? RingCodec.ToIeee(Convert(slot, typeof(double)))
-            : Convert(RingCodec.FromIeee(slot), typeof(long));
+    private static Expression AssignedValue(
+        Context ctx, Variable destination, Node value, int valueIndex, Expression compiled) {
+        var valueType = ctx.SlotTypeOf(value);
+        var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
+        var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
+        return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
+        var releases = new List<Expression>();
+        var cacheClears = new List<Expression>();
         foreach (var v in block.Variables) {
             if (v is Variable variable) {
                 ctx.DeclareVariable(variable);
                 varInitExprs.Add(ctx.NeedsCell(variable)
                     ? EmitUpvalueCellInit(variable, ctx)
-                    : Assign(ctx.VariableRead(variable), Constant(0L)));
+                    : ctx.VariableWrite(variable, ctx.VariableZero(variable)));
+                if (ArrayCacheCandidate(variable, block, ctx) is { } cache) {
+                    // The promotion predicate is the only proof of death this VM has: the
+                    // array is not returned, passed, aliased, or captured, and every other
+                    // reference is an IndexAccess receiver. A definition that is itself the
+                    // block's value is the exception the predicate cannot see — that value
+                    // is the handle — so such a handle stays live.
+                    if (!IsBlockValue(block, variable)) {
+                        releases.Add(Call(ctx.HeapLocal, HeapRecycle,
+                            Convert(ctx.VariableReadRaw(variable), typeof(int))));
+                    }
+                    cacheClears.Add(Assign(cache, Constant(null, cache.Type)));
+                }
             }
         }
         // Each statement starts from the block's entry depth. A statement's result is
@@ -133,27 +177,148 @@ public static partial class AbiEmitter {
         // so the block's value stays at RingDepth - 1 and Compile reports it.
         var stmtExprs = new List<Expression>(block.Nodes.Count);
         int entryDepth = ctx.RingDepth;
+        Type? valueClrType = null;
         for (int i = 0; i < block.Nodes.Count; i++) {
             var statement = block.Nodes[i];
             // A comment or a label emits no code and no value, so it must not release
             // what the previous statement left: that value is still the block's result
             // (`[return x, comment]` yields x).
-            if (statement is not (Comment or LabelDeclaration))
+            bool resetsDepth = statement is not (Comment or LabelDeclaration);
+            if (resetsDepth)
                 ctx.RingDepth = entryDepth;
-            stmtExprs.Add(CompileStatement(statement, ctx));
+            var code = CompileStatement(statement, ctx);
+            stmtExprs.Add(code);
+            if (statement is not Comment)
+                valueClrType = code.Type;
         }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
-        var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count);
+        var all = new List<Expression>(
+            varInitExprs.Count + stmtExprs.Count + stores.Count + releases.Count + cacheClears.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
         // The block-exit snapshot is also what VmDebugger.GetLocals reads after
         // execution, when no hook was ever attached, so it stays unconditional.
         // Per-statement stores live inside the hook guard (CompileStatement).
         all.AddRange(stores);
+        // A promoted array's cache local is keyed by slot, and a slot is handed to the
+        // next sibling block's variable, so it is cleared once its own scope is over: a
+        // later block that read it before defining its own array then fails closed on
+        // null instead of reading this block's array. The handle is released just before
+        // the clear — the promotion predicate proved no one can observe the array again,
+        // so the free is what makes the null mean what it looks like.
+        all.AddRange(releases);
+        all.AddRange(cacheClears);
         if (all.Count == 0) return Empty();
+        // A trailing snapshot store, recycle, or cache clear would otherwise type the block
+        // as what it does. Re-read the live value slot after them so the block's own type is
+        // the value's — an IEEE value stays a double instead of being read as bits, and a
+        // word value stays a word instead of the array a cache clear holds.
+        var valueSlotType = RingCodec.SlotTypeOf(valueClrType);
+        bool trailing = stores.Count > 0 || releases.Count > 0 || cacheClears.Count > 0;
+        if (trailing && ctx.RingDepth > entryDepth
+            && (RingCodec.IsTypedSlot(valueSlotType) || cacheClears.Count > 0))
+            all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
     }
+
+    /// <summary>True when the last statement that produces the block's value is the
+    /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
+    /// expression still observes it, and recycling it there would dangle a live handle.
+    /// A comment produces no value, so it does not end the search.</summary>
+    private static bool IsBlockValue(Block block, Variable variable) {
+        for (int i = block.Nodes.Count - 1; i >= 0; i--) {
+            if (block.Nodes[i] is Comment)
+                continue;
+            return block.Nodes[i] is Assignment assignment && Binds(assignment.Destination, variable);
+        }
+        return false;
+    }
+
+    /// <summary>The typed CLR local that caches <paramref name="variable"/>'s array, when
+    /// every reference the declaring block makes to it is an element access. Anything else
+    /// — a reassignment, <c>.Length</c>, an argument, a return, a capture, a use inside a
+    /// nested function body, or an element type the type pass cannot resolve — keeps the
+    /// heap path: the local is a cache for element access, never a replacement for the
+    /// variable.
+    /// <para>The definition must also be reachable before every use, so the local is
+    /// always assigned by the time it is read.</para></summary>
+    private static ParameterExpression? ArrayCacheCandidate(Variable variable, Block block, Context ctx) {
+        if (ctx.NeedsCell(variable))
+            return null;
+        int definition = -1;
+        NewArray? created = null;
+        for (int i = 0; i < block.Nodes.Count; i++) {
+            if (block.Nodes[i] is not Assignment assignment || !Binds(assignment.Destination, variable))
+                continue;
+            // A second assignment anywhere in the block — including inside a nested one —
+            // would leave the local disagreeing with the slot after the rebind.
+            if (definition >= 0 || assignment.Value is not NewArray newArray || IsReplaced(newArray, ctx))
+                return null;
+            definition = i;
+            created = newArray;
+        }
+        if (created is not null && ArrayElementClrType(created.ElementType, ctx) is { } elementClr) {
+            for (int i = 0; i < definition; i++) {
+                if (ReferencesName(block.Nodes[i], variable))
+                    return null;
+            }
+            if (created.Length is { } length && ReferencesName(length, variable))
+                return null;
+            for (int i = definition + 1; i < block.Nodes.Count; i++) {
+                if (!OnlyElementAccesses(block.Nodes[i], variable, block))
+                    return null;
+            }
+            return ctx.PromoteArray(variable, RingCodec.ArrayClrType(elementClr));
+        }
+        return null;
+    }
+
+    /// <summary>Every reference to the binding in a subtree must be the receiver of an
+    /// <see cref="IndexAccess"/>. A nested function body is a separate delegate and cannot
+    /// see the local at all, so a reference inside one disqualifies the variable; a nested
+    /// block that redeclares the name makes the reference ambiguous, which also disqualifies
+    /// it rather than guessing which binding a name match meant.</summary>
+    private static bool OnlyElementAccesses(
+        Node? node, Variable variable, Block declaring, bool receiver = false) {
+        if (node is null)
+            return true;
+        if (Binds(node, variable))
+            return receiver;
+        if (node is Lambda)
+            return !ReferencesName(node, variable);
+        if (node is Block nested && !ReferenceEquals(nested, declaring)
+            && nested.Variables.Any(v => v is Variable other
+                && !ReferenceEquals(other, variable)
+                && other.Name == variable.Name))
+            return false;
+        if (node is ForLoop { DeclaredVariables: { } declared }
+            && declared.Any(other => !ReferenceEquals(other, variable) && other.Name == variable.Name))
+            return false;
+        if (node is IndexAccess access)
+            return OnlyElementAccesses(access.Value, variable, declaring, receiver: true)
+                && access.Arguments.All(argument => OnlyElementAccesses(argument, variable, declaring));
+        return node.Children.All(child => OnlyElementAccesses(child, variable, declaring));
+    }
+
+    /// <summary>True when any node in the subtree resolves to the binding — by identity, or
+    /// by name, because a use site reaches a declaration it does not share an instance with.
+    /// </summary>
+    private static bool ReferencesName(Node? node, Variable variable) {
+        if (node is null)
+            return false;
+        if (Binds(node, variable))
+            return true;
+        return node.Children.Any(child => ReferencesName(child, variable));
+    }
+
+    /// <summary>True when a reference node denotes the binding: the declaration's own
+    /// instance, or a use of the same name. Shadowing is excluded by the callers, which
+    /// bail on a nested declaration of the name.</summary>
+    private static bool Binds(Node? node, Variable variable) =>
+        node is Variable use
+        && (ReferenceEquals(use, variable)
+            || string.Equals(use.Name, variable.Name, StringComparison.Ordinal));
 
     private static Expression EmitIfStatement(IfStatement ifStmt, Context ctx) {
         // Every arm starts from the same depth and its slots are dead afterwards, so
@@ -198,7 +363,8 @@ public static partial class AbiEmitter {
                 def = Compile(sw.DefaultCase, ctx);
             }
             rest = Block(def.Code,
-                Assign(ctx.RingVar(outSlot), def.RequireResult(sw.DefaultCase).Read(ctx)));
+                Assign(ctx.RingVar(outSlot),
+                    RingCodec.ToWord(def.RequireResult(sw.DefaultCase).Read(ctx))));
         }
         else {
             rest = Assign(ctx.RingVar(outSlot), Constant(0L));
@@ -219,9 +385,11 @@ public static partial class AbiEmitter {
             rest = Block(
                 pattern.Code,
                 IfThenElse(
-                    Equal(ctx.RingVar(valSlot), pattern.RequireResult(c.Pattern).Read(ctx)),
+                    Equal(ctx.RingVar(valSlot),
+                        RingCodec.ToWord(pattern.RequireResult(c.Pattern).Read(ctx))),
                     Block(body.Code,
-                        Assign(ctx.RingVar(outSlot), body.RequireResult(c.Body).Read(ctx))),
+                        Assign(ctx.RingVar(outSlot),
+                            RingCodec.ToWord(body.RequireResult(c.Body).Read(ctx)))),
                     rest));
         }
 
@@ -229,27 +397,98 @@ public static partial class AbiEmitter {
         return ring.Then(Block(rest, ctx.RingVar(outSlot)));
     }
 
-    private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) {
-        var breakLabel = Label("wl_break");
-        var continueLabel = Label("wl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, wl.Label);
+    /// <summary>Where a loop's test runs: at the top of each iteration, or after its
+    /// body — the difference that makes <c>do</c> run at least once.</summary>
+    private enum LoopTestPosition { BeforeBody, AfterBody }
+
+    /// <summary>
+    /// What one loop means, as opposed to how any loop is built: its test, the
+    /// statements that run once per iteration around the body, the body itself, and
+    /// what <c>continue</c> lands on. <see cref="EmitLoopScaffold"/> supplies the rest.
+    /// </summary>
+    private sealed record LoopPlan(
+        string LabelPrefix,
+        string? Name,
+        LoopTestPosition TestPosition,
+        Func<Context, Expression> Test,
+        Func<Context, Expression>? PerIteration,
+        Func<Context, Expression> Body,
+        Func<Context, Expression>? AfterContinue);
+
+    /// <summary>
+    /// The one loop shape all four loop emitters share: break/continue label pair, the
+    /// loop scope <c>break</c>/<c>continue</c> resolve in, the iteration guard, the
+    /// test's jump to the break label, the continue label, and the ring rewind around
+    /// each compile. Four hand-kept copies of this order is how #259 happened, so the
+    /// order lives here once and the emitters only describe their plan.
+    /// </summary>
+    private static Expression EmitLoopScaffold(LoopPlan plan, Context ctx) {
+        var breakLabel = Label($"{plan.LabelPrefix}_break");
+        var continueLabel = Label($"{plan.LabelPrefix}_continue");
+        ctx.PushLoopScope(breakLabel, continueLabel, plan.Name);
+
+        // Test, per-iteration statements, body and after-continue each start from the
+        // loop's entry depth and their slots are dead afterwards; the scope restores it,
+        // so the cursor cannot drift.
         Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(wl.Condition, ctx);
+        Expression body;
+        if (plan.TestPosition == LoopTestPosition.BeforeBody) {
+            using (ctx.OpenRingScope()) {
+                test = plan.Test(ctx);
+            }
+            using (ctx.OpenRingScope()) {
+                body = plan.Body(ctx);
+            }
         }
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(wl.Body, ctx);
+        else {
+            using (ctx.OpenRingScope()) {
+                body = plan.Body(ctx);
+            }
+            using (ctx.OpenRingScope()) {
+                test = plan.Test(ctx);
+            }
         }
-        var loopBody = Block(
-            EmitLoopIterationGuard(ctx),
-            IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr,
-            Label(continueLabel));
-        var result = Loop(loopBody, breakLabel);
+        Expression? perIteration = null;
+        if (plan.PerIteration is not null) {
+            using (ctx.OpenRingScope()) {
+                perIteration = plan.PerIteration(ctx);
+            }
+        }
+        Expression? afterContinue = null;
+        if (plan.AfterContinue is not null) {
+            using (ctx.OpenRingScope()) {
+                afterContinue = plan.AfterContinue(ctx);
+            }
+        }
+
+        var loopBody = new List<Expression> { EmitLoopIterationGuard(ctx) };
+        if (plan.TestPosition == LoopTestPosition.BeforeBody)
+            loopBody.Add(IfThen(Not(test), Goto(breakLabel)));
+        if (perIteration is not null)
+            loopBody.Add(perIteration);
+        loopBody.Add(body);
+        loopBody.Add(Label(continueLabel));
+        if (afterContinue is not null)
+            loopBody.Add(afterContinue);
+        if (plan.TestPosition == LoopTestPosition.AfterBody)
+            loopBody.Add(IfThen(Not(test), Goto(breakLabel)));
+
+        var result = Loop(Block(loopBody), breakLabel);
         ctx.PopLoopScope();
         return result;
     }
+
+    private static Expression EmitWhileLoop(WhileLoop wl, Context ctx) =>
+        EmitLoopScaffold(
+            new LoopPlan(
+                "wl",
+                wl.Label,
+                LoopTestPosition.BeforeBody,
+                Test: c => CompileConditionAsBool(wl.Condition, c),
+                PerIteration: null,
+                Body: c => CompileNode(wl.Body, c),
+                AfterContinue: null),
+            ctx);
 
     private static Expression EmitLoopIterationGuard(Context ctx) {
         if (ctx.Mode == CompilationMode.NoDebug)
@@ -266,27 +505,17 @@ public static partial class AbiEmitter {
                         Constant("MaxLoopIterations exceeded."))))));
     }
 
-    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) {
-        var breakLabel = Label("dwl_break");
-        var continueLabel = Label("dwl_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, dwl.Label);
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(dwl.Body, ctx);
-        }
-        Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(dwl.Condition, ctx);
-        }
-        var loopBody = Block(
-            EmitLoopIterationGuard(ctx),
-            bodyExpr,
-            Label(continueLabel),
-            IfThen(Not(test), Goto(breakLabel)));
-        var result = Loop(loopBody, breakLabel);
-        ctx.PopLoopScope();
-        return result;
-    }
+    private static Expression EmitDoWhileLoop(DoWhileLoop dwl, Context ctx) =>
+        EmitLoopScaffold(
+            new LoopPlan(
+                "dwl",
+                dwl.Label,
+                LoopTestPosition.AfterBody,
+                Test: c => CompileConditionAsBool(dwl.Condition, c),
+                PerIteration: null,
+                Body: c => CompileNode(dwl.Body, c),
+                AfterContinue: null),
+            ctx);
 
     private static Expression EmitThrow(ThrowStatement ts, Context ctx) {
         // Preserve the operand instance (Constant / Variable / New / ThrowExpression value).
@@ -353,6 +582,9 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitSuspendNode(SuspendNode sn, Context ctx) {
+        if (!ctx.IsRootBody)
+            throw new UnresumableBodyRejection(
+                $"VM compile rejected: SuspendNode '{sn}' is only executable in the compilation-unit body; a compiled function or lambda body emits no resume dispatch.");
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, sn);
         var resumeLabel = ctx.RegisterOrGetResumeLabel(step);
@@ -392,7 +624,7 @@ public static partial class AbiEmitter {
     }
 
     private static Expression ParameterValue(Parameter p, Context ctx) =>
-        ctx.Resolve(p).Read(ctx);
+        RingCodec.ToWord(ctx.Resolve(p).Read(ctx));
 
     /// <summary>
     /// Domain programs bind the instance via <c>SetArgs(this, …)</c> at slot 0.
@@ -510,10 +742,6 @@ public static partial class AbiEmitter {
     /// When condition is null, treat as 'while(true)'.
     /// </summary>
     private static Expression EmitForLoop(ForLoop fl, Context ctx) {
-        var breakLabel = Label("for_break");
-        var continueLabel = Label("for_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, fl.Label);
-
         // A declaration initializer (`for (var i = 0; …)`) owns a scope: allocate its
         // variables before the initializer writes them, and release the slots when the
         // loop ends. The plain assignment form declares nothing here.
@@ -532,37 +760,20 @@ public static partial class AbiEmitter {
         }
         if (fl.Initializer != null)
             stmts.Add(CompileNode(fl.Initializer, ctx));
-        var condition = fl.Condition ?? new Constant(1L);
 
-        // Body, increment, and test each start from the loop's entry depth and their
-        // slots are dead afterwards; the scope restores it, so the cursor cannot drift.
-        Expression bodyExpr;
-        using (ctx.OpenRingScope()) {
-            bodyExpr = CompileNode(fl.Body, ctx);
-        }
-        Expression? incrementExpr = null;
-        if (fl.Increment is not null) {
-            using (ctx.OpenRingScope()) {
-                incrementExpr = CompileNode(fl.Increment, ctx);
-            }
-        }
-        Expression test;
-        using (ctx.OpenRingScope()) {
-            test = CompileConditionAsBool(condition, ctx);
-        }
+        stmts.Add(EmitLoopScaffold(
+            new LoopPlan(
+                "for",
+                fl.Label,
+                LoopTestPosition.BeforeBody,
+                Test: c => CompileConditionAsBool(fl.Condition ?? new Constant(1L), c),
+                PerIteration: null,
+                Body: c => CompileNode(fl.Body, c),
+                AfterContinue: fl.Increment is null ? null : c => CompileNode(fl.Increment, c)),
+            ctx));
 
-        var loopBody = new List<Expression> {
-            EmitLoopIterationGuard(ctx),
-            IfThen(Not(test), Goto(breakLabel)),
-            bodyExpr,
-            Label(continueLabel)
-        };
-        if (incrementExpr != null) loopBody.Add(incrementExpr);
-
-        stmts.Add(Loop(Block(loopBody), breakLabel));
         if (scoped)
             ctx.PopScope();
-        ctx.PopLoopScope();
         return Block(stmts);
     }
 
@@ -575,9 +786,6 @@ public static partial class AbiEmitter {
         // A foreach yields no ring value: the collection slot and the body's slots are
         // dead when it completes, so the whole emission closes one ring scope.
         using var ringScope = ctx.OpenRingScope();
-        var breakLabel = Label("foreach_break");
-        var continueLabel = Label("foreach_continue");
-        ctx.PushLoopScope(breakLabel, continueLabel, fel.Label);
         ctx.PushScope();
         ctx.DeclareVariable(fel.LoopVariable);
         Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
@@ -590,20 +798,17 @@ public static partial class AbiEmitter {
         var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
         var colObj = Variable(typeof(object), "_col");
 
-        // The method-level scope already closes this region, so the body compiles in it.
-        var bodyExpr = CompileNode(fel.Body, ctx);
+        var loop = EmitLoopScaffold(
+            new LoopPlan(
+                "foreach",
+                fel.Label,
+                LoopTestPosition.BeforeBody,
+                Test: _ => Call(enumerator, EnumeratorMoveNext),
+                PerIteration: c => c.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, c)),
+                Body: c => CompileNode(fel.Body, c),
+                AfterContinue: null),
+            ctx);
 
-        var loop = Loop(
-            Block(
-                EmitLoopIterationGuard(ctx),
-                IfThen(Not(Call(enumerator, EnumeratorMoveNext)),
-                    Goto(breakLabel)),
-                ctx.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, ctx)),
-                bodyExpr,
-                Label(continueLabel)),
-            breakLabel);
-
-        ctx.PopLoopScope();
         ctx.PopScope();
 
         return ring.Then(Block(

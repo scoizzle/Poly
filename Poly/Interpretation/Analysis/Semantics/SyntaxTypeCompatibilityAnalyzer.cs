@@ -515,26 +515,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             $"lambda has {nParams} parameter(s) but invoke has {nArgs} argument(s)");
     }
 
-    /// <summary>
-    /// A local's type is recorded on its declaring <see cref="Variable"/> node, but
-    /// every use (including each assignment destination) is a distinct node. Resolve
-    /// a use to the declaration the scope validator bound it to, so the prior type of
-    /// the <em>binding</em> — not of one assignment node — is what later writes check.
-    /// </summary>
-    private static Node BindingOf(AnalysisContext context, Variable variable) {
-        var meta = context.GetMetadata<VariableAnalysisMetadata>(variable);
-        if (meta is not null) {
-            if (meta.VariableReferences.TryGetValue(variable, out var declaration)
-                && declaration is not null)
-                return declaration;
-            if (meta.ParameterReferences.TryGetValue(variable, out var parameter))
-                return parameter;
-        }
-        return variable;
-    }
-
     private void CheckVariableAssign(AnalysisContext context, Variable variable, Assignment assignment) {
-        var binding = BindingOf(context, variable);
+        var binding = StoredLambdaBinding.BindingOf(context, variable);
         var isNullLiteral = assignment.Value is Constant { Value: null };
         var rhsType = isNullLiteral ? null : ClrTypeOf(context, assignment.Value);
         if (rhsType == typeof(void)) {

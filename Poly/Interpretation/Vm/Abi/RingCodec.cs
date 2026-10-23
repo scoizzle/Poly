@@ -70,6 +70,37 @@ internal static class RingCodec {
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
 
+    /// <summary>True for the types C# performs an arithmetic operator on at 32 bits:
+    /// <c>int</c>, plus every smaller integral type, which C# promotes to <c>int</c>
+    /// before the operator runs (<c>short + short</c> is an <c>int</c> addition).
+    /// <c>uint</c> is excluded: it is 32-bit but does not fit the signed <c>int</c>
+    /// representation, so it keeps the word.</summary>
+    public static bool IsInt32Width(Type type) =>
+        type == typeof(int) || type == typeof(short) || type == typeof(byte)
+        || type == typeof(sbyte) || type == typeof(ushort) || type == typeof(char);
+
+    /// <summary>True for the types C# performs an arithmetic operator on at 64 bits.</summary>
+    public static bool IsInt64Width(Type type) =>
+        type == typeof(long) || type == typeof(ulong);
+
+    /// <summary>The width an integer arithmetic operation runs at, from the two operand
+    /// types analysis resolved. C# promotes to the wider operand, so one <c>long</c> makes
+    /// the operation 64-bit; two 32-bit-width operands make it <c>int</c>, and the CLR then
+    /// wraps the result at 32 bits.
+    /// <para>An operand whose width analysis could not name has no width: this throws
+    /// rather than answering the word, because a silent 64-bit guess is how
+    /// [#289](https://github.com/scoizzle/Poly/issues/289) arose. A resolved non-integer
+    /// type (a <c>bool</c>, a <c>decimal</c>) keeps the word it has always had.</para></summary>
+    public static Type IntegerArithmeticWidth(Type? left, Type? right) {
+        if (left is null || right is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot resolve the integer width of an arithmetic "
+                + $"operand (left={(left?.Name ?? "unresolved")}, right={(right?.Name ?? "unresolved")}).");
+        if (IsInt64Width(left) || IsInt64Width(right))
+            return typeof(long);
+        return IsInt32Width(left) && IsInt32Width(right) ? typeof(int) : typeof(long);
+    }
+
     /// <summary>An IEEE <c>double</c> expression as its ring slot: the raw bit
     /// pattern. The one writer of the double-to-long bitcast.</summary>
     public static Expression ToIeee(Expression ieeeDouble) =>
@@ -79,6 +110,66 @@ internal static class RingCodec {
     /// reader of the long-to-double bitcast.</summary>
     public static Expression FromIeee(Expression ringVal) =>
         Call(BitConverterInt64BitsToDouble, ringVal);
+
+    /// <summary>The CLR type of a ring local holding a value of
+    /// <paramref name="clrType"/>: <c>double</c>, <c>float</c> and <c>int</c> keep their
+    /// own type, and every other shape — a wider integer, a smaller integral type C#
+    /// promotes to <c>int</c> before an operator, a handle, or a type analysis could not
+    /// resolve — uses the <c>long</c> word.</summary>
+    public static Type SlotTypeOf(Type? clrType) =>
+        clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
+            ? clrType
+            : typeof(long);
+
+    /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
+    public static bool IsTypedSlot(Type slotType) =>
+        IsIeee(slotType) || slotType == typeof(int);
+
+    /// <summary>A typed slot expression as the word. The one place an expression-level
+    /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
+    /// form of both IEEE widths is a <c>double</c>'s bits, and an <c>int</c> widens
+    /// numerically because it is a number, not a bit pattern.</summary>
+    public static Expression ToWord(Expression value) =>
+        value.Type == typeof(int) ? Convert(value, typeof(long))
+            : IsIeee(value.Type) ? ToIeee(Convert(value, typeof(double)))
+            : value;
+
+    /// <summary>The word as a typed slot expression: the mirror of
+    /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
+    public static Expression FromWord(Expression word, Type slotType) =>
+        slotType == typeof(int) ? Convert(word, typeof(int))
+            : slotType == typeof(float) ? Convert(FromIeee(word), typeof(float))
+            : slotType == typeof(double) ? FromIeee(word)
+            : word;
+
+    /// <summary><paramref name="value"/> at <paramref name="representation"/>: the value
+    /// itself when it is already there, otherwise one conversion. Between the word and an
+    /// IEEE slot that conversion is the bit pattern (they are two spellings of one storage);
+    /// between the word and an <c>int</c> slot it is numeric, because an <c>int</c> slot
+    /// holds the number. This is what a storage boundary asks for, so no access converts
+    /// more than once.</summary>
+    public static Expression AsRepresentation(Expression value, Type representation) {
+        if (value.Type == representation)
+            return value;
+        if (representation == typeof(int))
+            return Convert(IsIeee(value.Type) ? FromIeee(value) : value, typeof(int));
+        if (value.Type == typeof(int))
+            return representation == typeof(double) ? Convert(value, typeof(double))
+                : representation == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
+                : Convert(value, typeof(long));
+        return FromWord(ToWord(value), representation);
+    }
+
+    /// <summary><paramref name="value"/> at <paramref name="representation"/> as the
+    /// <em>number</em> it denotes, not its bit pattern: a word widens to a double, a
+    /// double truncates to the word. A typed storage means the destination's own type
+    /// decides the conversion, so it is the numeric one.</summary>
+    public static Expression NumericTo(Expression value, Type representation) =>
+        value.Type == representation ? value
+            : representation == typeof(double) ? Convert(value, typeof(double))
+            : representation == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
+            : representation == typeof(int) ? Convert(value, typeof(int))
+            : Convert(Convert(value, typeof(double)), typeof(long));
 
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
@@ -116,7 +207,8 @@ internal static class RingCodec {
 
     /// <summary>Whether a call argument sits in its slot as a raw scalar (not a
     /// heap handle). The value representation decides; without one, the
-    /// argument's resolved type does.</summary>
+    /// argument's resolved type does. An argument the emitter cannot place is a
+    /// compile error — there is no "treat unknown as a handle" fallback.</summary>
     public static bool IsStackScalar(Node node, AnalysisResult? analysis) {
         switch (ValueRepresentationClassifier.KindOf(analysis, node)) {
             case ValueRepresentationKind.StackScalar:
@@ -129,13 +221,6 @@ internal static class RingCodec {
                 $"VM compile rejected: cannot tell whether argument '{node}' is a scalar or a reference.");
         return type.GetRuntimeType() is { IsValueType: true };
     }
-
-    /// <summary>Whether an argument to the name-dispatched invoke path sits in its
-    /// ring slot as a scalar (boxed by its source type) rather than a heap handle.
-    /// The effective node's type decides: a replacement such as String.Concat is a
-    /// heap handle, not a boxed scalar. This predicate never throws.</summary>
-    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) =>
-        ValueRepresentationClassifier.KindOf(analysis, node) is ValueRepresentationKind.StackScalar;
 
     // ── Compile-time conversion ──────────────────────────────────
 
@@ -298,6 +383,12 @@ internal static class RingCodec {
     public static Type ArraySlotElementType(Type? elementClr) =>
         elementClr is { IsValueType: true } ? typeof(long) : typeof(object);
 
+    /// <summary>The CLR array type a VM array of <paramref name="elementClr"/> is created
+    /// as: <c>long[]</c> when the element is a slot word, <c>object[]</c> when it is a
+    /// handle. One definition, so a promoted local's type cannot disagree with creation.</summary>
+    public static Type ArrayClrType(Type? elementClr) =>
+        ArraySlotElementType(elementClr).MakeArrayType();
+
     /// <summary>Read one element of a VM array. A null
     /// <paramref name="elementClr"/> means the element type is unknown at compile
     /// time, so the arm dispatches on the runtime array shape (<c>long[]</c> vs
@@ -377,5 +468,32 @@ internal static class RingCodec {
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot store a floating-point value into a '{elementClr.Name}' array element.");
         return ToIeee(Convert(value, typeof(double)));
+    }
+
+    /// <summary>Read one element through a promoted array's typed CLR local: the array
+    /// object itself is indexed, so there is no handle deref and no <c>castclass</c>. The
+    /// local's own type is the array shape the heap holds — <c>long[]</c> for a value-type
+    /// element (its slot word), <c>object[]</c> for a reference element — so this answers
+    /// exactly what <see cref="ArrayElementRead"/> answers, without the deref.</summary>
+    public static Expression CachedElementRead(
+        Expression arrayLocal, Expression index, Expression heap) {
+        var idx = Convert(index, typeof(int));
+        return arrayLocal.Type == typeof(long[])
+            ? ArrayAccess(arrayLocal, idx)
+            : Call(BoxToAbiInfo, heap, ArrayAccess(Convert(arrayLocal, typeof(object[])), idx));
+    }
+
+    /// <summary>Store one element through a promoted array's typed CLR local. The element
+    /// coercion is <see cref="CoerceIndexStore"/>'s, unchanged, so a promoted write encodes
+    /// the same bits the heap path wrote.</summary>
+    public static Expression CachedElementWrite(
+        Expression arrayLocal, Expression index, Expression value,
+        Type? elementClr, bool valueIsIeee) {
+        var idx = Convert(index, typeof(int));
+        if (arrayLocal.Type == typeof(long[]))
+            return Assign(ArrayAccess(arrayLocal, idx),
+                elementClr is null ? value : CoerceIndexStore(value, elementClr, valueIsIeee));
+        return Assign(ArrayAccess(Convert(arrayLocal, typeof(object[])), idx),
+            Convert(value, typeof(object)));
     }
 }

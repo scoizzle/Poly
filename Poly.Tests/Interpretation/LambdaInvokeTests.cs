@@ -1,7 +1,4 @@
 using Poly.Interpretation;
-using Poly.Tests.TestHelpers;
-
-using Expr = System.Linq.Expressions.Expression;
 
 namespace Poly.Tests.Interpretation;
 
@@ -12,11 +9,6 @@ public class LambdaInvokeTests {
     public async Task Lambda_WithNoParameters_CompilesAndReturnsConstant() {
         var lambda = new Lambda([], Wrap(42));
 
-        var expr = lambda.BuildExpression();
-        var compiled = Expr.Lambda<Func<Func<int>>>(expr).Compile();
-        var result = compiled()();
-
-        await Assert.That(result).IsEqualTo(42);
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda)));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(42);
     }
@@ -26,10 +18,6 @@ public class LambdaInvokeTests {
         var p = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([p], p);
 
-        var compiled = lambda.CompileLambda<Func<Func<int, int>>>();
-        var result = compiled()(7);
-
-        await Assert.That(result).IsEqualTo(7);
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(7))));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(7);
     }
@@ -40,10 +28,6 @@ public class LambdaInvokeTests {
         var y = new Parameter("y", TypeReference.To<int>());
         var lambda = new Lambda([x, y], new Add(x, y));
 
-        var compiled = lambda.CompileLambda<Func<Func<int, int, int>>>();
-        var result = compiled()(3, 4);
-
-        await Assert.That(result).IsEqualTo(7);
         using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(lambda, Wrap(3), Wrap(4))));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(7);
     }
@@ -64,11 +48,7 @@ public class LambdaInvokeTests {
 
         // outer: the lambda is just created and immediately invoked on n
         var invoke = new Invoke(innerLambda, n);
-        var compiled = invoke.CompileLambda<Func<int, bool>>((n, typeof(int)));
 
-        await Assert.That(compiled(5)).IsTrue();
-        await Assert.That(compiled(-3)).IsFalse();
-        await Assert.That(compiled(0)).IsFalse();
         using var execPos = Interpreter.Execute(Interpreter.Compile(new Invoke(innerLambda, Wrap(5))));
         await Assert.That(execPos.GetValue<bool>()).IsTrue();
         using var execNeg = Interpreter.Execute(Interpreter.Compile(new Invoke(innerLambda, Wrap(-3))));
@@ -85,10 +65,6 @@ public class LambdaInvokeTests {
         var lambda = new Lambda([p], new Add(p, Wrap(10)));
         var invoke = new Invoke(lambda, Wrap(5));
 
-        var expr = invoke.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(15);
         using var exec = Interpreter.Execute(Interpreter.Compile(invoke));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(15);
     }
@@ -100,10 +76,6 @@ public class LambdaInvokeTests {
         var lambda = new Lambda([inner], new Add(inner, Wrap(1)));
         var invoke = new Invoke(lambda, outer);
 
-        var compiled = invoke.CompileLambda<Func<int, int>>((outer, typeof(int)));
-
-        await Assert.That(compiled(9)).IsEqualTo(10);
-        await Assert.That(compiled(0)).IsEqualTo(1);
         var program = Interpreter.Compile(invoke);
         using var exec9 = Interpreter.Execute(program, s => s.SetArgs(9));
         await Assert.That(exec9.GetValue<int>()).IsEqualTo(10);
@@ -118,10 +90,6 @@ public class LambdaInvokeTests {
         var lambda = new Lambda([inner], new Add(inner, outer));
         var invoke = new Invoke(lambda, Wrap(5));
 
-        var compiled = invoke.CompileLambda<Func<int, int>>((outer, typeof(int)));
-
-        await Assert.That(compiled(10)).IsEqualTo(15);
-        await Assert.That(compiled(0)).IsEqualTo(5);
         var program = Interpreter.Compile(invoke);
         using var exec10 = Interpreter.Execute(program, s => s.SetArgs(10));
         await Assert.That(exec10.GetValue<int>()).IsEqualTo(15);
@@ -137,10 +105,6 @@ public class LambdaInvokeTests {
         var lambda = new Lambda([p], new Add(p, Wrap(100)));
         var invoke = lambda.InvokeWith(Wrap(7));
 
-        var expr = invoke.BuildExpression();
-        var result = Expr.Lambda<Func<int>>(expr).Compile()();
-
-        await Assert.That(result).IsEqualTo(107);
         using var exec = Interpreter.Execute(Interpreter.Compile(invoke));
         await Assert.That(exec.GetValue<int>()).IsEqualTo(107);
     }
@@ -155,10 +119,6 @@ public class LambdaInvokeTests {
             Return.False
         ], []);
 
-        var compiled = block.CompileLambda<Func<bool, bool>>((param, typeof(bool)));
-
-        await Assert.That(compiled(true)).IsTrue();
-        await Assert.That(compiled(false)).IsFalse();
         var program = Interpreter.Compile(block);
         using var execTrue = Interpreter.Execute(program, s => s.SetArgs(true));
         await Assert.That(execTrue.GetValue<bool>()).IsTrue();

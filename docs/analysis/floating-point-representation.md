@@ -27,6 +27,21 @@ So roughly **1.8x of FP cost is the emitted representation, and ~0 is interprete
 
 Everything downstream inherits it: comparisons (`EmitComparisonValue`), conditionals, and any arithmetic on a value that came from a double-producing call.
 
+## Why not every primitive
+
+The question "should slots be typed for all native primitives?" has a different answer per representation, and only one of them is about performance:
+
+| Representation | Typed slot? | Reason |
+|---|---|---|
+| `double`, `float` | **Yes** - the 1.8x | The only primitives whose representation differs from the machine word, so the only ones paying a conversion per operation. |
+| `long`, `int`, `short`, `byte`, `char`, `bool` | **No** | Already a word. `EmitBinaryArithmeticValue` builds the operation at 64-bit, so an `int` slot would need a *widening* `Convert` at every use - neutral at best, negative in practice. And the JIT holds both widths in the same 64-bit register, so there is nothing to win. |
+| `decimal` | Not this design | 128-bit and currently a heap handle; a native slot is a separate question. |
+| references | Already handles | No change. |
+
+Typing integer slots would also decide overflow semantics by accident - see [#289](https://github.com/scoizzle/Poly/issues/289), where the folder wraps `Int32` and the emitter does not. Settle that rule before any slot carries a declared integer width.
+
+So the mechanism to build is **"a slot carries a representation, and a representation may differ from the word"**, with `double` as its first instance and `float` as the second. Enabling N types is not the goal; having one place that knows the difference is.
+
 ## Proposal A - type the ring slot (the 1.8x)
 
 Make the ring's slot type follow the value's representation: an IEEE slot is `Variable(typeof(double), "_d{n}")`, not a `long`.

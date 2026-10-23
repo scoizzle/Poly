@@ -26,6 +26,12 @@ public class HeapBoundsTests {
     }
 
     [Test]
+    public async Task Recycle_OutOfRangeHandle_Throws() {
+        var heap = new VmManagedObjectHeap();
+        await Assert.That(() => heap.Recycle(5)).Throws<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
     public async Task Clear_ReusesTheBackingArray() {
         var heap = new VmManagedObjectHeap();
         var raw = heap.RawSlots;

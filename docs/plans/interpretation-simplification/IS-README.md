@@ -50,7 +50,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS7b | typed register/frame storage - where the FP win actually lives | IS7a | C | [tasks/IS7b.md](tasks/IS7b.md) |
 | [x] | IS7c | integer width is a representation; folded and unfolded `Int32` overflow agree (#289) | IS7b | C | [tasks/IS7c.md](tasks/IS7c.md) |
 | [x] | IS7d | an array held through the heap costs 1.40 ns per element; cache it in a typed local | IS7c | C | [tasks/IS7d.md](tasks/IS7d.md) |
-| [ ] | IS7e | an implicit recycle-on-null can hand a live handle to a later allocation; nothing ever frees | IS7d | C | [tasks/IS7e.md](tasks/IS7e.md) |
+| [x] | IS7e | an implicit recycle-on-null can hand a live handle to a later allocation; nothing ever frees | IS7d | C | [tasks/IS7e.md](tasks/IS7e.md) |
 | [r] | IS2e | a dual-dispatch proof on a shipped grammar — **retired**: no shipped grammar has two dispatch paths | IS2c | A | [tasks/IS2e.md](tasks/IS2e.md) |
 | [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [x] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |

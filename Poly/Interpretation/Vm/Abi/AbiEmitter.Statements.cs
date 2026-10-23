@@ -147,6 +147,7 @@ public static partial class AbiEmitter {
     private static Expression EmitBlock(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
+        var releases = new List<Expression>();
         var cacheClears = new List<Expression>();
         foreach (var v in block.Variables) {
             if (v is Variable variable) {
@@ -154,8 +155,18 @@ public static partial class AbiEmitter {
                 varInitExprs.Add(ctx.NeedsCell(variable)
                     ? EmitUpvalueCellInit(variable, ctx)
                     : ctx.VariableWrite(variable, ctx.VariableZero(variable)));
-                if (ArrayCacheCandidate(variable, block, ctx) is { } cache)
+                if (ArrayCacheCandidate(variable, block, ctx) is { } cache) {
+                    // The promotion predicate is the only proof of death this VM has: the
+                    // array is not returned, passed, aliased, or captured, and every other
+                    // reference is an IndexAccess receiver. A definition that is itself the
+                    // block's value is the exception the predicate cannot see — that value
+                    // is the handle — so such a handle stays live.
+                    if (!IsBlockValue(block, variable)) {
+                        releases.Add(Call(ctx.HeapLocal, HeapRecycle,
+                            Convert(ctx.VariableReadRaw(variable), typeof(int))));
+                    }
                     cacheClears.Add(Assign(cache, Constant(null, cache.Type)));
+                }
             }
         }
         // Each statement starts from the block's entry depth. A statement's result is
@@ -182,7 +193,8 @@ public static partial class AbiEmitter {
         }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
-        var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count + cacheClears.Count);
+        var all = new List<Expression>(
+            varInitExprs.Count + stmtExprs.Count + stores.Count + releases.Count + cacheClears.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
         // The block-exit snapshot is also what VmDebugger.GetLocals reads after
@@ -192,22 +204,35 @@ public static partial class AbiEmitter {
         // A promoted array's cache local is keyed by slot, and a slot is handed to the
         // next sibling block's variable, so it is cleared once its own scope is over: a
         // later block that read it before defining its own array then fails closed on
-        // null instead of reading this block's array. It does not free the array — the
-        // heap is append-only from the emitter's side, so `_objects[handle]` keeps it for
-        // the heap's lifetime either way. The store is lifetime hygiene that becomes
-        // load-bearing the moment the heap gains recycling.
+        // null instead of reading this block's array. The handle is released just before
+        // the clear — the promotion predicate proved no one can observe the array again,
+        // so the free is what makes the null mean what it looks like.
+        all.AddRange(releases);
         all.AddRange(cacheClears);
         if (all.Count == 0) return Empty();
-        // A trailing snapshot store or cache clear would otherwise type the block as what
-        // it stores. Re-read the live value slot after them so the block's own type is the
-        // value's — an IEEE value stays a double instead of being read as bits, and a word
-        // value stays a word instead of the array a cache clear holds.
+        // A trailing snapshot store, recycle, or cache clear would otherwise type the block
+        // as what it does. Re-read the live value slot after them so the block's own type is
+        // the value's — an IEEE value stays a double instead of being read as bits, and a
+        // word value stays a word instead of the array a cache clear holds.
         var valueSlotType = RingCodec.SlotTypeOf(valueClrType);
-        bool trailing = stores.Count > 0 || cacheClears.Count > 0;
+        bool trailing = stores.Count > 0 || releases.Count > 0 || cacheClears.Count > 0;
         if (trailing && ctx.RingDepth > entryDepth
             && (RingCodec.IsTypedSlot(valueSlotType) || cacheClears.Count > 0))
             all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
+    }
+
+    /// <summary>True when the last statement that produces the block's value is the
+    /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
+    /// expression still observes it, and recycling it there would dangle a live handle.
+    /// A comment produces no value, so it does not end the search.</summary>
+    private static bool IsBlockValue(Block block, Variable variable) {
+        for (int i = block.Nodes.Count - 1; i >= 0; i--) {
+            if (block.Nodes[i] is Comment)
+                continue;
+            return block.Nodes[i] is Assignment assignment && Binds(assignment.Destination, variable);
+        }
+        return false;
     }
 
     /// <summary>The typed CLR local that caches <paramref name="variable"/>'s array, when

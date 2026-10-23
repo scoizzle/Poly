@@ -46,6 +46,7 @@ public static partial class AbiEmitter {
     // Cached reflection lookups
     private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
     private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
+    private static readonly MethodInfo HeapRecycle = Ref<VmManagedObjectHeap>.Method(h => h.Recycle(0));
     private static readonly ConstructorInfo AstDictionaryCtor =
         typeof(Dictionary<string, object?>).GetConstructor([typeof(IEqualityComparer<string>)])!;
     private static readonly MethodInfo ObjectEquals = Ref.Method(

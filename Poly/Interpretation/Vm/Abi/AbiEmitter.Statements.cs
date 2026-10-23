@@ -133,14 +133,19 @@ public static partial class AbiEmitter {
         // so the block's value stays at RingDepth - 1 and Compile reports it.
         var stmtExprs = new List<Expression>(block.Nodes.Count);
         int entryDepth = ctx.RingDepth;
+        Type? valueClrType = null;
         for (int i = 0; i < block.Nodes.Count; i++) {
             var statement = block.Nodes[i];
             // A comment or a label emits no code and no value, so it must not release
             // what the previous statement left: that value is still the block's result
             // (`[return x, comment]` yields x).
-            if (statement is not (Comment or LabelDeclaration))
+            bool resetsDepth = statement is not (Comment or LabelDeclaration);
+            if (resetsDepth)
                 ctx.RingDepth = entryDepth;
-            stmtExprs.Add(CompileStatement(statement, ctx));
+            var code = CompileStatement(statement, ctx);
+            stmtExprs.Add(code);
+            if (statement is not Comment)
+                valueClrType = code.Type;
         }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
@@ -152,6 +157,12 @@ public static partial class AbiEmitter {
         // Per-statement stores live inside the hook guard (CompileStatement).
         all.AddRange(stores);
         if (all.Count == 0) return Empty();
+        // A trailing snapshot store would otherwise type the block as the word it
+        // stores. Re-read the live value slot after the snapshot so the block's own type
+        // is the value's — an IEEE value stays a double instead of being read as bits.
+        var valueSlotType = RingCodec.SlotTypeOf(valueClrType);
+        if (stores.Count > 0 && ctx.RingDepth > entryDepth && RingCodec.IsTypedSlot(valueSlotType))
+            all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
     }
 

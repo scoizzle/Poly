@@ -21,8 +21,9 @@ namespace Poly.Interpretation.Vm.Abi;
 /// </list>
 /// A binding resolves to exactly one of these (<see cref="Context.Resolve(Variable)"/>),
 /// so a read or a write is one call instead of a ladder re-implemented per site.
-/// The location carries no value shape: shape is <see cref="RingCodec"/>'s job,
-/// and the slot always holds the same <c>long</c> either way.
+/// The location carries no value shape beyond a ring slot's own representation:
+/// shape is <see cref="RingCodec"/>'s job, and a frame slot, a register, and a cell
+/// all hold the <c>long</c> word either way.
 /// </summary>
 internal abstract record SlotLocation {
 
@@ -32,11 +33,15 @@ internal abstract record SlotLocation {
     /// <summary>An expression storing <paramref name="value"/>; yields the stored value.</summary>
     public abstract Expression Write(Context ctx, Expression value);
 
-    /// <summary>A ring slot: a transient expression-stack local (<c>_rN</c>).</summary>
-    internal sealed record Ring(int Slot) : SlotLocation {
-        public override Expression Read(Context ctx) => ctx.RingVar(Slot);
+    /// <summary>A ring slot: a transient expression-stack local, named for the
+    /// representation it carries (<c>_rN</c> word, <c>_dN</c> double, <c>_fN</c> float).</summary>
+    internal sealed record Ring(int Slot, Type? Representation = null) : SlotLocation {
+        private Type SlotType => RingCodec.SlotTypeOf(Representation);
+
+        public override Expression Read(Context ctx) => ctx.RingVar(Slot, SlotType);
+
         public override Expression Write(Context ctx, Expression value) =>
-            Assign(ctx.RingVar(Slot), value);
+            Assign(ctx.RingVar(Slot, SlotType), value);
     }
 
     /// <summary>One frame slot: a local, a parameter, or the result slot.</summary>

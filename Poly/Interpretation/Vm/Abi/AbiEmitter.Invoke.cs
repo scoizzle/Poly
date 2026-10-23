@@ -268,8 +268,12 @@ public static partial class AbiEmitter {
             // saveDepth are never targets. The result belongs in the caller's first free
             // slot, and moves only when it did not already land there.
             ctx.RingDepth = saveDepth + 1;
-            if (bodyResultSlot != saveDepth)
-                postBody.Add(Assign(ctx.RingVar(saveDepth), ctx.RingVar(bodyResultSlot)));
+            // The caller's slot below `saveDepth` is a word, so an IEEE body result is
+            // converted once here rather than left as a typed local nobody reports.
+            if (bodyResultSlot != saveDepth
+                || RingCodec.IsTypedSlot(RingCodec.SlotTypeOf(bodyExpr.Type)))
+                postBody.Add(Assign(ctx.RingVar(saveDepth),
+                    ctx.RingWord(bodyResultSlot, bodyExpr.Type)));
             postBody.Add(Assign(ctx.FramePosLocal, callerFramePos));
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
@@ -531,7 +535,9 @@ public static partial class AbiEmitter {
         // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
         // a body that yields none — so a caller never reads a slot the callee left
         // untouched. An IsAsync method returns a completed Task / Task<T> instead.
-        Expression? resultValue = fnCtx.RingDepth > 0 ? fnCtx.RingVar(fnCtx.RingDepth - 1) : null;
+        Expression? resultValue = fnCtx.RingDepth > 0
+            ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.Type)
+            : null;
         if (asyncReturn is not null)
             resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
         bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),

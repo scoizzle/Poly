@@ -14,7 +14,7 @@ public static partial class AbiEmitter {
 
     public sealed class Context {
         private readonly ParameterExpression _stateParam;
-        private readonly List<ParameterExpression> _ringVars = new();
+        private readonly Dictionary<(int Index, Type Representation), ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
 
         public Context() {
@@ -171,13 +171,16 @@ public static partial class AbiEmitter {
             public int Slot(int index) => _base + index;
 
             /// <summary>Add a compiled value: fold its result into the next contiguous
-            /// slot and leave <see cref="RingDepth"/> just past it. Returns its slot.</summary>
+            /// slot and leave <see cref="RingDepth"/> just past it. Returns its slot.
+            /// <para>A region slot is a word. An IEEE value is converted once here, at
+            /// this boundary, so every consumer that reads <c>RingVar(slot)</c> from a
+            /// region sees the same shape whether or not the value was a double.</para></summary>
             public int Add(Expression compiled) {
                 int result = _ctx.RingDepth - 1;
                 int target = _base + _count;
                 _steps.Add(compiled);
-                if (result != target)
-                    _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingVar(result)));
+                if (result != target || RingCodec.IsTypedSlot(compiled.Type))
+                    _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingWord(result, compiled.Type)));
                 _count++;
                 _ctx.RingDepth = target + 1;
                 return target;
@@ -188,10 +191,11 @@ public static partial class AbiEmitter {
             public void AddUncounted(Expression step) => _steps.Add(step);
 
             /// <summary>Assign <paramref name="value"/> into the next slot and count it —
-            /// for a value that is not already on the ring (e.g. a boxed CLR expression).</summary>
+            /// for a value that is not already on the ring (e.g. a boxed CLR expression),
+            /// in its word form.</summary>
             public int AddValue(Expression value) {
                 int target = _base + _count;
-                _steps.Add(Assign(_ctx.RingVar(target), value));
+                _steps.Add(Assign(_ctx.RingVar(target), RingCodec.ToWord(value)));
                 _count++;
                 _ctx.RingDepth = target + 1;
                 return target;
@@ -217,21 +221,50 @@ public static partial class AbiEmitter {
             return variable;
         }
 
-        public ParameterExpression RingVar(int absoluteIndex) {
-            while (_ringVars.Count <= absoluteIndex) {
-                var v = Variable(typeof(long), $"_r{_ringVars.Count}");
-                _ringVars.Add(v);
+        public ParameterExpression RingVar(int absoluteIndex) =>
+            RingVar(absoluteIndex, typeof(long));
+
+        /// <summary>The ring local for <paramref name="absoluteIndex"/> at
+        /// <paramref name="representation"/>, declared on first use.
+        /// <para>A slot carries a representation, not just an index. Ring depth rewinds
+        /// after every statement, so index 3 legitimately holds a <c>double</c> in one
+        /// statement and a <c>long</c> in the next; one local per index would have to be
+        /// assigned a value of the wrong type. An IEEE slot keeps the value itself, so
+        /// no operation inside an expression has to bitcast it.</para></summary>
+        public ParameterExpression RingVar(int absoluteIndex, Type representation) {
+            if (!_ringVars.TryGetValue((absoluteIndex, representation), out var v)) {
+                v = Variable(representation, RingLocalName(absoluteIndex, representation));
+                _ringVars[(absoluteIndex, representation)] = v;
                 _locals.Add(v);
             }
             if (absoluteIndex + 1 > _maxDepth)
                 _maxDepth = absoluteIndex + 1;
-            return _ringVars[absoluteIndex];
+            return v;
+        }
+
+        private static string RingLocalName(int index, Type representation) =>
+            representation == typeof(double) ? $"_d{index}"
+                : representation == typeof(float) ? $"_f{index}"
+                : $"_r{index}";
+
+        /// <summary>The word form of a ring slot: the local at its own representation,
+        /// converted to the <c>long</c> word only when that representation is IEEE.</summary>
+        public Expression RingWord(int absoluteIndex, Type representation) =>
+            RingCodec.ToWord(RingVar(absoluteIndex, representation));
+
+        /// <summary>The ring representation of a node's value: its own type for an IEEE
+        /// scalar, the word for every other shape — including one analysis could not
+        /// resolve, which is the fallback rather than a failure.</summary>
+        public Type SlotTypeOf(Node node) {
+            var (kind, clr) = RepresentationOf(node);
+            return kind is ValueRepresentationKind.StackScalar ? RingCodec.SlotTypeOf(clr) : typeof(long);
         }
 
         public int AllocSlot() {
             int slot = RingDepth;
             RingDepth = slot + 1;
-            RingVar(slot);
+            if (slot + 1 > _maxDepth)
+                _maxDepth = slot + 1;
             return slot;
         }
 

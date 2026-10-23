@@ -89,7 +89,19 @@ Poly is ahead of C# native on sieve and collatz, and ahead of JavaScript on ever
 
 The double variants are the typed-slot work landing (IS7a/IS7b); nqueens is the array cache (IS7d).
 
-**Sieve is a real small regression, not noise:** two independent runs agree (3,570 and 3,574 min) while the C row held steady (3,748 vs 3,779) in the same runs, so the machine is comparable. `sieve_polyvm.cs` passes its buffer to `StridedSetBits`, which is an *argument*, so the array cache rightly does not promote it - the regression is elsewhere and is not yet diagnosed. Recorded here rather than smoothed over.
+**Sieve is a real small regression, now bisected.** Two independent runs agree (3,570 and 3,574 min) while the C row held steady (3,748 vs 3,779) in the same runs, so the machine is comparable. Same machine, 12 interleaved samples per tree:
+
+| Tree | min | median |
+|---|---:|---:|
+| `b4798ad2` - before IS7a/b | 3,314 | 3,506 |
+| `644d1b9f` - after IS7c | 3,563 | 3,683 |
+| `7cfdde81` - `master` | 3,379 | 3,591 |
+
+So IS7a/IS7b/IS7c cost ~5 %, and later slices recovered about half of it.
+
+**The mechanism, read off the emitted body** ([`sieve-expression-body.txt`](sieve-expression-body.txt)): the only structural difference between the pre-IS7 tree and the current one is that the shift amount `6` is now an **Int32 ring slot** (`_i4`) rather than an Int64 slot behind a `Convert`. Both materialise the constant into a local; the new form drops a conversion but adds a second local to the frame. There is no algorithmic change.
+
+**The larger cost in this program is older and unrelated:** the strided mark loop re-dereferences the heap **twice per iteration**, because `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask` and each `a[i]` re-derefs and re-casts. `StridedSetBits` receives the array as an *argument*, so the IS7d cache correctly declines to promote it - the fix is to give `StridedSetBits` a promoted receiver, not to weaken the predicate.
 
 ## What the table does and does not support
 

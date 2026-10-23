@@ -99,15 +99,18 @@ public class RingCodecTests {
     }
 
     [Test]
-    public async Task IsInvokeArgumentScalar_StringConcatAdd_IsNotScalar() {
+    public async Task IsStackScalar_StringConcatAdd_IsNotScalar() {
         var add = new Add(new Constant("a"), new Constant("b"));
         var analysis = Interpreter.Analyze(add);
         await Assert.That(ValueRepresentationClassifier.KindOf(analysis, add)).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.IsInvokeArgumentScalar(add, analysis)).IsFalse();
+        await Assert.That(RingCodec.IsStackScalar(add, analysis)).IsFalse();
     }
 
     [Test]
-    public async Task IsInvokeArgumentScalar_PlainReferenceConstant_IsFalse() {
-        await Assert.That(RingCodec.IsInvokeArgumentScalar(new Constant("a"), null)).IsFalse();
+    public async Task UnknownArgumentKind_IsACompileError() {
+        // A node the classifier cannot place is not silently a handle: emit fails closed.
+        await Assert.That(() => RingCodec.IsStackScalar(new Parameter("p", TypeReference.To<long>()), null))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("cannot tell whether argument");
     }
 }

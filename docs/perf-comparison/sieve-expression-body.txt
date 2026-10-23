@@ -2,28 +2,26 @@
 
 The body the VM emitter produces for `docs/perf-comparison/sieve_polyvm.cs`, rendered as an
 indented expression tree. **This is a diagnostic artifact, not a test input** - it will drift as
-the emitter changes, and that is expected. Regenerate with the dumper in
-`Poly.Tests/Interpretation/ExpressionBodyDumpTests.cs` (it writes `/tmp/expr-sieve-strided.txt`).
+the emitter changes, and that is expected. Regenerate with
+`Poly.Tests/Interpretation/ExpressionBodyDumpTests.cs` (it writes `/tmp/expr-sieve-strided.txt`),
+and the shared renderer is `Poly.Tests/TestHelpers/ExpressionText.cs`.
 
-Regenerated 2026-10-23 on `master` @ `7cfdde81`, `CompilationMode.NoDebug`.
+Regenerated 2026-10-23 for IS7h, `CompilationMode.NoDebug`.
 
 Reading notes:
 
 - `_slots` / `_heap` / `_fp` / `_this` are the fixed frame locals; `_regN` are variables;
   `_rN` are ring slots; `_iN` are **Int32** ring slots (IS7c) and `_dN` would be doubles.
-- The array buffer lives behind a heap handle in `_r2`: every element access is
-  `Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])` - a call plus a `castclass` - because
-  `StridedSetBits` receives the array as an *argument*, so the IS7d cache correctly declines to
-  promote it.
-- The strided mark loop (`_stride_loop`) contains that deref **twice per iteration**: `|=` lowers to
-  `a[i] = a[i] | mask`, and each `a[i]` re-derefs. That is the single largest cost in this program
-  and the reason sieve does not benefit from the array cache.
-- The only structural difference against the pre-IS7 tree is `_i4:Int32` holding the shift amount
-  `6` where the older tree held it in an Int64 slot behind a `Convert` (see the bisect in
-  `docs/perf-comparison/README.md`).
+- The buffer is a promoted array local (`_arr0`, `long[]`): the definition allocates once and
+  binds both the local and the heap, and element access is `_arr0[i]` with no deref and no cast.
+- **The strided mark loop contains zero `_heap.UnsafeGet` calls.** It used to contain two per
+  iteration - one for the read and one for the write of `a[i] = a[i] | mask` - because
+  `StridedSetBits` received the array as an argument and the array cache declined it. IS7h gave
+  the intrinsic a promoted receiver, which took `sieve_polyvm.cs` from ~3,379 to ~2,995 us (min).
+- `ExpressionBodyDumpTests` asserts all three facts above, so this file cannot rot silently.
 
 ```text
-block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _this:Int64, _reg0:Int64, _reg1:Int64, _reg2:Int64, _reg3:Int64, _r0:Int64, _r1:Int64, _r2:Int64, _r3:Int64, _r4:Int64, _i4:Int32, _r5:Int64, _r6:Int64, _r7:Int64, _r8:Int64, _r9:Int64, _r10:Int64, _r11:Int64]
+block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _this:Int64, _reg0:Int64, _arr0:Int64[], _reg1:Int64, _reg2:Int64, _reg3:Int64, _r0:Int64, _r1:Int64, _r2:Int64, _r3:Int64, _r4:Int64, _i3:Int32, _r5:Int64, _r6:Int64, _r7:Int64, _r8:Int64, _r9:Int64, _r10:Int64]
   label _entry
   assign : Int64[]
     Parameter : Int64[]  _slots
@@ -70,15 +68,18 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
         assign : Int64
           Parameter : Int64  _r0
           Constant : Int64  15626
+        assign : Int64[]
+          Parameter : Int64[]  _arr0
+          NewArrayBounds : Int64[]  new System.Int64[](Convert(_r0, Int32))
+            Convert : Int32  Convert(_r0, Int32)
+              Parameter : Int64  _r0
         assign : Int64
           Parameter : Int64  _r1
-          Convert : Int64  Convert(_heap.Allocate(Convert(new System.Int64[](Convert(_r0, Int32)), Object)), Int64)
-            Call : Int32  _heap.Allocate(Convert(new System.Int64[](Convert(_r0, Int32)), Object))
+          Convert : Int64  Convert(_heap.Allocate(Convert(_arr0, Object)), Int64)
+            Call : Int32  _heap.Allocate(Convert(_arr0, Object))
               Parameter : VmManagedObjectHeap  _heap
-              Convert : Object  Convert(new System.Int64[](Convert(_r0, Int32)), Object)
-                NewArrayBounds : Int64[]  new System.Int64[](Convert(_r0, Int32))
-                  Convert : Int32  Convert(_r0, Int32)
-                    Parameter : Int64  _r0
+              Convert : Object  Convert(_arr0, Object)
+                Parameter : Int64[]  _arr0
       assign : Int64
         Parameter : Int64  _r0
         Parameter : Int64  _r1
@@ -129,128 +130,106 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
                 Equal : Boolean  ({ ... } == { ... })
                   block : Int64  locals=[]
                     assign : Int64
-                      Parameter : Int64  _r10
+                      Parameter : Int64  _r9
                       And : Int64  ({ ... } & { ... })
                         block : Int64  locals=[]
                           assign : Int64
-                            Parameter : Int64  _r8
+                            Parameter : Int64  _r7
                             RightShift : Int64  ({ ... } >> Convert({ ... }, Int32))
                               block : Int64  locals=[]
                                 block : Int64  locals=[]
                                   assign : Int64
-                                    Parameter : Int64  _r2
-                                    Parameter : Int64  _reg0
-                                  assign : Int64
-                                    Parameter : Int64  _r5
+                                    Parameter : Int64  _r4
                                     RightShift : Int64  ({ ... } >> { ... })
                                       block : Int64  locals=[]
                                         assign : Int64
-                                          Parameter : Int64  _r3
+                                          Parameter : Int64  _r2
                                           Parameter : Int64  _reg1
-                                        Parameter : Int64  _r3
+                                        Parameter : Int64  _r2
                                       block : Int32  locals=[]
                                         assign : Int32
-                                          Parameter : Int32  _i4
+                                          Parameter : Int32  _i3
                                           Constant : Int32  6
-                                        Parameter : Int32  _i4
+                                        Parameter : Int32  _i3
+                                  assign : Int64
+                                    Parameter : Int64  _r2
+                                    Parameter : Int64  _r4
                                   assign : Int64
                                     Parameter : Int64  _r3
-                                    Parameter : Int64  _r5
-                                  assign : Int64
-                                    Parameter : Int64  _r4
-                                    block : Int64  locals=[_longArr:Int64[]]
-                                      assign : Int64[]
-                                        Parameter : Int64[]  _longArr
-                                        Convert : Int64[]  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])
-                                          Call : Object  _heap.UnsafeGet(Convert(_r2, Int32))
-                                            Parameter : VmManagedObjectHeap  _heap
-                                            Convert : Int32  Convert(_r2, Int32)
-                                              Parameter : Int64  _r2
-                                      Index : Int64  _longArr[Convert(_r3, Int32)]
-                                        Parameter : Int64[]  _longArr
-                                        Convert : Int32  Convert(_r3, Int32)
-                                          Parameter : Int64  _r3
-                                Parameter : Int64  _r4
+                                    Index : Int64  _arr0[Convert(_r2, Int32)]
+                                      Parameter : Int64[]  _arr0
+                                      Convert : Int32  Convert(_r2, Int32)
+                                        Parameter : Int64  _r2
+                                Parameter : Int64  _r3
                               Convert : Int32  Convert({ ... }, Int32)
                                 block : Int64  locals=[]
                                   assign : Int64
-                                    Parameter : Int64  _r7
+                                    Parameter : Int64  _r6
                                     And : Int64  ({ ... } & { ... })
                                       block : Int64  locals=[]
                                         assign : Int64
-                                          Parameter : Int64  _r5
+                                          Parameter : Int64  _r4
                                           Parameter : Int64  _reg1
-                                        Parameter : Int64  _r5
+                                        Parameter : Int64  _r4
                                       block : Int64  locals=[]
                                         assign : Int64
-                                          Parameter : Int64  _r6
+                                          Parameter : Int64  _r5
                                           Constant : Int64  63
-                                        Parameter : Int64  _r6
-                                  Parameter : Int64  _r7
-                          Parameter : Int64  _r8
+                                        Parameter : Int64  _r5
+                                  Parameter : Int64  _r6
+                          Parameter : Int64  _r7
                         block : Int64  locals=[]
                           assign : Int64
-                            Parameter : Int64  _r9
+                            Parameter : Int64  _r8
                             Constant : Int64  1
-                          Parameter : Int64  _r9
-                    Parameter : Int64  _r10
+                          Parameter : Int64  _r8
+                    Parameter : Int64  _r9
                   block : Int64  locals=[]
                     assign : Int64
-                      Parameter : Int64  _r11
+                      Parameter : Int64  _r10
                       Constant : Int64  0
-                    Parameter : Int64  _r11
+                    Parameter : Int64  _r10
               then
                 block : Void  locals=[]
                   block : Void  locals=[]
                     assign : Int64
-                      Parameter : Int64  _r2
-                      Parameter : Int64  _reg0
-                    assign : Int64
-                      Parameter : Int64  _r5
+                      Parameter : Int64  _r4
                       Multiply : Int64  ({ ... } * { ... })
+                        block : Int64  locals=[]
+                          assign : Int64
+                            Parameter : Int64  _r2
+                            Parameter : Int64  _reg1
+                          Parameter : Int64  _r2
                         block : Int64  locals=[]
                           assign : Int64
                             Parameter : Int64  _r3
                             Parameter : Int64  _reg1
                           Parameter : Int64  _r3
-                        block : Int64  locals=[]
-                          assign : Int64
-                            Parameter : Int64  _r4
-                            Parameter : Int64  _reg1
-                          Parameter : Int64  _r4
+                    assign : Int64
+                      Parameter : Int64  _r2
+                      Parameter : Int64  _r4
                     assign : Int64
                       Parameter : Int64  _r3
-                      Parameter : Int64  _r5
-                    assign : Int64
-                      Parameter : Int64  _r4
                       Parameter : Int64  _reg1
                     assign : Int64
-                      Parameter : Int64  _r5
+                      Parameter : Int64  _r4
                       Constant : Int64  1000000
                     block : Void  locals=[_bits_j:Int64]
                       assign : Int64
                         Parameter : Int64  _bits_j
-                        Parameter : Int64  _r3
+                        Parameter : Int64  _r2
                       label _stride_loop
                       block : Void  locals=[]
                         assign : Int64
-                          Index : Int64  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])[Convert((_bits_j >> 6), Int32)]
-                            Convert : Int64[]  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])
-                              Call : Object  _heap.UnsafeGet(Convert(_r2, Int32))
-                                Parameter : VmManagedObjectHeap  _heap
-                                Convert : Int32  Convert(_r2, Int32)
-                                  Parameter : Int64  _r2
+                          Index : Int64  _arr0[Convert((_bits_j >> 6), Int32)]
+                            Parameter : Int64[]  _arr0
                             Convert : Int32  Convert((_bits_j >> 6), Int32)
                               RightShift : Int64  (_bits_j >> 6)
                                 Parameter : Int64  _bits_j
                                 Constant : Int32  6
-                          Or : Int64  (Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])[Convert((_bits_j >> 6), Int32)] | …
-                            Index : Int64  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])[Convert((_bits_j >> 6), Int32)]
-                              Convert : Int64[]  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])
-                                Call : Object  _heap.UnsafeGet(Convert(_r2, Int32))
-                                  Parameter : VmManagedObjectHeap  _heap
-                                  Convert : Int32  Convert(_r2, Int32)
-                                    Parameter : Int64  _r2
+                          Or : Int64  (_arr0[Convert((_bits_j >> 6), Int32)] | (1 << Convert((_bits_j & 63), Int32)))
+                            Index : Int64  _arr0[Convert((_bits_j >> 6), Int32)]
+                              Parameter : Int64[]  _arr0
                               Convert : Int32  Convert((_bits_j >> 6), Int32)
                                 RightShift : Int64  (_bits_j >> 6)
                                   Parameter : Int64  _bits_j
@@ -263,13 +242,13 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
                                   Constant : Int64  63
                         assign : Int64
                           Parameter : Int64  _bits_j
-                          Add : Int64  (_bits_j + _r4)
+                          Add : Int64  (_bits_j + _r3)
+                            Parameter : Int64  _bits_j
+                            Parameter : Int64  _r3
+                        if (Boolean)
+                          GreaterThan : Boolean  (_bits_j > _r4)
                             Parameter : Int64  _bits_j
                             Parameter : Int64  _r4
-                        if (Boolean)
-                          GreaterThan : Boolean  (_bits_j > _r5)
-                            Parameter : Int64  _bits_j
-                            Parameter : Int64  _r5
                         then
                           Goto -> _stride_done
                         else
@@ -356,27 +335,16 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
                         block : Int64  locals=[]
                           assign : Int64
                             Parameter : Int64  _r2
-                            Parameter : Int64  _reg0
-                          assign : Int64
-                            Parameter : Int64  _r3
                             Parameter : Int64  _reg3
                           assign : Int64
-                            Parameter : Int64  _r4
-                            block : Int64  locals=[_longArr:Int64[]]
-                              assign : Int64[]
-                                Parameter : Int64[]  _longArr
-                                Convert : Int64[]  Convert(_heap.UnsafeGet(Convert(_r2, Int32)), Int64[])
-                                  Call : Object  _heap.UnsafeGet(Convert(_r2, Int32))
-                                    Parameter : VmManagedObjectHeap  _heap
-                                    Convert : Int32  Convert(_r2, Int32)
-                                      Parameter : Int64  _r2
-                              Index : Int64  _longArr[Convert(_r3, Int32)]
-                                Parameter : Int64[]  _longArr
-                                Convert : Int32  Convert(_r3, Int32)
-                                  Parameter : Int64  _r3
+                            Parameter : Int64  _r3
+                            Index : Int64  _arr0[Convert(_r2, Int32)]
+                              Parameter : Int64[]  _arr0
+                              Convert : Int32  Convert(_r2, Int32)
+                                Parameter : Int64  _r2
                         assign : Int64
                           Parameter : Int64  _r2
-                          Parameter : Int64  _r4
+                          Parameter : Int64  _r3
                         assign : Int64
                           Parameter : Int64  _r2
                           Not : Int64  Not(_r2)
@@ -437,27 +405,16 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
                       block : Int64  locals=[]
                         assign : Int64
                           Parameter : Int64  _r1
-                          Parameter : Int64  _reg0
-                        assign : Int64
-                          Parameter : Int64  _r2
                           Constant : Int64  15625
                         assign : Int64
-                          Parameter : Int64  _r3
-                          block : Int64  locals=[_longArr:Int64[]]
-                            assign : Int64[]
-                              Parameter : Int64[]  _longArr
-                              Convert : Int64[]  Convert(_heap.UnsafeGet(Convert(_r1, Int32)), Int64[])
-                                Call : Object  _heap.UnsafeGet(Convert(_r1, Int32))
-                                  Parameter : VmManagedObjectHeap  _heap
-                                  Convert : Int32  Convert(_r1, Int32)
-                                    Parameter : Int64  _r1
-                            Index : Int64  _longArr[Convert(_r2, Int32)]
-                              Parameter : Int64[]  _longArr
-                              Convert : Int32  Convert(_r2, Int32)
-                                Parameter : Int64  _r2
+                          Parameter : Int64  _r2
+                          Index : Int64  _arr0[Convert(_r1, Int32)]
+                            Parameter : Int64[]  _arr0
+                            Convert : Int32  Convert(_r1, Int32)
+                              Parameter : Int64  _r1
                       assign : Int64
                         Parameter : Int64  _r1
-                        Parameter : Int64  _r3
+                        Parameter : Int64  _r2
                       assign : Int64
                         Parameter : Int64  _r1
                         Not : Int64  Not(_r1)
@@ -535,6 +492,14 @@ block : Void  locals=[_slots:Int64[], _heap:VmManagedObjectHeap, _fp:Int32, _thi
           Parameter : Int32  _fp
           Constant : Int32  3
       Parameter : Int64  _reg3
+    Call : Void  _heap.Recycle(Convert(_reg0, Int32))
+      Parameter : VmManagedObjectHeap  _heap
+      Convert : Int32  Convert(_reg0, Int32)
+        Parameter : Int64  _reg0
+    assign : Int64[]
+      Parameter : Int64[]  _arr0
+      Constant : Int64[]  null
+    Parameter : Int64  _r0
   assign : Int64
     Index : Int64  _slots[_fp]
       Parameter : Int64[]  _slots

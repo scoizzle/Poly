@@ -268,20 +268,33 @@ public class HeapLifetimeTests {
             .Because("a caller that received the block's value can still read the array");
     }
 
-    /// <summary>The predicate's "argument" rule on the one node that takes an array object
-    /// without an <c>IndexAccess</c>: <c>StridedSetBits</c> is handed the handle, not an
-    /// element, so nothing proves the array dead and no recycle may be emitted.</summary>
+    /// <summary>A <c>StridedSetBits</c> receiver indexes the buffer exactly as an
+    /// <c>IndexAccess</c> does — it is never handed on — so it counts as an element access and
+    /// the array is promoted and released like any other. <para><b>Contract change (IS7h).</b>
+    /// This test previously asserted the opposite: that <c>StridedSetBits</c> was "an argument,
+    /// not an element access", so no promotion and no recycle. That rule cost the sieve's mark
+    /// loop two heap derefs per iteration. Promotion is safe here for the same reason it is safe
+    /// for an index access: the handle never leaves the statement.</para></summary>
     [Test, Timeout(10_000)]
-    public async Task StridedSetBits_KeepsTheHeapPath(CancellationToken ct) {
+    public async Task StridedSetBits_IsAReceiver_SoTheArrayIsPromotedAndRecycled(CancellationToken ct) {
         var cols = new Variable("cols");
         var program = ArrayProgram(
             new NewArray(TypeReference.To<long>(), new Constant(4L)), cols,
-            new StridedSetBits(cols, new Constant(0L), new Constant(1L), new Constant(63L)));
+            new StridedSetBits(cols, new Constant(0L), new Constant(1L), new Constant(3L)),
+            new IndexAccess(cols, new Constant(0L)));
 
-        await AssertNoRecycle(program, "passed to StridedSetBits");
-        var (_, count, slots) = RunWithHeap(program);
-        await Assert.That(slots.Take(count).Any(slot => slot is long[])).IsTrue()
-            .Because("the statement consumed the array object, so the heap keeps it alive");
+        var scan = new HeapCalls();
+        scan.Visit(Build(program).Expression);
+        await Assert.That(scan.Allocations.Count).IsEqualTo(1)
+            .Because("a promoted definition is one allocation");
+        await Assert.That(scan.Recycles.Count).IsEqualTo(1)
+            .Because("the receiver is an element access, so the handle is proven dead at the "
+                + "block exit: " + string.Join(", ", scan.Recycles.Select(call => call.ToString())));
+
+        // Bits 0..3 are set, so word 0 is 0b1111.
+        var (value, _, _) = RunWithHeap(program);
+        await Assert.That(value).IsEqualTo(15L)
+            .Because("the promoted store must set the same bits the heap path set");
     }
 
     private static (int Count, long Iterations) RunLoop(long iterations) {

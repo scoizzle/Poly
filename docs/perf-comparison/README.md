@@ -38,6 +38,29 @@ The four checksums match across every language - 78,498 / 458,080 / 92 / 837799:
 
 `mandelbrot_polyvm_dbl.cs` and `mandelbrot_polyvm_double.cs` are **variants**, not the base algorithm: they map viewport coordinates differently, which is why their checksum is 453734 rather than 458080. Their rows are labelled with a suffix and are not a slowdown of the main row.
 
+## Why nqueens is the weakest row (measured 2026-10-23)
+
+The nqueens row is where Poly trails JavaScript on the best case (55 us vs 42 us), even though it beats JS on average. The cause is array element access, and it is nearly the whole runtime.
+
+**Marginal cost of one array access inside the VM: 1.40 ns.** Measured by compiling two 100k-iteration loops through `Interpreter.Compile` - one reading a scalar, one reading `arr[i & 7]` - and differencing: scalar 28 us, array 169 us, delta 140 us. nqueens does roughly 36k element accesses per run, so ~50 us of its ~57 us is array access.
+
+The emitted shape is why. Every `IndexAccess` emits a temporary local assigned `heap.UnsafeGet((int)handle)` (a call), a `castclass` to `long[]` (a runtime type check), then the element read. Hand-written equivalents of the same loop, in four shapes:
+
+| Shape | min |
+|---|---|
+| deref + cast per access (what the VM emits) | 19.3 us |
+| deref once per loop iteration | 12.7 us |
+| deref once per run | 6.5 us |
+| raw `int[]`, the shape C#/JS use | 5.3 us |
+
+So the array representation costs up to 3.6x native before the VM's own per-access ceremony is counted, and the ceremony is what takes 19 us to 57 us.
+
+**The fix is [#262](https://github.com/scoizzle/Poly/pull/262)**, which promotes a `new T[n]` local with a constant length in [1,16] and inline elements to a frame window (`_slots[_fp + base + i]`), removing the deref and the castclass. Measured on the same harness, same machine: **56-63 us before, 41-44 us after** (checksum 92 both sides) - about 27 % off, which puts Poly at JavaScript's best case instead of 30 % behind it.
+
+Remaining headroom after #262: roughly 0.98 ns per access against a native ~0.2 ns, so about 35 us of the 41 us is still per-access ceremony - the temp local, an explicit window bounds check, and the CLR's own `_slots` bounds check. That is the next lever, not the heap deref.
+
+This section measures the *VM*, not the cross-language table; the 1.40 ns figure is from the same machine on which the table's Poly rows were taken, and the native columns remain cross-environment (see above).
+
 ## What the table does and does not support
 
 **It supports:** sustained-work throughput of the Poly VM against native and managed runtimes, and — because every language must print the same checksum — that the VM computes the same answer as C, C++, Rust and C# on these four programs. Within the host group, Poly versus `C# native` is the fair comparison.

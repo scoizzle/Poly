@@ -174,10 +174,25 @@ the per-statement debug hook all change, and one giant lambda risks the JIT's si
 and instruction cache where a per-function delegate does not. That is a board-level
 change to the ABI, not a slice.
 
-**And the shape is not where the remaining time is.** The iterative column is 3.2x faster
-than recursion for the same answer. The largest wins left in this kernel are in what the
-emitter chooses to compute per call — re-deriving masks instead of carrying `tried` per
-depth — not in how the call gets there.
+**Correction: the gap between the first two columns and the third is call mechanics, not
+algorithm.** An earlier draft of this note said the recursive shape "re-derives masks" and
+that the fix was to carry `tried` per depth. That was wrong: `avail` in the recursive
+source is a frame local that survives the call, so it is computed once per frame. The
+iterative form is a *different* nqueens formulation — it keeps `tried[d]` and recomputes
+`full & ~(cols|diag|anti|tried[d])` every iteration, which is *more* mask work per
+iteration, and it is still 3.2x faster. So the entire 81.0 -> 25.5 us difference is the
+call: 8,393 calls, 55.5 us of it, **6.6 ns per call in plain C#** — 68 % of the recursive
+run. Call mechanics really do dominate this kernel, which is the strongest argument for
+the inlining idea.
+
+What blocks it in the VM is that the same accounting does not hold. A VM frame costs
+4.75 ns of the 128 us (40 us); the other 88 us is per-frame body ceremony — 66,096
+statements at ~1.3 ns each, 3.5x the native body cost — which comes from register and
+slot traffic in the emitted code. Inlining all bodies into one lambda does not reduce that
+88 us; it *adds* to it, because recursive bodies would no longer share one set of `_regN`
+locals and every local would become a frame-slot spill. Removing 40 us of call cost while
+adding spill traffic to 88 us of body work is not a win to assume — it needs the box
+measured before it is believed, which is what a prototype would be for.
 
 ## What the table does and does not support
 

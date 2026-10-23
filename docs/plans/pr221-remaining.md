@@ -101,6 +101,7 @@ For:
 
 ```poly
 domain Notes
+uses temporal
 Note: entity {
   Title: Text
   Due: Date default(Today)
@@ -109,6 +110,13 @@ Note: entity {
   Score: Number default(5)
 }
 ```
+
+The `uses temporal` line is required, here and in the done-when domains below:
+`MinimalApiGeneratorTests.ParseDomain` injects `uses persistence` only, and
+`Compile` seeds the temporal catalog only when the source lists no `uses` at all.
+Without it `Today` parses but the bound session has no temporal meaning, so
+`LowerDefaultExpression` returns null and the exporter emits a required `Date due`
+with no default instead of `DateOnly? due = null`.
 
 `Create` (existing exporter; do not change):
 
@@ -266,8 +274,9 @@ then the implementation makes them pass.
    is `string?` with no initializer, no `[Required]`, and the argument is
    `Coalesce(dto.Mark, "x")`. Assert the full argument order, including a
    same-typed neighbour (`Memo`), so a positional swap cannot pass.
-4. `CreateDto_RuntimeDefault_IsForwardedForCreateTimeEvaluation` —
-   `Due: Date default(Today)` (and `Opened: DateTime default(Now)`) are `T?`
+4. `CreateDto_RuntimeDefault_IsForwardedForCreateTimeEvaluation` — with
+   `uses temporal` in the test domain, `Due: Date default(Today)` (and
+   `Opened: DateTime default(Now)`) are `T?`
    with **no initializer**, and the arguments are bare `dto.Due` / `dto.Opened`;
    no `DateOnly.FromDateTime` / `DateTime.UtcNow` / `DateTime.Today` appears in
    the POST lambda. This is the "evaluated at create, not the CLR default" proof.
@@ -300,9 +309,9 @@ then the implementation makes them pass.
     required scalar, a collection navigation, then a trailing `default(...)`:
     `Note.Create(dto.Title, Enumerable.Empty<Child>(), dto.Score ?? 5L)`. This
     proves the tail lands after navs, which the no-nav example cannot.
-11. `CreateDto_TrailingScalars_GeneratedHostCompiles` — compile one domain
-    containing a required scalar, a navigation, an optional, a constant default,
-    and a runtime default via
+11. `CreateDto_TrailingScalars_GeneratedHostCompiles` — compile one domain with
+    `uses temporal` containing a required scalar, a navigation, an optional, a
+    constant default, and a runtime default via
     `CompilerWithHttpHost().Compile(..., CompileMode.All, DbmsPack.Sqlite)` and
     `CompileHost(http.Files!)`; assert zero diagnostics. This is the
     signature/order gate: a shifted trailing argument is caught even when the

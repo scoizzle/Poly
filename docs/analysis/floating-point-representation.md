@@ -47,6 +47,28 @@ Two different justifications, and they do not apply to the same set.
 
 That second argument covers **every** numeric primitive, and retires a class of silent divergence. The objection raised earlier in this note - "an `int` slot would add a widening `Convert` at every use" - is only true of a half-typed design where the slot is typed and the arithmetic is not. A fully typed chain adds no conversions at all: `int + int` stays `int + int`. **That objection was wrong and is withdrawn.**
 
+### Which types earn a typed local (measured 2026-10-23)
+
+The rule is **representation, not width**. A local earns its own type when the value's in-memory form differs from the machine word; otherwise the word already *is* the representation and typing it buys nothing.
+
+| Type | Typed local? | Evidence |
+|---|---|---|
+| `double`, `float` | **yes** | IEEE bits are not the word. Typed registers measured **1.93x** on mandelbrot (131.7 -> 68.4 us). |
+| `int` | **yes, for semantics** | Speed was flat (Sieve 97.94 -> 97.25). It earns its place by making 32-bit overflow structural, which closed [#289](https://github.com/scoizzle/Poly/issues/289). |
+| `long`, `ulong` | already the word | — |
+| `byte`, `sbyte`, `short`, `ushort`, `char` | **no** | C# promotes all of them to `int` before every arithmetic operator (`short + short` is an `int` addition), so their *arithmetic* width is already `int` - which IS7c types. A slot of the declared narrow type would need a masking conversion on every store to hold the type invariant, and buys no arithmetic width. |
+| `uint` | **no** | 32-bit unsigned does not fit the signed `int` slot; it keeps the word (IS7c). |
+| `bool` | **no** | A word-sized flag; comparisons already produce one. |
+| `decimal` | not this mechanism | 128-bit, heap handle today. A native slot is a separate design (two words or a struct), not another row in this table. |
+
+A hand-written microbenchmark of the same masked-increment loop at 20M iterations, five local types, showed narrow locals are *not* slower in C# (long 16.8 ms, int 11.8, short 10.8, byte 10.4). That measurement does **not** transfer to the VM as a reason to type them: the VM's own `int` typing was flat on a real program, so the microbenchmark's spread is codegen luck rather than a systematic effect. The conclusion stands on the mechanism, not on the microbenchmark.
+
+What this rules in instead - the levers that remain, in measured order:
+
+1. **Array element access**, 1.40 ns each, ~87 % of nqueens (see [`docs/perf-comparison/README.md`](../perf-comparison/README.md)). Fixed by frame windows, not by typing more scalars.
+2. **`_slots` frame typing for IEEE**, only if parameter-bound code matters. Mandelbrot is fully register-backed (12 registers, 0 bitcasts), so the frame is untouched in the workload that motivated all of this; `MaxRegisterCount` is 32, so the frame only matters for functions with more variables or parameters than that.
+3. **Per-access ceremony** in a window: a temp local, an explicit bounds check, and an index conversion per access. ~0.98 ns remains after the windows land, against a native ~0.2 ns.
+
 ### Where conversions do remain, and at what frequency
 
 `SlotLocation` (`Poly/Interpretation/Vm/Abi/SlotLocation.cs`) already separates the four storage kinds, which is what makes this tractable:

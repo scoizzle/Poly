@@ -191,6 +191,55 @@ is the one node with no ring location; a consumer that asks for one fails closed
 block restarts each statement at the block's entry depth, so the high-water is the
 deepest single statement, and a result is kept only when it is the block's value.
 
+## Array Element Access
+
+An array is a heap object: the variable's slot holds its handle, and a VM array is a
+`long[]` when the element is a slot word and an `object[]` when it is a handle.
+
+**A promoted array is cached in a typed CLR local.** A local declared in a block whose
+only value is one `new T[n]`, and whose every other reference is the receiver of an
+`IndexAccess`, binds the array object to a local at its definition:
+
+```
+_arr3 = NewArrayBounds(elem, len);     // the real array, created once
+slot  = heap.Allocate(_arr3);          // the same object, as today
+```
+
+An element access is then `_arr3[i]` — one bounds check, no `heap.UnsafeGet`, no
+`castclass`. The slot keeps the handle, so identity is preserved by construction and
+nothing else about the variable changes; the local is a **cache**, not a replacement.
+An out-of-range index still throws `IndexOutOfRangeException` from the CLR check.
+
+**The local is keyed by `(slot, element type)`** (`Context.PromoteArray`), not by the
+`Variable`, because the rest of the emitter resolves bindings by slot and a slot is
+released at the end of a block and handed to the next sibling scope's variable —
+`_arrN` for a register slot, `_farrN` for a frame slot. Two element types never alias
+one local: a `long[]` and an `object[]` cannot be assigned to the same
+`ParameterExpression`.
+
+**The promotion predicate** is all-or-nothing per variable; anything else keeps the heap
+path:
+
+| Must hold | Why |
+|-----------|-----|
+| assigned exactly once, at a statement of the declaring block, before every other statement that references it | the local must be assigned before every read |
+| the assigned value is a `NewArray` whose element type resolves (`ArrayElementClrType`) | the local's type is the array shape |
+| every other reference is the `Value` of an `IndexAccess` | `.Length`, an argument, a return, or a block value is a use of the array object, not an element |
+| no reference inside a nested `Lambda` or function body | that body is a separate delegate and cannot see the local |
+| not captured (`Context.NeedsCell` is false) | a cell-backed local holds a cell handle, not the value |
+
+**The block clears the local at scope exit** (`EmitBlock` appends
+`Assign(cacheLocal, Constant(null))` after `Context.PopScope`). Because slots are reused
+across sibling scopes, a surviving local would let a later block read the *previous*
+block's array through a fresh binding; the clear makes that fail closed
+(`NullReferenceException`) instead of silently returning the wrong buffer.
+
+It does **not** release the array. `VmManagedObjectHeap` recycles a handle only through
+`Set`/`UnsafeSet`, and no emitter site calls either, so `_objects[handle]` keeps the
+array for the heap's lifetime whatever the local holds. Nulling buys no GC today; it is
+lifetime hygiene that becomes load-bearing the moment the heap gains recycling.
+`ArrayLocalCacheTests.SiblingBlock_SlotReuse_ReadsNullNotStaleArray` is the test.
+
 ## Compilation Modes
 
 | Mode | DebugHook | Resume dispatch | Use Case |

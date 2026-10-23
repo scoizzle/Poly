@@ -528,7 +528,13 @@ public static partial class AbiEmitter {
         return Block([ignored], seq);
     }
 
-    private static Expression EmitNewArray(NewArray n, Context ctx) {
+    private static Expression EmitNewArray(NewArray n, Context ctx) =>
+        EmitNewArray(n, ctx, cacheLocal: null);
+
+    /// <summary>Create an array. When <paramref name="cacheLocal"/> is supplied the one
+    /// array built here is bound to it <em>and</em> to the heap: a promoted definition
+    /// allocates once, so the local and the variable's slot hold the same object.</summary>
+    private static Expression EmitNewArray(NewArray n, Context ctx, ParameterExpression? cacheLocal) {
         var ring = ctx.OpenRing();
         int lenSlot = ring.Add(CompileNode(n.Length, ctx));
         int slot = ctx.AllocSlot();
@@ -548,8 +554,10 @@ public static partial class AbiEmitter {
         // not readable through a member access and no caller tracked its base offset.
         Type elemType = RingCodec.ArraySlotElementType(elementClr);
         var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
-        var handle = Call(ctx.HeapLocal, HeapAllocate,
-            Convert(arr, typeof(object)));
+        if (cacheLocal is not null)
+            ring.AddUncounted(Assign(cacheLocal, arr));
+        Expression source = cacheLocal is null ? arr : cacheLocal;
+        var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(source, typeof(object)));
         return ring.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
     }
 
@@ -563,6 +571,16 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 "VM compile rejected: index access requires an array or indexer.");
         var ring = ctx.OpenRing();
+        // A promoted array is the CLR local the definition bound, so the element is the
+        // array object indexed — one bounds check, no heap deref, no cast.
+        if (n.Value is Variable cached && ctx.TryArrayCache(cached, out var arrayLocal)) {
+            int cachedIdxSlot = ring.Add(CompileNode(
+                n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
+            int cachedOutSlot = ctx.AllocSlot();
+            var cachedRead = RingCodec.CachedElementRead(
+                arrayLocal, ctx.RingVar(cachedIdxSlot), ctx.HeapLocal);
+            return ring.Then(Assign(ctx.RingVar(cachedOutSlot), cachedRead));
+        }
         int arrSlot = ring.Add(CompileNode(n.Value, ctx));
         int idxSlot = ring.Add(CompileNode(
             n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));

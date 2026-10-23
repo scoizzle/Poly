@@ -15,7 +15,11 @@ public static partial class AbiEmitter {
     private static Expression EmitAssignment(Assignment a, Context ctx) {
         if (a.Destination is IndexAccess indexAccess) {
             var ring = ctx.OpenRing();
-            int arrSlot = ring.Add(CompileNode(indexAccess.Value, ctx));
+            // A promoted array's element store is the CLR local indexed, mirroring the read.
+            ParameterExpression? cachedArray = null;
+            bool cachedStore = indexAccess.Value is Variable cached
+                && ctx.TryArrayCache(cached, out cachedArray);
+            int arrSlot = cachedStore ? -1 : ring.Add(CompileNode(indexAccess.Value, ctx));
             int idxSlot = ring.Add(CompileNode(
                 indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
             int valSlot = ring.Add(CompileNode(a.Value, ctx));
@@ -23,12 +27,19 @@ public static partial class AbiEmitter {
             Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
                 ? clrElem.RuntimeType
                 : null;
-            var store = RingCodec.ArrayElementWrite(
-                ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
-                elemType, RingCodec.IsIeee(a.Value, ctx.Analysis));
+            bool valueIsIeee = RingCodec.IsIeee(a.Value, ctx.Analysis);
+            Expression store;
+            if (cachedStore)
+                store = RingCodec.CachedElementWrite(
+                    cachedArray!, ctx.RingVar(idxSlot), ctx.RingVar(valSlot), elemType, valueIsIeee);
+            else
+                store = RingCodec.ArrayElementWrite(
+                    ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
+                    elemType, valueIsIeee);
 
-            ctx.RingDepth = arrSlot + 1;
-            return ring.Then(Block(store, Assign(ctx.RingVar(arrSlot), ctx.RingVar(valSlot))));
+            ctx.RingDepth = (cachedStore ? idxSlot : arrSlot) + 1;
+            return ring.Then(Block(store, Assign(
+                ctx.RingVar(cachedStore ? idxSlot : arrSlot), ctx.RingVar(valSlot))));
         }
 
         if (a.Destination is Member member) {
@@ -91,12 +102,29 @@ public static partial class AbiEmitter {
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: assignment destination '{destVar.Name}' is not declared in any scope.");
         var value = ctx.OpenRing();
-        var compiled = CompileNode(a.Value, ctx);
+        var compiled = CacheDefinition(a, destVar, ctx) ?? CompileNode(a.Value, ctx);
         int valueIndex = ctx.RingDepth - 1;
         value.Add(compiled);
         var result = destination.Write(ctx, AssignedValue(ctx, destVar, a.Value, valueIndex, compiled));
         return value.Then(result);
     }
+
+    /// <summary>A promoted array's definition: the array is created once and bound to both
+    /// the typed local and the variable's slot, which keeps the handle. This is the one
+    /// site that supplies <see cref="EmitNewArray(NewArray, Context, ParameterExpression?)"/>
+    /// with a cache, so promotion and its allocation cannot drift apart.</summary>
+    private static Expression? CacheDefinition(Assignment a, Variable destVar, Context ctx) =>
+        a.Value is NewArray newArray
+        && !IsReplaced(newArray, ctx)
+        && ctx.TryArrayCache(destVar, out var cache)
+            ? EmitNewArray(newArray, ctx, cache)
+            : null;
+
+    /// <summary>True when analysis replaced <paramref name="node"/> with another node, which
+    /// is what <see cref="Compile"/> follows. A replaced definition is not the array it
+    /// names, so it keeps the general path.</summary>
+    private static bool IsReplaced(Node node, Context ctx) =>
+        ctx.Analysis?.GetNodeReplacement(node) is { } replacement && replacement != node;
 
     /// <summary>
     /// The compiled value at the variable's own representation. The emitter's own type
@@ -119,12 +147,15 @@ public static partial class AbiEmitter {
     private static Expression EmitBlock(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
+        var cacheClears = new List<Expression>();
         foreach (var v in block.Variables) {
             if (v is Variable variable) {
                 ctx.DeclareVariable(variable);
                 varInitExprs.Add(ctx.NeedsCell(variable)
                     ? EmitUpvalueCellInit(variable, ctx)
                     : ctx.VariableWrite(variable, ctx.VariableZero(variable)));
+                if (ArrayCacheCandidate(variable, block, ctx) is { } cache)
+                    cacheClears.Add(Assign(cache, Constant(null, cache.Type)));
             }
         }
         // Each statement starts from the block's entry depth. A statement's result is
@@ -151,22 +182,118 @@ public static partial class AbiEmitter {
         }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
-        var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count);
+        var all = new List<Expression>(varInitExprs.Count + stmtExprs.Count + stores.Count + cacheClears.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
         // The block-exit snapshot is also what VmDebugger.GetLocals reads after
         // execution, when no hook was ever attached, so it stays unconditional.
         // Per-statement stores live inside the hook guard (CompileStatement).
         all.AddRange(stores);
+        // A promoted array's cache local is keyed by slot, and a slot is handed to the
+        // next sibling block's variable, so it is cleared once its own scope is over: a
+        // later block that read it before defining its own array then fails closed on
+        // null instead of reading this block's array. It does not free the array — the
+        // heap is append-only from the emitter's side, so `_objects[handle]` keeps it for
+        // the heap's lifetime either way. The store is lifetime hygiene that becomes
+        // load-bearing the moment the heap gains recycling.
+        all.AddRange(cacheClears);
         if (all.Count == 0) return Empty();
-        // A trailing snapshot store would otherwise type the block as the word it
-        // stores. Re-read the live value slot after the snapshot so the block's own type
-        // is the value's — an IEEE value stays a double instead of being read as bits.
+        // A trailing snapshot store or cache clear would otherwise type the block as what
+        // it stores. Re-read the live value slot after them so the block's own type is the
+        // value's — an IEEE value stays a double instead of being read as bits, and a word
+        // value stays a word instead of the array a cache clear holds.
         var valueSlotType = RingCodec.SlotTypeOf(valueClrType);
-        if (stores.Count > 0 && ctx.RingDepth > entryDepth && RingCodec.IsTypedSlot(valueSlotType))
+        bool trailing = stores.Count > 0 || cacheClears.Count > 0;
+        if (trailing && ctx.RingDepth > entryDepth
+            && (RingCodec.IsTypedSlot(valueSlotType) || cacheClears.Count > 0))
             all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
     }
+
+    /// <summary>The typed CLR local that caches <paramref name="variable"/>'s array, when
+    /// every reference the declaring block makes to it is an element access. Anything else
+    /// — a reassignment, <c>.Length</c>, an argument, a return, a capture, a use inside a
+    /// nested function body, or an element type the type pass cannot resolve — keeps the
+    /// heap path: the local is a cache for element access, never a replacement for the
+    /// variable.
+    /// <para>The definition must also be reachable before every use, so the local is
+    /// always assigned by the time it is read.</para></summary>
+    private static ParameterExpression? ArrayCacheCandidate(Variable variable, Block block, Context ctx) {
+        if (ctx.NeedsCell(variable))
+            return null;
+        int definition = -1;
+        NewArray? created = null;
+        for (int i = 0; i < block.Nodes.Count; i++) {
+            if (block.Nodes[i] is not Assignment assignment || !Binds(assignment.Destination, variable))
+                continue;
+            // A second assignment anywhere in the block — including inside a nested one —
+            // would leave the local disagreeing with the slot after the rebind.
+            if (definition >= 0 || assignment.Value is not NewArray newArray || IsReplaced(newArray, ctx))
+                return null;
+            definition = i;
+            created = newArray;
+        }
+        if (created is not null && ArrayElementClrType(created.ElementType, ctx) is { } elementClr) {
+            for (int i = 0; i < definition; i++) {
+                if (ReferencesName(block.Nodes[i], variable))
+                    return null;
+            }
+            if (created.Length is { } length && ReferencesName(length, variable))
+                return null;
+            for (int i = definition + 1; i < block.Nodes.Count; i++) {
+                if (!OnlyElementAccesses(block.Nodes[i], variable, block))
+                    return null;
+            }
+            return ctx.PromoteArray(variable, RingCodec.ArrayClrType(elementClr));
+        }
+        return null;
+    }
+
+    /// <summary>Every reference to the binding in a subtree must be the receiver of an
+    /// <see cref="IndexAccess"/>. A nested function body is a separate delegate and cannot
+    /// see the local at all, so a reference inside one disqualifies the variable; a nested
+    /// block that redeclares the name makes the reference ambiguous, which also disqualifies
+    /// it rather than guessing which binding a name match meant.</summary>
+    private static bool OnlyElementAccesses(
+        Node? node, Variable variable, Block declaring, bool receiver = false) {
+        if (node is null)
+            return true;
+        if (Binds(node, variable))
+            return receiver;
+        if (node is Lambda)
+            return !ReferencesName(node, variable);
+        if (node is Block nested && !ReferenceEquals(nested, declaring)
+            && nested.Variables.Any(v => v is Variable other
+                && !ReferenceEquals(other, variable)
+                && other.Name == variable.Name))
+            return false;
+        if (node is ForLoop { DeclaredVariables: { } declared }
+            && declared.Any(other => !ReferenceEquals(other, variable) && other.Name == variable.Name))
+            return false;
+        if (node is IndexAccess access)
+            return OnlyElementAccesses(access.Value, variable, declaring, receiver: true)
+                && access.Arguments.All(argument => OnlyElementAccesses(argument, variable, declaring));
+        return node.Children.All(child => OnlyElementAccesses(child, variable, declaring));
+    }
+
+    /// <summary>True when any node in the subtree resolves to the binding — by identity, or
+    /// by name, because a use site reaches a declaration it does not share an instance with.
+    /// </summary>
+    private static bool ReferencesName(Node? node, Variable variable) {
+        if (node is null)
+            return false;
+        if (Binds(node, variable))
+            return true;
+        return node.Children.Any(child => ReferencesName(child, variable));
+    }
+
+    /// <summary>True when a reference node denotes the binding: the declaration's own
+    /// instance, or a use of the same name. Shadowing is excluded by the callers, which
+    /// bail on a nested declaration of the name.</summary>
+    private static bool Binds(Node? node, Variable variable) =>
+        node is Variable use
+        && (ReferenceEquals(use, variable)
+            || string.Equals(use.Name, variable.Name, StringComparison.Ordinal));
 
     private static Expression EmitIfStatement(IfStatement ifStmt, Context ctx) {
         // Every arm starts from the same depth and its slots are dead afterwards, so

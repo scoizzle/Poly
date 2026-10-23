@@ -27,32 +27,55 @@ So roughly **1.8x of FP cost is the emitted representation, and ~0 is interprete
 
 Everything downstream inherits it: comparisons (`EmitComparisonValue`), conditionals, and any arithmetic on a value that came from a double-producing call.
 
-## Why not every primitive
+## Typed local slots: what each representation buys
 
-The question "should slots be typed for all native primitives?" has a different answer per representation, and only one of them is about performance:
+Two different justifications, and they do not apply to the same set.
 
-| Representation | Typed slot? | Reason |
+**Speed.** Only `double` and `float` gain. They are the only primitives whose representation differs from the machine word, so they are the only ones paying a conversion per operation. Measured 1.8x.
+
+**Semantics.** Typed locals make overflow structural rather than conventional. If the ring slot is `int _r3` and `Add` is emitted as `Expression.Add(intA, intB)`, the CLR performs a 32-bit add and wraps at 32 bits - no analysis pass, no convention, no way for the emitter to disagree with itself. Today the ring is `long`, so `Int32` arithmetic silently widens and only the constant folder narrows, which is [#289](https://github.com/scoizzle/Poly/issues/289).
+
+That second argument covers **every** numeric primitive, and retires a class of silent divergence. The objection raised earlier in this note - "an `int` slot would add a widening `Convert` at every use" - is only true of a half-typed design where the slot is typed and the arithmetic is not. A fully typed chain adds no conversions at all: `int + int` stays `int + int`. **That objection was wrong and is withdrawn.**
+
+### Where conversions do remain, and at what frequency
+
+`SlotLocation` (`Poly/Interpretation/Vm/Abi/SlotLocation.cs`) already separates the four storage kinds, which is what makes this tractable:
+
+| Location | Type after this change | Conversion |
 |---|---|---|
-| `double`, `float` | **Yes** - the 1.8x | The only primitives whose representation differs from the machine word, so the only ones paying a conversion per operation. |
-| `long`, `int`, `short`, `byte`, `char`, `bool` | **No** | Already a word. `EmitBinaryArithmeticValue` builds the operation at 64-bit, so an `int` slot would need a *widening* `Convert` at every use - neutral at best, negative in practice. And the JIT holds both widths in the same 64-bit register, so there is nothing to win. |
-| `decimal` | Not this design | 128-bit and currently a heap handle; a native slot is a separate question. |
-| references | Already handles | No change. |
+| `Ring` - transient `_rN` locals | **typed** (`int`, `long`, `double`, ...) | none; this is where the win and the semantics live |
+| `Frame` - `_slots[_fp + n]` | stays `long` word | one per read/write |
+| `Cell` - `long[1]` captures | stays `long` word | one per read/write |
+| `Local` - `_regN`, instance handle | stays as today | none |
 
-Typing integer slots would also decide overflow semantics by accident - see [#289](https://github.com/scoizzle/Poly/issues/289), where the folder wraps `Int32` and the emitter does not. Settle that rule before any slot carries a declared integer width.
+So the change is **per-expression, not per-ABI**: everything inside one expression tree is typed and free; each crossing into a frame slot, capture cell, or call result costs one conversion. That is per statement or per call, not per operation.
 
-So the mechanism to build is **"a slot carries a representation, and a representation may differ from the word"**, with `double` as its first instance and `float` as the second. Enabling N types is not the goal; having one place that knows the difference is.
+**The residual cost is parameters.** A parameter lives in a frame slot, so a hot loop reading an `int` parameter converts on every read. Typing frame slots is a separate and much larger change (a monomorphic `long[]` cannot hold three widths; it would need per-width arrays or a byte-addressed arena). Measure whether any real workload is parameter-bound before attempting it - the ring change should land first and be measured on its own.
 
-## Proposal A - type the ring slot (the 1.8x)
+### The failure mode moves, and gets better
 
-Make the ring's slot type follow the value's representation: an IEEE slot is `Variable(typeof(double), "_d{n}")`, not a `long`.
+With an untyped ring, an analysis failure yields 64-bit arithmetic *pretending* to be 32-bit - silent, wrong, and invisible. With a typed ring, an analysis failure yields either the wrong declared width (a type-inference bug, which is what the analysis already owns and what its tests assert) or, if the type is genuinely unknown, a decision the emitter is forced to make explicitly: reject, or fall back to the word type and abandon the guarantee.
+
+That is the same trade IS0a made for the writer - fail closed rather than fold to a wrong shape. A `long`-only ring folds every `Int32` to a wrong shape by construction.
+
+### What this does to #289
+
+Typed slots do not by themselves fix the folder, which computes in host arithmetic at compile time. But they *decide* the rule the folder must follow: **the declared type is the arithmetic width**. With the emitter typed, the folder's obligation becomes concrete and testable ("fold at the type's width") instead of a choice between two conventions. Fix #289 in the same change that types integer slots, not before - otherwise the rule has nowhere to be observed.
+
+## Proposal A - type the ring slots
+
+Make the ring's slot type follow the value's representation: an IEEE slot is `Variable(typeof(double), "_d{n}")` and an `Int32` slot is `Variable(typeof(int), "_i{n}")`, not a `long` in either case.
 
 - `RingVar(int)` gains the slot's representation; the arms already know it (`RingCodec.IsIeee(node, ctx.Analysis)`).
-- Arithmetic on two IEEE operands reads the `double` locals directly and assigns a `double` result slot: no `FromIeee`, no `ToIeee`.
+- Arithmetic reads the typed locals directly and assigns a result slot of the operation's type: no `FromIeee`, no `ToIeee`, and an `Int32` add wraps at 32 bits because that is what `Expression.Add(int, int)` does.
+- The arithmetic arms (not just the slot declaration) must be built at the slot type; a typed slot beside a 64-bit `Add` gains nothing.
 - The bitcasts survive **only at boundaries where a word must move as a word**: the `_slots[FP+n]` frame, `VmCall.Invoke`'s result, and boxing into a heap handle. Those are per-call, not per-operation.
 
 This is compatible with IS3 rather than a reversal of it: every `CompileNode` arm still leaves its result in a slot, and `CompileValue` stays deleted. The slot is simply typed, so a double is stored as a double.
 
-**Risk:** mixed-representation expressions get more distinct locals, and a slot whose representation is not statically known still needs the `long` word form. Gate it on the FP benchmark plus the integer ones (Sieve is the sensitive one — it is where IS3's 38% came from, and typed slots must not erode it).
+**Order.** `double`/`float` first: it carries the measured 1.8x and no semantic question. Integer widths second, together with [#289](https://github.com/scoizzle/Poly/issues/289), because typed slots are what makes the width rule observable.
+
+**Risk:** mixed-width expressions get more distinct locals, and a slot whose representation is not statically known still needs the `long` word form. Gate it on the FP benchmark plus the integer ones (Sieve is the sensitive one — it is where IS3's 38% came from, and typed slots must not erode it). "Correct by construction" is not a licence to skip the measurement.
 
 ## Proposal B - one native FP baseline (do this first)
 

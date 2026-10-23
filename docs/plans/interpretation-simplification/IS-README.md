@@ -42,8 +42,8 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS1b | Mermaid's two dispatch switches and its silent child drops | IS1 | A | [tasks/IS1b.md](tasks/IS1b.md) |
 | [ ] | IS1c | qualified type names and using scope; a static call on a type is not expressible | IS0b, IS1 | A | [tasks/IS1c.md](tasks/IS1c.md) |
 | [x] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
-| [~] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
-| [B] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b, IS2d | A | [tasks/IS2c.md](tasks/IS2c.md) |
+| [x] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
+| [~] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b, IS2d | A | [tasks/IS2c.md](tasks/IS2c.md) |
 | [x] | IS2d | 11 writer defect classes the differential found (#279), incl. two silent wrong values | IS2a | A | [tasks/IS2d.md](tasks/IS2d.md) |
 | [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [x] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |

@@ -41,6 +41,11 @@ fails closed on a double recycle (`InvalidOperationException`), on handle 0, and
 handle the heap never issued. Its backing array is rented from `ArrayPool<object?>.Shared`
 and returned cleared on dispose, so short-lived executions do not allocate a heap buffer.
 
+A `typeof` value is seeded, not allocated per evaluation: one entry per distinct type is
+allocated at program entry and held in a `_typeN` local, so a `typeof` compiles to a local
+read. Before that, a `typeof` inside a loop allocated a fresh handle for the same `Type` on
+every iteration, and no type object was ever recycled.
+
 ## Call Frame Layout
 
 The layout is defined once in `VmCall` (`Poly/Interpretation/Vm/VmCall.cs`).

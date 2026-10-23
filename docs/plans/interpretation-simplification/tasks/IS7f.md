@@ -1,6 +1,6 @@
 # TASK IS7f - `typeof(x)` allocates a heap handle on every evaluation
 
-Status: planned. Branch `slice/IS7f`. Lane C (`vm`). Depends on IS7e (merged).
+Status: implemented, in review. Branch `slice/IS7f`. Lane C (`vm`). Depends on IS7e (merged).
 Plan: [IS-README](../IS-README.md).
 
 ## Why
@@ -76,3 +76,4 @@ none.
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-23 | parent | Copilot/VS Code | (this commit) | **SHIP.** One heap entry per distinct type, seeded at program entry into a `_typeN` local; `typeof` compiles to a local read. `TypeOfAllocationTests` 5/5 - the loop row goes from `first=1, last=1001` to a single distinct `heap.Count` across 1000 iterations. **Shape taken: the seeded local, not a constant**, because a heap handle is only known at run time - the card's "prefer a constant" was unachievable and the pre-existing tests already encoded the right shape (`Assign(ringSlot, ParameterExpression _typeN)`). The seed is guarded by `_typeN == 0` so a resume reuses the handle instead of leaking one per resume. | **RED, from the cancelled first attempt's tests, reproduced before the fix:** `TypeOfInLoop_HeapDoesNotGrow` `found 1001 [first=1, last=1001]`; `TwoTypeOfSites_ShareOneHandle` `found 2`; `TypeOf_AllocatesOncePerProgram` `found 0`; `DistinctTypes_GetDistinctHandles` `found 0`; `TypeOf_StillYieldsItsType` passed (behaviour baseline). **GREEN:** `TypeOfAllocationTests` 5/5, `AstParityTests` 146/146, full suite **4539/4539**, build 0 warnings. **Benchmarks not re-run:** no `ProgramBenchmarks` program uses `typeof`, so the result is flat by construction - the evidence here is the heap count, not a timing. **Note:** two background attempts at this slice were cancelled by the runtime (~38 min and ~32 min in), leaving only the tests; the implementation was completed in the parent session. |

@@ -487,10 +487,11 @@ public static partial class AbiEmitter {
     private static Expression EmitTypeOf(TypeOf t, Context ctx) {
         var runtime = ResolveClrType(t.Type, t.Type, ctx)
             ?? throw new InvalidOperationException("VM compile rejected: TypeOf type is unresolved.");
+        // The Type is known here, so its heap entry is seeded once per program (Build) and this
+        // arm is a local read. Allocating inline made a typeof in a loop one heap entry per
+        // iteration, and nothing recycles a type object.
         int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot),
-            Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(Constant(runtime, typeof(object)), typeof(object))),
-                typeof(long)));
+        return Assign(ctx.RingVar(slot), ctx.TypeHandleLocal(runtime));
     }
 
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>

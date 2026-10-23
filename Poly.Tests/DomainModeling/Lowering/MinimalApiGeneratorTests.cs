@@ -214,9 +214,220 @@ public class MinimalApiGeneratorTests {
         var rendered = Render(d);
         await Assert.That(rendered)
             .Contains("[Required]\n    public string Title { get; init; }");
-        // Trailing omittable scalars are not create-DTO members (held out separately).
-        await Assert.That(IrUnit(d).FindType("NoteDto")!.Properties!.Any(p => p.Name == "Memo")).IsFalse();
-        await Assert.That(IrUnit(d).FindType("NoteDto")!.Properties!.Any(p => p.Name == "Mark")).IsFalse();
+        // The trailing omittable scalars are nullable members with no [Required]: an
+        // omitted constant default is coalesced at the POST call site, while an
+        // `optional` is forwarded bare so absence stays null.
+        await Assert.That(rendered).Contains("public string? Mark { get; init; }");
+        await Assert.That(rendered).Contains("public string? Memo { get; init; }");
+        await Assert.That(IrUnit(d).FindType("NoteDto")!.FindProperty("Mark")!.Attributes).IsEmpty();
+        await Assert.That(IrUnit(d).FindType("NoteDto")!.FindProperty("Memo")!.Attributes).IsEmpty();
+    }
+
+    [Test]
+    public async Task CreateDto_OptionalScalar_IsNullableAndPassedThrough() {
+        // An `optional` scalar that is not a default has no omission fallback: the DTO
+        // member is nullable and the POST passes it straight through, so an omitted
+        // value stays absent (null) instead of becoming 0 / false / "".
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Memo: Text optional
+              Count: Number optional
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("public string? Memo { get; init; }");
+        await Assert.That(rendered).Contains("public long? Count { get; init; }");
+        await Assert.That(rendered).DoesNotContain("public string? Memo { get; init; } = ");
+        await Assert.That(rendered).DoesNotContain("public long? Count { get; init; } = ");
+        // Name order: Count, then Memo.
+        await Assert.That(rendered).Contains("Note.Create(dto.Title, dto.Count, dto.Memo);");
+        await Assert.That(rendered).DoesNotContain("dto.Count ?? 0");
+    }
+
+    [Test]
+    public async Task CreateDto_ConstantDefault_CoalescesInCreateArgs() {
+        // A constant `default(...)` is a compile-time default on Create's parameter, so
+        // the call site supplies the omission fallback. The full argument order is
+        // asserted: Mark and Memo are both strings, so a positional swap still compiles.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Mark: Text default("x")
+              Memo: Text optional
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("public string? Mark { get; init; }");
+        await Assert.That(rendered).Contains("public string? Memo { get; init; }");
+        await Assert.That(rendered)
+            .Contains("Note.Create(dto.Title, dto.Mark ?? \"x\", dto.Memo);");
+    }
+
+    [Test]
+    public async Task CreateDto_RuntimeDefault_IsForwardedForCreateTimeEvaluation() {
+        // A runtime default (Today / Now) is applied by Create's own `?? <runtime>`
+        // coalesce — the transport forwards the bare member so the clock is read at
+        // create time, not at JSON binding and not as the CLR default.
+        var d = ParseDomain("""
+            domain T
+            uses temporal
+            Note: entity {
+              Title: Text
+              Due: Date default(Today)
+              Opened: DateTime default(Now)
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("public DateOnly? Due { get; init; }");
+        await Assert.That(rendered).Contains("public DateTime? Opened { get; init; }");
+        await Assert.That(rendered).Contains("Note.Create(dto.Title, dto.Due, dto.Opened);");
+
+        var post = PostBlock(rendered, "notes");
+        await Assert.That(post).DoesNotContain("DateOnly.FromDateTime");
+        await Assert.That(post).DoesNotContain("DateTime.UtcNow");
+        await Assert.That(post).DoesNotContain("DateTime.Today");
+    }
+
+    [Test]
+    public async Task CreateDto_PresentZeroOrFalse_IsNotOmitted() {
+        // `long?` / `bool?` are non-null for a present 0 / false, so an explicit value
+        // wins over the fallback while an omitted member takes it.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Score: Number default(5)
+              Active: Boolean default(true)
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("public long? Score { get; init; }");
+        await Assert.That(rendered).Contains("public bool? Active { get; init; }");
+        await Assert.That(rendered)
+            .Contains("Note.Create(dto.Title, dto.Active ?? true, dto.Score ?? 5L);");
+    }
+
+    [Test]
+    public async Task CreateDto_ExplicitRequiredWithDefault_IsNotRequiredOnTheDto() {
+        // Create-presence is a different axis from value requiredness: `default(...)`
+        // makes the property omittable at create, so a DTO [Required] would reject
+        // exactly the omission the domain allows.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Mark: Text required default("x")
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains("public string? Mark { get; init; }");
+        var mark = IrUnit(d).FindType("NoteDto")!.FindProperty("Mark")!;
+        await Assert.That(mark.Attributes!.Any(a => a.Name == "Required")).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateDto_TrailingRange_StaysValidWhenOmitted() {
+        // The constraint projection is reused on the trailing copy with the underlying
+        // CLR name: "long?" would silently lose [Range].
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Score: Number default(5) range(0, 10)
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered)
+            .Contains("[Range(0, 10)]\n    public long? Score { get; init; }");
+        var score = IrUnit(d).FindType("NoteDto")!.FindProperty("Score")!;
+        await Assert.That(score.Attributes!.Any(a => a.Name == "Required")).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateDto_UnlowerableDefault_ThrowsFailClosed() {
+        // `default(1 + 1)` is admitted by analysis but lowers to neither a runtime
+        // expression nor a constant. Emitting `dto.Score` or `0` would be a silent
+        // wrong fallback, so generation fails closed instead.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              Score: Number default(1 + 1)
+            }
+            """);
+        var ex = Assert.Throws<NotSupportedException>(() => Render(d));
+        await Assert.That(ex!.Message).Contains("Note.Score");
+    }
+
+    [Test]
+    public async Task CreateDto_OptionalOnlyEntity_EmitsDto() {
+        // Every root gets a POST that references {Entity}Dto, so every root must get a
+        // DTO — including one whose only create inputs are omittable. The name
+        // reservation moves with the emission, so a colliding action DTO is qualified
+        // instead of emitting two NoteDto types (CS0101).
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Memo: Text optional
+            }
+            Ledger: entity {
+              Code: Text
+              Note: action (subject: Text) { }
+            }
+            """);
+        var unit = IrUnit(d);
+        await Assert.That(unit.FindType("NoteDto")).IsNotNull();
+        await Assert.That(unit.FindType("NoteDto")!.FindProperty("Memo")).IsNotNull();
+        await Assert.That(unit.FindType("LedgerNoteDto")).IsNotNull();
+        await Assert.That(unit.Types.Count(t => t.Name == "NoteDto")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task CreateDto_TrailingAfterNavigation_KeepsSignatureOrder() {
+        // The trailing tail lands after the navigations, matching Create's signature.
+        var d = ParseDomain("""
+            domain T
+            Note: entity {
+              Title: Text
+              children: many Child
+              Score: Number default(5)
+            }
+            Child: entity {
+              Name: Text
+              note: Note
+            }
+            """);
+        var rendered = Render(d);
+        await Assert.That(rendered).Contains(
+            "Note.Create(dto.Title, Enumerable.Empty<Child>(), dto.Score ?? 5L);");
+    }
+
+    [Test]
+    public async Task CreateDto_TrailingScalars_GeneratedHostCompiles() {
+        // The signature/order gate: a shifted trailing argument is caught even when the
+        // types happen to line up.
+        const string poly = """
+            domain Billing
+            uses temporal
+            Account: entity {
+              Name: Text required
+              invoices: many Invoice
+              Tier: Text default("basic")
+              Opened: Date default(Today)
+              Notes: Text optional
+            }
+            Invoice: entity {
+              Number: Text required
+              account: Account
+            }
+            """;
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(http.Success).IsTrue();
+        var errors = CompileHost(http.Files!);
+        await Assert.That(errors).IsEmpty();
     }
 
     [Test]
@@ -617,6 +828,16 @@ public class MinimalApiGeneratorTests {
 
         var errors = CompileHost(http.Files!);
         await Assert.That(errors).IsEmpty();
+    }
+
+    /// <summary>The rendered <c>MapPost</c> block for a root route, from its opening
+    /// statement to the seed local function — scopes assertions to the POST so the seed
+    /// path's sample values cannot satisfy them.</summary>
+    private static string PostBlock(string rendered, string routeSegment) {
+        var start = rendered.IndexOf($"app.MapPost(\"/api/{routeSegment}\"", StringComparison.Ordinal);
+        if (start < 0) return "";
+        var seed = rendered.IndexOf("System.Threading.Tasks.Task SeedAsync", start, StringComparison.Ordinal);
+        return seed < 0 ? rendered[start..] : rendered[start..seed];
     }
 
     private static int CountOf(string text, string value) {

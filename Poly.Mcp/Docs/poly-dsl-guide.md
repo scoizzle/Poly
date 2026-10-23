@@ -1155,9 +1155,12 @@ enforces the same envelopes the domain declares:
 - `pattern(regex)` → `[RegularExpression(regex)]`.
 - `required` → `[Required]` (reference-typed properties). Required is the default, so a
   bare not-`optional` property projects it too; only `optional` clears the flag. Trailing
-  `optional`/`default(...)` scalars are not create-DTO members yet: carrying them needs the
-  domain default (or a coalescing nullable field) in the DTO, otherwise the CLR default
-  overrides `default(...)` — tracked as a follow-up.
+  `optional`/`default(...)` scalars are nullable create-DTO members with no `[Required]`:
+  an omitted member binds to `null`, `optional` stays absent, a **constant**
+  `default(...)` is coalesced at the POST call site (`dto.Mark ?? "x"`), and a **runtime**
+  `default(...)` (`Today` / `Now` / `Guid`) is forwarded bare so `Create`'s own `??`
+  coalesce evaluates it at create time. A `default(...)` that lowers to neither fails
+  generation rather than silently sending the CLR default.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

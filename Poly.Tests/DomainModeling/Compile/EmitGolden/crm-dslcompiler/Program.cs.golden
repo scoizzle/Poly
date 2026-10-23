@@ -59,7 +59,7 @@ app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListA
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
+    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>(), dto.ClosedTickets ?? 0L, dto.OpenPipeline ?? 0L, dto.WonCount ?? 0L);
     if (!accountResult.IsSuccess)
     {
         return Results.Conflict(accountResult.ErrorMessage);
@@ -1374,6 +1374,9 @@ public record AccountDto
     public Industry Industry { get; init; }
     [Required]
     public string Name { get; init; } = default!;
+    public long? ClosedTickets { get; init; }
+    public long? OpenPipeline { get; init; }
+    public long? WonCount { get; init; }
 }
 
 public record CampaignDto

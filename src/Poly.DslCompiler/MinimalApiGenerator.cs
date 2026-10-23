@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.Interpretation.CSharp;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
@@ -16,6 +17,7 @@ namespace Poly.DslCompiler;
 /// </summary>
 public sealed class MinimalApiGenerator {
     private readonly Domain _domain;
+    private readonly AnalysisResult _analysis;
     private readonly List<Entity> _entities;
     private readonly string _domainName;
     private readonly Dictionary<string, StorageEntity> _storageLookup;
@@ -38,6 +40,7 @@ public sealed class MinimalApiGenerator {
         _emitter = emitter;
         _dbms = dbms;
         _domain = domain;
+        _analysis = analysis;
         _entities = domain.Types.OfType<Entity>().ToList();
         _domainName = domain.Name;
         _storageLookup = storageModel.Entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
@@ -64,7 +67,8 @@ public sealed class MinimalApiGenerator {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
             if (!GetStorageEntity(entity).IsRoot) continue;
-            if (GetConstructorOrder(entity).All(p => p.IsNavigation)) continue;
+            // Every root gets a POST that references {Entity}Dto — including one whose
+            // only create inputs are omittable — so its name is always reserved.
             reserved.Add($"{entity.Name}Dto");
         }
 
@@ -131,12 +135,17 @@ public sealed class MinimalApiGenerator {
                 $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
         }
 
-        // Trailing omittable scalars are deliberately NOT appended: the generated create
-        // contract would pass the CLR/DTO default for them, overriding the domain's own
-        // `default(...)`. Carrying them needs the DSL default (or a nullable field that
-        // coalesces) in the DTO — tracked as a follow-up.
+        // This is the required positional prefix of `Create`. The omittable tail
+        // (`optional` / `default(...)`) is carried by TrailingOptionalProperties and
+        // appended by the create-call builder, in the same order the exporter appends
+        // it to the factory signature.
         return metadata.ConstructorParameters;
     }
+
+    /// <summary>The ordered trailing omittable scalars of <c>Create</c> — the single
+    /// source for the DTO members and their POST arguments (never re-derived).</summary>
+    private List<Property> TrailingOptionalProperties(Entity entity) =>
+        DomainToCSharpExporter.TrailingOptionalProperties(entity, _analysis);
 
     /// <summary>
     /// One argument per constructor parameter, in ESM order: a collection nav is empty, a
@@ -167,6 +176,53 @@ public sealed class MinimalApiGenerator {
                 ?? throw new InvalidOperationException(
                     $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
             args.Add(scalar(prop));
+        }
+        return args;
+    }
+
+    /// <summary>
+    /// One argument per trailing omittable scalar, in <c>Create</c>'s signature order.
+    /// The DTO member is nullable and means "omitted", so every argument forwards the
+    /// member rather than a CLR/DTO default:
+    /// <list type="bullet">
+    /// <item><c>optional</c> without a default → bare member; absent stays <c>null</c>.</item>
+    /// <item>runtime <c>default(...)</c> (<c>Today</c>, <c>Now</c>, <c>Guid</c>) → bare
+    /// member; <c>Create</c>'s own <c>?? &lt;runtime&gt;</c> evaluates it at create time.</item>
+    /// <item>constant <c>default(...)</c> → <c>dto.X ?? constant</c>; <c>Create</c>'s
+    /// parameter is non-nullable with that compile-time default, so the call site
+    /// supplies the omission fallback.</item>
+    /// </list>
+    /// A default that lowers to neither fails generation: forwarding the member or a
+    /// CLR default would silently override the domain's value.
+    /// </summary>
+    private List<Node> BuildTrailingCreateArgs(Entity entity) {
+        var args = new List<Node>();
+        foreach (var prop in TrailingOptionalProperties(entity)) {
+            var member = new Member(new Variable("dto"), prop.Name);
+            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            if (defaultConstraint is null) {
+                args.Add(member);
+                continue;
+            }
+            var runtimeDefault = EffectLoweringPass.LowerDefaultExpression(
+                defaultConstraint.Expression,
+                new NamedTypeReference(prop.Type.TypeName),
+                RuntimeAnalysisCache.MeaningFor(_domain),
+                RuntimeAnalysisCache.FormsFor(_domain));
+            if (runtimeDefault is not null) {
+                args.Add(member);
+                continue;
+            }
+            var constant = DomainToCSharpExporter.LowerDefaultConstantNode(
+                defaultConstraint, prop, _domain, _analysis);
+            if (constant is not null) {
+                args.Add(new Coalesce(member, constant));
+                continue;
+            }
+            throw new NotSupportedException(
+                $"default(...) on '{entity.Name}.{prop.Name}' lowers to neither a runtime "
+                + "expression nor a constant, so the create DTO cannot apply the domain "
+                + "default when the value is omitted.");
         }
         return args;
     }
@@ -441,6 +497,7 @@ public sealed class MinimalApiGenerator {
 
         var createArgs = BuildCreateArgs(entity, GetConstructorOrder(entity),
             prop => new Member(new Variable("dto"), prop.Name));
+        createArgs.AddRange(BuildTrailingCreateArgs(entity));
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";
         var bodyNodes = new List<Node>();
@@ -994,7 +1051,6 @@ public sealed class MinimalApiGenerator {
             .Where(p => !p.IsNavigation)
             .ToList();
 
-        if (scalarParams.Count == 0) return;
         if (!GetStorageEntity(entity).IsRoot) return;
 
         // Emit as a record with get/init properties so transport validation attributes
@@ -1024,8 +1080,9 @@ public sealed class MinimalApiGenerator {
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
                     or EqualityConstraint));
             // Required is the default: a not-`optional` property projects `[Required]`
-            // without the redundant keyword. Trailing omittable scalars are not DTO
-            // members, so every member here is required unless explicitly optional.
+            // without the redundant keyword. The positional prefix only holds required
+            // scalars — the omittable tail is projected separately below — so the guard
+            // stays as the fail-closed check against a drifting constructor order.
             if (domainProp is not null
                 && !domainProp.Constraints.IsOptional()
                 && !domainProp.Constraints.OfType<DefaultValueConstraint>().Any()
@@ -1041,6 +1098,12 @@ public sealed class MinimalApiGenerator {
             return attrs.Count == 0 ? prop : prop with { Attributes = attrs };
         }).ToList();
 
+        // The omittable tail: one nullable member per trailing scalar, in Create's
+        // signature order. Null means "omitted" — the POST forwards it so the domain
+        // default (constant at the call site, runtime inside Create) applies.
+        props.AddRange(TrailingOptionalProperties(entity)
+            .Select(prop => BuildTrailingDtoMember(entity, prop)));
+
         dtoTypes.Add(new TypeDefinitionNode(
             $"{entity.Name}Dto",
             Properties: props,
@@ -1049,6 +1112,35 @@ public sealed class MinimalApiGenerator {
                 TypeDefinitionEqualitySemantics.Value
             )
         ));
+    }
+
+    /// <summary>
+    /// One trailing create-DTO member: nullable, init-only, and uninitialized, so an
+    /// omitted value binds to <c>null</c> (the "omitted" signal, distinct from a present
+    /// <c>0</c>/<c>false</c>). Constraint attributes reuse the required projection with
+    /// the <em>underlying</em> CLR name — <c>"long?"</c>/<c>"string?"</c> would silently
+    /// drop <c>[Range]</c>/<c>[MinLength]</c>/<c>[RegularExpression]</c>. <c>[Required]</c>
+    /// is never projected: <c>default(...)</c> makes the property omittable at create, so
+    /// requiring it would reject exactly the omission the domain allows.
+    /// </summary>
+    private PropertyDefinitionNode BuildTrailingDtoMember(Entity entity, Property prop) {
+        var clrType = GetClrTypeName(prop.Type.TypeName);
+        var effective = new List<Constraint>();
+        if (GetPropertyRange(entity, prop.Name) is { } range)
+            effective.Add(range);
+        effective.AddRange(prop.Constraints.Where(c =>
+            c is LengthConstraint or PatternConstraint or EqualityConstraint));
+
+        var member = new PropertyDefinitionNode(
+            prop.Name,
+            new OptionalTypeReference(ClrTypeNode(clrType)),
+            Getter: new PropertyGetterDefinitionNode(),
+            Initializer: new PropertyInitializerDefinitionNode());
+
+        var attrs = BuildConstraintAttributes(clrType, effective);
+        if (IsEnumTypeName(prop.Type.TypeName))
+            attrs = [EnumDataTypeAttribute(prop.Type.TypeName), .. attrs];
+        return attrs.Count == 0 ? member : member with { Attributes = attrs };
     }
 
     /// <summary>Appends the SeedAsync local function (Issue 11b).</summary>

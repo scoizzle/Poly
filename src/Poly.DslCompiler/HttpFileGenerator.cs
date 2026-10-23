@@ -37,8 +37,10 @@ public sealed class HttpFileGenerator {
     }
 
     /// <summary>
-    /// The entity's CREATE-signature scalar params (the complete constructor
-    /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
+    /// The entity's required CREATE-signature scalar params (the non-nav constructor
+    /// parameters). The sample body mirrors the <em>required</em> create arguments only,
+    /// deliberately omitting the trailing <c>optional</c>/<c>default(...)</c> scalars so
+    /// the request exercises the domain defaults.
     /// </summary>
     private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)

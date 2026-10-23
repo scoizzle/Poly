@@ -8,84 +8,84 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_KeywordVariable_PrefixesAtSign() {
         var result = new CSharpGenerator().Generate(new Variable("case"));
-        await Assert.That(result).IsEqualTo("@case;");
+        await Assert.That(result).IsEqualTo("_ = @case;");
     }
 
     [Test]
     public async Task Generate_ConstantInt_ProducesLiteral() {
         var node = new Constant(42);
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("42;");
+        await Assert.That(result).IsEqualTo("_ = 42;");
     }
 
     [Test]
     public async Task Generate_ConstantString_ProducesQuotedString() {
         var node = new Constant("hello");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("\"hello\";");
+        await Assert.That(result).IsEqualTo("_ = \"hello\";");
     }
 
     [Test]
     public async Task Generate_ConstantNull_ProducesNull() {
         var node = new Constant(null);
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("null;");
+        await Assert.That(result).IsEqualTo("_ = null;");
     }
 
     [Test]
     public async Task Generate_ConstantBool_ProducesTrueFalse() {
         var trueResult = new CSharpGenerator().Generate(new Constant(true));
         var falseResult = new CSharpGenerator().Generate(new Constant(false));
-        await Assert.That(trueResult).IsEqualTo("true;");
-        await Assert.That(falseResult).IsEqualTo("false;");
+        await Assert.That(trueResult).IsEqualTo("_ = true;");
+        await Assert.That(falseResult).IsEqualTo("_ = false;");
     }
 
     [Test]
     public async Task Generate_Variable_ProducesVariableName() {
         var node = new Variable("x");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("x;");
+        await Assert.That(result).IsEqualTo("_ = x;");
     }
 
     [Test]
     public async Task Generate_Parameter_ProducesParameterName() {
         var node = new Parameter("y");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("y;");
+        await Assert.That(result).IsEqualTo("_ = y;");
     }
 
     [Test]
     public async Task Generate_ThisReference_ProducesThis() {
         var result = new CSharpGenerator().Generate(new ThisReference());
-        await Assert.That(result).IsEqualTo("this;");
+        await Assert.That(result).IsEqualTo("_ = this;");
     }
 
     [Test]
     public async Task Generate_AddExpression_ProducesInfix() {
         var node = new Add(new Constant(1), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("1 + 2;");
+        await Assert.That(result).IsEqualTo("_ = unchecked(1 + 2);");
     }
 
     [Test]
     public async Task Generate_SubtractExpression_ProducesInfix() {
         var node = new Subtract(new Constant(5), new Constant(3));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("5 - 3;");
+        await Assert.That(result).IsEqualTo("_ = unchecked(5 - 3);");
     }
 
     [Test]
     public async Task Generate_MultiplyExpression_ProducesInfix() {
         var node = new Multiply(new Constant(4), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("4 * 2;");
+        await Assert.That(result).IsEqualTo("_ = unchecked(4 * 2);");
     }
 
     [Test]
     public async Task Generate_DivideExpression_ProducesInfix() {
         var node = new Divide(new Constant(10), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("10 / 2;");
+        await Assert.That(result).IsEqualTo("_ = 10 / 2;");
     }
 
     [Test]
@@ -96,28 +96,28 @@ public class CSharpGeneratorTests {
                 new Subtract(new Constant(100L), new Parameter("pct"))),
             new Constant(100L));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("100L * (100L - pct) / 100L;");
+        await Assert.That(result).IsEqualTo("_ = 100L * (100L - pct) / 100L;");
     }
 
     [Test]
     public async Task Generate_NestedArithmetic_ProducesCorrectOrder() {
         var node = new Add(new Multiply(new Constant(3), new Constant(4)), new Constant(5));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("3 * 4 + 5;");
+        await Assert.That(result).IsEqualTo("_ = unchecked(3 * 4 + 5);");
     }
 
     [Test]
     public async Task Generate_Equality_ProducesDoubleEquals() {
         var node = new Equal(new Constant(1), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("1 == 2;");
+        await Assert.That(result).IsEqualTo("_ = 1 == 2;");
     }
 
     [Test]
     public async Task Generate_NotEqual_ProducesBangEquals() {
         var node = new NotEqual(new Constant(1), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("1 != 2;");
+        await Assert.That(result).IsEqualTo("_ = 1 != 2;");
     }
 
     [Test]
@@ -126,18 +126,18 @@ public class CSharpGeneratorTests {
         var lte = new CSharpGenerator().Generate(new LessThanOrEqual(new Constant(1), new Constant(2)));
         var gt = new CSharpGenerator().Generate(new GreaterThan(new Constant(1), new Constant(2)));
         var gte = new CSharpGenerator().Generate(new GreaterThanOrEqual(new Constant(1), new Constant(2)));
-        await Assert.That(lt).IsEqualTo("1 < 2;");
-        await Assert.That(lte).IsEqualTo("1 <= 2;");
-        await Assert.That(gt).IsEqualTo("1 > 2;");
-        await Assert.That(gte).IsEqualTo("1 >= 2;");
+        await Assert.That(lt).IsEqualTo("_ = 1 < 2;");
+        await Assert.That(lte).IsEqualTo("_ = 1 <= 2;");
+        await Assert.That(gt).IsEqualTo("_ = 1 > 2;");
+        await Assert.That(gte).IsEqualTo("_ = 1 >= 2;");
     }
 
     [Test]
     public async Task Generate_AndOr_ProducesCorrectOperators() {
         var and = new CSharpGenerator().Generate(new And(new Constant(true), new Constant(false)));
         var or = new CSharpGenerator().Generate(new Or(new Constant(true), new Constant(false)));
-        await Assert.That(and).IsEqualTo("true && false;");
-        await Assert.That(or).IsEqualTo("true || false;");
+        await Assert.That(and).IsEqualTo("_ = true && false;");
+        await Assert.That(or).IsEqualTo("_ = true || false;");
     }
 
     [Test]
@@ -150,20 +150,20 @@ public class CSharpGeneratorTests {
 
         // |(&&) → (a && b) | c, not `a && b | c` (= a && (b | c) in C#).
         await Assert.That(new CSharpGenerator().Generate(
-            new BitwiseOr(new And(a, b), c))).IsEqualTo("(a && b) | c;");
+            new BitwiseOr(new And(a, b), c))).IsEqualTo("_ = (a && b) | c;");
 
         // ^(|) → a & b ^ (c | d), not `a & b ^ c | d` (= ((a & b) ^ c) | d).
         await Assert.That(new CSharpGenerator().Generate(
             new BitwiseXor(new BitwiseAnd(a, b), new BitwiseOr(c, new Variable("d")))))
-            .IsEqualTo("a & b ^ (c | d);");
+            .IsEqualTo("_ = a & b ^ (c | d);");
 
         // |(||) → (a || b) | c.
         await Assert.That(new CSharpGenerator().Generate(
-            new BitwiseOr(new Or(a, b), c))).IsEqualTo("(a || b) | c;");
+            new BitwiseOr(new Or(a, b), c))).IsEqualTo("_ = (a || b) | c;");
 
         // &&(|) stays tight on the left: a | b && c (a | b binds first).
         await Assert.That(new CSharpGenerator().Generate(
-            new And(new BitwiseOr(a, b), c))).IsEqualTo("a | b && c;");
+            new And(new BitwiseOr(a, b), c))).IsEqualTo("_ = a | b && c;");
     }
 
     [Test]
@@ -172,37 +172,37 @@ public class CSharpGeneratorTests {
         var b = new Variable("b");
         var c = new Variable("c");
         await Assert.That(new CSharpGenerator().Generate(
-            new ShiftLeft(a, new ShiftLeft(b, c)))).IsEqualTo("a << (b << c);");
+            new ShiftLeft(a, new ShiftLeft(b, c)))).IsEqualTo("_ = a << (b << c);");
         await Assert.That(new CSharpGenerator().Generate(
-            new ShiftRight(a, new ShiftRight(b, c)))).IsEqualTo("a >> (b >> c);");
+            new ShiftRight(a, new ShiftRight(b, c)))).IsEqualTo("_ = a >> (b >> c);");
         await Assert.That(new CSharpGenerator().Generate(
-            new ShiftLeft(new ShiftLeft(a, b), c))).IsEqualTo("a << b << c;");
+            new ShiftLeft(new ShiftLeft(a, b), c))).IsEqualTo("_ = a << b << c;");
     }
 
     [Test]
     public async Task Generate_Not_ProducesBangPrefix() {
         var result = new CSharpGenerator().Generate(new Not(new Constant(true)));
-        await Assert.That(result).IsEqualTo("!true;");
+        await Assert.That(result).IsEqualTo("_ = !true;");
     }
 
     [Test]
     public async Task Generate_UnaryMinus_ProducesNegativePrefix() {
         var result = new CSharpGenerator().Generate(new UnaryMinus(new Constant(5)));
-        await Assert.That(result).IsEqualTo("-5;");
+        await Assert.That(result).IsEqualTo("_ = -5;");
     }
 
     [Test]
     public async Task Generate_MemberAccess_ProducesDotNotation() {
         var node = new Member(new Variable("person"), "Name");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("person.Name;");
+        await Assert.That(result).IsEqualTo("_ = person.Name;");
     }
 
     [Test]
     public async Task Generate_IndexAccess_ProducesBrackets() {
         var node = new IndexAccess(new Variable("arr"), new Constant(0));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("arr[0];");
+        await Assert.That(result).IsEqualTo("_ = arr[0];");
     }
 
     [Test]
@@ -223,14 +223,14 @@ public class CSharpGeneratorTests {
     public async Task Generate_Conditional_ProducesTernary() {
         var node = new Conditional(new Constant(true), new Constant(1), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("(true ? 1 : 2);");
+        await Assert.That(result).IsEqualTo("_ = (true ? 1 : 2);");
     }
 
     [Test]
     public async Task Generate_Coalesce_ProducesDoubleQuestion() {
         var node = new Coalesce(new Variable("a"), new Constant(0));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("a ?? 0;");
+        await Assert.That(result).IsEqualTo("_ = a ?? 0;");
     }
 
     [Test]
@@ -244,36 +244,37 @@ public class CSharpGeneratorTests {
     public async Task Generate_TypeCast_ProducesCastExpression() {
         var node = new TypeCast(new Variable("x"), TypeReference.To<int>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("(System.Int32)x;");
+        await Assert.That(result).IsEqualTo("_ = (System.Int32)x;");
     }
 
     [Test]
     public async Task Generate_TypeIs_ProducesIsExpression() {
         var node = new TypeIs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("x is System.String;");
+        await Assert.That(result).IsEqualTo("_ = x is System.String;");
     }
 
     [Test]
     public async Task Generate_TypeAs_ProducesAsExpression() {
         var node = new TypeAs(new Variable("x"), TypeReference.To<string>());
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("x as System.String;");
+        await Assert.That(result).IsEqualTo("_ = x as System.String;");
     }
 
     [Test]
     public async Task Generate_MemberAccessOnCast_ParenthesizesCastExpression() {
         var node = new Member(new TypeCast(new Variable("actor"), new TypeReference("AdminUser")), "Department");
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("((AdminUser)actor).Department;");
+        await Assert.That(result).IsEqualTo("_ = ((AdminUser)actor).Department;");
     }
 
     [Test]
     public async Task Generate_Lambda_SingleParameter_ProducesLambdaExpression() {
         var param = new Parameter("x");
         var node = new Lambda([param], new Add(param, new Constant(1)));
-        var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("x => x + 1;");
+        // A lambda has no statement form; a cast gives it the delegate type C# needs.
+        var result = new CSharpGenerator().Generate(new TypeCast(node, TypeReference.To<Func<int, int>>()));
+        await Assert.That(result).IsEqualTo("_ = (Func<int, int>)(x => x + 1);");
     }
 
     [Test]
@@ -281,8 +282,8 @@ public class CSharpGeneratorTests {
         var x = new Parameter("x");
         var y = new Parameter("y");
         var node = new Lambda([x, y], new Add(x, y));
-        var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("(x, y) => x + y;");
+        var result = new CSharpGenerator().Generate(new TypeCast(node, TypeReference.To<Func<int, int, int>>()));
+        await Assert.That(result).IsEqualTo("_ = (Func<int, int, int>)((x, y) => x + y);");
     }
 
     [Test]
@@ -290,8 +291,8 @@ public class CSharpGeneratorTests {
         var node = new Block(new Constant(1), new Constant(2));
         var result = new CSharpGenerator().Generate(node);
         var expected = "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
-                       "    2;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
+                       "    _ = 2;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -314,7 +315,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "{" + Environment.NewLine +
                        "    var x = default(object);" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -354,11 +355,11 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "if (x == 0)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}" + Environment.NewLine +
                        "else" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    2;" + Environment.NewLine +
+                       "    _ = 2;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -371,7 +372,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "if (x == 0)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -447,7 +448,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "for (i = 0; i < 10; i = i + 1)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    42;" + Environment.NewLine +
+                       "    _ = 42;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -458,7 +459,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "for (; ; )" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    42;" + Environment.NewLine +
+                       "    _ = 42;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -470,7 +471,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "foreach (var item in items)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -529,15 +530,15 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}" + Environment.NewLine +
                        "catch (System.Exception ex)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    2;" + Environment.NewLine +
+                       "    _ = 2;" + Environment.NewLine +
                        "}" + Environment.NewLine +
                        "finally" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    3;" + Environment.NewLine +
+                       "    _ = 3;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -550,11 +551,11 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}" + Environment.NewLine +
                        "finally" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    2;" + Environment.NewLine +
+                       "    _ = 2;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -572,7 +573,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "try" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}" + Environment.NewLine +
                        "catch (System.Exception ex)" + Environment.NewLine +
                        "{" + Environment.NewLine +
@@ -589,7 +590,7 @@ public class CSharpGeneratorTests {
         var result = new CSharpGenerator().Generate(node);
         var expected = "using (resource)" + Environment.NewLine +
                        "{" + Environment.NewLine +
-                       "    1;" + Environment.NewLine +
+                       "    _ = 1;" + Environment.NewLine +
                        "}";
         await Assert.That(result).IsEqualTo(expected);
     }
@@ -638,7 +639,7 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_Modulo_ProducesPercent() {
         var result = new CSharpGenerator().Generate(new Modulo(new Constant(10), new Constant(3)));
-        await Assert.That(result).IsEqualTo("10 % 3;");
+        await Assert.That(result).IsEqualTo("_ = 10 % 3;");
     }
 
     [Test]
@@ -840,14 +841,14 @@ public class CSharpGeneratorTests {
             new Multiply(new Constant(3), new Constant(4)),
             new Divide(new Constant(10), new Constant(2)));
         var result = new CSharpGenerator().Generate(node);
-        await Assert.That(result).IsEqualTo("3 * 4 + 10 / 2;");
+        await Assert.That(result).IsEqualTo("_ = unchecked(3 * 4 + 10 / 2);");
     }
 
     [Test]
     public async Task Generate_EmptyGenerator_DoesNotThrow() {
         var generator = new CSharpGenerator();
         var result = generator.Generate(new Constant(1));
-        await Assert.That(result).IsEqualTo("1;");
+        await Assert.That(result).IsEqualTo("_ = 1;");
     }
 
     // ── Substrate tests (Group 2.4) ──────────────────────────────
@@ -887,7 +888,7 @@ public class CSharpGeneratorTests {
                 new Constant("Items"))
         );
         var lambda = new Lambda([bParam], body);
-        var result = new CSharpGenerator().Generate(lambda);
+        var result = new CSharpGenerator().Generate(new TypeCast(lambda, TypeReference.To<Func<object, object>>()));
         // Each invocation should have a trailing semicolon
         await Assert.That(result).Contains("FindNavigation(\"Loans\");");
         await Assert.That(result).Contains("ToTable(\"Items\");");

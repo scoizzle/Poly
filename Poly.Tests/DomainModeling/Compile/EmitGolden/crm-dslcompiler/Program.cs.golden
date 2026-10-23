@@ -1349,7 +1349,7 @@ app.Run();
 
 public record ProductDto
 {
-    [Range(0, 100000000)]
+    [Range(0.0, 100000000.0)]
     public long ListPrice { get; init; }
     [Required]
     public string Name { get; init; } = default!;

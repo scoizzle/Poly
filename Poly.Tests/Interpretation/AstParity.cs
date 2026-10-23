@@ -112,99 +112,12 @@ public static class AstParity {
     public const string EntryPointName = "Run";
 
     /// <summary>
-    /// The corpus programs whose printed C# does not agree with the VM today. Every entry is a
-    /// writer defect the differential found; each names its class so the list reads as findings.
+    /// The corpus programs whose printed C# does not agree with the VM, each pinned with the defect
+    /// it records. Empty, and it stays empty: IS2d fixed all eleven classes the differential found
+    /// (#279), so an entry here is now a writer defect to fix rather than a way to keep a red row
+    /// green.
     /// </summary>
-    public static IReadOnlyList<KnownDivergence> KnownDivergences { get; } = [
-        new("ArithmeticParserEvaluatorTests.MixedTypes_ComplexExpression_PromotesCorrectly", ParityDisposal.Executed, "double:22.5",
-            ParityDisposal.Executed, "double:23",
-            "double constant: the printed subtraction loses a double operand and rounds to an integer"),
-        new("ArithmeticParserEvaluatorTests.UnaryMinus_WithParentheses_EvaluatesCorrectly", ParityDisposal.Executed, "long:-15",
-            ParityDisposal.Executed, "long:-5",
-            "unary minus: a negated negative constant is one operand with the wrong value"),
-        new("ArithmeticParserEvaluatorTests.InvalidOperation_DivideByZero_ThrowsException",
-            ParityDisposal.Executed, "throw DivideByZeroException: Attempted to divide by zero.",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "constant division by zero: the VM throws at runtime, the printed `x / 0` is CS0020 at compile time"),
-        new("ArithmeticNodeTests.Divide_TwoDoubles_ReturnsDecimalQuotient", ParityDisposal.Executed, "double:3.5",
-            ParityDisposal.Executed, "long:3",
-            "double constant: a whole-valued double prints without a decimal point, so `/` becomes integer division"),
-        new("BlockScopeTests.BlockScope_NestedScopes_InnerShadowsOuter", ParityDisposal.Executed, "long:50",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "block shadowing: an inner block may shadow an outer local, which C# forbids (CS0136)"),
-        new("BlockScopeTests.BlockScope_CreatesNewScope_VariablesNotVisibleOutside", ParityDisposal.Executed, "long:50",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "block shadowing: an inner block may shadow an outer local, which C# forbids (CS0136)"),
-        new("BlockScopeTests.BlockScope_MultipleBlocks_IndependentScopes", ParityDisposal.Executed, "long:20",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "block value: a block's trailing expression prints as a bare expression statement (CS0201)"),
-        new("CoalesceTests.Coalesce_WithNonNullLeft_ReturnsLeftValue", ParityDisposal.Executed, "long:100",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "coalesce: `??` is printed on a non-nullable operand, which C# rejects (CS0019)"),
-        new("CoalesceTests.Coalesce_WithNullLeft_ReturnsRightValue", ParityDisposal.Executed, "long:42",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "coalesce: `??` is printed on a non-nullable operand, which C# rejects (CS0019)"),
-        new("CoalesceTests.Coalesce_ChainedOperators_WorksCorrectly", ParityDisposal.Executed, "long:10",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "coalesce: `??` is printed on a non-nullable operand, which C# rejects (CS0019)"),
-        new("ConstantNodeTests.Constant_DateTime_CompilesAndExecutes", ParityDisposal.Executed,
-            "DateTime:01/15/2024 10:30:00", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: a DateTime constant prints as its ToString, not a C# literal"),
-        new("ConstantNodeTests.Constant_ComplexObject_CompilesAndExecutes", ParityDisposal.Executed,
-            "List`1:System.Collections.Generic.List`1[System.Int32]", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: a collection constant prints as its type name, not a C# literal"),
-        new("ForEachLoopTests.ForEachLoop_Break_StopsIterating", ParityDisposal.Executed, "long:6",
-            ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: the collection constant prints as `System.Int32[]`"),
-        new("ForEachLoopTests.ForEachLoop_Continue_SkipsRemainingBodyForCurrentIteration", ParityDisposal.Executed,
-            "long:4", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: the collection constant prints as `System.Int32[]`"),
-        new("ForEachLoopTests.ForEachLoop_EmptyCollection_DoesNotExecuteBody", ParityDisposal.Executed, "long:5",
-            ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: the collection constant prints as `System.Int32[]`"),
-        new("ForEachLoopTests.ForEachLoop_ShadowsOuterVariable_WithoutLeakingValue", ParityDisposal.Executed, "long:103",
-            ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: the collection constant prints as `System.Int32[]`"),
-        new("ForEachLoopTests.ForEachLoop_UsesLoopVariableInsideBody", ParityDisposal.Executed, "long:10",
-            ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "constant fallback: the collection constant prints as `System.Int32[]`"),
-        new("InterpreterLanguageGotchaTests.NotEqual_NaN_IsTrue", ParityDisposal.Executed, "bool:true",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "double constant: `double.NaN` prints as the bare name `NaN` (CS0103)"),
-        new("InterpreterLanguageGotchaTests.Equal_NaN_IsFalse", ParityDisposal.Executed, "bool:false",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "double constant: `double.NaN` prints as the bare name `NaN` (CS0103)"),
-        new("InterpreterLanguageGotchaTests.LessThan_NaN_IsFalse", ParityDisposal.Executed, "bool:false",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "double constant: `double.NaN` prints as the bare name `NaN` (CS0103)"),
-        new("InterpreterLanguageGotchaTests.Add_LongOverflow_WrapsUnchecked", ParityDisposal.Executed, "long:-9223372036854775808",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "checked arithmetic: the VM wraps, the printed constant sum overflows in checked mode (CS0220)"),
-        new("LambdaInvokeTests.Invoke_WithLambdaNode_ExecutesBody", ParityDisposal.Executed, "long:15",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "lambda invocation: a lambda callee prints without the arguments' brackets it needs (CS0149)"),
-        new("LambdaInvokeTests.InvokeWith_ExtensionMethod_BuildsInvokeNode", ParityDisposal.Executed, "long:107",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "lambda invocation: a lambda callee prints without the arguments' brackets it needs (CS0149)"),
-        new("LambdaInvokeTests.Lambda_WithNoParameters_CompilesAndReturnsConstant", ParityDisposal.Executed,
-            "Object[]:System.Object[]", ParityDisposal.Rejected, "Roslyn compile errors:",
-            "lambda root: a bare lambda has no printed value form and prints as a statement (CS0201)"),
-        new("NewNodeTests.New_ParameterlessConstructor_CompilesAndCreatesInstance", ParityDisposal.Executed,
-            "ParityWidget:Poly.Tests.Interpretation.AstParityTests+ParityWidget", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "nested type name: a nested CLR type prints with the reflection separator `+`, not `.`"),
-        new("NewNodeTests.New_WithExplicitArguments_BindsAllConstructorParameters", ParityDisposal.Executed,
-            "ParityWidget:Poly.Tests.Interpretation.AstParityTests+ParityWidget", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "nested type name: a nested CLR type prints with the reflection separator `+`, not `.`"),
-        new("NewNodeTests.New_WithOptionalParameter_UsesDefaultValueWhenOmitted", ParityDisposal.Executed,
-            "ParityWidget:Poly.Tests.Interpretation.AstParityTests+ParityWidget", ParityDisposal.Rejected, "Roslyn syntax errors:",
-            "nested type name: a nested CLR type prints with the reflection separator `+`, not `.`"),
-        new("TypeCastTests.TypeAs_ObjectToString_WithIncompatibleValue_ReturnsNull", ParityDisposal.Executed, "null",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "type as: `42 as string` is CS0039, although the VM's `as` is a runtime try-cast that yields null"),
-        new("UnaryMinusTests.UnaryMinus_WithNegativeInteger_ReturnsPositive", ParityDisposal.Executed, "long:99",
-            ParityDisposal.Rejected, "Roslyn compile errors:",
-            "unary minus: a negated negative constant prints as the decrement `--99` (CS1059)"),
-    ];
+    public static IReadOnlyList<KnownDivergence> KnownDivergences { get; } = [];
 
     static readonly ConcurrentDictionary<string, (ParityDisposal Disposal, string Outcome)> PrintedBySource =
         new(StringComparer.Ordinal);
@@ -218,10 +131,17 @@ public static class AstParity {
     /// <param name="args">Arguments the VM is seeded with; a root lambda's parameters are bound from them.</param>
     public static ParityRow Compare(string program, Node node, params object?[] args) {
         ArgumentNullException.ThrowIfNull(node);
-        var vm = RunVm(node, args);
+        // A bare lambda is a program with parameters, not a value: both sides invoke it, the same
+        // shape the Invoke-of-lambda entry arm uses.
+        var vm = node is Lambda lambda
+            ? RunVm(Invoked(lambda, args), [])
+            : RunVm(node, args);
         var printed = RunPrinted(node, args);
         return new(program, vm.Disposal, vm.Outcome, printed.Disposal, printed.Outcome, printed.Source);
     }
+
+    static Invoke Invoked(Lambda lambda, object?[] args) =>
+        new(lambda, [.. args.Select(static argument => (Node)new Constant(argument))]);
 
     /// <summary>Runs both sides and fails with the emitted source when they disagree.</summary>
     public static async Task<ParityRow> AssertAgrees(string program, Node node, params object?[] args) {
@@ -334,17 +254,42 @@ public static class AstParity {
         return node switch {
             Return => (objectType, node, null),
             Comment => (voidType, node, null),
-            Block block when block.Nodes.Count > 0 && block.Nodes[^1] is Poly.Ast.Nodes.Expression =>
-                (objectType, new Block(
-                    [.. block.Nodes.Take(block.Nodes.Count - 1), new Return(block.Nodes[^1])],
-                    block.Variables), null),
+            Block block when Yields(block) => (objectType, Hoisted(block), null),
             Block => (voidType, node, null),
-            Lambda lambda => (objectType, lambda, null),
-            Invoke { Delegate: Lambda lambda, Arguments.Length: 0 } => (objectType, lambda.Body, lambda.Parameters),
+            Lambda lambda => LambdaEntry(lambda),
+            Invoke { Delegate: Lambda lambda, Arguments.Length: 0 } => LambdaEntry(lambda),
             Poly.Ast.Nodes.Expression => (objectType, new Return(node), null),
             _ => (voidType, node, null),
         };
     }
+
+    /// <summary>A root lambda's body is the program: a value body becomes the method's return and
+    /// a block body keeps its statements with its trailing value returned.</summary>
+    static (Node ReturnType, Node Body, IReadOnlyList<Parameter>? Parameters) LambdaEntry(Lambda lambda) =>
+        lambda.Body switch {
+            Block block when Yields(block) => (new ClrTypeReference(typeof(object)), Hoisted(block), lambda.Parameters),
+            Block => (new TypeReference("void"), lambda.Body, lambda.Parameters),
+            _ => (new ClrTypeReference(typeof(object)), new Return(lambda.Body), lambda.Parameters),
+        };
+
+    /// <summary>True when the block's value reaches a consumer: its last node is a value
+    /// expression, or a block that is one. The value is the block's meaning, so the entry point
+    /// returns it.</summary>
+    static bool Yields(Block block) => block.Nodes.Count > 0 && block.Nodes[^1] switch {
+        Block inner => Yields(inner),
+        Poly.Ast.Nodes.Expression => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Rewrites a value-carrying block so its trailing value is a <c>return</c> in the block that
+    /// carries it. C# has no block expression, so the consumer has to name the value: the writer
+    /// prints a block as a statement list and cannot invent a value its consumer never asked for.
+    /// </summary>
+    static Block Hoisted(Block block) =>
+        block.Nodes[^1] is Block inner
+            ? new Block([.. block.Nodes.Take(block.Nodes.Count - 1), Hoisted(inner)], block.Variables)
+            : new Block([.. block.Nodes.Take(block.Nodes.Count - 1), new Return(block.Nodes[^1])], block.Variables);
 
     static (ParityDisposal Disposal, string Outcome) Execute(string source, object?[] args) {
         Assembly assembly;

@@ -88,3 +88,80 @@ Two decisions the card does not settle, both recorded rather than guessed:
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | pending | **SHIP.** All eleven classes fixed; `AstParity.KnownDivergences` is **empty** and the 128-program differential agrees with the VM on every row (135 tests, 0 pinned). Full suite 4,502 passed / 0 failed / 0 skipped; `Poly.Benchmarks` build 0 warnings. `LinqExpressionGenerator` untouched — IS2c may now delete it on a differential that no longer has blind spots. | See the per-class table below. Two silent-wrong-value classes (`1.5 + 3 * 7.0` → `22.5` vs `23`, `-(10 + 5)` → `-15` vs `-5`) are gone: constants print round-trip literals, and a prefix operator parenthesises a compound operand. |
+
+### Red first (2026-10-22)
+
+**Corpus.** Emptying `KnownDivergences` and running
+`dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/AstParityTests/Corpus_PrintedCSharp_AgreesWithTheVm/*'`
+reproduced **exactly 29 failures** — the pinned set, no more and no fewer — each with both outcomes and
+the emitted source (`Executed long:-5` for `-(10 + 5)`, `Executed double:23` for `10 * 2.5 - 5 / 2.0`,
+`CS0136` for the shadowing block, `CS0443` for `System.Int32[]`, and so on).
+
+**Per class.** `CSharpWriterDefectTests` was added before the writer changed: 23 of its 29 cases failed
+(`DoubleConstant_ReReadsAsTheSameValue(7)`, `UnaryMinus_CompoundOperand_KeepsItsParentheses`,
+`ConstantWithoutLiteral_RejectsNamingTheType`, `BlockShadowing_RenamesTheInnerLocal_AndExecutes`,
+`BlockValue_ReachesItsConsumer`, `Coalesce_OnANonNullableOperand_PrintsThroughItsNullableForm`,
+`LambdaCallee_IsParenthesised`, `NestedClrType_PrintsWithDots`,
+`TypeAs_OnAValueTypedOperand_BoxesBeforeTheTryCast`,
+`ConstantIntegralArithmetic_PrintsInAnUncheckedContext`, `ConstantDivisionByZero_ThrowsAtRuntime`,
+`RootLambda_IsAProgramWithItsParameters`, …). The six that passed already round-tripped (`2.5`, `0.1`,
+`1e300`, `max`, `min`, `double.Epsilon` all carry a `.` or an `E`).
+
+### Per class (2026-10-22)
+
+| # | Class | Fix | Decision recorded |
+|---|-------|-----|------------------|
+| 1 | double literal | `R` format; a whole value gains `.0`; `NaN`/`±∞` print as `double.`-qualified names; `float` likewise | round-trip is exact, checked by bit pattern incl. `-0.0` and subnormals |
+| 2 | unary minus | `PrefixOperandText` parenthesises a compound operand and a signed literal; `Not` and `BitwiseNot` share the rule (same defect, same line) | `- -99` is not `--99`; `-(a + b)` is not `-a + b` |
+| 3 | constant fallback | a literal table: primitives, `DateTime` (ticks + `DateTimeKind`), 1-D arrays, `List<T>`; everything else rejects through `Unprintable` naming the type | **faithful literal over rejection** — see below |
+| 4 | block shadowing | printed locals get a lexical scope map; a declaration an enclosing scope already uses prints `name_2` | **rename on print**, per the card |
+| 5 | block value | the *caller* owns the value: `AstParity.EntryShape` hoists a trailing value (or trailing block) into a `return`; the writer owns the statement form and prints a value with no statement form as `_ = expr;` | C# has no block expression, so only a consumer can name the value |
+| 6 | coalesce | a non-nullable left operand prints through `(T?)`; an untyped `null` takes the right operand's type | keeps the VM's null test, compiles |
+| 7 | lambda callee | a lambda callee prints as a cast to `System.Func<…>`/`System.Action<…>` built from its parameters and the `Invoke`'s resolved type | brackets alone are not enough — C# cannot invoke a lambda expression, only a delegate |
+| 8 | nested CLR type names | `ClrTypeName` writes `Outer+Inner` as `Outer.Inner` | one helper, used by `TypeText`, `Expr` and `ToCSharpTypeName` |
+| 9 | `as` on a value type | a value-typed operand prints boxed: `(object)42 as System.String` | the VM's `as` is a runtime try-cast |
+| 10 | checked arithmetic / divide by zero | `+ - *` over integral constants print inside `unchecked(…)`; a constant zero divisor prints `System.Convert.ToX(0)` | `/` and `%` cannot overflow except `MinValue / -1`, which still fails loudly (CS0220) rather than silently |
+| 11 | lambda root | a root lambda is a program with parameters: both sides invoke it (`Compare` wraps it in `Invoke`, `EntryShape` returns its body) | a bare lambda is a value, and its VM value (`object[]`) is not a printed program |
+
+**Class 3 decision, and why it is not the card's "reject".** The card and §Needs Scot say reject
+`DateTime` and collections; the parent's non-negotiable says `KnownDivergences` ends empty. Those
+collide: `Constant_DateTime_CompilesAndExecutes`, `Constant_ComplexObject_CompilesAndExecutes` and the
+five `ForEachLoop` rows have a VM that **executes**, so a writer refusal can never agree with them.
+`new System.DateTime(<ticks>L, System.DateTimeKind.<Kind>)` is exact and one arm, and
+`new int[] { … }` / `new List<int> { … }` are the collection expressions the card does allow. Every
+other type still rejects (`Object`, `Guid`, `TimeSpan`, a hand-rolled class) — `ConstantWithoutLiteral_RejectsNamingTheType`
+pins that. Same argument the card itself makes for class 4: refusing a VM-executable program makes it
+unprintable, which is `printed ⊆ simulatable` failing in the other direction.
+
+**Explicitly out of scope, not fixed.** `long.MinValue` cannot be printed as a literal
+(`-9223372036854775808L` does not lex); no corpus program holds one, and fixing it needs a decision
+about `unchecked`/cast spelling. `Block` in *expression* position still prints braces (loudly invalid);
+C# has no block expression, and the caller decides (class 5).
+
+### Golden churn (2026-10-22)
+
+`POLY_UPDATE_GOLDEN=1 … --treenode-filter '/*/*/EmitGoldenTests/*'` produced exactly **one** changed
+line, in `EmitGolden/crm-dslcompiler/Program.cs.golden`:
+
+```
+-    [Range(0, 100000000)]
++    [Range(0.0, 100000000.0)]
+```
+
+`MinimalApiGenerator.BuildConstraintAttributes` builds the attribute arguments with
+`Convert.ToDouble(...)`, so the AST holds `double` constants and `0` was the defect: a whole-valued
+`double` printing without its point. The other 20 goldens are byte-identical — they carry no
+`double` constants and no bare expression statements.
+
+**Test-expectation churn, explained.** `CSharpGeneratorTests` (45 assertions) and two
+`CSharpLanguageTests` cases asserted the pre-fix statement text — `"42;"`, `"1 + 2;"`, `"a << b << c;"`
+— which is CS0201, not C#. They now assert what the writer emits (`"_ = 42;"`, `"_ = unchecked(1 + 2);"`,
+`"_ = a << b << c;"`). Three lambda cases moved to a cast consumer, because a lambda has no statement
+form. `NodeFactCorpus.AddedTexts` gained eleven entries: those kinds' only corpus evidence was the
+literal text of `CSharpGeneratorTests`, and the statement form they now carry is not VM-compilable.
+
+**Two out-of-lane test files.** `Poly.Tests/DomainModeling/Lowering/DslCompilerSqliteOracleTests.cs`
+(five `[Range(…)]` expectations) is outside lane A's glob but is a snapshot of writer output that the
+required fix invalidates; no production file outside `Poly/Interpretation/CSharp/` was touched. Flagged
+here rather than silently taken.

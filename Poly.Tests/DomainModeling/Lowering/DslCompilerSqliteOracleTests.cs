@@ -282,7 +282,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("public record RestockDto");
-        await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long amount { get; init; }");
+        await Assert.That(prog).Contains("[Range(0.0, 1000.0)]\n    public long amount { get; init; }");
         // An action with no constrained target emits no [Range] on its params.
         var compiler2 = CompilerWithHttpHost();
         var result2 = compiler2.Compile("""
@@ -392,8 +392,8 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Open max caps at the CLR type bound (long.MaxValue as double), never 0.
-        await Assert.That(prog).Contains("[Range(0, 9.223372036854776E+18)]");
-        await Assert.That(prog).DoesNotContain("[Range(0, 0)]");
+        await Assert.That(prog).Contains("[Range(0.0, 9.223372036854776E+18)]");
+        await Assert.That(prog).DoesNotContain("[Range(0.0, 0.0)]");
     }
 
     [Test]
@@ -423,7 +423,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("public record AdjustDto");
-        await Assert.That(prog).DoesNotContain("[Range(0, 10)]\n    public long amount");
+        await Assert.That(prog).DoesNotContain("[Range(0.0, 10.0)]\n    public long amount");
     }
 
     [Test]
@@ -445,6 +445,6 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("[Range(1, 50)]\n    public long qty { get; init; }");
+        await Assert.That(prog).Contains("[Range(1.0, 50.0)]\n    public long qty { get; init; }");
     }
 }

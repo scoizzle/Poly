@@ -17,14 +17,14 @@ public class CSharpLanguageTests {
 
     [Test]
     public async Task Write_Expression_WritesExpectedText() {
-        var node = new Add(new Constant(1), new Multiply(new Constant(2), new Constant(3)));
-        await Assert.That(CSharpLanguage.Write(node)).IsEqualTo("1 + 2 * 3;");
+        var node = new Add(new Variable("a"), new Multiply(new Variable("b"), new Variable("c")));
+        await Assert.That(CSharpLanguage.Write(node)).IsEqualTo("_ = a + b * c;");
     }
 
     [Test]
     public async Task Write_ParenthesizesLowerPrecedenceChild() {
-        var node = new Multiply(new Add(new Constant(1), new Constant(2)), new Constant(3));
-        await Assert.That(CSharpLanguage.Write(node)).IsEqualTo("(1 + 2) * 3;");
+        var node = new Multiply(new Add(new Variable("a"), new Variable("b")), new Variable("c"));
+        await Assert.That(CSharpLanguage.Write(node)).IsEqualTo("_ = (a + b) * c;");
     }
 
     [Test]

@@ -63,6 +63,34 @@ Remaining headroom after #262: roughly 0.98 ns per access against a native ~0.2 
 
 This section measures the *VM*, not the cross-language table; the 1.40 ns figure is from the same machine on which the table's Poly rows were taken, and the native columns remain cross-environment (see above).
 
+## Final run on `plan/interpretation-simplification` (2026-10-23 15:17)
+
+`results/results_20261023_151722.csv`, exec avg (min) against the same-environment baselines:
+
+| Benchmark | Poly VM | C# native | Ratio | JS |
+|---|---:|---:|---:|---:|
+| nqueens 8 | 56 us (41) | 31 | 1.81x | 46 |
+| sieve 1e6 | 3,701 us (3,570) | 3,869 | **0.96x** | 48,065 |
+| mandelbrot 128 | 1,056 us (984) | 789 | 1.34x | 2,514 |
+| collatz 1e6 | 138,695 us (135,920) | 170,164 | **0.82x** | 2,051,328 |
+
+Poly is ahead of C# native on sieve and collatz, and ahead of JavaScript on every program by min. Nqueens is the one place the average loses to JS (56 vs 46) because of a single 70 us outlier - its min (41) is at JS's 43.
+
+**Change against the 07:08 run on the same machine:**
+
+| Workload | 07:08 | 15:17 | |
+|---|---:|---:|---|
+| `Poly VM double (bits)` | 2,226 | **1,353** | **-39 %** |
+| `Poly VM double (grid)` | 2,218 | **1,297** | **-42 %** |
+| nqueens Poly VM (min) | 55 | **41** | -25 % |
+| collatz Poly VM | 145,124 | 138,695 | -4.4 % |
+| mandelbrot Poly VM | 1,069 | 1,056 | -1.2 % |
+| sieve Poly VM | 3,431 | 3,701 | **+7.9 %** |
+
+The double variants are the typed-slot work landing (IS7a/IS7b); nqueens is the array cache (IS7d).
+
+**Sieve is a real small regression, not noise:** two independent runs agree (3,570 and 3,574 min) while the C row held steady (3,748 vs 3,779) in the same runs, so the machine is comparable. `sieve_polyvm.cs` passes its buffer to `StridedSetBits`, which is an *argument*, so the array cache rightly does not promote it - the regression is elsewhere and is not yet diagnosed. Recorded here rather than smoothed over.
+
 ## What the table does and does not support
 
 **It supports:** sustained-work throughput of the Poly VM against native and managed runtimes, and — because every language must print the same checksum — that the VM computes the same answer as C, C++, Rust and C# on these four programs. Within the host group, Poly versus `C# native` is the fair comparison.

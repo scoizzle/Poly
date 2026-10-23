@@ -104,7 +104,7 @@ Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysi
 | IS2b | port the LINQ-oracle test consumers to VM execution | IS2a | [IS2b.md](../interpretation-simplification/tasks/IS2b.md) |
 | IS2d | the 11 writer defect classes the differential found (#279) | IS2a | [IS2d.md](../interpretation-simplification/tasks/IS2d.md) |
 | IS2c | delete `LinqExpressionGenerator` | IS2b, IS2d | [IS2c.md](../interpretation-simplification/tasks/IS2c.md) |
-| IS2e | a dual-dispatch proof on a shipped grammar (replaces the C99 instrument) | IS2c | [IS2e.md](../interpretation-simplification/tasks/IS2e.md) |
+| IS2e | **retired 2026-10-23** — no shipped grammar has two dispatch paths to compare | IS2c | [IS2e.md](../interpretation-simplification/tasks/IS2e.md) |
 | ISB | checked-in benchmark baseline for IS3/IS5 | none | [ISB.md](../interpretation-simplification/tasks/ISB.md) |
 | IS4 | one loop scaffold | IS1, IS0d | [IS4.md](../interpretation-simplification/tasks/IS4.md) |
 | IS3 | `CompileNode` total; delete `CompileValue` | IS2c, ISB | [IS3.md](../interpretation-simplification/tasks/IS3.md) |

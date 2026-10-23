@@ -17,7 +17,7 @@ A lane is a **file-ownership group**, not a queue of similar work. One agent own
 
 | Lane | Owns | Slices in order |
 |---|---|---|
-| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1d → IS1b → IS2a → IS2d → IS2b → IS2c → IS1c → IS2e |
+| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1d → IS1b → IS2a → IS2d → IS2b → IS2c → IS1c → IS2f |
 | **B `analysis`** | `Poly/Analysis/**`, `Poly/Interpretation/Analysis/**`, `Poly.Tests/Interpretation/*Analyzer*`, `Poly.Tests/Interpretation/*ControlFlow*`, `Poly.Tests/Interpretation/*SideEffect*`, `Poly.Tests/Interpretation/*Analysis*`, `Poly.Tests/Interpretation/*Const*`, `Poly.Tests/Interpretation/AnyChildTests.cs`, `Poly.Tests/Interpretation/AnalysisFactOwnershipTests.cs` | IS0c → IS0f → IS6 |
 | **C `vm`** | `Poly/Interpretation/Vm/**`, `Poly.Benchmarks/**`, `Poly.Tests/TestHelpers/VmTree.cs`, `Poly.Tests/Interpretation/*Vm*` (except `VmCorrectnessTests.cs`), `Poly.Tests/Interpretation/*Invoke*`, `Poly.Tests/Interpretation/*Lambda*`, `Poly.Tests/Interpretation/*Slot*`, `Poly.Tests/Interpretation/*Loop*` | IS0d → IS0e → ISB → IS4 → IS3 → IS5 |
 
@@ -27,7 +27,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 
 ## Slices
 
-`[ ]` not started · `[~]` in flight · `[x]` merged. A card's own Log is the truth for SHAs; this column is only the queue.
+`[ ]` not started · `[~]` in flight · `[x]` merged · `[r]` retired (resolved without code; the card records why). A card's own Log is the truth for SHAs; this column is only the queue.
 
 | State | ID | What it removes | Depends | Lane | Card |
 |---|---|---|---|---|---|
@@ -46,7 +46,7 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b, IS2d | A | [tasks/IS2c.md](tasks/IS2c.md) |
 | [x] | IS2d | 11 writer defect classes the differential found (#279), incl. two silent wrong values | IS2a | A | [tasks/IS2d.md](tasks/IS2d.md) |
 | [x] | IS2f | `[Range]` emits double attribute arguments for integral constraints (#281) | IS2d | A | [tasks/IS2f.md](tasks/IS2f.md) |
-| [ ] | IS2e | a dual-dispatch proof on a shipped grammar; the claim the C99 harness carried, withdrawn with it | IS2c | A | [tasks/IS2e.md](tasks/IS2e.md) |
+| [r] | IS2e | a dual-dispatch proof on a shipped grammar — **retired**: no shipped grammar has two dispatch paths | IS2c | A | [tasks/IS2e.md](tasks/IS2e.md) |
 | [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [x] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |
 | [x] | IS3 | `CompileValue` and its 7 twins; the void special case in #260 | IS2c, ISB | C | [tasks/IS3.md](tasks/IS3.md) |

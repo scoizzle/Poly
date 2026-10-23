@@ -13,11 +13,14 @@ namespace Poly.Tests.Interpretation;
 /// The "printed ⊆ simulatable" audit (async/await part 1 §Enforcement, reframed by part 2).
 /// <see cref="NodeFacts"/> records which kinds the VM rejects on purpose. This class adds the
 /// print form for every such kind, so a kind the printer emits as live code cannot ship without
-/// a VM execution.
+/// a VM execution. <see cref="PrintForm.Expanded"/> covers the kinds whose print keeps the meaning
+/// and loses the kind: their law is an execution (<see cref="ExpandedKinds_PrintReReadsToAnExecutableEquivalent"/>),
+/// not a round trip.
 /// </summary>
 public class PrintedSubsetVmTests {
     public enum PrintForm {
         Live,
+        Expanded,
         Erased,
         Rejected,
         Name,
@@ -27,7 +30,7 @@ public class PrintedSubsetVmTests {
     /// <summary>
     /// One entry per kind <see cref="NodeFacts"/> gives a reject reason — the only side the law
     /// can fail on, since a Vm-claimed kind is simulatable by definition — plus samples that pin
-    /// the Erased / Rejected / Declaration / Live forms the audit leans on. Part 1 §Enforcement
+    /// the Erased / Expanded / Rejected / Declaration / Live forms the audit leans on. Part 1 §Enforcement
     /// asked for one entry per concrete node; part 2 §"What this removes from part 1" narrows it
     /// to this set.
     /// </summary>
@@ -40,7 +43,7 @@ public class PrintedSubsetVmTests {
         [typeof(TypeDefinitionReference)] = PrintForm.Name,
         [typeof(SuspendNode)] = PrintForm.Erased,
         [typeof(StridedSetBits)] = PrintForm.Rejected,
-        [typeof(PopCount)] = PrintForm.Rejected,
+        [typeof(PopCount)] = PrintForm.Expanded,
         [typeof(MethodDefinitionNode)] = PrintForm.Declaration,
         [typeof(Await)] = PrintForm.Live,
     };
@@ -90,9 +93,37 @@ public class PrintedSubsetVmTests {
                 new Constant(0L), new Constant(0L), new Constant(1L), new Constant(63L))))
             .Throws<InvalidOperationException>()
             .WithMessageContaining(nameof(StridedSetBits));
-        await Assert.That(() => CSharpLanguage.Write(new PopCount(new Constant(7L))))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining(nameof(PopCount));
+    }
+
+    /// <summary>
+    /// A sample per <see cref="PrintForm.Expanded"/> kind: a self-contained program whose print
+    /// re-reads to an executable equivalent. An Expanded kind's print keeps the meaning and loses
+    /// the kind, so the law is an execution, not a round-trip of the node.
+    /// </summary>
+    public static readonly Dictionary<Type, Node> ExpandedSamples = new() {
+        [typeof(PopCount)] = new PopCount(new Constant(7L)),
+    };
+
+    [Test]
+    public async Task ExpandedKinds_PrintReReadsToAnExecutableEquivalent() {
+        var expanded = Forms.Where(form => form.Value == PrintForm.Expanded).Select(form => form.Key).ToArray();
+        await Assert.That(ExpandedSamples.Keys.OrderBy(type => type.Name))
+            .IsEquivalentTo(expanded.OrderBy(type => type.Name))
+            .Because("every Expanded kind needs a sample, and a sample needs its claim");
+
+        foreach (var (kind, sample) in ExpandedSamples) {
+            // A statement form (`_ = …;`) is not readable back; the value form is a return.
+            var printed = CSharpLanguage.Write(new Return(sample));
+            var unit = CSharpLanguage.Read("{ " + printed + " }");
+            var analysis = Interpreter.Analyze(unit);
+            await Assert.That(analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
+                .IsEmpty().Because($"{kind.Name} prints text that must analyze cleanly: {printed}");
+
+            using var reread = Interpreter.Execute(Interpreter.Compile(CSharpScript.ProgramBlock(unit), analysis));
+            using var original = Interpreter.Execute(Interpreter.Compile(sample));
+            await Assert.That(reread.Result.Value).IsEqualTo(original.Result.Value)
+                .Because($"an Expanded kind's print re-reads to an executable equivalent ({kind.Name})");
+        }
     }
 
     [Test]

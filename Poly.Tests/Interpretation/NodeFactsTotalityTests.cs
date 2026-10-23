@@ -88,6 +88,25 @@ public class NodeFactsTotalityTests {
             .Because(Explain("a Writer-claimed kind needs a corpus text that contains it", Names(unevidenced)));
     }
 
+    /// <summary>A kind-preserving print and an expanding print are different claims, and an
+    /// expanding one is backed by the Expanded print law rather than by kind survival.</summary>
+    [Test]
+    public async Task CorpusKind_ClaimedByWriterExpanded_HasTheExpandedPrintLaw() {
+        var claimed = Claiming(Producers.WriterExpanded).Select(kv => kv.Key)
+            .OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
+        var sampled = PrintedSubsetVmTests.ExpandedSamples.Keys
+            .OrderBy(t => t.Name, StringComparer.Ordinal).ToArray();
+        await Assert.That(sampled).IsEquivalentTo(claimed)
+            .Because(Explain("a WriterExpanded claim needs a sample the Expanded print law executes",
+                claimed.Select(t => t.Name)));
+
+        var both = Claiming(Producers.WriterExpanded)
+            .Where(kv => kv.Value.Producers.HasFlag(Producers.Writer))
+            .Select(kv => kv.Value.Label).ToArray();
+        await Assert.That(both).IsEmpty()
+            .Because(Explain("a kind cannot both keep and lose its kind on print", both));
+    }
+
     [Test]
     public async Task CorpusKind_ClaimedByReader_IsProduced() {
         var unproven = Claiming(Producers.Reader)

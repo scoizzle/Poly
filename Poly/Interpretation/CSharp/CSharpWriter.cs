@@ -1077,9 +1077,11 @@ public sealed class CSharpWriter {
             case Block block:
                 return BlockText(block, 0);
             case PopCount popCount:
-                return Unprintable(popCount,
-                    "its only C# spelling is a fully-qualified static call, and the reader resolves "
-                    + "a qualified name to a value chain rather than a type (IS1c)");
+                // Its only faithful spelling is the library call: the operand converted to the
+                // parameter type, on the fully-qualified type the VM binds.
+                return Expr(new Invoke(
+                    new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
+                    new TypeCast(popCount.Operand, new PrimitiveTypeReference(PrimitiveType.UInt64))));
             case NewArray newArray:
                 return RenderFills("expr-primary", "new-array", Names(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));

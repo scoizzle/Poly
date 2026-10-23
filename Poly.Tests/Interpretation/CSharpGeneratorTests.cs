@@ -934,9 +934,8 @@ public class CSharpGeneratorTests {
     [Test]
     public async Task Generate_PopCount_StridedSetBits_NullForgiving_BitwiseNot_Await() {
         var g = new CSharpGenerator();
-        await Assert.That(() => g.Generate(new PopCount(new Constant(7L))))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining(nameof(PopCount));
+        await Assert.That(g.Generate(new PopCount(new Constant(7L))))
+            .Contains("System.Numerics.BitOperations.PopCount");
         await Assert.That(() => g.Generate(new StridedSetBits(
                 new Variable("a"), new Constant(1L), new Constant(2L), new Constant(3L))))
             .Throws<InvalidOperationException>()

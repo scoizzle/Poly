@@ -42,14 +42,13 @@ public class CSharpWriterFailClosedTests {
     }
 
     [Test]
-    public async Task PopCount_IsRejected_UntilQualifiedStaticCallsResolve() {
-        // PopCount's only faithful spelling is System.Numerics.BitOperations.PopCount((ulong)x).
-        // The reader roots that chain in a Variable, so a round trip loses the kind and cannot
-        // execute. The grammar must not carry a bespoke pattern for one library intrinsic;
-        // reject until IS1c gives the surface a real qualified-type receiver.
-        await Assert.That(() => CSharpLanguage.Write(new PopCount(new Constant(7L))))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining(nameof(PopCount));
+    public async Task PopCount_PrintsItsOnlyFaithfulSpelling() {
+        // System.Numerics.BitOperations.PopCount((ulong)x) is the kind's only faithful spelling.
+        // The surface expresses it with a type receiver, so the printer emits the library call
+        // with no grammar pattern keyed on the intrinsic.
+        var printed = CSharpLanguage.Write(new PopCount(new Constant(7L)));
+        await Assert.That(printed).IsEqualTo("_ = System.Numerics.BitOperations.PopCount((ulong)7L);");
+        await Assert.That(SyntaxErrors($"class C {{ void M() {{ {printed} }} }}")).IsEmpty();
     }
 
     [Test]

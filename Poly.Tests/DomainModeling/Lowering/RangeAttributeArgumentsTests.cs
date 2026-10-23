@@ -190,12 +190,21 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task LongMinValue_HasNoPrintableCSharpLiteral_KnownLimit() {
-        // Known limit recorded by issue #281, not fixed here: long.MinValue has no C# literal.
-        // `-9223372036854775808L` is a negated POSITIVE literal, and 9223372036854775808 does not
-        // fit a long, so this printed text does not compile. The range rule never reaches it
-        // (a beyond-int bound takes the double constructor); a long-typed Constant that did would.
+    public async Task LongMinValue_PrintsTheQualifiedForm_FormerlyAKnownLimit() {
+        // This was a real limit and is now closed: long.MinValue has no digits-plus-suffix
+        // literal, so the writer prints the qualified form — the same answer DoubleLiteral
+        // already gives for values with no literal — and the reader folds it back to the same
+        // constant. `-9223372036854775808L` is a negated POSITIVE literal that does not re-read:
+        // 9223372036854775808 is outside a long, and the reader overflowed on the text the
+        // writer had just produced. Compile proof:
+        // CSharpQualifiedConstantTests.LongMinValue_PrintedTextCompiles;
+        // round-trip proof: CSharpQualifiedConstantTests.LongMinValue_RoundTripsToTheSameConstant.
         var printed = new CSharpWriter().Write(new Constant(long.MinValue));
-        await Assert.That(printed).IsEqualTo("_ = -9223372036854775808L;");
+        await Assert.That(printed).IsEqualTo("_ = long.MinValue;");
+
+        var reread = CSharpScript.Run("long.MinValue");
+        await Assert.That(reread.Success).IsTrue().Because(string.Join("; ", reread.Diagnostics));
+        await Assert.That(reread.Value).IsEqualTo("-9223372036854775808");
+        await Assert.That(reread.ValueType).IsEqualTo(nameof(Int64));
     }
 }

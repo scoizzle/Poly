@@ -116,7 +116,8 @@ internal static class RingCodec {
 
     /// <summary>Whether a call argument sits in its slot as a raw scalar (not a
     /// heap handle). The value representation decides; without one, the
-    /// argument's resolved type does.</summary>
+    /// argument's resolved type does. An argument the emitter cannot place is a
+    /// compile error — there is no "treat unknown as a handle" fallback.</summary>
     public static bool IsStackScalar(Node node, AnalysisResult? analysis) {
         switch (ValueRepresentationClassifier.KindOf(analysis, node)) {
             case ValueRepresentationKind.StackScalar:
@@ -129,13 +130,6 @@ internal static class RingCodec {
                 $"VM compile rejected: cannot tell whether argument '{node}' is a scalar or a reference.");
         return type.GetRuntimeType() is { IsValueType: true };
     }
-
-    /// <summary>Whether an argument to the name-dispatched invoke path sits in its
-    /// ring slot as a scalar (boxed by its source type) rather than a heap handle.
-    /// The effective node's type decides: a replacement such as String.Concat is a
-    /// heap handle, not a boxed scalar. This predicate never throws.</summary>
-    public static bool IsInvokeArgumentScalar(Node node, AnalysisResult? analysis) =>
-        ValueRepresentationClassifier.KindOf(analysis, node) is ValueRepresentationKind.StackScalar;
 
     // ── Compile-time conversion ──────────────────────────────────
 

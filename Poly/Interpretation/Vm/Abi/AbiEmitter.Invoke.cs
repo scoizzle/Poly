@@ -12,6 +12,18 @@ namespace Poly.Interpretation.Vm.Abi;
 public static partial class AbiEmitter {
 
     /// <summary>
+    /// A call's ring outcome, the one convention every invocation path uses: a value is
+    /// converted by its CLR type — an inline word, an IEEE bit pattern, or a heap handle —
+    /// and a <c>void</c> call leaves <c>0L</c>, so the slot the caller reserved is always
+    /// written. <paramref name="returnType"/> is null when analysis could not resolve it;
+    /// the runtime codec then classifies the boxed value.
+    /// </summary>
+    private static Expression EmitResult(Expression call, Type? returnType, Context ctx) =>
+        returnType == typeof(void)
+            ? Block(call, Constant(0L))
+            : RingCodec.FromClr(call, returnType, ctx.HeapLocal);
+
+    /// <summary>
     /// Invoke: for Lambda targets, compile the body inline (no separate delegate).
     /// </summary>
     private static Expression EmitInvoke(Invoke invoke, Context ctx) {
@@ -113,21 +125,8 @@ public static partial class AbiEmitter {
                             fullBody.Add(unset);
                     }
 
-                    // Convert result to ABI (long-representable value types unboxed,
-                    // reference + non-long value types heap-allocated)
-                    var resultType = methodInfo.ReturnType;
-                    if (resultType == typeof(void)) {
-                        fullBody.Add(callExpr);
-                        fullBody.Add(Assign(ctx.RingVar(slot), Constant(0L)));
-                        return Block(fullBody);
-                    }
-                    if (resultType.IsValueType) {
-                        fullBody.Add(Assign(ctx.RingVar(slot),
-                            RingCodec.FromClr(callExpr, resultType, ctx.HeapLocal)));
-                        return Block(fullBody);
-                    }
                     fullBody.Add(Assign(ctx.RingVar(slot),
-                        RingCodec.FromClr(Convert(callExpr, typeof(object)), resultType, ctx.HeapLocal)));
+                        EmitResult(callExpr, methodInfo.ReturnType, ctx)));
                     return Block(fullBody);
                 }
 
@@ -172,8 +171,8 @@ public static partial class AbiEmitter {
                 Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
-                var arg = invoke.Arguments[i];
-                bool scalar = RingCodec.IsInvokeArgumentScalar(arg, ctx.Analysis);
+                // An argument the emitter cannot place is a compile error, not a handle.
+                bool scalar = RingCodec.IsStackScalar(invoke.Arguments[i], ctx.Analysis);
                 argObjs[i] = scalar
                     ? Convert(ctx.RingVar(astArgSlots[i]), typeof(object))
                     : Call(ctx.HeapLocal, HeapUnsafeGet,
@@ -196,25 +195,14 @@ public static partial class AbiEmitter {
             if (unsetReceiver is not null)
                 astBody.Add(unsetReceiver);
 
+            // The declared return type is the only one a name-dispatched call has; an
+            // unresolved member leaves the value to the runtime codec.
             var returnClr = method?.MemberTypeDefinition.GetRuntimeType();
             bool isVoid = method is not null
                 && (returnClr == typeof(void)
                     || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal));
-            if (isVoid) {
-                astBody.Add(invokeCall);
-                astBody.Add(Assign(ctx.RingVar(astSlot), Constant(0L)));
-            }
-            else if (returnClr is not null
-                && returnClr.IsValueType
-                && RingCodec.IsInline(returnClr)) {
-                astBody.Add(Assign(ctx.RingVar(astSlot),
-                    Convert(Convert(invokeCall, returnClr), typeof(long))));
-            }
-            else {
-                // CLR/AST invoke result → ring via BoxToAbi (bool 0/1, null 0, refs handles).
-                astBody.Add(Assign(ctx.RingVar(astSlot),
-                    Call(null, BoxToAbiInfo, ctx.HeapLocal, invokeCall)));
-            }
+            astBody.Add(Assign(ctx.RingVar(astSlot),
+                EmitResult(invokeCall, isVoid ? typeof(void) : returnClr, ctx)));
             return Block(astBody);
         }
 
@@ -256,9 +244,12 @@ public static partial class AbiEmitter {
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
 
             var callSp = Variable(typeof(int), "_callSp");
+            var callerFramePos = Variable(typeof(int), "_callerFp");
             preBody.Add(Assign(callSp, spProp));
             // SetArgs seeded the arguments at slots[callSp + index]; the frame pointer
-            // is that first slot, so parameters resolve at FP + index.
+            // is that first slot, so parameters resolve at FP + index. The caller's
+            // frame pointer is restored below, as VmCall.Invoke restores it after a call.
+            preBody.Add(Assign(callerFramePos, ctx.FramePosLocal));
             preBody.Add(Assign(ctx.FramePosLocal, callSp));
 
             int savedParamOffset = ctx.ParamSlotOffset;
@@ -279,15 +270,13 @@ public static partial class AbiEmitter {
             ctx.RingDepth = saveDepth + 1;
             if (bodyResultSlot != saveDepth)
                 postBody.Add(Assign(ctx.RingVar(saveDepth), ctx.RingVar(bodyResultSlot)));
-            // This legacy SetArgs path restores the root frame sentinel 0. The old
-            // OldFramePos field was never written, so that was always the value.
-            postBody.Add(Assign(ctx.FramePosLocal, Constant(0)));
+            postBody.Add(Assign(ctx.FramePosLocal, callerFramePos));
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
             ctx.PopFrameParameters();
             ctx.PopScope();
-            var locals = new List<ParameterExpression> { callSp };
+            var locals = new List<ParameterExpression> { callSp, callerFramePos };
             return Block(locals, Block(preBody.Concat(postBody)));
         }
 
@@ -539,16 +528,16 @@ public static partial class AbiEmitter {
         var bodyCompiled = CompileNode(body, fnCtx);
         bodyExprs.Add(bodyCompiled);
 
-        // Flush result: return value at _slots[_fp], SP = _fp + 1.
-        // An IsAsync method returns a completed Task / Task<T> instead of the body's value.
+        // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
+        // a body that yields none — so a caller never reads a slot the callee left
+        // untouched. An IsAsync method returns a completed Task / Task<T> instead.
         Expression? resultValue = fnCtx.RingDepth > 0 ? fnCtx.RingVar(fnCtx.RingDepth - 1) : null;
         if (asyncReturn is not null)
             resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
-        if (resultValue is not null) {
-            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal), resultValue));
-            bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
-                Add(fnCtx.FramePosLocal, Constant(1))));
-        }
+        bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
+            resultValue ?? Constant(0L)));
+        bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
+            Add(fnCtx.FramePosLocal, Constant(1))));
 
         bodyExprs.Add(Label(fnCtx.ExitLabel));
 
@@ -690,7 +679,7 @@ public static partial class AbiEmitter {
                 continue;
             }
             int got = ring.Add(CompileNode(arguments[i], ctx));
-            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ReadsRawSlot(declaredParameters[i])
+            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterReadsRawSlot(declaredParameters[i])
                 ? Convert(
                     Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
                     typeof(long))
@@ -705,7 +694,7 @@ public static partial class AbiEmitter {
     /// <summary>A callee parameter's storage convention, from its declaration.
     /// Inline value types (including nullable inline types, which IsInline peels)
     /// are raw slots; non-inline value types and references live on the heap.</summary>
-    private static bool ReadsRawSlot(IParameter parameter) {
+    private static bool ParameterReadsRawSlot(IParameter parameter) {
         var runtimeType = parameter.ParameterTypeDefinition.GetRuntimeType();
         return runtimeType is not null && RingCodec.IsInline(runtimeType);
     }
@@ -713,7 +702,7 @@ public static partial class AbiEmitter {
     /// <summary>An omitted argument's default, stored by the callee parameter's
     /// convention: a raw slot for an inline value type, a heap handle otherwise.</summary>
     private static Expression DefaultArgument(Parameter parameter, IParameter declared, Context ctx) {
-        if (ReadsRawSlot(declared))
+        if (ParameterReadsRawSlot(declared))
             return ParameterDefaultLong(parameter, ctx);
         var value = parameter.DefaultValue is Constant constant ? constant.Value : null;
         return Convert(
@@ -747,20 +736,12 @@ public static partial class AbiEmitter {
 
         int result = ctx.AllocSlot();
         ctx.RingDepth = result + 1;
-        var call = Call(
+        // The callee already left the ring word at slots[FramePos] (VmCall.Invoke's
+        // contract, void included), so the caller only moves it into its own slot.
+        seq.Add(Assign(ctx.RingVar(result), Call(
             null, InvokeAstFunctionInfo, ctx.State,
             ArrayIndex(Constant(table), Constant(0)),
-            NewArrayInit(typeof(long), inits));
-        var returnClr = method.MemberTypeDefinition.GetRuntimeType();
-        bool isVoid = returnClr == typeof(void)
-            || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal);
-        if (isVoid) {
-            seq.Add(call);
-            seq.Add(Assign(ctx.RingVar(result), Constant(0L)));
-        }
-        else {
-            seq.Add(Assign(ctx.RingVar(result), call));
-        }
+            NewArrayInit(typeof(long), inits))));
         return Block(seq);
     }
 

@@ -17,8 +17,8 @@ namespace Poly.Tests.TestHelpers;
 /// block.
 /// </summary>
 internal static class VmTree {
-    private static readonly Regex RingLocal = new("^_[rdf](\\d+)$", RegexOptions.Compiled);
-    private static readonly Regex VariableRegister = new("^_(?:d|f)?reg(\\d+)$", RegexOptions.Compiled);
+    private static readonly Regex RingLocal = new("^_[rdfi](\\d+)$", RegexOptions.Compiled);
+    private static readonly Regex VariableRegister = new("^_(?:d|f|i)?reg(\\d+)$", RegexOptions.Compiled);
 
     /// <summary>
     /// One emitted loop: the break target its test jumps to and the top-level items of

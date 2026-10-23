@@ -268,13 +268,16 @@ public static partial class AbiEmitter {
             // saveDepth are never targets. The result belongs in the caller's first free
             // slot, and moves only when it did not already land there.
             ctx.RingDepth = saveDepth + 1;
-            // The caller's slot below `saveDepth` is a word, so an IEEE body result is
+            // The caller's slot below `saveDepth` is a word, so a typed body result is
             // converted once here rather than left as a typed local nobody reports.
             if (bodyResultSlot != saveDepth
                 || RingCodec.IsTypedSlot(RingCodec.SlotTypeOf(bodyExpr.Type)))
                 postBody.Add(Assign(ctx.RingVar(saveDepth),
                     ctx.RingWord(bodyResultSlot, bodyExpr.Type)));
             postBody.Add(Assign(ctx.FramePosLocal, callerFramePos));
+            // The block must end on its value: its own type is what the caller reports as
+            // the result's representation, and the frame restore above is an int.
+            postBody.Add(ctx.RingVar(saveDepth));
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter

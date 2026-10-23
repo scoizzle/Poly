@@ -228,7 +228,9 @@ public class DirectVmAbiEmitterTests {
     [Test, Timeout(10_000)]
     public async Task Capture_WithParameters_CombinesCaptureAndArgs(CancellationToken ct) {
         var offset = new Variable("offset");
-        var x = new Parameter("x");
+        // The parameter is typed: the integer width comes from analysis, and an operand
+        // whose width is unnamed is a compile rejection rather than a silent 64-bit guess.
+        var x = new Parameter("x", TypeReference.To<int>());
         var lambda = new Lambda([x], new Add(x, offset));
         var invoke = new Invoke(lambda, new Constant(32));
         var code = new Block([

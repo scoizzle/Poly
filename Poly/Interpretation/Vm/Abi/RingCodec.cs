@@ -70,6 +70,37 @@ internal static class RingCodec {
     public static bool IsIeee(Type type) =>
         type == typeof(float) || type == typeof(double);
 
+    /// <summary>True for the types C# performs an arithmetic operator on at 32 bits:
+    /// <c>int</c>, plus every smaller integral type, which C# promotes to <c>int</c>
+    /// before the operator runs (<c>short + short</c> is an <c>int</c> addition).
+    /// <c>uint</c> is excluded: it is 32-bit but does not fit the signed <c>int</c>
+    /// representation, so it keeps the word.</summary>
+    public static bool IsInt32Width(Type type) =>
+        type == typeof(int) || type == typeof(short) || type == typeof(byte)
+        || type == typeof(sbyte) || type == typeof(ushort) || type == typeof(char);
+
+    /// <summary>True for the types C# performs an arithmetic operator on at 64 bits.</summary>
+    public static bool IsInt64Width(Type type) =>
+        type == typeof(long) || type == typeof(ulong);
+
+    /// <summary>The width an integer arithmetic operation runs at, from the two operand
+    /// types analysis resolved. C# promotes to the wider operand, so one <c>long</c> makes
+    /// the operation 64-bit; two 32-bit-width operands make it <c>int</c>, and the CLR then
+    /// wraps the result at 32 bits.
+    /// <para>An operand whose width analysis could not name has no width: this throws
+    /// rather than answering the word, because a silent 64-bit guess is how
+    /// [#289](https://github.com/scoizzle/Poly/issues/289) arose. A resolved non-integer
+    /// type (a <c>bool</c>, a <c>decimal</c>) keeps the word it has always had.</para></summary>
+    public static Type IntegerArithmeticWidth(Type? left, Type? right) {
+        if (left is null || right is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot resolve the integer width of an arithmetic "
+                + $"operand (left={(left?.Name ?? "unresolved")}, right={(right?.Name ?? "unresolved")}).");
+        if (IsInt64Width(left) || IsInt64Width(right))
+            return typeof(long);
+        return IsInt32Width(left) && IsInt32Width(right) ? typeof(int) : typeof(long);
+    }
+
     /// <summary>An IEEE <c>double</c> expression as its ring slot: the raw bit
     /// pattern. The one writer of the double-to-long bitcast.</summary>
     public static Expression ToIeee(Expression ieeeDouble) =>
@@ -81,34 +112,53 @@ internal static class RingCodec {
         Call(BitConverterInt64BitsToDouble, ringVal);
 
     /// <summary>The CLR type of a ring local holding a value of
-    /// <paramref name="clrType"/>: <c>double</c> and <c>float</c> keep their own type,
-    /// and every other shape — an integer, a handle, or a type analysis could not
+    /// <paramref name="clrType"/>: <c>double</c>, <c>float</c> and <c>int</c> keep their
+    /// own type, and every other shape — a wider integer, a smaller integral type C#
+    /// promotes to <c>int</c> before an operator, a handle, or a type analysis could not
     /// resolve — uses the <c>long</c> word.</summary>
     public static Type SlotTypeOf(Type? clrType) =>
-        clrType == typeof(float) || clrType == typeof(double) ? clrType : typeof(long);
+        clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
+            ? clrType
+            : typeof(long);
 
     /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
-    public static bool IsTypedSlot(Type slotType) => IsIeee(slotType);
+    public static bool IsTypedSlot(Type slotType) =>
+        IsIeee(slotType) || slotType == typeof(int);
 
     /// <summary>A typed slot expression as the word. The one place an expression-level
     /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
-    /// form of both IEEE widths is a <c>double</c>'s bits.</summary>
+    /// form of both IEEE widths is a <c>double</c>'s bits, and an <c>int</c> widens
+    /// numerically because it is a number, not a bit pattern.</summary>
     public static Expression ToWord(Expression value) =>
-        IsTypedSlot(value.Type) ? ToIeee(Convert(value, typeof(double))) : value;
+        value.Type == typeof(int) ? Convert(value, typeof(long))
+            : IsIeee(value.Type) ? ToIeee(Convert(value, typeof(double)))
+            : value;
 
     /// <summary>The word as a typed slot expression: the mirror of
     /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
     public static Expression FromWord(Expression word, Type slotType) =>
-        slotType == typeof(float) ? Convert(FromIeee(word), typeof(float))
+        slotType == typeof(int) ? Convert(word, typeof(int))
+            : slotType == typeof(float) ? Convert(FromIeee(word), typeof(float))
             : slotType == typeof(double) ? FromIeee(word)
             : word;
 
     /// <summary><paramref name="value"/> at <paramref name="representation"/>: the value
-    /// itself when it is already there, otherwise the bit-pattern conversion — one bitcast
-    /// when exactly one side is the word. This is what a storage boundary asks for, so no
-    /// access converts more than once.</summary>
-    public static Expression AsRepresentation(Expression value, Type representation) =>
-        value.Type == representation ? value : FromWord(ToWord(value), representation);
+    /// itself when it is already there, otherwise one conversion. Between the word and an
+    /// IEEE slot that conversion is the bit pattern (they are two spellings of one storage);
+    /// between the word and an <c>int</c> slot it is numeric, because an <c>int</c> slot
+    /// holds the number. This is what a storage boundary asks for, so no access converts
+    /// more than once.</summary>
+    public static Expression AsRepresentation(Expression value, Type representation) {
+        if (value.Type == representation)
+            return value;
+        if (representation == typeof(int))
+            return Convert(IsIeee(value.Type) ? FromIeee(value) : value, typeof(int));
+        if (value.Type == typeof(int))
+            return representation == typeof(double) ? Convert(value, typeof(double))
+                : representation == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
+                : Convert(value, typeof(long));
+        return FromWord(ToWord(value), representation);
+    }
 
     /// <summary><paramref name="value"/> at <paramref name="representation"/> as the
     /// <em>number</em> it denotes, not its bit pattern: a word widens to a double, a
@@ -118,6 +168,7 @@ internal static class RingCodec {
         value.Type == representation ? value
             : representation == typeof(double) ? Convert(value, typeof(double))
             : representation == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
+            : representation == typeof(int) ? Convert(value, typeof(int))
             : Convert(Convert(value, typeof(double)), typeof(long));
 
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is

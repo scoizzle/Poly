@@ -61,6 +61,11 @@ public class AstParityTests {
             new Modulo(Wrap(10), Wrap(3))),
         new("ArithmeticNodeTests.Add_TwoIntegers_ReturnsSum",
             new Add(new Constant(5), new Constant(3))),
+        // A genuine unfolded Int32 overflow: the operands are locals, so no fold hides the
+        // width the arithmetic runs at. The printed C# is unchecked, so both sides must
+        // answer -2147483648 (IS7c, #289).
+        new("Int32WidthTests.Int32MaxPlusOne_ThroughVariables_WrapsAt32Bits",
+            Int32OverflowThroughLocals()),
         new("ArithmeticNodeTests.Add_TwoDoubles_ReturnsSum",
             new Add(new Constant(3.5), new Constant(2.5))),
         new("ArithmeticNodeTests.Add_IntAndDouble_PromotesToDouble",
@@ -356,6 +361,19 @@ public class AstParityTests {
         var w = new Parameter("v", TypeReference.To<int>());
         yield return new("LambdaInvokeTests.InvokeWith_ExtensionMethod_BuildsInvokeNode",
             new Lambda([w], new Add(w, Wrap(100))).InvokeWith(Wrap(7)));
+    }
+
+    /// <summary>The program <c>int.MaxValue + 1</c> through locals, so nothing folds it:
+    /// the differential then covers a real <c>Int32</c> overflow rather than a folded
+    /// constant (IS7c, #289).</summary>
+    static Node Int32OverflowThroughLocals() {
+        var a = new Variable("a");
+        var b = new Variable("b");
+        return new Block([
+            new Assignment(a, new Constant(int.MaxValue)),
+            new Assignment(b, new Constant(1)),
+            new Add(a, b),
+        ], [a, b]);
     }
 
     static IReadOnlyList<CorpusCase> Programs { get; } = [.. Corpus()];

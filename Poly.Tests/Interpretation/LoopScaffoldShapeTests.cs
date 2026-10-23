@@ -54,11 +54,13 @@ public class LoopScaffoldShapeTests {
         await Assert.That(shape.InTryFinally).IsFalse();
 
         // The scope is pushed before the body compiles, so a `continue` in the body is
-        // the loop's own...
+        // the loop's own. The body is a statement, so its ring answer wraps the jump.
         var loop = new WhileLoop(new LessThan(i, new Constant(3L)), new ContinueStatement());
         var inside = OnlyLoop(new Block([new Assignment(i, new Constant(0L)), loop], [i]));
-        await Assert.That(inside.Steps[2]).IsAssignableTo<GotoExpression>();
-        await Assert.That(((GotoExpression)inside.Steps[2]).Target).IsSameReferenceAs(inside.ContinueTarget);
+        var bodyStep = (BlockExpression)inside.Steps[2];
+        await Assert.That(bodyStep.Expressions[0]).IsAssignableTo<GotoExpression>();
+        await Assert.That(((GotoExpression)bodyStep.Expressions[0]).Target)
+            .IsSameReferenceAs(inside.ContinueTarget);
 
         // ...and popped after it, so one after the loop is rejected rather than resolving
         // to a scope this emitter forgot to close.

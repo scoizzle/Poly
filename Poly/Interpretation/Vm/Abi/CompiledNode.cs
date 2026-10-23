@@ -10,9 +10,11 @@ namespace Poly.Interpretation.Vm.Abi;
 /// it, "the result is on top of the ring" was ambient state: every consumer
 /// re-derived <c>RingDepth - 1</c>, and every emitter that did not follow the
 /// convention patched the cursor with <c>RingDepth = slot + 1</c>.
-/// <para>Naming the location is what lets a consumer release it. A node that
-/// produces no value — a loop, a branch, a jump, a throw — has no result location,
-/// and <see cref="Result"/> is null rather than a lie about slot depth.</para>
+/// <para>Naming the location is what lets a consumer release it. Every arm of
+/// <c>CompileNodeInner</c> leaves one — a node with no value leaves <c>0L</c> — so
+/// <see cref="Result"/> is null only for a node that emits no code at all (a
+/// <c>Comment</c>), and <see cref="RequireResult"/> is the fail-closed answer for a
+/// caller that needs a value.</para>
 /// </summary>
 internal readonly record struct CompiledNode(Expression Code, SlotLocation? Result) {
 

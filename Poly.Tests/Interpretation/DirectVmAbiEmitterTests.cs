@@ -174,8 +174,8 @@ public class DirectVmAbiEmitterTests {
                 new Assignment(y, new Constant(20)),
                 new Add(x, y)
             ], [x, y]));
-        // Variables use value stack, not ring. Peak ring depth from CompileValue-based
-        // arithmetic: constants are on eval stack, final Add spills 1 slot.
+        // Every operand leaves its result in the ring, so the Add's two operands and its
+        // result are three slots; the block reuses them statement after statement.
         await Assert.That(program.MaxRingDepth).IsLessThanOrEqualTo(4);
     }
 

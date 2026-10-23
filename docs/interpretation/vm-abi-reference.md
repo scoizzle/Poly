@@ -128,6 +128,34 @@ chain — `zx*zx + zy*zy` — contains no `BitConverter` call between its operan
 **word is the fallback**: a representation analysis cannot resolve is not an error, and
 integer programs keep their local count unchanged.
 
+### A variable register carries a representation too
+
+A program's hot state is not on the ring — it is in variables. A variable is backed by a
+register (`_regN`) while the body has fewer than 32 live ones, and by a frame slot
+(`_slots[_fp + n]`) after that. The same rule applies to a register:
+
+| Variable | Register local | Contents |
+|----------|---------------|----------|
+| `double` | `_dregN` | the value itself |
+| `float` | `_fregN` | the value itself, 32-bit |
+| every other value | `_regN` | the `long` word |
+| a **captured** (cell-backed) local | `_regN` | the capture cell's heap handle |
+
+A captured local's register holds the handle, not the value, because the cell is where
+the value lives; typing it by the variable's value would coerce the handle.
+
+A register index is released when its scope ends and reused by the next scope's variable,
+which may have a different representation — index 0 can back a `double` in one block and
+a word in the next. Registers are therefore keyed by **(index, representation)** exactly
+as ring slots are (`Context.RegisterVar`), so two variables can never alias one
+`ParameterExpression` at two types. `RegisterIndex_ReusedAcrossRepresentations_DoesNotAlias`
+is the test.
+
+Reading a `double` variable into a ring slot of the same type is a copy, and assigning
+one is a copy: no conversion per access. The numeric conversion between width classes
+(an integer assigned to a `double` widens, a `double` assigned to an integer truncates)
+happens once, at the assignment, in `AbiEmitter.AssignedValue`.
+
 **Bitcasts only at a word boundary.** `BitConverter.DoubleToInt64Bits` /
 `Int64BitsToDouble` (wrapped once, in `RingCodec.ToIeee` / `FromIeee`) appear only where
 a value must move as a word:
@@ -135,18 +163,21 @@ a value must move as a word:
 | Boundary | Why |
 |----------|-----|
 | `_slots[_fp + n]` read/write | a frame slot is a `long` word |
-| `_regN` and `long[1]` capture cells | storage is one `long` |
+| the block-exit `_slots` snapshot store | `VmDebugger.GetLocals` reads frame slots |
+| `long[1]` capture cells | the cell is one `long` |
 | `VmCall.Invoke` result and CLR call results | a call answers in the caller's word |
 | a `RingRegion` slot | regions are word-addressed, and every region consumer reads a word |
 | the root copy-out | the program's result is a word |
 
-Those are per statement, per call, or per region — not per operation. A `float` stays
+Those are per statement, per call, or per region — not per access. A `float` stays
 `float` throughout an expression and widens only when it becomes a word, because the
 word form of both IEEE widths is a `double`'s bits.
 
 The tree rule is checked structurally: `VmTree.Scan.IeeeArithmeticWithBitcasts` lists
 every IEEE arithmetic node whose operand or result converts at the operation, and
-`IeeeRingSlotTests` fails if that list is non-empty.
+`VmTree.Scan.RegisterBitcasts` lists every bitcast that reads or is stored into a
+variable's own register (excluding the frame snapshot and a call argument).
+`IeeeRingSlotTests` and `TypedVariableStorageTests` fail if either list is non-empty.
 
 `CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
 its result, so nothing has to infer the result from slot depth. Every arm leaves its
@@ -189,8 +220,11 @@ reader of the double/long bitcast.
 
 Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Local`, `Cell`);
 `Context.Resolve` maps a binding to one, so an emit site asks for the location
-instead of re-deriving `_slots[_fp + n]`. The value shape is not part of the
-location. Two classifiers answer two questions: `RingCodec.UnderlyingKindFor`
+instead of re-deriving `_slots[_fp + n]`. Each location states the `Representation` it
+holds — a typed register or a typed ring slot holds the value, a frame slot and a cell
+hold the word — and `ReadAs` / `Write` convert only when the requested representation
+differs, so a value crosses the word boundary once at the crossing. Two classifiers
+answer two questions: `RingCodec.UnderlyingKindFor`
 (does the *underlying* type fit one slot as bits; peels `Nullable`) and
 `ValueRepresentationClassifier.KindFor` (what does a *node* of this type put in
 its slot; a nullable is a heap handle).

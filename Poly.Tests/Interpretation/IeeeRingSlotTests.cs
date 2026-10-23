@@ -45,9 +45,11 @@ public class IeeeRingSlotTests {
                 + "round-trip a word at the operation: " + string.Join(", ", offenders));
     }
 
-    /// <summary>A double stored by one statement and read by the next crosses the word
-    /// boundary exactly once each way: two stores and one read are three bitcasts, and
-    /// nothing else in the program bitcasts.</summary>
+    /// <summary>A double stored by one statement and read by the next keeps its value in
+    /// the typed ring slot and in a typed register, so the store and the read themselves
+    /// cost nothing. What is left is the word boundaries the ABI charges once each: the
+    /// assignment's own result on the word ring (one per statement), the block-exit frame
+    /// snapshot (one per variable), and the program's result slot.</summary>
     [Test, Timeout(10_000)]
     public async Task IeeeAcrossStatements_CrossesTheBoundaryOnce(CancellationToken ct) {
         var zero = new Variable("zero");
@@ -58,9 +60,13 @@ public class IeeeRingSlotTests {
         ], [zero, copy]);
 
         var built = Build(program);
+        var scan = VmTree.Read(built.Expression);
 
-        await Assert.That(VmTree.BitcastCount(built.Expression)).IsEqualTo(3)
-            .Because("two double stores (zero, copy) and one double read (zero)");
+        await Assert.That(scan.RegisterBitcasts).IsEmpty()
+            .Because("the register holds the double, so neither statement converts on access");
+        await Assert.That(VmTree.BitcastCount(built.Expression)).IsEqualTo(5)
+            .Because("two assignment results on the word ring, two block-exit frame "
+                + "snapshots, and the root result slot");
         await Assert.That(ResultOf(program)).IsEqualTo(0.5)
             .Because("the typed slot still round-trips its value through the word");
     }

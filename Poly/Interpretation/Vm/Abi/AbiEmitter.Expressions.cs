@@ -521,15 +521,16 @@ public static partial class AbiEmitter {
 
     /// <summary>Variable reference: reads whatever storage the binding resolves
     /// to — a frame slot, a register, or a capture cell — and leaves the value
-    /// on the ring for expression chaining. An IEEE local lands in a slot of its own
-    /// type, so the bitcast happens once at the storage boundary instead of once per
-    /// use inside the expression that follows.</summary>
+    /// on the ring for expression chaining. An IEEE register holds the value itself, so
+    /// the read is a copy; a word-backed storage (frame slot, capture cell) converts once
+    /// here, at the storage boundary, instead of once per use inside the expression that
+    /// follows.</summary>
     private static Expression EmitVariable(Variable v, Context ctx) {
-        if (ctx.Resolve(v) is not { } location)
+        if (ctx.Resolve(v) is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: variable '{v.Name}' is not declared in any scope.");
         int slot = ctx.AllocSlot();
         var slotType = ctx.SlotTypeOf(v);
-        return Assign(ctx.RingVar(slot, slotType), RingCodec.FromWord(location.Read(ctx), slotType));
+        return Assign(ctx.RingVar(slot, slotType), ctx.VariableReadAs(v, slotType));
     }
 }

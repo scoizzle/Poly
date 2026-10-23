@@ -91,27 +91,29 @@ public static partial class AbiEmitter {
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: assignment destination '{destVar.Name}' is not declared in any scope.");
         var value = ctx.OpenRing();
-        int resultSlot = value.Add(CompileNode(a.Value, ctx));
-        var result = destination.Write(ctx,
-            CoerceSlotToDestination(ctx, destVar, a.Value, ctx.RingVar(resultSlot)));
+        var compiled = CompileNode(a.Value, ctx);
+        int valueIndex = ctx.RingDepth - 1;
+        value.Add(compiled);
+        var result = destination.Write(ctx, AssignedValue(ctx, destVar, a.Value, valueIndex, compiled));
         return value.Then(result);
     }
 
     /// <summary>
-    /// Convert a compiled value into the destination variable's slot representation.
-    /// Doubles and floats live in slots as IEEE bit patterns, so a scalar value needs
-    /// <c>DoubleToInt64Bits</c>, and a double value assigned to a scalar variable needs
-    /// <c>Int64BitsToDouble</c> first. Without this the raw value lands in a slot the
-    /// other representation reads (e.g. <c>double x = 1; x = 2;</c>).
+    /// The compiled value at the variable's own representation. The emitter's own type
+    /// says how the value was <em>encoded</em> (<c>double</c>, <c>float</c>, or the word),
+    /// while the value's analysis type says what it <em>means</em>: a word encoding of a
+    /// double is its bit pattern, an integer word is the number. The numeric conversion
+    /// between the two width classes happens once here — an integer assigned to a
+    /// <c>double</c> variable widens, a <c>double</c> assigned to an integer truncates —
+    /// and the storage then takes the value as the word if the storage is a word (a
+    /// cell-backed local, whose register holds the cell handle).
     /// </summary>
-    private static Expression CoerceSlotToDestination(Context ctx, Variable destination, Node value, Expression slot) {
-        bool destinationIsDouble = RingCodec.IsIeee(destination, ctx.Analysis);
-        bool valueIsDouble = RingCodec.IsIeee(value, ctx.Analysis);
-        if (destinationIsDouble == valueIsDouble)
-            return slot;
-        return destinationIsDouble
-            ? RingCodec.ToIeee(Convert(slot, typeof(double)))
-            : Convert(RingCodec.FromIeee(slot), typeof(long));
+    private static Expression AssignedValue(
+        Context ctx, Variable destination, Node value, int valueIndex, Expression compiled) {
+        var valueType = ctx.SlotTypeOf(value);
+        var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
+        var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
+        return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
@@ -122,7 +124,7 @@ public static partial class AbiEmitter {
                 ctx.DeclareVariable(variable);
                 varInitExprs.Add(ctx.NeedsCell(variable)
                     ? EmitUpvalueCellInit(variable, ctx)
-                    : Assign(ctx.VariableRead(variable), Constant(0L)));
+                    : ctx.VariableWrite(variable, ctx.VariableZero(variable)));
             }
         }
         // Each statement starts from the block's entry depth. A statement's result is
@@ -467,7 +469,7 @@ public static partial class AbiEmitter {
     }
 
     private static Expression ParameterValue(Parameter p, Context ctx) =>
-        ctx.Resolve(p).Read(ctx);
+        RingCodec.ToWord(ctx.Resolve(p).Read(ctx));
 
     /// <summary>
     /// Domain programs bind the instance via <c>SetArgs(this, …)</c> at slot 0.

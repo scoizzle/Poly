@@ -84,3 +84,69 @@ One decision: **where short-name resolution lives** — the reader (one pass, le
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | `5c1dc5ab` | **SHIP.** Every shape-matrix row passes, the shadowing row included; `PopCount` prints its library call and the round trip executes, recorded `Expanded`. Full suite 4,474 passed / 0 failed / 0 skipped; `AstParityTests` 145/145; `Poly.slnx` build 0 warnings. No lane-B file touched. | See §Route, §Red first, §`PopCount` form and §Writer finding below. |
+
+### Route (2026-10-22)
+
+**Qualified names: resolution route, and it was already in place.** On the untouched tree
+`CSharpScript.Run("System.Numerics.BitOperations.PopCount((ulong)7)")` already answered `3` and
+`System.Math.Abs(-1)` answered `1`: `DottedTypeNames` + `TypeAndMemberResolutionPass` bind the
+dotted spine to a type receiver, and `VariableLifetimePass` keeps a bound root a value. #278's
+reader premise ("analysis cannot resolve it") is stale in this tree; what was still missing was
+using scope and the writer side. No new grammar pattern, and **no change to
+`TypeAndMemberResolutionPass.cs`** — the slice stayed inside lane A.
+
+**Using scope: resolved in `Read`** (`CSharpReader.cs`, which Scope 2 and §Files name for this).
+A receiver the unit's own usings import folds to `NamedTypeReference(name, namespace)`, so
+`using System.Numerics;` + `BitOperations.PopCount(x)` reaches the same static call as the
+qualified spelling. Chosen because binding a *bare identifier* as a type is a scope decision
+owned by `VariableLifetimePass`: `ScopeValidator` reports `Variable 'X' is not declared in this
+scope` for `Math.Abs(-1)` before `TypeAndMemberResolver` could rewrite the root, so an
+analysis-only using route needs `Poly/Interpretation/Analysis/Semantics/VariableLifetimePass.cs`
+(lane B). This slice did not take that file. The cost, recorded: a little name binding lives in
+the reader.
+
+**The shadowing guard.** `Parser.ValueNames` is the set of identifiers the text spells anywhere
+other than before a `.`. Every declaration form in the exported subset leaves its name before a
+non-`.` token (`x =`, `x;`, `x,`, `x)`, `x in`, `x =>`), so a declared name is always in the set:
+a local, field or parameter wins and the chain stays a value chain. A missed bind is a
+conservative under-resolution that fails closed, never a wrong static call. The first directive
+naming the type wins, as a namespace import does.
+
+**Recorded unsupported:** alias usings — the `using` rule takes a dotted name only, so
+`using X = System;` does not parse. A directive placed after a statement (invalid C#) does not
+bind earlier statements; that also fails closed.
+
+### Red first (2026-10-22)
+
+`dotnet run --project Poly.Tests/Poly.Tests.csproj -- --treenode-filter '/*/*/CSharpQualifiedNameTests/*'`
+on the new file, before any production change: **3 of 6 failed**.
+
+- `PopCount_PrintsItsOnlyCSharpSpelling`, `PopCount_RoundTrip_Executes` —
+  `CSharpWriter rejected PopCount (NodeId …): its only C# spelling is a fully-qualified static call…`.
+- `UsingScope_ResolvesShortTypeName` — `Expected to be of type NamedTypeReference … but Value is of
+  type Variable`.
+- **Passed already, recorded:** `QualifiedStaticCall_ReadsAsExecutable`,
+  `FullyQualifiedStaticCall_Executes`, `LocalNamedLikeANamespace_Wins` — the shadowing row was
+  expected to be able to pass immediately, and it did.
+
+### `PopCount` form: `Expanded` (2026-10-22)
+
+Prints `System.Numerics.BitOperations.PopCount((ulong)x)`; the text re-reads as
+`Invoke(Member(<type reference>, "PopCount"), TypeCast(x, ulong))`, which executes to the same
+value. Meaning preserved, kind not — an `Expanded` print, not `Live`. The form is recorded in
+`PrintedSubsetVmTests.Forms` **with its law**
+(`ExpandedKinds_PrintReReadsToAnExecutableEquivalent`: an Expanded kind's print re-reads to an
+executable equivalent), and `NodeFacts` gains `Producers.WriterExpanded` so `NodeFactsTotalityTests`
+ties every such claim to a sample the law executes. `AstParityTests` moved PopCount's row from
+"writer refused" to both sides agreeing (`long:3`); `VmExecutes_AndWriterRejects_IsAFailure` now
+pins that decision synthetically, because the corpus no longer carries the shape.
+
+### Writer finding (2026-10-22)
+
+`Member(<type ref>, name)` already printed correctly through `Expr`'s callee-position type branch;
+routing the receiver through `TypeText` instead escaped a keyword-named CLR type and turned every
+golden's `object.ReferenceEquals` into `@object.ReferenceEquals` (43 failures). Reverted: the
+existing spelling is the rule, and `TypeReceiver_PrintsAsTheTypeName` now pins it (`int.MaxValue`,
+`System.Numerics.BitOperations.PopCount`) so the shape cannot regress silently. `EscapeTypeName`'s
+keyword escaping is declaration-side and unchanged.

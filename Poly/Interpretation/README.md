@@ -6,7 +6,7 @@ Generic **language VM** for programs expressed as `Poly.Ast` Syntax trees. Domai
 
 Analyze → `Interpreter.Compile` (fail-closed on analysis errors) → `AbiEmitter` → `VmState`. Per [VM as canonical semantics](../../docs/decisions/2026-06-08-vm-as-canonical-semantics.md), this path is the **authoritative behavior**.
 
-The LINQ expression path (`BuildExpression` / `LinqExpressionGenerator`) is a **programmatic semantic checker** for that VM: the same Syntax tree must evaluate to the same result, and the expression tree is inspectable when debugging the custom VM. It is not a second language and not a replacement for `Interpreter.Compile`. C# emit is a projection of the same trees.
+There is **one interpreter**. Its second opinion comes from outside this repository: `CSharpWriter` prints the same Syntax tree, Roslyn compiles that text, and the compiled method must produce what the VM produced (`Poly.Tests/Interpretation/AstParity*.cs`). The writer is the meaning-source checked by that compiler, not a second execution engine of ours — C# emit is a projection of the same trees.
 
 **C# language surface** (`CSharp/`): Syntax trees print through one `Poly.Grammar` pattern table — `CSharpWriter` emits declarations and statements from the table's fixed skeletons, and `CSharpReader` matches the same patterns and folds them back to AST nodes. Roslyn is the external oracle in the tests: every golden file must parse with zero syntax diagnostics, round-trip idempotently, and agree with Roslyn's declaration/invocation/lambda counts. `CSharpGenerator` is a thin compatibility façade over `CSharpWriter`.
 
@@ -103,7 +103,6 @@ long handle = exec.RawValue;
 | [`Analysis/`](Analysis/) | Semantic analysis passes | [`Analysis/README.md`](Analysis/README.md) — pass registry, ordering, diagnostics |
 | [`Vm/`](Vm/) | Compile primitives → delegate; runtime state | [`Vm/README.md`](Vm/README.md) — `ProgramCompiler`, stack/heap ABI |
 | [`CSharp/`](CSharp/) | C# source emission from AST | Secondary backend; not canonical semantics |
-| [`LinqExpressions/`](LinqExpressions/) | LINQ expression trees from AST | Semantic parity + inspectable execution for the VM (not a second engine) |
 | [`Mermaid/`](Mermaid/) | Mermaid diagrams from AST | Visualization only; labels from `NodeFacts`, children from `Node.Children` |
 
 Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`, `NodeFacts.cs`.
@@ -256,8 +255,7 @@ consumes this to produce the correct nesting of `Try`/`Catch`/`Finally` expressi
 
 These read the **AST directly** and are not the conformance target for new features:
 
-- **LINQ** — `LinqExpressionGenerator`; parity tests still exist for some scenarios.
-- **C#** — `CSharpGenerator`; codegen and pretty-printing.
+- **C#** — `CSharpGenerator`; codegen and pretty-printing. Its printed text is the differential the test suite holds against Roslyn.
 - **Mermaid** — `MermaidAstGenerator`; docs and debugging. It reads `NodeFacts` for a kind's label and `Node.Children` for its children, so it re-derives no dispatch of its own.
 
 New language semantics should land in analysis → direct lowering → `AbiEmitter` first.

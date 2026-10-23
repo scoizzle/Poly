@@ -128,7 +128,7 @@ public class MiddlewareInterpreterIntegrationTests {
 
     /// <summary>
     /// Test numeric type promotion in arithmetic operations.
-    /// Verifies that the code generator (LinqExpressionGenerator) correctly promotes int + double to double.
+    /// Verifies that the VM correctly promotes int + double to double.
     /// </summary>
     [Test]
     public async Task NumericTypePromotion_IntPlusDouble_ProducesCorrectResult() {

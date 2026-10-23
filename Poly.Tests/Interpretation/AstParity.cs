@@ -95,9 +95,9 @@ public sealed record KnownDivergence(
 /// <para>
 /// The VM executes the program; <see cref="CSharpWriter"/> prints the same tree through the same
 /// analysis, Roslyn compiles the printed text, and the compiled method is executed with the same
-/// seed arguments. The row records what each side did, and the two are compared. This replaces the
-/// assumption that <c>LinqExpressionGenerator</c> is a sound oracle: it has fewer arms than the VM,
-/// accepts kinds the VM rejects, and models <c>this</c> as null — so it cannot show these.
+/// seed arguments. The row records what each side did, and the two are compared. This replaces a
+/// second in-house interpreter, which was an unsound oracle in both directions: it had fewer arms
+/// than the VM, it accepted kinds the VM rejects, and it modelled <c>this</c> as null.
 /// </para>
 /// <para>
 /// A refusal is a row, never a skip. When the VM rejects, the printed side must reject too; when

@@ -1,5 +1,4 @@
 using Poly.Interpretation;
-using Poly.Interpretation.LinqExpressions;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.TestHelpers;
@@ -178,12 +177,11 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Await_TaskLong_LinqCheckerCompiles() {
+    public async Task Await_TaskLong_VmExecutes() {
         var host = new AwaitHost();
         var node = new Await(new Invoke(new Member(new Constant(host), nameof(AwaitHost.Completed))));
-        var expr = new LinqExpressionGenerator(node.AnalyzeNode()).Compile(node).Expression;
-        var compiled = System.Linq.Expressions.Expression.Lambda<Func<long>>(expr).Compile();
-        await Assert.That(compiled()).IsEqualTo(42L);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(42L);
     }
 
     private sealed class AwaitHost {

@@ -19,8 +19,8 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Lowers a DomainExpression tree into the shared Syntax AST
-/// (<see cref="Syntax.Nodes"/>), making it compilable through
-/// the existing LinqExpressionGenerator and CSharpWriter.
+/// (<see cref="Syntax.Nodes"/>), which the language VM executes and
+/// CSharpWriter prints.
 /// </summary>
 /// <remarks>
 /// Domain-specific nodes (OwnedAccess, RelationshipNavigation)

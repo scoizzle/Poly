@@ -367,6 +367,11 @@ public static partial class AbiEmitter {
             return Assign(ctx.RingVar(slot, typeof(double)), Constant(d));
         if (c.Value is float f)
             return Assign(ctx.RingVar(slot, typeof(float)), Constant(f));
+        // An int literal is an int: its boxed CLR type is the width analysis resolves for
+        // the constant, so the slot carries the same width and an all-int expression pays
+        // no conversion between a variable and a literal.
+        if (c.Value is int i)
+            return Assign(ctx.RingVar(slot, typeof(int)), Constant(i));
         if (RingCodec.TryInlineConstant(c.Value, out long val))
             return Assign(ctx.RingVar(slot), Constant(val));
         return Assign(ctx.RingVar(slot),
@@ -594,10 +599,40 @@ public static partial class AbiEmitter {
                 AsIeee(left, leftVal, target, ctx),
                 AsIeee(right, rightVal, target, ctx));
         }
-        var rhs = rightVal;
-        if (factory == LeftShift || factory == RightShift) rhs = Convert(rhs, typeof(int));
-        return factory(leftVal, rhs);
+        // A shift's result width is its left operand's; its count is always an int in C#.
+        if (factory == LeftShift || factory == RightShift)
+            return factory(
+                RingCodec.AsRepresentation(leftVal, IntegerWidthOf(left, ctx)),
+                RingCodec.AsRepresentation(rightVal, typeof(int)));
+        // Every other integer operator — bitwise included — runs at the width analysis
+        // resolved for its operands, so `Expression.Add(int, int)` wraps at 32 bits because
+        // the CLR does, and an all-int expression needs no conversion between operations.
+        var width = IntegerArithmeticWidthOf(left, right, ctx);
+        return factory(
+            RingCodec.AsRepresentation(leftVal, width),
+            RingCodec.AsRepresentation(rightVal, width));
     }
+
+    /// <summary>The width an integer operation runs at, from the operand types analysis
+    /// resolved. An operand whose width is unresolved is a compile rejection that names it:
+    /// falling back to the word is how
+    /// [#289](https://github.com/scoizzle/Poly/issues/289) arose.</summary>
+    private static Type IntegerArithmeticWidthOf(Node left, Node right, Context ctx) =>
+        RingCodec.IntegerArithmeticWidth(
+            ResolvedOperandType(left, ctx), ResolvedOperandType(right, ctx));
+
+    /// <summary>The width one operand's own arithmetic runs at: <c>int</c> for the types C#
+    /// promotes to 32 bits, the word otherwise.</summary>
+    private static Type IntegerWidthOf(Node node, Context ctx) =>
+        RingCodec.IsInt32Width(ResolvedOperandType(node, ctx)) ? typeof(int) : typeof(long);
+
+    /// <summary>The CLR type analysis resolved for an arithmetic operand, or a rejection
+    /// that names the operand.</summary>
+    private static Type ResolvedOperandType(Node node, Context ctx) =>
+        ctx.ClrTypeOf(node)
+        ?? throw new InvalidOperationException(
+            "VM compile rejected: cannot resolve the integer width of "
+            + $"'{node}' ({node.GetType().Name}).");
 
     /// <summary>The type an IEEE arithmetic result takes: <c>double</c> as soon as
     /// either operand is one, otherwise <c>float</c> — C#'s own promotion, which keeps
@@ -663,10 +698,12 @@ public static partial class AbiEmitter {
         ctx.KindOf(node) is ValueRepresentationKind.StackScalar;
 
     /// <summary>The one type two arms of a value can share: <c>double</c> if either is
-    /// one, else <c>float</c> if either is one, else the left type unchanged.</summary>
+    /// one, else <c>float</c> if either is one, else <c>long</c> if either is one, else the
+    /// left type unchanged.</summary>
     private static Type ValueTypeOf(Type left, Type right) =>
         left == typeof(double) || right == typeof(double) ? typeof(double)
             : left == typeof(float) || right == typeof(float) ? typeof(float)
+            : left == typeof(long) || right == typeof(long) ? typeof(long)
             : left;
 
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
@@ -709,6 +746,11 @@ public static partial class AbiEmitter {
                 CompileConditionAsBool(n.RightHandValue, ctx)),
             Or n => OrElse(CompileConditionAsBool(n.LeftHandValue, ctx),
                 CompileConditionAsBool(n.RightHandValue, ctx)),
-            _ => NotEqual(ValueOf(node, ctx), Constant(0L))
+            _ => IsNonZero(ValueOf(node, ctx))
         };
+
+    /// <summary>Truthiness at the value's own width: an <c>int</c> slot compares with an
+    /// <c>int</c> zero, a word with the word's.</summary>
+    private static Expression IsNonZero(Expression value) =>
+        value.Type == typeof(int) ? NotEqual(value, Constant(0)) : NotEqual(value, Constant(0L));
 }

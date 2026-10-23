@@ -245,6 +245,7 @@ public static partial class AbiEmitter {
         private static string RingLocalName(int index, Type representation) =>
             representation == typeof(double) ? $"_d{index}"
                 : representation == typeof(float) ? $"_f{index}"
+                : representation == typeof(int) ? $"_i{index}"
                 : $"_r{index}";
 
         /// <summary>The word form of a ring slot: the local at its own representation,
@@ -252,9 +253,11 @@ public static partial class AbiEmitter {
         public Expression RingWord(int absoluteIndex, Type representation) =>
             RingCodec.ToWord(RingVar(absoluteIndex, representation));
 
-        /// <summary>The ring representation of a node's value: its own type for an IEEE
-        /// scalar, the word for every other shape — including one analysis could not
-        /// resolve, which is the fallback rather than a failure.</summary>
+        /// <summary>The ring representation of a node's value: its own type for an IEEE or
+        /// <c>int</c> scalar, the word for every other shape — including one analysis could
+        /// not resolve, which is the storage fallback rather than a failure. (An integer
+        /// <em>operation</em> with an unresolved width is a different question, and it fails
+        /// closed: see <see cref="RingCodec.IntegerArithmeticWidth"/>.)</summary>
         public Type SlotTypeOf(Node node) {
             var (kind, clr) = RepresentationOf(node);
             return kind is ValueRepresentationKind.StackScalar ? RingCodec.SlotTypeOf(clr) : typeof(long);
@@ -357,6 +360,7 @@ public static partial class AbiEmitter {
         public Expression VariableZero(Variable v) => RegisterRepresentation(v) switch {
             var t when t == typeof(double) => Constant(0.0),
             var t when t == typeof(float) => Constant(0.0f),
+            var t when t == typeof(int) => Constant(0),
             _ => Constant(0L),
         };
 
@@ -391,6 +395,7 @@ public static partial class AbiEmitter {
         private static string RegisterLocalName(int index, Type representation) =>
             representation == typeof(double) ? $"_dreg{index}"
                 : representation == typeof(float) ? $"_freg{index}"
+                : representation == typeof(int) ? $"_ireg{index}"
                 : $"_reg{index}";
 
         private readonly List<VariableLayout> _variableLayouts = new();

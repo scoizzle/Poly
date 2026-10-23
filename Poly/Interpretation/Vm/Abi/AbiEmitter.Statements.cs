@@ -211,7 +211,8 @@ public static partial class AbiEmitter {
                 def = Compile(sw.DefaultCase, ctx);
             }
             rest = Block(def.Code,
-                Assign(ctx.RingVar(outSlot), def.RequireResult(sw.DefaultCase).Read(ctx)));
+                Assign(ctx.RingVar(outSlot),
+                    RingCodec.ToWord(def.RequireResult(sw.DefaultCase).Read(ctx))));
         }
         else {
             rest = Assign(ctx.RingVar(outSlot), Constant(0L));
@@ -232,9 +233,11 @@ public static partial class AbiEmitter {
             rest = Block(
                 pattern.Code,
                 IfThenElse(
-                    Equal(ctx.RingVar(valSlot), pattern.RequireResult(c.Pattern).Read(ctx)),
+                    Equal(ctx.RingVar(valSlot),
+                        RingCodec.ToWord(pattern.RequireResult(c.Pattern).Read(ctx))),
                     Block(body.Code,
-                        Assign(ctx.RingVar(outSlot), body.RequireResult(c.Body).Read(ctx))),
+                        Assign(ctx.RingVar(outSlot),
+                            RingCodec.ToWord(body.RequireResult(c.Body).Read(ctx)))),
                     rest));
         }
 

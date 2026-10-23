@@ -425,13 +425,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     /// <summary>int * int can overflow 32 bits; promote to long and
     /// return long when the result doesn't fit in int.</summary>
-    private static object SafeIntMultiply(int x, int y) {
-        long r = (long)x * y;
-        if (r >= int.MinValue && r <= int.MaxValue)
-            return (int)r;
-        return r;
-    }
-
     private static object NegateInt(int x) {
         if (x == int.MinValue)
             return -(long)x;
@@ -656,7 +649,8 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     };
 
     private static object? Multiply(object a, object b) => (a, b) switch {
-        (int x, int y) => SafeIntMultiply(x, y),
+        // int * int is int: the fold runs at the resolved width, so it wraps like the CLR does.
+        (int x, int y) => unchecked(x * y),
         (long x, long y) => x * y,
         (double x, double y) => x * y,
         (float x, float y) => x * y,

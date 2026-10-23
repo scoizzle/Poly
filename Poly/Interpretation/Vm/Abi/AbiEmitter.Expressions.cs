@@ -46,7 +46,12 @@ public static partial class AbiEmitter {
                 AsIeee(left, lv, target, ctx),
                 AsIeee(right, rv, target, ctx));
         }
-        return cf(lv, rv);
+        // The operands must compare at one width: `Expression.Equal(int, long)` has no
+        // such overload. Two ints compare as ints; one long makes it a 64-bit compare.
+        var width = lv.Type == rv.Type ? lv.Type
+            : lv.Type == typeof(int) || rv.Type == typeof(int) ? typeof(long)
+            : lv.Type;
+        return cf(RingCodec.AsRepresentation(lv, width), RingCodec.AsRepresentation(rv, width));
     }
 
     /// <summary>Comparison as a ring value: the bool test the condition path already uses,
@@ -126,7 +131,7 @@ public static partial class AbiEmitter {
                     Constant(0L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)))));
+                        ctx.RingWord(rightSlot, rightExpr.Type)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
@@ -147,7 +152,7 @@ public static partial class AbiEmitter {
                     Constant(1L),
                     Block(
                         rightExpr,
-                        ctx.RingVar(rightSlot)))));
+                        ctx.RingWord(rightSlot, rightExpr.Type)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }

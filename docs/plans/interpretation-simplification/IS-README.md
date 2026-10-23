@@ -17,7 +17,7 @@ A lane is a **file-ownership group**, not a queue of similar work. One agent own
 
 | Lane | Owns | Slices in order |
 |---|---|---|
-| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1d → IS1b → IS2a → IS2b → IS2c → IS1c |
+| **A `csharp`** | `Poly/Interpretation/CSharp/**`, `Poly/Interpretation/LinqExpressions/**`, `Poly/Interpretation/Mermaid/**`, `Poly/Interpretation/NodeFacts.cs`, `Poly/Interpretation/README.md`, `Poly.Tests/Interpretation/CSharp*`, `Poly.Tests/Interpretation/Linq*`, `Poly.Tests/Interpretation/NodeFact*`, `Poly.Tests/Interpretation/AstParity*`, `Poly.Tests/Interpretation/LanguageSurfaceTests.cs`, `Poly.Tests/Interpretation/VmCorrectnessTests.cs`, `Poly.Tests/Integration/Mermaid*`, `Poly.Tests/TestHelpers/NodeTestHelpers.cs`, `Poly.Tests/DomainModeling/Compile/EmitGolden/**` | IS0a → IS0b → IS1 → IS1d → IS1b → IS2a → IS2d → IS2b → IS2c → IS1c |
 | **B `analysis`** | `Poly/Analysis/**`, `Poly/Interpretation/Analysis/**`, `Poly.Tests/Interpretation/*Analyzer*`, `Poly.Tests/Interpretation/*ControlFlow*`, `Poly.Tests/Interpretation/*SideEffect*`, `Poly.Tests/Interpretation/*Analysis*`, `Poly.Tests/Interpretation/*Const*`, `Poly.Tests/Interpretation/AnyChildTests.cs`, `Poly.Tests/Interpretation/AnalysisFactOwnershipTests.cs` | IS0c → IS0f → IS6 |
 | **C `vm`** | `Poly/Interpretation/Vm/**`, `Poly.Benchmarks/**`, `Poly.Tests/TestHelpers/VmTree.cs`, `Poly.Tests/Interpretation/*Vm*` (except `VmCorrectnessTests.cs`), `Poly.Tests/Interpretation/*Invoke*`, `Poly.Tests/Interpretation/*Lambda*`, `Poly.Tests/Interpretation/*Slot*`, `Poly.Tests/Interpretation/*Loop*` | IS0d → IS0e → ISB → IS4 → IS3 → IS5 |
 
@@ -41,9 +41,10 @@ Two one-line exceptions, both comment-only and named so they do not read as owne
 | [x] | IS1d | a `for` header prints its increment as a statement, so the output does not compile | IS1 | A | [tasks/IS1d.md](tasks/IS1d.md) |
 | [x] | IS1b | Mermaid's two dispatch switches and its silent child drops | IS1 | A | [tasks/IS1b.md](tasks/IS1b.md) |
 | [ ] | IS1c | qualified type names and using scope; a static call on a type is not expressible | IS0b, IS1 | A | [tasks/IS1c.md](tasks/IS1c.md) |
-| [ ] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
-| [ ] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
-| [ ] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b | A | [tasks/IS2c.md](tasks/IS2c.md) |
+| [x] | IS2a | the assumption that the LINQ oracle is sound; proves the writer against Roslyn over a corpus | IS1 | A | [tasks/IS2a.md](tasks/IS2a.md) |
+| [~] | IS2b | 18 test files' dependence on `NodeTestHelpers.BuildExpression` | IS2a | A | [tasks/IS2b.md](tasks/IS2b.md) |
+| [B] | IS2c | `LinqExpressionGenerator` — 1,093 LOC, zero production callers | IS2b, IS2d | A | [tasks/IS2c.md](tasks/IS2c.md) |
+| [ ] | IS2d | 11 writer defect classes the differential found (#279), incl. two silent wrong values | IS2a | A | [tasks/IS2d.md](tasks/IS2d.md) |
 | [x] | ISB | the untracked `/tmp/polybench` recipe; a checked-in baseline for IS3/IS5 | — | C | [tasks/ISB.md](tasks/ISB.md) |
 | [x] | IS4 | four copies of the same loop scaffolding | IS1, IS0d | C | [tasks/IS4.md](tasks/IS4.md) |
 | [ ] | IS3 | `CompileValue` and its 7 twins; the void special case in #260 | IS2c, ISB | C | [tasks/IS3.md](tasks/IS3.md) |
@@ -60,7 +61,7 @@ Lanes start together; slices inside a lane do not. Cross-lane arrows are real ga
 | 1 | lane's previous slice merged | IS0b | IS0f | IS0e, then ISB |
 | 2 | IS0e merged (for A) | IS1, then IS1b | IS6 | — |
 | 3 | IS1 merged (for C) | IS1d, then IS1b, then IS2a | — | IS4 |
-| 4 | IS2a merged | IS2b | — | — (IS3 needs IS2c + ISB) |
+| 4 | IS2a merged | IS2d, then IS2b | — | — (IS3 needs IS2c + ISB) |
 | 5 | IS2b merged | IS2c, then IS1c | — | — |
 | 6 | IS2c and ISB merged | — | — | IS3 |
 | 7 | IS3 merged | — | — | IS5 |

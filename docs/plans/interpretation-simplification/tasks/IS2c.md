@@ -1,7 +1,13 @@
 # TASK IS2c - delete the second interpreter
 
-Status: planned. Branch `slice/IS2c`. Lane A (`csharp`). Depends on IS2b.
+Status: **held** — depends on IS2b and IS2d. Branch `slice/IS2c`. Lane A (`csharp`).
 Plan: [IS-README](../IS-README.md). Audit: [interpretation-simplification.md](../../../analysis/interpretation-simplification.md) §2.
+
+## Held until the writer agrees with the VM
+
+IS2a built the replacement differential and found 29 rows where the printed program disagrees with the VM — 11 writer defect classes, two of them silent wrong values ([#279](https://github.com/scoizzle/Poly/issues/279)). Those rows are pinned in `AstParity.KnownDivergences`, so **nothing verifies VM behaviour for those shapes today**. Deleting the LINQ oracle first would delete the only oracle for them as well.
+
+This slice therefore starts when [IS2d](IS2d.md) has emptied `KnownDivergences`. That is the card's own precondition, restated as a dependency, not a new one.
 
 ## Why
 

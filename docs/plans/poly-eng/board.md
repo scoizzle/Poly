@@ -101,7 +101,8 @@ Producer and analysis single-sourcing, from the [2026-10-22 audit](../../analysi
 | IS1c | qualified type names + using scope; a static call on a type is not expressible | IS0b, IS1 | [IS1c.md](../interpretation-simplification/tasks/IS1c.md) |
 | IS2a | writer→Roslyn differential over the corpus | IS1 | [IS2a.md](../interpretation-simplification/tasks/IS2a.md) |
 | IS2b | port the LINQ-oracle test consumers to VM execution | IS2a | [IS2b.md](../interpretation-simplification/tasks/IS2b.md) |
-| IS2c | delete `LinqExpressionGenerator` | IS2b | [IS2c.md](../interpretation-simplification/tasks/IS2c.md) |
+| IS2d | the 11 writer defect classes the differential found (#279) | IS2a | [IS2d.md](../interpretation-simplification/tasks/IS2d.md) |
+| IS2c | delete `LinqExpressionGenerator` | IS2b, IS2d | [IS2c.md](../interpretation-simplification/tasks/IS2c.md) |
 | ISB | checked-in benchmark baseline for IS3/IS5 | none | [ISB.md](../interpretation-simplification/tasks/ISB.md) |
 | IS4 | one loop scaffold | IS1, IS0d | [IS4.md](../interpretation-simplification/tasks/IS4.md) |
 | IS3 | `CompileNode` total; delete `CompileValue` | IS2c, ISB | [IS3.md](../interpretation-simplification/tasks/IS3.md) |

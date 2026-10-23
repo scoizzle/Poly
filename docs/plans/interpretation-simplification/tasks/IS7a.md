@@ -1,6 +1,6 @@
 # TASK IS7a - typed ring slots for IEEE values
 
-Status: planned. Branch `slice/IS7a`. Lane C (`vm`). Depends on IS5 (merged).
+Status: **delivered, HELD** — `slice/IS7a` @ `3ff83e7d`, PR #290, not merged. The card's SHIP criterion ("the FP benchmark improves") was not met; see §Outcome. Lane C (`vm`). Depends on IS5 (merged). Land with [IS7b](IS7b.md).
 Plan: [IS-README](../IS-README.md). Analysis: [`floating-point-representation.md`](../../../analysis/floating-point-representation.md).
 
 ## Why
@@ -76,3 +76,28 @@ none.
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+
+## Outcome (2026-10-23) — the win is one layer lower
+
+Delivered and green, but the FP benchmark did **not** improve, so this does not ship on its own:
+
+| Benchmark (`--job medium`) | before | after |
+|---|---|---|
+| NQueens | 176.15 | 170.46 |
+| Sieve | 98.98 | **98.67** (held - no erosion) |
+| **Mandelbrot** (double) | **130.24** | **131.39 / 130.90** - flat |
+| Collatz | 137.60 | 134.39 |
+
+What did land: the slot table keyed by (index, representation), `_dN`/`_fN` locals, and the structural proof - ring locals 11 word/0 double -> 6 word/9 double, total bitcasts 48 -> 28, IEEE ops converting at the operation 14/14 -> 2/14, `MaxRingDepth` unchanged at 11. Sieve holds because integer programs declare zero typed locals.
+
+**Why it did not help.** The ring holds transient *expression* intermediates. Mandelbrot's hot state - `zr`, `zi`, `cr`, `ci` - lives in **variables**, and a variable is backed by `_regVars`, declared `Variable(typeof(long), "_reg{n}")` (`AbiEmitter.Context.cs:348`), or by a frame slot in the `long[]` `_slots`. IS7a did not touch either. A hand-written A/B at this benchmark's exact shape: all-bits `long` locals 124 us, typed `double` locals 64 us, VM 131 us. The 1.9x is in **variable storage**, not the ring.
+
+**This corrects the analysis note's attribution.** The 2,350 vs 1,320 us A/B in [`floating-point-representation.md`](../../../analysis/floating-point-representation.md) compared long locals against nested double locals - a *variable-storage* difference - and this card read it as a ring difference. The note has been corrected.
+
+**Why it is still held rather than closed.** Typed variables without a typed ring gains little: an expression over typed `double` variables would still spill its result into a `long` ring slot, reintroducing one bitcast per expression. The two changes pay only together. So this stays open and lands with [IS7b](IS7b.md), measured as a pair.
+
+## Log
+
+| Date | Who | Mill | SHA | Verdict / event | Findings |
+|------|-----|------|-----|-----------------|----------|
+| 2026-10-23 | agent | Copilot/VS Code | `3ff83e7d` | **DELIVERED, HELD.** Slot table by (index, representation); `_dN`/`_fN` locals; structural bitcast test red-then-green; Sieve held; suite 4,499 green. FP benchmark flat, so the card's SHIP criterion fails. | The measured 1.9x lives in `_regN`/`_slots`, not the ring. Also fixed en route: `EmitBlock`'s trailing snapshot store, `CompileFunctionBody`'s result flush, and the inline-lambda copy-out all read the word local across a representation boundary. |

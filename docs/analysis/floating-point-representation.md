@@ -4,6 +4,16 @@
 **Scope:** `Poly/Interpretation/Vm/Abi/` — the ring slot type, `RingCodec.ToIeee`/`FromIeee`, and the arithmetic arms.
 **Input:** the double-precision mandelbrot rows in [`docs/perf-comparison/results/results_20261023_070816.csv`](../perf-comparison/results/results_20261023_070816.csv).
 
+## Correction (2026-10-23): the 1.8x is in variable storage, not the ring
+
+IS7a typed the ring slots and the FP benchmark did not move (Mandelbrot 130.24 -> 131.39 us, `--job medium`). Measuring rather than assuming found the mistake in this note's attribution: the A/B below compared **long locals** against **nested double locals**, which is a *variable-storage* difference, and it was read here as a ring difference.
+
+The ring holds transient expression intermediates. A program's hot state lives in variables, backed by `_regVars` (`Variable(typeof(long), "_reg{n}")`, `AbiEmitter.Context.cs:348`) or by `_slots[_fp + n]` in a `long[]`. Neither changed. A hand-written A/B at `ProgramBenchmarks`' exact mandelbrot shape: all-bits `long` locals **124 us**, typed `double` locals **64 us**, current VM **131 us**.
+
+So the ordering is inverted from what this note first proposed: [IS7a](../plans/interpretation-simplification/tasks/IS7a.md) (ring) is necessary - otherwise an expression over typed doubles spills back into a `long` slot - but [IS7b](../plans/interpretation-simplification/tasks/IS7b.md) (typed variable storage) is where the speed actually is. They land together.
+
+The measurement below is still the right upper bound; it is a statement about *the whole storage model*, not about the ring.
+
 ## The measurement that frames everything
 
 The VM's dispatch is not the problem. A hand-written C# function, laid out in **exactly the shape the emitter produces** (every intermediate a `long` local holding IEEE bits, `BitConverter` around every operation), costs the same as the Poly program:

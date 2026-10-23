@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Interpretation.LinqExpressions;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -58,47 +57,6 @@ public static class PolicyEvaluator {
         PolicySubject.Validate(entity);
         var predicate = policy.CompileVMPredicate<TEntity>();
         return predicate(entity);
-    }
-
-    /// <summary>
-    /// Compiles <paramref name="policy"/> into a <c>Func&lt;TEntity, bool&gt;</c>
-    /// using <c>LinqExpressionGenerator</c>. Retained as secondary reference.
-    /// </summary>
-    public static Func<TEntity, bool> CompileLinqPredicate<TEntity>(this Policy policy) {
-        ArgumentNullException.ThrowIfNull(policy);
-
-        var entityParam = new Parameter("entity", TypeReference.To<TEntity>());
-        var pass = new DomainExpressionLoweringPass();
-        var lowered = pass.Lower(policy.Expression, entityParam);
-
-        var analysis = Interpreter.Analyze(lowered);
-
-        var generator = new LinqExpressionGenerator(analysis);
-        var compiled = generator.Compile(lowered);
-        var entityExpr = compiled.Parameters.FirstOrDefault(p => p.Name == "entity")
-            ?? Expression.Parameter(typeof(TEntity), "entity");
-
-        var lambda = Expression
-            .Lambda<Func<TEntity, bool>>(compiled.Expression, entityExpr);
-
-        return lambda.Compile();
-    }
-
-    /// <summary>
-    /// Evaluates <paramref name="policy"/> using <b>both</b> LINQ and VM paths
-    /// and throws if they diverge. Use only in tests that explicitly cross-check
-    /// engine agreement. For product code, prefer <see cref="Evaluate{TEntity}"/>
-    /// (VM-primary).
-    /// </summary>
-    public static bool EvaluateWithDualOracle<TEntity>(this Policy policy, TEntity entity) {
-        var linqResult = policy.CompileLinqPredicate<TEntity>()(entity);
-        var vmResult = policy.CompileVMPredicate<TEntity>()(entity);
-
-        if (linqResult != vmResult)
-            throw new InvalidOperationException(
-                $"Policy evaluation mismatch: LINQ returned {linqResult}, VM returned {vmResult}. " +
-                $"This indicates a divergence between the two execution engines for policy '{policy.Name}'.");
-        return vmResult;
     }
 
     // ── Domain-validated property path ─────────────────────────────

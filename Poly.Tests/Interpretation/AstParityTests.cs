@@ -31,6 +31,9 @@ public class AstParityTests {
 
         public string Name { get; } = "";
         public int Count { get; }
+
+        public int Triple() => Count * 3;
+        public int Add(int value) => Count + value;
     }
 
     /// <summary>One corpus program, labelled with the test that builds it.</summary>
@@ -497,6 +500,46 @@ public class AstParityTests {
         await Assert.That(stale).IsEmpty()
             .Because("a divergence with no contradicting row is a stale finding, not a skip");
     }
+
+    /// <summary>One differential row handed down by a parity case: the shape, and the seed a root lambda binds.</summary>
+    public sealed record MovedShape(string Label, Node Program, object?[] Args);
+
+    /// <summary>
+    /// The shapes the LINQ-parity cases in <c>VmCorrectnessTests</c> exercised that no corpus row
+    /// carried, one row each. Those cases asserted only that the VM agreed with the second
+    /// interpreter, so they could not be ported; the shape moves here, where the other side is a
+    /// compiler that is not ours.
+    /// </summary>
+    public static IEnumerable<MovedShape> ShapesMovedFromTheLinqParityCases() {
+        static MovedShape Seeded(string label, Func<Parameter, Node> body, object?[] args) {
+            var widget = new Parameter("widget", TypeReference.To<ParityWidget>());
+            return new(label, new Lambda([widget], body(widget)), args);
+        }
+
+        yield return new("ParityShapes.NegativeLiteral", new Constant(-7), []);
+        yield return new("ParityShapes.StringLength", new Member(new Constant("hello"), "Length"), []);
+        yield return new("ParityShapes.GreaterThan", new GreaterThan(new Constant(5), new Constant(3)), []);
+        yield return new("ParityShapes.LogicalAnd",
+            new And(new Equal(new Constant(1), new Constant(1)), new Equal(new Constant(2), new Constant(2))), []);
+        yield return new("ParityShapes.LogicalOr",
+            new Or(new Equal(new Constant(1), new Constant(0)), new Equal(new Constant(2), new Constant(2))), []);
+        yield return new("ParityShapes.LogicalNot", new Not(new Equal(new Constant(1), new Constant(0))), []);
+        yield return new("ParityShapes.CoalesceNonNullLeft",
+            new Coalesce(new Constant("hello"), new Constant("world")), []);
+        yield return Seeded("ParityShapes.InstanceMethodNoArguments",
+            widget => new Invoke(new Member(widget, "Triple")), [new ParityWidget("t", 7)]);
+        yield return Seeded("ParityShapes.InstanceMethodWithArgument",
+            widget => new Invoke(new Member(widget, "Add"), new Constant(5)), [new ParityWidget("a", 10)]);
+        yield return Seeded("ParityShapes.PropertyRead",
+            widget => new Member(widget, "Count"), [new ParityWidget("p", 25)]);
+        yield return Seeded("ParityShapes.PropertyReadAndStringEquality",
+            widget => new Equal(new Member(widget, "Name"), new Constant("Alice")), [new ParityWidget("Alice", 30)]);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(ShapesMovedFromTheLinqParityCases))]
+    public async Task MovedShapes_PrintedCSharp_AgreesWithTheVm(MovedShape shape) =>
+        await AstParity.AssertAgrees(shape.Label, shape.Program, shape.Args);
 
     /// <summary>The kinds the writer cannot print, with the disposal each side must have today.</summary>
     static Dictionary<Type, PrintDisposition> Samples() => new() {

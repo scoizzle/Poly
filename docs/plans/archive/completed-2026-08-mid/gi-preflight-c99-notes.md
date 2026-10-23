@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-07  
 **Status:** **DONE / green** — closed 2026-08-07  
-**Harness:** [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../../../Poly.Tests/Integration/C99ParserInterpreterTests.cs)  
+**Harness:** `Poly.Tests/Integration/C99ParserInterpreterTests.cs` (deleted 2026-10-22 with the LINQ oracle — [IS2c](../../interpretation-simplification/tasks/IS2c.md))  
 **Plan:** [`grammar-integration.md`](grammar-integration.md) §3.4 · §11.1
 
 ---

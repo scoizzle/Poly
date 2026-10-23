@@ -2,10 +2,6 @@ using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.ConstantFolding;
-using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
 using Poly.Tests.TestHelpers;
 
@@ -251,36 +247,9 @@ public class DomainExpressionVmExecutionTests {
         await Assert.That((long)result.Value!).IsEqualTo(1L);
     }
 
-    // ── PropertyAccess via LINQ path ──────────────────────────────────────
-    // The lowering pass correctly maps PropertyAccess → Member(subject, name).
-    // The LINQ expression generator compiles Member for any CLR type natively.
-    // The VM µop path for heap-allocated objects is a gap (see next section).
-
-    private static InterpreterResult ExecuteViaLinq(Node node) {
-        var analysis = new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseVariableScopeValidator()
-            .UseTypeAndMemberResolver()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseConstantFolding()
-            .UseControlFlowAnalysis()
-            .UseDefiniteAssignmentAnalysis()
-            .Build()
-            .Analyze(node);
-        var generator = new LinqExpressionGenerator(analysis);
-        var compiled = generator.Compile(node);
-        var lambda = System.Linq.Expressions.Expression
-            .Lambda<Func<object?>>(System.Linq.Expressions.Expression.Convert(compiled.Expression, typeof(object)))
-            .Compile();
-        var value = lambda();
-        return InterpreterResult.FromValue(value);
-    }
-
-    private InterpreterResult ExecuteDomainViaLinq(DomainExpression expr, Node subject) {
-        var node = Pass.Lower(expr, subject);
-        return ExecuteViaLinq(node);
-    }
+    // ── PropertyAccess through the lowering pass ─────────────────────────
+    // The lowering pass maps PropertyAccess → Member(subject, name); the VM
+    // reads the property through its µop path.
 
     [Test]
     public async Task PropertyAccess_OnClrRecord_ReturnsPropertyValue() {
@@ -367,7 +336,7 @@ public class DomainExpressionVmExecutionTests {
                 DomainExpression.Property(nameof(PersonRecord.Age)),
                 DomainExpression.Literal(18)));
 
-        var predicate = policy.CompileLinqPredicate<PersonRecord>();
+        var predicate = policy.CompileVMPredicate<PersonRecord>();
 
         var people = new[] {
             new PersonRecord("Alice", 25),
@@ -513,36 +482,6 @@ public class DomainExpressionVmExecutionTests {
         await Assert.That(policy.Evaluate(new PersonRecord("VIP", 15))).IsTrue();
         // Age 25 → under 18 is false → AND short-circuits to false → NOT → true
         await Assert.That(policy.Evaluate(new PersonRecord("Adult", 25))).IsTrue();
-    }
-
-    /// <summary>
-    /// Cross-check: VM and LINQ paths agree on all test cases above.
-    /// This test verifies the invariant that PolicyEvaluator uses internally.
-    /// </summary>
-    [Test]
-    public async Task Policy_LinqAndVmPaths_Agree() {
-        var policies = new[] {
-            new Policy("P1", DomainExpression.GreaterThan(DomainExpression.Property("Age"), DomainExpression.Literal(18))),
-            new Policy("P2", DomainExpression.And(
-                DomainExpression.GreaterThan(DomainExpression.Property("Age"), DomainExpression.Literal(10)),
-                DomainExpression.LessThan(DomainExpression.Property("Age"), DomainExpression.Literal(20)))),
-            new Policy("P3", DomainExpression.Or(
-                DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal("Alice")),
-                DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal("Bob")))),
-        };
-
-        var entities = new[] {
-            new PersonRecord("Alice", 25),
-            new PersonRecord("Bob", 15),
-            new PersonRecord("Charlie", 30),
-        };
-
-        foreach (var policy in policies) {
-            foreach (var entity in entities) {
-                var result = policy.EvaluateWithDualOracle(entity);
-                await Assert.That(result).IsAssignableTo<bool>();
-            }
-        }
     }
 
     // ── DE lower-smoke matrix: gap coverage ─────────────────────

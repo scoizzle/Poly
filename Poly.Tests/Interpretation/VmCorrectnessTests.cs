@@ -1,16 +1,7 @@
-using System.Linq.Expressions;
-
-using Poly.DomainModeling.Lowering;
-using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
-using Poly.Interpretation.Analysis.ConstantFolding;
-using Poly.Interpretation.Analysis.ControlFlow;
-using Poly.Interpretation.Analysis.Semantics;
-using Poly.Interpretation.LinqExpressions;
 using Poly.Interpretation.Vm;
 using Poly.Introspection.CommonLanguageRuntime;
 
-using Expr = System.Linq.Expressions.Expression;
 using SN = Poly.Ast.Nodes;
 
 namespace Poly.Tests.Interpretation;
@@ -18,19 +9,6 @@ namespace Poly.Tests.Interpretation;
 public record PersonRecord(string Name, int Age);
 
 public class VmCorrectnessTests {
-    private static AnalysisResult LinqAnalyze(Node node) {
-        return new AnalyzerBuilder()
-            .UseThisReferenceContext()
-            .UseVariableScopeValidator()
-            .UseTypeAndMemberResolver()
-            .UseSideEffectAnalysis()
-            .UseJumpTargetResolution()
-            .UseConstantFolding()
-            .UseControlFlowAnalysis()
-            .UseDefiniteAssignmentAnalysis()
-            .Build()
-            .Analyze(node);
-    }
 
     private static VmProgram Compile(Node node, CompilationMode mode = CompilationMode.Normal) =>
         Interpreter.Compile(node, mode);
@@ -47,53 +25,6 @@ public class VmCorrectnessTests {
     // ═══════════════════════════════════════════════════════════════
     //  A. Structured Combinatorial
     // ═══════════════════════════════════════════════════════════════
-
-    private sealed record InvokeTarget(int Value) {
-        public int Triple() => Value * 3;
-        public int Add(int x) => Value + x;
-    }
-
-    [Test]
-    public async Task InstanceMethod_InvokeMember_Triple_DualOracle() {
-        // Proves that Invoke(Member(instance, "Triple")) sequences the
-        // receiver correctly in the emitted expression tree.
-        var target = new InvokeTarget(7);
-        var instanceParam = new Parameter("inst", TypeReference.To<InvokeTarget>());
-        var tripleInvoke = new Invoke(new Member(instanceParam, "Triple"));
-
-        // VM path
-        var vmProg = Interpreter.Compile(tripleInvoke);
-        using var vmExec = Interpreter.Execute(vmProg, s => s.SetArgs(target));
-        var vmResult = vmExec.Result.GetValue<long>();
-
-        // LINQ path (reference)
-        var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
-        var linqCall = Expr.Call(linqParam, Ref<InvokeTarget>.Method(t => t.Triple()));
-        var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
-        var linqResult = linqLambda.Compile()(target);
-
-        await Assert.That(vmResult).IsEqualTo(linqResult);
-    }
-
-    [Test]
-    public async Task InstanceMethod_InvokeMember_WithArg_DualOracle() {
-        // Instance method with arguments
-        var target = new InvokeTarget(10);
-        var instanceParam = new Parameter("inst", TypeReference.To<InvokeTarget>());
-        var addInvoke = new Invoke(new Member(instanceParam, "Add"), new Constant(5));
-
-        var vmProg = Interpreter.Compile(addInvoke);
-        using var vmExec = Interpreter.Execute(vmProg, s => s.SetArgs(target));
-        var vmResult = vmExec.Result.GetValue<long>();
-
-        var linqParam = Expr.Parameter(typeof(InvokeTarget), "inst");
-        var linqCall = Expr.Call(linqParam, Ref<InvokeTarget>.Method(t => t.Add(0)),
-            Expr.Constant(5));
-        var linqLambda = Expr.Lambda<Func<InvokeTarget, long>>(Expr.Convert(linqCall, typeof(long)), linqParam);
-        var linqResult = linqLambda.Compile()(target);
-
-        await Assert.That(vmResult).IsEqualTo(linqResult);
-    }
 
     [Test]
     public async Task SetArgs_NullArg_ReturnsZero() {
@@ -274,141 +205,7 @@ public class VmCorrectnessTests {
     }
 
     [Test]
-    public async Task Regression_DynamicInvoke_ParameterMismatch_ArithmeticOnly() {
-        // Found during LINQ-matching fuzzing: AssertVmMatchesLinq uses
-        // DynamicInvoke() with no arguments.  This works for expressions
-        // WITHOUT free parameters (pure arithmetic).  Expressions with
-        // entity/property references have unbound parameters and require
-        // a different matching strategy.  This test documents that the
-        // matching approach is intentionally limited to arithmetic, and
-        // proves it works for that subset.
-        for (int i = 0; i < 5; i++) {
-            // Sum from 1 to n — purely arithmetic, no parameters
-            var expr = DomainExpression.Add(
-                DomainExpression.Literal(i * 10),
-                DomainExpression.Literal(5));
-            await AssertVmMatchesLinq(expr);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  B. VM matches LINQ on shared DomainExpression trees
-    // ═══════════════════════════════════════════════════════════════
-
-    private readonly DomainExpressionLoweringPass LowerPass = new();
-    private static readonly ParameterReference Subject = new();
-
-    private static async Task AssertVmMatchesLinq(DomainExpression expr) {
-        await AssertVmMatchesLinqImpl(expr, Subject, []);
-    }
-
-    private static async Task AssertVmMatchesLinq(DomainExpression expr, Node subject) {
-        await AssertVmMatchesLinqImpl(expr, subject, []);
-    }
-
-    private static async Task AssertVmMatchesLinq(DomainExpression expr, Node subject, object?[] args) {
-        await AssertVmMatchesLinqImpl(expr, subject, args);
-    }
-
-    private static async Task AssertVmMatchesLinqImpl(DomainExpression expr, Node subject, object?[] args) {
-        // Fresh pass per call — DomainExpressionLoweringPass carries mutable
-        // _currentSubject state and must not be shared across parallel tests.
-        var pass = new DomainExpressionLoweringPass();
-        var lowered = pass.Lower(expr, subject);
-        var analysis = LinqAnalyze(lowered);
-
-        // LINQ path
-        var gen = new LinqExpressionGenerator(analysis);
-        var result = gen.Compile(lowered);
-
-        LambdaExpression linqLambda;
-        if (result.Parameters.Count > 0) {
-            linqLambda = Expr.Lambda(result.Expression, result.Parameters);
-        }
-        else {
-            linqLambda = Expr.Lambda(result.Expression);
-        }
-        var linqDel = linqLambda.Compile();
-        var linqRaw = linqDel.DynamicInvoke(args);
-        long linqVal = NormalizeLongResult(linqRaw);
-
-        // VM path — same args. Illegal trees fail closed (language VM); fuzz skips those.
-        try {
-            var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(args));
-            await Assert.That(vmVal).IsEqualTo(linqVal);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("VM compile rejected", StringComparison.Ordinal)) {
-            return;
-        }
-    }
-
-    /// <summary>Normalize a CLR result value to the VM's long representation.</summary>
-    private static long NormalizeLongResult(object? raw) => raw switch {
-        long l => l,
-        int i => i,
-        bool b => b ? 1L : 0L,
-        short s => s,
-        byte by => by,
-        null => 0L,
-        _ => throw new InvalidOperationException($"Unexpected type: {raw?.GetType()}")
-    };
-
-    [Test]
-    public async Task MatchLinq_Literal() {
-        await AssertVmMatchesLinq(DomainExpression.Literal(42));
-    }
-
-    [Test]
-    public async Task MatchLinq_NegativeLiteral() {
-        await AssertVmMatchesLinq(DomainExpression.Literal(-7));
-    }
-
-    [Test]
-    public async Task MatchLinq_Add() {
-        await AssertVmMatchesLinq(DomainExpression.Add(
-            DomainExpression.Literal(1), DomainExpression.Literal(2)));
-    }
-
-    [Test]
-    public async Task MatchLinq_DeepArithmetic() {
-        await AssertVmMatchesLinq(DomainExpression.Add(
-            DomainExpression.Multiply(
-                DomainExpression.Add(DomainExpression.Literal(2), DomainExpression.Literal(3)),
-                DomainExpression.Literal(4)),
-            DomainExpression.Literal(10)));
-    }
-
-    [Test]
-    public async Task MatchLinq_Comparisons() {
-        await AssertVmMatchesLinq(DomainExpression.GreaterThan(
-            DomainExpression.Literal(5), DomainExpression.Literal(3)));
-        await AssertVmMatchesLinq(DomainExpression.LessThan(
-            DomainExpression.Literal(3), DomainExpression.Literal(5)));
-        await AssertVmMatchesLinq(DomainExpression.Equal(
-            DomainExpression.Literal(42), DomainExpression.Literal(42)));
-        await AssertVmMatchesLinq(DomainExpression.NotEqual(
-            DomainExpression.Literal(42), DomainExpression.Literal(0)));
-    }
-
-    [Test]
-    public async Task MatchLinq_AndOr() {
-        await AssertVmMatchesLinq(DomainExpression.And(
-            DomainExpression.Equal(DomainExpression.Literal(1), DomainExpression.Literal(1)),
-            DomainExpression.Equal(DomainExpression.Literal(2), DomainExpression.Literal(2))));
-        await AssertVmMatchesLinq(DomainExpression.Or(
-            DomainExpression.Equal(DomainExpression.Literal(1), DomainExpression.Literal(0)),
-            DomainExpression.Equal(DomainExpression.Literal(2), DomainExpression.Literal(2))));
-    }
-
-    [Test]
-    public async Task MatchLinq_Not() {
-        await AssertVmMatchesLinq(DomainExpression.Not(
-            DomainExpression.Equal(DomainExpression.Literal(1), DomainExpression.Literal(0))));
-    }
-
-    [Test]
-    public async Task MatchLinq_StringEquality() {
-        // String equality via VM: verify it works (cross-reference not needed)
+    public async Task StringEquality_OnEntityProperty_ReturnsOneOrZero() {
         var e = new Parameter("entity", TypeReference.To<PersonRecord>());
         var body = new Invoke(new Lambda([e],
             new Equal(new Member(e, "Name"), new Constant("Alice"))));
@@ -419,17 +216,13 @@ public class VmCorrectnessTests {
     }
 
     [Test]
-    public async Task MatchLinq_CompositeGuard() {
+    public async Task CompositeGuard_AgeInRange_ReturnsOneOrZero() {
         var e = new Parameter("entity", TypeReference.To<PersonRecord>());
         var body = new Invoke(new Lambda([e],
             new SN.And(
                 new GreaterThanOrEqual(new Member(e, "Age"), new Constant(18L)),
                 new LessThan(new Member(e, "Age"), new Constant(21L)))));
-        await AssertVmMatchesLinqMultiCase(body);
-    }
 
-    private static async Task AssertVmMatchesLinqMultiCase(Node body) {
-        // VM path
         var vmProg = Compile(body);
         using var exec20 = Interpreter.Execute(vmProg, s => {
             s.MaxLoopIterations = 100_000_000;
@@ -445,115 +238,6 @@ public class VmCorrectnessTests {
 
         await Assert.That(vm20Result).IsEqualTo(1L);
         await Assert.That(vm17Result).IsEqualTo(0L);
-    }
-
-    [Test]
-    public async Task MatchLinq_RandomArithmetic() {
-        var rng = new Random(42);
-        for (int i = 0; i < 20; i++) {
-            var expr = RandomArithmeticExpr(rng, depth: 0);
-            await AssertVmMatchesLinq(expr);
-        }
-    }
-
-    private static DomainExpression RandomArithmeticExpr(Random rng, int depth) {
-        if (depth >= 4)
-            return DomainExpression.Literal(rng.Next(-100, 101));
-        return (rng.Next(0, 7)) switch {
-            0 => DomainExpression.Literal(rng.Next(-1000, 1001)),
-            1 => DomainExpression.Literal((long)rng.Next(-1000, 1001)),
-            2 => DomainExpression.Add(RandomArithmeticExpr(rng, depth + 1), RandomArithmeticExpr(rng, depth + 1)),
-            3 => DomainExpression.Subtract(RandomArithmeticExpr(rng, depth + 1), RandomArithmeticExpr(rng, depth + 1)),
-            4 => DomainExpression.Multiply(RandomArithmeticExpr(rng, depth + 1), RandomArithmeticExpr(rng, depth + 1)),
-            5 => DomainExpression.Divide(RandomArithmeticExpr(rng, depth + 1), DomainExpression.Literal(rng.Next(1, 101))),
-            6 => DomainExpression.Equal(RandomArithmeticExpr(rng, depth + 1), RandomArithmeticExpr(rng, depth + 1)),
-            _ => DomainExpression.Literal(rng.Next(-100, 101)),
-        };
-    }
-
-    // ── D. Cross-engine MatchLinq tests (parameterized) ────────────
-
-    [Test]
-    public async Task MatchLinq_PropertyAccess_Age() {
-        // entity.Age with PersonRecord("Alice", 25) → 25
-        var subject = new Parameter("entity", TypeReference.To<PersonRecord>());
-        var lowered = LowerPass.Lower(DomainExpression.Property("Age"), subject);
-        var analysis = LinqAnalyze(lowered);
-        var gen = new LinqExpressionGenerator(analysis);
-        var compiled = gen.CompileAsLambda(lowered, subject);
-        var linqDel = compiled.Compile();
-        var linqRaw = linqDel.DynamicInvoke(new PersonRecord("Alice", 25));
-        var linqVal = (long)(int)linqRaw!;
-
-        var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(new PersonRecord("Alice", 25)));
-        await Assert.That(vmVal).IsEqualTo(linqVal);
-    }
-
-    [Test]
-    public async Task MatchLinq_MethodCall_StringLength() {
-        var node = new Member(new Constant("hello"), "Length");
-        var analysis = LinqAnalyze(node);
-
-        var gen = new LinqExpressionGenerator(analysis);
-        var result = gen.Compile(node);
-        var linqLambda = Expr.Lambda(result.Expression);
-        var linqDel = linqLambda.Compile();
-        var linqRaw = linqDel.DynamicInvoke();
-        var linqVal = (long)(int)linqRaw!;
-
-        var (_, vmVal) = ExecVm(node);
-        await Assert.That(vmVal).IsEqualTo(linqVal);
-    }
-
-    [Test]
-    public async Task MatchLinq_Coalesce_NonNull() {
-        // "hello" ?? "world" → "hello"
-        var node = new Coalesce(new Constant("hello"), new Constant("world"));
-        var analysis = LinqAnalyze(node);
-
-        var gen = new LinqExpressionGenerator(analysis);
-        var result = gen.Compile(node);
-        var linqLambda = Expr.Lambda(result.Expression);
-        var linqDel = linqLambda.Compile();
-        var linqObj = linqDel.DynamicInvoke();
-        // The LINQ path returns the string "hello"; VM path returns the heap handle.
-        // We just verify both engines produce the same result kind (not raw value).
-        var vmProg = Compile(node);
-        using var exec = Interpreter.Execute(vmProg);
-        // Both should return something non-zero (heap handle for string)
-        await Assert.That(exec.RawValue).IsNotEqualTo(0L);
-    }
-
-    [Test]
-    public async Task MatchLinq_PropertyAccess_NameEq() {
-        // entity.Name == "Alice" with PersonRecord("Alice", 25) → 1L
-        var subject = new Parameter("entity", TypeReference.To<PersonRecord>());
-        var lowered = LowerPass.Lower(
-            DomainExpression.Equal(
-                DomainExpression.Property("Name"),
-                DomainExpression.Literal("Alice")),
-            subject);
-        var analysis = LinqAnalyze(lowered);
-        var gen = new LinqExpressionGenerator(analysis);
-        var compiled = gen.CompileAsLambda(lowered, subject);
-        var linqDel = compiled.Compile();
-        var linqRaw = linqDel.DynamicInvoke(new PersonRecord("Alice", 25));
-        var linqVal = NormalizeLongResult(linqRaw);
-
-        var (_, vmVal) = ExecVm(lowered, s => s.SetArgs(new PersonRecord("Alice", 25)));
-        await Assert.That(vmVal).IsEqualTo(linqVal);
-    }
-
-    [Test]
-    public async Task MatchLinq_Lambda_NoCapture() {
-        var lambda = new Lambda([], new Constant(42));
-        var invoke = new Invoke(lambda);
-        var analysis = LinqAnalyze(invoke);
-        var gen = new LinqExpressionGenerator(analysis);
-        var result = gen.Compile(invoke);
-        var linqVal = NormalizeLongResult(Expr.Lambda(result.Expression).Compile().DynamicInvoke());
-        var (_, vmVal) = ExecVm(invoke);
-        await Assert.That(vmVal).IsEqualTo(linqVal);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -739,12 +423,9 @@ public class VmCorrectnessTests {
 
     [Test]
     public async Task Fuzz_CallExternal_MultipleRefParams() {
-        // Multiple string parameters — each must be dereferenced independently.
+        // Two string operands — each must be dereferenced independently.
         var a = new Constant("hello");
         var b = new Constant("world");
-        // String.Concat via LINQ Expression doesn't map to a µop directly,
-        // so test via the syntax AST Equal (which does compare strings).
-        // Instead, test that calling string.Equals with two string params works.
         var body = new Equal(a, b);
         var (_, r) = ExecVm(body);
         await Assert.That(r).IsEqualTo(0L);
@@ -909,37 +590,6 @@ public class VmCorrectnessTests {
              outer], [outer]);
         var (_, r) = ExecVm(body);
         await Assert.That(r).IsEqualTo(3L);
-    }
-
-    // ── Random property access comparison ────────────────────────
-
-    [Test]
-    public async Task Fuzz_RandomPropertyAccess_MatchLinq() {
-        // Tests cross-path consistency: VM and LINQ must produce the same
-        // result for property access expressions with entity parameters.
-        // The CompileAsLambda parameter must be the SAME node that was part
-        // of the original AST and analysis — creating a new Parameter("entity")
-        // will fail because it wasn't registered in the compilation context.
-        var entityParam = new Parameter("entity", TypeReference.To<PersonRecord>());
-        var pass = new DomainExpressionLoweringPass();
-        var lowered = pass.Lower(DomainExpression.Property("Age"), entityParam);
-        var analysis = LinqAnalyze(lowered);
-
-        // LINQ path: use the same entityParam that was lowered
-        var gen = new LinqExpressionGenerator(analysis);
-        var compiled = gen.CompileAsLambda(lowered, entityParam);
-        var linqDel = compiled.Compile();
-        var linqResult = linqDel.DynamicInvoke(new PersonRecord("Alice", 25));
-        var linqVal = (long)(int)linqResult!;
-
-        // VM path
-        var vmProg = Compile(lowered);
-        var state = new VmState(vmProg);
-        state.SetArgs(new PersonRecord("Alice", 25));
-        Interpreter.Execute(state);
-        var vmVal = state.Stack.Pop();
-
-        await Assert.That(vmVal).IsEqualTo(linqVal);
     }
 
     // ── All µop types exercised ──────────────────────────────────

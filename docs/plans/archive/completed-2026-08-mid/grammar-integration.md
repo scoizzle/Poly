@@ -88,7 +88,7 @@ This is **not** a redesign of domain semantics, evolution, or analysis. Output r
 
 | Asset | Location / role |
 |-------|-----------------|
-| **Harness** | [`Poly.Tests/Integration/C99ParserInterpreterTests.cs`](../../../../Poly.Tests/Integration/C99ParserInterpreterTests.cs) (~1k LOC, ~20 end-to-end cases) |
+| **Harness** | `Poly.Tests/Integration/C99ParserInterpreterTests.cs` (~1k LOC, ~20 end-to-end cases) — deleted 2026-10-22 with the LINQ oracle ([IS2c](../../interpretation-simplification/tasks/IS2c.md)) |
 | **Lexer already Grammar** | `C99TokenReader : StringTokenReader<C99TokenKind>` — token media path is already real |
 | **Parser still hand RD** | `C99Parser` — recursive descent → Poly AST → LINQ → execute |
 | **Stress shape** | Arithmetic / comparison / logical / ternary; if/else, while, for; structs, member access, assignments — closer to **DSL expression + block** load than JSON |

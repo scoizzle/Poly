@@ -88,7 +88,7 @@ Two decisions the card does not settle, both recorded rather than guessed:
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
-| 2026-10-22 | agent | Copilot/VS Code | pending | **SHIP.** All eleven classes fixed; `AstParity.KnownDivergences` is **empty** and the 128-program differential agrees with the VM on every row (135 tests, 0 pinned). Full suite 4,502 passed / 0 failed / 0 skipped; `Poly.Benchmarks` build 0 warnings. `LinqExpressionGenerator` untouched — IS2c may now delete it on a differential that no longer has blind spots. | See the per-class table below. Two silent-wrong-value classes (`1.5 + 3 * 7.0` → `22.5` vs `23`, `-(10 + 5)` → `-15` vs `-5`) are gone: constants print round-trip literals, and a prefix operator parenthesises a compound operand. |
+| 2026-10-22 | agent | Copilot/VS Code | `dea4a4ad` | **SHIP.** All eleven classes fixed; `AstParity.KnownDivergences` is **empty** and the 128-program differential agrees with the VM on every row (135 tests, 0 pinned). Full suite 4,502 passed / 0 failed / 0 skipped; `Poly.Benchmarks` build 0 warnings. `LinqExpressionGenerator` untouched — IS2c may now delete it on a differential that no longer has blind spots. | See the per-class table below. Two silent-wrong-value classes (`1.5 + 3 * 7.0` → `22.5` vs `23`, `-(10 + 5)` → `-15` vs `-5`) are gone: constants print round-trip literals, and a prefix operator parenthesises a compound operand. |
 
 ### Red first (2026-10-22)
 

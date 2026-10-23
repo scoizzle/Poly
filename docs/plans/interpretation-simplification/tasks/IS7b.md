@@ -1,6 +1,6 @@
 # TASK IS7b - typed storage for variables (register and frame)
 
-Status: planned. Branch `slice/IS7b`, stacked on `slice/IS7a`. Lane C (`vm`). Depends on IS7a.
+Status: **merged** `11e5b647` (#291), together with IS7a. Branch `slice/IS7b` was stacked on `slice/IS7a`. Lane C (`vm`). Depends on IS7a.
 Plan: [IS-README](../IS-README.md). Analysis: [`floating-point-representation.md`](../../../analysis/floating-point-representation.md).
 Lands with [IS7a](IS7a.md) - the pair is measured as one change.
 

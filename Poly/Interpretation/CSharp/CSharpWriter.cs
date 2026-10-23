@@ -1388,6 +1388,16 @@ public sealed class CSharpWriter {
     }
 
     /// <summary>
+    /// <c>long.MinValue</c> prints in its qualified form. The digits-plus-suffix spelling is a
+    /// negated <em>positive</em> literal, and it does not re-read: <c>9223372036854775808</c> is
+    /// outside a <c>long</c>, so the reader overflows on the text the writer just produced.
+    /// </summary>
+    private static string LongLiteral(long value) =>
+        value == long.MinValue
+            ? "long.MinValue"
+            : value.ToString(CultureInfo.InvariantCulture) + "L";
+
+    /// <summary>
     /// A constant's C# literal, or null when the value has no faithful one — the writer refuses
     /// rather than printing <c>ToString()</c>, which is source only by accident.
     /// </summary>
@@ -1395,7 +1405,7 @@ public sealed class CSharpWriter {
         float f => FloatLiteral(f),
         double d => DoubleLiteral(d),
         decimal m => m.ToString(CultureInfo.InvariantCulture) + "m",
-        long l => l.ToString(CultureInfo.InvariantCulture) + "L",
+        long l => LongLiteral(l),
         ulong ul => ul.ToString(CultureInfo.InvariantCulture) + "UL",
         uint ui => ui.ToString(CultureInfo.InvariantCulture) + "u",
         int or short or sbyte or byte or ushort => Convert.ToString(value, CultureInfo.InvariantCulture),

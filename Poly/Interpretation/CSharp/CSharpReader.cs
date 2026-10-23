@@ -881,7 +881,7 @@ public static class CSharpReader {
             var tail = tails[index];
             switch (tail.PatternName) {
                 case "member":
-                    return FoldPostfixTails(new Member(acc, Capture(tail, "name")), tails, index + 1);
+                    return FoldPostfixTails(QualifiedConstant(acc, Capture(tail, "name")), tails, index + 1);
                 case "invoke":
                     return FoldPostfixTails(
                         new Invoke(ChainNameof(acc), [.. FoldArgList(tail.Children[0])]), tails, index + 1);
@@ -907,6 +907,30 @@ public static class CSharpReader {
 
         private static Node ChainNameof(Node acc) =>
             acc is Variable { Name: "nameof" } ? new TypeReference("nameof") : acc;
+
+        /// <summary>
+        /// A value with no C# literal prints in a qualified form — <c>long.MinValue</c>,
+        /// <c>double.NaN</c> — so exactly those spellings fold back to the constant they name.
+        /// <c>NodeFacts</c> claims <c>Writer</c> for <see cref="Constant"/> on the printed text
+        /// re-reading as the same kind, and the digits-plus-suffix spelling of
+        /// <c>long.MinValue</c> does not re-read at all. Every other <c>type.Member</c> stays a
+        /// member access.
+        /// </summary>
+        private static Node QualifiedConstant(Node receiver, string member) {
+            if (receiver is not PrimitiveTypeReference type)
+                return new Member(receiver, member);
+            var value = (type.PrimitiveId, member) switch {
+                (PrimitiveType.Int64, "MinValue") => (object)long.MinValue,
+                (PrimitiveType.Float64, "NaN") => double.NaN,
+                (PrimitiveType.Float64, "PositiveInfinity") => double.PositiveInfinity,
+                (PrimitiveType.Float64, "NegativeInfinity") => double.NegativeInfinity,
+                (PrimitiveType.Float32, "NaN") => float.NaN,
+                (PrimitiveType.Float32, "PositiveInfinity") => float.PositiveInfinity,
+                (PrimitiveType.Float32, "NegativeInfinity") => float.NegativeInfinity,
+                _ => null,
+            };
+            return value is null ? new Member(receiver, member) : new Constant(value);
+        }
 
         /// <summary>Folds <c>recv?.member</c> onto the single conditional-chain fold in
         /// <see cref="FoldConditionalChain"/>.</summary>

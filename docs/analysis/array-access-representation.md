@@ -1,6 +1,6 @@
 # Array access: cache the array in a typed local, don't window its elements
 
-**Status:** research + proposal. No production change accompanies this note. Measurements taken 2026-10-23 on `plan/interpretation-simplification`.
+**Status:** implemented as [IS7d](../plans/interpretation-simplification/tasks/IS7d.md) (`slice/IS7d`, merged `6db19380`). Numeric agreement is 92 across every nqueens run. Measurements taken 2026-10-23 on `plan/interpretation-simplification`.
 **Scope:** `Poly/Interpretation/Vm/Abi/` — `IndexAccess` emission, `SlotLocation`, the variable/storage model.
 **Input:** [#262](https://github.com/scoizzle/Poly/pull/262) (frame windows) and the measurement in [`docs/perf-comparison/README.md`](../perf-comparison/README.md) §Why nqueens is the weakest row.
 
@@ -103,6 +103,35 @@ The window's `ReadAt` emits an **explicit** `BoundsCheck` *and then* an `ArrayAc
 The explicit check cannot simply be deleted: `_fp + Base + i` for an out-of-range `i` can land in a *neighbouring* window's slots, which the CLR check would happily allow. It becomes redundant only if a window ends exactly where `_slots` does - true for the last window alone. So the options are: keep both checks (predictable, cheap), or reach the elements by ref with no CLR check and keep the explicit one - one check, at the cost of unsafe code.
 
 Either way the per-access ceiling stays around a nanosecond, because the remaining VM ceremony, not the check count, is the bulk.
+
+## Outcome (2026-10-23)
+
+IS7d landed the cache. Measured on the integrated branch, `--job medium`:
+
+| Benchmark | before | after |
+|---|---|---|
+| **Sieve** (the array workload in `ProgramBenchmarks`) | 105.63 us | **61.54 us (-42 %)** |
+| Mandelbrot | 71.97 | 69.72 (flat; array-free) |
+| Collatz | 156.75 | 138.81 |
+| NQueens (bitmask, no arrays) | 173.06 | 169.97 (noise) |
+
+And the array nqueens from `docs/perf-comparison`, which is the workload that started this:
+
+| | min | median |
+|---|---|---|
+| before | 57 | 63 |
+| with IS7d's cache | **39-42** | **40-42** |
+| with #262's window (measured earlier) | 41 | 42 |
+
+**Equivalent to the window on this workload, as the corrected comparison predicted, and it also removed a deref from every element access in the Sieve program.** `grep` for `UnsafeGet` in both emitted trees: 0. Four `_arrN` locals for nqueens' four buffers, four `NewArrayBounds`, four `Allocate` - one allocation each.
+
+The null-at-scope-exit is in, keyed by (slot, element type), with the sibling-reuse test constructing two blocks that share one `_arr0` and asserting the store sequence `array, null, array, null`.
+
+**Residual, recorded not fixed:** a `break`/`continue`/`return` out of a block skips the trailing clear, exactly as it skips the pre-existing `_slots` snapshot stores. No stale buffer is reachable because the promotion predicate requires the definition to precede every use - the clear is what keeps that true if the predicate is ever relaxed, and what becomes necessary if the heap gains recycling.
+
+## Status of the window (#262)
+
+With the cache landed, the window's remaining justifications are narrow: a buffer allocated *inside a hot loop* (the cache does not avoid the 20 ns allocation) and literal-indexed access (a window folds to a local access). Neither has a measured workload in this repository. #262 should be re-measured against the cache before it merges; if no case appears, it retires with evidence.
 
 ## Recommendation
 

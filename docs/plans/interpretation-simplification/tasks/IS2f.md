@@ -129,3 +129,20 @@ Nothing blocking. Two records he may want to rule on:
 | 2026-10-23 | Copilot | 2026-10-23 | — | GREEN | Same filter → **19 passed, 0 failed**. Oracle slice `DslCompilerSqliteOracleTests` → 20 passed. Golden slice `EmitGoldenTests` → 21 passed. Full suite → **4,493 passed, 0 failed** (IS2d baseline 4,474 + 19 new). Build → 0 warnings. |
 | 2026-10-23 | Copilot | 2026-10-23 | — | Golden + oracle diffs, per line | Golden `crm-dslcompiler/Program.cs.golden:1352`: `[Range(0.0, 100000000.0)]` → `[Range(0, 100000000)]` — `Product.ListPrice: Number range(0, 100000000)`; `0` and `100000000` are integral and fit `int`, so the exact constructor applies. Oracle `DslCompilerSqliteOracleTests`: `:285` `[Range(0.0, 1000.0)]` → `[Range(0, 1000)]` (action DTO inherits `Stock: Number range(0, 1000)`); `:448` `[Range(1.0, 50.0)]` → `[Range(1, 50)]` (`Qty: Number range(1, 50)`); `:426` the negative guard `DoesNotContain("[Range(0.0, 10.0)]")` → `DoesNotContain("[Range(0, 10)]")` — otherwise the guard would pass only because the shape changed, not because the defect is absent; `:396` `DoesNotContain("[Range(0.0, 0.0)]")` → `DoesNotContain("[Range(0, 0)]")`, same reason (the collapsed-open-max bug would now print the integral form). `:395` `Contains("[Range(0.0, 9.223372036854776E+18)]")` is unchanged and deliberately so — a `long`'s open max is beyond `int`. |
 | 2026-10-23 | Copilot | 2026-10-23 | — | `long.MinValue` | Not handled: `CSharpWriter` prints `-9223372036854775808L`, which is a negated positive literal and does not compile. Recorded by `LongMinValue_HasNoPrintableCSharpLiteral_KnownLimit`; no production change. |
+
+## Correction (2026-10-23) - the `long.MinValue` limit was not real
+
+This card recorded that `long.MinValue` has no printable C# literal, and pinned
+`LongMinValue_HasNoPrintableCSharpLiteral_KnownLimit` on that basis. It was wrong. C# 6.4.5.3
+special-cases the negated-literal position: `-9223372036854775808` *is* a legal `long` constant,
+so `_ = -9223372036854775808L;` compiles (verified by compiling it, and by a control -
+`long v = 9223372036854775808L;` without the minus is CS0266, which is what makes the probe
+trustworthy).
+
+[IS7g](IS7g.md) closed the real defect, which was elsewhere: the **reader** overflowed.
+`FoldNumber`'s `long.Parse("9223372036854775808")` threw, so `Read(Write(x))` failed even though
+the printed text compiled. IS7g also found that `double.NaN` had the same write-then-unreadable
+gap, and folded both through one `QualifiedConstant` path.
+
+The lesson is the same one this program keeps relearning: the claim was recorded from reading the
+literal rather than compiling it.

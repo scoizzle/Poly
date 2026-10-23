@@ -178,6 +178,26 @@ public class ArrayLocalCacheTests {
         await Assert.That(Run(program)).IsEqualTo(3L);
     }
 
+    /// <summary>A use before the definition keeps the heap path. The cache local is assigned at
+    /// the definition, so a reference that runs earlier would read null; the predicate therefore
+    /// requires the definition to precede every use. <para>Ported from the frame-window design
+    /// (PR #262) when it was closed, because that was the one case its tests covered and this
+    /// suite did not. The executor rejects the program, which is why the assertion is structural
+    /// and the program is never run.</para></summary>
+    [Test, Timeout(10_000)]
+    public async Task UseBeforeDefinition_KeepsTheHeapPath(CancellationToken ct) {
+        var cols = new Variable("cols");
+        var program = new Block([
+            new IndexAccess(cols, new Constant(0L)),
+            new Assignment(cols, new NewArray(TypeReference.To<long>(), new Constant(3L))),
+        ], [cols]);
+
+        var scan = Scan(program);
+
+        await Assert.That(scan.ArrayCacheLocals).IsEmpty()
+            .Because("a reference precedes the definition, so nothing may be cached for it");
+    }
+
     /// <summary>A capture keeps the heap path: the closure body is a separate delegate
     /// and cannot see the emitter's CLR local.</summary>
     [Test, Timeout(10_000)]

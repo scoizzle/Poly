@@ -83,11 +83,39 @@ The existing ladder is the oracle: build `docs/perf-comparison/nqueens_polyvm.cs
 
 Correctness gate: `AstParityTests` (145 rows) plus a `VmTree` structural assertion that a promoted variable's element access contains no `UnsafeGet` call and no `castclass`.
 
+## Can they stack? Not on one variable - but yes in a program
+
+They are two **storage representations for the same elements**, so a variable takes one or the other. Composing them on one variable means maintaining two copies: the window writes elements to `_slots`, so the heap array goes stale, and any observer of the handle (identity comparison, a pass-through argument, `.Length`) would see a buffer that no longer matches. Keeping that consistent needs a write barrier on every element access - strictly worse than either.
+
+They *do* stack where it matters, as **two outcomes of one promotion decision over disjoint variable sets**:
+
+| Variable | Outcome | Why |
+|---|---|---|
+| constant length, literal-indexed, allocated inside a hot loop, non-escaping | **window** | the access folds to a local (50k reads: 14 us vs 68 us) *and* the 20 ns allocation disappears |
+| everything else that passes dominance - any length, variable index, long-lived | **cache** | one bounds check per access, identity preserved, no length cap |
+
+A program gets both; a variable gets one. That is stacking in the sense that matters, and it keeps a single predicate deciding, which is what stops the two paths from disagreeing.
+
+### One cheap improvement the comparison exposed
+
+The window's `ReadAt` emits an **explicit** `BoundsCheck` *and then* an `ArrayAccess` on `_slots`, which carries the CLR's own bounds check - **two checks per access**. The cache path, `arr[i]`, pays one. That is the whole of the window's per-access disadvantage, and it explains why the two land within 6 % of each other.
+
+The explicit check cannot simply be deleted: `_fp + Base + i` for an out-of-range `i` can land in a *neighbouring* window's slots, which the CLR check would happily allow. It becomes redundant only if a window ends exactly where `_slots` does - true for the last window alone. So the options are: keep both checks (predictable, cheap), or reach the elements by ref with no CLR check and keep the explicit one - one check, at the cost of unsafe code.
+
+Either way the per-access ceiling stays around a nanosecond, because the remaining VM ceremony, not the check count, is the bulk.
+
 ## Recommendation
 
-**Implement the cache first.** It is the smaller predicate on a sounder invariant (identity preserved), it subsumes the window's benefit for the nqueens case, and it leaves the window available for the case the cache cannot help — a buffer allocated inside a hot loop, where avoiding allocation is the point.
+**Implement the cache; do not implement both.** Accept the allocation.
 
-If both land, the promotion is one predicate with two outcomes: a constant small length in a hot allocation site promotes to slots; everything else that passes dominance caches the array object.
+- Per access the two are equal (~1.0 ns for a variable index), so "it removes the deref" no longer distinguishes the window - the cache removes it too.
+- The allocation the window uniquely avoids is 20 ns on 4 allocations in nqueens: 0.2 % of the run. No measured Poly workload allocates a buffer hot.
+- The cache needs only dominance and preserves identity by construction. The window needs an escape analysis proving a buffer cannot leak as a slot index (#262's own known gaps: a name-uniqueness guard, debugger invisibility) and is capped at length 16.
+- Two mechanisms racing on one variable is the failure mode this program exists to remove.
+
+**The exception worth keeping open:** a buffer allocated inside a hot loop *and* indexed by literals. There the window is free per access and removes a 20 ns allocation, so it wins outright - but it needs a measured workload first, and #262 should be re-measured after a cache lands.
+
+If both land, the promotion must remain **one predicate with one outcome per variable** (see above), not two mechanisms racing.
 
 ## Note on naming
 

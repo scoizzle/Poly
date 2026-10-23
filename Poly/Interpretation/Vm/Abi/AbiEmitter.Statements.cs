@@ -298,6 +298,14 @@ public static partial class AbiEmitter {
         if (node is IndexAccess access)
             return OnlyElementAccesses(access.Value, variable, declaring, receiver: true)
                 && access.Arguments.All(argument => OnlyElementAccesses(argument, variable, declaring));
+        // A StridedSetBits receiver writes elements of the same buffer, so it is the same kind of
+        // use: the array is never handed on, only indexed. Without this the sieve's mark loop
+        // reached the array as an argument and paid two heap derefs per iteration.
+        if (node is StridedSetBits strided)
+            return OnlyElementAccesses(strided.Array, variable, declaring, receiver: true)
+                && OnlyElementAccesses(strided.StartValue, variable, declaring)
+                && OnlyElementAccesses(strided.Step, variable, declaring)
+                && OnlyElementAccesses(strided.Limit, variable, declaring);
         return node.Children.All(child => OnlyElementAccesses(child, variable, declaring));
     }
 

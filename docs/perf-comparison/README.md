@@ -101,7 +101,7 @@ So IS7a/IS7b/IS7c cost ~5 %, and later slices recovered about half of it.
 
 **The mechanism, read off the emitted body** ([`sieve-expression-body.txt`](sieve-expression-body.txt)): the only structural difference between the pre-IS7 tree and the current one is that the shift amount `6` is now an **Int32 ring slot** (`_i4`) rather than an Int64 slot behind a `Convert`. Both materialise the constant into a local; the new form drops a conversion but adds a second local to the frame. There is no algorithmic change.
 
-**The larger cost in this program is older and unrelated:** the strided mark loop re-dereferences the heap **twice per iteration**, because `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask` and each `a[i]` re-derefs and re-casts. `StridedSetBits` receives the array as an *argument*, so the IS7d cache correctly declines to promote it - the fix is to give `StridedSetBits` a promoted receiver, not to weaken the predicate.
+**The larger cost in this program was older and unrelated, and is now fixed (IS7h).** The strided mark loop used to re-dereference the heap **twice per iteration**, because `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask` and each `a[i]` re-dereferenced and re-cast - `StridedSetBits` received the array as an *argument*, so the array cache declined to promote it. Treating the intrinsic's array operand as a receiver (it is never handed on, only indexed) promotes it: the loop is now `_arr0[i] | mask` with zero derefs, and `sieve_polyvm.cs` goes **3,379 -> 2,995 us min** (-11 %), which also erases the regression recorded above.
 
 ## What the table does and does not support
 

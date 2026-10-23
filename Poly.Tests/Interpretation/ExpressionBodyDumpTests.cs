@@ -1,9 +1,8 @@
-using System.Linq.Expressions;
-using System.Text;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -15,28 +14,30 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class ExpressionBodyDumpTests {
     [Test]
-    public async Task Sieve_Body_Renders_AndShowsTheStridedDeref() {
+    public async Task Sieve_Body_Renders_AndStridedLoopUsesTheCache() {
         var body = SieveStrided();
         var built = AbiEmitter.Build(body, Interpreter.Analyze(body), CompilationMode.NoDebug);
-        var sb = new StringBuilder();
-        Dump(built.Expression.Body, sb, 0);
-        var text = sb.ToString();
+        var text = ExpressionText.Render(built.Expression.Body);
         File.WriteAllText("/tmp/expr-sieve-strided.txt", text);
 
         await Assert.That(text).Contains("_stride_loop")
             .Because("the strided mark loop is emitted as a labelled loop");
 
-        // `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask`, and each `a[i]` re-derefs the
-        // heap: the buffer reaches StridedSetBits as an argument, so the array cache declines it.
+        // `bits[j >> 6] |= mask` lowers to `a[i] = a[i] | mask` over the promoted array local, so
+        // the loop neither reads nor writes through the heap. It used to re-deref twice per
+        // iteration, because the buffer reached StridedSetBits as an argument and the cache
+        // declined it (IS7h gave the intrinsic a promoted receiver).
         var stride = text[text.IndexOf("_stride_loop", StringComparison.Ordinal)..];
         stride = stride[..stride.IndexOf("_stride_done", StringComparison.Ordinal)];
         // Count call nodes, not text: the renderer also prints a node's text on its parent's line.
         var derefs = stride.Split("Call : Object  _heap.UnsafeGet").Length - 1;
-        await Assert.That(derefs).IsEqualTo(2)
-            .Because($"the strided store re-derefs the heap once for the read and once for the write; found {derefs}");
+        await Assert.That(derefs).IsEqualTo(0)
+            .Because($"the strided store must reach the promoted array local; found {derefs} derefs");
 
-        await Assert.That(text).Contains("_i4:Int32")
-            .Because("an int constant is an Int32 ring slot (IS7c)");
+        // Slot numbering shifts as the emitter changes, so name the fact, not the index.
+        var locals = text[..text.IndexOf('\n')];
+        await Assert.That(locals).Contains(":Int32")
+            .Because("an int constant is carried in an Int32 ring slot (IS7c)");
     }
 
     /// <summary>Mirrors docs/perf-comparison/sieve_polyvm.cs.</summary>
@@ -75,78 +76,5 @@ public class ExpressionBodyDumpTests {
              new Assignment(cnt, new Subtract(cnt, new Constant(2L))),
              cnt],
             [bits, i, cnt, w]);
-    }
-
-    static void Dump(Expression? e, StringBuilder sb, int depth) {
-        if (e is null) return;
-        var pad = new string(' ', depth * 2);
-        switch (e) {
-            case LambdaExpression l:
-                sb.AppendLine($"{pad}lambda");
-                Dump(l.Body, sb, depth + 1);
-                return;
-            case BlockExpression b:
-                sb.AppendLine($"{pad}block : {Fmt(b.Type)}  locals=[{string.Join(", ", b.Variables.Select(v => $"{v.Name}:{Fmt(v.Type)}"))}]");
-                foreach (var x in b.Expressions) Dump(x, sb, depth + 1);
-                return;
-            case ConditionalExpression c:
-                sb.AppendLine($"{pad}if ({Fmt(c.Test.Type)})");
-                Dump(c.Test, sb, depth + 1);
-                sb.AppendLine($"{pad}then");
-                Dump(c.IfTrue, sb, depth + 1);
-                sb.AppendLine($"{pad}else");
-                Dump(c.IfFalse, sb, depth + 1);
-                return;
-            case GotoExpression g:
-                sb.AppendLine($"{pad}{g.Kind} -> {g.Target?.Name}");
-                return;
-            case LabelExpression la:
-                sb.AppendLine($"{pad}label {la.Target.Name}");
-                Dump(la.DefaultValue, sb, depth + 1);
-                return;
-            case LoopExpression lo:
-                sb.AppendLine($"{pad}loop {lo.BreakLabel?.Name}/{lo.ContinueLabel?.Name}");
-                Dump(lo.Body, sb, depth + 1);
-                return;
-            case TryExpression t:
-                sb.AppendLine($"{pad}try");
-                Dump(t.Body, sb, depth + 1);
-                foreach (var h in t.Handlers) { sb.AppendLine($"{pad}catch"); Dump(h.Body, sb, depth + 1); }
-                if (t.Finally is not null) { sb.AppendLine($"{pad}finally"); Dump(t.Finally, sb, depth + 1); }
-                return;
-            case BinaryExpression bin when bin.NodeType == ExpressionType.Assign:
-                sb.AppendLine($"{pad}assign : {Fmt(bin.Type)}");
-                Dump(bin.Left, sb, depth + 1);
-                Dump(bin.Right, sb, depth + 1);
-                return;
-            default:
-                sb.AppendLine($"{pad}{e.NodeType} : {Fmt(e.Type)}  {Short(e)}");
-                switch (e) {
-                    case BinaryExpression b2: Dump(b2.Left, sb, depth + 1); Dump(b2.Right, sb, depth + 1); break;
-                    case UnaryExpression u: Dump(u.Operand, sb, depth + 1); break;
-                    case MethodCallExpression mc:
-                        Dump(mc.Object, sb, depth + 1);
-                        foreach (var a in mc.Arguments) Dump(a, sb, depth + 1);
-                        break;
-                    case InvocationExpression inv:
-                        Dump(inv.Expression, sb, depth + 1);
-                        foreach (var a in inv.Arguments) Dump(a, sb, depth + 1);
-                        break;
-                    case IndexExpression ix:
-                        Dump(ix.Object, sb, depth + 1);
-                        foreach (var a in ix.Arguments) Dump(a, sb, depth + 1);
-                        break;
-                    case NewArrayExpression na: foreach (var x in na.Expressions) Dump(x, sb, depth + 1); break;
-                    case MemberExpression me: Dump(me.Expression, sb, depth + 1); break;
-                    case TypeBinaryExpression tb: Dump(tb.Expression, sb, depth + 1); break;
-                }
-                return;
-        }
-    }
-
-    static string Fmt(Type t) => t.Name;
-    static string Short(Expression e) {
-        var s = e.ToString().Replace("\r", " ").Replace("\n", " ");
-        return s.Length > 90 ? s[..90] + "…" : s;
     }
 }

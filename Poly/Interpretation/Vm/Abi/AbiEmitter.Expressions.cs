@@ -497,13 +497,19 @@ public static partial class AbiEmitter {
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
     private static Expression EmitStridedSetBits(StridedSetBits ssb, Context ctx) {
         var ring = ctx.OpenRing();
-        int arrSlot = ring.Add(CompileNode(ssb.Array, ctx));
+        // A promoted receiver is the cached CLR local itself: the loop reads and writes it
+        // directly, so neither the read nor the write re-derefs the heap.
+        ParameterExpression? cachedArray = null;
+        bool cached = ssb.Array is Variable receiver
+            && ctx.TryArrayCache(receiver, out cachedArray)
+            && cachedArray!.Type == typeof(long[]);
+        int arrSlot = cached ? -1 : ring.Add(CompileNode(ssb.Array, ctx));
         int startSlot = ring.Add(CompileNode(ssb.StartValue, ctx));
         int stepSlot = ring.Add(CompileNode(ssb.Step, ctx));
         int limitSlot = ring.Add(CompileNode(ssb.Limit, ctx));
 
-        // ABI-level strided set — heap array path (direct cast to long[]).
-        var arrObj = RingCodec.LongArray(ctx.HeapLocal, ctx.RingVar(arrSlot));
+        // ABI-level strided set: the promoted local, or the heap array cast to long[].
+        var arrObj = cached ? cachedArray! : RingCodec.LongArray(ctx.HeapLocal, ctx.RingVar(arrSlot));
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");

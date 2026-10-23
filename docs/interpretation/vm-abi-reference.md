@@ -46,6 +46,11 @@ allocated at program entry and held in a `_typeN` local, so a `typeof` compiles 
 read. Before that, a `typeof` inside a loop allocated a fresh handle for the same `Type` on
 every iteration, and no type object was ever recycled.
 
+A promoted array's element accesses include `StridedSetBits`'s array operand: the intrinsic
+indexes the buffer and never hands it on, so it counts as a receiver for both promotion and
+the scope-exit recycle. `bits[j >> 6] |= mask` therefore compiles against the cached local, not
+through `heap.UnsafeGet`.
+
 ## Call Frame Layout
 
 The layout is defined once in `VmCall` (`Poly/Interpretation/Vm/VmCall.cs`).

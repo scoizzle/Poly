@@ -427,11 +427,18 @@ public class AstParityTests {
 
     [Test]
     public async Task VmExecutes_AndWriterRejects_IsAFailure() {
-        var row = AstParity.Compare("PopCount", new PopCount(new Constant(7L)));
-        await Assert.That(row.Vm).IsEqualTo(ParityDisposal.Executed);
-        await Assert.That(row.Printed).IsEqualTo(ParityDisposal.Rejected);
-        await Assert.That(row.PrintedOutcome).Contains(nameof(PopCount));
+        // No corpus program has this shape today — PopCount, its last example, now prints the
+        // library call and agrees — so the decision itself is pinned: one side refusing what the
+        // other runs is not agreement, and the message names both sides.
+        var row = new ParityRow(
+            "VM ran, writer refused",
+            ParityDisposal.Executed, "long:7",
+            ParityDisposal.Rejected, "writer refused: CSharpWriter rejected ParameterReference",
+            null);
         await Assert.That(row.Agrees).IsFalse();
+        await Assert.That(row.RejectedOnBothSides).IsFalse();
+        await Assert.That(row.Describe()).Contains("long:7");
+        await Assert.That(row.Describe()).Contains("writer refused");
     }
 
     [Test]
@@ -541,12 +548,14 @@ public class AstParityTests {
     public async Task MovedShapes_PrintedCSharp_AgreesWithTheVm(MovedShape shape) =>
         await AstParity.AssertAgrees(shape.Label, shape.Program, shape.Args);
 
-    /// <summary>The kinds the writer cannot print, with the disposal each side must have today.</summary>
+    /// <summary>The kinds the writer does not print as themselves, with the disposal each side must
+    /// have today: a refusal, an erasure, or — for PopCount — an expansion that executes.</summary>
     static Dictionary<Type, PrintDisposition> Samples() => new() {
         // The writer prints a comment, so both sides execute as void.
         [typeof(Comment)] = new(ParityDisposal.Executed, ParityDisposal.Executed, "void", "void", Agrees: true),
-        // The writer refuses the kind by name (IS1c carries the missing spelling).
-        [typeof(PopCount)] = new(ParityDisposal.Executed, ParityDisposal.Rejected, "long:3", "writer refused:", Agrees: false),
+        // The writer expands the kind to its only faithful spelling, the library call, so the
+        // printed side executes to the same value as the VM.
+        [typeof(PopCount)] = new(ParityDisposal.Executed, ParityDisposal.Executed, "long:3", "long:3", Agrees: true),
         // At the entry point both sides refuse it: the writer keeps the kind out of the reader's reach,
         // and the VM needs a declared array. Inside a block the writer prints it and both sides run it.
         [typeof(StridedSetBits)] = new(ParityDisposal.Rejected, ParityDisposal.Rejected,

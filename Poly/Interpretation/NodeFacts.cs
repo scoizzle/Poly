@@ -8,6 +8,7 @@ public enum Producers {
     Writer = 2,
     Reader = 4,
     Mermaid = 8,
+    WriterExpanded = 16,
 }
 
 /// <summary>
@@ -21,10 +22,12 @@ public sealed record NodeFact(string Label, Producers Producers, string? RejectR
 /// Data plus a totality test; it carries no behaviour.
 /// <para>
 /// <c>Vm</c> means the kind executes; <c>Writer</c> means the writer prints it and the printed
-/// text re-reads to the same kind; <c>Reader</c> means the reader produces it from C# text;
-/// <c>Mermaid</c> means it renders with its own label and keeps every child. <c>None</c> means no
-/// producer honours the kind, and <see cref="NodeFact.RejectReason"/> records a deliberate VM
-/// rejection and the message it must carry.
+/// text re-reads to the same kind; <c>WriterExpanded</c> means the writer prints it as an
+/// equivalent C# form that re-reads as a different, executable kind (meaning preserved, kind not);
+/// <c>Reader</c> means the reader produces it from C# text; <c>Mermaid</c> means it renders with its
+/// own label and keeps every child. <c>None</c> means no producer honours the kind, and
+/// <see cref="NodeFact.RejectReason"/> records a deliberate VM rejection and the message it must
+/// carry.
 /// </para>
 /// </summary>
 public static class NodeFacts {
@@ -84,7 +87,7 @@ public static class NodeFacts {
         [typeof(Or)] = Fact<Or>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Parameter)] = Fact<Parameter>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ParameterReference)] = Fact<ParameterReference>(Producers.None, "ParameterReference is not a VM value; bind a Parameter."),
-        [typeof(PopCount)] = Fact<PopCount>(Producers.Vm),
+        [typeof(PopCount)] = Fact<PopCount>(Producers.Vm | Producers.WriterExpanded),
         [typeof(PrimitiveTypeReference)] = Fact<PrimitiveTypeReference>(Producers.Writer | Producers.Reader, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
         [typeof(PropertyDefinitionNode)] = Fact<PropertyDefinitionNode>(Producers.Writer | Producers.Reader),
         [typeof(PropertyGetterDefinitionNode)] = Fact<PropertyGetterDefinitionNode>(Producers.Writer | Producers.Reader | Producers.Mermaid),

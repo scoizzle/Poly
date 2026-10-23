@@ -173,6 +173,17 @@ public static partial class AbiEmitter {
         ctx.IsRootBody = true;
         // Compile root BEFORE PC dispatch so SuspendNode resume labels are registered.
         var rootExpr = CompileStatement(root, ctx);
+        // Seed one heap entry per distinct typeof type before anything can read it. Guarded so a
+        // resume (which re-enters above the PC dispatch) reuses the handle it already allocated
+        // instead of leaking one per resume.
+        foreach (var (runtimeType, local) in ctx.TypeHandles) {
+            body.Add(IfThen(
+                Equal(local, Constant(0L)),
+                Assign(local, Convert(
+                    Call(ctx.HeapLocal, HeapAllocate,
+                        Convert(Constant(runtimeType, typeof(object)), typeof(object))),
+                    typeof(long)))));
+        }
         body.Add(ctx.EmitPcDispatch(Goto(ctx.ExitLabel)));
         // Nested AST calls (ProbeCreate/CreateIn host jobs) allocate frames at
         // StackPointer. SetArgs writes this+params at slots[0..] without

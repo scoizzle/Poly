@@ -17,6 +17,25 @@ public static partial class AbiEmitter {
         private readonly Dictionary<(int Index, Type Representation), ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
 
+        /// <summary>One local per distinct <c>typeof</c> type, holding that type object's heap
+        /// handle. Seeded once before the program body runs, so evaluating <c>typeof</c> is a
+        /// local read rather than an allocation per evaluation.</summary>
+        private readonly Dictionary<Type, ParameterExpression> _typeHandles = new();
+
+        /// <summary>The seeded-handle local for <paramref name="runtimeType"/>, declared on
+        /// first use. Two <c>typeof</c> sites for one type share it.</summary>
+        public ParameterExpression TypeHandleLocal(Type runtimeType) {
+            if (!_typeHandles.TryGetValue(runtimeType, out var local)) {
+                local = Variable(typeof(long), $"_type{_typeHandles.Count}");
+                _typeHandles[runtimeType] = local;
+                _locals.Add(local);
+            }
+            return local;
+        }
+
+        /// <summary>The type handles registered while compiling, in declaration order.</summary>
+        public IEnumerable<KeyValuePair<Type, ParameterExpression>> TypeHandles => _typeHandles;
+
         public Context() {
             _stateParam = Parameter(typeof(VmState), "state");
             CurrentAstNodeExpr = Property(_stateParam, nameof(VmState.CurrentAstNode));

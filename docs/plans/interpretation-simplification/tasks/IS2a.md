@@ -71,3 +71,34 @@ none.
 
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
+| 2026-10-22 | agent | Copilot/VS Code | b3ede88c | **SHIP.** `AstParity` is the differential: VM execution vs `CSharpWriter`-printed text that Roslyn parses, compiles, and runs. 128 corpus programs (one row per existing `BuildExpression` program, 16 files) + 7 harness contracts, all green; full suite 4,473 passed / 0 failed / 0 skipped; `Poly.Benchmarks` build 0 warnings. 29 corpus rows do not agree yet — each pinned in `AstParity.KnownDivergences` with its defect (below). `LinqExpressionGenerator` untouched, still running alongside. | **11 writer defect classes, none previously known:** (1) `double` constants print with `G`, so `7.0`→`7` (integer division) and `NaN`→`NaN` (CS0103); (2) unary minus of a negative constant prints `--99` (CS1059) and `-(10 + 5)` prints `-10 + 5`; (3) a constant with no C# literal prints its `ToString()`/type name — `DateTime`, `int[]`, `List<int>`; (4) a block may shadow an outer local, which C# forbids (CS0136), and a block's trailing expression prints as a bare statement (CS0201); (5) `Coalesce` prints `??` on non-nullable operands (CS0019); (6) a lambda callee prints without the brackets it needs (CS0149); (7) `TypeAs` prints `42 as string` (CS0039) although the VM's `as` yields null; (8) `New` of a nested CLR type prints `Outer+Inner` (CS1526); (9) constant `/ 0` is CS0020 while the VM throws at run time; (10) constant overflow is CS0220 while the VM wraps; (11) `PopCount` is writer-refused (IS1c) and `SuspendNode` is erased to its child, so the VM suspends where the printed side returns. |
+
+### Evidence (2026-10-22)
+
+**Corpus.** 128 programs: 114 reconstructed from the 16 test files that call `BuildExpression`
+(`ArithmeticNodeTests`, `BlockScopeTests`, `BlockTests`, `CoalesceTests`, `ConstantNodeTests`,
+`ForEachLoopTests`, `InterpreterIntegrationTests`, `InterpreterLanguageGotchaTests`,
+`LambdaInvokeTests`, `ModuloTests`, `NewNodeTests`, `NumericTypePromotionTests`, `TypeCastTests`,
+`UnaryMinusTests`, `MiddlewareInterpreterIntegrationTests`, `ArithmeticParserEvaluatorTests`), plus
+14 whose meaning depends on node identity (a local declared once and reused, a shadowing loop
+variable) rebuilt with the same instances. `ArithmeticParserEvaluatorTests`' parser is private, so
+its 28 expression texts are read with `CSharpLanguage.Read`. `Corpus_CoversEveryTestFileThatBuildsAnExpression`
+fails if a file that builds a LINQ expression loses its rows.
+
+**RED, introduced and reverted.** `ParityRow.Agrees` changed to count a rejection on either side as
+agreement (the old harness's early return). `dotnet run --project Poly.Tests/Poly.Tests.csproj --
+--treenode-filter '/*/*/AstParityTests/*'` → `failed VmRejects_AndPrintedExecutes_IsAFailure`
+(`Expected to be false but found True` at `Assert.That(row.Agrees).IsFalse()`),
+`failed VmExecutes_AndWriterRejects_IsAFailure`, `failed UnsupportedKinds_AreListedNotSkipped`;
+3 failed / 132 succeeded. Reverted → 135 succeeded.
+
+**GREEN.** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` 0 warnings;
+`dotnet run --project Poly.Tests/Poly.Tests.csproj` → 4,473 passed, 0 failed, 0 skipped (4,338
+before this slice).
+
+**Not in this slice, and why.** Fixing the 11 classes touches `Poly/Interpretation/CSharp/**`
+(writer semantics: literal spelling, precedence, block shadowing, coalesce typing, nested type
+names, unchecked arithmetic). This card's Files are two new test files, and each fix changes
+emitted output the `EmitGolden` corpus reads. The defects are recorded here and in
+`AstParity.KnownDivergences` as evidence for a follow-up card; IS2c (delete the oracle) should not
+land until they are fixed, because until then the printed C# is not a faithful second execution.

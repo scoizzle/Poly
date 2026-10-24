@@ -82,13 +82,19 @@ internal static class ValueRepresentationClassifier {
     /// same-name/arity overloads agree on their return type (for example
     /// <c>DateTime.AddMinutes(long)</c> widening to the <c>double</c> overload). The
     /// resolved member wins whenever analysis found it; this never guesses between
-    /// differing return types.</summary>
+    /// differing return types.
+    /// <para>An AST type definition is excluded: its runtime type is the VM's own storage
+    /// (a dictionary), not the API the program calls, so reflecting over it can only
+    /// invent a signature the type does not have.</para></summary>
     private static Type? InferUnresolvedClrReturn(INodeMetadataProvider? provider, Node node) {
         if (provider is null)
             return null;
         if (node is not Invoke { Delegate: Member member } invoke)
             return null;
-        var receiver = provider.GetResolvedType(member.Value)?.GetRuntimeType();
+        var receiverDefinition = provider.GetResolvedType(member.Value);
+        if (receiverDefinition is null or AstTypeDefinition)
+            return null;
+        var receiver = receiverDefinition.GetRuntimeType();
         if (receiver is null)
             return null;
         var returns = receiver

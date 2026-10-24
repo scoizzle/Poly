@@ -526,9 +526,9 @@ public static partial class AbiEmitter {
             return Block(seq);
 
         var table = TryCompileAstCallable(
-            definition, definition.Body!, parameters, ctx, instanceSlot: true)
+            definition, definition.Body!, parameters, ctx, instanceSlot: true, rejection: out var rejection)
             ?? throw new InvalidOperationException(
-                "VM compile rejected: AST constructor body could not be compiled.");
+                "VM compile rejected: AST constructor body could not be compiled. " + rejection);
         var inits = new List<Expression>(parameters.Count + 1) { ctx.RingVar(slot) };
         inits.AddRange(args);
 

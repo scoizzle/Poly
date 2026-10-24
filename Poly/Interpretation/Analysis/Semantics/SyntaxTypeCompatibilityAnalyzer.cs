@@ -365,7 +365,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
         if (shape is not null && MethodInvocationSemanticResolver.AcceptsLambdaArgument(context, shape, paramType))
             return true;
-        if (IsNumericWidening(argType, paramType))
+        if (paramType.IsNumericWideningFrom(argType))
             return true;
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
@@ -478,31 +478,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return paramType.TryGetRuntimeType(out var runtimeType) && primitive.PrimitiveId.GetClrType() == runtimeType;
         return false;
     }
-
-    private static bool IsNumericWidening(ITypeDefinition from, ITypeDefinition to) {
-        if (!from.TryGetRuntimeType(out var fromClr) || !to.TryGetRuntimeType(out var toClr))
-            return false;
-        var fromCode = Type.GetTypeCode(fromClr);
-        var toCode = Type.GetTypeCode(toClr);
-        // TypeCode identity alone is not widening: Object==Object for unrelated
-        // classes (Uri vs StringBuilder) must not count as a plausible overload.
-        if (fromCode == toCode)
-            return NumericWidenRank(fromCode) is not null;
-        return NumericWidenRank(fromCode) is int fr
-            && NumericWidenRank(toCode) is int tr
-            && fr <= tr;
-    }
-
-    private static int? NumericWidenRank(TypeCode code) => code switch {
-        TypeCode.SByte or TypeCode.Byte => 1,
-        TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Char => 2,
-        TypeCode.Int32 or TypeCode.UInt32 => 3,
-        TypeCode.Int64 or TypeCode.UInt64 => 4,
-        TypeCode.Single => 5,
-        TypeCode.Double => 6,
-        TypeCode.Decimal => 7,
-        _ => null
-    };
 
     private void CheckInvokeArity(AnalysisContext context, Invoke invoke, Lambda lambda, bool allowZeroArgsAsSetArgs) {
         int nParams = lambda.Parameters.Count;

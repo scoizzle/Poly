@@ -77,6 +77,9 @@ public static class TypeMemberQueryExtensions {
                     case (_, _) when parameter.ParameterTypeDefinition.IsAssignableFrom(argument):
                         score++; // Assignable but not exact match
                         continue;
+                    case (_, _) when parameter.ParameterTypeDefinition.IsNumericWideningFrom(argument):
+                        score += 2; // Widening is legal but ranks below assignable
+                        continue;
                     default:
                         return null; // Incompatible types
                 }

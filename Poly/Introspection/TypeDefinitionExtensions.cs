@@ -107,6 +107,32 @@ public static class TypeDefinitionExtensions {
         }
 
         /// <summary>
+        /// Determines if a value of <paramref name="from"/> widens to this type by C#'s
+        /// implicit numeric conversion — the relation that makes
+        /// <c>Add(long, long)</c> accept <c>Add(1, 2)</c>.
+        /// </summary>
+        /// <remarks>
+        /// <see cref="IsAssignableFrom"/> cannot answer this: CLR assignability does not
+        /// include numeric widening, so <c>typeof(long).IsAssignableFrom(typeof(int))</c>
+        /// is false. Overload scoring and syntax compatibility both ask this question, and
+        /// they must not answer it twice.
+        /// </remarks>
+        public bool IsNumericWideningFrom(ITypeDefinition from) {
+            ArgumentNullException.ThrowIfNull(from);
+            if (!from.TryGetRuntimeType(out var fromClr) || !typeDefinition.TryGetRuntimeType(out var toClr))
+                return false;
+            var fromCode = Type.GetTypeCode(fromClr);
+            var toCode = Type.GetTypeCode(toClr);
+            // TypeCode identity alone is not widening: Object==Object for unrelated
+            // classes (Uri vs StringBuilder) must not count as a plausible overload.
+            if (fromCode == toCode)
+                return NumericWidenRank(fromCode) is not null;
+            return NumericWidenRank(fromCode) is int fromRank
+                && NumericWidenRank(toCode) is int toRank
+                && fromRank <= toRank;
+        }
+
+        /// <summary>
         /// Determines if values of <paramref name="other"/> can be assigned to this type.
         /// </summary>
         /// <remarks>
@@ -224,4 +250,17 @@ public static class TypeDefinitionExtensions {
                 .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         }
     }
+
+    /// <summary>Widening order for C#'s implicit numeric conversions. A <c>null</c>
+    /// rank is not a number, so it never widens.</summary>
+    private static int? NumericWidenRank(TypeCode code) => code switch {
+        TypeCode.SByte or TypeCode.Byte => 1,
+        TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Char => 2,
+        TypeCode.Int32 or TypeCode.UInt32 => 3,
+        TypeCode.Int64 or TypeCode.UInt64 => 4,
+        TypeCode.Single => 5,
+        TypeCode.Double => 6,
+        TypeCode.Decimal => 7,
+        _ => null
+    };
 }

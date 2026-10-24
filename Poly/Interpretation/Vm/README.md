@@ -262,6 +262,26 @@ The restore is a catch-and-rethrow, not a `try`/`finally`. A `finally` is emitte
 as a funclet call on the normal path — a second prologue and epilogue per frame —
 whereas the catch only costs anything when something throws.
 
+### A rejected body fails closed
+
+A resolved AST method with a body must compile. When it does not — a lambda inside an
+AST method, an unresolvable member in the body, a wrong-arity call — the reject is never
+silently replaced by a name-dispatched host call:
+
+- **Receiver is an instance the VM constructs** (`new T()` for an AST type): there is no
+  host object to dispatch to — the runtime object is the VM's own dictionary, which has
+  none of `T`'s methods — so emission throws, naming the method and the reject. It used to
+  run to `Type 'Dictionary\`2' does not define method '…'` at *runtime*, which names the
+  storage type instead of the cause.
+- **Any other receiver** (a parameter or `this` that a host may fill with an object that
+  really implements the method): the `GetMethods` / `InvokeNamed` fallback stays, and the
+  failure now carries the reject as a trailing clause, so the reason travels with the
+  symptom.
+
+Type inference for an unresolved invoke also refuses to reflect over an AST type's runtime
+type: that is the VM's storage (a dictionary), not the API the program calls, so it could
+only invent a signature the type does not have.
+
 ### `VmValueStack`
 Pooled `long[]` stack backed by `ArrayPool<long>.Shared`. Grows by doubling,
 `SetStackPointer` grows on demand, and `Dispose` returns the buffer cleared.

@@ -30,6 +30,9 @@ public static partial class AbiEmitter {
         // Handle Invoke(Member(instance, "Method"), args) — resolve the method
         // and call it directly via CLR reflection, bypassing full lambda handling.
         if (invoke.Delegate is Member member) {
+            // Set when an AST method body fails to compile and the call falls through to
+            // name dispatch, so the runtime failure can name the compile reject.
+            string? astBodyReject = null;
             // The invoke carries the overload match. The member node keeps the
             // first same-named member, which is the wrong MethodInfo when the
             // callee is overloaded.
@@ -144,17 +147,29 @@ public static partial class AbiEmitter {
                         astMethod.DefinitionNode.Parameters ?? [],
                         ctx,
                         instanceSlot: !astMethod.IsStatic,
+                        rejection: out var rejection,
                         asyncReturn: asyncReturn);
-                    // A body the VM cannot analyze (sibling types, host stubs) stays
-                    // on the CLR / InvokeNamed path.
                     if (table is not null)
                         return EmitAstInvoke(invoke, member, astMethod, table, ctx);
+                    // The body exists and resolved to this AST method, so a name-dispatched
+                    // fallback can only be right on an instance that is not ours to shape.
+                    // `new T()` is the VM's own dictionary, which has no such method: emit
+                    // nothing and reject here, while the reason is still in hand, rather
+                    // than fail at runtime naming the storage type.
+                    if (IsVmConstructedInstance(member.Value, ctx))
+                        throw new InvalidOperationException(
+                            $"VM compile rejected: AST method '{astMethod.Name}' has no compilable body and "
+                            + "its receiver is an instance the VM constructs, so there is no host method to "
+                            + $"dispatch to. {Reason(rejection)}");
+                    astBodyReject = rejection;
                 }
             }
 
             // ITypeMethod without MethodInfo, or Member that analysis did not
             // resolve as a method: live instance by name+arity, then
             // InvokeNamed(string, object?[]). Fail-closed inside InvokeInstanceMethod.
+            // `astBodyReject` is set when we get here because an AST method body failed,
+            // so the failure can name that reason instead of only the receiver's type.
             if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
@@ -184,7 +199,8 @@ public static partial class AbiEmitter {
                 InvokeInstanceMethodInfo,
                 astInstanceObj,
                 Constant(member.MemberName),
-                NewArrayInit(typeof(object), argObjs));
+                NewArrayInit(typeof(object), argObjs),
+                Constant(astBodyReject, typeof(string)));
 
             int astSlot = ctx.AllocSlot();
             ctx.RingDepth = astSlot + 1;
@@ -856,13 +872,28 @@ public static partial class AbiEmitter {
         return Block(seq);
     }
 
+    /// <param name="rejection">Why the body did not compile, when it did not. Callers that
+    /// keep a name-dispatched fallback carry this into the runtime failure, so a compile
+    /// reject is never reported as a missing method on the receiver's storage type.</param>
+    /// <summary>
+    /// True when the receiver is an instance the VM allocates itself: <c>new T()</c> for a
+    /// <c>T</c> analysis resolves to an AST type definition, whose runtime object is the
+    /// VM's own dictionary. A host-supplied instance reaches the same call shape through
+    /// <c>this</c> or a parameter instead, and may genuinely implement the method.
+    /// </summary>
+    private static bool IsVmConstructedInstance(Node receiver, Context ctx) =>
+        receiver is New
+        && ctx.Analysis?.GetResolvedType(receiver) is AstTypeDefinition;
+
     private static Action<VmState>[]? TryCompileAstCallable(
         Node key,
         Node body,
         IReadOnlyList<Parameter> parameters,
         Context caller,
         bool instanceSlot,
+        out string? rejection,
         Type? asyncReturn = null) {
+        rejection = null;
         var mode = caller.Mode;
         lock (AstCallableGate) {
             if (AstCallables.TryGetValue(key, out var byMode) && byMode.TryGetValue(mode, out var done))
@@ -926,6 +957,7 @@ public static partial class AbiEmitter {
                 throw new InvalidOperationException(
                     $"VM compile rejected: AST method '{forwarder.Name}' forwards to a CLR static method and could not be compiled. {ex.Message}",
                     ex);
+            rejection = ex.Message;
             return null;
         }
 
@@ -1018,8 +1050,8 @@ public static partial class AbiEmitter {
     // ── Float/double helpers ────────────────────────
 
     private static readonly MethodInfo InvokeInstanceMethodInfo =
-        Ref.Method((Expression<Func<object, string, object?[], object?>>)((instance, name, args) =>
-            InvokeInstanceMethod(instance, name, args)));
+        Ref.Method((Expression<Func<object, string, object?[], string?, object?>>)((instance, name, args, bodyReject) =>
+            InvokeInstanceMethod(instance, name, args, bodyReject)));
     private static readonly MethodInfo InvokeHeapClosureInfo =
         typeof(AbiEmitter).GetMethod(nameof(InvokeHeapClosure),
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
@@ -1033,10 +1065,15 @@ public static partial class AbiEmitter {
     /// name plus args. Fail-closed if the instance is null or neither method
     /// is present.
     /// </summary>
-    private static object? InvokeInstanceMethod(object instance, string methodName, object?[] args) {
+    /// <param name="bodyReject">Why the AST method body did not compile, when this call is a
+    /// fallback for one. Carried into the failure so a compile reject is not reported as a
+    /// missing method on the receiver's storage type.</param>
+    private static object? InvokeInstanceMethod(
+        object instance, string methodName, object?[] args, string? bodyReject = null) {
         if (instance is null)
             throw new InvalidOperationException(
-                $"Invoke '{methodName}' requires a non-null instance.");
+                $"Invoke '{methodName}' requires a non-null instance."
+                + Because(bodyReject));
 
         var instanceType = instance.GetType();
         const BindingFlags flags =
@@ -1074,8 +1111,19 @@ public static partial class AbiEmitter {
             return InvokeAndUnwrap(invokeNamed, instance, [methodName, args]);
 
         throw new InvalidOperationException(
-            $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s).");
+            $"Type '{instanceType.Name}' does not define method '{methodName}' with {args.Length} parameter(s)."
+            + Because(bodyReject));
     }
+
+    /// <summary>The compile reject behind a name-dispatched fallback, as a sentence to
+    /// append to the runtime failure — or nothing at all when there was no reject.</summary>
+    private static string Because(string? bodyReject) =>
+        bodyReject is null ? "" : $" (the AST method body did not compile: {Reason(bodyReject)})";
+
+    /// <summary>A reject's text without the prefix its own thrower added, so a message that
+    /// wraps another does not say "VM compile rejected" twice.</summary>
+    private static string Reason(string? rejection) =>
+        rejection is null ? "" : rejection.Replace("VM compile rejected: ", "", StringComparison.Ordinal).TrimEnd('.');
 
     private static System.Collections.IEnumerator GetEnumeratorOrThrow(object? collection) {
         if (collection is null)

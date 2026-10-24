@@ -186,13 +186,36 @@ run. Call mechanics really do dominate this kernel, which is the strongest argum
 the inlining idea.
 
 What blocks it in the VM is that the same accounting does not hold. A VM frame costs
-4.75 ns of the 128 us (40 us); the other 88 us is per-frame body ceremony — 66,096
-statements at ~1.3 ns each, 3.5x the native body cost — which comes from register and
-slot traffic in the emitted code. Inlining all bodies into one lambda does not reduce that
-88 us; it *adds* to it, because recursive bodies would no longer share one set of `_regN`
-locals and every local would become a frame-slot spill. Removing 40 us of call cost while
-adding spill traffic to 88 us of body work is not a win to assume — it needs the box
-measured before it is believed, which is what a prototype would be for.
+4.75 ns of the 128 us (40 us); the other 88 us is the body — 66,096 statements — and that
+body is *not* where the VM is slow, which was measured rather than assumed (see the next
+section). Inlining all bodies into one lambda does not reduce the 88 us; it *adds* to it,
+because recursive bodies would no longer share one set of `_regN` locals and every local
+would become a frame-slot spill. Removing 40 us of call cost while adding spill traffic to
+88 us of body work is not a win to assume — it needs the box measured before it is
+believed, which is what a prototype would be for.
+
+### The loops are at native parity. Do not go looking for per-statement waste
+
+An earlier draft of this note blamed "per-statement ceremony" for a 3.5x gap between the
+VM's body and native. That figure was wrong: it compared the VM running its *recursive*
+nqueens against a native *iterative* implementation, which is a different algorithm.
+
+Measured properly — each `ProgramBenchmarks` program against a native C# method doing the
+same arithmetic at the same widths, no VM machinery, both sides warmed and interleaved
+(min of 3 x 21 runs):
+
+| Program | VM | native C# | ratio |
+|---|---:|---:|---:|
+| sieve 20000 | 57.80 us | 59.90 us | **0.96x** |
+| mandelbrot 40x50 | 63.00 us | 54.80 us | 1.15x |
+| collatz 3000 | 128.30 us | 163.70 us | **0.78x** |
+| nqueens 9 | ~128 us | 81.0 us | 1.58x |
+
+Two of the three loops are **faster than native C#**, mandelbrot is 15 % behind on pure
+double arithmetic, and the only large gap is the call-heavy program. So the emitted
+per-statement code is already at parity and is not a place to spend effort; the residual is
+per-*frame* overhead in code that calls a lot. That is exactly what the inlining idea
+targets, which is why it is the only remaining lever rather than one of several.
 
 ## What the table does and does not support
 

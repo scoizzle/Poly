@@ -251,12 +251,6 @@ public static partial class AbiEmitter {
         if (ctx.Analysis is not null) {
             var leftRep = ctx.KindOf(left);
             var rightRep = ctx.KindOf(right);
-            // A scalar slot holds a word, even when compared with the null constant
-            // (`age != null` on an optional value parameter must be true, not a deref
-            // of the word as a heap handle).
-            if ((left is Constant { Value: null } && rightRep == ValueRepresentationKind.StackScalar)
-                || (right is Constant { Value: null } && leftRep == ValueRepresentationKind.StackScalar))
-                return false;
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;

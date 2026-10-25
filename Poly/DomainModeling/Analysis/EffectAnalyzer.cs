@@ -821,11 +821,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// DMEFF011: a <c>create</c> / <c>create in</c> must provide a value for every
-    /// <c>required</c> property of the created entity, unless the property has a
-    /// <c>default</c> or is the auto-wired back-reference navigation (the target's
-    /// nav typed as the create-in source entity). Without this, the generated
-    /// <c>Create</c> factory would fail at runtime on a missing required value —
-    /// analysis catches the bad authoring shape before the export/runtime path.
+    /// required property of the created entity — a property without <c>optional</c> —
+    /// unless the property has a <c>default</c>, is initialized by the first stage's
+    /// entry effects, or is the auto-wired back-reference navigation (the target's nav
+    /// typed as the create-in source entity). Without this, the generated <c>Create</c>
+    /// factory would fail at runtime on a missing required value — analysis catches the
+    /// bad authoring shape before the export/runtime path.
     /// </summary>
     private static void ValidateRequiredInitializerCoverage(
         AnalysisContext context,
@@ -835,9 +836,14 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         IReadOnlyList<PropertyBinding> initializers) {
         var provided = new HashSet<string>(
             initializers.Select(i => i.PropertyName), StringComparer.Ordinal);
+        var required = context.GetStructure(targetEntity)?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(targetEntity);
+        var entryAssigned = context.GetStructure(targetEntity)?.EntryAssignedPropertyNames
+            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
         foreach (var prop in targetEntity.Properties) {
-            if (!prop.Constraints.Any(static c => c is RequiredConstraint)) continue;
+            if (!required.Contains(prop.Name)) continue;
             if (prop.Constraints.Any(static c => c is DefaultValueConstraint)) continue;
+            if (entryAssigned.Contains(prop.Name)) continue;
             if (autoWireSourceEntity is not null
                 && string.Equals(prop.Type.TypeName, autoWireSourceEntity.Name, StringComparison.Ordinal))
                 continue; // auto-wired back-reference
@@ -846,7 +852,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             context.ReportError(
                 effect,
                 $"Create effect on '{targetEntity.Name}' does not provide required property '{prop.Name}'. " +
-                $"Every 'required' property must be set in the create / create in initializers (or have a default).",
+                $"Every property without 'optional' must be set in the create / create in initializers (or have a default).",
                 DomainModelDiagnosticCodes.CreateMissingRequiredProperty);
         }
     }

@@ -48,7 +48,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -63,7 +63,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: Date
               Finished: Date
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -78,7 +78,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: Date
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -119,7 +119,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -147,7 +147,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);

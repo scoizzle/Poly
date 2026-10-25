@@ -91,17 +91,18 @@ parameter. To-one navigation bindings in `create in` initializers are **legal**
 (e.g. `create in loans { book: book }`) — the binding flows into the child's
 value bag / constructor parameter like a scalar initializer.
 
-**Required coverage (DMEFF011):** every `required` **scalar** property of the
+**Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default`. Only scalar/enum-typed properties carry constraints —
-navigation properties cannot be `required` (the DSL rejects `nav: Type required`
-as a parse error), so the back-reference exemption simply means the auto-wired
-nav needs no initializer value. Analysis rejects a create that omits a required
-property — the generated `Create` factory would otherwise throw at runtime.
+unless it has a `default` or the first stage's `entry` effects assign it. Only
+scalar/enum-typed properties carry constraints — navigation properties cannot be
+marked either way in that tail (`nav: Type required` / `optional` is a parse
+error), so the back-reference exemption simply means the auto-wired nav needs no
+initializer value. Analysis rejects a create that omits a required property — the
+generated `Create` factory would otherwise throw at runtime.
 
 ```poly
-// ✅ Correct — both required props provided
-Token: entity { Lexeme: Text required Kind: Text required }
+// ✅ Correct — both props provided (a property is required by default)
+Token: entity { Lexeme: Text Kind: Text }
 Parser: entity {
   tokens: many Token
   Lex: action {
@@ -109,8 +110,17 @@ Parser: entity {
   }
 }
 
+// ✅ Correct — Note opted out, so it may be omitted
+Draft: entity { Lexeme: Text Note: Text optional }
+Parser2: entity {
+  drafts: many Draft
+  Lex: action {
+    create in drafts { Lexeme: "let" }
+  }
+}
+
 // ❌ Wrong — DMEFF011: 'Lexeme' is required but not provided
-// Parser2: entity {
+// Parser3: entity {
 //   tokens: many Token
 //   Lex: action {
 //     create in tokens { Kind: "Keyword" }
@@ -285,6 +295,7 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
 | Required | `required` | `Name: Text required` |
+| Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
@@ -308,15 +319,28 @@ Item: entity {
 
 ### What makes a property optional at create
 
-Every property **without** `default(...)` is a **required parameter of the generated
-`Create` factory** (and of the entity's create DTO), so a `create` / `create in` /
-`create_instance` must supply it. **Only `default(...)` makes a property optional** — the
-default is applied when the value is omitted.
+Properties are **required at create by default**: every property without `optional`
+is a required parameter of the generated `Create` factory (and, for a root entity,
+of the create DTO), so a `create` / `create in` / `create_instance` must supply it.
 
-`required` is a *value* rule (the value must not be empty when it is written); it is not
-what decides creatability. So an enum property, a `value`-typed (nested document) property,
-or a plain `Text` property with no `default(...)` all block create when omitted, while a
-`required` property *with* a `default(...)` does not.
+`optional` is the explicit opt-out: the property is omitted from the required create
+signature, prints as `T?`, and stores `null` when omitted. `default(...)` still supplies
+a value when the property is omitted; the default wins over the omitted `null`.
+
+```poly
+Token: entity {
+  Lexeme: Text                 // required at create
+  Note: Text optional          // may be omitted; omitted = null
+  Kind: Text default("Word")   // may be omitted; the default supplies "Word"
+}
+```
+
+`required` is the explicit spelling of the default (a value rule: the value must not be
+empty when it is written). Carrying both `required` and `optional` on one property is an
+analysis error — required is the default and `optional` is its opt-out.
+
+`optional` applies to entity properties only. Value-type (`value { ... }`) and contract
+payload members are always required fields; `optional` there is a positioned parse error.
 
 ### Annotations (Portable Storage Hints)
 
@@ -1084,6 +1108,7 @@ SetName: action (newName: Text) {
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
 | Required | `required` | `Name: Text required` |
+| Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
@@ -1114,7 +1139,7 @@ attributes below. What reaches the database:
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
 | `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
 | `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
-| `required` | `IsRequired()` for reference-typed columns. |
+| `required` (or no `optional`) | `IsRequired()` for reference-typed columns. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport projects them onto DTO validation attributes, so the API boundary
@@ -1127,7 +1152,9 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- `required` → `[Required]` (reference-typed properties).
+- `required` (or no `optional`) → `[Required]` (reference-typed properties). Every
+  string member of the create DTO is `[Required]`: each member is a required ctor
+  slot, and optional members are absent from that DTO.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

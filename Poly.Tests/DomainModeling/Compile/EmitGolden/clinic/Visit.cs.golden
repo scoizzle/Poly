@@ -60,6 +60,10 @@ public class Visit
     }
     public static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
+        if (string.IsNullOrEmpty(reason))
+        {
+            return DomainResult<Visit>.Failure("'Reason' is required.");
+        }
         if (reason.Length < 2L)
         {
             return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");

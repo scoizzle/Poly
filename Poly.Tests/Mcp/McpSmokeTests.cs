@@ -230,7 +230,7 @@ public class McpSmokeTests {
               Name: Text
               loans: many Loan
               Active: stage {
-                CheckOut: action { create in loans { } }
+                CheckOut: action { create in loans { Status: "new" } }
               }
               when loans Overdue {
                 assign Name to "overdue"
@@ -686,17 +686,17 @@ public class McpSmokeTests {
         await Assert.That(r5.Success).IsTrue();
 
         var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":25}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":true}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var edge = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":18}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":18,\"Active\":true}"));
         await Assert.That(edge.Success).IsTrue();
         await Assert.That(edge.Message).Contains("true");
 
         var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":15,\"Active\":true}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
 
@@ -721,12 +721,12 @@ public class McpSmokeTests {
         await Assert.That(andFail.Message).Contains("false");
 
         var notPass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "NotAdult",
-            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":15,\"Active\":true}"));
         await Assert.That(notPass.Success).IsTrue();
         await Assert.That(notPass.Message).Contains("true");
 
         var always = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Always",
-            RequireInstance(sessionId, "Person", "{\"Age\":0}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":0,\"Active\":true}"));
         await Assert.That(always.Success).IsTrue();
         await Assert.That(always.Message).Contains("true");
     }
@@ -1874,7 +1874,7 @@ public class McpSmokeTests {
         await Assert.That(r6.Success).IsTrue();
 
         // Verify via MCP: create instance and call action from Draft stage
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
@@ -1974,7 +1974,7 @@ public class McpSmokeTests {
         await Assert.That(evolveResult!.Succeeded).IsTrue();
 
         // Verify via MCP: create instance and call action — should transition
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
@@ -2032,7 +2032,7 @@ public class McpSmokeTests {
 
         // Runtime: InvokeAction must fall through to the entity action and transition,
         // not silently no-op on the params-carrying stage copy.
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 

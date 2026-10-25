@@ -64,7 +64,7 @@ public class C1aRootProgramParamsTests {
         session.Lower(domain, analysis);
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
         var item = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "", ["Flag"] = false },
+            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "item", ["Flag"] = false },
             domain);
 
         var exNum = Assert.Throws<InvalidOperationException>(() =>

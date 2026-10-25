@@ -83,7 +83,7 @@ public class ClockLoweringTests {
 
     [Test]
     public async Task Assign_TextToGuid_StoresStringNotLiteralInTree() {
-        var id = new Property("ExternalId", new DomainTypeReference("Text"), []);
+        var id = new Property("ExternalId", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var stamp = new Poly.DomainModeling.Ontology.Action("Stamp", InvocationResult.Void, [],
             [new AssignEffect(DomainExpression.Property("ExternalId"), DomainExpression.Property("Guid"))],
             []);
@@ -103,7 +103,7 @@ public class ClockLoweringTests {
 
     private static (Entity Entity, Poly.DomainModeling.Ontology.Action Action) DateAssignAction(
         DomainExpression clock) {
-        var due = new Property("Due", new DomainTypeReference("Date"), []);
+        var due = new Property("Due", new DomainTypeReference("Date"), [new OptionalConstraint()]);
         var touch = new Poly.DomainModeling.Ontology.Action("Touch", InvocationResult.Void, [],
             [new AssignEffect(DomainExpression.Property("Due"), clock)], []);
         var entity = new Entity("Item", [due], [touch], [], []);

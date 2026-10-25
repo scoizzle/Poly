@@ -70,7 +70,7 @@ public class Item3LowerPopulateTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(ticket.CurrentStage).IsEqualTo("Draft");
         ticket.TransitionStage("Done");
         await Assert.That(ticket.CurrentStage).IsEqualTo("Done");
@@ -107,7 +107,7 @@ public class Item3LowerPopulateTests {
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         // Create applies first-stage OnEntry via ApplyInitialStageEntryEffects → EntryExitBodies.
         var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(ticket.GetProperty<string>("Note")).IsEqualTo("sentinel-entry");
 
         // TransitionStage binds Done OnEntry from EntryExitBodies (not action-inline).

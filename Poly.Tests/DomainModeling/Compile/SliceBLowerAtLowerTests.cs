@@ -48,7 +48,7 @@ public class SliceBLowerAtLowerTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "", ["Log"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
         await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
 
         inst.TransitionStage("Mid");
@@ -118,7 +118,7 @@ public class SliceBLowerAtLowerTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "", ["Log"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Mid"));
         await Assert.That(ex!.Message).Contains("segment");
@@ -142,7 +142,7 @@ public class SliceBLowerAtLowerTests {
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
         var lot = DomainEntityInstance.Create(lotE,
-            new Dictionary<string, object?> { ["Tag"] = "" }, domain);
+            new Dictionary<string, object?> { ["Tag"] = "seed" }, domain);
         var result = lot.InvokeAction("Mark");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(lot.GetProperty<string>("Tag")).IsEqualTo("ok");
@@ -176,7 +176,7 @@ public class SliceBLowerAtLowerTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "", ["Log"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
 
         var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Mid"));
         await Assert.That(ex!.Message).Contains("segment");
@@ -199,7 +199,7 @@ public class SliceBLowerAtLowerTests {
             OnExitEffects: []);
         var entity = new Entity("Ticket", [note], Actions: [], Policies: [], Stages: [draft, active]);
         var inst = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Note"] = "" });
+            new Dictionary<string, object?> { ["Note"] = "seed" });
         await Assert.That(inst.Domain).IsNull();
 
         var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Active"));

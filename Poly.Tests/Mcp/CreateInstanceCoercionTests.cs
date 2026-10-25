@@ -16,9 +16,9 @@ public class CreateInstanceCoercionTests {
         Job: entity {
           Name: Text required
           ExpiresAt: DateTime
-          Due: Date
-          Window: Duration
-          OpensAt: Time
+          Due: Date optional
+          Window: Duration optional
+          OpensAt: Time optional
 
           IsExpired: policy { ExpiresAt < Now }
         }

@@ -160,6 +160,10 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Name' is required.");
         }
+        if (string.IsNullOrEmpty(phone))
+        {
+            return DomainResult<Guest>.Failure("'Phone' is required.");
+        }
         if (phone.Length < 7L)
         {
             return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");

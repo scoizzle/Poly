@@ -100,7 +100,7 @@ public class SliceASharedModuleBodyTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
         inst.TransitionStage("Done");
         await Assert.That(inst.CurrentStage).IsEqualTo("Done");

@@ -843,7 +843,7 @@ public sealed class MinimalApiGenerator {
                 result.Add(argument);
                 continue;
             }
-            if (IsTrailingDefault(entity, parameter.Name))
+            if (IsTrailingOmittable(entity, parameter.Name))
                 continue;
             if (!string.Equals(parameter.Name, "db", StringComparison.Ordinal))
                 throw new InvalidOperationException(
@@ -854,14 +854,15 @@ public sealed class MinimalApiGenerator {
         return result;
     }
 
-    private bool IsTrailingDefault(Entity entity, string parameterName) {
+    private bool IsTrailingOmittable(Entity entity, string parameterName) {
         if (!_entityStructureLookup.TryGetValue(entity.Name, out var structure))
             return false;
         foreach (var property in entity.Properties) {
             if (!string.Equals(ToCamelCase(property.Name), parameterName, StringComparison.Ordinal))
                 continue;
-            return property.Constraints.OfType<DefaultValueConstraint>().Any()
-                && !structure.EntryAssignedPropertyNames.Contains(property.Name);
+            return !structure.EntryAssignedPropertyNames.Contains(property.Name)
+                && (!structure.RequiredPropertyNames.Contains(property.Name)
+                    || property.Constraints.OfType<DefaultValueConstraint>().Any());
         }
         return false;
     }
@@ -1124,6 +1125,10 @@ public sealed class MinimalApiGenerator {
                     or EqualityConstraint));
 
             var attrs = BuildConstraintAttributes(clrType, effective);
+            // Every member of the create DTO is a required ctor slot (optional
+            // properties are absent from the DTO), so every string member is [Required].
+            if (clrType == "string" && attrs.All(a => a.Name != "Required"))
+                attrs = [new AttributeNode("Required", []), .. attrs];
             // Enum-typed members: the CLR enum type enforces membership at binding; the
             // [EnumDataType] attribute additionally declares the allowed-value union on the
             // contract and fails loud at validation if binding ever bypasses the type.

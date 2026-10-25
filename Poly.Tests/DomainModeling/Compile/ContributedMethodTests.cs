@@ -25,7 +25,7 @@ public class ContributedMethodTests {
         Widget: entity { Code: Text required unique }
         Lot: entity {
           widgets: many Widget
-          Note: Text
+          Note: Text optional
           Issue: action (code: Text) {
             create in widgets { Code: code }
           }
@@ -55,7 +55,7 @@ public class ContributedMethodTests {
         domain Lab
         Widget: entity {
           Code: Text required unique
-          Sku: Text unique
+          Sku: Text optional unique
         }
         Lot: entity {
           widgets: many Widget

@@ -87,6 +87,10 @@ public class Order
     public bool IsPaid() => this.State == OrderState.Paid;
     public static DomainResult<Order> Create(string cancelReason, long discount, long total, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
+        if (string.IsNullOrEmpty(cancelReason))
+        {
+            return DomainResult<Order>.Failure("'CancelReason' is required.");
+        }
         if (cancelReason.Length > 200L)
         {
             return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");

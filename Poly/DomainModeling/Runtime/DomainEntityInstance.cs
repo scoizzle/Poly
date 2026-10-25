@@ -136,9 +136,7 @@ public sealed partial record DomainEntityInstance {
         // Domain-null: required/range/length/pattern in ValidateConstraints.
         var checkError = CreateCheckFailure(
             entity,
-            domain is not null
-                ? propertyValues ?? new Dictionary<string, object?>()
-                : values,
+            values,
             domain);
         if (checkError is not null)
             throw domain is not null
@@ -165,9 +163,34 @@ public sealed partial record DomainEntityInstance {
         Domain? domain) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(values);
-        return domain is not null
-            ? RunCreateFactoryChecks(entity, values, domain)
-            : ValidateConstraints(entity, values, domain);
+        if (domain is null)
+            return ValidateConstraints(entity, values);
+        var missing = FindMissingRequiredValue(entity, values);
+        if (missing is not null)
+            return missing;
+        return RunCreateFactoryChecks(entity, values, domain);
+    }
+
+    /// <summary>
+    /// Required-by-default coverage: every property without <c>optional</c> must carry
+    /// a value, unless <c>default(...)</c> or the first stage's entry effects supply one.
+    /// The same rule runs before the compiled factory (domain-bound) and before the
+    /// domain-null checks, so both create paths fail alike.
+    /// </summary>
+    private static string? FindMissingRequiredValue(
+        Entity entity, IReadOnlyDictionary<string, object?> values) {
+        var required = EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+        var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+        foreach (var prop in entity.Properties) {
+            if (!required.Contains(prop.Name)) continue;
+            if (entryAssigned.Contains(prop.Name)) continue;
+            if (prop.Constraints.OfType<DefaultValueConstraint>().Any()) continue;
+            if (!values.TryGetValue(prop.Name, out var value) || value is null)
+                return $"'{prop.Name}' is required.";
+            if (IsText(prop) && string.IsNullOrEmpty(value as string))
+                return $"'{prop.Name}' is required.";
+        }
+        return null;
     }
 
     /// <summary>
@@ -261,24 +284,20 @@ public sealed partial record DomainEntityInstance {
     };
 
     /// <summary>
-    /// Domain-null create checks: required/range/length/pattern. Equality
-    /// lives in the compiled factory (Domain-bound prefix above). Unique
-    /// lives at <c>TryAdd</c>.
+    /// Domain-null create checks: required coverage plus range/length/pattern.
+    /// Equality lives in the compiled factory (Domain-bound prefix above).
+    /// Unique lives at <c>TryAdd</c>.
     /// </summary>
     private static string? ValidateConstraints(
         Entity entity,
-        IReadOnlyDictionary<string, object?> values,
-        Domain? domain = null) {
+        IReadOnlyDictionary<string, object?> values) {
+        var missing = FindMissingRequiredValue(entity, values);
+        if (missing is not null)
+            return missing;
         foreach (var prop in entity.Properties) {
             values.TryGetValue(prop.Name, out var v);
             foreach (var constraint in prop.Constraints) {
                 switch (constraint) {
-                    case RequiredConstraint:
-                        if (IsText(prop) && string.IsNullOrEmpty(v as string))
-                            return $"'{prop.Name}' is required.";
-                        if (v is null && IsNullableDomainTypeName(prop.Type.TypeName, domain))
-                            return $"'{prop.Name}' is required.";
-                        break;
                     case RangeConstraint r:
                         if (v is IConvertible num && v is not bool and not string && v is not Guid and not DateTime and not DateOnly) {
                             var dv = Convert.ToDecimal(num);
@@ -308,14 +327,6 @@ public sealed partial record DomainEntityInstance {
 
     private static bool IsText(Property prop) =>
         prop.Type.TypeName is "Text" or "String";
-
-    private static bool IsNullableDomainTypeName(string typeName, Domain? domain) {
-        if (domain?.Types.OfType<EnumType>().Any(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal)) == true)
-            return false;
-        return !DomainTypeMapping.IsNonNullableClrValueType(
-            RuntimeAnalysisCache.ClrTypeName(domain, typeName));
-    }
 
     /// <summary>
     /// Applies the first stage's entry effects at creation time, matching the export's
@@ -1144,7 +1155,7 @@ public sealed partial record DomainEntityInstance {
         var slots = new List<string>();
         foreach (var p in DomainToCSharpExporter.GetConstructorParameters(entity, analysis))
             slots.Add(p.Name);
-        foreach (var prop in DomainToCSharpExporter.TrailingDefaultedProperties(entity, analysis))
+        foreach (var prop in DomainToCSharpExporter.TrailingOmittableProperties(entity, analysis))
             slots.Add(prop.Name);
         return slots;
     }

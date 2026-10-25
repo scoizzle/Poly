@@ -40,8 +40,8 @@ public class DomainToCSharpExporterTests {
           MemberSince: Date default(Today)
           Status: PatronStatus default(Active)
           MaxItems: Number range(0, 20) required
-          CurrentBorrowCount: Number
-          OutstandingFines: Number
+          CurrentBorrowCount: Number default(0)
+          OutstandingFines: Number default(0)
           loans: many Loan
           fines: many Fine
           GoodStanding: policy { Status is "Active" }
@@ -90,11 +90,11 @@ public class DomainToCSharpExporterTests {
         }
 
         Loan: entity {
-          Status: Text
+          Status: Text optional
           CheckedOutAt: DateTime
-          DueDate: DateTime
-          ReturnedAt: DateTime
-          TimesRenewed: Number
+          DueDate: DateTime default(Now)
+          ReturnedAt: DateTime optional
+          TimesRenewed: Number optional
           book: Book
           borrower: Patron
           Active: stage {
@@ -118,7 +118,7 @@ public class DomainToCSharpExporterTests {
           Amount: Number required
           Reason: Text
           DateIssued: DateTime default(Now)
-          Paid: Boolean
+          Paid: Boolean optional
           patron: Patron
           Unpaid: stage {
             Pay: action {
@@ -446,6 +446,8 @@ public class DomainToCSharpExporterTests {
             .Where(p => autoWireBackRef is null
                 || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
             .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
+            .Concat(DomainToCSharpExporter.TrailingOmittableProperties(loan, analysis)
+                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected);
     }
@@ -462,7 +464,7 @@ public class DomainToCSharpExporterTests {
               orders: many Order
 
               CheckOut: action {
-                create in orders { Title: "t" }
+                create in orders { Title: "t" Total: 0 }
               }
             }
 
@@ -1263,6 +1265,20 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_Compiles_OptionalConstrainedProperties() {
+        // An optional parameter is T?; a value constraint guard must not compare it
+        // directly (CS0019/CS0266), and an omitted value must stay null.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalGuards
+            Person: entity {
+              Age: Number optional range(0, 150)
+              Note: Text optional length(2, 5)
+            }
+            """);
+        await AssertExportCompiles(domain, analysis);
+    }
+
+    [Test]
     public async Task Export_RuntimeKeywordDefaults_AdaptToTargetClrType() {
         // Discovery round5 F1–F3: `default(Guid)` on Text, `default(Now)` on Date,
         // `default(Today)` on DateTime, and `assign DateProp to now` must export
@@ -1356,7 +1372,7 @@ public class DomainToCSharpExporterTests {
             Customer: entity {
               orders: many Order
               CheckOut: action {
-                create in orders { Title: "t" }
+                create in orders { Title: "t" Total: 0 }
               }
             }
 

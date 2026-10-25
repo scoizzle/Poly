@@ -18,30 +18,47 @@ public sealed class SessionBuilder {
     private readonly List<IConstraintCompiler> _constraintCompilers = [];
     private readonly List<string> _loadedIds = [];
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
+    private readonly List<StageContribution> _contributions = [];
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
     public TypeMappingRegistry TypeMaps { get; } = new();
     public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
+    public IReadOnlyList<StageContribution> Contributions => _contributions;
     public ExpressionMeaning Meaning { get; } = new();
 
     /// <summary>No extensions loaded.</summary>
     public static SessionBuilder CreateEmpty() => new();
 
     /// <summary>
-    /// Loads <paramref name="library"/>. Duplicate <see cref="IDomainLibrary.Id"/> fails closed.
+    /// Loads <paramref name="library"/> as an authored extension. Duplicate
+    /// <see cref="IDomainLibrary.Id"/> fails closed.
     /// </summary>
     public SessionBuilder Load(IDomainLibrary library) {
+        Register(library);
+        _loadedIds.Add(library.Id);
+        foreach (var (name, category) in library.PrimitiveSeeds)
+            _primitiveSeeds.Add((library.Id, name, category));
+        return this;
+    }
+
+    /// <summary>
+    /// Loads <see cref="CoreLibrary"/> at <see cref="PipelineStage.Load"/>. Core is
+    /// implicit, so it is not recorded in the session's authored extension ids.
+    /// </summary>
+    public SessionBuilder LoadCore() {
+        Register(new CoreLibrary());
+        return this;
+    }
+
+    private void Register(IDomainLibrary library) {
         ArgumentNullException.ThrowIfNull(library);
         if (string.IsNullOrWhiteSpace(library.Id))
             throw new ArgumentException("Library id must be non-empty.", nameof(library));
         if (!_loadedIdSet.Add(library.Id))
             throw new InvalidOperationException($"A library with id '{library.Id}' is already loaded.");
+        _contributions.Add(new StageContribution(PipelineStage.Load, library.Id));
         library.Register(this);
-        _loadedIds.Add(library.Id);
-        foreach (var (name, category) in library.PrimitiveSeeds)
-            _primitiveSeeds.Add((library.Id, name, category));
-        return this;
     }
 
     public SessionBuilder AddStorageConvention(IStorageConvention convention) {
@@ -57,7 +74,7 @@ public sealed class SessionBuilder {
     }
 
     /// <summary>
-    /// Appends a library analyzer after the core list. Duplicate
+    /// Appends an analyzer to the pipeline. Duplicate
     /// <see cref="INodeAnalyzer.PassName"/> fails closed. Libraries do not splice
     /// the middle of the pipeline.
     /// </summary>
@@ -107,6 +124,7 @@ public sealed class SessionBuilder {
             Meaning,
             _artifacts,
             _analyzers,
+            _contributions.ToArray(),
             _primitiveSeeds,
             _constraintCompilers.ToArray());
     }

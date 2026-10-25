@@ -11,22 +11,35 @@ namespace Poly.DomainModeling.Analysis;
 /// </summary>
 public static class DomainModelAnalyzer {
     /// <summary>
-    /// Builds the product analysis pipeline. The session owns its analyzer;
-    /// this factory is the single construction point. Storage mapping is a
-    /// library overlay, not a core-list pass.
+    /// Core's analysis passes in registration order: the schedule. The session
+    /// owns them via <see cref="Compile.CoreLibrary"/>; libraries append flags
+    /// after this list.
     /// </summary>
-    internal static Analyzer BuildPipeline(
-        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null,
+    internal static IReadOnlyList<INodeAnalyzer> CorePasses(
         ExpressionMeaning? meaning = null,
-        ExpressionFormRegistry? forms = null) {
-        var builder = new AnalyzerBuilder()
-            .UseDomainModelAnalysisPipeline(meaning, forms);
-        if (extraAnalyzers is not null) {
-            foreach (var analyzer in extraAnalyzers)
-                builder.AddAnalyzer(analyzer);
-        }
-        return builder.Build();
-    }
+        ExpressionFormRegistry? forms = null) => [
+        new StructuralDomainAnalyzer(),
+        new DomainCatalogPass(),
+        new ExpressionTypeAnalyzer(meaning, forms),
+        new PolicyConstraintAnalyzer(),
+        new ConstraintQualityAnalyzer(),
+        new ContractIntegrationAnalyzer(),
+        new RequiredPropertiesPass(),
+        new ConstraintPropagationAnalyzer(),
+        new EffectFactsPass(),
+        new EffectInvariantAnalyzer(),
+        new EffectAnalyzer(),
+        new RuntimeContractAnalyzer(),
+        new CapabilityAnalyzer(),
+        new SubscriptionAnalyzer(),
+        new EntityStructureAnalyzer(),
+        new EffectTopologyPass(),
+        new OwnershipAggregatePass(),
+        new RuleCoverageAnalyzer(),
+        new CrossReferencePass(),
+        new UnwrittenRelationshipPass(),
+        new AuthoringSuggestionAnalyzer(),
+    ];
 
     public static AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -79,28 +92,8 @@ public static class DomainModelAnalysisBuilderExtensions {
             ExpressionMeaning? meaning = null,
             ExpressionFormRegistry? forms = null) {
             // Registration order is the schedule. Waves are comments, not a scheduler.
-            // Libraries append flags after this list; they fill ExpressionMeaning, not mid-list passes.
-            builder.AddAnalyzer(new StructuralDomainAnalyzer());
-            builder.AddAnalyzer(new DomainCatalogPass());
-            builder.AddAnalyzer(new ExpressionTypeAnalyzer(meaning, forms));
-            builder.AddAnalyzer(new PolicyConstraintAnalyzer());
-            builder.AddAnalyzer(new ConstraintQualityAnalyzer());
-            builder.AddAnalyzer(new ContractIntegrationAnalyzer());
-            builder.AddAnalyzer(new RequiredPropertiesPass());
-            builder.AddAnalyzer(new ConstraintPropagationAnalyzer());
-            builder.AddAnalyzer(new EffectFactsPass());
-            builder.AddAnalyzer(new EffectInvariantAnalyzer());
-            builder.AddAnalyzer(new EffectAnalyzer());
-            builder.AddAnalyzer(new RuntimeContractAnalyzer());
-            builder.AddAnalyzer(new CapabilityAnalyzer());
-            builder.AddAnalyzer(new SubscriptionAnalyzer());
-            builder.AddAnalyzer(new EntityStructureAnalyzer());
-            builder.AddAnalyzer(new EffectTopologyPass());
-            builder.AddAnalyzer(new OwnershipAggregatePass());
-            builder.AddAnalyzer(new RuleCoverageAnalyzer());
-            builder.AddAnalyzer(new CrossReferencePass());
-            builder.AddAnalyzer(new UnwrittenRelationshipPass());
-            builder.AddAnalyzer(new AuthoringSuggestionAnalyzer());
+            foreach (var pass in DomainModelAnalyzer.CorePasses(meaning, forms))
+                builder.AddAnalyzer(pass);
             return builder;
         }
     }

@@ -97,6 +97,7 @@ public class UniqueSimulatePrintAgreeTests {
 
     private static (Domain Domain, Poly.Analysis.AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
         foreach (var id in ExtensionCatalog.ProductAuthoring)
             builder.Load(ExtensionCatalog.Core.Resolve(id));
         builder.Load(new PersistenceEmitLibrary());

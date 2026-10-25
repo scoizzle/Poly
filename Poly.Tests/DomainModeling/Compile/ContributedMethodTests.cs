@@ -390,6 +390,7 @@ public class ContributedMethodTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Compile(
         string poly, IDomainLibrary library, bool withPersistence = true) {
         var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
         foreach (var id in ExtensionCatalog.ProductAuthoring)
             builder.Load(ExtensionCatalog.Core.Resolve(id));
         // The storage request facts need the persistence pass. A proof that the

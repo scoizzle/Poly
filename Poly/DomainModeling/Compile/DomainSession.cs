@@ -20,6 +20,9 @@ public sealed class DomainSession {
 
     public IReadOnlyList<string> Extensions { get; }
 
+    /// <summary>Each loaded library's entry into its pipeline stage, in load order.</summary>
+    public IReadOnlyList<StageContribution> Contributions { get; }
+
     public Language<DslToken, DslTokenKind> Language { get; }
 
     public AnnotationRegistry Annotations { get; }
@@ -39,7 +42,7 @@ public sealed class DomainSession {
 
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
-    internal IReadOnlyList<INodeAnalyzer> ExtraAnalyzers { get; }
+    internal IReadOnlyList<INodeAnalyzer> Analyzers { get; }
 
     /// <summary>
     /// Compilers libraries added at <see cref="SessionBuilder.AddConstraintCompiler"/>.
@@ -79,9 +82,15 @@ public sealed class DomainSession {
 
     private Analyzer? _analyzer;
 
-    /// <summary>The session's analysis pipeline: core product passes plus library analyzers.</summary>
-    private Analyzer Analyzer =>
-        _analyzer ??= DomainModelAnalyzer.BuildPipeline(ExtraAnalyzers, Meaning, ExpressionForms);
+    /// <summary>The session's analysis pipeline: core's passes plus library analyzers.</summary>
+    private Analyzer Analyzer => _analyzer ??= BuildAnalyzer();
+
+    private Analyzer BuildAnalyzer() {
+        if (!Contributions.Any(contribution =>
+                contribution.Stage == PipelineStage.Load && contribution.LibraryId == CoreLibrary.CoreId))
+            throw new InvalidOperationException("The analyzer pipeline requires the core library loaded at Load.");
+        return new Analyzer(Analyzers);
+    }
 
     internal DomainSession(
         Domain? domain,
@@ -94,7 +103,8 @@ public sealed class DomainSession {
         ExpressionFoldTable folds,
         ExpressionMeaning meaning,
         IReadOnlyList<IArtifactContributor>? artifacts = null,
-        IReadOnlyList<INodeAnalyzer>? extraAnalyzers = null,
+        IReadOnlyList<INodeAnalyzer>? analyzers = null,
+        IReadOnlyList<StageContribution>? contributions = null,
         IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)>? primitiveSeeds = null,
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null) {
         Domain = domain;
@@ -107,7 +117,8 @@ public sealed class DomainSession {
         Folds = folds;
         Meaning = meaning;
         Artifacts = artifacts ?? [];
-        ExtraAnalyzers = extraAnalyzers ?? [];
+        Analyzers = analyzers ?? [];
+        Contributions = contributions ?? [];
         PrimitiveSeeds = primitiveSeeds ?? [];
         ConstraintCompilers = constraintCompilers ?? [];
     }
@@ -125,6 +136,7 @@ public sealed class DomainSession {
         ArgumentNullException.ThrowIfNull(extensions);
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in extensions) {
             if (string.IsNullOrWhiteSpace(id))
@@ -165,6 +177,7 @@ public sealed class DomainSession {
             ids = seed;
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))
@@ -181,7 +194,7 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, ExtraAnalyzers, PrimitiveSeeds, ConstraintCompilers);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers);
         return Open(domain);
     }
 

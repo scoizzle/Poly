@@ -170,11 +170,10 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
-    public async Task Analyze_LibraryPassClashesWithCorePassName_Throws() {
+    public async Task Load_LibraryPassClashesWithCorePassName_Throws() {
         var catalog = ExtensionCatalog.Core.With(new CoreClashLibrary());
         var domain = DomainFactory.Create("D") with { Extensions = ["core-clash"] };
-        var session = DomainSession.Open(domain, catalog);
-        await Assert.That(() => session.Analyze(domain))
+        await Assert.That(() => DomainSession.Open(domain, catalog))
             .Throws<InvalidOperationException>()
             .WithMessageContaining(DomainCatalogPass.Id);
     }

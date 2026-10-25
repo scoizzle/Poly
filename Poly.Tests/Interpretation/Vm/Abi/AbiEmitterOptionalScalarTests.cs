@@ -61,6 +61,50 @@ public class AbiEmitterOptionalScalarTests {
         await Assert.That(Run(types, new Constant(null))).IsTrue();
     }
 
+    /// <summary>An optional parameter is a heap handle; assigning it to an optional
+    /// member stores the value, not the handle.</summary>
+    [Test]
+    public async Task Constructor_OptionalScalarMember_FromOptionalParam_StoresValue() {
+        var limit = OptionalAge();
+        var types = Analyze(new TypeDefinitionNode(
+            "CopyLot", "Branch",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    [limit],
+                    new Block([
+                        new Assignment(new Member(new ThisReference(), "Limit"), limit)
+                    ]))
+            ],
+            Properties: [
+                new PropertyDefinitionNode("Limit", new OptionalTypeReference(TypeReference.To<long>()))
+            ]));
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(new New(new TypeReference("Branch.CopyLot"), new Constant(41L)), types));
+        var bag = exec.GetValue<Dictionary<string, object?>>();
+        await Assert.That(bag!["Limit"]).IsEqualTo(41L);
+    }
+
+    [Test]
+    public async Task Constructor_OptionalScalarMember_FromOmittedOptional_StoresNull() {
+        var limit = OptionalAge();
+        var types = Analyze(new TypeDefinitionNode(
+            "OmitLot", "Branch",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    [limit],
+                    new Block([
+                        new Assignment(new Member(new ThisReference(), "Limit"), limit)
+                    ]))
+            ],
+            Properties: [
+                new PropertyDefinitionNode("Limit", new OptionalTypeReference(TypeReference.To<long>()))
+            ]));
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(new New(new TypeReference("Branch.OmitLot")), types));
+        var bag = exec.GetValue<Dictionary<string, object?>>();
+        await Assert.That(bag!["Limit"]).IsNull();
+    }
+
     /// <summary>Assigning a scalar to an optional member boxes the value: zero is
     /// present, not the null sentinel.</summary>
     [Test]

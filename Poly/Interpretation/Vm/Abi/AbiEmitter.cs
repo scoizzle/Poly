@@ -290,16 +290,16 @@ public static partial class AbiEmitter {
     private static Expression CompileNodeInner(Node node, Context ctx) {
         return node switch {
             Constant c => EmitConstant(c, ctx),
-            Add n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Add, ctx),
-            Subtract n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Subtract, ctx),
-            Multiply n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Multiply, ctx),
-            Divide n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Divide, ctx),
-            Modulo n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Modulo, ctx),
-            BitwiseAnd n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, And, ctx),
-            BitwiseOr n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, Or, ctx),
-            BitwiseXor n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
-            ShiftLeft n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
-            ShiftRight n => EmitBinaryArithmetic(n.LeftHandValue, n.RightHandValue, RightShift, ctx),
+            Add n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Add, ctx),
+            Subtract n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Subtract, ctx),
+            Multiply n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Multiply, ctx),
+            Divide n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Divide, ctx),
+            Modulo n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Modulo, ctx),
+            BitwiseAnd n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, And, ctx),
+            BitwiseOr n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, Or, ctx),
+            BitwiseXor n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, ExclusiveOr, ctx),
+            ShiftLeft n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, LeftShift, ctx),
+            ShiftRight n => EmitBinaryArithmetic(n, n.LeftHandValue, n.RightHandValue, RightShift, ctx),
             Equal n => EmitComparison(n.LeftHandValue, n.RightHandValue, Equal, ctx),
             NotEqual n => EmitComparison(n.LeftHandValue, n.RightHandValue, NotEqual, ctx),
             LessThan n => EmitComparison(n.LeftHandValue, n.RightHandValue, LessThan, ctx),
@@ -611,9 +611,23 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitBinaryArithmeticValue(
-        Node left, Node right,
+        Node owner, Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
         Context ctx) {
+        var leftUnderlying = NullableUnderlyingOf(left, ctx);
+        var rightUnderlying = NullableUnderlyingOf(right, ctx);
+        bool anyNullable = leftUnderlying is not null || rightUnderlying is not null;
+        bool anyHeap = (leftUnderlying is not null && IsHeapNullableOperand(left, ctx))
+            || (rightUnderlying is not null && IsHeapNullableOperand(right, ctx));
+        bool allHeap = (leftUnderlying is null || IsHeapNullableOperand(left, ctx))
+            && (rightUnderlying is null || IsHeapNullableOperand(right, ctx));
+        if (anyHeap && !allHeap)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot combine a heap optional value with a "
+                + "scalar-encoded optional value.");
+        if (anyNullable && allHeap)
+            return EmitLiftedArithmetic(
+                owner, left, right, factory, ctx, leftUnderlying, rightUnderlying);
         var leftVal = ValueOf(left, ctx);
         var rightVal = ValueOf(right, ctx);
         bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
@@ -638,6 +652,68 @@ public static partial class AbiEmitter {
         return factory(
             RingCodec.AsRepresentation(leftVal, width),
             RingCodec.AsRepresentation(rightVal, width));
+    }
+
+    /// <summary>Binary arithmetic with a nullable operand. Both values are unboxed, the
+    /// operation runs on the values, and a nullable result is boxed: C# lifts the
+    /// operator, so an absent operand makes the result absent.</summary>
+    private static Expression EmitLiftedArithmetic(
+        Node owner, Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        Context ctx, Type? leftUnderlying, Type? rightUnderlying) {
+        var resultUnderlying = ctx.ClrTypeOf(owner) is { } resultClr
+            ? Nullable.GetUnderlyingType(resultClr)
+            : null;
+        if (resultUnderlying is null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: nullable arithmetic '{owner}' must produce a nullable value.");
+
+        var lv = ValueOf(left, ctx);
+        var rv = ValueOf(right, ctx);
+        var leftPresent = leftUnderlying is null ? null : NullablePresent(lv);
+        var rightPresent = rightUnderlying is null ? null : NullablePresent(rv);
+        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? lv.Type;
+        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rv.Type;
+        var leftValue = leftPresent is null
+            ? lv
+            : Condition(leftPresent, UnboxNullable(lv, leftType, ctx), Default(leftType));
+        var rightValue = rightPresent is null
+            ? rv
+            : Condition(rightPresent, UnboxNullable(rv, rightType, ctx), Default(rightType));
+        Expression present = leftPresent is null ? rightPresent!
+            : rightPresent is null ? leftPresent
+            : AndAlso(leftPresent, rightPresent);
+
+        Expression result;
+        if (IsIeeeType(resultUnderlying)) {
+            var target = resultUnderlying == typeof(float) ? typeof(float) : typeof(double);
+            result = factory(Convert(leftValue, typeof(double)), Convert(rightValue, typeof(double)));
+            if (result.Type != target)
+                result = Convert(result, target);
+        }
+        else if (factory == LeftShift || factory == RightShift) {
+            var width = RingCodec.SlotTypeOf(resultUnderlying);
+            result = factory(
+                LiftedOperand(leftValue, leftType, width),
+                LiftedOperand(rightValue, rightType, typeof(int)));
+        }
+        else {
+            var width = RingCodec.SlotTypeOf(resultUnderlying);
+            result = factory(
+                LiftedOperand(leftValue, leftType, width),
+                LiftedOperand(rightValue, rightType, width));
+        }
+
+        Expression boxed = resultUnderlying == typeof(bool)
+            ? Condition(
+                NotEqual(Convert(result, typeof(long)), Constant(0L)),
+                Constant(true, typeof(object)),
+                Constant(false, typeof(object)))
+            : Convert(Convert(result, resultUnderlying), typeof(object));
+        return Condition(
+            present,
+            Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
+            Constant(0L));
     }
 
     /// <summary>The width an integer operation runs at, from the operand types analysis

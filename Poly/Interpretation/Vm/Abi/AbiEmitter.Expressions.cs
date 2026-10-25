@@ -22,6 +22,11 @@ public static partial class AbiEmitter {
         // heap-resident (Nullable<T>), so its null test keeps the sentinel path.
         if (eq && FoldScalarNullTest(left, right, cf, ctx) is { } folded)
             return folded;
+        // A nullable value is a heap handle, so a value comparison must unbox it and
+        // apply C#'s lifted rule: an absent operand is false for ordering and equal
+        // only to another absent operand.
+        if (TryLiftedComparison(left, right, cf, eq, ctx) is { } lifted)
+            return lifted;
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
         if (eq && AreHeapValues(ctx, left, right)) {
@@ -80,10 +85,10 @@ public static partial class AbiEmitter {
     /// <summary>Binary arithmetic in ring form: the value form, spilled. Keeping
     /// one body means the IEEE and shift rules cannot drift between the two.</summary>
     private static Expression EmitBinaryArithmetic(
-        Node left, Node right,
+        Node owner, Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
         Context ctx) =>
-        SpillToRing(EmitBinaryArithmeticValue(left, right, factory, ctx), ctx);
+        SpillToRing(EmitBinaryArithmeticValue(owner, left, right, factory, ctx), ctx);
 
     /// <summary>Converts a long value (heap handle or 0 for null) to an object
     /// reference suitable for comparison. Handle 0 maps to CLR null rather
@@ -99,8 +104,9 @@ public static partial class AbiEmitter {
 
     /// <summary>A scalar compared with the null constant is a compile-time answer:
     /// <c>== null</c> is false and <c>!= null</c> is true, because the slot holds a
-    /// value rather than a null sentinel. The scalar operand still emits, so its own
-    /// effects are kept; only the null test folds.</summary>
+    /// value rather than a null sentinel. The scalar operand still emits — its own
+    /// effects (a store, a call) are kept in the tree — only the null test folds, so
+    /// no heap or word sentinel check is ever emitted for this comparison.</summary>
     private static Expression? FoldScalarNullTest(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
@@ -112,8 +118,110 @@ public static partial class AbiEmitter {
             : null;
         if (scalar is null || ctx.KindOf(scalar) != ValueRepresentationKind.StackScalar)
             return null;
-        _ = ValueOf(scalar, ctx);
-        return cf == Equal ? Constant(false) : Constant(true);
+        return Block(ValueOf(scalar, ctx),
+            Constant(cf == Equal ? false : true));
+    }
+
+    /// <summary>The underlying CLR type of a nullable value operand, or null when the
+    /// node is not a nullable value.</summary>
+    private static Type? NullableUnderlyingOf(Node node, Context ctx) =>
+        ctx.ClrTypeOf(node) is { } clr ? Nullable.GetUnderlyingType(clr) : null;
+
+    /// <summary>True when a nullable operand's slot is the heap handle the ABI emits
+    /// for a parameter (root SetArgs or a call frame). A nullable produced by the
+    /// legacy member/return encoder is still a scalar word and keeps that path.</summary>
+    private static bool IsHeapNullableOperand(Node node, Context ctx) =>
+        node is Parameter || (node is Variable v && ctx.BoundParameter(v) is not null);
+
+    /// <summary>True for a heap value that is a reference or a non-inline value type —
+    /// the existing heap path's operands, not a nullable value.</summary>
+    private static bool IsNonNullableHeap(Node node, Context ctx) =>
+        ctx.Analysis is not null
+        && ctx.KindOf(node) == ValueRepresentationKind.HeapRef
+        && NullableUnderlyingOf(node, ctx) is null;
+
+    /// <summary>A nullable heap slot's presence: handle 0 is the null sentinel.</summary>
+    private static Expression NullablePresent(Expression handle) =>
+        NotEqual(handle, Constant(0L));
+
+    /// <summary>The underlying value of a nullable heap slot. The caller guards
+    /// presence, so handle 0 is never unboxed.</summary>
+    private static Expression UnboxNullable(Expression handle, Type underlying, Context ctx) =>
+        Convert(Call(ctx.HeapLocal, HeapUnsafeGet, Convert(handle, typeof(int))), underlying);
+
+    private static bool IsIeeeType(Type type) => type == typeof(float) || type == typeof(double);
+
+    /// <summary>An unboxed value at the width an integral operation runs at. A bool is
+    /// 0/1 and an enum is its underlying integer, because the ring word carries the
+    /// number, not the declared CLR type.</summary>
+    private static Expression LiftedOperand(Expression value, Type valueType, Type width) {
+        if (valueType == typeof(bool))
+            value = Condition(value, Constant(1L), Constant(0L));
+        else if (value.Type.IsEnum)
+            value = Convert(value, typeof(long));
+        else if (value.Type != typeof(int) && value.Type != typeof(long) && !IsIeeeType(value.Type))
+            value = Convert(value, typeof(long));
+        return RingCodec.AsRepresentation(value, width);
+    }
+
+    /// <summary>A value comparison where at least one operand is a nullable value.
+    /// Returns null when neither side is nullable, or when the other side is the null
+    /// constant (the sentinel path) or a reference/non-inline heap value (the existing
+    /// heap path). Absent is false for ordering, and equal only to absent.</summary>
+    private static Expression? TryLiftedComparison(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        bool eq, Context ctx) {
+        if (ctx.Analysis is null)
+            return null;
+        var leftUnderlying = NullableUnderlyingOf(left, ctx);
+        var rightUnderlying = NullableUnderlyingOf(right, ctx);
+        if (leftUnderlying is null && rightUnderlying is null)
+            return null;
+        bool anyHeap = (leftUnderlying is not null && IsHeapNullableOperand(left, ctx))
+            || (rightUnderlying is not null && IsHeapNullableOperand(right, ctx));
+        bool allHeap = (leftUnderlying is null || IsHeapNullableOperand(left, ctx))
+            && (rightUnderlying is null || IsHeapNullableOperand(right, ctx));
+        if (anyHeap && !allHeap)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot compare a heap optional value with a "
+                + "scalar-encoded optional value.");
+        if (!anyHeap)
+            return null;
+        if (left is Constant { Value: null } || right is Constant { Value: null })
+            return null;
+        if (IsNonNullableHeap(left, ctx) || IsNonNullableHeap(right, ctx))
+            return null;
+
+        var lv = ValueOf(left, ctx);
+        var rv = ValueOf(right, ctx);
+        var leftPresent = leftUnderlying is null ? null : NullablePresent(lv);
+        var rightPresent = rightUnderlying is null ? null : NullablePresent(rv);
+        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? lv.Type;
+        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rv.Type;
+        var leftValue = leftPresent is null
+            ? lv
+            : Condition(leftPresent, UnboxNullable(lv, leftType, ctx), Default(leftType));
+        var rightValue = rightPresent is null
+            ? rv
+            : Condition(rightPresent, UnboxNullable(rv, rightType, ctx), Default(rightType));
+        Expression present = leftPresent is null ? rightPresent!
+            : rightPresent is null ? leftPresent
+            : AndAlso(leftPresent, rightPresent);
+
+        bool ieee = IsIeeeType(leftType) || IsIeeeType(rightType);
+        Expression Value(Expression value, Type type) =>
+            ieee ? Convert(value, typeof(double)) : LiftedOperand(value, type, typeof(long));
+        if (!eq)
+            return AndAlso(present, cf(Value(leftValue, leftType), Value(rightValue, rightType)));
+
+        // Equality is true when both are present and their values match, or when both
+        // are absent. A scalar side is always present.
+        var areEqual = AndAlso(present, System.Linq.Expressions.Expression.Equal(
+            Value(leftValue, leftType), Value(rightValue, rightType)));
+        if (leftPresent is not null && rightPresent is not null)
+            areEqual = OrElse(areEqual, AndAlso(Not(leftPresent), Not(rightPresent)));
+        return cf == Equal ? areEqual : Not(areEqual);
     }
 
     /// <summary>Check if both nodes likely produce heap reference values that
@@ -195,6 +303,9 @@ public static partial class AbiEmitter {
     /// <summary>Unary minus: negate the operand in its own ring slot — an in-place shape,
     /// not a spill of a value form.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
+        if (NullableUnderlyingOf(unaryMinus.Operand, ctx) is { } underlying
+            && IsHeapNullableOperand(unaryMinus.Operand, ctx))
+            return EmitLiftedUnary(unaryMinus.Operand, underlying, Negate, ctx);
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
         Expression result;
@@ -212,9 +323,44 @@ public static partial class AbiEmitter {
     /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
     /// of a value form.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
+        if (NullableUnderlyingOf(n.Operand, ctx) is { } underlying
+            && IsHeapNullableOperand(n.Operand, ctx))
+            return EmitLiftedUnary(n.Operand, underlying, Not, ctx);
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(n.Operand, ctx));
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
+    }
+
+    /// <summary>Unary operator on a nullable value: unbox, apply, box. An absent
+    /// operand yields the null sentinel rather than the handle.</summary>
+    private static Expression EmitLiftedUnary(
+        Node operand, Type underlying, Func<Expression, Expression> op, Context ctx) {
+        var ring = ctx.OpenRing();
+        int slot = ring.Add(CompileNode(operand, ctx));
+        var handle = ctx.RingVar(slot);
+        var present = NullablePresent(handle);
+        var value = Condition(present, UnboxNullable(handle, underlying, ctx), Default(underlying));
+        Expression result;
+        if (IsIeeeType(underlying)) {
+            var target = underlying == typeof(float) ? typeof(float) : typeof(double);
+            result = op(Convert(value, typeof(double)));
+            if (result.Type != target)
+                result = Convert(result, target);
+        }
+        else {
+            result = op(LiftedOperand(value, underlying, RingCodec.SlotTypeOf(underlying)));
+        }
+        Expression boxed = underlying == typeof(bool)
+            ? Condition(
+                NotEqual(Convert(result, typeof(long)), Constant(0L)),
+                Constant(true, typeof(object)),
+                Constant(false, typeof(object)))
+            : Convert(Convert(result, underlying), typeof(object));
+        int outSlot = ctx.AllocSlot();
+        return ring.Then(Assign(ctx.RingVar(outSlot), Condition(
+            present,
+            Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
+            Constant(0L))));
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own

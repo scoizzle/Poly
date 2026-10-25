@@ -150,6 +150,17 @@ public static partial class AbiEmitter {
         if (NullableUnderlyingOf(destination, ctx) is { } underlying
             && ctx.KindOf(value) is ValueRepresentationKind.StackScalar) {
             var scalar = RingCodec.NumericTo(decoded, RingCodec.SlotTypeOf(underlying));
+            // A scalar bool word is 0/1, not a CLR bool: box the test the word already
+            // carries. Convert(long, bool) does not exist.
+            if (underlying == typeof(bool)) {
+                return Convert(
+                    Call(ctx.HeapLocal, HeapAllocate,
+                        Condition(
+                            NotEqual(scalar, Constant(0L)),
+                            Constant(true, typeof(object)),
+                            Constant(false, typeof(object)))),
+                    typeof(long));
+            }
             return Convert(
                 Call(ctx.HeapLocal, HeapAllocate,
                     Convert(Convert(scalar, underlying), typeof(object))),

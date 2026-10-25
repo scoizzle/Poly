@@ -127,6 +127,32 @@ public class AbiEmitterOptionalScalarTests {
         await Assert.That(bag!["Limit"]).IsEqualTo(0L);
     }
 
+    /// <summary>An AST property with an optional scalar type and no stored value reads
+    /// as the null sentinel, not <c>Missing.Value</c>.</summary>
+    [Test]
+    public async Task AstProperty_OptionalScalar_Absent_ReadsAsNull() {
+        var limit = OptionalAge();
+        var types = Analyze(new TypeDefinitionNode(
+            "BagLot", "Branch",
+            Constructors: [new ConstructorDefinitionNode([], new Block([]))],
+            Properties: [
+                new PropertyDefinitionNode("Limit", new OptionalTypeReference(TypeReference.To<long>()))
+            ],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Probe",
+                    new PrimitiveTypeReference(PrimitiveType.Boolean),
+                    Parameters: [limit],
+                    Body: new Return(new Equal(
+                        new Member(new ThisReference(), "Limit"), new Constant(null))))
+            ]));
+        using var exec = Interpreter.Execute(Interpreter.Compile(
+            new Invoke(new Member(new New(new TypeReference("Branch.BagLot")), "Probe"),
+                new Constant(41L)),
+            types));
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
+    }
+
     /// <summary>A scalar with no default is required: omitting it is an analysis
     /// error, never a silent zero or null word.</summary>
     [Test]

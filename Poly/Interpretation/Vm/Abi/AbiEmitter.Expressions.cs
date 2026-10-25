@@ -127,12 +127,6 @@ public static partial class AbiEmitter {
     private static Type? NullableUnderlyingOf(Node node, Context ctx) =>
         ctx.ClrTypeOf(node) is { } clr ? Nullable.GetUnderlyingType(clr) : null;
 
-    /// <summary>True when a nullable operand's slot is the heap handle the ABI emits
-    /// for a parameter (root SetArgs or a call frame). A nullable produced by the
-    /// legacy member/return encoder is still a scalar word and keeps that path.</summary>
-    private static bool IsHeapNullableOperand(Node node, Context ctx) =>
-        node is Parameter || (node is Variable v && ctx.BoundParameter(v) is not null);
-
     /// <summary>True for a heap value that is a reference or a non-inline value type —
     /// the existing heap path's operands, not a nullable value.</summary>
     private static bool IsNonNullableHeap(Node node, Context ctx) =>
@@ -145,17 +139,29 @@ public static partial class AbiEmitter {
         NotEqual(handle, Constant(0L));
 
     /// <summary>The underlying value of a nullable heap slot. The caller guards
-    /// presence, so handle 0 is never unboxed.</summary>
+    /// presence, so handle 0 is never unboxed. The conversion tolerates a producer
+    /// that boxed a narrower argument (an <c>int</c> for a <c>long?</c> slot).</summary>
     private static Expression UnboxNullable(Expression handle, Type underlying, Context ctx) =>
-        Convert(Call(ctx.HeapLocal, HeapUnsafeGet, Convert(handle, typeof(int))), underlying);
+        Convert(
+            Call(UnboxNullableAsInfo, ctx.HeapLocal, handle, Constant(underlying, typeof(Type))),
+            underlying);
 
     private static bool IsIeeeType(Type type) => type == typeof(float) || type == typeof(double);
 
+    /// <summary>Three-valued logic has no bool result in this subset, so an optional
+    /// Boolean operand fails closed rather than reading its handle as truthy.</summary>
+    private static void RejectNullableLogical(string op, Node left, Node right, Context ctx) {
+        if (NullableUnderlyingOf(left, ctx) is not null || NullableUnderlyingOf(right, ctx) is not null)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{op}' on an optional Boolean is not supported.");
+    }
+
     /// <summary>An unboxed value at the width an integral operation runs at. A bool is
     /// 0/1 and an enum is its underlying integer, because the ring word carries the
-    /// number, not the declared CLR type.</summary>
-    private static Expression LiftedOperand(Expression value, Type valueType, Type width) {
-        if (valueType == typeof(bool))
+    /// number, not the declared CLR type. A scalar bool already arrives as its 0/1
+    /// word; an unboxed bool is the CLR value the test needs.</summary>
+    private static Expression LiftedOperand(Expression value, Type width) {
+        if (value.Type == typeof(bool))
             value = Condition(value, Constant(1L), Constant(0L));
         else if (value.Type.IsEnum)
             value = Convert(value, typeof(long));
@@ -177,16 +183,6 @@ public static partial class AbiEmitter {
         var leftUnderlying = NullableUnderlyingOf(left, ctx);
         var rightUnderlying = NullableUnderlyingOf(right, ctx);
         if (leftUnderlying is null && rightUnderlying is null)
-            return null;
-        bool anyHeap = (leftUnderlying is not null && IsHeapNullableOperand(left, ctx))
-            || (rightUnderlying is not null && IsHeapNullableOperand(right, ctx));
-        bool allHeap = (leftUnderlying is null || IsHeapNullableOperand(left, ctx))
-            && (rightUnderlying is null || IsHeapNullableOperand(right, ctx));
-        if (anyHeap && !allHeap)
-            throw new InvalidOperationException(
-                "VM compile rejected: cannot compare a heap optional value with a "
-                + "scalar-encoded optional value.");
-        if (!anyHeap)
             return null;
         if (left is Constant { Value: null } || right is Constant { Value: null })
             return null;
@@ -210,15 +206,15 @@ public static partial class AbiEmitter {
             : AndAlso(leftPresent, rightPresent);
 
         bool ieee = IsIeeeType(leftType) || IsIeeeType(rightType);
-        Expression Value(Expression value, Type type) =>
-            ieee ? Convert(value, typeof(double)) : LiftedOperand(value, type, typeof(long));
+        Expression Value(Expression value) =>
+            ieee ? Convert(value, typeof(double)) : LiftedOperand(value, typeof(long));
         if (!eq)
-            return AndAlso(present, cf(Value(leftValue, leftType), Value(rightValue, rightType)));
+            return AndAlso(present, cf(Value(leftValue), Value(rightValue)));
 
         // Equality is true when both are present and their values match, or when both
         // are absent. A scalar side is always present.
         var areEqual = AndAlso(present, System.Linq.Expressions.Expression.Equal(
-            Value(leftValue, leftType), Value(rightValue, rightType)));
+            Value(leftValue), Value(rightValue)));
         if (leftPresent is not null && rightPresent is not null)
             areEqual = OrElse(areEqual, AndAlso(Not(leftPresent), Not(rightPresent)));
         return cf == Equal ? areEqual : Not(areEqual);
@@ -251,6 +247,7 @@ public static partial class AbiEmitter {
     /// <summary>Short-circuit AND: if left is false, skip right. Answers in the left
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
+        RejectNullableLogical("and", and.LeftHandValue, and.RightHandValue, ctx);
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
 
@@ -272,6 +269,7 @@ public static partial class AbiEmitter {
     /// <summary>Short-circuit OR: if left is true, skip right. Answers in the left
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
+        RejectNullableLogical("or", or.LeftHandValue, or.RightHandValue, ctx);
         var ring = ctx.OpenRing();
         int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
 
@@ -293,6 +291,7 @@ public static partial class AbiEmitter {
     /// <summary>Logical NOT: 0→1, anything else→0, in the operand's own ring slot — an
     /// in-place shape, not a spill of a value form.</summary>
     private static Expression EmitNot(Not not, Context ctx) {
+        RejectNullableLogical("not", not.Value, not.Value, ctx);
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(not.Value, ctx));
         var result = Assign(ctx.RingVar(slot),
@@ -303,8 +302,7 @@ public static partial class AbiEmitter {
     /// <summary>Unary minus: negate the operand in its own ring slot — an in-place shape,
     /// not a spill of a value form.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
-        if (NullableUnderlyingOf(unaryMinus.Operand, ctx) is { } underlying
-            && IsHeapNullableOperand(unaryMinus.Operand, ctx))
+        if (NullableUnderlyingOf(unaryMinus.Operand, ctx) is { } underlying)
             return EmitLiftedUnary(unaryMinus.Operand, underlying, Negate, ctx);
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
@@ -323,8 +321,7 @@ public static partial class AbiEmitter {
     /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
     /// of a value form.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
-        if (NullableUnderlyingOf(n.Operand, ctx) is { } underlying
-            && IsHeapNullableOperand(n.Operand, ctx))
+        if (NullableUnderlyingOf(n.Operand, ctx) is { } underlying)
             return EmitLiftedUnary(n.Operand, underlying, Not, ctx);
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(n.Operand, ctx));
@@ -348,7 +345,7 @@ public static partial class AbiEmitter {
                 result = Convert(result, target);
         }
         else {
-            result = op(LiftedOperand(value, underlying, RingCodec.SlotTypeOf(underlying)));
+            result = op(LiftedOperand(value, RingCodec.SlotTypeOf(underlying)));
         }
         Expression boxed = underlying == typeof(bool)
             ? Condition(
@@ -366,6 +363,9 @@ public static partial class AbiEmitter {
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
     /// ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitPopCount(PopCount pc, Context ctx) {
+        if (NullableUnderlyingOf(pc.Operand, ctx) is not null)
+            throw new InvalidOperationException(
+                "VM compile rejected: PopCount of an optional value is not supported.");
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(pc.Operand, ctx));
         var call = Call(null, BitOperationsPopCount,
@@ -631,6 +631,12 @@ public static partial class AbiEmitter {
             sourceType = c.Value.GetType();
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(t.Operand, ctx));
+        // A cast to a nullable value boxes the underlying value: the slot is a heap
+        // handle (or the null sentinel), never the word itself.
+        if (Nullable.GetUnderlyingType(targetType) is not null)
+            return ring.Then(Assign(ctx.RingVar(slot), RingCodec.FromClr(
+                RingCodec.ToClr(ctx.RingVar(slot), targetType, t.Operand, ctx.Analysis, ctx.HeapLocal),
+                targetType, ctx.HeapLocal)));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
         return ring.Then(

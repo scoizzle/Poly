@@ -144,6 +144,17 @@ public static partial class AbiEmitter {
         var valueType = ctx.SlotTypeOf(value);
         var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
         var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
+        // A nullable destination is a heap handle. A scalar value is boxed at the
+        // underlying type; a heap value (a nullable or a reference) is already a handle,
+        // and the null constant is the sentinel 0.
+        if (NullableUnderlyingOf(destination, ctx) is { } underlying
+            && ctx.KindOf(value) is ValueRepresentationKind.StackScalar) {
+            var scalar = RingCodec.NumericTo(decoded, RingCodec.SlotTypeOf(underlying));
+            return Convert(
+                Call(ctx.HeapLocal, HeapAllocate,
+                    Convert(Convert(scalar, underlying), typeof(object))),
+                typeof(long));
+        }
         return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
     }
 

@@ -74,6 +74,8 @@ public static partial class AbiEmitter {
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.TypeAs(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, long>>)((h, v) => RingCodec.UnboxNullable(h, v)));
+    private static readonly MethodInfo UnboxNullableAsInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)((h, v, t) => RingCodec.UnboxNullableAs(h, v, t)));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
         typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!;
@@ -409,16 +411,8 @@ public static partial class AbiEmitter {
             for (int i = 0; i < ctorParams.Length; i++) {
                 var paramType = ctorParams[i].ParameterType;
                 if (i < n.Arguments.Length) {
-                    var ringVal = ctx.RingVar(argSlots[i]);
-                    if (paramType.IsValueType) {
-                        ctorArgs[i] = Convert(ringVal, paramType);
-                    }
-                    else {
-                        ctorArgs[i] = Convert(
-                            Call(ctx.HeapLocal, HeapUnsafeGet,
-                                Convert(ringVal, typeof(int))),
-                            paramType);
-                    }
+                    ctorArgs[i] = RingCodec.ToClr(
+                        ctx.RingVar(argSlots[i]), paramType, n.Arguments[i], ctx.Analysis, ctx.HeapLocal);
                 }
                 else if (ctorParams[i].HasDefaultValue) {
                     ctorArgs[i] = Constant(ctorParams[i].DefaultValue, paramType);
@@ -616,16 +610,7 @@ public static partial class AbiEmitter {
         Context ctx) {
         var leftUnderlying = NullableUnderlyingOf(left, ctx);
         var rightUnderlying = NullableUnderlyingOf(right, ctx);
-        bool anyNullable = leftUnderlying is not null || rightUnderlying is not null;
-        bool anyHeap = (leftUnderlying is not null && IsHeapNullableOperand(left, ctx))
-            || (rightUnderlying is not null && IsHeapNullableOperand(right, ctx));
-        bool allHeap = (leftUnderlying is null || IsHeapNullableOperand(left, ctx))
-            && (rightUnderlying is null || IsHeapNullableOperand(right, ctx));
-        if (anyHeap && !allHeap)
-            throw new InvalidOperationException(
-                "VM compile rejected: cannot combine a heap optional value with a "
-                + "scalar-encoded optional value.");
-        if (anyNullable && allHeap)
+        if (leftUnderlying is not null || rightUnderlying is not null)
             return EmitLiftedArithmetic(
                 owner, left, right, factory, ctx, leftUnderlying, rightUnderlying);
         var leftVal = ValueOf(left, ctx);
@@ -694,14 +679,14 @@ public static partial class AbiEmitter {
         else if (factory == LeftShift || factory == RightShift) {
             var width = RingCodec.SlotTypeOf(resultUnderlying);
             result = factory(
-                LiftedOperand(leftValue, leftType, width),
-                LiftedOperand(rightValue, rightType, typeof(int)));
+                LiftedOperand(leftValue, width),
+                LiftedOperand(rightValue, typeof(int)));
         }
         else {
             var width = RingCodec.SlotTypeOf(resultUnderlying);
             result = factory(
-                LiftedOperand(leftValue, leftType, width),
-                LiftedOperand(rightValue, rightType, width));
+                LiftedOperand(leftValue, width),
+                LiftedOperand(rightValue, width));
         }
 
         Expression boxed = resultUnderlying == typeof(bool)

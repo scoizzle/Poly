@@ -516,6 +516,11 @@ internal static class DictionaryBackedValue {
     /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
     internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
+        // An absent nullable value is the VM's null sentinel, not Missing.Value:
+        // boxing Missing would make the slot look present (and unboxing it fails).
+        if (targetType.GetRuntimeType() is { } runtime
+            && Nullable.GetUnderlyingType(runtime) is not null)
+            return Expression.Constant(null, typeof(object));
         var convert = ConvertMethod(targetType.PrimitiveType);
         if (convert is null || !convert.ReturnType.IsValueType)
             return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));

@@ -229,9 +229,26 @@ internal static class RingCodec {
     public static Expression FromClr(Expression value, Type? clrType, Expression heap) {
         if (clrType == typeof(float) || clrType == typeof(double))
             return ToIeee(Convert(value, typeof(double)));
+        // A nullable is heap-resident: absent is the sentinel 0, present is a handle
+        // to the boxed underlying value. A value read from a nullable member or a
+        // nullable call return must not collapse to the underlying word.
+        if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
+            return BoxNullable(value, heap);
         if (clrType is not null && clrType.IsValueType && IsInline(clrType))
             return Convert(Convert(value, clrType), typeof(long));
         return Call(BoxToAbiInfo, heap, Convert(value, typeof(object)));
+    }
+
+    /// <summary>Box a nullable value as its slot: the null sentinel when it has no
+    /// value, otherwise a handle to the boxed underlying value.</summary>
+    private static Expression BoxNullable(Expression value, Expression heap) {
+        var boxed = Variable(typeof(object), "_nullable");
+        return Block([boxed],
+            Assign(boxed, Convert(value, typeof(object))),
+            Condition(
+                Equal(boxed, Constant(null, typeof(object))),
+                Constant(0L),
+                Convert(Call(heap, HeapAllocate, boxed), typeof(long))));
     }
 
     /// <summary>Read a ring slot as a CLR value of <paramref name="targetType"/>.
@@ -252,21 +269,31 @@ internal static class RingCodec {
         if (source is Constant constant && constant.Value is not null
             && !TryInlineConstant(constant.Value, out _))
             return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
-        if (targetType.IsValueType && IsInline(targetType))
+        // A nullable target takes the underlying value: a scalar source converts to it,
+        // a heap source is the boxed underlying (or the null sentinel).
+        if (targetType.IsValueType && Nullable.GetUnderlyingType(targetType) is not null) {
+            if (sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null)
+                return Convert(ScalarValue(ringVal, sourceClr), targetType);
+            return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
+        }
+        if (targetType.IsValueType
+            && ValueRepresentationClassifier.KindFor(targetType) == ValueRepresentationKind.StackScalar)
             return Convert(ringVal, targetType);
         // A scalar reaching an `object` parameter is boxed by its source type. A heap
         // source (an enum constant, a reference, a non-inline value type) is dereferenced.
         if (targetType == typeof(object) && source is not null
-            && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null) {
-            Expression scalar = IsIeee(sourceClr)
-                ? Convert(FromIeee(ringVal), sourceClr)
-                : sourceClr == typeof(bool)
-                    ? NotEqual(ringVal, Constant(0L))
-                    : Convert(ringVal, sourceClr);
-            return Convert(scalar, typeof(object));
-        }
+            && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null)
+            return Convert(ScalarValue(ringVal, sourceClr), typeof(object));
         return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
     }
+
+    /// <summary>The CLR value of a scalar ring slot, at its own declared type.</summary>
+    private static Expression ScalarValue(Expression ringVal, Type sourceClr) =>
+        IsIeee(sourceClr)
+            ? Convert(FromIeee(ringVal), sourceClr)
+            : sourceClr == typeof(bool)
+                ? NotEqual(ringVal, Constant(0L))
+                : Convert(ringVal, sourceClr);
 
     /// <summary>Allocate a value on the heap and return its ring handle. Use for
     /// a value whose representation is known to be heap-resident.</summary>
@@ -328,6 +355,17 @@ internal static class RingCodec {
         var obj = heap.UnsafeGet((int)handle);
         if (obj is null) return 0L;
         return System.Convert.ToInt64(obj);
+    }
+
+    /// <summary>Runtime unbox of a nullable value as its declared underlying type.
+    /// Producers may box a narrower argument (an <c>int</c> passed to a <c>long?</c>
+    /// parameter), so the value is converted rather than cast. Handle 0 and a stored
+    /// null are the absent sentinel.</summary>
+    public static object? UnboxNullableAs(VmManagedObjectHeap heap, long handle, Type underlying) {
+        if (handle == 0L) return null;
+        var obj = heap.UnsafeGet((int)handle);
+        if (obj is null) return null;
+        return System.Convert.ChangeType(obj, underlying, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>Runtime <c>as</c>: the same handle when the heap value is

@@ -279,6 +279,7 @@ public sealed class DslCompiler {
 
         // Load-time registration (not bag invent): host producers for loaded doors.
         var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
         var loaded = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))

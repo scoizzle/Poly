@@ -15,9 +15,15 @@ public static partial class AbiEmitter {
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
         Context ctx) {
+        bool eq = cf == Equal || cf == NotEqual;
+        // A plain scalar slot holds the value itself, so it can never be null: the
+        // answer is known from the static type and must not reach the heap path,
+        // which would dereference the word as a handle. An optional scalar is
+        // heap-resident (Nullable<T>), so its null test keeps the sentinel path.
+        if (eq && FoldScalarNullTest(left, right, cf, ctx) is { } folded)
+            return folded;
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
-        bool eq = cf == Equal || cf == NotEqual;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
@@ -91,18 +97,31 @@ public static partial class AbiEmitter {
             deref);
     }
 
+    /// <summary>A scalar compared with the null constant is a compile-time answer:
+    /// <c>== null</c> is false and <c>!= null</c> is true, because the slot holds a
+    /// value rather than a null sentinel. The scalar operand still emits, so its own
+    /// effects are kept; only the null test folds.</summary>
+    private static Expression? FoldScalarNullTest(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        Context ctx) {
+        if (ctx.Analysis is null)
+            return null;
+        var scalar = left is Constant { Value: null } ? right
+            : right is Constant { Value: null } ? left
+            : null;
+        if (scalar is null || ctx.KindOf(scalar) != ValueRepresentationKind.StackScalar)
+            return null;
+        _ = ValueOf(scalar, ctx);
+        return cf == Equal ? Constant(false) : Constant(true);
+    }
+
     /// <summary>Check if both nodes likely produce heap reference values that
     /// should be compared by value rather than handle.</summary>
     private static bool AreHeapValues(Context ctx, Node left, Node right) {
         if (ctx.Analysis is not null) {
             var leftRep = ctx.KindOf(left);
             var rightRep = ctx.KindOf(right);
-            // A scalar slot holds a word, even when compared with the null constant
-            // (`age != null` on an optional value parameter must be true, not a deref
-            // of the word as a heap handle).
-            if ((left is Constant { Value: null } && rightRep == ValueRepresentationKind.StackScalar)
-                || (right is Constant { Value: null } && leftRep == ValueRepresentationKind.StackScalar))
-                return false;
             if (leftRep == ValueRepresentationKind.HeapRef
                 || rightRep == ValueRepresentationKind.HeapRef)
                 return true;

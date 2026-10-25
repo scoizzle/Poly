@@ -70,7 +70,8 @@ public static partial class AbiEmitter {
             Expression writeValue;
             if (clrMemberType is not null
                 && clrMemberType.IsValueType
-                && RingCodec.IsInline(clrMemberType)) {
+                && ValueRepresentationClassifier.KindFor(clrMemberType)
+                    == ValueRepresentationKind.StackScalar) {
                 if (clrMemberType == typeof(bool))
                     writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
                         Constant(false, typeof(object)),
@@ -79,9 +80,11 @@ public static partial class AbiEmitter {
                     writeValue = Convert(Convert(ctx.RingVar(valueSlot), clrMemberType), typeof(object));
             }
             else {
-                writeValue = Call(ctx.HeapLocal,
-                    HeapUnsafeGet,
-                    Convert(ctx.RingVar(valueSlot), typeof(int)));
+                // A heap-stored member (nullable, reference, non-inline value) takes an
+                // object: a heap value is dereferenced, a scalar value is boxed at its
+                // own type, and the null constant stays null.
+                writeValue = RingCodec.ToClr(
+                    ctx.RingVar(valueSlot), typeof(object), a.Value, ctx.Analysis, ctx.HeapLocal);
             }
 
             var writeExpr = resolved.EmitWrite(instanceObj, writeValue);

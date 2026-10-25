@@ -204,7 +204,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
                 AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
-            OptionalTypeReference optional => ResolveNodeType(context, optional.InnerType),
+            // The declared shape of an optional value type is Nullable<T>, which the
+            // VM stores as a heap handle; unwrapping it here would leave an optional
+            // scalar in a single word, where value 0 and absent are the same slot.
+            OptionalTypeReference optional =>
+                AstTypeReferenceResolver.TryResolve(optional, context.TypeDefinitions),
             PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
                 ? context.TypeDefinitions.GetTypeDefinition(clr)
                 : null,

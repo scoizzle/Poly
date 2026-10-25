@@ -809,11 +809,19 @@ public static partial class AbiEmitter {
             }
             int got = ring.Add(CompileNode(arguments[i], ctx));
             values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterReadsRawSlot(declaredParameters[i])
+                // Box the argument at its own CLR type: a heap parameter's value is an
+                // object, and boxing the widened word would store a long where the
+                // argument was an int.
                 ? Convert(
-                    Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
+                    Call(ctx.HeapLocal, HeapAllocate,
+                        RingCodec.ToClr(ctx.RingVar(got), typeof(object),
+                            arguments[i], ctx.Analysis, ctx.HeapLocal)),
                     typeof(long))
                 : ctx.RingVar(got));
         }
+        // Omission of a required scalar is already an analysis error (the call has no
+        // matching member); an omitted optional therefore reaches this arm with a
+        // declared default, never with a null word standing in for a value.
         for (int i = arguments.Count; i < parameters.Count; i++)
             values.Add(DefaultArgument(parameters[i], declaredParameters[i], ctx));
         seq.AddRange(ring.Steps);
@@ -821,19 +829,23 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>A callee parameter's storage convention, from its declaration.
-    /// Inline value types (including nullable inline types, which IsInline peels)
-    /// are raw slots; non-inline value types and references live on the heap.</summary>
+    /// Only a scalar slot holds the value itself; a nullable, a non-inline value
+    /// type, and a reference are heap handles under the null sentinel.</summary>
     private static bool ParameterReadsRawSlot(IParameter parameter) {
         var runtimeType = parameter.ParameterTypeDefinition.GetRuntimeType();
-        return runtimeType is not null && RingCodec.IsInline(runtimeType);
+        return runtimeType is not null
+            && ValueRepresentationClassifier.KindFor(runtimeType) == ValueRepresentationKind.StackScalar;
     }
 
     /// <summary>An omitted argument's default, stored by the callee parameter's
-    /// convention: a raw slot for an inline value type, a heap handle otherwise.</summary>
+    /// convention: a raw slot for a scalar, a heap handle otherwise. An absent
+    /// optional default is the null sentinel, not a heap entry that holds null.</summary>
     private static Expression DefaultArgument(Parameter parameter, IParameter declared, Context ctx) {
         if (ParameterReadsRawSlot(declared))
             return ParameterDefaultLong(parameter, ctx);
         var value = parameter.DefaultValue is Constant constant ? constant.Value : null;
+        if (value is null)
+            return Constant(0L);
         return Convert(
             Call(ctx.HeapLocal, HeapAllocate, Constant(value, typeof(object))),
             typeof(long));

@@ -179,6 +179,23 @@ public class UnifiedAddTests {
     }
 
     [Test]
+    public async Task Add_Constraint_Optional_Succeeds() {
+        var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Order"}""");
+        McpTestTools.Evolve.Add(sessionId, "property",
+            """{"entityName":"Order","name":"Note","typeName":"Text"}""");
+
+        var response = McpTestTools.Evolve.Add(sessionId, "constraint",
+            """{"entityName":"Order","propertyName":"Note","type":"Optional"}""");
+
+        await Assert.That(response.Success).IsTrue();
+        var constraints = McpTestTools.Evolve.GetConstraints(sessionId, "Order", "Note");
+        await Assert.That(constraints.Success).IsTrue();
+        var json = System.Text.Json.JsonSerializer.Serialize(constraints.Data);
+        await Assert.That(json).Contains("Optional");
+    }
+
+    [Test]
     public async Task Add_Policy_DslFragment_Succeeds() {
         var (sessionId, _) = McpTestTools.Store.Create("UnifiedAddTest");
         McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}""");

@@ -82,6 +82,7 @@ public static class DslGrammar {
         DslTokenKind.NumberType => "Number",
         DslTokenKind.BooleanType => "Boolean",
         DslTokenKind.Required => "required",
+        DslTokenKind.Optional => "optional",
         DslTokenKind.Unique => "unique",
         DslTokenKind.Range => "range",
         DslTokenKind.Length => "length",

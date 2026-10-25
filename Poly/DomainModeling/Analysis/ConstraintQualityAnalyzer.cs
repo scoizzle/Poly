@@ -32,6 +32,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
 
     private static void ValidatePropertyConstraints(AnalysisContext context, Property property) {
         var constraints = property.Constraints;
+        ValidateRequiredAndOptional(context, property, constraints);
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);
         ValidateEqualitySatisfiability(context, property, constraints);
@@ -39,6 +40,22 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateConstraintTypeCompatibility(context, property, constraints);
         ValidateDefaultWithinConstraints(context, property, constraints);
         NoteUnprojectedStorageConstraints(context, property, constraints);
+    }
+
+    /// <summary>
+    /// Required is the default and <c>optional</c> is its opt-out, so carrying both is
+    /// a contradiction, not two unrelated constraints.
+    /// </summary>
+    private static void ValidateRequiredAndOptional(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        if (constraints.Any(c => c is RequiredConstraint)
+            && constraints.Any(c => c is OptionalConstraint)) {
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' cannot be both 'required' and 'optional': " +
+                "required is the default and 'optional' is its opt-out.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
     }
 
     /// <summary>

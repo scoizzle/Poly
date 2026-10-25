@@ -22,6 +22,15 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
+    public async Task ForDocument_LoadsUses() {
+        var tree = DslSyntaxTree.Parse("domain D\nuses temporal\n");
+
+        var session = DomainSession.ForDocument(tree, []);
+
+        await Assert.That(session.Extensions).Contains("temporal");
+    }
+
+    [Test]
     public async Task ForExtensions_WithoutTemporal_NowIsProperty() {
         var session = DomainSession.ForExtensions([]);
         await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "now", out _)).IsFalse();

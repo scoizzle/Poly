@@ -22,7 +22,7 @@ public sealed class DomainExtensionTests {
 
     [Test]
     public async Task Parse_DuplicateUses_FailsClosed() {
-        await Assert.That(() => DomainCompilation.PeekExtensions("""
+        await Assert.That(() => DslSyntaxTree.Parse("""
             domain T
             uses temporal
             uses temporal

@@ -1309,9 +1309,9 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            parseSession = DomainSession.ForAuthoringSource(polyText, seed, ProductCatalog.Catalog);
-            var parser = new PolyDslParser(polyText, parseSession);
-            changes = parser.Parse();
+            var tree = DslSyntaxTree.Parse(polyText);
+            parseSession = DomainSession.ForAuthoringDocument(tree, seed, ProductCatalog.Catalog);
+            changes = DomainCompilation.Resolve(tree, parseSession);
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
         }
         catch (FormatException ex) {

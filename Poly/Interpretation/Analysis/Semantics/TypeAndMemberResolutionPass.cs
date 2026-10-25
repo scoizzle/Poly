@@ -225,9 +225,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Lambda lambda => ResolveLambdaType(context, lambda),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
             IfStatement => null,
-            BitwiseAnd ba => ResolveArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
-            BitwiseOr bor => ResolveArithmeticType(context, bor.LeftHandValue, bor.RightHandValue),
-            BitwiseXor bx => ResolveArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
+            BitwiseAnd ba => ResolveNumericArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
+            BitwiseOr bor => ResolveNumericArithmeticType(context, bor.LeftHandValue, bor.RightHandValue),
+            BitwiseXor bx => ResolveNumericArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
             ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
             ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveNodeType(context, bn.Operand),
@@ -328,26 +328,51 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         PromoteNumeric(context, ResolveNodeType(context, left), ResolveNodeType(context, right));
 
     /// <summary>Promote two already-resolved operand types (C#-style). Callers resolve
-    /// each operand once; a deep chain must not re-resolve its subtree per parent.</summary>
+    /// each operand once; a deep chain must not re-resolve its subtree per parent.
+    /// A nullable operand ranks as its underlying type and the result is lifted:
+    /// C# lifts the operator when either operand is nullable (`1 + age` is <c>long?</c>
+    /// just like <c>age + 1</c>, and the emitter must know the result is nullable).</summary>
     private static ITypeDefinition? PromoteNumeric(
         AnalysisContext context, ITypeDefinition? leftType, ITypeDefinition? rightType) {
         if (leftType == null || rightType == null)
             return null;
 
-        var leftRank = GetNumericRank(leftType);
-        var rightRank = GetNumericRank(rightType);
+        bool lifted = IsNullableType(leftType) || IsNullableType(rightType);
+        var leftValue = PeelNullable(context, leftType);
+        var rightValue = PeelNullable(context, rightType);
+        var leftRank = GetNumericRank(leftValue);
+        var rightRank = GetNumericRank(rightValue);
 
         // Promote to the wider numeric type (C#-style); fall back to the
         // left operand type when either side is not a numeric primitive.
         if (leftRank is null || rightRank is null)
             return leftType;
 
-        var promoted = leftRank >= rightRank ? leftType : rightType;
+        var promoted = leftRank >= rightRank ? leftValue : rightValue;
         // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
         // must accept a later int write), so a char result becomes int.
-        return promoted.GetRuntimeType() == typeof(char)
+        var result = promoted.GetRuntimeType() == typeof(char)
             ? context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted
             : promoted;
+        return lifted ? LiftToNullable(context, result) : result;
+    }
+
+    /// <summary>True when the type's declared shape is <c>Nullable&lt;T&gt;</c>.</summary>
+    private static bool IsNullableType(ITypeDefinition type) =>
+        type.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null;
+
+    /// <summary>The type itself, or a nullable's underlying value type.</summary>
+    private static ITypeDefinition PeelNullable(AnalysisContext context, ITypeDefinition type) =>
+        type.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is { } underlying
+            ? context.TypeDefinitions.GetTypeDefinition(underlying) ?? type
+            : type;
+
+    /// <summary>The nullable form of a value type; other shapes are unchanged.</summary>
+    private static ITypeDefinition LiftToNullable(AnalysisContext context, ITypeDefinition type) {
+        var runtime = type.GetRuntimeType();
+        if (runtime is null || !runtime.IsValueType || Nullable.GetUnderlyingType(runtime) is not null)
+            return type;
+        return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime)) ?? type;
     }
 
     private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
@@ -376,7 +401,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (leftType == null || rightType == null)
             return null;
 
-        return leftType;
+        // A shift result is the left operand's type, and it is lifted when either
+        // operand is nullable: `1 << age` answers <c>int?</c>, not <c>int</c>.
+        return IsNullableType(rightType) ? LiftToNullable(context, leftType) : leftType;
     }
 
     private static ITypeDefinition? ResolveMemberAccessType(

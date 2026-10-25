@@ -652,6 +652,11 @@ public static partial class AbiEmitter {
         if (resultUnderlying is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: nullable arithmetic '{owner}' must produce a nullable value.");
+        // Only a real scalar has a lifted word form. A nullable decimal is a heap
+        // value, so reject it rather than round the operand through long.
+        if (!RingCodec.IsInline(resultUnderlying))
+            throw new InvalidOperationException(
+                $"VM compile rejected: arithmetic on an optional {resultUnderlying.Name} is not supported.");
 
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);

@@ -22,6 +22,10 @@ public static partial class AbiEmitter {
         // heap-resident (Nullable<T>), so its null test keeps the sentinel path.
         if (eq && FoldScalarNullTest(left, right, cf, ctx) is { } folded)
             return folded;
+        // A decimal is a heap value against an inline number: unbox it and compare in
+        // decimal, because the number is a value, not a heap handle.
+        if (eq && TryDecimalEquality(left, right, cf, ctx) is { } decimalEq)
+            return decimalEq;
         // A nullable value is a heap handle, so a value comparison must unbox it and
         // apply C#'s lifted rule: an absent operand is false for ordering and equal
         // only to another absent operand.
@@ -232,6 +236,75 @@ public static partial class AbiEmitter {
             areEqual = OrElse(areEqual, AndAlso(Not(leftPresent), Not(rightPresent)));
         return cf == Equal ? areEqual : Not(areEqual);
     }
+
+    /// <summary>Equality between a <c>decimal</c> or <c>decimal?</c> operand and an
+    /// inline numeric operand (#330 R5). The decimal side is a heap handle, so compare
+    /// it after unboxing, with the other value converted to <c>decimal</c> — the heap
+    /// path would read the inline number's word as a heap index. Absent equals nothing,
+    /// and a present zero equals zero. Two decimal operands stay on the heap path,
+    /// where <c>object.Equals</c> compares two boxes of the same type.</summary>
+    private static Expression? TryDecimalEquality(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> cf,
+        Context ctx) {
+        if (ctx.Analysis is null)
+            return null;
+        var leftType = NullableUnderlyingOf(left, ctx) ?? ctx.ClrTypeOf(left);
+        var rightType = NullableUnderlyingOf(right, ctx) ?? ctx.ClrTypeOf(right);
+        bool leftDecimal = leftType == typeof(decimal);
+        bool rightDecimal = rightType == typeof(decimal);
+        if (leftDecimal == rightDecimal)
+            return null;
+        var decimalNode = leftDecimal ? left : right;
+        var otherNode = leftDecimal ? right : left;
+        var otherType = leftDecimal ? rightType : leftType;
+        if (otherType is null || !IsNumericClrType(otherType))
+            return null;
+
+        var decimalRaw = ValueOf(decimalNode, ctx);
+        var otherRaw = ValueOf(otherNode, ctx);
+        var decimalHandle = Variable(typeof(long), "_decimalHandle");
+        var otherSlot = Variable(otherRaw.Type, "_otherValue");
+        var decimalPresent = NullableUnderlyingOf(decimalNode, ctx) is null
+            ? null
+            : NullablePresent(decimalHandle);
+        var decimalValue = UnboxNullable(decimalHandle, typeof(decimal), ctx);
+        if (decimalPresent is not null)
+            decimalValue = Condition(decimalPresent, decimalValue, Default(typeof(decimal)));
+
+        var otherUnderlying = NullableUnderlyingOf(otherNode, ctx);
+        Expression otherValue = otherSlot;
+        Expression? otherPresent = null;
+        if (otherUnderlying is not null) {
+            var otherHandle = RingCodec.ToWord(otherSlot);
+            otherPresent = NullablePresent(otherHandle);
+            otherValue = Condition(otherPresent, UnboxNullable(otherHandle, otherUnderlying, ctx),
+                Default(otherUnderlying));
+        }
+        var otherDecimal = Convert(otherValue, typeof(decimal));
+
+        Expression? present = decimalPresent;
+        if (otherPresent is not null)
+            present = present is null ? otherPresent : AndAlso(present, otherPresent);
+
+        var areEqual = Expression.Equal(decimalValue, otherDecimal);
+        if (present is not null) {
+            areEqual = AndAlso(present, areEqual);
+            if (decimalPresent is not null && otherPresent is not null)
+                areEqual = OrElse(areEqual, AndAlso(Not(decimalPresent), Not(otherPresent)));
+        }
+        return Block([decimalHandle, otherSlot],
+            Assign(decimalHandle, RingCodec.ToWord(decimalRaw)),
+            Assign(otherSlot, otherRaw),
+            cf == Equal ? areEqual : Not(areEqual));
+    }
+
+    private static bool IsNumericClrType(Type type) =>
+        !type.IsEnum
+        && (type == typeof(char) || Type.GetTypeCode(type) is TypeCode.SByte
+            or TypeCode.Byte or TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Int32
+            or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64
+            or TypeCode.Single or TypeCode.Double or TypeCode.Decimal);
 
     /// <summary>Check if both nodes likely produce heap reference values that
     /// should be compared by value rather than handle.</summary>

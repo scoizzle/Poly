@@ -1,5 +1,5 @@
 # TASK optional - properties required by default; opt-in optional
-Status: planned. Branch slice/optional. Lane A. Review 2. Implement mill: OpenCode (review on Grok).
+Status: in review. Branch slice/optional. Lane A. Review 2. Implement mill: OpenCode (review on Grok).
 
 ## Scope
 - Today `required` is only a value constraint (`Poly/DomainModeling/Ontology/Constraints/RequiredConstraint.cs:3`), and requiredness is re-decided at each consumer: create coverage (`Poly/DomainModeling/Analysis/EffectAnalyzer.cs:830-852`), C# `[Required]`/ctor (`Poly/DomainModeling/Lowering/DomainToCSharpExporter.cs:235-241`), storage (`Poly/DomainModeling/Analysis/StorageAnalyzer.cs:292-303`), create DTO (`src/Poly.DslCompiler/MinimalApiGenerator.cs:1126`).
@@ -95,3 +95,4 @@ none
 | Date | Who | Mill | SHA | Verdict / event | Findings |
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6501436d | planned | issue #324; deps #309/#325 and #310/#326 (`6501436d`) merged; decisions #14/#15/#16 accepted |
+| 2026-10-25 | implementer | opencode/opencode-go/deepseek-v4.1-flash | f95b7c2e | pushed | tests 4594/4594; red recorded (DMEFF011, pre-fact analyzer); sweep: old names gone, `OptionalConstraint` only at the fact seam, goldens requiredness-only |

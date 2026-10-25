@@ -188,6 +188,19 @@ public static partial class AbiEmitter {
             return null;
         if (IsNonNullableHeap(left, ctx) || IsNonNullableHeap(right, ctx))
             return null;
+        // Only a real scalar lifts through the word. A nullable whose underlying value
+        // is a heap value (decimal?, DateTime?, Guid?, TimeSpan?) compares on the heap
+        // path: object.Equals on the boxed values, where absent equals absent. Lifting
+        // would round decimal through long and has no conversion for the others.
+        if ((leftUnderlying is { } leftScalar && !RingCodec.IsInline(leftScalar))
+            || (rightUnderlying is { } rightScalar && !RingCodec.IsInline(rightScalar))) {
+            if (eq)
+                return null;
+            // Ordering an absent heap nullable is false in C#, and the heap compare
+            // orders null first: fail closed rather than answer from that order.
+            throw new InvalidOperationException(
+                "VM compile rejected: ordering comparison of an optional heap value is not supported.");
+        }
 
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
@@ -332,6 +345,9 @@ public static partial class AbiEmitter {
     /// operand yields the null sentinel rather than the handle.</summary>
     private static Expression EmitLiftedUnary(
         Node operand, Type underlying, Func<Expression, Expression> op, Context ctx) {
+        if (!RingCodec.IsInline(underlying))
+            throw new InvalidOperationException(
+                $"VM compile rejected: unary operator on an optional {underlying.Name} is not supported.");
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(operand, ctx));
         var handle = ctx.RingVar(slot);

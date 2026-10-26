@@ -123,16 +123,12 @@ internal static class ValueRepresentationClassifier {
     /// boxed value, not the underlying inline word); enums and the integral/char/
     /// bool/IEEE types are inline words; everything else is a handle.</summary>
     public static ValueRepresentationKind KindFor(Type type) {
-        if (type == typeof(void))
-            return ValueRepresentationKind.Void;
-        if (Nullable.GetUnderlyingType(type) is not null)
-            return ValueRepresentationKind.HeapRef;
-        if (type.IsEnum || type == typeof(bool) || type == typeof(char)
-            || type == typeof(long) || type == typeof(int) || type == typeof(short)
-            || type == typeof(byte) || type == typeof(sbyte) || type == typeof(ushort)
-            || type == typeof(uint) || type == typeof(ulong)
-            || type == typeof(float) || type == typeof(double))
+        if (Nullable.GetUnderlyingType(type) is { } underlying)
+            return KindFor(underlying);
+
+        if (type.IsPrimitive || type.IsEnum)
             return ValueRepresentationKind.StackScalar;
+
         return ValueRepresentationKind.HeapRef;
     }
 }

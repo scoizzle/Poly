@@ -32,37 +32,13 @@ internal static class RingCodec {
 
     // ── Classification ───────────────────────────────────────────
 
-    /// <summary>The ring-slot shape of a type's <em>underlying</em> word: a
-    /// nullable is peeled, enums are inline scalars, and float/double are inline
-    /// IEEE bit patterns (classified <see cref="ValueRepresentationKind.StackScalar"/>
-    /// because they occupy one slot — <see cref="IsIeee(Type)"/> carries the
-    /// bit-pattern distinction).
-    /// <para>This answers "is the underlying value long-representable", which is
-    /// what boxing, array element shapes, and unboxing ask. It is <b>not</b> the
-    /// slot kind of a nullable <em>node</em>: a nullable is boxed into a heap
-    /// handle, which is <see cref="ValueRepresentationClassifier.KindFor(Type)"/>'s
-    /// rule. Keep the two questions apart — same signature, different meaning.</para></summary>
-    public static ValueRepresentationKind UnderlyingKindFor(Type type) {
-        var t = Nullable.GetUnderlyingType(type) ?? type;
-        if (t.IsEnum) return ValueRepresentationKind.StackScalar;
-        // A boolean is an inline word (0 = false, non-zero = true); its CLR type is
-        // what marks it boolean at decode boundaries.
-        if (t == typeof(bool)) return ValueRepresentationKind.StackScalar;
-        if (t == typeof(long) || t == typeof(int) || t == typeof(short)
-            || t == typeof(byte) || t == typeof(sbyte) || t == typeof(ushort)
-            || t == typeof(uint) || t == typeof(ulong) || t == typeof(char)
-            || t == typeof(float) || t == typeof(double))
-            return ValueRepresentationKind.StackScalar;
-        return ValueRepresentationKind.HeapRef;
-    }
-
     /// <summary>True when the type's <em>underlying</em> value is an inline word
     /// rather than a heap value. A nullable returns true: its underlying value is
     /// a word, even though a nullable node's slot holds a handle. Callers that
     /// mean "this slot holds the word" must ask
     /// <see cref="ValueRepresentationClassifier.KindFor(Type)"/> instead.</summary>
     public static bool IsInline(Type type) =>
-        UnderlyingKindFor(type) is ValueRepresentationKind.StackScalar;
+        ValueRepresentationClassifier.KindFor(type) is ValueRepresentationKind.StackScalar;
 
     /// <summary>True when the type stores its IEEE bit pattern in the slot.
     /// Exact <c>float</c>/<c>double</c> only; a nullable wraps the value in a

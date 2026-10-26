@@ -31,6 +31,7 @@ Derived invariants this plan makes mechanical:
 | `11d0c760` + `fb43f265` + `49199f17` | R2 R3 R4 fixed, R5 opened | Each finding got its own `Try*` helper. `TryLiftedComparison` handed a heap-underlying nullable back to `AreHeapValues`, which then dereferenced the inline number as a handle: absent `decimal?` equalled 0 and present `0m` did not equal 0. |
 | `14c5e8fa` | R5 fixed; R6 R7 open | `TryDecimalEquality` emits the decimal operand first (`AbiEmitter.Expressions.cs:264-265`), reordering root parameter slots (R6), and converts a float/double/ulong word with `Convert(long, decimal)` (`:284`), reading IEEE bits and a signed ulong as the number (R7). |
 | `417b174e` + PLAN-REVIEW | P1 P2 P3 | The domain table claimed to mirror the fold's three steps but sent every float/double pair to `double`, so `2u == 2.0` read true where the fold says false, and one row `Convert`ed `ulong` to `long` (the R7 signed read again). An enum parameter was classified `Inline` although `ToRing` boxes it. `Null` was matched after the null-CLR failure, so `== null` could no longer fold. |
+| `6061cadf` + `55da516d` | review: R6 fixed, R1-R5 pins held | The helpers read an operand's *generating code* as its value: `EmitLiftedArithmetic` and `TryLiftedComparison` spliced it into three tree positions, so a nullable call operand re-ran and crashed (`RingCodec.UnboxNullableAs` read the receiver as a handle). `EmitReturn` left a scalar body value unboxed for a nullable-returning method, which the same read then dereferenced. `TryDecimalEquality` emitted by type instead of source order, crossing root parameter slots (R6). `PromoteNumeric` widened only `char`, so `byte? + byte?` truncated to its own type. |
 | pattern | — | Four rounds of per-finding helpers. Every helper owned a subset of shapes, so the next shape fell through into the previous helper's wrong assumption. This plan replaces the ladder with one operand/domain protocol. |
 
 ### Grug follow-ups, decided here
@@ -98,7 +99,7 @@ var r = Variable(rightRaw.Type, "_cmpR");
 return Block([l, r], Assign(l, leftRaw), Assign(r, rightRaw), test(l, r));
 ```
 
-Why this is structural, not incidental: `TryDecimalEquality` calls `ValueOf(decimalNode)` before `ValueOf(otherNode)`. `EmitParameter` resolves the parameter on first use (`AbiEmitter.Statements.cs:651-660`), `Context.DeclareParameter` gives it the next frame slot (`AbiEmitter.Context.cs:756-768`), and `SetArgs` binds argument *i* to slot *i*, so the decimal parameter takes the int argument's frame slot and `int == decimal` dereferences an integer as a handle. Locals do not show the bug: the tip answers `local int==dec=0` correctly, while `int==dec` throws `NullReferenceException`. Shapes and domains are decided without emitting, then exactly two `ValueOf` calls run in source order.
+Already true at `6061cadf` for both existing helpers, each binding its operands to locals in source order; the protocol below inherits the shape. Why it is structural, not incidental: `TryDecimalEquality` used to call `ValueOf(decimalNode)` before `ValueOf(otherNode)`. `EmitParameter` resolves the parameter on first use (`AbiEmitter.Statements.cs:651-660`), `Context.DeclareParameter` gives it the next frame slot (`AbiEmitter.Context.cs:756-768`), and `SetArgs` binds argument *i* to slot *i*, so the decimal parameter takes the int argument's frame slot and `int == decimal` dereferences an integer as a handle. Locals do not show the bug: the tip answers `local int==dec=0` correctly, while `int==dec` throws `NullReferenceException`. Shapes and domains are decided without emitting, then exactly two `ValueOf` calls run in source order.
 
 ### 4. Pick one domain
 
@@ -233,7 +234,7 @@ Docs (same change):
 
 ## Done when
 
-1. The R6 rows pass: `int == decimal` (both parameters, either order) uses the values and does not throw; `int? 4 == decimal? 4.5m` is false, `4 == 4.0m` is true, both absent is true, one absent is false.
+1. The R6 rows pass (green at `6061cadf`, pinned by `AbiEmitterLiftedOperandOrderTests`): `int == decimal` (both parameters, either order) uses the values and does not throw; `int? 4 == decimal? 4.5m` is false, `4 == 4.0m` is true, both absent is true, one absent is false.
 2. The R7 rows pass under **C# promotion, not the fold**: `decimal 1.5 == double 1.5` and `== float 1.5f` are true; `(decimal)ulong.MaxValue == ulong.MaxValue` is true for a parameter, a literal, and a fold; `ulong.MaxValue > 1` is true; `-1 == ulong.MaxValue` and `'a' > ulong.MaxValue` are false; `ulong.MaxValue == (double)ulong.MaxValue` and `2u == 2.0` are true (fold false; divergence recorded in Follow-ups); `16777217u == 16777216f` is true (the domain is `float`); `9007199254740993m == (double)9007199254740993m` is true and equals the fold. No `Convert(ulong, long)` exists.
 3. Required decimal ordering against an inline number and optional decimal/DateTime ordering use the values; absent ordering is false; ordering a `bool` is rejected (C# has no operator).
 4. `decimal?`/`DateTime?`/`Guid?`/`TimeSpan?` equality still uses values (R2), a required scalar vs null still folds with no heap deref (R1), and a `Constant { Value: null }` is shape `Null` before the type check so `== null` still folds.
@@ -305,6 +306,7 @@ Named here, not in this slice (Scot's ruling; do not expand #330):
 | Enum slot uniformity | `ToRing` storing the underlying integer (the ruling's later slice) plus `FromClr`/`ToClr`. Until then, an enum value a comparison sees is a box; a CLR-returned enum that `FromClr` still inlines (`RingCodec.cs:229-240`) remains the pre-existing heap-path misread and is left as-is here. |
 | Unseeded required `DateTime`/`Guid` equality | Out of scope for #330. `RequiredValue` fails closed on handle 0; two unseeded handles used to compare equal. No dedicated test and no behavior expansion in this PR. |
 | Exact `decimal` ↔ `float`/`double` | Today the table compares in `double` (total, non-throwing, fold-consistent) and loses decimal precision above 2^53. A future exact rule can replace the one row. |
+| Optional narrow-integral arithmetic | **Closed at `55da516d`**: `PromoteNumeric` widens `sbyte`/`byte`/`short`/`ushort` (and `char`) to `int`, so `byte? + byte?` is `int?` and boxes 400. |
 | Optional `ulong` arithmetic | `LiftedOperand` still converts a `ulong` to `long` (`AbiEmitter.Expressions.cs:167-174`); that is the arithmetic path, not the comparison protocol, and is out of #330. |
 
 ## Needs Scot
@@ -317,3 +319,4 @@ none. The ruling decided the review's three open questions: mixed unsigned/small
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-26 | planner | opencode/opencode-go/deepseek-v4.1-flash | 14c5e8fa | planned | R6 R7 open; R1–R5 lessons |
 | 2026-10-26 | planner | opencode/opencode-go/deepseek-v4.1-flash | 417b174e | revised after PLAN-REVIEW REVISE | P1: C# promotion replaces the fold-mirroring table, no `long` domain. P2: enums compare as boxes. P3: `Null` matched before the null-CLR failure. Scot ruling: C# nullable semantics; fold divergences parked. |
+| 2026-10-26 | reviewer | grok review | 27e45cda | R6 fixed; 3 regressions closed | `6061cadf`: operands read once, left then right; nullable return boxes its scalar value; R6 source order. `55da516d`: narrow integrals promote to `int`. Full suite 4644/4644. R7 still open. |

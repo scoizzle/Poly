@@ -25,8 +25,6 @@ public static partial class AbiEmitter {
     private static Type? NullableUnderlyingOf(Node node, Context ctx) =>
         ctx.ClrTypeOf(node) is { } clr ? Nullable.GetUnderlyingType(clr) : null;
 
-    private static bool IsIeeeType(Type type) => type == typeof(float) || type == typeof(double);
-
     /// <summary>Three-valued logic has no bool result in this subset, so an optional
     /// Boolean operand fails closed rather than reading its handle as truthy.</summary>
     private static void RejectNullableLogical(string op, Node left, Node right, Context ctx) {
@@ -123,14 +121,13 @@ public static partial class AbiEmitter {
     /// <c>Nullable&lt;T&gt;</c> local. An absent operand stays absent.</summary>
     private static Expression EmitLiftedUnary(
         Node operand, Type underlying, Func<Expression, Expression> op, Context ctx) {
-        var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(operand, ctx));
-        var localType = ctx.SlotTypeOf(operand);
-        var local = ctx.RingVar(slot, localType);
+        var code = CompileNode(operand, ctx);
+        var local = ctx.RingVar(ctx.RingDepth - 1, code.Type);
         var nullable = typeof(Nullable<>).MakeGenericType(underlying);
         Expression value = local.Type == nullable ? local : AsLiftedArithmeticOperand(local, underlying, ctx);
         int outSlot = ctx.AllocSlot();
-        return ring.Then(Assign(ctx.RingVar(outSlot, nullable), op(value)));
+        ctx.RingDepth = outSlot + 1;
+        return Block(code, Assign(ctx.RingVar(outSlot, nullable), op(value)));
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own

@@ -8,11 +8,12 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 
 /// <summary>
 /// One comparison reads values, never slots (#330 R7 and the compare protocol).
-/// The domain is C# numeric promotion plus the nullable lift, and the constant
-/// fold uses that same promotion. An absent operand equals only an absent
-/// operand and orders as false. An integral pair promotes to <c>decimal</c>,
-/// and an integral against <c>float</c> promotes to <c>float</c>. An enum slot
-/// is its underlying integer.
+/// The domain is C# numeric promotion plus the nullable lift. An absent operand
+/// equals only an absent operand and orders as false. A same-type integral pair
+/// compares as that type. A mixed integral pair promotes to <c>decimal</c>,
+/// and an integral against <c>float</c> promotes to <c>float</c>. The constant
+/// fold still promotes every integral pair to <c>decimal</c>; that answer
+/// matches because <c>decimal</c> is exact. An enum slot is its underlying integer.
 /// </summary>
 public class AbiEmitterCompareDomainTests {
     private static long Run(Node body, params object?[] args) {

@@ -7,10 +7,11 @@ namespace Poly.Interpretation.Vm.Abi;
 public static partial class AbiEmitter {
     private enum CompareShape { Null, Optional, Enum, Inline, HeapValue, Reference }
 
-    /// <summary>The value a pair is promoted to. Integral pairs use <c>decimal</c>
-    /// because it holds every <c>ulong</c>, <c>char</c>, and signed 64-bit value
-    /// exactly, so there is no <c>long</c> domain and no <c>Convert(ulong, long)</c>.</summary>
-    private enum CompareDomain { Boolean, Double, Float, Decimal, Value, Reference }
+    /// <summary>The value a pair is promoted to. A same-type integral pair compares
+    /// as that type. A mixed integral pair uses <c>decimal</c>, which holds every
+    /// <c>ulong</c>, <c>char</c>, and signed 64-bit value exactly, so there is no
+    /// <c>long</c> domain and no <c>Convert(ulong, long)</c>.</summary>
+    private enum CompareDomain { Boolean, Double, Float, Decimal, Integer, Value, Reference }
 
     private readonly record struct CompareOperand(CompareShape Shape, Type? Clr, Type? Underlying);
 
@@ -119,7 +120,7 @@ public static partial class AbiEmitter {
         if (l == typeof(decimal) || r == typeof(decimal))
             return CompareDomain.Decimal;
         if (IsIntegralOrChar(l) && IsIntegralOrChar(r))
-            return CompareDomain.Decimal;
+            return l == r ? CompareDomain.Integer : CompareDomain.Decimal;
         if (l == r && l.IsValueType)
             return CompareDomain.Value;
         if (!l.IsValueType && !r.IsValueType)
@@ -174,8 +175,8 @@ public static partial class AbiEmitter {
         CompareDomain domain, bool equality,
         Func<Expression, Expression, BinaryExpression> cf,
         Context ctx) {
-        var (leftValue, _) = ReadCompareOperand(leftLocal, leftOp, ctx);
-        var (rightValue, _) = ReadCompareOperand(rightLocal, rightOp, ctx);
+        var leftValue = ReadCompareOperand(leftLocal, leftOp, ctx);
+        var rightValue = ReadCompareOperand(rightLocal, rightOp, ctx);
         bool lift = Nullable.GetUnderlyingType(leftValue.Type) is not null
             || Nullable.GetUnderlyingType(rightValue.Type) is not null;
         if (lift)
@@ -239,15 +240,14 @@ public static partial class AbiEmitter {
     /// that underlying integer converted back to the enum. A required heap value
     /// is <see cref="RingCodec.RequiredValue"/>; handle 0 fails closed. An
     /// optional is the Nullable&lt;T&gt; local, or the frame handle unboxed once.</summary>
-    private static (Expression Value, Expression? Present) ReadCompareOperand(
+    private static Expression ReadCompareOperand(
         Expression local, CompareOperand operand, Context ctx) {
         switch (operand.Shape) {
             case CompareShape.Inline: {
                     var clr = operand.Clr!;
-                    Expression value = local.Type == clr
+                    return local.Type == clr
                         ? local
                         : RingCodec.ScalarValue(RingCodec.ToWord(local), clr);
-                    return (value, null);
                 }
             case CompareShape.Enum: {
                     var clr = operand.Clr!;
@@ -255,30 +255,28 @@ public static partial class AbiEmitter {
                     Expression word = local.Type == underlying
                         ? local
                         : RingCodec.ScalarValue(RingCodec.ToWord(local), underlying);
-                    return (Convert(word, clr), null);
+                    return Convert(word, clr);
                 }
             case CompareShape.HeapValue: {
                     var clr = operand.Clr!;
                     var boxed = Call(
                         RequiredValueInfo, ctx.HeapLocal, RingCodec.ToWord(local), Constant(clr, typeof(Type)));
-                    return (Convert(boxed, clr), null);
+                    return Convert(boxed, clr);
                 }
             case CompareShape.Optional: {
                     var nullable = operand.Clr!;
-                    Expression value = local.Type == nullable
+                    return local.Type == nullable
                         ? local
                         : local.Type == operand.Underlying
                             ? Convert(local, nullable)
                             : RingCodec.UnboxToNullable(local, nullable, ctx.HeapLocal);
-                    return (value, null);
                 }
             case CompareShape.Reference: {
                     var handle = RingCodec.ToWord(local);
-                    Expression value = Condition(
+                    return Condition(
                         Equal(handle, Constant(0L)),
                         Constant(null, typeof(object)),
                         RingCodec.DerefObject(ctx.HeapLocal, handle));
-                    return (value, null);
                 }
             default:
                 throw new InvalidOperationException(

@@ -332,8 +332,10 @@ an absent operand is false. The frame boxes that local only when a `long` slot
 has to hold it.
 
 The pair is promoted by C# binary numeric promotion plus the nullable lift.
-Integral pairs, including `ulong` and `char`, promote to `decimal`, which is
+A same-type integral pair compares as that type. A mixed integral pair,
+including `ulong` with a signed value and `char`, promotes to `decimal`, which is
 exact. A `decimal` against `float` or `double` promotes to `double`. An
 integral against `float` promotes to `float` (`16777217 == 16777216f`). The
-constant fold uses the same promotion. `ulong` division and the right shift
+constant fold still promotes every integral pair to `decimal`; that answer
+matches, because `decimal` is exact for those values. `ulong` division and the right shift
 run on `ulong`; the ring stores the bits in a `long`.

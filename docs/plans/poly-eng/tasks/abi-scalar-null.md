@@ -115,7 +115,8 @@ Already true at `6061cadf` for both existing helpers, each binding its operands 
 | either is `double` | `double` | promote both | promote both |
 | either is `float` | `float` | promote both (C# rounds an integral operand to `float`: `16777217u == 16777216f` is true) | promote both |
 | either is `decimal` | `decimal` | promote both (exact; `ulong` stays unsigned, `char` is its code point) | promote both |
-| otherwise both integral/`char` | `decimal` | promote both (exact; no `long` step, so nothing wraps) | promote both |
+| both the same integral/`char` | that type | compare as that type | same compare |
+| mixed integral/`char` | `decimal` | promote both (exact; no `long` step, so nothing wraps) | promote both |
 | both the same non-numeric value type | `Value` | `object.Equals(l, r)` | `cf(VmHeapComparison.Compare(l, r), 0)` |
 | both references | `Reference` | `object.Equals(l, r)` | `cf(VmHeapComparison.Compare(l, r), 0)` |
 | anything else | — | fail closed: `comparison between '<X>' and '<Y>' has no common value` | fail closed |
@@ -123,12 +124,12 @@ Already true at `6061cadf` for both existing helpers, each binding its operands 
 The function's comment must carry these rules; each one is a place the next reader could "fix" wrongly:
 
 - **`decimal` vs `float`/`double`.** C# has no operator and rejects the mix. This table compares in `double` because `decimal` → `double` is total (it never throws, unlike `double` → `decimal` for NaN/∞/out-of-range) and it is the fold's existing choice. Precision caveat: above 2^53 the decimal operand compares at double precision, so `9007199254740993m == (double)9007199254740993m` is true — the fold's answer. Exact decimal↔IEEE is a follow-up, not a second rule.
-- **No `long` domain.** Every integral pair promotes to `decimal`, which represents every `ulong`, `char`, and signed 64-bit value exactly. `Convert(ulong, long)` (R7) has no row and never appears.
+- **No `long` domain.** A same-type integral pair compares as that type. A mixed integral pair promotes to `decimal`, which represents every `ulong`, `char`, and signed 64-bit value exactly. `Convert(ulong, long)` (R7) has no row and never appears.
 - **Order matters.** A `decimal` operand is decided before `float`, so `decimal` vs `float` is `double`, never `float`.
 - **`bool` ordering.** Analysis lets `true > false` through (two `Cat.Boolean` operands are `Compatible`), but C# has no such operator; the table fails closed instead of comparing 0/1.
 - **Mixed `ulong`/signed and `char`/`ulong`.** C# has no operator for a non-constant signed operand (the constant `-1` does not convert to `ulong`). The exact `decimal` rule answers, at runtime and in the fold: `-1 == ulong.MaxValue` false, `'a' > ulong.MaxValue` false, `ulong.MaxValue > 1` true.
 
-**Fold relationship.** The constant fold uses the same promotion as the runtime: `float` when either side is `float`, `double` when either side is `double` or a `decimal` meets a real, `decimal` for an integral pair (including mixed `ulong` and signed, which C# rejects). `2u == 2.0`, `ulong.MaxValue == (double)ulong.MaxValue`, and `16777217 == 16777216f` fold true. `-1 == ulong.MaxValue` folds false.
+**Fold relationship.** The constant fold uses the runtime's promotion: `float` when either side is `float`, `double` when either side is `double` or a `decimal` meets a real, `decimal` for an integral pair (including mixed `ulong` and signed, which C# rejects). A same-type integral pair compares as itself at runtime; the fold's decimal answer is the same value. `2u == 2.0`, `ulong.MaxValue == (double)ulong.MaxValue`, and `16777217 == 16777216f` fold true. `-1 == ulong.MaxValue` folds false.
 
 **Why not the review's three-step fold table.** Copying the old `FloatingEquals` guards into the ABI would have answered `2u == 2.0` false while C# answers true. Scot ruled the ABI is C#-sane, and the fold now uses that same promotion. The old `object.Equals` fallback compared boxed runtime types, not values.
 
@@ -151,7 +152,7 @@ A non-optional pair uses the domain operator directly. `Value` and `Reference` s
 ### 7. Never
 
 - `Convert(ulong, long)` or any signed read of an unsigned operand; there is no `long` domain (R7).
-- Classify an enum operand as `Inline` or decode it as an integer word; the constant encoder and `ToRing` box it (P2).
+- Box an enum operand. The slot is `RingCodec.EnumWord`; comparison converts that word back to the enum. An optional enum is `Optional`.
 - `Convert(long, decimal)` on an IEEE word (R7).
 - Dereference an inline word as a handle, or compare a handle to a number (R5).
 - `Convert(long, bool)`; decode a bool as `!= 0` (R4).
@@ -206,7 +207,7 @@ Before values are measured at the tip's code (`14c5e8fa`, which `417b174e` does 
 | `int? 4 == 4L` | true | true | `OptionalInt_Equal_Long_UsesValue` |
 | side effects in a mixed decimal comparison | right (decimal) runs first | left runs first | `MixedDecimal_Comparison_EvaluatesLeftThenRight` |
 | `DateTime? == DateTime` | analysis reject | analysis reject (pinned) | `DateTimeOptional_Equal_RequiredDateTime_IsRejected` |
-| `decimal? + 1m` | emit reject | emit reject (pinned) | `OptionalDecimal_Arithmetic_IsCompileRejected` |
+| `decimal? + 1m` | emit reject | 5 + 1 is 6; absent + 1 is null | `OptionalDecimal_Arithmetic_UsesTheValue` |
 | unseeded `decimal == decimal` | **true** (two null handles) | throws `VM: required Decimal value is absent` | `RequiredDecimal_Unseeded_Equality_Throws` |
 
 ## Files
@@ -214,8 +215,8 @@ Before values are measured at the tip's code (`14c5e8fa`, which `417b174e` does 
 Product:
 
 - `Poly/Interpretation/Vm/Abi/AbiEmitter.Compare.cs` — new partial: `CompileCompareTest`, `EmitComparisonValue`, `EmitComparison`, `FoldNullComparison`, `CompareOperandOf`, `CompareDomainOf`, `ReadCompareOperand`, `CompareValues`, the shape switch, the promotion table, and the fold-relationship comment.
-- `Poly/Interpretation/Vm/Abi/AbiEmitter.Expressions.cs` — remove `CompileCompareTest`'s body and the comparison-only helpers (`HeapValueToObject`, `FoldScalarNullTest`, `IsNonNullableHeap`, `TryLiftedComparison`, `TryDecimalEquality`, `AreHeapValues`). Keep `NullableUnderlyingOf`, `NullablePresent`, `UnboxNullable`, `LiftedOperand`, `IsIeeeType`, `RejectNullableLogical` and the arithmetic/unary/logical arms.
-- `Poly/Interpretation/Vm/Abi/RingCodec.cs` — make `ScalarValue` internal (the one word-to-CLR decoder) and add `RequiredValue(heap, handle, type)` next to `UnboxNullableAs`: handle 0 fails closed; otherwise return the box when it already is the type, else `ChangeType`. Do **not** change `ToRing`, `FromClr`/`ToClr`, or enum classification here (the enum-uniformity follow-up).
+- `Poly/Interpretation/Vm/Abi/AbiEmitter.Expressions.cs` — comparison lives in `AbiEmitter.Compare.cs`. `NullablePresent`, `LiftedOperand`, and `IsIeeeType` are gone. Nullable arithmetic and unary use the lifted CLR operator on a `Nullable<T>` local. `RejectNullableLogical` stays.
+- `Poly/Interpretation/Vm/Abi/RingCodec.cs` — `ScalarValue` is the word-to-CLR decoder. `RequiredValue` fails closed on handle 0. `EnumWord` is what `TryInlineConstant`, `ToRing`, and `FromClr` store. `ToFrameWord` / `UnboxToNullable` are the frame boundary for a `Nullable<T>` local.
 - `Poly/Interpretation/Vm/Abi/AbiEmitter.cs` — add the `RequiredValue` `MethodInfo` beside `UnboxNullableAsInfo`.
 - `Poly/Interpretation/Vm/VmHeapComparison.cs` — no change; reused for `Value`/`Reference` ordering (`VmHeapComparison.cs:11-26`).
 

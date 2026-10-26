@@ -58,4 +58,42 @@ public class AbiEmitterOptionalArithmeticTests {
         using var exec = Execute(new BitwiseOr(new Constant(1L), age));
         await Assert.That(exec.Result.Value).IsNull();
     }
+
+    private static Parameter OptionalByte() =>
+        new("b", new OptionalTypeReference(TypeReference.To<byte>()));
+
+    private static Parameter OptionalShort() =>
+        new("s", new OptionalTypeReference(TypeReference.To<short>()));
+
+    /// <summary>C# promotes a smaller integral to <c>int</c> before the operator runs, and
+    /// the nullable lift keeps the promotion: <c>byte? + byte?</c> is <c>int?</c>, so the
+    /// sum is 400 and not the byte 400 truncates to.</summary>
+    [Test, Timeout(10_000)]
+    public async Task OptionalByte_BytePlusByte_OverflowsAsInt(CancellationToken ct) {
+        _ = ct;
+        var a = new Parameter("a", new OptionalTypeReference(TypeReference.To<byte>()));
+        using var exec = Execute(new Add(a, OptionalByte()), (byte)200, (byte)200);
+        await Assert.That(exec.Result.Value).IsEqualTo(400);
+        await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(int));
+    }
+
+    /// <summary>The same promotion at 16 bits: 30000 * 2 does not fit a short.</summary>
+    [Test, Timeout(10_000)]
+    public async Task OptionalShort_ShortTimesShort_ExceedsInt16(CancellationToken ct) {
+        _ = ct;
+        var a = new Parameter("a", new OptionalTypeReference(TypeReference.To<short>()));
+        using var exec = Execute(new Multiply(a, OptionalShort()), (short)30000, (short)2);
+        await Assert.That(exec.Result.Value).IsEqualTo(60000);
+        await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(int));
+    }
+
+    /// <summary>The promotion does not narrow a wider operand: <c>long + byte?</c> is
+    /// <c>long?</c>.</summary>
+    [Test, Timeout(10_000)]
+    public async Task OptionalByte_LongPlusNullable_StaysLong(CancellationToken ct) {
+        _ = ct;
+        using var exec = Execute(new Add(new Constant(1L), OptionalByte()), (byte)200);
+        await Assert.That(exec.Result.Value).IsEqualTo(201L);
+        await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(long));
+    }
 }

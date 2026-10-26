@@ -349,13 +349,19 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return leftType;
 
         var promoted = leftRank >= rightRank ? leftValue : rightValue;
-        // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
-        // must accept a later int write), so a char result becomes int.
-        var result = promoted.GetRuntimeType() == typeof(char)
+        // C# binary numeric promotion widens char and every integral narrower than int
+        // to int before the operator runs: `'a' + 'b'` is 195, `b + b` with
+        // b = (byte)200 is 400, and `short + short` does not wrap at 16 bits.
+        var result = IsPromotedToInt(promoted.GetRuntimeType())
             ? context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted
             : promoted;
         return lifted ? LiftToNullable(context, result) : result;
     }
+
+    /// <summary>True for a type C# binary numeric promotion widens to <c>int</c>.</summary>
+    private static bool IsPromotedToInt(Type? runtime) =>
+        runtime == typeof(char) || runtime == typeof(sbyte) || runtime == typeof(byte)
+        || runtime == typeof(short) || runtime == typeof(ushort);
 
     /// <summary>True when the type's declared shape is <c>Nullable&lt;T&gt;</c>.</summary>
     private static bool IsNullableType(ITypeDefinition type) =>

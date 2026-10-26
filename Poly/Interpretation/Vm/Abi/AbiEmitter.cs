@@ -76,6 +76,8 @@ public static partial class AbiEmitter {
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, long>>)((h, v) => RingCodec.UnboxNullable(h, v)));
     private static readonly MethodInfo UnboxNullableAsInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)((h, v, t) => RingCodec.UnboxNullableAs(h, v, t)));
+    private static readonly MethodInfo RequiredValueInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object>>)((h, v, t) => RingCodec.RequiredValue(h, v, t)));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
     private static readonly ConstructorInfo ReadOnlySpanLongArrayCtor =
         typeof(ReadOnlySpan<long>).GetConstructor([typeof(long[])])!;

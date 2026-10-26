@@ -287,8 +287,10 @@ internal static class RingCodec {
         return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
     }
 
-    /// <summary>The CLR value of a scalar ring slot, at its own declared type.</summary>
-    private static Expression ScalarValue(Expression ringVal, Type sourceClr) =>
+    /// <summary>The CLR value of a scalar ring slot, at its own declared type.
+    /// <c>ulong</c> is an unchecked bitcast of the word, IEEE uses <see cref="FromIeee"/>,
+    /// and <c>bool</c> is <c>!= 0</c>.</summary>
+    internal static Expression ScalarValue(Expression ringVal, Type sourceClr) =>
         IsIeee(sourceClr)
             ? Convert(FromIeee(ringVal), sourceClr)
             : sourceClr == typeof(bool)
@@ -365,7 +367,28 @@ internal static class RingCodec {
         if (handle == 0L) return null;
         var obj = heap.UnsafeGet((int)handle);
         if (obj is null) return null;
+        // A box that is already the underlying type (an enum, a decimal) is that
+        // value. ChangeType cannot target an enum.
+        if (underlying.IsInstanceOfType(obj))
+            return obj;
         return System.Convert.ChangeType(obj, underlying, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The boxed value of a required heap slot. Handle 0 is absent and
+    /// fails closed; a box that is already <paramref name="type"/> is returned
+    /// as-is, which is how an enum box is read (<c>ChangeType</c> cannot target
+    /// an enum).</summary>
+    public static object RequiredValue(VmManagedObjectHeap heap, long handle, Type type) {
+        if (handle == 0L)
+            throw new InvalidOperationException($"VM: required {type.Name} value is absent");
+        var value = heap.UnsafeGet((int)handle);
+        if (value is not null && type.IsInstanceOfType(value))
+            return value;
+        if (value is null)
+            throw new InvalidOperationException($"VM: required {type.Name} value is absent");
+        if (type.IsEnum)
+            throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{type}'.");
+        return System.Convert.ChangeType(value, type, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>Runtime <c>as</c>: the same handle when the heap value is

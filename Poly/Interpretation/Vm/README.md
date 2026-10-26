@@ -218,13 +218,20 @@ Analyzed AST → AbiEmitter.Build → Expression<Action<VmState>> → .Compile()
 (`BuiltVmProgram`); `AbiEmitter.Emit` compiles it into the `VmProgram` delegate.
 The VM README's examples are built from that expression.
 
+A comparison reads the operands' values, never their slots. `AbiEmitter.Compare.cs`
+decodes each operand (an inline word through `ScalarValue`, a heap value through
+`RequiredValue`, an optional through the null sentinel) and promotes the pair by
+C#'s numeric rules plus the nullable lift. Absent equals only absent, and orders
+as false.
+
 ## File Map
 
 | File | Purpose |
 |------|---------|
 | `Abi/AbiEmitter.cs` | **Primary compiler**: walks analyzed AST, builds the `Action<VmState>` lambda |
 | `Abi/AbiEmitter.Context.cs` | Compilation context (ring, frames, scopes) |
-| `Abi/AbiEmitter.Expressions.cs` | Arithmetic, comparison, logic, members, types |
+| `Abi/AbiEmitter.Compare.cs` | Comparison: read values, never slots; C# promotion with the nullable lift |
+| `Abi/AbiEmitter.Expressions.cs` | Arithmetic, logic, members, types |
 | `Abi/AbiEmitter.Statements.cs` | Assignment, blocks, branches, loops, EH, return |
 | `Abi/AbiEmitter.Invoke.cs` | Invoke, lambda bodies, instance dispatch |
 | `Abi/RingCodec.cs` | The ABI codec: value classification and both-direction conversion |

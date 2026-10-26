@@ -96,4 +96,14 @@ public class AbiEmitterOptionalArithmeticTests {
         await Assert.That(exec.Result.Value).IsEqualTo(201L);
         await Assert.That(exec.Result.Value?.GetType()).IsEqualTo(typeof(long));
     }
+
+    /// <summary>An optional decimal has no lifted word. Comparison may unbox it;
+    /// arithmetic stays rejected.</summary>
+    [Test]
+    public async Task OptionalDecimal_Arithmetic_IsCompileRejected() {
+        var amount = new Parameter("amount", new OptionalTypeReference(TypeReference.To<decimal>()));
+        await Assert.That(() => Interpreter.Compile(new Add(amount, new Constant(1m))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: arithmetic on an optional Decimal is not supported.");
+    }
 }

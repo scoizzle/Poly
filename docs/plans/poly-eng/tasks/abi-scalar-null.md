@@ -70,11 +70,11 @@ All comparison meaning moves into `CompileCompareTest` in a new `AbiEmitter.Comp
 | `Null` | `Constant { Value: null }` — **before any type check** (`Classify` returns `HeapRef` with a null CLR type, `ValueRepresentation.cs:55-57`) | — |
 | `Optional` | `Nullable.GetUnderlyingType(Clr) != null` (including `enum?`) | the underlying type |
 | `Enum` | `Clr.IsEnum`, whatever `Kind` says — the constant encoder and `ToRing` box it | the enum type |
-| `Inline` | `Kind == StackScalar` (numeric, `bool`, `char`; not enum) | the resolved type: `int`, `long`, `ulong`, `float`, `double`, `bool`, `char` |
+| `Inline` | `Kind == StackScalar` (numeric, `bool`, `char`; not enum), or `Kind == Void` with CLR `void` (a resolved void call; `EmitResult` writes `0L`, so the decoded type is `long`) | the resolved type, or `long` for void |
 | `HeapValue` | `Kind == HeapRef`, `Clr.IsValueType`, not nullable, not enum | `decimal`, `DateTime`, `Guid`, `TimeSpan`, `DateOnly`, `TimeOnly` |
 | `Reference` | `Kind == HeapRef`, reference type | `string`, entity, `object` |
 
-Only after `Null` is matched: `Kind == Unknown` or a null CLR type fails closed: `VM compile rejected: cannot compare '<node>' because its type did not resolve.` This loses nothing that is exercised: with the tip instrumented to throw on an `Unknown` comparison, **0 of 4636** suite comparisons reached the fallback. `AreHeapValues` and its Member heuristic (`AbiEmitter.Expressions.cs:311-331`) and `HeapValueToObject` are deleted with it.
+Only after `Null` is matched: `Kind == Unknown` or a null CLR type fails closed: `VM compile rejected: cannot compare '<node>' because its type did not resolve.` This loses nothing that is exercised: with the tip instrumented to throw on an `Unknown` comparison, **0 of 4636** suite comparisons reached the fallback. A resolved void call is not that case. `Classify` returns `Void` and `typeof(void)`, and `EmitResult` has already written `0L`, so the operand is `Inline` `long`. `DirectVmAbiEmitterTests.VoidClrInvoke_LeavesZero_ForTheNextStatement` compares that word to `0L`. A statement with no CLR type still fails closed. `AreHeapValues` and its Member heuristic (`AbiEmitter.Expressions.cs:311-331`) and `HeapValueToObject` are deleted with it.
 
 ### 2. Fold null first
 
@@ -240,7 +240,7 @@ Docs (same change):
 4. `decimal?`/`DateTime?`/`Guid?`/`TimeSpan?` equality still uses values (R2), a required scalar vs null still folds with no heap deref (R1), and a `Constant { Value: null }` is shape `Null` before the type check so `== null` still folds.
 5. An enum parameter is compared with an enum constant by dereferencing the boxes: same member true, different member false, `enum?` present/absent true/false; no enum operand is classified `Inline` or decoded as an integer.
 6. `TryDecimalEquality`, `TryLiftedComparison`, `AreHeapValues`, `IsNonNullableHeap`, `HeapValueToObject` are gone; one protocol decides shapes, one chooses a domain, and exactly two ordered `ValueOf` calls emit the operands.
-7. `Unknown` comparison operands fail closed (measured: 0/4636 at the tip).
+7. `Unknown` comparison operands, and statements with no CLR type, fail closed (measured: 0/4636 analyzed comparisons at the tip). A resolved void call compares as inline `long`.
 8. `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` is 0 warnings / 0 errors; the full suite is green on the tip with the count recorded in the PR comment.
 9. No test is deleted, skipped, or weakened; the existing optional/heap tests pass unchanged.
 10. Comments and XML docs state only what the code does, including the fold divergences; the protocol fits in one file and reads as a table.
@@ -302,16 +302,15 @@ Named here, not in this slice (Scot's ruling; do not expand #330):
 
 | follow-up | why deferred |
 |-----------|--------------|
-| Constant fold for mixed unsigned/small-int vs IEEE | `FloatingEquals` falls to `object.Equals` because `TryConvertToDouble` covers only `int`, `long`, `float`, `double`, `decimal`, `char` (`ConstantFoldingPass.cs:698-707, 745-756`), so it answers false for `2u == 2.0` and `ulong.MaxValue == (double)ulong.MaxValue` where C# promotes and answers true. Fix the fold after #330; the runtime is C#-sane now. |
+| Constant fold for mixed unsigned/small-int vs IEEE | `FloatingEquals` falls to `object.Equals` because `TryConvertToDouble` covers only `int`, `long`, `float`, `double`, `decimal`, `char` (`ConstantFoldingPass.cs:698-707, 745-756`), so it answers false for `2u == 2.0` and `ulong.MaxValue == (double)ulong.MaxValue` where C# promotes and answers true. `16777217u == 16777216f` also folds false: the fold forces `double`, while the runtime domain is `float` and answers true. The fold fix promotes to `float` when C# does; extending the double set does not. Fix the fold after #330; the runtime is C#-sane now. |
 | Enum slot uniformity | `ToRing` storing the underlying integer (the ruling's later slice) plus `FromClr`/`ToClr`. Until then, an enum value a comparison sees is a box; a CLR-returned enum that `FromClr` still inlines (`RingCodec.cs:229-240`) remains the pre-existing heap-path misread and is left as-is here. |
-| Unseeded required `DateTime`/`Guid` equality | Out of scope for #330. `RequiredValue` fails closed on handle 0; two unseeded handles used to compare equal. No dedicated test and no behavior expansion in this PR. |
 | Exact `decimal` ↔ `float`/`double` | Today the table compares in `double` (total, non-throwing, fold-consistent) and loses decimal precision above 2^53. A future exact rule can replace the one row. |
 | Optional narrow-integral arithmetic | **Closed at `55da516d`**: `PromoteNumeric` widens `sbyte`/`byte`/`short`/`ushort` (and `char`) to `int`, so `byte? + byte?` is `int?` and boxes 400. |
 | Optional `ulong` arithmetic | `LiftedOperand` still converts a `ulong` to `long` (`AbiEmitter.Expressions.cs:167-174`); that is the arithmetic path, not the comparison protocol, and is out of #330. |
 
 ## Needs Scot
 
-none. The ruling decided the review's three open questions: mixed unsigned/small-int vs IEEE follows C# promotion (fold fix parked); enum operands are dereferenced boxes (`ToRing` uniformity later); unseeded required `DateTime`/`Guid` equality is out of scope.
+none. The ruling decided the review's three open questions: mixed unsigned/small-int vs IEEE follows C# promotion (fold fix parked); enum operands are dereferenced boxes (`ToRing` uniformity later). Unseeded required `DateTime`/`Guid` equality was called out of scope, then the second review asked for one row beside decimal: `RequiredValue` fails closed on handle 0 for every required heap value, and `RequiredGuid_Unseeded_Equality_Throws` pins `VM: required Guid value is absent`.
 
 ## Log
 
@@ -320,3 +319,4 @@ none. The ruling decided the review's three open questions: mixed unsigned/small
 | 2026-10-26 | planner | opencode/opencode-go/deepseek-v4.1-flash | 14c5e8fa | planned | R6 R7 open; R1–R5 lessons |
 | 2026-10-26 | planner | opencode/opencode-go/deepseek-v4.1-flash | 417b174e | revised after PLAN-REVIEW REVISE | P1: C# promotion replaces the fold-mirroring table, no `long` domain. P2: enums compare as boxes. P3: `Null` matched before the null-CLR failure. Scot ruling: C# nullable semantics; fold divergences parked. |
 | 2026-10-26 | reviewer | grok review | 27e45cda | R6 fixed; 3 regressions closed | `6061cadf`: operands read once, left then right; nullable return boxes its scalar value; R6 source order. `55da516d`: narrow integrals promote to `int`. Full suite 4644/4644. R7 still open. |
+| 2026-10-26 | implementer | grok | 763fd58d | R7 closed by the comparison protocol | **RED** (`dotnet run --project Poly.Tests/Poly.Tests.csproj -p:NuGetAudit=false -- --treenode-filter '/*/*/AbiEmitterCompareDomainTests/*'` from the worktree, against the old ladder): total 40, failed 22, succeeded 18. The 22 were the matrix befores: optional heap ordering threw, decimal vs ulong/float/double compared as words, unseeded decimal and Guid equality did not throw, required decimal `== null` dereferenced the heap. **GREEN** same filter 40/40. `decimal? + 1m` stayed an `Add` until analysis stopped rewriting a nullable operand to `Decimal.Add`; `AbiEmitterOptionalArithmeticTests` 10/10 after that guard. A resolved void call is inline `long` (`EmitResult` writes `0L`); `DirectVmAbiEmitterTests` 36/36. Optional `ulong` arithmetic stays out. Benchmarks build 0 warnings / 0 errors. Full suite 4685/4685 (baseline 4644; +40 compare-domain, +1 optional-decimal arithmetic). |

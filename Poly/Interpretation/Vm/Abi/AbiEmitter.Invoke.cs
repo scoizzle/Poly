@@ -821,11 +821,13 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>A callee parameter's storage convention, from its declaration.
-    /// Inline value types (including nullable inline types, which IsInline peels)
-    /// are raw slots; non-inline value types and references live on the heap.</summary>
+    /// An inline value type is a raw slot. A <c>Nullable&lt;T&gt;</c> is a handle:
+    /// the callee unboxes it into a local.</summary>
     private static bool ParameterReadsRawSlot(IParameter parameter) {
         var runtimeType = parameter.ParameterTypeDefinition.GetRuntimeType();
-        return runtimeType is not null && RingCodec.IsInline(runtimeType);
+        return runtimeType is not null
+            && Nullable.GetUnderlyingType(runtimeType) is null
+            && RingCodec.IsInline(runtimeType);
     }
 
     /// <summary>An omitted argument's default, stored by the callee parameter's

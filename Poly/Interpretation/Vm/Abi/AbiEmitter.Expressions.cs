@@ -18,6 +18,28 @@ public static partial class AbiEmitter {
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
         bool eq = cf == Equal || cf == NotEqual;
+        if (!eq && (IsNullConstant(left) || IsNullConstant(right)))
+            throw new InvalidOperationException(
+                "VM compile rejected: no ordering comparison with null.");
+        if (Nullable.GetUnderlyingType(lv.Type) is not null
+            || Nullable.GetUnderlyingType(rv.Type) is not null)
+            return CompileNullableCompare(left, right, lv, rv, cf, eq, ctx);
+        // A required value cannot be null. The answer is a constant, and the word
+        // is not a handle: dereferencing it is how `x != null` came back false.
+        if (eq && (IsNullConstant(left) || IsNullConstant(right))) {
+            if (IsNullConstant(left) && IsNullConstant(right))
+                return Constant(cf == Equal);
+            var otherNode = IsNullConstant(left) ? right : left;
+            var otherVal = IsNullConstant(left) ? rv : lv;
+            var otherClr = ctx.ClrTypeOf(otherNode);
+            if (otherClr is { IsValueType: true } && Nullable.GetUnderlyingType(otherClr) is null)
+                return Block(otherVal, Constant(cf == NotEqual));
+        }
+        if (!eq && (IsBoolOperand(left, lv, ctx) || IsBoolOperand(right, rv, ctx)))
+            throw new InvalidOperationException(
+                "VM compile rejected: no ordering operator for 'Boolean'.");
+        if (TryDecimalCompare(left, right, lv, rv, cf, ctx) is { } decimalCompare)
+            return decimalCompare;
         if (eq && AreHeapValues(ctx, left, right)) {
             var lo = HeapValueToObject(lv, ctx);
             var ro = HeapValueToObject(rv, ctx);
@@ -52,6 +74,62 @@ public static partial class AbiEmitter {
             : lv.Type == typeof(int) || rv.Type == typeof(int) ? typeof(long)
             : lv.Type;
         return cf(RingCodec.AsRepresentation(lv, width), RingCodec.AsRepresentation(rv, width));
+    }
+
+    private static bool IsNullConstant(Node node) => node is Constant { Value: null };
+
+    private static bool IsBoolOperand(Node node, Expression value, Context ctx) =>
+        UnderlyingOf(node, value, ctx) == typeof(bool);
+
+    /// <summary>Lifted comparison. Equality of <c>bool?</c> stays bool. Ordering of
+    /// bool, and a pair C# has no operator for, fail closed.</summary>
+    private static Expression CompileNullableCompare(
+        Node left, Node right, Expression lv, Expression rv,
+        Func<Expression, Expression, BinaryExpression> cf, bool eq, Context ctx) {
+        var leftType = UnderlyingOf(left, lv, ctx);
+        var rightType = UnderlyingOf(right, rv, ctx);
+        if (leftType is null)
+            leftType = rightType;
+        if (rightType is null)
+            rightType = leftType;
+        if (leftType is null || rightType is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot resolve a nullable comparison.");
+        Type promoted;
+        if (leftType == typeof(bool) || rightType == typeof(bool)) {
+            if (!eq || leftType != typeof(bool) || rightType != typeof(bool))
+                throw RejectBinary(leftType, rightType);
+            promoted = typeof(bool);
+        }
+        else {
+            promoted = CSharpBinaryNumericType(leftType, rightType, shift: false);
+        }
+        var nullable = typeof(Nullable<>).MakeGenericType(promoted);
+        return cf(
+            AsNullableOperand(left, lv, nullable, ctx),
+            AsNullableOperand(right, rv, nullable, ctx));
+    }
+
+    /// <summary>A required <c>decimal</c> compared with an integral converts the
+    /// integral. <c>decimal</c> against <c>float</c> or <c>double</c> has no operator.
+    /// Same-type decimal stays on the heap path.</summary>
+    private static Expression? TryDecimalCompare(
+        Node left, Node right, Expression lv, Expression rv,
+        Func<Expression, Expression, BinaryExpression> cf, Context ctx) {
+        var leftType = UnderlyingOf(left, lv, ctx);
+        var rightType = UnderlyingOf(right, rv, ctx);
+        if (leftType != typeof(decimal) && rightType != typeof(decimal))
+            return null;
+        if (leftType is not null && RingCodec.IsIeee(leftType)
+            || rightType is not null && RingCodec.IsIeee(rightType))
+            throw RejectBinary(leftType, rightType);
+        if (leftType == typeof(decimal) && rightType == typeof(decimal))
+            return null;
+        if (!ConvertsToDecimal(leftType) || !ConvertsToDecimal(rightType))
+            return null;
+        return cf(
+            AsUnderlying(left, lv, typeof(decimal), ctx),
+            AsUnderlying(right, rv, typeof(decimal), ctx));
     }
 
     /// <summary>Comparison as a ring value: the bool test the condition path already uses,
@@ -168,10 +246,14 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>Unary minus: negate the operand in its own ring slot — an in-place shape,
-    /// not a spill of a value form.</summary>
+    /// not a spill of a value form. A nullable operand is already the value, so negating
+    /// the frame word would negate the handle.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(unaryMinus.Operand, ctx));
+        var compiled = Compile(unaryMinus.Operand, ctx);
+        if (NullableValue(compiled, ctx) is { } nullable)
+            return SpillToRing(Negate(nullable), ctx);
+        int slot = ring.Add(compiled.Code);
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
             var dbl = RingCodec.FromIeee(ctx.RingVar(slot));
@@ -185,12 +267,21 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>Bitwise NOT in the operand's own ring slot — an in-place shape, not a spill
-    /// of a value form.</summary>
+    /// of a value form. A nullable operand uses the lifted operator.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(n.Operand, ctx));
+        var compiled = Compile(n.Operand, ctx);
+        if (NullableValue(compiled, ctx) is { } nullable)
+            return SpillToRing(Not(nullable), ctx);
+        int slot = ring.Add(compiled.Code);
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
+
+    /// <summary>The operand's <c>Nullable&lt;T&gt;</c> value, or null when the slot is a word.</summary>
+    private static Expression? NullableValue(CompiledNode compiled, Context ctx) =>
+        compiled.Result?.Representation is { } rep && Nullable.GetUnderlyingType(rep) is not null
+            ? Block(compiled.Code, compiled.Result.Read(ctx))
+            : null;
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
     /// ring slot — an in-place shape, not a spill of a value form.</summary>
@@ -270,7 +361,7 @@ public static partial class AbiEmitter {
         // own expression tree. CLR properties use Property(inst, propInfo),
         // AST properties use Dictionary indexer, fields use Field(inst, fieldInfo).
         if (resolved.EmitRead(instanceObj) is Expression readExpr) {
-            return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
+            return Block(instanceExpr, StoreOnRing(ctx, resultSlot,
                 ConvertMemberResult(readExpr, resolved, ctx)));
         }
 
@@ -287,7 +378,7 @@ public static partial class AbiEmitter {
                 Expression resultExpr = instanceForCall is not null
                     ? Call(instanceForCall, methodInfo)
                     : Call(null, methodInfo);
-                return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
+                return Block(instanceExpr, StoreOnRing(ctx, resultSlot,
                     ConvertMemberResult(resultExpr, resolved, ctx)));
             }
         }
@@ -296,11 +387,37 @@ public static partial class AbiEmitter {
         return instanceExpr;
     }
 
-    /// <summary>Convert a member access result (object?) to the ring ABI (long).</summary>
+    /// <summary>Convert a member access result to the ring. A <c>Nullable&lt;T&gt;</c>
+    /// stays nullable: converting it through <c>FromClr</c> reads <c>.Value</c> and
+    /// throws when the member is null.</summary>
     private static Expression ConvertMemberResult(Expression readCall, ITypeMember resolved, Context ctx) {
         var clrType = resolved.MemberTypeDefinition.GetRuntimeType()
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
+        if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
+            return NullableMemberRead(readCall, clrType);
         return RingCodec.FromClr(readCall, clrType, ctx.HeapLocal);
+    }
+
+    private static Expression StoreOnRing(Context ctx, int resultSlot, Expression value) =>
+        Assign(ctx.RingVar(resultSlot, RingCodec.SlotTypeOf(value.Type)), value);
+
+    /// <summary>A nullable member as <c>Nullable&lt;T&gt;</c>. A CLR or dictionary read
+    /// arrives as <c>object</c>: null is absent, and a boxed value unboxes. The read
+    /// runs once.</summary>
+    private static Expression NullableMemberRead(Expression read, Type nullable) {
+        if (read.Type == nullable)
+            return read;
+        if (Nullable.GetUnderlyingType(read.Type) is not null)
+            return Convert(read, nullable);
+        if (read.Type != typeof(object))
+            return Convert(read, nullable);
+        var local = Variable(typeof(object), "_member");
+        return Block([local],
+            Assign(local, read),
+            Condition(
+                Equal(local, Constant(null, typeof(object))),
+                Default(nullable),
+                Convert(local, nullable)));
     }
 
     /// <summary>TypeIs: test the operand against the target type. A scalar operand is

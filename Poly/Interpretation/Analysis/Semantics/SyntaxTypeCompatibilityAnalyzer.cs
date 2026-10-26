@@ -213,7 +213,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (left == typeof(decimal) || right == typeof(decimal)) {
+        // Decimal.Add does not lift: rewriting `decimal? + 1m` would turn null into 0.
+        // A nullable operand keeps the operator so the VM can lift it.
+        if ((left == typeof(decimal) || right == typeof(decimal))
+            && Nullable.GetUnderlyingType(left) is null
+            && Nullable.GetUnderlyingType(right) is null) {
             if (!RewriteDecimalArithmetic(context, parent, leftNode, rightNode, kind))
                 Report(context, leftNode,
                     $"decimal arithmetic could not be resolved ({kind})");

@@ -104,15 +104,13 @@ public class PolicySampleSubjectSpikeTests {
     }
 
     [Test]
-    public async Task PropBag_WithNullValue_FailsOnVm() {
+    public async Task PropBag_WithNullValue_ReadsAsNull() {
         var bag = new PropBag(Age: null, Total: 100, Status: null, Name: "Test");
         var subject = new Constant(bag);
 
-        // Accessing a nullable int? property with null value on VM throws
-        // because the VM tries to unbox the nullable struct and fails.
         var node = Pass.Lower(DomainExpression.Property("Age"), subject);
 
-        await Assert.That(() => ExecuteOnVm(node)).Throws<Exception>();
+        await Assert.That(ExecuteOnVm(node).Value).IsNull();
     }
 
     // ── Approach 6: PropBag with non-nullable value types ──────────

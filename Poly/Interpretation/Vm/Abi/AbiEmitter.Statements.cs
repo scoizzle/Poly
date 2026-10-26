@@ -68,7 +68,10 @@ public static partial class AbiEmitter {
             var clrMemberType = memberTypeDef.GetRuntimeType()
                 ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
-            if (clrMemberType is not null
+            if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
+                writeValue = NullableMemberWrite(a.Value, ctx.RingVar(valueSlot), memberUnderlying, ctx);
+            }
+            else if (clrMemberType is not null
                 && clrMemberType.IsValueType
                 && RingCodec.IsInline(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
@@ -138,10 +141,15 @@ public static partial class AbiEmitter {
     /// </summary>
     private static Expression AssignedValue(
         Context ctx, Variable destination, Node value, int valueIndex, Expression compiled) {
-        var valueType = ctx.SlotTypeOf(value);
         var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
+        var destType = ctx.SlotTypeOf(destination);
+        // A bool? local cannot be assigned the 0/1 long a comparison leaves.
+        // Convert(long, bool) does not exist; the nullable operand does the 0/1 test.
+        if (Nullable.GetUnderlyingType(destType) is not null)
+            return AsNullableOperand(value, emitted, destType, ctx);
+        var valueType = ctx.SlotTypeOf(value);
         var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
-        return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
+        return RingCodec.NumericTo(decoded, destType);
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
@@ -628,6 +636,11 @@ public static partial class AbiEmitter {
         if (ctx.TryGetCapture(p, out int capIndex)) {
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
+        var nullable = ctx.TryClrType(p) ?? (p.TypeReference is null ? null : ctx.TryClrType(p.TypeReference));
+        if (nullable is not null && Nullable.GetUnderlyingType(nullable) is not null)
+            return Assign(
+                ctx.RingVar(slot, nullable),
+                RingCodec.UnboxToNullable(ParameterValue(p, ctx), nullable, ctx.HeapLocal));
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
 

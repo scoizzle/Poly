@@ -198,7 +198,7 @@ public static partial class AbiEmitter {
             : null;
         if (rootResult is not null) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
-                RingCodec.ToWord(rootResult.Read(ctx))));
+                RingCodec.ToFrameWord(rootResult.Read(ctx), ctx.HeapLocal)));
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
@@ -616,6 +616,16 @@ public static partial class AbiEmitter {
         Context ctx) {
         var leftVal = ValueOf(left, ctx);
         var rightVal = ValueOf(right, ctx);
+        if (Nullable.GetUnderlyingType(leftVal.Type) is not null
+            || Nullable.GetUnderlyingType(rightVal.Type) is not null) {
+            if (factory == LeftShift || factory == RightShift)
+                return EmitLiftedShift(left, right, leftVal, rightVal, factory, ctx);
+            var nullable = typeof(Nullable<>).MakeGenericType(
+                PromoteUnderlying(left, right, leftVal, rightVal, ctx, shift: false));
+            return factory(
+                AsNullableOperand(left, leftVal, nullable, ctx),
+                AsNullableOperand(right, rightVal, nullable, ctx));
+        }
         bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
         bool rightIeee = RingCodec.IsIeee(right, ctx.Analysis);
         if (leftIeee || rightIeee) {
@@ -638,6 +648,163 @@ public static partial class AbiEmitter {
         return factory(
             RingCodec.AsRepresentation(leftVal, width),
             RingCodec.AsRepresentation(rightVal, width));
+    }
+
+    /// <summary>C# binary numeric promotion of the underlying types. A null constant
+    /// takes the other operand's type. A shift's width is its left operand, and
+    /// <c>ulong</c> stays <c>ulong</c> so the right shift is logical.</summary>
+    private static Type PromoteUnderlying(
+        Node left, Node right, Expression leftVal, Expression rightVal, Context ctx, bool shift) {
+        var leftType = UnderlyingOf(left, leftVal, ctx);
+        var rightType = UnderlyingOf(right, rightVal, ctx);
+        if (leftType is null)
+            leftType = rightType;
+        if (rightType is null)
+            rightType = leftType;
+        if (leftType is null || rightType is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot resolve the width of a nullable arithmetic operand.");
+        return CSharpBinaryNumericType(leftType, rightType, shift);
+    }
+
+    /// <summary>The type a binary operator on these underlying types takes.
+    /// <c>decimal</c> with <c>float</c> or <c>double</c>, and <c>ulong</c> with a
+    /// signed operand, have no operator and fail closed.</summary>
+    private static Type CSharpBinaryNumericType(Type left, Type right, bool shift) {
+        if (shift)
+            return left == typeof(ulong) ? typeof(ulong)
+                : RingCodec.IsInt32Width(left) ? typeof(int) : typeof(long);
+        if (left == typeof(bool) || right == typeof(bool))
+            throw RejectBinary(left, right);
+        if (left == typeof(decimal) || right == typeof(decimal)) {
+            if (RingCodec.IsIeee(left) || RingCodec.IsIeee(right)
+                || !ConvertsToDecimal(left) || !ConvertsToDecimal(right))
+                throw RejectBinary(left, right);
+            return typeof(decimal);
+        }
+        if (RingCodec.IsIeee(left) || RingCodec.IsIeee(right))
+            return IeeeArithmeticType(
+                RingCodec.IsIeee(left) ? left : null,
+                RingCodec.IsIeee(right) ? right : null);
+        // DateTime, TimeSpan, and an enum compare as themselves. Routing them
+        // through the integer width turns the operator into a long comparison.
+        if (left == right && !IsBinaryIntegral(left))
+            return left;
+        if (left == typeof(ulong) || right == typeof(ulong)) {
+            if (IsUnsignedOrChar(left) && IsUnsignedOrChar(right))
+                return typeof(ulong);
+            throw RejectBinary(left, right);
+        }
+        if (left == typeof(long) || right == typeof(long))
+            return typeof(long);
+        return RingCodec.IntegerArithmeticWidth(left, right);
+    }
+
+    private static InvalidOperationException RejectBinary(Type? left, Type? right) =>
+        new($"VM compile rejected: no operator for '{left?.Name ?? "unresolved"}' and '{right?.Name ?? "unresolved"}'.");
+
+    private static bool ConvertsToDecimal(Type? type) =>
+        type == typeof(decimal) || IsBinaryIntegral(type);
+
+    private static bool IsBinaryIntegral(Type? type) =>
+        type == typeof(byte) || type == typeof(sbyte) || type == typeof(short)
+        || type == typeof(ushort) || type == typeof(int) || type == typeof(uint)
+        || type == typeof(long) || type == typeof(ulong) || type == typeof(char);
+
+    /// <summary>Types that promote to <c>ulong</c> rather than to a signed width.</summary>
+    private static bool IsUnsignedOrChar(Type type) =>
+        type == typeof(byte) || type == typeof(ushort) || type == typeof(char)
+        || type == typeof(uint) || type == typeof(ulong);
+
+    /// <summary>The operand's CLR type with <c>Nullable&lt;T&gt;</c> removed.
+    /// A null constant has no numeric type.</summary>
+    private static Type? UnderlyingOf(Node node, Expression value, Context ctx) {
+        if (node is Constant { Value: null })
+            return null;
+        var clr = ctx.ClrTypeOf(node) ?? value.Type;
+        return Nullable.GetUnderlyingType(clr) ?? clr;
+    }
+
+    /// <summary>A shift's left operand promotes like the non-nullable shift, then
+    /// lifts. The count stays an <c>int</c>. Expression trees have no lifted shift,
+    /// so an absent left answers <c>default</c> without shifting.</summary>
+    private static Expression EmitLiftedShift(
+        Node left, Node right, Expression leftVal, Expression rightVal,
+        Func<Expression, Expression, BinaryExpression> factory,
+        Context ctx) {
+        var nullable = typeof(Nullable<>).MakeGenericType(
+            PromoteUnderlying(left, right, leftVal, rightVal, ctx, shift: true));
+        var local = Variable(nullable, "_shift");
+        var shifted = factory(
+            Property(local, "Value"),
+            RingCodec.AsRepresentation(rightVal, typeof(int)));
+        return Block([local],
+            Assign(local, AsNullableOperand(left, leftVal, nullable, ctx)),
+            Condition(
+                Property(local, "HasValue"),
+                Convert(shifted, nullable),
+                Default(nullable)));
+    }
+
+    private static Expression AsNullableOperand(
+        Node node, Expression value, Type nullable, Context ctx) {
+        if (node is Constant { Value: null })
+            return Default(nullable);
+        if (value.Type == nullable)
+            return value;
+        var underlying = Nullable.GetUnderlyingType(nullable)!;
+        if (Nullable.GetUnderlyingType(value.Type) is not null || value.Type == underlying)
+            return Convert(value, nullable);
+        value = AsUnderlying(node, value, underlying, ctx);
+        return value.Type == nullable ? value : Convert(value, nullable);
+    }
+
+    /// <summary>The word or handle as <paramref name="underlying"/>. A bool word is the
+    /// 0/1 test. A decimal, enum, or other non-inline value is unboxed. An IEEE word
+    /// is its bit pattern. <c>ulong</c> is a same-size bitcast, so
+    /// <c>ulong.MaxValue</c> stays unsigned.</summary>
+    private static Expression AsUnderlying(Node node, Expression value, Type underlying, Context ctx) {
+        if (underlying == typeof(bool))
+            return NotEqual(RingCodec.ToWord(value), Constant(0L));
+        if (value.Type == underlying)
+            return value;
+        var source = UnderlyingOf(node, value, ctx) ?? value.Type;
+        if (value.Type == typeof(long) && NeedsHeapUnbox(source))
+            return Convert(
+                Call(ctx.HeapLocal, HeapUnsafeGet, Convert(value, typeof(int))),
+                underlying);
+        if (RingCodec.IsIeee(underlying) || RingCodec.IsIeee(node, ctx.Analysis))
+            return AsIeee(node, value, underlying, ctx);
+        if (underlying == typeof(ulong))
+            return Convert(RingCodec.ToWord(value), typeof(ulong));
+        if (underlying == typeof(decimal) || !RingCodec.IsInline(underlying))
+            return Convert(value.Type == typeof(long) ? value : RingCodec.ToWord(value), underlying);
+        var represented = RingCodec.AsRepresentation(value, underlying);
+        return represented.Type == underlying ? represented : Convert(represented, underlying);
+    }
+
+    /// <summary>True when a long slot holds a heap handle for this type. An enum
+    /// constant is boxed even though its kind is inline.</summary>
+    private static bool NeedsHeapUnbox(Type source) =>
+        source.IsEnum
+        || (source.IsValueType
+            && Nullable.GetUnderlyingType(source) is null
+            && !RingCodec.IsInline(source));
+
+    /// <summary>The object stored for a <c>Nullable&lt;T&gt;</c> member. A nullable
+    /// source's word is a handle (0 is null). A scalar word is the number, so 0
+    /// stays present. A boxed decimal or enum is already the object.</summary>
+    private static Expression NullableMemberWrite(
+        Node value, Expression word, Type underlying, Context ctx) {
+        var valueClr = ctx.ClrTypeOf(value);
+        if (valueClr is not null && Nullable.GetUnderlyingType(valueClr) is not null)
+            return Condition(
+                Equal(word, Constant(0L)),
+                Constant(null, typeof(object)),
+                Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))));
+        if (valueClr is not null && NeedsHeapUnbox(valueClr))
+            return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
+        return Convert(AsUnderlying(value, word, underlying, ctx), typeof(object));
     }
 
     /// <summary>The width an integer operation runs at, from the operand types analysis
@@ -734,8 +901,16 @@ public static partial class AbiEmitter {
             : left;
 
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
-        var tmp = Variable(typeof(long), "_coal");
         var leftVal = ValueOf(n.LeftHandValue, ctx);
+        if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
+            var rightArm = ValueOf(n.RightHandValue, ctx);
+            Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
+                ? rightArm
+                : Convert(rightArm, underlying);
+            var leftLocal = Variable(leftVal.Type, "_coal");
+            return Block([leftLocal], Assign(leftLocal, leftVal), Coalesce(leftLocal, right));
+        }
+        var tmp = Variable(typeof(long), "_coal");
         // A coalesce answers in the word: its left side is a nullable heap handle, so
         // an IEEE right arm crosses the boundary here rather than widening the result.
         var rightVal = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));

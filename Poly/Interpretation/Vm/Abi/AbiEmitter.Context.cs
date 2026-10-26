@@ -265,12 +265,14 @@ public static partial class AbiEmitter {
             representation == typeof(double) ? $"_d{index}"
                 : representation == typeof(float) ? $"_f{index}"
                 : representation == typeof(int) ? $"_i{index}"
+                : Nullable.GetUnderlyingType(representation) is { } underlying
+                    ? $"_n{index}_{underlying.Name}"
                 : $"_r{index}";
 
-        /// <summary>The word form of a ring slot: the local at its own representation,
-        /// converted to the <c>long</c> word only when that representation is IEEE.</summary>
+        /// <summary>The word form of a ring slot. A <c>Nullable&lt;T&gt;</c> local
+        /// boxes here; every other local uses <see cref="RingCodec.ToWord"/>.</summary>
         public Expression RingWord(int absoluteIndex, Type representation) =>
-            RingCodec.ToWord(RingVar(absoluteIndex, representation));
+            RingCodec.ToFrameWord(RingVar(absoluteIndex, representation), HeapLocal);
 
         /// <summary>The ring representation of a node's value: its own type for an IEEE or
         /// <c>int</c> scalar, the word for every other shape — including one analysis could
@@ -279,6 +281,8 @@ public static partial class AbiEmitter {
         /// closed: see <see cref="RingCodec.IntegerArithmeticWidth"/>.)</summary>
         public Type SlotTypeOf(Node node) {
             var (kind, clr) = RepresentationOf(node);
+            if (clr is not null && Nullable.GetUnderlyingType(clr) is not null)
+                return clr;
             return kind is ValueRepresentationKind.StackScalar ? RingCodec.SlotTypeOf(clr) : typeof(long);
         }
 
@@ -335,7 +339,7 @@ public static partial class AbiEmitter {
                 if (_variableRegisters.TryGetValue(v, out var reg) && scope.TryGetValue(v, out int slot)) {
                     stores.Add(Assign(
                         ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot))),
-                        RingCodec.ToWord(RegisterVar(reg))));
+                        RingCodec.ToFrameWord(RegisterVar(reg), HeapLocal)));
                 }
             }
             return stores;
@@ -382,12 +386,17 @@ public static partial class AbiEmitter {
             NeedsCell(v) ? typeof(long) : SlotTypeOf(v);
 
         /// <summary>The zero a declared local starts at, at its own representation.</summary>
-        public Expression VariableZero(Variable v) => RegisterRepresentation(v) switch {
-            var t when t == typeof(double) => Constant(0.0),
-            var t when t == typeof(float) => Constant(0.0f),
-            var t when t == typeof(int) => Constant(0),
-            _ => Constant(0L),
-        };
+        public Expression VariableZero(Variable v) {
+            var representation = RegisterRepresentation(v);
+            if (Nullable.GetUnderlyingType(representation) is not null)
+                return Default(representation);
+            return representation switch {
+                var t when t == typeof(double) => Constant(0.0),
+                var t when t == typeof(float) => Constant(0.0f),
+                var t when t == typeof(int) => Constant(0),
+                _ => Constant(0L),
+            };
+        }
 
         /// <summary>Reserve the next register index. The local itself is declared on first
         /// use at the representation its variable needs, so an index carries only the
@@ -421,6 +430,8 @@ public static partial class AbiEmitter {
             representation == typeof(double) ? $"_dreg{index}"
                 : representation == typeof(float) ? $"_freg{index}"
                 : representation == typeof(int) ? $"_ireg{index}"
+                : Nullable.GetUnderlyingType(representation) is { } underlying
+                    ? $"_nreg{index}_{underlying.Name}"
                 : $"_reg{index}";
 
         /// <summary>Bind a promoted variable's array to the typed CLR local that caches it,

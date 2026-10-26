@@ -117,13 +117,15 @@ internal static class RingCodec {
     /// promotes to <c>int</c> before an operator, a handle, or a type analysis could not
     /// resolve — uses the <c>long</c> word.</summary>
     public static Type SlotTypeOf(Type? clrType) =>
-        clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
+        clrType is not null && Nullable.GetUnderlyingType(clrType) is not null ? clrType
+        : clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
             ? clrType
             : typeof(long);
 
     /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
     public static bool IsTypedSlot(Type slotType) =>
-        IsIeee(slotType) || slotType == typeof(int);
+        IsIeee(slotType) || slotType == typeof(int)
+        || Nullable.GetUnderlyingType(slotType) is not null;
 
     /// <summary>A typed slot expression as the word. The one place an expression-level
     /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
@@ -133,6 +135,44 @@ internal static class RingCodec {
         value.Type == typeof(int) ? Convert(value, typeof(long))
             : IsIeee(value.Type) ? ToIeee(Convert(value, typeof(double)))
             : value;
+
+    /// <summary>The frame word of a local. <c>Nullable&lt;T&gt;</c> becomes a handle
+    /// here: absent is 0, present is the boxed underlying value.</summary>
+    public static Expression ToFrameWord(Expression value, Expression heap) =>
+        Nullable.GetUnderlyingType(value.Type) is not null
+            ? BoxNullable(value, heap)
+            : ToWord(value);
+
+    private static readonly MethodInfo ReadNullableInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)(
+            (h, v, t) => ReadNullable(h, v, t)));
+
+    /// <summary>A frame handle as <paramref name="nullableType"/>. Handle 0 is
+    /// <c>default</c>.</summary>
+    public static Expression UnboxToNullable(Expression handle, Type nullableType, Expression heap) {
+        var underlying = Nullable.GetUnderlyingType(nullableType)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: '{nullableType}' is not a nullable value.");
+        var word = ToWord(handle);
+        var payload = Convert(
+            Call(ReadNullableInfo, heap, word, Constant(underlying, typeof(Type))),
+            underlying);
+        return Condition(
+            Equal(word, Constant(0L)),
+            Default(nullableType),
+            Convert(payload, nullableType));
+    }
+
+    /// <summary>Box a <c>Nullable&lt;T&gt;</c> as its frame word.</summary>
+    public static Expression BoxNullable(Expression value, Expression heap) {
+        var boxed = Variable(typeof(object), "_nullable");
+        return Block([boxed],
+            Assign(boxed, Convert(value, typeof(object))),
+            Condition(
+                Equal(boxed, Constant(null, typeof(object))),
+                Constant(0L),
+                Convert(Call(heap, HeapAllocate, boxed), typeof(long))));
+    }
 
     /// <summary>The word as a typed slot expression: the mirror of
     /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
@@ -247,6 +287,12 @@ internal static class RingCodec {
         }
         if (targetType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
+        // A nullable value crosses the call as a handle. IsInline peels Nullable<T>,
+        // so a numeric convert here would pass the handle number instead of the value.
+        if (Nullable.GetUnderlyingType(targetType) is not null
+            && sourceClr is not null
+            && Nullable.GetUnderlyingType(sourceClr) is not null)
+            return UnboxToNullable(ringVal, targetType, heap);
         // An enum constant is boxed by EmitConstant (TryInlineConstant rejects it), so
         // dereference before converting it to an inline enum target.
         if (source is Constant constant && constant.Value is not null
@@ -322,7 +368,17 @@ internal static class RingCodec {
         throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }
 
-    /// <summary>Runtime unbox of a nullable inline value from its heap handle.</summary>
+    /// <summary>The boxed underlying value of a nullable frame slot, or null
+    /// when the handle is the absent sentinel.</summary>
+    public static object? ReadNullable(VmManagedObjectHeap heap, long handle, Type underlying) {
+        if (handle == 0L) return null;
+        var obj = heap.UnsafeGet((int)handle);
+        if (obj is null) return null;
+        if (underlying.IsInstanceOfType(obj))
+            return obj;
+        return System.Convert.ChangeType(obj, underlying, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     public static long UnboxNullable(VmManagedObjectHeap heap, long handle) {
         if (handle == 0L) return 0L;
         var obj = heap.UnsafeGet((int)handle);

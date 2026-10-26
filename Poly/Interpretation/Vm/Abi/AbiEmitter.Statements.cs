@@ -953,6 +953,15 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         int resultSlot = ring.Add(CompileNode(ret.Value, ctx));
         Expression value = ctx.RingVar(resultSlot);
+        // The frame slot carries the callee's declared return representation. A nullable
+        // return is a heap handle, so a scalar body value boxes here: handing the caller a
+        // raw word would make it dereference a number as a heap index.
+        if (ctx.DeclaredReturn is { } declaredReturn
+            && Nullable.GetUnderlyingType(declaredReturn) is not null
+            && RingCodec.IsStackScalar(ret.Value, ctx.Analysis))
+            value = RingCodec.Box(
+                RingCodec.ToClr(value, typeof(object), ret.Value, ctx.Analysis, ctx.HeapLocal),
+                ctx.HeapLocal);
         if (ctx.AsyncReturn is not null)
             value = WrapAsyncResult(value, ctx.AsyncReturn, ctx, ret.Value);
 

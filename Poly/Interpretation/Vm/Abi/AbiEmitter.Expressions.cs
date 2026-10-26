@@ -206,18 +206,22 @@ public static partial class AbiEmitter {
                 "VM compile rejected: ordering comparison of an optional heap value is not supported.");
         }
 
+        // Read both operands once, left then right: ValueOf is the operand's code, and
+        // this shape reads each value three times below.
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
-        var leftPresent = leftUnderlying is null ? null : NullablePresent(lv);
-        var rightPresent = rightUnderlying is null ? null : NullablePresent(rv);
-        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? lv.Type;
-        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rv.Type;
-        var leftValue = leftPresent is null
-            ? lv
-            : Condition(leftPresent, UnboxNullable(lv, leftType, ctx), Default(leftType));
-        var rightValue = rightPresent is null
-            ? rv
-            : Condition(rightPresent, UnboxNullable(rv, rightType, ctx), Default(rightType));
+        var leftLocal = Variable(lv.Type, "_cmpLeft");
+        var rightLocal = Variable(rv.Type, "_cmpRight");
+        var leftPresent = leftUnderlying is null ? null : NullablePresent(leftLocal);
+        var rightPresent = rightUnderlying is null ? null : NullablePresent(rightLocal);
+        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? leftLocal.Type;
+        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rightLocal.Type;
+        Expression leftValue = leftPresent is null
+            ? leftLocal
+            : Condition(leftPresent, UnboxNullable(leftLocal, leftType, ctx), Default(leftType));
+        Expression rightValue = rightPresent is null
+            ? rightLocal
+            : Condition(rightPresent, UnboxNullable(rightLocal, rightType, ctx), Default(rightType));
         Expression present = leftPresent is null ? rightPresent!
             : rightPresent is null ? leftPresent
             : AndAlso(leftPresent, rightPresent);
@@ -226,7 +230,11 @@ public static partial class AbiEmitter {
         Expression Value(Expression value) =>
             ieee ? Convert(value, typeof(double)) : LiftedOperand(value, typeof(long));
         if (!eq)
-            return AndAlso(present, cf(Value(leftValue), Value(rightValue)));
+            return Block(
+                [leftLocal, rightLocal],
+                Assign(leftLocal, lv),
+                Assign(rightLocal, rv),
+                AndAlso(present, cf(Value(leftValue), Value(rightValue))));
 
         // Equality is true when both are present and their values match, or when both
         // are absent. A scalar side is always present.
@@ -234,7 +242,11 @@ public static partial class AbiEmitter {
             Value(leftValue), Value(rightValue)));
         if (leftPresent is not null && rightPresent is not null)
             areEqual = OrElse(areEqual, AndAlso(Not(leftPresent), Not(rightPresent)));
-        return cf == Equal ? areEqual : Not(areEqual);
+        return Block(
+            [leftLocal, rightLocal],
+            Assign(leftLocal, lv),
+            Assign(rightLocal, rv),
+            cf == Equal ? areEqual : Not(areEqual));
     }
 
     /// <summary>Equality between a <c>decimal</c> or <c>decimal?</c> operand and an
@@ -261,8 +273,15 @@ public static partial class AbiEmitter {
         if (otherType is null || !IsNumericClrType(otherType))
             return null;
 
-        var decimalRaw = ValueOf(decimalNode, ctx);
-        var otherRaw = ValueOf(otherNode, ctx);
+        // Emit in source order, then map the bound values onto the decimal and other
+        // roles: a root parameter's frame slot is assigned on first use and SetArgs binds
+        // argument i to slot i, so reading the right operand first would cross them.
+        var leftRaw = ValueOf(left, ctx);
+        var rightRaw = ValueOf(right, ctx);
+        var leftLocal = Variable(leftRaw.Type, "_cmpLeft");
+        var rightLocal = Variable(rightRaw.Type, "_cmpRight");
+        var decimalRaw = leftDecimal ? leftLocal : rightLocal;
+        var otherRaw = leftDecimal ? rightLocal : leftLocal;
         var decimalHandle = Variable(typeof(long), "_decimalHandle");
         var otherSlot = Variable(otherRaw.Type, "_otherValue");
         var decimalPresent = NullableUnderlyingOf(decimalNode, ctx) is null
@@ -293,7 +312,9 @@ public static partial class AbiEmitter {
             if (decimalPresent is not null && otherPresent is not null)
                 areEqual = OrElse(areEqual, AndAlso(Not(decimalPresent), Not(otherPresent)));
         }
-        return Block([decimalHandle, otherSlot],
+        return Block([leftLocal, rightLocal, decimalHandle, otherSlot],
+            Assign(leftLocal, leftRaw),
+            Assign(rightLocal, rightRaw),
             Assign(decimalHandle, RingCodec.ToWord(decimalRaw)),
             Assign(otherSlot, otherRaw),
             cf == Equal ? areEqual : Not(areEqual));

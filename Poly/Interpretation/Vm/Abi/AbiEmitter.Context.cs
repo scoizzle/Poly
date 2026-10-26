@@ -105,6 +105,11 @@ public static partial class AbiEmitter {
         /// function body being compiled; <see cref="EmitReturn"/> wraps every return in a
         /// completed task while it is set. Null for lambdas and non-async bodies.</summary>
         public Type? AsyncReturn { get; set; }
+        /// <summary>The declared CLR return type of the function body being compiled, when
+        /// the caller knows it. <see cref="EmitReturn"/> stores the value in the declared
+        /// representation: a nullable return is a heap handle, so a scalar body value boxes
+        /// rather than handing a number to a caller that will read it as a handle.</summary>
+        public Type? DeclaredReturn { get; set; }
         public IReadOnlyList<ParameterExpression> Locals => _locals;
 
         public Expression SlotsInitExpression =>

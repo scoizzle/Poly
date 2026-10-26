@@ -148,7 +148,8 @@ public static partial class AbiEmitter {
                         ctx,
                         instanceSlot: !astMethod.IsStatic,
                         rejection: out var rejection,
-                        asyncReturn: asyncReturn);
+                        asyncReturn: asyncReturn,
+                        declaredReturn: astMethod.MemberTypeDefinition.GetRuntimeType());
                     if (table is not null)
                         return EmitAstInvoke(invoke, member, astMethod, table, ctx);
                     // The body exists and resolved to this AST method, so a name-dispatched
@@ -504,13 +505,15 @@ public static partial class AbiEmitter {
         AnalysisResult analysis,
         HashSet<object> capturedBindings,
         bool instanceSlot = false,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? declaredReturn = null) {
 
         var fnCtx = new Context();
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
         fnCtx.AsyncReturn = asyncReturn;
+        fnCtx.DeclaredReturn = declaredReturn;
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
         // Instance calls pass the receiver handle at frame slot 0. User
@@ -904,7 +907,8 @@ public static partial class AbiEmitter {
         Context caller,
         bool instanceSlot,
         out string? rejection,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? declaredReturn = null) {
         rejection = null;
         var mode = caller.Mode;
         lock (AstCallableGate) {
@@ -949,7 +953,8 @@ public static partial class AbiEmitter {
                 unitAnalysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
                 instanceSlot,
-                asyncReturn);
+                asyncReturn,
+                declaredReturn);
         }
         catch (Exception ex) {
             // Drop this slot and everything compiled under it: those bodies may

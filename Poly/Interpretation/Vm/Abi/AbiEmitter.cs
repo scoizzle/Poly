@@ -658,18 +658,23 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 $"VM compile rejected: arithmetic on an optional {resultUnderlying.Name} is not supported.");
 
+        // A lifted operand is read three times — presence, unbox, and the presence
+        // conjunction — so bind each one once, left then right: ValueOf is the operand's
+        // code, and a value spliced into several tree positions runs that code again.
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
-        var leftPresent = leftUnderlying is null ? null : NullablePresent(lv);
-        var rightPresent = rightUnderlying is null ? null : NullablePresent(rv);
-        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? lv.Type;
-        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rv.Type;
-        var leftValue = leftPresent is null
-            ? lv
-            : Condition(leftPresent, UnboxNullable(lv, leftType, ctx), Default(leftType));
-        var rightValue = rightPresent is null
-            ? rv
-            : Condition(rightPresent, UnboxNullable(rv, rightType, ctx), Default(rightType));
+        var leftLocal = Variable(lv.Type, "_liftedLeft");
+        var rightLocal = Variable(rv.Type, "_liftedRight");
+        var leftPresent = leftUnderlying is null ? null : NullablePresent(leftLocal);
+        var rightPresent = rightUnderlying is null ? null : NullablePresent(rightLocal);
+        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? leftLocal.Type;
+        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rightLocal.Type;
+        Expression leftValue = leftPresent is null
+            ? leftLocal
+            : Condition(leftPresent, UnboxNullable(leftLocal, leftType, ctx), Default(leftType));
+        Expression rightValue = rightPresent is null
+            ? rightLocal
+            : Condition(rightPresent, UnboxNullable(rightLocal, rightType, ctx), Default(rightType));
         Expression present = leftPresent is null ? rightPresent!
             : rightPresent is null ? leftPresent
             : AndAlso(leftPresent, rightPresent);
@@ -700,10 +705,14 @@ public static partial class AbiEmitter {
                 Constant(true, typeof(object)),
                 Constant(false, typeof(object)))
             : Convert(Convert(result, resultUnderlying), typeof(object));
-        return Condition(
-            present,
-            Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
-            Constant(0L));
+        return Block(
+            [leftLocal, rightLocal],
+            Assign(leftLocal, lv),
+            Assign(rightLocal, rv),
+            Condition(
+                present,
+                Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
+                Constant(0L)));
     }
 
     /// <summary>The width an integer operation runs at, from the operand types analysis

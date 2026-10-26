@@ -128,8 +128,8 @@ public static partial class AbiEmitter {
                             fullBody.Add(unset);
                     }
 
-                    fullBody.Add(Assign(ctx.RingVar(slot),
-                        EmitResult(callExpr, methodInfo.ReturnType, ctx)));
+                    var result = EmitResult(callExpr, methodInfo.ReturnType, ctx);
+                    fullBody.Add(Assign(ctx.RingVar(slot, result.Type), result));
                     return Block(fullBody);
                 }
 
@@ -881,9 +881,20 @@ public static partial class AbiEmitter {
         int result = ctx.AllocSlot();
         ctx.RingDepth = result + 1;
         // The callee already left the ring word at slots[FramePos] (VmCall.Invoke's
-        // contract, void included), so the caller only moves it into its own slot.
-        seq.Add(Assign(ctx.RingVar(result), EmitCallFrame(
-            ArrayIndex(Constant(table), Constant(0)), inits, ctx)));
+        // contract, void included). A nullable return is a frame handle; the caller
+        // unboxes it once into the Nullable<T> local. The call is bound first so the
+        // unbox's presence test does not run it again.
+        Expression call = EmitCallFrame(ArrayIndex(Constant(table), Constant(0)), inits, ctx);
+        var returnType = method.MemberTypeDefinition.GetRuntimeType();
+        if (returnType is not null && Nullable.GetUnderlyingType(returnType) is not null) {
+            var word = Variable(typeof(long), "_ret");
+            seq.Add(Assign(word, call));
+            seq.Add(Assign(
+                ctx.RingVar(result, returnType),
+                RingCodec.UnboxToNullable(word, returnType, ctx.HeapLocal)));
+            return Block([word], seq);
+        }
+        seq.Add(Assign(ctx.RingVar(result), call));
         return Block(seq);
     }
 

@@ -313,7 +313,7 @@ The representation table:
 | `short`, `byte` | Stack scalar (converted to/from `long`) | Both |
 | Reference types | Heap handle (`int` index) | Both |
 | `decimal`, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Guid` | Heap handle | Both |
-| Nullable value types | Heap handle; 0 is absent, a present value is a boxed cell | Both |
+| Nullable value types | Frame: heap handle (0 absent, present is a boxed cell). Expression local: `Nullable<T>` | Both |
 | Enums | Underlying integer in the long word (`ulong` underlying is the unchecked bitcast) | Both |
 | Other value types | Heap handle | Both |
 
@@ -326,8 +326,10 @@ It never compares a slot word to a handle. Inline primitives go through
 to the enum. A void call is an inline `long`: `EmitResult` writes `0L`
 into the slot it reserved. `decimal`, `DateTime`, and the other heap value types go
 through `RingCodec.RequiredValue`, which fails closed on handle 0. An optional
-uses the null sentinel: absent equals only absent, and an ordering with an
-absent operand is false.
+operand is a `Nullable<T>` local. Both sides promote to `Nullable<domain>` and
+the lifted CLR operator answers: absent equals only absent, and an ordering with
+an absent operand is false. The frame boxes that local only when a `long` slot
+has to hold it.
 
 The pair is promoted by C# binary numeric promotion plus the nullable lift.
 Integral pairs, including `ulong` and `char`, promote to `decimal`, which is

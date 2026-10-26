@@ -74,8 +74,6 @@ public static partial class AbiEmitter {
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.TypeAs(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, long>>)((h, v) => RingCodec.UnboxNullable(h, v)));
-    private static readonly MethodInfo UnboxNullableAsInfo =
-        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)((h, v, t) => RingCodec.UnboxNullableAs(h, v, t)));
     private static readonly MethodInfo RequiredValueInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object>>)((h, v, t) => RingCodec.RequiredValue(h, v, t)));
     // Expression<Func<T>> cannot close over a ref struct (CS9244).
@@ -202,7 +200,7 @@ public static partial class AbiEmitter {
             : null;
         if (rootResult is not null) {
             body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
-                RingCodec.ToWord(rootResult.Read(ctx))));
+                RingCodec.ToFrameWord(rootResult.Read(ctx), ctx.HeapLocal)));
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
@@ -613,8 +611,7 @@ public static partial class AbiEmitter {
         var leftUnderlying = NullableUnderlyingOf(left, ctx);
         var rightUnderlying = NullableUnderlyingOf(right, ctx);
         if (leftUnderlying is not null || rightUnderlying is not null)
-            return EmitLiftedArithmetic(
-                owner, left, right, factory, ctx, leftUnderlying, rightUnderlying);
+            return EmitLiftedArithmetic(owner, left, right, factory, ctx);
         var leftVal = ValueOf(left, ctx);
         var rightVal = ValueOf(right, ctx);
         bool leftIeee = RingCodec.IsIeee(left, ctx.Analysis);
@@ -658,86 +655,67 @@ public static partial class AbiEmitter {
         return Convert(factory(unsignedLeft, unsignedRight), typeof(long));
     }
 
-    /// <summary>Binary arithmetic with a nullable operand. Both values are unboxed, the
-    /// operation runs on the values, and a nullable result is boxed: C# lifts the
-    /// operator, so an absent operand makes the result absent.</summary>
+    /// <summary>Binary arithmetic with a nullable operand. Each operand is read once
+    /// into a <c>Nullable&lt;T&gt;</c> and the lifted CLR operator runs on those locals.
+    /// An absent operand makes the result absent. The frame boxes the result only when
+    /// a <c>long</c> slot has to hold it.</summary>
     private static Expression EmitLiftedArithmetic(
         Node owner, Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
-        Context ctx, Type? leftUnderlying, Type? rightUnderlying) {
+        Context ctx) {
         var resultUnderlying = ctx.ClrTypeOf(owner) is { } resultClr
             ? Nullable.GetUnderlyingType(resultClr)
             : null;
         if (resultUnderlying is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: nullable arithmetic '{owner}' must produce a nullable value.");
-        // Only a real scalar has a lifted word form. A nullable decimal is a heap
-        // value, so reject it rather than round the operand through long.
-        if (!RingCodec.IsInline(resultUnderlying))
-            throw new InvalidOperationException(
-                $"VM compile rejected: arithmetic on an optional {resultUnderlying.Name} is not supported.");
 
-        // A lifted operand is read three times — presence, unbox, and the presence
-        // conjunction — so bind each one once, left then right: ValueOf is the operand's
-        // code, and a value spliced into several tree positions runs that code again.
         var lv = ValueOf(left, ctx);
         var rv = ValueOf(right, ctx);
         var leftLocal = Variable(lv.Type, "_liftedLeft");
         var rightLocal = Variable(rv.Type, "_liftedRight");
-        var leftPresent = leftUnderlying is null ? null : NullablePresent(leftLocal);
-        var rightPresent = rightUnderlying is null ? null : NullablePresent(rightLocal);
-        var leftType = leftUnderlying ?? ctx.ClrTypeOf(left) ?? leftLocal.Type;
-        var rightType = rightUnderlying ?? ctx.ClrTypeOf(right) ?? rightLocal.Type;
-        Expression leftValue = leftPresent is null
-            ? leftLocal
-            : Condition(leftPresent, UnboxNullable(leftLocal, leftType, ctx), Default(leftType));
-        Expression rightValue = rightPresent is null
-            ? rightLocal
-            : Condition(rightPresent, UnboxNullable(rightLocal, rightType, ctx), Default(rightType));
-        Expression present = leftPresent is null ? rightPresent!
-            : rightPresent is null ? leftPresent
-            : AndAlso(leftPresent, rightPresent);
-
-        Expression result;
-        if (resultUnderlying == typeof(ulong) || leftType == typeof(ulong) || rightType == typeof(ulong)) {
-            bool shift = factory == LeftShift || factory == RightShift;
-            result = factory(
-                Convert(leftValue, typeof(ulong)),
-                shift ? Convert(rightValue, typeof(int)) : Convert(rightValue, typeof(ulong)));
-        }
-        else if (IsIeeeType(resultUnderlying)) {
-            var target = resultUnderlying == typeof(float) ? typeof(float) : typeof(double);
-            result = factory(Convert(leftValue, typeof(double)), Convert(rightValue, typeof(double)));
-            if (result.Type != target)
-                result = Convert(result, target);
-        }
-        else if (factory == LeftShift || factory == RightShift) {
-            var width = RingCodec.SlotTypeOf(resultUnderlying);
-            result = factory(
-                LiftedOperand(leftValue, width),
-                LiftedOperand(rightValue, typeof(int)));
-        }
-        else {
-            var width = RingCodec.SlotTypeOf(resultUnderlying);
-            result = factory(
-                LiftedOperand(leftValue, width),
-                LiftedOperand(rightValue, width));
-        }
-
-        Expression boxed = resultUnderlying == typeof(bool)
-            ? Condition(
-                NotEqual(Convert(result, typeof(long)), Constant(0L)),
-                Constant(true, typeof(object)),
-                Constant(false, typeof(object)))
-            : Convert(Convert(result, resultUnderlying), typeof(object));
+        bool shift = factory == LeftShift || factory == RightShift;
+        Expression leftValue = AsLiftedArithmeticOperand(leftLocal, resultUnderlying, ctx);
+        Expression rightValue = shift
+            ? AsShiftCount(rightLocal)
+            : AsLiftedArithmeticOperand(rightLocal, resultUnderlying, ctx);
         return Block(
             [leftLocal, rightLocal],
             Assign(leftLocal, lv),
             Assign(rightLocal, rv),
-            Condition(
-                present,
-                Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
-                Constant(0L)));
+            factory(leftValue, rightValue));
+    }
+
+    /// <summary>An operand as <c>Nullable&lt;underlying&gt;</c>. A local that already is
+    /// that nullable is a copy. A word is the inline scalar, or a heap value when the
+    /// underlying does not fit in a word.</summary>
+    private static Expression AsLiftedArithmeticOperand(Expression value, Type underlying, Context ctx) {
+        var nullable = typeof(Nullable<>).MakeGenericType(underlying);
+        if (value.Type == nullable)
+            return value;
+        if (Nullable.GetUnderlyingType(value.Type) is not null)
+            return Convert(value, nullable);
+        if (value.Type == underlying)
+            return Convert(value, nullable);
+        if (value.Type == typeof(long) && !RingCodec.IsInline(underlying)) {
+            var boxed = Call(
+                RequiredValueInfo, ctx.HeapLocal, value, Constant(underlying, typeof(Type)));
+            return Convert(Convert(boxed, underlying), nullable);
+        }
+        Expression scalar = value.Type == typeof(long)
+            ? RingCodec.ScalarValue(value, underlying)
+            : Convert(value, underlying);
+        return Convert(scalar, nullable);
+    }
+
+    /// <summary>A shift count as <c>int</c>. A nullable count uses the lifted form
+    /// the operator expects: absent makes the shift absent.</summary>
+    private static Expression AsShiftCount(Expression value) {
+        if (value.Type == typeof(int) || value.Type == typeof(int?))
+            return value;
+        if (Nullable.GetUnderlyingType(value.Type) is not null)
+            return Convert(value, typeof(int?));
+        return Convert(value, typeof(int));
     }
 
     /// <summary>The width an integer operation runs at, from the operand types analysis
@@ -834,11 +812,21 @@ public static partial class AbiEmitter {
             : left;
 
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
-        var tmp = Variable(typeof(long), "_coal");
         var leftVal = ValueOf(n.LeftHandValue, ctx);
-        // A coalesce answers in the word: its left side is a nullable heap handle, so
-        // an IEEE right arm crosses the boundary here rather than widening the result.
-        var rightVal = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));
+        if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
+            var rightVal = ValueOf(n.RightHandValue, ctx);
+            Expression right = CoalesceRight(rightVal, underlying, leftVal.Type, ctx);
+            var leftLocal = Variable(leftVal.Type, "_coal");
+            Expression coalesced = Coalesce(leftLocal, right);
+            // int, long, float, and double already are slot types. decimal and bool
+            // are not: the frame keeps the handle or the 0/1 word it uses everywhere else.
+            if (coalesced.Type != RingCodec.SlotTypeOf(coalesced.Type))
+                coalesced = StoredCoalesce(coalesced, ctx);
+            return Block([leftLocal], Assign(leftLocal, leftVal), coalesced);
+        }
+        var tmp = Variable(typeof(long), "_coal");
+        // A reference coalesce answers in the word.
+        var rightWord = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));
         Expression whenLeft = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;
@@ -849,7 +837,32 @@ public static partial class AbiEmitter {
                     ? NotEqual(tmp, Constant(0L))
                     : Constant(true),
                 whenLeft,
-                rightVal));
+                rightWord));
+    }
+
+    private static Expression CoalesceRight(Expression right, Type underlying, Type leftType, Context ctx) {
+        if (right.Type == underlying || right.Type == leftType)
+            return right;
+        if (Nullable.GetUnderlyingType(right.Type) is not null)
+            return Convert(right, leftType);
+        if (right.Type == typeof(long) && !RingCodec.IsInline(underlying)) {
+            var boxed = Call(
+                RequiredValueInfo, ctx.HeapLocal, right, Constant(underlying, typeof(Type)));
+            return Convert(boxed, underlying);
+        }
+        if (right.Type == typeof(long))
+            return RingCodec.ScalarValue(right, underlying);
+        return Convert(right, underlying);
+    }
+
+    private static Expression StoredCoalesce(Expression value, Context ctx) {
+        if (value.Type == typeof(bool))
+            return Condition(value, Constant(1L), Constant(0L));
+        if (RingCodec.IsInline(value.Type))
+            return value.Type == typeof(int) || value.Type == typeof(long) || RingCodec.IsIeee(value.Type)
+                ? RingCodec.ToWord(value)
+                : Convert(value, typeof(long));
+        return RingCodec.Box(Convert(value, typeof(object)), ctx.HeapLocal);
     }
 
     private static Expression UnboxIfHeapNullable(Context ctx, Node node, Expression handle) {

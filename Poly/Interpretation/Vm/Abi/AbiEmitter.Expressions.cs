@@ -25,18 +25,6 @@ public static partial class AbiEmitter {
     private static Type? NullableUnderlyingOf(Node node, Context ctx) =>
         ctx.ClrTypeOf(node) is { } clr ? Nullable.GetUnderlyingType(clr) : null;
 
-    /// <summary>A nullable heap slot's presence: handle 0 is the null sentinel.</summary>
-    private static Expression NullablePresent(Expression handle) =>
-        NotEqual(handle, Constant(0L));
-
-    /// <summary>The underlying value of a nullable heap slot. The caller guards
-    /// presence, so handle 0 is never unboxed. The conversion tolerates a producer
-    /// that boxed a narrower argument (an <c>int</c> for a <c>long?</c> slot).</summary>
-    private static Expression UnboxNullable(Expression handle, Type underlying, Context ctx) =>
-        Convert(
-            Call(UnboxNullableAsInfo, ctx.HeapLocal, handle, Constant(underlying, typeof(Type))),
-            underlying);
-
     private static bool IsIeeeType(Type type) => type == typeof(float) || type == typeof(double);
 
     /// <summary>Three-valued logic has no bool result in this subset, so an optional
@@ -45,20 +33,6 @@ public static partial class AbiEmitter {
         if (NullableUnderlyingOf(left, ctx) is not null || NullableUnderlyingOf(right, ctx) is not null)
             throw new InvalidOperationException(
                 $"VM compile rejected: '{op}' on an optional Boolean is not supported.");
-    }
-
-    /// <summary>An unboxed value at the width an integral operation runs at. A bool is
-    /// 0/1 and an enum is its underlying integer, because the ring word carries the
-    /// number, not the declared CLR type. A scalar bool already arrives as its 0/1
-    /// word; an unboxed bool is the CLR value the test needs.</summary>
-    private static Expression LiftedOperand(Expression value, Type width) {
-        if (value.Type == typeof(bool))
-            value = Condition(value, Constant(1L), Constant(0L));
-        else if (value.Type.IsEnum)
-            value = Convert(value, typeof(long));
-        else if (value.Type != typeof(int) && value.Type != typeof(long) && !IsIeeeType(value.Type))
-            value = Convert(value, typeof(long));
-        return RingCodec.AsRepresentation(value, width);
     }
 
     /// <summary>Short-circuit AND: if left is false, skip right. Answers in the left
@@ -145,39 +119,18 @@ public static partial class AbiEmitter {
         return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
     }
 
-    /// <summary>Unary operator on a nullable value: unbox, apply, box. An absent
-    /// operand yields the null sentinel rather than the handle.</summary>
+    /// <summary>Unary operator on a nullable value: the lifted CLR operator on the
+    /// <c>Nullable&lt;T&gt;</c> local. An absent operand stays absent.</summary>
     private static Expression EmitLiftedUnary(
         Node operand, Type underlying, Func<Expression, Expression> op, Context ctx) {
-        if (!RingCodec.IsInline(underlying))
-            throw new InvalidOperationException(
-                $"VM compile rejected: unary operator on an optional {underlying.Name} is not supported.");
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(operand, ctx));
-        var handle = ctx.RingVar(slot);
-        var present = NullablePresent(handle);
-        var value = Condition(present, UnboxNullable(handle, underlying, ctx), Default(underlying));
-        Expression result;
-        if (IsIeeeType(underlying)) {
-            var target = underlying == typeof(float) ? typeof(float) : typeof(double);
-            result = op(Convert(value, typeof(double)));
-            if (result.Type != target)
-                result = Convert(result, target);
-        }
-        else {
-            result = op(LiftedOperand(value, RingCodec.SlotTypeOf(underlying)));
-        }
-        Expression boxed = underlying == typeof(bool)
-            ? Condition(
-                NotEqual(Convert(result, typeof(long)), Constant(0L)),
-                Constant(true, typeof(object)),
-                Constant(false, typeof(object)))
-            : Convert(Convert(result, underlying), typeof(object));
+        var localType = ctx.SlotTypeOf(operand);
+        var local = ctx.RingVar(slot, localType);
+        var nullable = typeof(Nullable<>).MakeGenericType(underlying);
+        Expression value = local.Type == nullable ? local : AsLiftedArithmeticOperand(local, underlying, ctx);
         int outSlot = ctx.AllocSlot();
-        return ring.Then(Assign(ctx.RingVar(outSlot), Condition(
-            present,
-            Convert(Call(ctx.HeapLocal, HeapAllocate, boxed), typeof(long)),
-            Constant(0L))));
+        return ring.Then(Assign(ctx.RingVar(outSlot, nullable), op(value)));
     }
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
@@ -261,8 +214,8 @@ public static partial class AbiEmitter {
         // own expression tree. CLR properties use Property(inst, propInfo),
         // AST properties use Dictionary indexer, fields use Field(inst, fieldInfo).
         if (resolved.EmitRead(instanceObj) is Expression readExpr) {
-            return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
-                ConvertMemberResult(readExpr, resolved, ctx)));
+            var converted = ConvertMemberResult(readExpr, resolved, ctx);
+            return Block(instanceExpr, Assign(ctx.RingVar(resultSlot, converted.Type), converted));
         }
 
         // Parameterless method call (e.g. ToString, GetHashCode) — invoke via MethodInfo.
@@ -278,8 +231,8 @@ public static partial class AbiEmitter {
                 Expression resultExpr = instanceForCall is not null
                     ? Call(instanceForCall, methodInfo)
                     : Call(null, methodInfo);
-                return Block(instanceExpr, Assign(ctx.RingVar(resultSlot),
-                    ConvertMemberResult(resultExpr, resolved, ctx)));
+                var converted = ConvertMemberResult(resultExpr, resolved, ctx);
+                return Block(instanceExpr, Assign(ctx.RingVar(resultSlot, converted.Type), converted));
             }
         }
 
@@ -403,7 +356,8 @@ public static partial class AbiEmitter {
         if (resultType is null) {
             return ring.Then(Block(call, Assign(ctx.RingVar(slot), Constant(0L))));
         }
-        return ring.Then(Assign(ctx.RingVar(slot), RingCodec.FromClr(call, resultType, ctx.HeapLocal)));
+        var awaited = RingCodec.FromClr(call, resultType, ctx.HeapLocal);
+        return ring.Then(Assign(ctx.RingVar(slot, awaited.Type), awaited));
     }
 
     /// <summary>Await of an awaitable that is not one of the well-known BCL shapes.
@@ -424,8 +378,8 @@ public static partial class AbiEmitter {
         if (binding.GetResult.ReturnType == typeof(void)) {
             return ring.Then(Block(result, Assign(ctx.RingVar(slot), Constant(0L))));
         }
-        return ring.Then(
-            Assign(ctx.RingVar(slot), RingCodec.FromClr(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
+        var awaited = RingCodec.FromClr(result, binding.GetResult.ReturnType, ctx.HeapLocal);
+        return ring.Then(Assign(ctx.RingVar(slot, awaited.Type), awaited));
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
@@ -451,12 +405,12 @@ public static partial class AbiEmitter {
             sourceType = c.Value.GetType();
         var ring = ctx.OpenRing();
         int slot = ring.Add(CompileNode(t.Operand, ctx));
-        // A cast to a nullable value boxes the underlying value: the slot is a heap
-        // handle (or the null sentinel), never the word itself.
-        if (Nullable.GetUnderlyingType(targetType) is not null)
-            return ring.Then(Assign(ctx.RingVar(slot), RingCodec.FromClr(
-                RingCodec.ToClr(ctx.RingVar(slot), targetType, t.Operand, ctx.Analysis, ctx.HeapLocal),
-                targetType, ctx.HeapLocal)));
+        if (Nullable.GetUnderlyingType(targetType) is not null) {
+            var source = ctx.RingVar(slot, ctx.SlotTypeOf(t.Operand));
+            var asNullable = RingCodec.ToClr(
+                source, targetType, t.Operand, ctx.Analysis, ctx.HeapLocal);
+            return ring.Then(Assign(ctx.RingVar(slot, targetType), asNullable));
+        }
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
         return ring.Then(
@@ -470,6 +424,8 @@ public static partial class AbiEmitter {
         int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
         if (target == typeof(double) || target == typeof(float))
+            return Assign(ctx.RingVar(slot, target), Default(target));
+        if (target is not null && Nullable.GetUnderlyingType(target) is not null)
             return Assign(ctx.RingVar(slot, target), Default(target));
         if (target is null || (target.IsValueType && RingCodec.IsInline(target))
             || target == typeof(bool)

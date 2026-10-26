@@ -144,27 +144,25 @@ public static partial class AbiEmitter {
         var valueType = ctx.SlotTypeOf(value);
         var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
         var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
-        // A nullable destination is a heap handle. A scalar value is boxed at the
-        // underlying type; a heap value (a nullable or a reference) is already a handle,
-        // and the null constant is the sentinel 0.
-        if (NullableUnderlyingOf(destination, ctx) is { } underlying
-            && ctx.KindOf(value) is ValueRepresentationKind.StackScalar) {
-            var scalar = RingCodec.NumericTo(decoded, RingCodec.SlotTypeOf(underlying));
-            // A scalar bool word is 0/1, not a CLR bool: box the test the word already
-            // carries. Convert(long, bool) does not exist.
-            if (underlying == typeof(bool)) {
-                return Convert(
-                    Call(ctx.HeapLocal, HeapAllocate,
-                        Condition(
-                            NotEqual(scalar, Constant(0L)),
-                            Constant(true, typeof(object)),
-                            Constant(false, typeof(object)))),
-                    typeof(long));
+        // A nullable destination's local is Nullable<T>. The frame boxes it on the way
+        // out; the assignment itself does not.
+        if (NullableUnderlyingOf(destination, ctx) is { } underlying) {
+            var nullable = typeof(Nullable<>).MakeGenericType(underlying);
+            if (value is Constant { Value: null })
+                return Default(nullable);
+            if (decoded.Type == nullable)
+                return decoded;
+            if (Nullable.GetUnderlyingType(decoded.Type) is not null)
+                return Convert(decoded, nullable);
+            if (ctx.KindOf(value) is ValueRepresentationKind.StackScalar) {
+                Expression scalar = underlying == typeof(bool) && decoded.Type == typeof(long)
+                    ? NotEqual(decoded, Constant(0L))
+                    : decoded.Type == underlying ? decoded
+                    : decoded.Type == typeof(long) ? RingCodec.ScalarValue(decoded, underlying)
+                    : Convert(decoded, underlying);
+                return Convert(scalar, nullable);
             }
-            return Convert(
-                Call(ctx.HeapLocal, HeapAllocate,
-                    Convert(Convert(scalar, underlying), typeof(object))),
-                typeof(long));
+            return RingCodec.UnboxToNullable(decoded, nullable, ctx.HeapLocal);
         }
         return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
     }
@@ -650,10 +648,13 @@ public static partial class AbiEmitter {
 
     private static Expression EmitParameter(Parameter p, Context ctx) {
         int slot = ctx.AllocSlot();
-        if (ctx.TryGetCapture(p, out int capIndex)) {
-            return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
-        }
-        return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
+        Expression word = ctx.TryGetCapture(p, out int capIndex)
+            ? EmitCaptureCellValue(ctx, capIndex)
+            : ParameterValue(p, ctx);
+        var clr = ctx.ClrTypeOf(p);
+        if (clr is not null && Nullable.GetUnderlyingType(clr) is not null)
+            return Assign(ctx.RingVar(slot, clr), RingCodec.UnboxToNullable(word, clr, ctx.HeapLocal));
+        return Assign(ctx.RingVar(slot), word);
     }
 
     private static Expression ParameterValue(Parameter p, Context ctx) =>

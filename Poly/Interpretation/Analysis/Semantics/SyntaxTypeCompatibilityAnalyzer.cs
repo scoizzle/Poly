@@ -214,8 +214,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         }
 
         if (left == typeof(decimal) || right == typeof(decimal)) {
-            // An optional decimal has no lifted word. Decimal.Add would unbox it and
-            // drop the absent case, so leave the node for the emitter, which rejects it.
+            // An optional decimal stays an Add node. Decimal.Add would unbox it and
+            // drop the absent case. The emitter runs the lifted operator on Nullable<decimal>.
             if (Nullable.GetUnderlyingType(left) is not null || Nullable.GetUnderlyingType(right) is not null)
                 return;
             if (!RewriteDecimalArithmetic(context, parent, leftNode, rightNode, kind))

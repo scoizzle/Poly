@@ -158,10 +158,13 @@ public static partial class AbiEmitter {
 
         var raw = ValueOf(other, ctx);
         var local = Variable(raw.Type, "_cmpNull");
-        var handle = RingCodec.ToWord(local);
-        Expression test = equal
-            ? Equal(handle, Constant(0L))
-            : NotEqual(handle, Constant(0L));
+        Expression test = Nullable.GetUnderlyingType(raw.Type) is not null
+            ? equal
+                ? Expression.Equal(local, Default(raw.Type))
+                : Expression.NotEqual(local, Default(raw.Type))
+            : equal
+                ? Equal(RingCodec.ToWord(local), Constant(0L))
+                : NotEqual(RingCodec.ToWord(local), Constant(0L));
         return Block([local], Assign(local, raw), test);
     }
 
@@ -171,30 +174,62 @@ public static partial class AbiEmitter {
         CompareDomain domain, bool equality,
         Func<Expression, Expression, BinaryExpression> cf,
         Context ctx) {
-        var (leftValue, leftPresent) = ReadCompareOperand(leftLocal, leftOp, ctx);
-        var (rightValue, rightPresent) = ReadCompareOperand(rightLocal, rightOp, ctx);
+        var (leftValue, _) = ReadCompareOperand(leftLocal, leftOp, ctx);
+        var (rightValue, _) = ReadCompareOperand(rightLocal, rightOp, ctx);
+        bool lift = Nullable.GetUnderlyingType(leftValue.Type) is not null
+            || Nullable.GetUnderlyingType(rightValue.Type) is not null;
+        if (lift)
+            return LiftedCompare(leftValue, rightValue, domain, equality, cf);
         var left = ToDomain(leftValue, domain);
         var right = ToDomain(rightValue, domain);
-        Expression values = domain is CompareDomain.Value or CompareDomain.Reference
+        return domain is CompareDomain.Value or CompareDomain.Reference
             ? equality
                 ? Call(ObjectEquals, left, right)
                 : cf(Call(VmHeapCompare, left, right), Constant(0))
             : equality
                 ? Expression.Equal(left, right)
                 : cf(left, right);
+    }
 
-        Expression? present = leftPresent is null ? rightPresent
-            : rightPresent is null ? leftPresent
-            : AndAlso(leftPresent, rightPresent);
-        if (present is null)
-            return values;
-        if (!equality)
-            return AndAlso(present, values);
+    /// <summary>The lifted CLR operator. Both sides are <c>Nullable&lt;T&gt;</c> of the
+    /// domain, so an absent operand compares the way C# does and the body does not
+    /// rebuild that rule.</summary>
+    private static Expression LiftedCompare(
+        Expression left, Expression right, CompareDomain domain, bool equality,
+        Func<Expression, Expression, BinaryExpression> cf) {
+        if (domain is CompareDomain.Value) {
+            left = AsSameNullable(left, right);
+            right = AsSameNullable(right, left);
+            return equality ? Expression.Equal(left, right) : cf(left, right);
+        }
+        left = ToNullableDomain(left, domain);
+        right = ToNullableDomain(right, domain);
+        return equality ? Expression.Equal(left, right) : cf(left, right);
+    }
 
-        var equal = AndAlso(present, values);
-        if (leftPresent is not null && rightPresent is not null)
-            equal = OrElse(equal, AndAlso(Not(leftPresent), Not(rightPresent)));
-        return equal;
+    private static Expression AsSameNullable(Expression value, Expression other) {
+        if (Nullable.GetUnderlyingType(value.Type) is not null)
+            return value;
+        if (Nullable.GetUnderlyingType(other.Type) is { } underlying && value.Type == underlying)
+            return Convert(value, other.Type);
+        return value;
+    }
+
+    private static Expression ToNullableDomain(Expression value, CompareDomain domain) {
+        Type target = domain switch {
+            CompareDomain.Double => typeof(double),
+            CompareDomain.Float => typeof(float),
+            CompareDomain.Decimal => typeof(decimal),
+            CompareDomain.Boolean => typeof(bool),
+            _ => Nullable.GetUnderlyingType(value.Type) ?? value.Type,
+        };
+        var nullable = typeof(Nullable<>).MakeGenericType(target);
+        if (value.Type == nullable)
+            return value;
+        if (Nullable.GetUnderlyingType(value.Type) is not null)
+            return Convert(value, nullable);
+        Expression core = value.Type == target ? value : Convert(value, target);
+        return Convert(core, nullable);
     }
 
     /// <summary>One CLR value for the slot. An inline word goes through
@@ -203,7 +238,7 @@ public static partial class AbiEmitter {
     /// A typed slot that already holds the CLR type skips that. An enum word is
     /// that underlying integer converted back to the enum. A required heap value
     /// is <see cref="RingCodec.RequiredValue"/>; handle 0 fails closed. An
-    /// optional unboxes only when its handle is present.</summary>
+    /// optional is the Nullable&lt;T&gt; local, or the frame handle unboxed once.</summary>
     private static (Expression Value, Expression? Present) ReadCompareOperand(
         Expression local, CompareOperand operand, Context ctx) {
         switch (operand.Shape) {
@@ -229,13 +264,13 @@ public static partial class AbiEmitter {
                     return (Convert(boxed, clr), null);
                 }
             case CompareShape.Optional: {
-                    var handle = RingCodec.ToWord(local);
-                    var present = NotEqual(handle, Constant(0L));
-                    var underlying = operand.Underlying!;
-                    var unboxed = Convert(
-                        Call(UnboxNullableAsInfo, ctx.HeapLocal, handle, Constant(underlying, typeof(Type))),
-                        underlying);
-                    return (Condition(present, unboxed, Default(underlying)), present);
+                    var nullable = operand.Clr!;
+                    Expression value = local.Type == nullable
+                        ? local
+                        : local.Type == operand.Underlying
+                            ? Convert(local, nullable)
+                            : RingCodec.UnboxToNullable(local, nullable, ctx.HeapLocal);
+                    return (value, null);
                 }
             case CompareShape.Reference: {
                     var handle = RingCodec.ToWord(local);

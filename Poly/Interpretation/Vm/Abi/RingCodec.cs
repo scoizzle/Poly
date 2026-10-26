@@ -117,13 +117,15 @@ internal static class RingCodec {
     /// promotes to <c>int</c> before an operator, a handle, or a type analysis could not
     /// resolve — uses the <c>long</c> word.</summary>
     public static Type SlotTypeOf(Type? clrType) =>
-        clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
+        clrType is not null && Nullable.GetUnderlyingType(clrType) is not null ? clrType
+        : clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(int)
             ? clrType
             : typeof(long);
 
     /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
     public static bool IsTypedSlot(Type slotType) =>
-        IsIeee(slotType) || slotType == typeof(int);
+        IsIeee(slotType) || slotType == typeof(int)
+        || Nullable.GetUnderlyingType(slotType) is not null;
 
     /// <summary>A typed slot expression as the word. The one place an expression-level
     /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
@@ -133,6 +135,32 @@ internal static class RingCodec {
         value.Type == typeof(int) ? Convert(value, typeof(long))
             : IsIeee(value.Type) ? ToIeee(Convert(value, typeof(double)))
             : value;
+
+    /// <summary>The frame word of a local. A <c>Nullable&lt;T&gt;</c> boxes here —
+    /// absent is handle 0, present is a heap cell — and every other local uses
+    /// <see cref="ToWord"/>.</summary>
+    public static Expression ToFrameWord(Expression value, Expression heap) =>
+        Nullable.GetUnderlyingType(value.Type) is not null
+            ? BoxNullable(value, heap)
+            : ToWord(value);
+
+    private static readonly MethodInfo UnboxNullableAsInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)(
+            (h, v, t) => UnboxNullableAs(h, v, t)));
+
+    /// <summary>A frame handle as <paramref name="nullableType"/>. Handle 0 is
+    /// <c>default</c>; a present cell unboxes to the underlying value.</summary>
+    public static Expression UnboxToNullable(Expression handle, Type nullableType, Expression heap) {
+        var underlying = Nullable.GetUnderlyingType(nullableType)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: '{nullableType}' is not a nullable value.");
+        var word = ToWord(handle);
+        var present = NotEqual(word, Constant(0L));
+        var unboxed = Convert(
+            Call(UnboxNullableAsInfo, heap, word, Constant(underlying, typeof(Type))),
+            underlying);
+        return Condition(present, Convert(unboxed, nullableType), Default(nullableType));
+    }
 
     /// <summary>The word as a typed slot expression: the mirror of
     /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
@@ -240,11 +268,10 @@ internal static class RingCodec {
     public static Expression FromClr(Expression value, Type? clrType, Expression heap) {
         if (clrType == typeof(float) || clrType == typeof(double))
             return ToIeee(Convert(value, typeof(double)));
-        // A nullable is heap-resident: absent is the sentinel 0, present is a handle
-        // to the boxed underlying value. A value read from a nullable member or a
-        // nullable call return must not collapse to the underlying word.
+        // A nullable stays a Nullable<T> local. The frame boxes it, at the
+        // debug, return, call, and capture boundary, not on this value.
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
-            return BoxNullable(value, heap);
+            return value.Type == clrType ? value : Convert(value, clrType);
         // An enum's slot is its underlying integer, the same word ToRing and the
         // constant encoder write. A ulong underlying converts to long as a bitcast.
         if (clrType is { IsEnum: true })
@@ -256,7 +283,7 @@ internal static class RingCodec {
 
     /// <summary>Box a nullable value as its slot: the null sentinel when it has no
     /// value, otherwise a handle to the boxed underlying value.</summary>
-    private static Expression BoxNullable(Expression value, Expression heap) {
+    internal static Expression BoxNullable(Expression value, Expression heap) {
         var boxed = Variable(typeof(object), "_nullable");
         return Block([boxed],
             Assign(boxed, Convert(value, typeof(object))),
@@ -271,6 +298,8 @@ internal static class RingCodec {
     /// is boxed by its source type; everything else is dereferenced as a handle.</summary>
     public static Expression ToClr(
         Expression ringVal, Type targetType, Node? source, AnalysisResult? analysis, Expression heap) {
+        if (Nullable.GetUnderlyingType(ringVal.Type) is not null)
+            return NullableLocalToClr(ringVal, targetType);
         var (sourceKind, sourceClr) = ValueRepresentationClassifier.Classify(analysis, source);
         if (targetType == typeof(double) || targetType == typeof(float)) {
             if (sourceClr is not null && IsIeee(sourceClr))
@@ -299,6 +328,17 @@ internal static class RingCodec {
             && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null)
             return Convert(ScalarValue(ringVal, sourceClr), typeof(object));
         return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
+    }
+
+    /// <summary>A <c>Nullable&lt;T&gt;</c> local as <paramref name="targetType"/>.
+    /// The local is already the value, so this does not touch the heap.</summary>
+    private static Expression NullableLocalToClr(Expression value, Type targetType) {
+        if (targetType == value.Type)
+            return value;
+        if (Nullable.GetUnderlyingType(targetType) is not null || targetType == typeof(object))
+            return Convert(value, targetType);
+        var payload = Property(value, "Value");
+        return payload.Type == targetType ? payload : Convert(payload, targetType);
     }
 
     /// <summary>The CLR value of a scalar ring slot, at its own declared type.

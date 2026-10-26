@@ -203,8 +203,22 @@ public static partial class AbiEmitter {
                 int result = _ctx.RingDepth - 1;
                 int target = _base + _count;
                 _steps.Add(compiled);
-                if (result != target || RingCodec.IsTypedSlot(compiled.Type))
-                    _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingWord(result, compiled.Type)));
+                if (result != target || RingCodec.IsTypedSlot(compiled.Type)) {
+                    var local = _ctx.RingVar(result, compiled.Type);
+                    if (Nullable.GetUnderlyingType(compiled.Type) is not null) {
+                        // The producer wrote Nullable<T> at its own index. A reader of
+                        // this region slot sees that local, and a word consumer sees
+                        // the boxed frame image.
+                        if (result != target)
+                            _steps.Add(Assign(_ctx.RingVar(target, compiled.Type), local));
+                        _steps.Add(Assign(
+                            _ctx.RingVar(target),
+                            RingCodec.ToFrameWord(local, _ctx.HeapLocal)));
+                    }
+                    else {
+                        _steps.Add(Assign(_ctx.RingVar(target), _ctx.RingWord(result, compiled.Type)));
+                    }
+                }
                 _count++;
                 _ctx.RingDepth = target + 1;
                 return target;
@@ -270,6 +284,8 @@ public static partial class AbiEmitter {
             representation == typeof(double) ? $"_d{index}"
                 : representation == typeof(float) ? $"_f{index}"
                 : representation == typeof(int) ? $"_i{index}"
+                : Nullable.GetUnderlyingType(representation) is { } underlying
+                    ? $"_n{index}_{underlying.Name}"
                 : $"_r{index}";
 
         /// <summary>The word form of a ring slot: the local at its own representation,
@@ -284,6 +300,8 @@ public static partial class AbiEmitter {
         /// closed: see <see cref="RingCodec.IntegerArithmeticWidth"/>.)</summary>
         public Type SlotTypeOf(Node node) {
             var (kind, clr) = RepresentationOf(node);
+            if (clr is not null && Nullable.GetUnderlyingType(clr) is not null)
+                return clr;
             return kind is ValueRepresentationKind.StackScalar ? RingCodec.SlotTypeOf(clr) : typeof(long);
         }
 
@@ -340,7 +358,7 @@ public static partial class AbiEmitter {
                 if (_variableRegisters.TryGetValue(v, out var reg) && scope.TryGetValue(v, out int slot)) {
                     stores.Add(Assign(
                         ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot))),
-                        RingCodec.ToWord(RegisterVar(reg))));
+                        RingCodec.ToFrameWord(RegisterVar(reg), HeapLocal)));
                 }
             }
             return stores;

@@ -5,9 +5,9 @@ Status: revised after PLAN-REVIEW REVISE (P1 P2 P3; Scot C# nullable ruling). Br
 
 - Scalars are never nullable. A scalar compared to null folds to a constant (`== null` false, `!= null` true); the scalar operand still runs its effects.
 - A domain scalar gets a value at construction, from an argument or a default. Omitting a required scalar is an analysis error, never a zero or null word.
-- An optional scalar is heap-resident under the VM null sentinel: absent is handle 0, present zero is a heap cell holding 0.
-- The two-word ring and the in-word present/absent flag are not used. A ring-local nullable is allowed only when the present flag and the payload both fit one 64-bit Abi word; nothing here needs it.
-- No packing into a sub-word float with spare bits. An optional `float`/`double` is a heap cell like every other optional.
+- An optional scalar's frame slot is heap-resident under the VM null sentinel: absent is handle 0, present zero is a heap cell holding 0. The expression local and a register are `Nullable<T>`. Box and unbox only where a `long` frame, capture cell, call argument, debug snapshot, or return has to hold the value.
+- The two-word frame is not used. `decimal?`, `DateTime?`, and `Guid?` do not fit in two longs, and a second slot would break "argument i is slot i".
+- No packing into a sub-word float with spare bits. An optional `float`/`double` frame slot is a heap cell like every other optional.
 - Equality compares decoded values, not storage: no operand is read as a handle and no handle is read as a number. There is no JavaScript-style coercion.
 - **Equality follows C# nullable semantics.** Operators lift: `null == null` is true, an absent operand never equals a present value (zero included), a present zero equals zero of the same value, and ordering with an absent operand is false.
 - **Mixed numeric comparisons follow C# binary numeric promotion plus the nullable lift** (`int`/`uint`/`ulong`/`byte`/`short`/`char`/`float`/`double`/`decimal`). The constant fold uses that same promotion. Where C# has no operator for a pair the analysis admits (`decimal` vs `float`/`double`; `ulong` vs a signed type), §4 states the exact rule and its precision.
@@ -17,7 +17,7 @@ Status: revised after PLAN-REVIEW REVISE (P1 P2 P3; Scot C# nullable ruling). Br
 
 Derived invariants this plan makes mechanical:
 
-- A node's slot kind comes from `ValueRepresentationClassifier.KindFor`: a nullable is a heap handle (`Poly/Interpretation/Vm/Abi/ValueRepresentation.cs:125-137`). Never call `RingCodec.IsInline` on a nullable to decide a slot; peel it and ask only whether the *underlying* value is numeric. An enum's slot agrees with `KindFor`: both are the underlying integer (`RingCodec.EnumWord`). Its shape still comes from `Clr.IsEnum`, before the `StackScalar` arm, so the decoder converts the word back to the enum. An optional enum is a heap handle.
+- A node's frame-slot kind comes from `ValueRepresentationClassifier.KindFor`: a nullable is a heap handle (`Poly/Interpretation/Vm/Abi/ValueRepresentation.cs:125-137`). Never call `RingCodec.IsInline` on a nullable to decide that frame slot; peel it and ask only whether the *underlying* value is numeric. The expression local is `Nullable<T>` (`RingCodec.SlotTypeOf`), which is not the frame kind. An enum's slot agrees with `KindFor`: both are the underlying integer (`RingCodec.EnumWord`). Its shape still comes from `Clr.IsEnum`, before the `StackScalar` arm, so the decoder converts the word back to the enum. An optional enum's frame slot is a heap handle; its local is `Nullable<enum>`.
 - A null constant is matched as shape `Null` before the type check: it has no CLR type by design (`ValueRepresentation.cs:55-57`).
 - A comparison never compares storage words or handles for a value. Both operands are decoded to CLR values and compared as values.
 - Operands are emitted in source order, left then right. A root parameter's frame slot is assigned on first use (`Poly/Interpretation/Vm/Abi/AbiEmitter.Context.cs:756-767`), and `VmState.SetArgs` binds argument *i* to slot *i* by that order (`Poly/Interpretation/Vm/VmState.cs:97-107`). Any helper that emits the right operand first silently reorders the ABI.
@@ -38,8 +38,8 @@ Derived invariants this plan makes mechanical:
 
 | follow-up | decision |
 |-----------|----------|
-| Ordering an optional decimal/DateTime/Guid/TimeSpan | **Fix.** The protocol unboxes, requires both present, and orders by value; absent is false. |
-| Optional decimal arithmetic | **Keep fail-closed.** Emit still rejects with `arithmetic on an optional Decimal is not supported` (`AbiEmitter.cs:657-659`); pin it with a test. Comparison and arithmetic are separate contracts. |
+| Ordering an optional decimal/DateTime/Guid/TimeSpan | **Fix.** The lifted CLR operator orders by value; an absent operand is false. |
+| Optional decimal arithmetic | **Closed.** The emitter runs the lifted operator on `Nullable<decimal>`. Analysis does not rewrite that node to `Decimal.Add`, which would drop the absent case. |
 | Optional ulong compared as signed | **Fix.** Decode the word through `ulong`; compare a mixed ulong/signed pair in decimal, which is exact (C# has no such operator, and `FloatingCompare` throws rather than folds). |
 | Mixed `uint`/`ulong`/`short`/`byte`/`sbyte`/`ushort` vs `float`/`double` | **Closed.** Runtime and fold both follow C# promotion, including promoting an integral to `float`. |
 | `DateTime?` vs `DateTime` | **Keep fail-closed at analysis** (``comparison between incompatible types 'Nullable`1' and 'DateTime'``). The emitter protocol would handle it, but the compatibility rule rejects first; relaxing it is a separate slice. |
@@ -47,15 +47,17 @@ Derived invariants this plan makes mechanical:
 
 ## Target representation
 
-**Keep the heap null sentinel.** This PR changes no representation.
+**The frame keeps the heap null sentinel.** The expression local does not.
 
-- An optional value type resolves to `Nullable<T>` (`Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs:207-211`) and a nullable node's slot is a heap handle (`ValueRepresentation.cs:125-137`). Absent is handle 0; present is a handle to the boxed underlying value, so present zero is a cell, not the sentinel (`RingCodec.BoxNullable`, `Poly/Interpretation/Vm/Abi/RingCodec.cs:244-252`). `SetArgs` boxes a nullable argument by the declared parameter type.
-- **Enums are the underlying integer.** `KindFor` calls an enum `StackScalar`, and `TryInlineConstant`, `ToRing`, and `FromClr` store `RingCodec.EnumWord`. Comparison decodes that word. An optional enum stays a heap box (`BoxNullable`).
-- Why not two-word: it changes the slot ABI in `SlotLocation`, the `long[]` value stack, frames, arrays, captures, call frames, and every producer artifact, for a shape the heap already carries correctly. No consumer asks for it.
+- An optional value type resolves to `Nullable<T>` (`Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs:207-211`). `KindFor` still calls that a heap handle, and that is the frame slot: absent is handle 0, present is a boxed cell (`RingCodec.BoxNullable`). `SetArgs` boxes at the entry boundary.
+- A ring local and a register hold `Nullable<T>`. Compare, arithmetic, unary, and coalesce emit the lifted CLR operator on that local. They do not rebuild a present flag.
+- The frame boxes where a `long` has to hold the value: the debug snapshot (`EmitScopeStores` and the block-exit copy), return and the root result, a call argument's word slot, and a capture cell. A parameter and a call result unbox once into the local.
+- **Enums are the underlying integer.** `KindFor` calls an enum `StackScalar`, and `TryInlineConstant`, `ToRing`, and `FromClr` store `RingCodec.EnumWord`. Comparison decodes that word. An optional enum's frame slot stays a heap box; its local is `Nullable<enum>`.
+- Why not two-word: it changes the slot ABI in `SlotLocation`, the `long[]` value stack, frames, arrays, captures, call frames, and every producer artifact. `decimal?`, `DateTime?`, and `Guid?` do not fit in two longs. No consumer asks for it.
 - Why not an in-word flag: `long`/`double` fill the 64-bit payload, and the ruling already rejects packing a float with spare bits. A per-shape split (`bool?` inline, `long?` heap) would put two representations behind one protocol, which is the bug class this plan removes.
-- One slot per value everywhere means the protocol has exactly one decode per shape.
+- Why not a hand-written lift over the handle: that was a second numeric type system beside the CLR operator, which already implements the lift.
 
-Not touched by the comparison protocol itself: `KindFor`, `UnderlyingKindFor`, `SlotTypeOf`, `BoxNullable`, arrays, captures, frames. The closed enum follow-up writes `EnumWord` from `TryInlineConstant`, `ToRing`, and `FromClr`. `ToClr` converts that word back to the enum (`Expression.Convert` from the long word). `VmHeapComparison` is reused as-is.
+Not touched: `KindFor` (a nullable frame slot stays `HeapRef`), arrays, and `VmHeapComparison`. `SlotTypeOf` returns `Nullable<T>` for a nullable local. The closed enum follow-up writes `EnumWord` from `TryInlineConstant`, `ToRing`, and `FromClr`. `ToClr` converts that word back to the enum (`Expression.Convert` from the long word).
 
 ## Equality / compare protocol
 
@@ -108,7 +110,7 @@ Already true at `6061cadf` for both existing helpers, each binding its operands 
 | operands | domain | equality | ordering |
 |----------|--------|----------|----------|
 | both `bool` | `Boolean` | `l == r` | fail closed: C# has no ordering operator for `bool`, and analysis does not reject it today (`SyntaxTypeCompatibilityAnalyzer.cs:1038-1045`) |
-| either is an enum | `Value` | `object.Equals(l, r)` (the operands are the dereferenced boxes) | `cf(VmHeapComparison.Compare(l, r), 0)` |
+| either is an enum | `Value` | `object.Equals(l, r)` when neither side is optional. An optional enum uses the lifted operator in §6, not `object.Equals` | `cf(VmHeapComparison.Compare(l, r), 0)` when neither side is optional |
 | `decimal` and `float`/`double` | `double` | `(double)decimal` vs the IEEE value | same compare |
 | either is `double` | `double` | promote both | promote both |
 | either is `float` | `float` | promote both (C# rounds an integral operand to `float`: `16777217u == 16777216f` is true) | promote both |
@@ -133,20 +135,18 @@ The function's comment must carry these rules; each one is a place the next read
 ### 5. Decode one value per operand
 
 - `Inline`: `ScalarValue(word, Clr)` (`RingCodec.cs:291-296`, made internal) is the one word-to-CLR decoder: IEEE via `FromIeee`, `bool` via `!= 0`, everything else one `Convert`. Normalize with `ToWord` first (skip it when the local's own type already is `Clr`), so a `double` constant (typed slot) and a `double` parameter (word) take the same path. `ulong` is `Convert(long, ulong)`, an unchecked bitcast, so `ulong.MaxValue` survives as the unsigned value.
-- `Enum`: `ScalarValue` to the underlying type, then `Convert` to the enum. The word is `RingCodec.EnumWord`, not a box. An optional enum is shape `Optional` and still unboxes.
+- `Enum`: `ScalarValue` to the underlying type, then `Convert` to the enum. The word is `RingCodec.EnumWord`, not a box. An optional enum is shape `Optional`: the local is `Nullable<enum>`.
 - `HeapValue`: `RequiredValue(heap, handle, Clr)`, next to `UnboxNullableAs`: handle 0 throws `VM: required <type> value is absent`; otherwise return the box when it is already the type, else `ChangeType` to the declared type. A required decimal is never silently 0. Enums do not use this path.
-- `Optional`: bind the handle once; `present = handle != 0`; `value = present ? Convert(UnboxNullableAs(handle, Underlying), Underlying) : default(Underlying)`.
+- `Optional`: the local is `Nullable<T>` when the producer wrote one. A frame handle unboxes once (`UnboxToNullable`). There is no present flag.
 - `Reference`: `value = handle == 0 ? null : RingCodec.DerefObject(heap, handle)`.
 
-Then one `Convert` to the domain type. `Boolean` values are already `bool` and need no conversion; every numeric value is already at its declared CLR type, so the conversion is the single promotion to the domain. `Enum`, `Value`, and `Reference` stay objects.
+Then one `Convert` to the domain type. `Boolean` values are already `bool` and need no conversion; every numeric value is already at its declared CLR type, so the conversion is the single promotion to the domain. `Enum`, `Value`, and `Reference` stay objects. An optional side promotes to `Nullable<domain>` instead.
 
-### 6. Presence, then the answer
+### 6. The lifted operator, when either side is optional
 
-- Equality: `(bothPresent && valuesEqual) || (bothAbsent)`. With one optional side: `present && valuesEqual`. With none: `valuesEqual`.
-- `NotEqual` is `Not(equality)`, never a second path.
-- Ordering: `bothPresent && valuesOrder`; absent is always false. With no optional side: `valuesOrder`.
+When either decoded value is `Nullable<T>`, both sides become `Nullable<domain>` and the CLR operator (`Expression.Equal`, `GreaterThan`, and the rest) answers. That is the lift: absent equals only absent, ordering with an absent operand is false, and present zero is a value. `NotEqual` is `Not(equality)`, never a second path.
 
-That is C#'s lifted rule: absent is false for ordering, equal only to absent, and present zero is a value.
+A non-optional pair uses the domain operator directly. `Value` and `Reference` stay `object.Equals` / `VmHeapComparison`. An optional enum is the `Value` domain on `Nullable<enum>`, compared with `Expression.Equal`. `object.Equals` compares the boxes and drops the lift.
 
 ### 7. Never
 

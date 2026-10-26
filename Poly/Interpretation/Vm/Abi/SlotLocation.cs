@@ -38,15 +38,30 @@ internal abstract record SlotLocation {
 
     /// <summary>An expression yielding the stored value at
     /// <paramref name="representation"/>; a storage of that representation is a copy.</summary>
-    public Expression ReadAs(Context ctx, Type representation) =>
-        representation == Representation
-            ? Read(ctx)
-            : RingCodec.AsRepresentation(Read(ctx), representation);
+    public Expression ReadAs(Context ctx, Type representation) {
+        var raw = Read(ctx);
+        if (representation == Representation)
+            return raw;
+        if (Nullable.GetUnderlyingType(representation) is not null && Representation == typeof(long))
+            return RingCodec.UnboxToNullable(raw, representation, ctx.HeapLocal);
+        if (Nullable.GetUnderlyingType(Representation) is not null && representation == typeof(long))
+            return RingCodec.BoxNullable(raw, ctx.HeapLocal);
+        return RingCodec.AsRepresentation(raw, representation);
+    }
 
     /// <summary>An expression storing <paramref name="value"/>, which may be at any
-    /// representation; it converts once when it differs from the storage's.</summary>
-    public Expression Write(Context ctx, Expression value) =>
-        Store(ctx, RingCodec.AsRepresentation(value, Representation));
+    /// representation; it converts once when it differs from the storage's.
+    /// A <c>Nullable&lt;T&gt;</c> crossing a <c>long</c> frame or cell boxes or unboxes
+    /// here, which is the storage boundary.</summary>
+    public Expression Write(Context ctx, Expression value) {
+        if (value.Type == Representation)
+            return Store(ctx, value);
+        if (Nullable.GetUnderlyingType(value.Type) is not null && Representation == typeof(long))
+            return Store(ctx, RingCodec.BoxNullable(value, ctx.HeapLocal));
+        if (Nullable.GetUnderlyingType(Representation) is not null && value.Type == typeof(long))
+            return Store(ctx, RingCodec.UnboxToNullable(value, Representation, ctx.HeapLocal));
+        return Store(ctx, RingCodec.AsRepresentation(value, Representation));
+    }
 
     /// <summary>Store a value already at <see cref="Representation"/>.</summary>
     protected abstract Expression Store(Context ctx, Expression value);

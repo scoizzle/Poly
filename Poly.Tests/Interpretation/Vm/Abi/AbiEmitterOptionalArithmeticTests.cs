@@ -100,6 +100,20 @@ public class AbiEmitterOptionalArithmeticTests {
     /// <summary>An optional decimal has no lifted word. Comparison may unbox it;
     /// arithmetic stays rejected.</summary>
     [Test]
+    public async Task OptionalULong_MaxDividedByTwo_UsesUnsignedValue() {
+        var n = new Parameter("n", new OptionalTypeReference(TypeReference.To<ulong>()));
+        using var exec = Execute(new Divide(n, new Constant(2UL)), ulong.MaxValue);
+        await Assert.That(exec.Result.Value).IsEqualTo(ulong.MaxValue / 2);
+    }
+
+    [Test]
+    public async Task OptionalULong_MaxShiftedRight_UsesLogicalShift() {
+        var n = new Parameter("n", new OptionalTypeReference(TypeReference.To<ulong>()));
+        using var exec = Execute(new ShiftRight(n, new Constant(1)), ulong.MaxValue);
+        await Assert.That(exec.Result.Value).IsEqualTo(ulong.MaxValue >> 1);
+    }
+
+    [Test]
     public async Task OptionalDecimal_Arithmetic_IsCompileRejected() {
         var amount = new Parameter("amount", new OptionalTypeReference(TypeReference.To<decimal>()));
         await Assert.That(() => Interpreter.Compile(new Add(amount, new Constant(1m))))

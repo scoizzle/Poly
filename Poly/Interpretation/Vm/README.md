@@ -219,8 +219,9 @@ Analyzed AST → AbiEmitter.Build → Expression<Action<VmState>> → .Compile()
 The VM README's examples are built from that expression.
 
 A comparison reads the operands' values, never their slots. `AbiEmitter.Compare.cs`
-decodes each operand (an inline word through `ScalarValue`, a heap value through
-`RequiredValue`, an optional through the null sentinel) and promotes the pair by
+decodes each operand (an inline word, including an enum's underlying integer, through
+`ScalarValue`, a heap value through `RequiredValue`, an optional through the null
+sentinel) and promotes the pair by
 C#'s numeric rules plus the nullable lift. Absent equals only absent, and orders
 as false.
 

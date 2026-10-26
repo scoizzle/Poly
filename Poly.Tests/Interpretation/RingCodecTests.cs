@@ -75,8 +75,8 @@ public class RingCodecTests {
         await Assert.That(ConstantKind(true)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(1.5)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(7L)).IsEqualTo(ValueRepresentationKind.StackScalar);
-        // An enum constant is boxed by the emitter, not folded to an inline slot.
-        await Assert.That(ConstantKind(DayOfWeek.Monday)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        // An enum constant is its underlying integer, the same word a call and a parameter store.
+        await Assert.That(ConstantKind(DayOfWeek.Saturday)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(null)).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
@@ -94,9 +94,19 @@ public class RingCodecTests {
         await Assert.That(RingCodec.TryInlineConstant(ulong.MaxValue, out long ul)).IsTrue();
         await Assert.That(ul).IsEqualTo(unchecked((long)ulong.MaxValue));
 
-        await Assert.That(RingCodec.TryInlineConstant(DayOfWeek.Monday, out _)).IsFalse();
+        await Assert.That(RingCodec.TryInlineConstant(DayOfWeek.Saturday, out long saturday)).IsTrue();
+        await Assert.That(saturday).IsEqualTo((long)DayOfWeek.Saturday);
         await Assert.That(RingCodec.TryInlineConstant("x", out _)).IsFalse();
     }
+
+    [Test]
+    public async Task ToRing_Enum_StoresUnderlyingInteger() {
+        using var heap = new VmManagedObjectHeap();
+        await Assert.That(RingCodec.ToRing(DayOfWeek.Saturday, heap)).IsEqualTo((long)DayOfWeek.Saturday);
+        await Assert.That(RingCodec.ToRing(Wide.All, heap)).IsEqualTo(unchecked((long)ulong.MaxValue));
+    }
+
+    private enum Wide : ulong { All = ulong.MaxValue }
 
     [Test]
     public async Task IsStackScalar_StringConcatAdd_IsNotScalar() {

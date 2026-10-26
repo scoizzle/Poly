@@ -8,12 +8,11 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 
 /// <summary>
 /// One comparison reads values, never slots (#330 R7 and the compare protocol).
-/// The domain is C# numeric promotion plus the nullable lift: an absent operand
-/// equals only an absent operand and orders as false, and an integral pair
-/// promotes to <c>decimal</c> so an unsigned word is never read as a signed
-/// <c>long</c>. Where the constant fold still answers <c>object.Equals</c>
-/// (<c>2u == 2.0</c>, <c>ulong.MaxValue == (double)ulong.MaxValue</c>), the
-/// runtime answers the numeric promotion; that fold is a follow-up.
+/// The domain is C# numeric promotion plus the nullable lift, and the constant
+/// fold uses that same promotion. An absent operand equals only an absent
+/// operand and orders as false. An integral pair promotes to <c>decimal</c>,
+/// and an integral against <c>float</c> promotes to <c>float</c>. An enum slot
+/// is its underlying integer.
 /// </summary>
 public class AbiEmitterCompareDomainTests {
     private static long Run(Node body, params object?[] args) {
@@ -128,8 +127,7 @@ public class AbiEmitterCompareDomainTests {
             new GreaterThan(Optional<ulong>("count"), new Constant(1)), ulong.MaxValue)).IsEqualTo(1L);
     }
 
-    /// <summary>C# promotes <c>uint</c> to <c>double</c>. The constant fold still
-    /// answers false for this pair; the runtime does not.</summary>
+    /// <summary>C# promotes <c>uint</c> to <c>double</c>. The constant fold does too.</summary>
     [Test]
     public async Task UnsignedInt_Equal_Double_UsesNumericPromotion() {
         await Assert.That(Run(new Equal(Param<uint>("count"), Param<double>("width")), 2u, 2.0d)).IsEqualTo(1L);
@@ -147,7 +145,7 @@ public class AbiEmitterCompareDomainTests {
     }
 
     /// <summary>C# promotes the integral operand to <c>float</c>, which rounds
-    /// 16777217 to 16777216. The fold widens through <c>double</c> and answers false.</summary>
+    /// 16777217 to 16777216. The fold does the same.</summary>
     [Test]
     public async Task UnsignedInt_Equal_Float_UsesFloatPromotion() {
         await Assert.That(Run(new Equal(Param<uint>("count"), new Constant(16777216f)), 16777217u)).IsEqualTo(1L);
@@ -192,6 +190,39 @@ public class AbiEmitterCompareDomainTests {
             .Throws<InvalidOperationException>()
             .WithMessage("VM compile rejected: ordering comparison of 'Boolean' is not supported.");
     }
+
+    /// <summary>A constant pair must not fold away the rejection. C# has no
+    /// <c>bool</c> ordering operator.</summary>
+    [Test]
+    public async Task BoolConstants_Ordering_IsCompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new GreaterThan(new Constant(true), new Constant(false))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: ordering comparison of 'Boolean' is not supported.");
+    }
+
+    [Test]
+    public async Task EnumMember_Equal_SameMemberConstant_IsTrue() {
+        var day = new DateTime(2026, 10, 26);
+        await Assert.That(Run(new Equal(
+            new Member(new Constant(day), "DayOfWeek"),
+            new Constant(day.DayOfWeek)))).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task EnumMember_Equal_EnumMember_IsTrue() {
+        var day = new DateTime(2026, 10, 26);
+        await Assert.That(Run(new Equal(
+            new Member(new Constant(day), "DayOfWeek"),
+            new Member(new Constant(day), "DayOfWeek")))).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task ULongEnum_Parameter_Equal_Constant_UsesUnderlyingBits() {
+        await Assert.That(Run(
+            new Equal(Param<Wide>("wide"), new Constant(Wide.All)), Wide.All)).IsEqualTo(1L);
+    }
+
+    private enum Wide : ulong { None = 0, All = ulong.MaxValue }
 
     [Test]
     public async Task DecimalParameter_LessThan_InlineFive_IsFalse() {

@@ -51,13 +51,14 @@ internal static class ValueRepresentationClassifier {
 
         // A constant carries its value, not a declared type (folding runs after the
         // type pass). Its slot is whatever the constant encoder produces: an inline
-        // word, or a boxed heap handle (an enum is boxed today); null is the sentinel.
+        // word (an enum's underlying integer included), or a boxed heap handle;
+        // null is the sentinel.
         if (effective is Constant constant) {
             if (constant.Value is null)
                 return (ValueRepresentationKind.HeapRef, null);
             var valueType = constant.Value.GetType();
-            // Classify the slot the writer actually produces: TryInlineConstant is the
-            // constant encoder, and an enum constant is not inline there (it is boxed).
+            // Classify the slot the writer actually produces. TryInlineConstant is
+            // the constant encoder, including an enum's underlying integer.
             return (RingCodec.TryInlineConstant(constant.Value, out _)
                 ? ValueRepresentationKind.StackScalar
                 : ValueRepresentationKind.HeapRef, valueType);

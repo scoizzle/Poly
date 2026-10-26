@@ -627,6 +627,10 @@ public static partial class AbiEmitter {
                 AsIeee(left, leftVal, target, ctx),
                 AsIeee(right, rightVal, target, ctx));
         }
+        // ulong division and the right shift are not the signed long operation.
+        // The ring keeps the bits; the operation runs on ulong.
+        if (ctx.ClrTypeOf(left) == typeof(ulong) || ctx.ClrTypeOf(right) == typeof(ulong))
+            return EmitULongArithmetic(leftVal, rightVal, factory);
         // A shift's result width is its left operand's; its count is always an int in C#.
         if (factory == LeftShift || factory == RightShift)
             return factory(
@@ -639,6 +643,19 @@ public static partial class AbiEmitter {
         return factory(
             RingCodec.AsRepresentation(leftVal, width),
             RingCodec.AsRepresentation(rightVal, width));
+    }
+
+    /// <summary><c>ulong</c> arithmetic on the ring's long bits. Division and the
+    /// right shift are unsigned; the result is stored back as those bits.</summary>
+    private static Expression EmitULongArithmetic(
+        Expression left, Expression right,
+        Func<Expression, Expression, BinaryExpression> factory) {
+        bool shift = factory == LeftShift || factory == RightShift;
+        var unsignedLeft = Convert(RingCodec.ToWord(left), typeof(ulong));
+        Expression unsignedRight = shift
+            ? Convert(RingCodec.ToWord(right), typeof(int))
+            : Convert(RingCodec.ToWord(right), typeof(ulong));
+        return Convert(factory(unsignedLeft, unsignedRight), typeof(long));
     }
 
     /// <summary>Binary arithmetic with a nullable operand. Both values are unboxed, the
@@ -682,7 +699,13 @@ public static partial class AbiEmitter {
             : AndAlso(leftPresent, rightPresent);
 
         Expression result;
-        if (IsIeeeType(resultUnderlying)) {
+        if (resultUnderlying == typeof(ulong) || leftType == typeof(ulong) || rightType == typeof(ulong)) {
+            bool shift = factory == LeftShift || factory == RightShift;
+            result = factory(
+                Convert(leftValue, typeof(ulong)),
+                shift ? Convert(rightValue, typeof(int)) : Convert(rightValue, typeof(ulong)));
+        }
+        else if (IsIeeeType(resultUnderlying)) {
             var target = resultUnderlying == typeof(float) ? typeof(float) : typeof(double);
             result = factory(Convert(leftValue, typeof(double)), Convert(rightValue, typeof(double)));
             if (result.Type != target)

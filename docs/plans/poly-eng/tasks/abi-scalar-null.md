@@ -10,14 +10,14 @@ Status: revised after PLAN-REVIEW REVISE (P1 P2 P3; Scot C# nullable ruling). Br
 - No packing into a sub-word float with spare bits. An optional `float`/`double` is a heap cell like every other optional.
 - Equality compares decoded values, not storage: no operand is read as a handle and no handle is read as a number. There is no JavaScript-style coercion.
 - **Equality follows C# nullable semantics.** Operators lift: `null == null` is true, an absent operand never equals a present value (zero included), a present zero equals zero of the same value, and ordering with an absent operand is false.
-- **Mixed numeric comparisons follow C# binary numeric promotion plus the nullable lift** (`int`/`uint`/`ulong`/`byte`/`short`/`char`/`float`/`double`/`decimal`). The runtime is not forced to reproduce the constant fold: where `FloatingEquals` and C# disagree today, the runtime is C#-sane and the fold fix is a follow-up. Where C# has no operator for a pair the analysis admits (`decimal` vs `float`/`double`; `ulong` vs a signed type), §4 states the exact rule and its precision.
-- **An enum operand is a heap box today.** The constant encoder boxes an enum (`TryInlineConstant` rejects it, `Poly/Interpretation/Vm/Abi/RingCodec.cs:177-194`) and `SetArgs` → `ToRing`'s default arm boxes a parameter (`RingCodec.cs:308-323`, `Poly/Interpretation/Vm/VmState.cs:97-107`). Compare enums by dereferencing the boxes, never as an inline word or a `long`. Making the slot uniformly the underlying integer is a later slice (§Follow-ups).
+- **Mixed numeric comparisons follow C# binary numeric promotion plus the nullable lift** (`int`/`uint`/`ulong`/`byte`/`short`/`char`/`float`/`double`/`decimal`). The constant fold uses that same promotion. Where C# has no operator for a pair the analysis admits (`decimal` vs `float`/`double`; `ulong` vs a signed type), §4 states the exact rule and its precision.
+- **An enum operand is its underlying integer.** `TryInlineConstant`, `ToRing`, and `FromClr` store `RingCodec.EnumWord` (a `ulong` underlying is the unchecked bitcast). Comparison converts that word back to the enum. An optional enum stays a heap box.
 - **A `Constant { Value: null }` is shape `Null` before any type check.** `Classify` gives it `HeapRef` with a null CLR type (`Poly/Interpretation/Vm/Abi/ValueRepresentation.cs:55-57`), so a "null CLR type fails closed" check placed first would reject every `== null`, including R1.
 - This PR is Interpretation and targets master. The DomainModeling-only suite rule for #305 does not apply.
 
 Derived invariants this plan makes mechanical:
 
-- A node's slot kind comes from `ValueRepresentationClassifier.KindFor`: a nullable is a heap handle (`Poly/Interpretation/Vm/Abi/ValueRepresentation.cs:125-137`). Never call `RingCodec.IsInline` on a nullable to decide a slot; peel it and ask only whether the *underlying* value is numeric. An enum is the one exception to reading `KindFor` as the slot: `KindFor(enum)` says `StackScalar` (`ValueRepresentation.cs:130`) while the constant encoder and `ToRing` write a handle, so an enum operand's shape comes from `Clr.IsEnum`.
+- A node's slot kind comes from `ValueRepresentationClassifier.KindFor`: a nullable is a heap handle (`Poly/Interpretation/Vm/Abi/ValueRepresentation.cs:125-137`). Never call `RingCodec.IsInline` on a nullable to decide a slot; peel it and ask only whether the *underlying* value is numeric. An enum's slot agrees with `KindFor`: both are the underlying integer (`RingCodec.EnumWord`). Its shape still comes from `Clr.IsEnum`, before the `StackScalar` arm, so the decoder converts the word back to the enum. An optional enum is a heap handle.
 - A null constant is matched as shape `Null` before the type check: it has no CLR type by design (`ValueRepresentation.cs:55-57`).
 - A comparison never compares storage words or handles for a value. Both operands are decoded to CLR values and compared as values.
 - Operands are emitted in source order, left then right. A root parameter's frame slot is assigned on first use (`Poly/Interpretation/Vm/Abi/AbiEmitter.Context.cs:756-767`), and `VmState.SetArgs` binds argument *i* to slot *i* by that order (`Poly/Interpretation/Vm/VmState.cs:97-107`). Any helper that emits the right operand first silently reorders the ABI.
@@ -41,7 +41,7 @@ Derived invariants this plan makes mechanical:
 | Ordering an optional decimal/DateTime/Guid/TimeSpan | **Fix.** The protocol unboxes, requires both present, and orders by value; absent is false. |
 | Optional decimal arithmetic | **Keep fail-closed.** Emit still rejects with `arithmetic on an optional Decimal is not supported` (`AbiEmitter.cs:657-659`); pin it with a test. Comparison and arithmetic are separate contracts. |
 | Optional ulong compared as signed | **Fix.** Decode the word through `ulong`; compare a mixed ulong/signed pair in decimal, which is exact (C# has no such operator, and `FloatingCompare` throws rather than folds). |
-| Mixed `uint`/`ulong`/`short`/`byte`/`sbyte`/`ushort` vs `float`/`double` | **Runtime follows C# promotion**, not `FloatingEquals`'s `object.Equals` fallback: `TryConvertToDouble` covers only `int`, `long`, `float`, `double`, `decimal`, `char` (`ConstantFoldingPass.cs:745-756`). The fold fix is a follow-up. |
+| Mixed `uint`/`ulong`/`short`/`byte`/`sbyte`/`ushort` vs `float`/`double` | **Closed.** Runtime and fold both follow C# promotion, including promoting an integral to `float`. |
 | `DateTime?` vs `DateTime` | **Keep fail-closed at analysis** (``comparison between incompatible types 'Nullable`1' and 'DateTime'``). The emitter protocol would handle it, but the compatibility rule rejects first; relaxing it is a separate slice. |
 | `not` on `bool?` | **Keep rejected.** Three-valued logic has no `bool` result; `AbiEmitterNullScalarTests.OptionalScalar_LogicalNot_IsCompileRejected` (`:310`) already pins it. |
 
@@ -50,12 +50,12 @@ Derived invariants this plan makes mechanical:
 **Keep the heap null sentinel.** This PR changes no representation.
 
 - An optional value type resolves to `Nullable<T>` (`Poly/Interpretation/Analysis/Semantics/TypeAndMemberResolutionPass.cs:207-211`) and a nullable node's slot is a heap handle (`ValueRepresentation.cs:125-137`). Absent is handle 0; present is a handle to the boxed underlying value, so present zero is a cell, not the sentinel (`RingCodec.BoxNullable`, `Poly/Interpretation/Vm/Abi/RingCodec.cs:244-252`). `SetArgs` boxes a nullable argument by the declared parameter type.
-- **Enums are boxes.** `KindFor` calls an enum `StackScalar` (`ValueRepresentation.cs:130`), but the two writers a comparison sees produce a handle: the constant encoder boxes an enum (`TryInlineConstant` rejects it, `RingCodec.cs:177-194`) and `SetArgs` → `ToRing`'s default arm boxes a parameter (`RingCodec.cs:308-323`, `VmState.cs:97-107`). This plan decodes an enum operand as a box and does not touch `ToRing`. Making enum slots uniformly the underlying integer is the follow-up slice (§Follow-ups).
+- **Enums are the underlying integer.** `KindFor` calls an enum `StackScalar`, and `TryInlineConstant`, `ToRing`, and `FromClr` store `RingCodec.EnumWord`. Comparison decodes that word. An optional enum stays a heap box (`BoxNullable`).
 - Why not two-word: it changes the slot ABI in `SlotLocation`, the `long[]` value stack, frames, arrays, captures, call frames, and every producer artifact, for a shape the heap already carries correctly. No consumer asks for it.
 - Why not an in-word flag: `long`/`double` fill the 64-bit payload, and the ruling already rejects packing a float with spare bits. A per-shape split (`bool?` inline, `long?` heap) would put two representations behind one protocol, which is the bug class this plan removes.
 - One slot per value everywhere means the protocol has exactly one decode per shape.
 
-Not touched: `KindFor`, `UnderlyingKindFor`, `SlotTypeOf`, `TryInlineConstant`, `ToRing`, `FromClr`/`ToClr`, `BoxNullable`, arrays, captures, frames. `VmHeapComparison` is reused as-is.
+Not touched by the comparison protocol itself: `KindFor`, `UnderlyingKindFor`, `SlotTypeOf`, `BoxNullable`, arrays, captures, frames. The closed enum follow-up writes `EnumWord` from `TryInlineConstant`, `ToRing`, and `FromClr`. `ToClr` converts that word back to the enum (`Expression.Convert` from the long word). `VmHeapComparison` is reused as-is.
 
 ## Equality / compare protocol
 
@@ -69,7 +69,7 @@ All comparison meaning moves into `CompileCompareTest` in a new `AbiEmitter.Comp
 |-------|------|----------|
 | `Null` | `Constant { Value: null }` — **before any type check** (`Classify` returns `HeapRef` with a null CLR type, `ValueRepresentation.cs:55-57`) | — |
 | `Optional` | `Nullable.GetUnderlyingType(Clr) != null` (including `enum?`) | the underlying type |
-| `Enum` | `Clr.IsEnum`, whatever `Kind` says — the constant encoder and `ToRing` box it | the enum type |
+| `Enum` | `Clr.IsEnum`. The slot is the underlying integer (`RingCodec.EnumWord`): a constant, a `ToRing` parameter, and a `FromClr` result write the same word. A `ulong` underlying uses the unchecked bitcast | the enum type |
 | `Inline` | `Kind == StackScalar` (numeric, `bool`, `char`; not enum), or `Kind == Void` with CLR `void` (a resolved void call; `EmitResult` writes `0L`, so the decoded type is `long`) | the resolved type, or `long` for void |
 | `HeapValue` | `Kind == HeapRef`, `Clr.IsValueType`, not nullable, not enum | `decimal`, `DateTime`, `Guid`, `TimeSpan`, `DateOnly`, `TimeOnly` |
 | `Reference` | `Kind == HeapRef`, reference type | `string`, entity, `object` |
@@ -124,17 +124,17 @@ The function's comment must carry these rules; each one is a place the next read
 - **No `long` domain.** Every integral pair promotes to `decimal`, which represents every `ulong`, `char`, and signed 64-bit value exactly. `Convert(ulong, long)` (R7) has no row and never appears.
 - **Order matters.** A `decimal` operand is decided before `float`, so `decimal` vs `float` is `double`, never `float`.
 - **`bool` ordering.** Analysis lets `true > false` through (two `Cat.Boolean` operands are `Compatible`), but C# has no such operator; the table fails closed instead of comparing 0/1.
-- **Mixed `ulong`/signed and `char`/`ulong`.** C# has no operator for a non-constant signed operand (the constant `-1` does not convert to `ulong`), and `FloatingCompare` throws rather than folds (`ConstantFoldingPass.cs:725-743`). The exact `decimal` rule answers: `-1 == ulong.MaxValue` false, `'a' > ulong.MaxValue` false, `ulong.MaxValue > 1` true.
+- **Mixed `ulong`/signed and `char`/`ulong`.** C# has no operator for a non-constant signed operand (the constant `-1` does not convert to `ulong`). The exact `decimal` rule answers, at runtime and in the fold: `-1 == ulong.MaxValue` false, `'a' > ulong.MaxValue` false, `ulong.MaxValue > 1` true.
 
-**Fold relationship, stated honestly.** The runtime is not "the fold widened". `FloatingEquals` uses `object.Equals` whenever `TryConvertToDouble`/`TryConvertToDecimal` cannot cover both operands (`ConstantFoldingPass.cs:698-707, 712-723, 745-756`). So the fold answers **false** for `2u == 2.0`, `ulong.MaxValue == (double)ulong.MaxValue`, and every `short`/`byte`/`sbyte`/`ushort` vs `float`/`double` pair. C# promotes those; the runtime answers numerically (true when the values are equal). That divergence is deliberate under Scot's ruling; the fold fix is a follow-up. The matrix records the fold's answer on every row where it differs.
+**Fold relationship.** The constant fold uses the same promotion as the runtime: `float` when either side is `float`, `double` when either side is `double` or a `decimal` meets a real, `decimal` for an integral pair (including mixed `ulong` and signed, which C# rejects). `2u == 2.0`, `ulong.MaxValue == (double)ulong.MaxValue`, and `16777217 == 16777216f` fold true. `-1 == ulong.MaxValue` folds false.
 
-**Why not the review's three-step fold table.** Copying `FloatingEquals`'s guards into the ABI would answer `2u == 2.0` false and `ulong.MaxValue == (double)ulong.MaxValue` false, while C# answers true; Scot ruled the ABI compare protocol is C#-sane and the fold is the thing to fix. The fold's `object.Equals` fallback is a comparison of boxed runtime types, not of values, so it is the wrong contract for a runtime that already decodes both operands.
+**Why not the review's three-step fold table.** Copying the old `FloatingEquals` guards into the ABI would have answered `2u == 2.0` false while C# answers true. Scot ruled the ABI is C#-sane, and the fold now uses that same promotion. The old `object.Equals` fallback compared boxed runtime types, not values.
 
 ### 5. Decode one value per operand
 
 - `Inline`: `ScalarValue(word, Clr)` (`RingCodec.cs:291-296`, made internal) is the one word-to-CLR decoder: IEEE via `FromIeee`, `bool` via `!= 0`, everything else one `Convert`. Normalize with `ToWord` first (skip it when the local's own type already is `Clr`), so a `double` constant (typed slot) and a `double` parameter (word) take the same path. `ulong` is `Convert(long, ulong)`, an unchecked bitcast, so `ulong.MaxValue` survives as the unsigned value.
-- `Enum`: dereference the box through `RequiredValue` with the enum type and never `Convert(long, enum)`: the constant encoder and `ToRing` both store the boxed enum.
-- `HeapValue`: `RequiredValue(heap, handle, Clr)`, a new runtime helper next to `UnboxNullableAs` (`RingCodec.cs:364-369`): handle 0 throws `VM: required <type> value is absent`; otherwise return the box when it is already the type, else `ChangeType` to the declared type. A required decimal is never silently 0, and an enum box is returned as-is (`ChangeType` cannot target an enum).
+- `Enum`: `ScalarValue` to the underlying type, then `Convert` to the enum. The word is `RingCodec.EnumWord`, not a box. An optional enum is shape `Optional` and still unboxes.
+- `HeapValue`: `RequiredValue(heap, handle, Clr)`, next to `UnboxNullableAs`: handle 0 throws `VM: required <type> value is absent`; otherwise return the box when it is already the type, else `ChangeType` to the declared type. A required decimal is never silently 0. Enums do not use this path.
 - `Optional`: bind the handle once; `present = handle != 0`; `value = present ? Convert(UnboxNullableAs(handle, Underlying), Underlying) : default(Underlying)`.
 - `Reference`: `value = handle == 0 ? null : RingCodec.DerefObject(heap, handle)`.
 
@@ -228,29 +228,29 @@ Tests:
 Docs (same change):
 
 - `Poly/Interpretation/Vm/README.md` — file-map row for `Abi/AbiEmitter.Compare.cs`; one paragraph: a comparison reads values, never slots, and the domain is C# promotion with the nullable lift.
-- `docs/interpretation/vm-abi-reference.md` — correct the representation table's "Value types" row (inline primitives are words; `decimal`/`DateTime`/… and every nullable are handles; enums are boxes today) and add a short "Comparisons" subsection.
+- `docs/interpretation/vm-abi-reference.md` — representation table: inline primitives are words; `decimal`/`DateTime`/… and every nullable are handles; an enum is its underlying integer. The Comparisons subsection states the promotion, the enum word, and unsigned `ulong` arithmetic.
 - `docs/plans/poly-eng/tasks/abi-scalar-null.md` — this file.
 - `docs/CORE.md` — no change; it only points at the emitter.
 
 ## Done when
 
 1. The R6 rows pass (green at `6061cadf`, pinned by `AbiEmitterLiftedOperandOrderTests`): `int == decimal` (both parameters, either order) uses the values and does not throw; `int? 4 == decimal? 4.5m` is false, `4 == 4.0m` is true, both absent is true, one absent is false.
-2. The R7 rows pass under **C# promotion, not the fold**: `decimal 1.5 == double 1.5` and `== float 1.5f` are true; `(decimal)ulong.MaxValue == ulong.MaxValue` is true for a parameter, a literal, and a fold; `ulong.MaxValue > 1` is true; `-1 == ulong.MaxValue` and `'a' > ulong.MaxValue` are false; `ulong.MaxValue == (double)ulong.MaxValue` and `2u == 2.0` are true (fold false; divergence recorded in Follow-ups); `16777217u == 16777216f` is true (the domain is `float`); `9007199254740993m == (double)9007199254740993m` is true and equals the fold. No `Convert(ulong, long)` exists.
+2. The R7 rows pass under **C# promotion, and the fold agrees**: `decimal 1.5 == double 1.5` and `== float 1.5f` are true; `(decimal)ulong.MaxValue == ulong.MaxValue` is true for a parameter, a literal, and a fold; `ulong.MaxValue > 1` is true; `-1 == ulong.MaxValue` and `'a' > ulong.MaxValue` are false; `ulong.MaxValue == (double)ulong.MaxValue` and `2u == 2.0` fold true; `16777217u == 16777216f` and `16777217 == 16777216f` fold true (the domain is `float`); `9007199254740993m == (double)9007199254740993m` is true. No `Convert(ulong, long)` exists on the comparison path. `ulong` division and the right shift run on `ulong`.
 3. Required decimal ordering against an inline number and optional decimal/DateTime ordering use the values; absent ordering is false; ordering a `bool` is rejected (C# has no operator).
 4. `decimal?`/`DateTime?`/`Guid?`/`TimeSpan?` equality still uses values (R2), a required scalar vs null still folds with no heap deref (R1), and a `Constant { Value: null }` is shape `Null` before the type check so `== null` still folds.
-5. An enum parameter is compared with an enum constant by dereferencing the boxes: same member true, different member false, `enum?` present/absent true/false; no enum operand is classified `Inline` or decoded as an integer.
+5. An enum parameter, an enum constant, and a `FromClr` enum result compare as the underlying integer word: same member true, different member false, `enum?` present/absent true/false. A `ulong`-backed member round-trips through the unchecked bitcast. An optional enum stays a box.
 6. `TryDecimalEquality`, `TryLiftedComparison`, `AreHeapValues`, `IsNonNullableHeap`, `HeapValueToObject` are gone; one protocol decides shapes, one chooses a domain, and exactly two ordered `ValueOf` calls emit the operands.
 7. `Unknown` comparison operands, and statements with no CLR type, fail closed (measured: 0/4636 analyzed comparisons at the tip). A resolved void call compares as inline `long`.
 8. `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj` is 0 warnings / 0 errors; the full suite is green on the tip with the count recorded in the PR comment.
 9. No test is deleted, skipped, or weakened; the existing optional/heap tests pass unchanged.
-10. Comments and XML docs state only what the code does, including the fold divergences; the protocol fits in one file and reads as a table.
+10. Comments and XML docs state only what the code does, including the decimal-versus-real precision caveat; the protocol fits in one file and reads as a table.
 
 ## SHIP if / NOT SHIP if
 
 **SHIP if**
 
 - Every "after" in the shape matrix holds on the tip, and each wrong "before" was watched red first with the command and output recorded in the PR comment.
-- The runtime follows C# numeric promotion and lifted nullable semantics; every remaining divergence from `FloatingEquals` is named in Follow-ups, not hidden in a domain row.
+- The runtime and the constant fold follow the same C# promotion and lifted nullable semantics. The decimal-versus-real row's precision loss above 2^53 is the named caveat.
 - The old comparison helpers are gone and no new `Try*` comparison helper exists.
 - The build is clean, the changed-area filters pass, the full suite passes, and CI is green on the reviewed SHA.
 - Grug has no blocker, major, or suggestion open, and the hand-edit gate is yes.
@@ -259,7 +259,7 @@ Docs (same change):
 
 - R6 or R7 is only correct for constants, or only when the decimal is the first-read parameter.
 - Any operand is still compared as a handle, a word, or a signed `long` conversion of an unsigned/IEEE value.
-- An enum operand is classified `Inline` or decoded as an integer; an enum parameter/constant pair regresses.
+- An enum slot is a box, or an enum word is read as a signed `long` instead of its underlying type.
 - `Null` is matched after the null-CLR failure, or `== null` stops folding (R1).
 - A lifted operation routes a non-inline underlying through `long` (R2), a bool is converted with `Convert(long, bool)` (R4), or a scalar-vs-null test emits a heap deref (R1).
 - Disproving a finding required a new special case for that one shape.
@@ -292,8 +292,8 @@ Baseline at `14c5e8fa`: 4636 passed, 0 failed, 0 skipped. The new file adds case
 
 - The whole protocol is one file with one shape switch, one domain table, and one decode function per storage kind. Scot can add a shape or a domain row without touching emission.
 - The evaluation order is two adjacent `ValueOf` calls in one function; there is no helper that can quietly reorder them.
-- `RingCodec.ScalarValue` is the single word-to-CLR reader and `RequiredValue` is the single heap-value reader (enum boxes included). A misread word has one place to fix.
-- The comments name the ruling behind each rule (heap sentinel, C# nullable lift, C# promotion, source order, enum boxes) and cite the oracle; no comment describes a path the code does not take, and no comment says the domain mirrors the fold where it deliberately does not.
+- `RingCodec.ScalarValue` is the single word-to-CLR reader (an enum word goes to its underlying type, then to the enum) and `RequiredValue` is the single required-heap-value reader. A misread word has one place to fix.
+- The comments name the ruling behind each rule (heap sentinel, C# nullable lift, C# promotion, source order, enum word) and cite the oracle; no comment describes a path the code does not take.
 - No reflection at emit beyond the existing `Ref` lookups, no new `#region`, no agent paperwork in product paths.
 
 ## Follow-ups
@@ -302,15 +302,15 @@ Named here, not in this slice (Scot's ruling; do not expand #330):
 
 | follow-up | why deferred |
 |-----------|--------------|
-| Constant fold for mixed unsigned/small-int vs IEEE | `FloatingEquals` falls to `object.Equals` because `TryConvertToDouble` covers only `int`, `long`, `float`, `double`, `decimal`, `char` (`ConstantFoldingPass.cs:698-707, 745-756`), so it answers false for `2u == 2.0` and `ulong.MaxValue == (double)ulong.MaxValue` where C# promotes and answers true. `16777217u == 16777216f` also folds false: the fold forces `double`, while the runtime domain is `float` and answers true. The fold fix promotes to `float` when C# does; extending the double set does not. Fix the fold after #330; the runtime is C#-sane now. |
-| Enum slot uniformity | `ToRing` storing the underlying integer (the ruling's later slice) plus `FromClr`/`ToClr`. Until then, an enum value a comparison sees is a box; a CLR-returned enum that `FromClr` still inlines (`RingCodec.cs:229-240`) remains the pre-existing heap-path misread and is left as-is here. |
+| Constant fold for mixed unsigned/small-int vs IEEE | **Closed.** The fold uses the comparison promotion: `float` when either side is `float`, `double` when either side is `double` or a `decimal` meets a real, `decimal` for an integral pair. `16777217 == 16777216f` folds true because the integral converts to `float`, not because the double set grew. |
+| Enum slot uniformity | **Closed.** `ToRing`, `TryInlineConstant`, and `FromClr` store `RingCodec.EnumWord`. Comparison converts that word back to the enum. A `ulong` underlying uses the unchecked bitcast. |
 | Exact `decimal` ↔ `float`/`double` | Today the table compares in `double` (total, non-throwing, fold-consistent) and loses decimal precision above 2^53. A future exact rule can replace the one row. |
 | Optional narrow-integral arithmetic | **Closed at `55da516d`**: `PromoteNumeric` widens `sbyte`/`byte`/`short`/`ushort` (and `char`) to `int`, so `byte? + byte?` is `int?` and boxes 400. |
-| Optional `ulong` arithmetic | `LiftedOperand` still converts a `ulong` to `long` (`AbiEmitter.Expressions.cs:167-174`); that is the arithmetic path, not the comparison protocol, and is out of #330. |
+| Optional `ulong` arithmetic | **Closed.** `ulong` division and the right shift run on `ulong`, including the lifted form. Addition already matched at the bit level. The ring still stores the bits in a `long`. |
 
 ## Needs Scot
 
-none. The ruling decided the review's three open questions: mixed unsigned/small-int vs IEEE follows C# promotion (fold fix parked); enum operands are dereferenced boxes (`ToRing` uniformity later). Unseeded required `DateTime`/`Guid` equality was called out of scope, then the second review asked for one row beside decimal: `RequiredValue` fails closed on handle 0 for every required heap value, and `RequiredGuid_Unseeded_Equality_Throws` pins `VM: required Guid value is absent`.
+none. The fold and the enum word are closed (see Follow-ups). Unseeded required `Guid` equality throws, pinned by `RequiredGuid_Unseeded_Equality_Throws`.
 
 ## Log
 

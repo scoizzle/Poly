@@ -189,8 +189,19 @@ internal static class RingCodec {
             case char c: raw = c; return true;
             case float f: raw = BitConverter.DoubleToInt64Bits(f); return true;
             case double d: raw = BitConverter.DoubleToInt64Bits(d); return true;
+            case Enum e: raw = EnumWord(e); return true;
             default: raw = 0; return false;
         }
+    }
+
+    /// <summary>The ring word of an enum: its underlying integer, sign-extended
+    /// into <c>long</c>. A <c>ulong</c> underlying uses the same unchecked bitcast
+    /// as a <c>ulong</c> scalar, so <c>ulong.MaxValue</c> round-trips.</summary>
+    public static long EnumWord(Enum value) {
+        var underlying = Enum.GetUnderlyingType(value.GetType());
+        return underlying == typeof(ulong)
+            ? unchecked((long)System.Convert.ToUInt64(value))
+            : System.Convert.ToInt64(value);
     }
 
     /// <summary>True when a node's value is an IEEE bit pattern (float/double).</summary>
@@ -234,6 +245,10 @@ internal static class RingCodec {
         // nullable call return must not collapse to the underlying word.
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return BoxNullable(value, heap);
+        // An enum's slot is its underlying integer, the same word ToRing and the
+        // constant encoder write. A ulong underlying converts to long as a bitcast.
+        if (clrType is { IsEnum: true })
+            return Convert(Convert(value, Enum.GetUnderlyingType(clrType)), typeof(long));
         if (clrType is not null && clrType.IsValueType && IsInline(clrType))
             return Convert(Convert(value, clrType), typeof(long));
         return Call(BoxToAbiInfo, heap, Convert(value, typeof(object)));
@@ -264,8 +279,7 @@ internal static class RingCodec {
         }
         if (targetType == typeof(bool))
             return NotEqual(ringVal, Constant(0L));
-        // An enum constant is boxed by EmitConstant (TryInlineConstant rejects it), so
-        // dereference before converting it to an inline enum target.
+        // A constant the encoder does not inline (a decimal, a string) is a handle.
         if (source is Constant constant && constant.Value is not null
             && !TryInlineConstant(constant.Value, out _))
             return Convert(Call(heap, HeapUnsafeGet, Convert(ringVal, typeof(int))), targetType);
@@ -280,7 +294,7 @@ internal static class RingCodec {
             && ValueRepresentationClassifier.KindFor(targetType) == ValueRepresentationKind.StackScalar)
             return Convert(ringVal, targetType);
         // A scalar reaching an `object` parameter is boxed by its source type. A heap
-        // source (an enum constant, a reference, a non-inline value type) is dereferenced.
+        // source (a reference, a non-inline value type) is dereferenced.
         if (targetType == typeof(object) && source is not null
             && sourceKind is ValueRepresentationKind.StackScalar && sourceClr is not null)
             return Convert(ScalarValue(ringVal, sourceClr), typeof(object));
@@ -321,6 +335,7 @@ internal static class RingCodec {
         char c => c,
         float f => BitConverter.DoubleToInt64Bits(f),
         double d => BitConverter.DoubleToInt64Bits(d),
+        Enum e => EnumWord(e),
         _ => heap.Allocate(value),
     };
 

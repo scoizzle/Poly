@@ -314,7 +314,7 @@ The representation table:
 | Reference types | Heap handle (`int` index) | Both |
 | `decimal`, `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`, `Guid` | Heap handle | Both |
 | Nullable value types | Heap handle; 0 is absent, a present value is a boxed cell | Both |
-| Enums | Heap box (a constant and a `ToRing` parameter) | Both |
+| Enums | Underlying integer in the long word (`ulong` underlying is the unchecked bitcast) | Both |
 | Other value types | Heap handle | Both |
 
 ### Comparisons
@@ -322,7 +322,8 @@ The representation table:
 A comparison decodes both operands to CLR values and compares those values.
 It never compares a slot word to a handle. Inline primitives go through
 `RingCodec.ScalarValue` (IEEE via `FromIeee`, `ulong` as an unchecked bitcast,
-`bool` as `!= 0`). A void call is an inline `long`: `EmitResult` writes `0L`
+`bool` as `!= 0`). An enum word is that underlying integer, converted back
+to the enum. A void call is an inline `long`: `EmitResult` writes `0L`
 into the slot it reserved. `decimal`, `DateTime`, and the other heap value types go
 through `RingCodec.RequiredValue`, which fails closed on handle 0. An optional
 uses the null sentinel: absent equals only absent, and an ordering with an
@@ -330,6 +331,7 @@ absent operand is false.
 
 The pair is promoted by C# binary numeric promotion plus the nullable lift.
 Integral pairs, including `ulong` and `char`, promote to `decimal`, which is
-exact. A `decimal` against `float` or `double` promotes to `double`. The
-constant fold does not yet do this for every pair (`2u == 2.0` folds false);
-the runtime answers the promotion.
+exact. A `decimal` against `float` or `double` promotes to `double`. An
+integral against `float` promotes to `float` (`16777217 == 16777216f`). The
+constant fold uses the same promotion. `ulong` division and the right shift
+run on `ulong`; the ring stores the bits in a `long`.

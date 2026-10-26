@@ -16,11 +16,10 @@ public static partial class AbiEmitter {
 
     /// <summary>Comparison as a bool. Operands are emitted left then right and each
     /// is read once. The domain is C# binary numeric promotion plus the nullable
-    /// lift, not the constant fold: <c>2u == 2.0</c> and
-    /// <c>ulong.MaxValue == (double)ulong.MaxValue</c> are numeric here and still
-    /// false in <c>FloatingEquals</c>. A <c>decimal</c> against <c>float</c> or
-    /// <c>double</c> compares in <c>double</c>, which is total and loses precision
-    /// above 2^53.</summary>
+    /// lift, and the constant fold uses the same promotion: an integral operand
+    /// promotes to <c>float</c> when the other side is <c>float</c>. A
+    /// <c>decimal</c> against <c>float</c> or <c>double</c> compares in
+    /// <c>double</c>, which is total and loses precision above 2^53.</summary>
     private static Expression CompileCompareTest(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> cf,
@@ -65,8 +64,9 @@ public static partial class AbiEmitter {
 
     /// <summary>Shape from the slot the writers produce. A null constant is matched
     /// before the null-CLR failure: <c>Classify</c> gives it <c>HeapRef</c> and no
-    /// CLR type. An enum is a box (the constant encoder and <c>ToRing</c> allocate),
-    /// whatever <c>KindFor</c> reports. A void call is an inline <c>long</c>:
+    /// CLR type. An enum's slot is its underlying integer
+    /// (<see cref="RingCodec.EnumWord"/>), whatever <c>Kind</c> would say about a
+    /// box. A void call is an inline <c>long</c>:
     /// <c>EmitResult</c> writes <c>0L</c> into the slot it reserved. A statement
     /// with no CLR type still fails closed above that row.</summary>
     private static CompareOperand CompareOperandOf(Node node, Context ctx) {
@@ -200,9 +200,10 @@ public static partial class AbiEmitter {
     /// <summary>One CLR value for the slot. An inline word goes through
     /// <see cref="RingCodec.ScalarValue"/> (<c>ulong</c> is an unchecked bitcast,
     /// IEEE uses <see cref="RingCodec.FromIeee"/>, <c>bool</c> is <c>!= 0</c>).
-    /// A typed slot that already holds the CLR type skips that. An enum or a
-    /// required heap value is <see cref="RingCodec.RequiredValue"/>; handle 0
-    /// fails closed. An optional unboxes only when its handle is present.</summary>
+    /// A typed slot that already holds the CLR type skips that. An enum word is
+    /// that underlying integer converted back to the enum. A required heap value
+    /// is <see cref="RingCodec.RequiredValue"/>; handle 0 fails closed. An
+    /// optional unboxes only when its handle is present.</summary>
     private static (Expression Value, Expression? Present) ReadCompareOperand(
         Expression local, CompareOperand operand, Context ctx) {
         switch (operand.Shape) {
@@ -213,13 +214,19 @@ public static partial class AbiEmitter {
                         : RingCodec.ScalarValue(RingCodec.ToWord(local), clr);
                     return (value, null);
                 }
-            case CompareShape.Enum:
+            case CompareShape.Enum: {
+                    var clr = operand.Clr!;
+                    var underlying = Enum.GetUnderlyingType(clr);
+                    Expression word = local.Type == underlying
+                        ? local
+                        : RingCodec.ScalarValue(RingCodec.ToWord(local), underlying);
+                    return (Convert(word, clr), null);
+                }
             case CompareShape.HeapValue: {
                     var clr = operand.Clr!;
                     var boxed = Call(
                         RequiredValueInfo, ctx.HeapLocal, RingCodec.ToWord(local), Constant(clr, typeof(Type)));
-                    Expression value = operand.Shape == CompareShape.Enum ? boxed : Convert(boxed, clr);
-                    return (value, null);
+                    return (Convert(boxed, clr), null);
                 }
             case CompareShape.Optional: {
                     var handle = RingCodec.ToWord(local);

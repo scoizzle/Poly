@@ -100,7 +100,7 @@ public static partial class AbiEmitter {
                             methodArgs[i] = Nullable.GetUnderlyingType(parameterType) is not null
                                 && sourceClr is not null
                                 && Nullable.GetUnderlyingType(sourceClr) is not null
-                                ? new SlotLocation.Ring(argSlots[i]).Holding(parameterType).Read(ctx)
+                                ? new SlotLocation.Ring(argSlots[i]).ReadAs(ctx, parameterType)
                                 : RingCodec.ToClr(
                                     ringVal, parameterType, invoke.Arguments[i],
                                     ctx.Analysis, ctx.HeapLocal);
@@ -112,14 +112,11 @@ public static partial class AbiEmitter {
                         callExpr = Call(null, methodInfo, methodArgs);
                     }
                     else {
-                        var instanceObj = Call(ctx.HeapLocal,
-                            HeapUnsafeGet,
-                            Convert(ctx.RingVar(instanceSlot), typeof(int)));
-                        // Convert from 'object' to the declaring type so Expression.Call
-                        // can resolve the method. This is a no-op cast at runtime for
-                        // reference types but satisfies Expression tree type validation.
                         var declaringType = methodInfo.DeclaringType!;
-                        callExpr = Call(Convert(instanceObj, declaringType), methodInfo, methodArgs);
+                        var receiverClr = ctx.ClrTypeOf(member.Value) ?? declaringType;
+                        callExpr = Call(
+                            InstanceCallTarget(ctx.RingVar(instanceSlot), receiverClr, declaringType, ctx),
+                            methodInfo, methodArgs);
                     }
 
                     // Build the full expression sequence: instance → args → call → result
@@ -188,14 +185,13 @@ public static partial class AbiEmitter {
             for (int i = 0; i < invoke.Arguments.Length; i++)
                 astArgSlots[i] = astArgs.Add(CompileNode(invoke.Arguments[i], ctx));
 
-            var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
-                Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
+            var astInstanceObj = InstanceObject(ctx.RingVar(astInstanceSlot), ctx.ClrTypeOf(member.Value), ctx);
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
                 // An argument the emitter cannot place is a compile error, not a handle.
                 bool scalar = RingCodec.IsStackScalar(invoke.Arguments[i], ctx.Analysis);
                 argObjs[i] = scalar
-                    ? Convert(ctx.RingVar(astArgSlots[i]), typeof(object))
+                    ? ScalarArgument(ctx.RingVar(astArgSlots[i]), ctx.ClrTypeOf(invoke.Arguments[i]), ctx)
                     : Call(ctx.HeapLocal, HeapUnsafeGet,
                         Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
             }
@@ -256,17 +252,18 @@ public static partial class AbiEmitter {
             // argument slots of its own.
             ctx.PushScope();
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
-            ctx.PushFrameParameters();
             foreach (var param in lambda.Parameters)
-                ctx.MapFrameParameter(param, ctx.DeclareParameter(param));
+                ctx.DeclareParameter(param);
             int saveDepth = ctx.RingDepth;
 
             var preBody = new List<Expression>();   // before inline body
             var postBody = new List<Expression>();  // after inline body
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
 
-            var callSp = Variable(typeof(int), "_callSp");
-            var callerFramePos = Variable(typeof(int), "_callerFp");
+            using var callSpLease = ctx.LeaseHelper(typeof(int), "_callSp");
+            using var callerFramePosLease = ctx.LeaseHelper(typeof(int), "_callerFp");
+            var callSp = callSpLease.Local;
+            var callerFramePos = callerFramePosLease.Local;
             preBody.Add(Assign(callSp, spProp));
             // SetArgs seeded the arguments at slots[callSp + index]; the frame pointer
             // is that first slot, so parameters resolve at FP + index. The caller's
@@ -303,10 +300,8 @@ public static partial class AbiEmitter {
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
-            ctx.PopFrameParameters();
             ctx.PopScope();
-            var locals = new List<ParameterExpression> { callSp, callerFramePos };
-            return Block(locals, Block(preBody.Concat(postBody)));
+            return Block(preBody.Concat(postBody));
         }
 
         if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
@@ -520,7 +515,7 @@ public static partial class AbiEmitter {
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
         // Instance calls pass the receiver handle at frame slot 0. User
-        // parameters start at slot 1 and are matched by name.
+        // parameters start at slot 1 and are matched by the parameter node.
         if (instanceSlot)
             fnCtx.ParamSlotOffset = -1;
         var bodyExprs = new List<Expression>();
@@ -548,9 +543,8 @@ public static partial class AbiEmitter {
         // for the receiver. Without the reserve, block-local zeros land on the
         // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
-        fnCtx.PushFrameParameters();
         foreach (var param in parameters)
-            fnCtx.MapFrameParameter(param, fnCtx.DeclareParameter(param));
+            fnCtx.DeclareParameter(param);
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Compile body
@@ -1160,6 +1154,40 @@ public static partial class AbiEmitter {
             Equal(handle, Constant(0L)),
             Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
     }
+
+    /// <summary>The receiver of a resolved instance call. A temporal word is the
+    /// value (<c>DateTime.AddDays</c> must not treat <c>ToBinary</c> as a heap
+    /// index). Every other receiver is still the heap object.</summary>
+    private static Expression InstanceCallTarget(
+        Expression word, Type? receiverClr, Type declaringType, Context ctx) {
+        var temporal = TemporalWord(receiverClr) ? receiverClr
+            : TemporalWord(declaringType) ? declaringType
+            : null;
+        if (temporal is not null)
+            return LocalType.Decode(word, temporal, declaringType, ctx.HeapLocal);
+        return Convert(
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))),
+            declaringType);
+    }
+
+    /// <summary>A name-dispatched receiver as <c>object</c>. A temporal word is
+    /// decoded; a handle is still the heap object.</summary>
+    private static Expression InstanceObject(Expression word, Type? clr, Context ctx) {
+        if (TemporalWord(clr))
+            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
+        return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
+    }
+
+    /// <summary>A scalar argument of a name-dispatched call. A temporal word boxes
+    /// the CLR value; an int or IEEE word boxes as it always has.</summary>
+    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) {
+        if (TemporalWord(clr))
+            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
+        return Convert(word, typeof(object));
+    }
+
+    private static bool TemporalWord(Type? clr) =>
+        clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true };
 
     private static Expression MissingClrArgument(ParameterInfo parameter) {
         if (!parameter.HasDefaultValue)

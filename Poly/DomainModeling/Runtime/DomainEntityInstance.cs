@@ -6,6 +6,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
@@ -1193,10 +1194,36 @@ public sealed partial record DomainEntityInstance {
         var analysis = Interpreter.Analyze(
             tree,
             types,
-            setup: ctx => AnnotateThisReferences(ctx, tree, entityType));
+            setup: ctx => {
+                AnnotateThisReferences(ctx, tree, entityType);
+                if (rootParameters is { Count: > 0 })
+                    BindRootParameterUses(ctx, tree, rootParameters);
+            });
         return rootParameters is { Count: > 0 }
             ? Interpreter.Compile(tree, analysis, rootParameters)
             : Interpreter.Compile(tree, analysis);
+    }
+
+    /// <summary>A root parameter is declared for SetArgs, and the body may hold
+    /// another <see cref="Parameter"/> instance of that name. Point the use at the
+    /// declared instance. A later scope pass overwrites this when a nested parameter
+    /// shadows the name.</summary>
+    private static void BindRootParameterUses(
+        AnalysisContext ctx, Node node, IReadOnlyList<Parameter> rootParameters) {
+        if (node is Parameter parameter) {
+            foreach (var declared in rootParameters) {
+                if (ReferenceEquals(declared, parameter))
+                    break;
+                if (string.Equals(declared.Name, parameter.Name, StringComparison.Ordinal)) {
+                    ctx.SetMetadata(parameter, new ParameterBindingMetadata(declared));
+                    break;
+                }
+            }
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                BindRootParameterUses(ctx, child, rootParameters);
+        }
     }
 
     private static void AnnotateThisReferences(

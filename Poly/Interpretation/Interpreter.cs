@@ -244,6 +244,9 @@ public static class Interpreter {
         if (rootKind == PrimValueKind.StackScalar) {
             if (clr == typeof(double) || clr == typeof(float))
                 return InterpreterResult.FromValue(BitConverter.Int64BitsToDouble(raw));
+            // A temporal word is the value, not the bits. DateTime.FromBinary keeps Kind.
+            if (clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true } temporal)
+                return InterpreterResult.FromValue(temporal.Read(raw));
             return InterpreterResult.FromValue(raw);
         }
 

@@ -11,30 +11,33 @@ using static System.Linq.Expressions.Expression;
 namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>
-/// What a frame word means. <see cref="For"/> is the one classification.
+/// What a frame word means: one registered <see cref="LocalType"/> per CLR type.
+/// <see cref="Of(Type)"/> is the one classification.
 /// <see cref="ValueRepresentationClassifier.KindFor"/> reports <see cref="Kind"/>.
-/// <see cref="SlotLocation.View"/> reads and writes through <see cref="Encode"/>
-/// and <see cref="FromWord"/>. A primitive of at most 64 bits is a
-/// <see cref="Word"/>, <see cref="Bits"/>, or <see cref="Flag"/>, never a handle.
+/// A typed read of a stored word is <see cref="FromWord"/>; a typed write is
+/// <see cref="Encode"/>. A primitive of at most 64 bits is an
+/// <see cref="Int64Local"/>, <see cref="Int32Local"/>, <see cref="IEEELocal"/>, or
+/// <see cref="FlagLocal"/>, never a handle. <see cref="TemporalLocal"/> is a word
+/// for <c>DateTime</c>, <c>DateOnly</c>, and <c>TimeOnly</c>.
 /// </summary>
-internal abstract record FrameRepresentation(Type Clr) {
-    private static readonly ConcurrentDictionary<Type, FrameRepresentation> Forms = new();
+internal abstract record LocalType(Type Clr) {
+    private static readonly ConcurrentDictionary<Type, LocalType> Forms = new();
 
     public abstract ValueRepresentationKind Kind { get; }
 
-    /// <summary>The representation of <paramref name="clr"/>. Cached. Nullable
-    /// wraps the representation of its underlying type.</summary>
-    public static FrameRepresentation For(Type clr) => Forms.GetOrAdd(clr, Create);
+    /// <summary>The local type of <paramref name="clr"/>. Cached. Nullable
+    /// wraps the local type of its underlying type.</summary>
+    public static LocalType Of(Type clr) => Forms.GetOrAdd(clr, Create);
 
     /// <summary>Encode <paramref name="value"/> as the frame word of <paramref name="clr"/>.</summary>
     public static Expression Encode(Expression value, Type clr, Expression heap) {
         if (value.Type == typeof(long) && clr != typeof(long)
             && Nullable.GetUnderlyingType(clr) is null && clr != typeof(ulong))
             return value;
-        var form = For(clr);
+        var form = Of(clr);
         var nullableValue = Nullable.GetUnderlyingType(value.Type) is not null;
         if (value.Type != clr && value.Type != typeof(long) && !nullableValue
-            && (form is Optional || form.Kind == ValueRepresentationKind.StackScalar))
+            && (form is NullableLocal || form.Kind == ValueRepresentationKind.StackScalar))
             value = Convert(value, clr);
         return form.ToFrame(value, heap);
     }
@@ -42,35 +45,35 @@ internal abstract record FrameRepresentation(Type Clr) {
     /// <summary>Read a frame word whose meaning is <paramref name="source"/> as <paramref name="target"/>.</summary>
     public static Expression Decode(Expression word, Type? source, Type target, Expression heap) {
         source ??= word.Type;
-        return For(source).FromWord(word, target, heap);
+        return Of(source).FromWord(word, target, heap);
     }
 
     /// <summary>The frame word for a runtime value. Null is the absent sentinel.</summary>
     public static long Write(object? value, VmManagedObjectHeap heap) =>
-        value is null ? 0L : For(value.GetType()).ToRing(value, heap);
+        value is null ? 0L : Of(value.GetType()).ToRing(value, heap);
 
-    /// <summary>The form of a node, after analysis replacement. A statement is
-    /// none. A constant uses <see cref="For"/> on the value's type.</summary>
-    public static (FrameRepresentation? Form, Type? Clr) Of(INodeMetadataProvider? provider, Node? node) {
+    /// <summary>The local type of a node, after analysis replacement. A statement is
+    /// none. A constant uses <see cref="Of(Type)"/> on the value's type.</summary>
+    public static (LocalType? Form, Type? Clr) Of(INodeMetadataProvider? provider, Node? node) {
         if (node is null)
             return (null, null);
         var effective = provider?.GetNodeReplacement(node) ?? node;
         if (effective is Return { Value: { } returned })
             return Of(provider, returned);
         if (effective is Statement)
-            return (None.Instance, null);
+            return (NoneLocal.Instance, null);
         if (effective is TryCatchFinally tryCatch)
             return Of(provider, tryCatch.TryBlock);
         if (effective is Constant constant) {
             if (constant.Value is null)
-                return (For(typeof(object)), null);
+                return (Of(typeof(object)), null);
             var valueType = constant.Value.GetType();
-            return (For(valueType), valueType);
+            return (Of(valueType), valueType);
         }
         var type = provider?.GetResolvedType(effective)?.GetRuntimeType()
             ?? provider?.GetResolvedMember(effective)?.MemberTypeDefinition.GetRuntimeType()
             ?? InferReturn(provider, effective);
-        return type is null ? (null, null) : (For(type), type);
+        return type is null ? (null, null) : (Of(type), type);
     }
 
     private static Type? InferReturn(INodeMetadataProvider? provider, Node node) {
@@ -99,7 +102,7 @@ internal abstract record FrameRepresentation(Type Clr) {
             raw = 0L;
             return true;
         }
-        var form = For(value.GetType());
+        var form = Of(value.GetType());
         if (form.Kind != ValueRepresentationKind.StackScalar) {
             raw = 0L;
             return false;
@@ -111,12 +114,12 @@ internal abstract record FrameRepresentation(Type Clr) {
     public abstract long ToRing(object value, VmManagedObjectHeap heap);
 
     /// <summary>The CLR type of a ring local for this form. <c>float</c>,
-    /// <c>double</c>, <c>int</c>, and <c>Nullable&lt;T&gt;</c> keep their type.
-    /// Every other form uses the <c>long</c> word.</summary>
+    /// <c>double</c>, the 32-bit integer family, and <c>Nullable&lt;T&gt;</c> keep
+    /// a typed local. Every other form uses the <c>long</c> word.</summary>
     public Type SlotType => this switch {
-        Bits => Clr,
-        Word word when word.Clr == typeof(int) => typeof(int),
-        Optional => Clr,
+        IEEELocal => Clr,
+        Int32Local => typeof(int),
+        NullableLocal => Clr,
         _ => typeof(long),
     };
 
@@ -125,15 +128,15 @@ internal abstract record FrameRepresentation(Type Clr) {
     public bool IsTyped => SlotType != typeof(long);
 
     public static bool IsInline(Type type) =>
-        For(type).Kind == ValueRepresentationKind.StackScalar;
+        Of(type).Kind == ValueRepresentationKind.StackScalar;
 
-    public static bool IsIeee(Type type) => For(type) is Bits;
+    public static bool IsIeee(Type type) => Of(type) is IEEELocal;
 
     /// <summary>An expression-level value as its frame word. An <c>int</c> widens.
     /// IEEE becomes bits. Anything already a word stays a word.</summary>
     public static Expression ToWord(Expression value) =>
         value.Type == typeof(int) ? Convert(value, typeof(long))
-        : For(value.Type) is Bits ? RingCodec.ToIeee(Convert(value, typeof(double)))
+        : Of(value.Type) is IEEELocal ? RingCodec.ToIeee(Convert(value, typeof(double)))
         : value;
 
     /// <summary>The word as a typed ring slot. Only <c>int</c>, <c>float</c>, and
@@ -151,7 +154,7 @@ internal abstract record FrameRepresentation(Type Clr) {
         if (value.Type == slotType)
             return value;
         if (slotType == typeof(int))
-            return Convert(For(value.Type) is Bits ? RingCodec.FromIeee(value) : value, typeof(int));
+            return Convert(Of(value.Type) is IEEELocal ? RingCodec.FromIeee(value) : value, typeof(int));
         if (value.Type == typeof(int))
             return slotType == typeof(double) ? Convert(value, typeof(double))
                 : slotType == typeof(float) ? Convert(Convert(value, typeof(double)), typeof(float))
@@ -173,19 +176,36 @@ internal abstract record FrameRepresentation(Type Clr) {
 
     public abstract Expression FromWord(Expression word, Type target, Expression heap);
 
-    private static FrameRepresentation Create(Type clr) {
+    private static LocalType Create(Type clr) {
         var underlying = Nullable.GetUnderlyingType(clr);
         if (underlying is not null)
-            return new Optional(clr, For(underlying));
+            return new NullableLocal(clr, Of(underlying));
         if (clr == typeof(void))
-            return None.Instance;
+            return NoneLocal.Instance;
         if (clr == typeof(bool))
-            return new Flag(clr);
+            return new FlagLocal(clr);
         if (clr == typeof(float) || clr == typeof(double))
-            return new Bits(clr);
+            return new IEEELocal(clr);
+        if (IsInt32Family(clr))
+            return new Int32Local(clr);
         if (clr.IsPrimitive || clr.IsEnum)
-            return new Word(clr);
-        return new Handle(clr);
+            return new Int64Local(clr);
+        if (!clr.IsValueType)
+            return new HandleLocal(clr);
+        if (clr == typeof(DateTime) || clr == typeof(DateOnly)
+            || clr == typeof(TimeOnly) || clr == typeof(DateTimeOffset))
+            return new TemporalLocal(clr);
+        return new StructLocal(clr);
+    }
+
+    /// <summary>Types whose arithmetic is a 32-bit operation, plus an enum with
+    /// one of those underlying types. <c>uint</c> is not one of them: mixed with
+    /// <c>int</c> it promotes to <c>long</c>.</summary>
+    private static bool IsInt32Family(Type clr) {
+        var underlying = clr.IsEnum ? Enum.GetUnderlyingType(clr) : clr;
+        return underlying == typeof(int) || underlying == typeof(short)
+            || underlying == typeof(ushort) || underlying == typeof(byte)
+            || underlying == typeof(sbyte) || underlying == typeof(char);
     }
 
     /// <summary>A scalar word brought to <paramref name="target"/>.</summary>
@@ -197,9 +217,11 @@ internal abstract record FrameRepresentation(Type Clr) {
         return Convert(value, target);
     }
 
-    /// <summary>An inline integer, <c>char</c>, enum, <c>nint</c>, or <c>nuint</c>.
-    /// The frame holds the number. <c>ulong</c> and <c>nuint</c> are bitcasts.</summary>
-    internal sealed record Word(Type Clr) : FrameRepresentation(Clr) {
+    /// <summary>An inline integer wider than 32 bits, a <c>uint</c>, an enum with
+    /// a 64-bit underlying type, <c>nint</c>, or <c>nuint</c>. The frame holds the
+    /// number. <c>ulong</c> and <c>nuint</c> are bitcasts. The 32-bit family is
+    /// <see cref="Int32Local"/>.</summary>
+    internal sealed record Int64Local(Type Clr) : LocalType(Clr) {
         private static readonly MethodInfo UIntPtrToUInt64 =
             typeof(nuint).GetMethod(nameof(nuint.ToUInt64), Type.EmptyTypes)!;
         private static readonly ConstructorInfo UIntPtrFromULong =
@@ -257,9 +279,57 @@ internal abstract record FrameRepresentation(Type Clr) {
         }
     }
 
+    /// <summary>The 32-bit integer family: <c>int</c> and every integral type C#
+    /// promotes to <c>int</c>, plus an enum with such an underlying type. The local
+    /// is <c>int</c>. The frame holds the word. A store into a smaller member of
+    /// the family narrows with the unchecked cast.</summary>
+    internal sealed record Int32Local(Type Clr) : LocalType(Clr) {
+        private static readonly MethodInfo UIntPtrToUInt64 =
+            typeof(nuint).GetMethod(nameof(nuint.ToUInt64), Type.EmptyTypes)!;
+
+        public override ValueRepresentationKind Kind => ValueRepresentationKind.StackScalar;
+
+        public override Expression ToFrame(Expression value, Expression heap) {
+            if (value.Type == typeof(ulong))
+                return Convert(value, typeof(long));
+            if (value.Type == typeof(nuint))
+                return Convert(Call(value, UIntPtrToUInt64), typeof(long));
+            if (value.Type == typeof(long))
+                return value;
+            if (value.Type != Clr)
+                value = Convert(value, Clr);
+            return Convert(value, typeof(long));
+        }
+
+        public override Expression FromWord(Expression word, Type target, Expression heap) =>
+            Finish(word.Type == Clr ? word : Convert(RingCodec.ToWord(word), Clr), target);
+
+        public override long ToRing(object value, VmManagedObjectHeap heap) => value switch {
+            byte b => b,
+            sbyte sb => sb,
+            short s => s,
+            ushort us => us,
+            int i => i,
+            uint ui => ui,
+            long l => l,
+            ulong ul => unchecked((long)ul),
+            char c => c,
+            nint p => p,
+            nuint p => unchecked((long)p),
+            Enum e => EnumToWord(e),
+            _ => throw new InvalidOperationException(
+                $"VM compile rejected: '{value.GetType()}' is not an inline word."),
+        };
+
+        private static long EnumToWord(Enum value) {
+            var under = System.Convert.ChangeType(value, Enum.GetUnderlyingType(value.GetType()));
+            return under is ulong ul ? unchecked((long)ul) : System.Convert.ToInt64(under);
+        }
+    }
+
     /// <summary><c>float</c> or <c>double</c>. The frame holds the IEEE bits.
     /// Both widths use a <c>double</c>'s bit pattern.</summary>
-    internal sealed record Bits(Type Clr) : FrameRepresentation(Clr) {
+    internal sealed record IEEELocal(Type Clr) : LocalType(Clr) {
         public override ValueRepresentationKind Kind => ValueRepresentationKind.StackScalar;
 
         public override Expression ToFrame(Expression value, Expression heap) =>
@@ -283,7 +353,7 @@ internal abstract record FrameRepresentation(Type Clr) {
     }
 
     /// <summary><c>bool</c>. The frame holds 0 or 1.</summary>
-    internal sealed record Flag(Type Clr) : FrameRepresentation(Clr) {
+    internal sealed record FlagLocal(Type Clr) : LocalType(Clr) {
         public override ValueRepresentationKind Kind => ValueRepresentationKind.StackScalar;
 
         public override Expression ToFrame(Expression value, Expression heap) =>
@@ -298,9 +368,10 @@ internal abstract record FrameRepresentation(Type Clr) {
             Finish(word.Type == typeof(bool) ? word : NotEqual(RingCodec.ToWord(word), Constant(0L)), target);
     }
 
-    /// <summary>A heap handle: <c>decimal</c>, a reference, or any other value
-    /// that does not fit in 64 bits.</summary>
-    internal sealed record Handle(Type Clr) : FrameRepresentation(Clr) {
+    /// <summary>A heap handle: a reference type, or a value that does not fit in
+    /// 64 bits. <see cref="TemporalLocal"/> and <see cref="StructLocal"/> are the
+    /// value-type registrations and share this encoding.</summary>
+    internal record HandleLocal(Type Clr) : LocalType(Clr) {
         public override ValueRepresentationKind Kind => ValueRepresentationKind.HeapRef;
 
         public override Expression ToFrame(Expression value, Expression heap) =>
@@ -318,9 +389,81 @@ internal abstract record FrameRepresentation(Type Clr) {
         }
     }
 
+    /// <summary>A temporal value. <c>DateTime</c> (<see cref="DateTime.ToBinary"/>,
+    /// which keeps <see cref="DateTimeKind"/>), <c>DateOnly</c> (<see cref="DateOnly.DayNumber"/>),
+    /// and <c>TimeOnly</c> (<see cref="TimeOnly.Ticks"/>) are one word.
+    /// <c>DateTimeOffset</c> is 16 bytes and stays a heap handle.</summary>
+    internal sealed record TemporalLocal(Type Clr) : HandleLocal(Clr) {
+        private static readonly MethodInfo DateTimeToBinary =
+            typeof(DateTime).GetMethod(nameof(DateTime.ToBinary), Type.EmptyTypes)!;
+        private static readonly MethodInfo DateTimeFromBinary =
+            typeof(DateTime).GetMethod(nameof(DateTime.FromBinary), [typeof(long)])!;
+        private static readonly MethodInfo DateOnlyFromDayNumber =
+            typeof(DateOnly).GetMethod(nameof(DateOnly.FromDayNumber), [typeof(int)])!;
+        private static readonly ConstructorInfo TimeOnlyFromTicks =
+            typeof(TimeOnly).GetConstructor([typeof(long)])!;
+
+        /// <summary>True when the value is a single frame word, not a handle.</summary>
+        public bool IsWord => Clr != typeof(DateTimeOffset);
+
+        public override ValueRepresentationKind Kind =>
+            IsWord ? ValueRepresentationKind.StackScalar : ValueRepresentationKind.HeapRef;
+
+        public override Expression ToFrame(Expression value, Expression heap) {
+            if (!IsWord)
+                return base.ToFrame(value, heap);
+            if (value.Type == typeof(long))
+                return value;
+            if (value.Type != Clr)
+                value = Convert(value, Clr);
+            if (Clr == typeof(DateTime))
+                return Call(value, DateTimeToBinary);
+            if (Clr == typeof(DateOnly))
+                return Convert(Property(value, nameof(DateOnly.DayNumber)), typeof(long));
+            return Property(value, nameof(TimeOnly.Ticks));
+        }
+
+        public override long ToRing(object value, VmManagedObjectHeap heap) {
+            if (!IsWord)
+                return base.ToRing(value, heap);
+            return value switch {
+                DateTime dateTime => dateTime.ToBinary(),
+                DateOnly date => date.DayNumber,
+                TimeOnly time => time.Ticks,
+                _ => throw new InvalidOperationException(
+                    $"VM compile rejected: '{value.GetType()}' is not a {Clr.Name}."),
+            };
+        }
+
+        public override Expression FromWord(Expression word, Type target, Expression heap) {
+            if (!IsWord)
+                return base.FromWord(word, target, heap);
+            if (word.Type == Clr)
+                return Finish(word, target);
+            var bits = RingCodec.ToWord(word);
+            Expression value = Clr == typeof(DateTime)
+                ? Call(DateTimeFromBinary, bits)
+                : Clr == typeof(DateOnly)
+                    ? Call(DateOnlyFromDayNumber, Convert(bits, typeof(int)))
+                    : New(TimeOnlyFromTicks, bits);
+            return Finish(value, target);
+        }
+
+        /// <summary>The CLR value of a frame word. A zero word is the default value.</summary>
+        public object Read(long word) =>
+            Clr == typeof(DateTime) ? DateTime.FromBinary(word)
+            : Clr == typeof(DateOnly) ? DateOnly.FromDayNumber(checked((int)word))
+            : new TimeOnly(word);
+    }
+
+    /// <summary>A value type that does not fit one word: <c>decimal</c>,
+    /// <c>Guid</c>, <c>Int128</c>, <c>UInt128</c>, or any other non-temporal
+    /// struct. The frame holds a heap handle.</summary>
+    internal sealed record StructLocal(Type Clr) : HandleLocal(Clr);
+
     /// <summary>A <c>Nullable&lt;T&gt;</c> whose underlying value is <see cref="Inner"/>.
     /// The frame holds a handle, and 0 is absent.</summary>
-    internal sealed record Optional(Type Clr, FrameRepresentation Inner) : FrameRepresentation(Clr) {
+    internal sealed record NullableLocal(Type Clr, LocalType Inner) : LocalType(Clr) {
         public override ValueRepresentationKind Kind => ValueRepresentationKind.HeapRef;
 
         public override Expression ToFrame(Expression value, Expression heap) {
@@ -348,10 +491,10 @@ internal abstract record FrameRepresentation(Type Clr) {
     }
 
     /// <summary><c>void</c> has no frame word.</summary>
-    internal sealed record None : FrameRepresentation {
-        public static readonly None Instance = new();
+    internal sealed record NoneLocal : LocalType {
+        public static readonly NoneLocal Instance = new();
 
-        private None() : base(typeof(void)) { }
+        private NoneLocal() : base(typeof(void)) { }
 
         public override ValueRepresentationKind Kind => ValueRepresentationKind.Void;
 

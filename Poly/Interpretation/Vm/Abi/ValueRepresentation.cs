@@ -34,11 +34,11 @@ internal static class ValueRepresentationClassifier {
     /// <c>float</c>, <c>double</c>, <c>nint</c>, and <c>nuint</c>. A nullable is a
     /// heap handle. Everything else is a handle.</summary>
     public static ValueRepresentationKind KindFor(Type type) =>
-        FrameRepresentation.For(type).Kind;
+        LocalType.Of(type).Kind;
 
     public static (ValueRepresentationKind Kind, Type? ClrType) Classify(
         INodeMetadataProvider? provider, Node? node) {
-        var (form, clr) = FrameRepresentation.Of(provider, node);
+        var (form, clr) = LocalType.Of(provider, node);
         return (form?.Kind ?? ValueRepresentationKind.Unknown, clr);
     }
 

@@ -35,12 +35,12 @@ internal static class RingCodec {
     /// <summary>True when <see cref="ValueRepresentationClassifier.KindFor(Type)"/>
     /// stores the value as an inline word. A nullable is a handle, so it is not
     /// inline. <see cref="ToFrame"/> and <see cref="FromFrame"/> convert it.</summary>
-    public static bool IsInline(Type type) => FrameRepresentation.IsInline(type);
+    public static bool IsInline(Type type) => LocalType.IsInline(type);
 
     /// <summary>True when the type stores its IEEE bit pattern in the slot.
     /// Exact <c>float</c>/<c>double</c> only; a nullable wraps the value in a
     /// heap cell, matching <see cref="FromClr"/>.</summary>
-    public static bool IsIeee(Type type) => FrameRepresentation.IsIeee(type);
+    public static bool IsIeee(Type type) => LocalType.IsIeee(type);
 
     /// <summary>True for the types C# performs an arithmetic operator on at 32 bits:
     /// <c>int</c>, plus every smaller integral type, which C# promotes to <c>int</c>
@@ -89,17 +89,17 @@ internal static class RingCodec {
     /// promotes to <c>int</c> before an operator, a handle, or a type analysis could not
     /// resolve — uses the <c>long</c> word.</summary>
     public static Type SlotTypeOf(Type? clrType) =>
-        clrType is null ? typeof(long) : FrameRepresentation.For(clrType).SlotType;
+        clrType is null ? typeof(long) : LocalType.Of(clrType).SlotType;
 
     /// <summary>True when a ring local's own type is the value, rather than the word.</summary>
     public static bool IsTypedSlot(Type slotType) =>
-        FrameRepresentation.For(slotType).IsTyped;
+        LocalType.Of(slotType).IsTyped;
 
     /// <summary>A typed slot expression as the word. The one place an expression-level
     /// IEEE value becomes its bit pattern; a <c>float</c> widens first because the word
     /// form of both IEEE widths is a <c>double</c>'s bits, and an <c>int</c> widens
     /// numerically because it is a number, not a bit pattern.</summary>
-    public static Expression ToWord(Expression value) => FrameRepresentation.ToWord(value);
+    public static Expression ToWord(Expression value) => LocalType.ToWord(value);
 
     /// <summary>The frame word of a local. <c>Nullable&lt;T&gt;</c> becomes a handle
     /// here: absent is 0, present is the boxed underlying value.</summary>
@@ -108,12 +108,12 @@ internal static class RingCodec {
     /// <summary>Encode a CLR value of <paramref name="clr"/> as its frame word.
     /// The representation for <paramref name="clr"/> owns the spelling.</summary>
     public static Expression ToFrame(Expression value, Type clr, Expression heap) =>
-        FrameRepresentation.Encode(value, clr, heap);
+        LocalType.Encode(value, clr, heap);
 
     /// <summary>Read a frame word as <paramref name="target"/>. <paramref name="source"/>
     /// is what the word means, which is the same representation <see cref="ToFrame"/> wrote.</summary>
     public static Expression FromFrame(Expression word, Type? source, Type target, Expression heap) =>
-        FrameRepresentation.Decode(word, source, target, heap);
+        LocalType.Decode(word, source, target, heap);
 
     private static readonly MethodInfo ReadNullableInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)(
@@ -151,23 +151,23 @@ internal static class RingCodec {
     /// <summary>The word as a typed slot expression: the mirror of
     /// <see cref="ToWord"/>, for a local whose own type is <paramref name="slotType"/>.</summary>
     public static Expression FromWord(Expression word, Type slotType) =>
-        FrameRepresentation.FromSlot(word, slotType);
+        LocalType.FromSlot(word, slotType);
 
     /// <summary>The value at a slot's storage type. IEEE is the bit pattern.
     /// <c>int</c> is numeric.</summary>
     public static Expression AsRepresentation(Expression value, Type representation) =>
-        FrameRepresentation.AsSlot(value, representation);
+        LocalType.AsSlot(value, representation);
 
     /// <summary>The value as the number <paramref name="representation"/> denotes,
     /// not its bit pattern.</summary>
     public static Expression NumericTo(Expression value, Type representation) =>
-        FrameRepresentation.Numeric(value, representation);
+        LocalType.Numeric(value, representation);
 
     /// <summary>Fold a compile-time constant into its inline ring slot. Null is
     /// the null sentinel 0; float and double are IEEE bit patterns; <c>ulong</c>
     /// uses an unchecked 64-bit bitcast so <c>ulong.MaxValue</c> round-trips.</summary>
     public static bool TryInlineConstant(object? value, out long raw) =>
-        FrameRepresentation.TryInline(value, out raw);
+        LocalType.TryInline(value, out raw);
 
     /// <summary>True when a node's value is an IEEE bit pattern (float/double).</summary>
     public static bool IsIeee(Node node, AnalysisResult? analysis) =>
@@ -233,7 +233,7 @@ internal static class RingCodec {
     /// implementation used by <see cref="VmState.SetArgs"/>, restoration, and
     /// the emitted boxing call.</summary>
     public static long ToRing(object? value, VmManagedObjectHeap heap) =>
-        FrameRepresentation.Write(value, heap);
+        LocalType.Write(value, heap);
 
     /// <summary>Heap-first runtime conversion used by emitted calls and the
     /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, VmManagedObjectHeap)"/>.</summary>

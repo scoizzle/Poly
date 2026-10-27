@@ -18,6 +18,10 @@ internal record VariableAnalysisMetadata(
 /// created for its variable, so the type pass can stamp the exception type.</summary>
 internal sealed record CatchBindingMetadata(Variable Declaration) : IAnalysisMetadata;
 
+/// <summary>A <see cref="Parameter"/> use that is a different instance from the
+/// parameter in scope. The emitter follows this edge; it does not scan names.</summary>
+internal sealed record ParameterBindingMetadata(Parameter Declaration) : IAnalysisMetadata;
+
 /// <summary>One free binding of a <see cref="Lambda"/>, in tree-walk order.</summary>
 internal readonly record struct LambdaCaptureBinding(Variable? Variable, Parameter? Parameter);
 
@@ -116,6 +120,13 @@ internal sealed class ScopeValidator : INodeAnalyzer {
 
             case Variable variable:
                 ValidateVariableReference(context, state, variable);
+                AnalyzeChildrenWithState(context, state, node);
+                break;
+
+            case Parameter parameter:
+                if (InnermostParameter(state, parameter.Name) is { } declaration
+                    && !ReferenceEquals(declaration, parameter))
+                    context.SetMetadata(parameter, new ParameterBindingMetadata(declaration));
                 AnalyzeChildrenWithState(context, state, node);
                 break;
 
@@ -367,6 +378,18 @@ internal sealed class ScopeValidator : INodeAnalyzer {
             state.VariablesByName[parameter.Name] = stack;
         }
         stack.Push(parameter);
+    }
+
+    /// <summary>The innermost parameter of <paramref name="name"/>. A variable pushed
+    /// above it does not hide the parameter from a <see cref="Parameter"/> use.</summary>
+    private static Parameter? InnermostParameter(ScopeState state, string name) {
+        if (!state.VariablesByName.TryGetValue(name, out var stack))
+            return null;
+        foreach (var binding in stack) {
+            if (binding is Parameter parameter)
+                return parameter;
+        }
+        return null;
     }
 
     private void ValidateVariableReference(AnalysisContext context, ScopeState state, Variable variable) {

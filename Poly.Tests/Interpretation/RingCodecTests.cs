@@ -53,9 +53,9 @@ public class RingCodecTests {
     [Test]
     public async Task KindFor_HeapResidentValueTypes_AreHeapRefs() {
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(decimal))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DateTime))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DateOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(TimeOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        // DateTime, DateOnly, and TimeOnly are one word each (ABI7 D5). DateTimeOffset
+        // is 16 bytes, so it stays a handle, with TimeSpan and Guid.
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DateTimeOffset))).IsEqualTo(ValueRepresentationKind.HeapRef);
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(TimeSpan))).IsEqualTo(ValueRepresentationKind.HeapRef);
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(Guid))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }

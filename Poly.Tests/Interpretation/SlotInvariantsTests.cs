@@ -32,7 +32,9 @@ public class SlotInvariantsTests {
             typeof(double), typeof(float), typeof(string), typeof(object),
             typeof(int[]), typeof(DateTime), typeof(decimal),
         }) {
-            var expected = type.IsPrimitive || type.IsEnum
+            // DateTime is a one-word temporal (ToBinary), so it agrees with the
+            // scalars. DateTimeOffset does not: it is 16 bytes and stays a handle.
+            var expected = type.IsPrimitive || type.IsEnum || type == typeof(DateTime)
                 ? ValueRepresentationKind.StackScalar
                 : ValueRepresentationKind.HeapRef;
             await Assert.That(ValueRepresentationClassifier.KindFor(type)).IsEqualTo(expected);

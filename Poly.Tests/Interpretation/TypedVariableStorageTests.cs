@@ -37,8 +37,8 @@ public class TypedVariableStorageTests {
         var scan = Scan(program);
 
         var registers = scan.Registers;
-        await Assert.That(registers.Any(local => local.Name == "_dreg0" && local.Type == typeof(double)))
-            .IsTrue().Because("zr is a double variable, so its register holds the double: "
+        await Assert.That(registers.Any(local => local.Name == "_d0" && local.Type == typeof(double)))
+            .IsTrue().Because("zr is a double variable, so its pool lease holds the double (_d0, not _dreg0): "
                 + string.Join(", ", registers.Select(local => $"{local.Name}:{local.Type.Name}")));
 
         var offenders = scan.RegisterBitcasts
@@ -70,12 +70,12 @@ public class TypedVariableStorageTests {
         var built = Build(program);
         var scan = VmTree.Read(built.Expression);
 
-        var register = scan.Registers.Single(local => local.Name == "_dreg0");
+        var register = scan.Registers.Single(local => local.Name == "_d0");
         await Assert.That(register.Type).IsEqualTo(typeof(double));
-        await Assert.That(scan.Registers.Count(local => local.Name == "_dreg0")).IsEqualTo(1)
-            .Because("both statements write the one register the declaration bound");
+        await Assert.That(scan.Registers.Count(local => local.Name == "_d0")).IsEqualTo(1)
+            .Because("both statements write the one _d0 lease the declaration bound");
         await Assert.That(scan.RegisterBitcasts).IsEmpty()
-            .Because("the second statement reads and writes the double register directly");
+            .Because("the second statement reads and writes the double lease directly");
         await Assert.That(ResultOf(program)).IsEqualTo(1.25)
             .Because("the value still round-trips: z = z * 2 + 0.25");
     }
@@ -95,7 +95,7 @@ public class TypedVariableStorageTests {
         var scan = VmTree.Read(built.Expression);
 
         await Assert.That(scan.RegisterBitcasts).IsEmpty()
-            .Because("the call takes the double register as it stands; the register is not "
+            .Because("the call takes the double lease as it stands; the lease is not "
                 + "read through a bitcast and written back");
 
         var echo = CallArguments(built.Expression, nameof(DoubleHost.Echo));
@@ -121,11 +121,11 @@ public class TypedVariableStorageTests {
 
         var scan = Scan(program);
 
-        var register = scan.Registers.Single(local => local.Name == "_reg0");
+        var register = scan.Registers.Single(local => local.Name == "_r0");
         await Assert.That(register.Type).IsEqualTo(typeof(long))
-            .Because("a cell-backed local's register holds the cell handle, not the value");
-        await Assert.That(scan.Registers.Any(local => local.Name == "_dreg0")).IsFalse()
-            .Because("retyping the register would silently coerce the cell handle");
+            .Because("a cell-backed local's lease holds the cell handle, not the value; the lease is _r0, not _reg0");
+        await Assert.That(scan.Registers.Any(local => local.Name == "_d0")).IsFalse()
+            .Because("retyping the lease to _d0 would silently coerce the cell handle");
         await Assert.That(scan.RegisterBitcasts).IsEmpty()
             .Because("the conversion belongs to the cell, which is the word boundary");
 
@@ -149,12 +149,12 @@ public class TypedVariableStorageTests {
 
         var scan = Scan(program);
 
-        var doubleAtZero = scan.Registers.SingleOrDefault(local => local.Name == "_dreg0");
-        var wordAtZero = scan.Registers.SingleOrDefault(local => local.Name == "_reg0");
+        var doubleAtZero = scan.Registers.SingleOrDefault(local => local.Name == "_d0");
+        var wordAtZero = scan.Registers.SingleOrDefault(local => local.Name == "_r0");
         await Assert.That(doubleAtZero).IsNotNull()
-            .Because("the first block's double takes index 0 at the double representation");
+            .Because("the first block's double takes pool index 0 as _d0");
         await Assert.That(wordAtZero).IsNotNull()
-            .Because("the second block's long reuses index 0 at the word representation");
+            .Because("the second block's long reuses index 0 as _r0");
         await Assert.That(doubleAtZero!.Type).IsEqualTo(typeof(double));
         await Assert.That(wordAtZero!.Type).IsEqualTo(typeof(long));
         await Assert.That(ReferenceEquals(doubleAtZero, wordAtZero)).IsFalse()
@@ -177,7 +177,8 @@ public class TypedVariableStorageTests {
         var scan = Scan(program);
 
         var register = scan.Registers.Single();
-        await Assert.That(register.Name).IsEqualTo("_reg0");
+        await Assert.That(register.Name).IsEqualTo("_r0")
+            .Because("an integer variable is the pool's long lease _r0, not a _reg0 local");
         await Assert.That(register.Type).IsEqualTo(typeof(long));
         await Assert.That(scan.RegisterBitcasts).IsEmpty();
         await Assert.That(DirectVmAbiEmitterTests.ExecDirect(program)).IsEqualTo(8L);

@@ -174,9 +174,11 @@ public class DirectVmAbiEmitterTests {
                 new Assignment(y, new Constant(20)),
                 new Add(x, y)
             ], [x, y]));
-        // Every operand leaves its result in the ring, so the Add's two operands and its
-        // result are three slots; the block reuses them statement after statement.
-        await Assert.That(program.MaxRingDepth).IsLessThanOrEqualTo(4);
+        // x and y are pool leases at indexes 0 and 1. The Add's two operands and its
+        // result sit above those leases, so the high water is 5, not the old
+        // statement-only ceiling of 4.
+        await Assert.That(program.MaxRingDepth).IsEqualTo(5)
+            .Because("two variable leases plus the add's slots, not the old statement-only ceiling of 4");
     }
 
     [Test, Timeout(10_000)]

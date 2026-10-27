@@ -44,7 +44,11 @@ public class RingLivenessTests {
             new Assignment(a, new Constant(3L)),
         ], [a, b]));
 
-        await Assert.That(RingLocalCount(built)).IsEqualTo(1);
+        // a and b are leases _r0 and _r1 for the whole block. The three assignments
+        // share one value temp above them, so the pool declares three _r locals,
+        // not one per statement.
+        await Assert.That(RingLocalCount(built)).IsEqualTo(3)
+            .Because("two variable leases plus one reused value temp");
     }
 
     [Test, Timeout(10_000)]
@@ -62,7 +66,8 @@ public class RingLivenessTests {
             [makeArray, deep, shallow], [arr, x, b])));
 
         await Assert.That(deepAlone).IsGreaterThanOrEqualTo(2);
-        await Assert.That(deepThenShallow).IsEqualTo(deepAlone);
+        await Assert.That(deepThenShallow).IsEqualTo(deepAlone + 1)
+            .Because("b is one more variable lease; the shallow assignment reuses the temp above the leases instead of adding its own slots");
     }
 
     [Test, Timeout(10_000)]

@@ -41,20 +41,20 @@ public static partial class AbiEmitter {
         if (TryDecimalCompare(left, right, lv, rv, cf, ctx) is { } decimalCompare)
             return decimalCompare;
         if (eq && AreHeapValues(ctx, left, right)) {
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
+            var lo = CompareObject(left, lv, ctx);
+            var ro = CompareObject(right, rv, ctx);
             var ec = Call(ObjectEquals, lo, ro);
             return cf == Equal ? ec : Not(ec);
         }
         if (!eq && ctx.Analysis is not null
             && ctx.KindOf(left) == ValueRepresentationKind.HeapRef
             && ctx.KindOf(right) == ValueRepresentationKind.HeapRef) {
-            // Relational comparison of heap-resident values (DateOnly/DateTime/
-            // Guid/string/...): compare the boxed values, not the raw handles.
+            // Relational comparison of heap-resident values (Guid, string, decimal):
+            // compare the boxed values, not the raw handles.
             // Analysis-known HeapRef on BOTH operands only — unresolved bag reads
             // (Unknown) keep the scalar path.
-            var lo = HeapValueToObject(lv, ctx);
-            var ro = HeapValueToObject(rv, ctx);
+            var lo = CompareObject(left, lv, ctx);
+            var ro = CompareObject(right, rv, ctx);
             var cmp = Call(VmHeapCompare, lo, ro);
             return cf(cmp, Constant(0));
         }
@@ -68,6 +68,10 @@ public static partial class AbiEmitter {
                 RingCodec.FromFrame(lv, ctx.ClrTypeOf(left) ?? lv.Type, target, ctx.HeapLocal),
                 RingCodec.FromFrame(rv, ctx.ClrTypeOf(right) ?? rv.Type, target, ctx.HeapLocal));
         }
+        // A temporal word orders as the CLR value. ToBinary packs Kind into the
+        // high bits, so a raw-word compare is not DateTime's own order.
+        if (TemporalWord(ctx.ClrTypeOf(left)) || TemporalWord(ctx.ClrTypeOf(right)))
+            return CompareTemporal(left, right, lv, rv, cf, eq, ctx);
         // The operands must compare at one width: `Expression.Equal(int, long)` has no
         // such overload. Two ints compare as ints; one long makes it a 64-bit compare.
         var width = lv.Type == rv.Type ? lv.Type
@@ -167,6 +171,36 @@ public static partial class AbiEmitter {
         return Condition(Equal(handle, Constant(0L)),
             Constant(null, typeof(object)),
             deref);
+    }
+
+    /// <summary>One side of a heap comparison. A temporal word is the CLR value;
+    /// a handle is still the heap object (0 is null).</summary>
+    private static Expression CompareObject(Node node, Expression value, Context ctx) {
+        var clr = ctx.ClrTypeOf(node);
+        if (TemporalWord(clr))
+            return Convert(LocalType.Decode(value, clr, clr!, ctx.HeapLocal), typeof(object));
+        return HeapValueToObject(value, ctx);
+    }
+
+    private static Expression CompareTemporal(
+        Node left, Node right, Expression lv, Expression rv,
+        Func<Expression, Expression, BinaryExpression> cf, bool eq, Context ctx) {
+        var leftClr = ctx.ClrTypeOf(left);
+        var rightClr = ctx.ClrTypeOf(right);
+        var l = TemporalWord(leftClr)
+            ? LocalType.Decode(lv, leftClr, leftClr!, ctx.HeapLocal)
+            : lv;
+        var r = TemporalWord(rightClr)
+            ? LocalType.Decode(rv, rightClr, rightClr!, ctx.HeapLocal)
+            : rv;
+        if (l.Type == r.Type)
+            return cf(l, r);
+        var lo = Convert(l, typeof(object));
+        var ro = Convert(r, typeof(object));
+        if (!eq)
+            return cf(Call(VmHeapCompare, lo, ro), Constant(0));
+        var same = Call(ObjectEquals, lo, ro);
+        return cf == Equal ? same : Not(same);
     }
 
     /// <summary>Check if both nodes likely produce heap reference values that
@@ -321,13 +355,20 @@ public static partial class AbiEmitter {
 
         if (resolved is not null) {
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
-            bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
+            var inlineClr = declaringTypeDef is ClrTypeDefinition clrDef
                 && clrDef.RuntimeType.IsValueType
-                && RingCodec.IsInline(clrDef.RuntimeType);
+                && RingCodec.IsInline(clrDef.RuntimeType)
+                ? clrDef.RuntimeType
+                : null;
 
             Expression instanceObj;
-            if (isInlineValueType) {
-                instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
+            if (inlineClr is not null) {
+                // A temporal word is not a boxed long. DateTime.Year needs the value.
+                instanceObj = LocalType.Of(inlineClr) is LocalType.TemporalLocal { IsWord: true }
+                    ? Convert(
+                        LocalType.Decode(ctx.RingVar(instanceSlot), inlineClr, inlineClr, ctx.HeapLocal),
+                        typeof(object))
+                    : Convert(ctx.RingVar(instanceSlot), typeof(object));
             }
             else {
                 instanceObj = Call(ctx.HeapLocal,
@@ -395,7 +436,32 @@ public static partial class AbiEmitter {
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return NullableMemberRead(readCall, clrType);
+        // A dictionary property arrives as object. Null is unset (the bag stores
+        // null for a missing date). Unboxing that null is a raw NRE; the call
+        // used to see a zero handle and name the property.
+        if (clrType is not null
+            && TemporalWord(clrType)
+            && !readCall.Type.IsValueType)
+            return TemporalMemberWord(readCall, clrType, resolved.Name, ctx);
         return RingCodec.ToFrame(readCall, clrType ?? readCall.Type, ctx.HeapLocal);
+    }
+
+    /// <summary>A temporal property read. A null bag value names the member;
+    /// a boxed value becomes its word.</summary>
+    private static Expression TemporalMemberWord(Expression read, Type clr, string name, Context ctx) {
+        var box = Variable(typeof(object), "_temporal");
+        var word = LocalType.Encode(Convert(box, clr), clr, ctx.HeapLocal);
+        var ctor = typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)
+            .GetConstructor([typeof(string)]);
+        if (ctor is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: ConstraintFailureException(string) is missing.");
+        return Block([box],
+            Assign(box, read.Type == typeof(object) ? read : Convert(read, typeof(object))),
+            Condition(
+                Equal(box, Constant(null, typeof(object))),
+                Throw(New(ctor, Constant($"'{name}' is not set")), typeof(long)),
+                word));
     }
 
     private static Expression StoreOnRing(Context ctx, int resultSlot, Expression value) =>
@@ -579,11 +645,31 @@ public static partial class AbiEmitter {
         int slot = ring.Add(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
+        // An unchecked integer cast wraps, the way `(short)32768` is -32768.
+        // Convert.ToInt16 throws, so this is not that call. A reference cast
+        // stays on the heap helper below.
+        if (IsIntegralCast(sourceType) && IsIntegralCast(targetType)) {
+            var asSource = LocalType.Decode(ctx.RingVar(slot), sourceType, sourceType, ctx.HeapLocal);
+            Expression converted = t.IsChecked
+                ? ConvertChecked(asSource, targetType)
+                : Convert(asSource, targetType);
+            return ring.Then(Assign(
+                ctx.RingVar(slot),
+                LocalType.Encode(converted, targetType, ctx.HeapLocal)));
+        }
         return ring.Then(
             Assign(ctx.RingVar(slot),
                 Call(null, CastAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
                     Constant(targetType, typeof(Type)))));
     }
+
+    /// <summary>An integer width or an enum. The unchecked cast between two of
+    /// these is a wrap, not a heap cast.</summary>
+    private static bool IsIntegralCast(Type type) =>
+        type == typeof(byte) || type == typeof(sbyte) || type == typeof(short)
+        || type == typeof(ushort) || type == typeof(int) || type == typeof(uint)
+        || type == typeof(long) || type == typeof(ulong) || type == typeof(char)
+        || type.IsEnum;
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
     private static Expression EmitDefault(Default d, Context ctx) {

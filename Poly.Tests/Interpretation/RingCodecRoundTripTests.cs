@@ -68,14 +68,14 @@ public class RingCodecRoundTripTests {
     }
 
     [Test]
-    public async Task Kind_IsTheFrameRepresentation() {
-        await Assert.That(FrameRepresentation.For(typeof(int)) is FrameRepresentation.Word).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(nint)) is FrameRepresentation.Word).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(double)) is FrameRepresentation.Bits).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(bool)) is FrameRepresentation.Flag).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(decimal)) is FrameRepresentation.Handle).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(int?)) is FrameRepresentation.Optional).IsTrue();
-        await Assert.That(FrameRepresentation.For(typeof(void)).Kind).IsEqualTo(ValueRepresentationKind.Void);
+    public async Task Kind_IsTheLocalType() {
+        await Assert.That(LocalType.Of(typeof(int)) is LocalType.Int32Local).IsTrue();
+        await Assert.That(LocalType.Of(typeof(nint)) is LocalType.Int64Local).IsTrue();
+        await Assert.That(LocalType.Of(typeof(double)) is LocalType.IEEELocal).IsTrue();
+        await Assert.That(LocalType.Of(typeof(bool)) is LocalType.FlagLocal).IsTrue();
+        await Assert.That(LocalType.Of(typeof(decimal)) is LocalType.StructLocal).IsTrue();
+        await Assert.That(LocalType.Of(typeof(int?)) is LocalType.NullableLocal).IsTrue();
+        await Assert.That(LocalType.Of(typeof(void)).Kind).IsEqualTo(ValueRepresentationKind.Void);
     }
 
     [Test]

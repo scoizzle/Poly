@@ -115,9 +115,8 @@ public static partial class AbiEmitter {
         if (rootParameters is not null) {
             ctx.IsCompiledFunctionBody = true;
             ctx.RestoreParamSlots(1);
-            ctx.PushFrameParameters();
             foreach (var parameter in rootParameters)
-                ctx.MapFrameParameter(parameter, ctx.DeclareParameter(parameter));
+                ctx.DeclareParameter(parameter);
             rootArgCount = 1 + rootParameters.Count;
             ctx.ReserveFrameSlots(rootArgCount);
         }
@@ -373,19 +372,18 @@ public static partial class AbiEmitter {
     private sealed class UnresumableBodyRejection(string message) : InvalidOperationException(message);
 
     private static Expression EmitConstant(Constant c, Context ctx) {
-        int slot = ctx.AllocSlot();
         if (c.Value is double d)
-            return Assign(ctx.RingVar(slot, typeof(double)), Constant(d));
+            return Assign(ctx.HoldRing(typeof(double)), Constant(d));
         if (c.Value is float f)
-            return Assign(ctx.RingVar(slot, typeof(float)), Constant(f));
+            return Assign(ctx.HoldRing(typeof(float)), Constant(f));
         // An int literal is an int: its boxed CLR type is the width analysis resolves for
         // the constant, so the slot carries the same width and an all-int expression pays
         // no conversion between a variable and a literal.
         if (c.Value is int i)
-            return Assign(ctx.RingVar(slot, typeof(int)), Constant(i));
+            return Assign(ctx.HoldRing(typeof(int)), Constant(i));
         if (RingCodec.TryInlineConstant(c.Value, out long val))
-            return Assign(ctx.RingVar(slot), Constant(val));
-        return Assign(ctx.RingVar(slot),
+            return Assign(ctx.HoldRing(typeof(long)), Constant(val));
+        return Assign(ctx.HoldRing(typeof(long)),
             RingCodec.Box(Convert(Constant(c.Value), typeof(object)), ctx.HeapLocal));
     }
 
@@ -410,7 +408,9 @@ public static partial class AbiEmitter {
                 if (i < n.Arguments.Length) {
                     var ringVal = ctx.RingVar(argSlots[i]);
                     if (paramType.IsValueType) {
-                        ctorArgs[i] = Convert(ringVal, paramType);
+                        ctorArgs[i] = LocalType.Of(paramType) is LocalType.TemporalLocal { IsWord: true }
+                            ? LocalType.Decode(ringVal, paramType, paramType, ctx.HeapLocal)
+                            : Convert(ringVal, paramType);
                     }
                     else {
                         ctorArgs[i] = Convert(
@@ -428,11 +428,17 @@ public static partial class AbiEmitter {
                 }
             }
             var newExpr = New(ctor, ctorArgs);
-            var boxed = Convert(newExpr, typeof(object));
             int slot = ctx.AllocSlot();
-            var handle = Call(ctx.HeapLocal, HeapAllocate, boxed);
             ctx.RingDepth = slot + 1;
-            return args.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+            // An inline value (a temporal word, an int, an IEEE bit pattern) is the
+            // word itself. Boxing it and then reading the handle as that word returns
+            // the default.
+            Expression stored = targetType is not null && RingCodec.IsInline(targetType)
+                ? LocalType.Encode(newExpr, targetType, ctx.HeapLocal)
+                : Convert(
+                    Call(ctx.HeapLocal, HeapAllocate, Convert(newExpr, typeof(object))),
+                    typeof(long));
+            return args.Then(Assign(ctx.RingVar(slot), stored));
         }
         var typeName = targetType?.Name ?? n.Type.ToString();
         throw new InvalidOperationException(
@@ -549,7 +555,7 @@ public static partial class AbiEmitter {
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
         // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
-        // A value-type element that is not a ring slot (decimal, DateTime, Guid) is a heap
+        // A value-type element that is not a ring slot (decimal, Guid) is a heap
         // handle, and a fresh array's zero slot would be the null handle, not default(T);
         // reject the optional spelling rather than read null where C# gives the default.
         var elementClr = ArrayElementClrType(n.ElementType, ctx);
@@ -602,17 +608,19 @@ public static partial class AbiEmitter {
     }
 
     private static Expression SpillToRing(Expression value, Context ctx) {
-        int slot = ctx.AllocSlot();
-        ctx.RingDepth = slot + 1;
         // An IEEE value keeps its own local: that is the whole point of the typed
         // slot, and the reason an all-IEEE expression needs no bitcast between operands.
-        return Assign(ctx.RingVar(slot, RingCodec.SlotTypeOf(value.Type)), value);
+        using var scope = ctx.Scope();
+        return scope.Yield(value);
     }
 
     private static Expression EmitBinaryArithmeticValue(
         Node left, Node right,
         Func<Expression, Expression, BinaryExpression> factory,
         Context ctx) {
+        if ((factory == LeftShift || factory == RightShift)
+            && (ContainsSuspend(left) || ContainsSuspend(right)))
+            return EmitShiftAcrossSuspend(left, right, factory, ctx);
         var leftVal = ValueOf(left, ctx);
         var rightVal = ValueOf(right, ctx);
         if (Nullable.GetUnderlyingType(leftVal.Type) is not null
@@ -733,11 +741,12 @@ public static partial class AbiEmitter {
         Context ctx) {
         var nullable = typeof(Nullable<>).MakeGenericType(
             PromoteUnderlying(left, right, leftVal, rightVal, ctx, shift: true));
-        var local = Variable(nullable, "_shift");
+        using var shift = ctx.LeaseHelper(nullable, "_shift");
+        var local = shift.Local;
         var shifted = factory(
             Property(local, "Value"),
             RingCodec.AsRepresentation(rightVal, typeof(int)));
-        return Block([local],
+        return Block(
             Assign(local, AsNullableOperand(left, leftVal, nullable, ctx)),
             Condition(
                 Property(local, "HasValue"),
@@ -776,7 +785,7 @@ public static partial class AbiEmitter {
         // location is the only unbox; the member stores the object it produces.
         if (valueClr is not null && Nullable.GetUnderlyingType(valueClr) is not null)
             return Convert(
-                new SlotLocation.Ring(valueSlot).Holding(nullableType).Read(ctx),
+                new SlotLocation.Ring(valueSlot).ReadAs(ctx, nullableType),
                 typeof(object));
         if (valueClr is not null && NeedsHeapUnbox(valueClr))
             return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
@@ -867,24 +876,147 @@ public static partial class AbiEmitter {
             : left == typeof(long) || right == typeof(long) ? typeof(long)
             : left;
 
+    private static bool ContainsSuspend(Node node) {
+        if (node is SuspendNode)
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && ContainsSuspend(child))
+                return true;
+        return false;
+    }
+
+    /// <summary>A shift whose operand suspends cannot leave the resume label inside
+    /// the value assigned to the ring. The helper is leased before either operand is
+    /// compiled, so a suspend in the count still sees <c>_shift</c>.</summary>
+    private static Expression EmitShiftAcrossSuspend(
+        Node left, Node right,
+        Func<Expression, Expression, BinaryExpression> factory,
+        Context ctx) {
+        if (NullableOperand(left, ctx) || NullableOperand(right, ctx)) {
+            var nullable = typeof(Nullable<>).MakeGenericType(ShiftWidth(left, ctx));
+            using var shift = ctx.LeaseHelper(nullable, "_shift");
+            var local = shift.Local;
+            var leftCompiled = Compile(left, ctx);
+            var leftRead = leftCompiled.RequireResult(left).Read(ctx);
+            var rightCompiled = Compile(right, ctx);
+            var rightRead = rightCompiled.RequireResult(right).Read(ctx);
+            var shifted = factory(
+                Property(local, "Value"),
+                RingCodec.AsRepresentation(rightRead, typeof(int)));
+            return Block(
+                leftCompiled.Code,
+                Assign(local, AsNullableOperand(left, leftRead, nullable, ctx)),
+                rightCompiled.Code,
+                Condition(
+                    Property(local, "HasValue"),
+                    Convert(shifted, nullable),
+                    Default(nullable)));
+        }
+        var leftCode = Compile(left, ctx);
+        var rightCode = Compile(right, ctx);
+        return Block(
+            leftCode.Code,
+            rightCode.Code,
+            factory(
+                RingCodec.AsRepresentation(leftCode.RequireResult(left).Read(ctx), IntegerWidthOf(left, ctx)),
+                RingCodec.AsRepresentation(rightCode.RequireResult(right).Read(ctx), typeof(int))));
+    }
+
+    private static bool NullableOperand(Node node, Context ctx) {
+        var clr = ctx.ClrTypeOf(node);
+        return clr is not null && Nullable.GetUnderlyingType(clr) is not null;
+    }
+
+    private static Type ShiftWidth(Node left, Context ctx) {
+        var clr = ctx.ClrTypeOf(left);
+        var underlying = clr is null ? null : Nullable.GetUnderlyingType(clr) ?? clr;
+        if (underlying is null)
+            throw new InvalidOperationException(
+                "VM compile rejected: cannot resolve the width of a nullable arithmetic operand.");
+        return underlying == typeof(ulong) ? typeof(ulong)
+            : RingCodec.IsInt32Width(underlying) ? typeof(int) : typeof(long);
+    }
+
+    /// <summary>A coalesce whose arm suspends cannot leave the resume label inside
+    /// <c>Expression.Coalesce</c> or an assignment. <c>_coal</c> is leased before the
+    /// suspending arm is compiled. The right arm runs only when the left has no value,
+    /// as a statement, and the result is a condition that does not contain the label.</summary>
+    private static Expression EmitCoalesceAcrossSuspend(Coalesce n, Context ctx) {
+        bool leftSuspends = ContainsSuspend(n.LeftHandValue);
+        CompiledNode leftCompiled = default;
+        Expression leftRead;
+        Type helperType;
+        if (!leftSuspends) {
+            leftCompiled = Compile(n.LeftHandValue, ctx);
+            leftRead = leftCompiled.RequireResult(n.LeftHandValue).Read(ctx);
+            helperType = Nullable.GetUnderlyingType(leftRead.Type) is not null ? leftRead.Type : typeof(long);
+        }
+        else {
+            var declared = ctx.ClrTypeOf(n.LeftHandValue);
+            helperType = declared is not null && Nullable.GetUnderlyingType(declared) is not null
+                ? declared
+                : typeof(long);
+            leftRead = Constant(0L);
+        }
+        using var coal = ctx.LeaseHelper(helperType, "_coal");
+        if (leftSuspends) {
+            leftCompiled = Compile(n.LeftHandValue, ctx);
+            leftRead = leftCompiled.RequireResult(n.LeftHandValue).Read(ctx);
+        }
+        var rightCompiled = Compile(n.RightHandValue, ctx);
+        var rightRead = rightCompiled.RequireResult(n.RightHandValue).Read(ctx);
+        var done = Label("coalDone");
+        var tmp = coal.Local;
+        if (Nullable.GetUnderlyingType(tmp.Type) is { } underlying) {
+            Expression stored = leftRead!.Type == tmp.Type ? leftRead : Convert(leftRead, tmp.Type);
+            Expression right = rightRead.Type == underlying || rightRead.Type == tmp.Type
+                ? rightRead
+                : Convert(rightRead, underlying);
+            return Block(
+                leftCompiled.Code,
+                Assign(tmp, stored),
+                IfThen(Property(tmp, "HasValue"), Goto(done)),
+                rightCompiled.Code,
+                Label(done),
+                Condition(Property(tmp, "HasValue"), Property(tmp, "Value"), right));
+        }
+        bool sentinel = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis);
+        Expression leftWord = leftRead!.Type == typeof(long) ? leftRead : RingCodec.ToWord(leftRead);
+        Expression whenLeft = sentinel
+            ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
+            : tmp;
+        Expression present = sentinel ? NotEqual(tmp, Constant(0L)) : Constant(true);
+        return Block(
+            leftCompiled.Code,
+            Assign(tmp, leftWord),
+            IfThen(present, Goto(done)),
+            rightCompiled.Code,
+            Label(done),
+            Condition(present, whenLeft, RingCodec.ToWord(rightRead)));
+    }
+
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
+        if (ContainsSuspend(n))
+            return EmitCoalesceAcrossSuspend(n, ctx);
         var leftVal = ValueOf(n.LeftHandValue, ctx);
         if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
             var rightArm = ValueOf(n.RightHandValue, ctx);
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm
                 : Convert(rightArm, underlying);
-            var leftLocal = Variable(leftVal.Type, "_coal");
-            return Block([leftLocal], Assign(leftLocal, leftVal), Coalesce(leftLocal, right));
+            using var coal = ctx.LeaseHelper(leftVal.Type, "_coal");
+            var leftLocal = coal.Local;
+            return Block(Assign(leftLocal, leftVal), Coalesce(leftLocal, right));
         }
-        var tmp = Variable(typeof(long), "_coal");
+        using var held = ctx.LeaseHelper(typeof(long), "_coal");
+        var tmp = held.Local;
         // A coalesce answers in the word: its left side is a nullable heap handle, so
         // an IEEE right arm crosses the boundary here rather than widening the result.
         var rightVal = RingCodec.ToWord(ValueOf(n.RightHandValue, ctx));
         Expression whenLeft = RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
             ? UnboxIfHeapNullable(ctx, n.LeftHandValue, tmp)
             : tmp;
-        return Block([tmp],
+        return Block(
             Assign(tmp, leftVal),
             Condition(
                 RingCodec.UsesNullSentinel(n.LeftHandValue, ctx.Analysis)
@@ -922,4 +1054,5 @@ public static partial class AbiEmitter {
     /// <c>int</c> zero, a word with the word's.</summary>
     private static Expression IsNonZero(Expression value) =>
         value.Type == typeof(int) ? NotEqual(value, Constant(0)) : NotEqual(value, Constant(0L));
+
 }

@@ -21,7 +21,7 @@ public static partial class AbiEmitter {
     private static Expression EmitResult(Expression call, Type? returnType, Context ctx) =>
         returnType == typeof(void)
             ? Block(call, Constant(0L))
-            : RingCodec.FromClr(call, returnType, ctx.HeapLocal);
+            : RingCodec.ToFrame(call, returnType ?? call.Type, ctx.HeapLocal);
 
     /// <summary>
     /// Invoke: for Lambda targets, compile the body inline (no separate delegate).
@@ -95,9 +95,15 @@ public static partial class AbiEmitter {
                                 continue;
                             }
                             var ringVal = ctx.RingVar(argSlots[i]);
-                            methodArgs[i] = RingCodec.ToClr(
-                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i],
-                                ctx.Analysis, ctx.HeapLocal);
+                            var parameterType = methodParams[i].ParameterType;
+                            var sourceClr = ctx.ClrTypeOf(invoke.Arguments[i]);
+                            methodArgs[i] = Nullable.GetUnderlyingType(parameterType) is not null
+                                && sourceClr is not null
+                                && Nullable.GetUnderlyingType(sourceClr) is not null
+                                ? new SlotLocation.Ring(argSlots[i]).Holding(parameterType).Read(ctx)
+                                : RingCodec.ToClr(
+                                    ringVal, parameterType, invoke.Arguments[i],
+                                    ctx.Analysis, ctx.HeapLocal);
                         }
                     }
 
@@ -627,7 +633,7 @@ public static partial class AbiEmitter {
     /// </summary>
     private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, Context ctx, Node? source) {
         if (asyncReturn == typeof(Task))
-            return RingCodec.FromClr(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
+            return RingCodec.ToFrame(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
         var resultType = asyncReturn.GetGenericArguments()[0];
         if (bodyValue is null)
             throw new InvalidOperationException(
@@ -638,7 +644,7 @@ public static partial class AbiEmitter {
                 $"VM compile rejected: async method returning '{asyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
         var yielded = RingCodec.ToClr(bodyValue, resultType, source, ctx.Analysis, ctx.HeapLocal);
         var task = Call(TaskFromResultInfo.MakeGenericMethod(resultType), yielded);
-        return RingCodec.FromClr(task, asyncReturn, ctx.HeapLocal);
+        return RingCodec.ToFrame(task, asyncReturn, ctx.HeapLocal);
     }
 
     // Compiled AST constructors and methods, per definition node and compilation
@@ -803,7 +809,7 @@ public static partial class AbiEmitter {
                     out var bridgePrelude, out var bridgeArgument)) {
                 ring.AddUncounted(bridgePrelude);
                 int bridged = ring.AddValue(
-                    RingCodec.FromClr(bridgeArgument, parameterType, ctx.HeapLocal));
+                    RingCodec.ToFrame(bridgeArgument, parameterType ?? bridgeArgument.Type, ctx.HeapLocal));
                 values.Add(ctx.RingVar(bridged));
                 continue;
             }

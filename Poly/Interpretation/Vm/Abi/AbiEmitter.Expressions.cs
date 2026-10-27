@@ -65,8 +65,8 @@ public static partial class AbiEmitter {
                 leftIeee ? ctx.ClrTypeOf(left) : null,
                 rightIeee ? ctx.ClrTypeOf(right) : null);
             return cf(
-                AsIeee(left, lv, target, ctx),
-                AsIeee(right, rv, target, ctx));
+                RingCodec.FromFrame(lv, ctx.ClrTypeOf(left) ?? lv.Type, target, ctx.HeapLocal),
+                RingCodec.FromFrame(rv, ctx.ClrTypeOf(right) ?? rv.Type, target, ctx.HeapLocal));
         }
         // The operands must compare at one width: `Expression.Equal(int, long)` has no
         // such overload. Two ints compare as ints; one long makes it a 64-bit compare.
@@ -128,8 +128,8 @@ public static partial class AbiEmitter {
         if (!ConvertsToDecimal(leftType) || !ConvertsToDecimal(rightType))
             return null;
         return cf(
-            AsUnderlying(left, lv, typeof(decimal), ctx),
-            AsUnderlying(right, rv, typeof(decimal), ctx));
+            RingCodec.FromFrame(lv, UnderlyingOf(left, lv, ctx) ?? lv.Type, typeof(decimal), ctx.HeapLocal),
+            RingCodec.FromFrame(rv, UnderlyingOf(right, rv, ctx) ?? rv.Type, typeof(decimal), ctx.HeapLocal));
     }
 
     /// <summary>Comparison as a ring value: the bool test the condition path already uses,
@@ -395,7 +395,7 @@ public static partial class AbiEmitter {
             ?? resolved.MemberTypeDefinition.PrimitiveType?.GetClrType();
         if (clrType is not null && Nullable.GetUnderlyingType(clrType) is not null)
             return NullableMemberRead(readCall, clrType);
-        return RingCodec.FromClr(readCall, clrType, ctx.HeapLocal);
+        return RingCodec.ToFrame(readCall, clrType ?? readCall.Type, ctx.HeapLocal);
     }
 
     private static Expression StoreOnRing(Context ctx, int resultSlot, Expression value) =>
@@ -529,7 +529,7 @@ public static partial class AbiEmitter {
         if (resultType is null) {
             return ring.Then(Block(call, Assign(ctx.RingVar(slot), Constant(0L))));
         }
-        return ring.Then(Assign(ctx.RingVar(slot), RingCodec.FromClr(call, resultType, ctx.HeapLocal)));
+        return ring.Then(Assign(ctx.RingVar(slot), RingCodec.ToFrame(call, resultType, ctx.HeapLocal)));
     }
 
     /// <summary>Await of an awaitable that is not one of the well-known BCL shapes.
@@ -551,7 +551,7 @@ public static partial class AbiEmitter {
             return ring.Then(Block(result, Assign(ctx.RingVar(slot), Constant(0L))));
         }
         return ring.Then(
-            Assign(ctx.RingVar(slot), RingCodec.FromClr(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
+            Assign(ctx.RingVar(slot), RingCodec.ToFrame(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>

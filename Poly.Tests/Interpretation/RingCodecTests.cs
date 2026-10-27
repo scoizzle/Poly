@@ -11,29 +11,29 @@ namespace Poly.Tests.Interpretation;
 public class RingCodecTests {
     [Test]
     public async Task KindFor_IntegerPrimitives_AreStackScalars() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(long))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(int))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(short))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(byte))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(sbyte))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(ushort))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(uint))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(ulong))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(char))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(long))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(int))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(short))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(byte))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(sbyte))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(ushort))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(uint))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(ulong))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(char))).IsEqualTo(ValueRepresentationKind.StackScalar);
     }
 
     [Test]
     public async Task KindFor_Bool_IsStackScalar() {
         // A boolean is an inline word: 0 = false, non-zero = true. Boolean-ness is
         // carried by the CLR type and decoded at the boundary, not a slot kind.
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(bool))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(bool))).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(RingCodec.IsInline(typeof(bool))).IsTrue();
     }
 
     [Test]
     public async Task KindFor_FloatAndDouble_AreStackScalarsAndIeee() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(float))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(double))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(float))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(double))).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(RingCodec.IsIeee(typeof(float))).IsTrue();
         await Assert.That(RingCodec.IsIeee(typeof(double))).IsTrue();
         await Assert.That(RingCodec.IsIeee(typeof(int))).IsFalse();
@@ -41,30 +41,30 @@ public class RingCodecTests {
 
     [Test]
     public async Task KindFor_EnumAndNullableEnum_AreStackScalars() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(DayOfWeek))).IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(DayOfWeek?))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DayOfWeek))).IsEqualTo(ValueRepresentationKind.StackScalar);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DayOfWeek?))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     [Test]
-    public async Task KindFor_NullableInt_IsStackScalar() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(int?))).IsEqualTo(ValueRepresentationKind.StackScalar);
+    public async Task KindFor_NullableInt_IsHeapRef() {
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(int?))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     [Test]
     public async Task KindFor_HeapResidentValueTypes_AreHeapRefs() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(decimal))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(DateTime))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(DateOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(TimeOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(TimeSpan))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(Guid))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(decimal))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DateTime))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DateOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(TimeOnly))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(TimeSpan))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(Guid))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     [Test]
     public async Task KindFor_ReferenceTypes_AreHeapRefs() {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(string))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(object))).IsEqualTo(ValueRepresentationKind.HeapRef);
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(int[]))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(string))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(object))).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ValueRepresentationClassifier.KindFor(typeof(int[]))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
     private static ValueRepresentationKind ConstantKind(object? value) =>
@@ -75,8 +75,7 @@ public class RingCodecTests {
         await Assert.That(ConstantKind(true)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(1.5)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(7L)).IsEqualTo(ValueRepresentationKind.StackScalar);
-        // An enum constant is boxed by the emitter, not folded to an inline slot.
-        await Assert.That(ConstantKind(DayOfWeek.Monday)).IsEqualTo(ValueRepresentationKind.HeapRef);
+        await Assert.That(ConstantKind(DayOfWeek.Monday)).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ConstantKind(null)).IsEqualTo(ValueRepresentationKind.HeapRef);
     }
 
@@ -94,7 +93,8 @@ public class RingCodecTests {
         await Assert.That(RingCodec.TryInlineConstant(ulong.MaxValue, out long ul)).IsTrue();
         await Assert.That(ul).IsEqualTo(unchecked((long)ulong.MaxValue));
 
-        await Assert.That(RingCodec.TryInlineConstant(DayOfWeek.Monday, out _)).IsFalse();
+        await Assert.That(RingCodec.TryInlineConstant(DayOfWeek.Monday, out long monday)).IsTrue();
+        await Assert.That(monday).IsEqualTo((long)DayOfWeek.Monday);
         await Assert.That(RingCodec.TryInlineConstant("x", out _)).IsFalse();
     }
 

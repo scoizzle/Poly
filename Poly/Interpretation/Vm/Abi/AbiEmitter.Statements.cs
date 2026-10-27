@@ -69,7 +69,7 @@ public static partial class AbiEmitter {
                 ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
             if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
-                writeValue = NullableMemberWrite(a.Value, ctx.RingVar(valueSlot), memberUnderlying, ctx);
+                writeValue = NullableMemberWrite(a.Value, valueSlot, clrMemberType, memberUnderlying, ctx);
             }
             else if (clrMemberType is not null
                 && clrMemberType.IsValueType
@@ -637,10 +637,12 @@ public static partial class AbiEmitter {
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
         var nullable = ctx.TryClrType(p) ?? (p.TypeReference is null ? null : ctx.TryClrType(p.TypeReference));
-        if (nullable is not null && Nullable.GetUnderlyingType(nullable) is not null)
+        var storage = ctx.Resolve(p);
+        if (nullable is not null && Nullable.GetUnderlyingType(nullable) is not null
+            && storage.Representation == typeof(long))
             return Assign(
                 ctx.RingVar(slot, nullable),
-                RingCodec.UnboxToNullable(ParameterValue(p, ctx), nullable, ctx.HeapLocal));
+                storage.Holding(nullable).Read(ctx));
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
 

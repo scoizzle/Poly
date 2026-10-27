@@ -272,7 +272,7 @@ public static partial class AbiEmitter {
         /// <summary>The word form of a ring slot. A <c>Nullable&lt;T&gt;</c> local
         /// boxes here; every other local uses <see cref="RingCodec.ToWord"/>.</summary>
         public Expression RingWord(int absoluteIndex, Type representation) =>
-            RingCodec.ToFrameWord(RingVar(absoluteIndex, representation), HeapLocal);
+            RingCodec.ToFrame(RingVar(absoluteIndex, representation), representation, HeapLocal);
 
         /// <summary>The ring representation of a node's value: its own type for an IEEE or
         /// <c>int</c> scalar, the word for every other shape — including one analysis could
@@ -337,9 +337,7 @@ public static partial class AbiEmitter {
             var stores = new List<Expression>(vars.Count);
             foreach (var v in vars) {
                 if (_variableRegisters.TryGetValue(v, out var reg) && scope.TryGetValue(v, out int slot)) {
-                    stores.Add(Assign(
-                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot))),
-                        RingCodec.ToFrameWord(RegisterVar(reg), HeapLocal)));
+                    stores.Add(new SlotLocation.Frame(slot).Write(this, RegisterVar(reg)));
                 }
             }
             return stores;

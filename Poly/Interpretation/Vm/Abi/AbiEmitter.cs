@@ -197,8 +197,7 @@ public static partial class AbiEmitter {
             ? new SlotLocation.Ring(ctx.RingDepth - 1, rootExpr.Type)
             : null;
         if (rootResult is not null) {
-            body.Add(Assign(ArrayAccess(ctx.SlotsLocal, ctx.FramePosLocal),
-                RingCodec.ToFrameWord(rootResult.Read(ctx), ctx.HeapLocal)));
+            body.Add(new SlotLocation.Frame(0).Write(ctx, rootResult.Read(ctx)));
             body.Add(Assign(ctx.SlotsStackPointer,
                 Add(ctx.FramePosLocal, Constant(1))));
         }
@@ -633,8 +632,8 @@ public static partial class AbiEmitter {
                 leftIeee ? ctx.ClrTypeOf(left) : null,
                 rightIeee ? ctx.ClrTypeOf(right) : null);
             return factory(
-                AsIeee(left, leftVal, target, ctx),
-                AsIeee(right, rightVal, target, ctx));
+                RingCodec.FromFrame(leftVal, ctx.ClrTypeOf(left) ?? leftVal.Type, target, ctx.HeapLocal),
+                RingCodec.FromFrame(rightVal, ctx.ClrTypeOf(right) ?? rightVal.Type, target, ctx.HeapLocal));
         }
         // A shift's result width is its left operand's; its count is always an int in C#.
         if (factory == LeftShift || factory == RightShift)
@@ -755,56 +754,35 @@ public static partial class AbiEmitter {
         var underlying = Nullable.GetUnderlyingType(nullable)!;
         if (Nullable.GetUnderlyingType(value.Type) is not null || value.Type == underlying)
             return Convert(value, nullable);
-        value = AsUnderlying(node, value, underlying, ctx);
+        value = RingCodec.FromFrame(value, UnderlyingOf(node, value, ctx) ?? value.Type, underlying, ctx.HeapLocal);
         return value.Type == nullable ? value : Convert(value, nullable);
     }
 
-    /// <summary>The word or handle as <paramref name="underlying"/>. A bool word is the
-    /// 0/1 test. A decimal, enum, or other non-inline value is unboxed. An IEEE word
-    /// is its bit pattern. <c>ulong</c> is a same-size bitcast, so
-    /// <c>ulong.MaxValue</c> stays unsigned.</summary>
-    private static Expression AsUnderlying(Node node, Expression value, Type underlying, Context ctx) {
-        if (underlying == typeof(bool))
-            return NotEqual(RingCodec.ToWord(value), Constant(0L));
-        if (value.Type == underlying)
-            return value;
-        var source = UnderlyingOf(node, value, ctx) ?? value.Type;
-        if (value.Type == typeof(long) && NeedsHeapUnbox(source))
-            return Convert(
-                Call(ctx.HeapLocal, HeapUnsafeGet, Convert(value, typeof(int))),
-                underlying);
-        if (RingCodec.IsIeee(underlying) || RingCodec.IsIeee(node, ctx.Analysis))
-            return AsIeee(node, value, underlying, ctx);
-        if (underlying == typeof(ulong))
-            return Convert(RingCodec.ToWord(value), typeof(ulong));
-        if (underlying == typeof(decimal) || !RingCodec.IsInline(underlying))
-            return Convert(value.Type == typeof(long) ? value : RingCodec.ToWord(value), underlying);
-        var represented = RingCodec.AsRepresentation(value, underlying);
-        return represented.Type == underlying ? represented : Convert(represented, underlying);
-    }
-
-    /// <summary>True when a long slot holds a heap handle for this type. An enum
-    /// constant is boxed even though its kind is inline.</summary>
+    /// <summary>True when a long slot holds a heap handle for this non-nullable
+    /// value type. An inline primitive, including an enum, is the word itself.</summary>
     private static bool NeedsHeapUnbox(Type source) =>
-        source.IsEnum
-        || (source.IsValueType
-            && Nullable.GetUnderlyingType(source) is null
-            && !RingCodec.IsInline(source));
+        source.IsValueType
+        && Nullable.GetUnderlyingType(source) is null
+        && !RingCodec.IsInline(source);
 
     /// <summary>The object stored for a <c>Nullable&lt;T&gt;</c> member. A nullable
     /// source's word is a handle (0 is null). A scalar word is the number, so 0
     /// stays present. A boxed decimal or enum is already the object.</summary>
     private static Expression NullableMemberWrite(
-        Node value, Expression word, Type underlying, Context ctx) {
+        Node value, int valueSlot, Type nullableType, Type underlying, Context ctx) {
+        var word = ctx.RingVar(valueSlot);
         var valueClr = ctx.ClrTypeOf(value);
+        // The region word of a nullable is already the handle. The optional
+        // location is the only unbox; the member stores the object it produces.
         if (valueClr is not null && Nullable.GetUnderlyingType(valueClr) is not null)
-            return Condition(
-                Equal(word, Constant(0L)),
-                Constant(null, typeof(object)),
-                Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))));
+            return Convert(
+                new SlotLocation.Ring(valueSlot).Holding(nullableType).Read(ctx),
+                typeof(object));
         if (valueClr is not null && NeedsHeapUnbox(valueClr))
             return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
-        return Convert(AsUnderlying(value, word, underlying, ctx), typeof(object));
+        return Convert(
+            RingCodec.FromFrame(word, ctx.ClrTypeOf(value) ?? word.Type, underlying, ctx.HeapLocal),
+            typeof(object));
     }
 
     /// <summary>The width an integer operation runs at, from the operand types analysis
@@ -833,17 +811,6 @@ public static partial class AbiEmitter {
     /// a <c>float</c> expression 32-bit.</summary>
     private static Type IeeeArithmeticType(Type? left, Type? right) =>
         left == typeof(double) || right == typeof(double) ? typeof(double) : typeof(float);
-
-    /// <summary>An operand at <paramref name="target"/>. A typed slot is already the
-    /// value; a word that holds IEEE bits is bitcast, and a word that is a plain
-    /// integer is converted.</summary>
-    private static Expression AsIeee(Node node, Expression value, Type target, Context ctx) {
-        if (value.Type == typeof(long))
-            value = RingCodec.IsIeee(node, ctx.Analysis)
-                ? RingCodec.FromIeee(value)
-                : Convert(value, target);
-        return value.Type == target ? value : Convert(value, target);
-    }
 
     private static Expression EmitConditionalValue(Conditional c, Context ctx) {
         var test = CompileConditionAsBool(c.Condition, ctx);

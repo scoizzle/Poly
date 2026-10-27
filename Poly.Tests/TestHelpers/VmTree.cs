@@ -127,12 +127,12 @@ internal static class VmTree {
         private readonly HashSet<Expression> _bitcastArguments = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<Expression> _boundaryBitcasts = new(ReferenceEqualityComparer.Instance);
         private readonly List<(MethodCallExpression Call, ParameterExpression Local)> _leaseBitcasts = [];
-        private readonly List<ParameterExpression?> _slotStoreSources = [];
-        private bool _resultFollowsLastStore;
         private readonly HashSet<ParameterExpression> _zeroInits = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<ParameterExpression> _rejectedZero = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<ParameterExpression> _cellInits = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _rejectedCell = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<ParameterExpression> _assignedRing = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<ParameterExpression, int> _ringAssigns = new(ReferenceEqualityComparer.Instance);
         private ParameterExpression? _pendingZero;
         private HashSet<ParameterExpression>? _leases;
         private readonly List<MethodCallExpression> _heapDerefs = [];
@@ -209,15 +209,10 @@ internal static class VmTree {
                 _slotIndexes.Add(node.Right);
             if (node.NodeType == ExpressionType.Assign
                 && IsFrameSlot(node.Left)) {
-                _slotStoreSources.Add(LeaseSource(node.Right));
-                _resultFollowsLastStore = false;
                 // The observation copy is the sanctioned word boundary.
                 if (IsBitcastCall(node.Right))
                     _boundaryBitcasts.Add(node.Right);
             }
-            if (node.NodeType == ExpressionType.Assign
-                && node.Left is MemberExpression { Member.Name: "StackPointer" })
-                _resultFollowsLastStore = true;
             // A lease stored through a bitcast is the write half of a per-access
             // conversion. A typed lease stores the value itself.
             if (node.NodeType == ExpressionType.Assign
@@ -289,13 +284,6 @@ internal static class VmTree {
             || expression is BinaryExpression { NodeType: ExpressionType.ArrayIndex, Left: ParameterExpression array }
                 && array == _slots;
 
-        /// <summary>The pool local a frame store writes, through a convert or the
-        /// IEEE bitcast <see cref="LocalType"/> uses at the word boundary.</summary>
-        private static ParameterExpression? LeaseSource(Expression expression) {
-            var local = UnwrapLocal(expression);
-            return local is not null && TryRingIndex(local.Name, out _) ? local : null;
-        }
-
         private static ParameterExpression? UnwrapLocal(Expression? expression) {
             while (expression is UnaryExpression {
                 NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked
@@ -324,22 +312,25 @@ internal static class VmTree {
                 : form is not LocalType.IEEELocal;
         }
 
-        /// <summary>Variable leases: the pool locals the observation copies
-        /// store. The trailing store is the root result copy when
-        /// <c>StackPointer</c> is assigned after it, and that temp is not a
-        /// variable.</summary>
+        /// <summary>Variable leases. A cell lease is the capture allocate. A value
+        /// lease is the declaration zero that the program assigns again.
+        /// <c>NoDebug</c> emits no observation copy, so a frame store cannot be the
+        /// signal. A zero copied into another pool local, or a zero assigned only
+        /// once, is a temp. A pool local reused for a later value after an allocate
+        /// is a temp too.</summary>
         private HashSet<ParameterExpression> Leases {
             get {
                 if (_leases is not null)
                     return _leases;
                 _leases = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
-                int limit = _slotStoreSources.Count;
-                if (_resultFollowsLastStore && limit > 0)
-                    limit--;
-                for (int i = 0; i < limit; i++) {
-                    if (_slotStoreSources[i] is { } source && IsVariableLease(source))
-                        _leases.Add(source);
+                foreach (var local in _zeroInits) {
+                    if (!_rejectedZero.Contains(local)
+                        && _ringAssigns.GetValueOrDefault(local) >= 2)
+                        _leases.Add(local);
                 }
+                foreach (var local in _cellInits)
+                    if (!_rejectedCell.Contains(local))
+                        _leases.Add(local);
                 return _leases;
             }
         }
@@ -357,6 +348,12 @@ internal static class VmTree {
                     _rejectedZero.Add(pending);
                 _pendingZero = null;
             }
+            if (left is ParameterExpression counted && TryRingIndex(counted.Name, out _))
+                _ringAssigns[counted] = _ringAssigns.GetValueOrDefault(counted) + 1;
+            if (left is ParameterExpression overwritten
+                && _cellInits.Contains(overwritten)
+                && !IsHeapAllocate(right))
+                _rejectedCell.Add(overwritten);
             if (left is not ParameterExpression local || !TryRingIndex(local.Name, out _) || !_assignedRing.Add(local))
                 return;
             if (IsZeroConstant(right)) {
@@ -366,10 +363,6 @@ internal static class VmTree {
             else if (IsHeapAllocate(right))
                 _cellInits.Add(local);
         }
-
-        private bool IsVariableLease(ParameterExpression local) =>
-            _cellInits.Contains(local)
-            || (_zeroInits.Contains(local) && !_rejectedZero.Contains(local));
 
         private static bool IsZeroConstant(Expression expression) => expression switch {
             ConstantExpression { Value: 0 or 0L or 0.0 or 0f or false } => true,

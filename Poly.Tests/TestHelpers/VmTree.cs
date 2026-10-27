@@ -133,7 +133,10 @@ internal static class VmTree {
         private readonly HashSet<ParameterExpression> _rejectedCell = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<ParameterExpression> _assignedRing = new(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<ParameterExpression, int> _ringAssigns = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _zeroRead = new(ReferenceEqualityComparer.Instance);
         private ParameterExpression? _pendingZero;
+        private ParameterExpression? _writing;
+        private bool _snapshot;
         private HashSet<ParameterExpression>? _leases;
         private readonly List<MethodCallExpression> _heapDerefs = [];
         private readonly List<MethodCallExpression> _callFrames = [];
@@ -195,6 +198,16 @@ internal static class VmTree {
 
         protected override Expression VisitParameter(ParameterExpression node) {
             _occurrences[node] = _occurrences.GetValueOrDefault(node) + 1;
+            // A declaration zero that is read before the next store is a temp.
+            // The cached element store reads its index slot, then the result copy
+            // assigns that slot again; the read is what keeps the slot out.
+            // A frame snapshot reads every live lease before the statement runs, and
+            // that copy is not a use of the declaration zero.
+            if (!ReferenceEquals(node, _writing)
+                && !_snapshot
+                && _zeroInits.Contains(node)
+                && _ringAssigns.GetValueOrDefault(node) == 1)
+                _zeroRead.Add(node);
             return base.VisitParameter(node);
         }
 
@@ -236,6 +249,22 @@ internal static class VmTree {
                 or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
                 or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual)
                 _comparisons.Add(node);
+            if (node.NodeType == ExpressionType.Assign && IsFrameSlot(node.Left)) {
+                Visit(node.Left);
+                bool savedSnapshot = _snapshot;
+                _snapshot = true;
+                Visit(node.Right);
+                _snapshot = savedSnapshot;
+                return node;
+            }
+            if (node.NodeType == ExpressionType.Assign && node.Left is ParameterExpression target) {
+                var saved = _writing;
+                _writing = target;
+                Visit(node.Left);
+                _writing = saved;
+                Visit(node.Right);
+                return node;
+            }
             return base.VisitBinary(node);
         }
 
@@ -316,8 +345,9 @@ internal static class VmTree {
         /// lease is the declaration zero that the program assigns again.
         /// <c>NoDebug</c> emits no observation copy, so a frame store cannot be the
         /// signal. A zero copied into another pool local, or a zero assigned only
-        /// once, is a temp. A pool local reused for a later value after an allocate
-        /// is a temp too.</summary>
+        /// once, or a zero read before it is assigned again, is a temp. A pool
+        /// local reused for a later value after an allocate is a temp too. A frame
+        /// snapshot of the lease is not that read.</summary>
         private HashSet<ParameterExpression> Leases {
             get {
                 if (_leases is not null)
@@ -325,6 +355,7 @@ internal static class VmTree {
                 _leases = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
                 foreach (var local in _zeroInits) {
                     if (!_rejectedZero.Contains(local)
+                        && !_zeroRead.Contains(local)
                         && _ringAssigns.GetValueOrDefault(local) >= 2)
                         _leases.Add(local);
                 }
@@ -415,8 +446,10 @@ internal static class VmTree {
                 .ToList();
 
         /// <summary>The variable leases the body declares, in tree order. A lease is a
-        /// pool local the observation copy stores. Statement temps share the pool's
-        /// names and are not leases. An index reused by a later scope declares one
+        /// pool local whose declaration zero is assigned again without being read,
+        /// or a cell allocate that stays the local's value. <c>NoDebug</c> emits no
+        /// observation copy. Statement temps share the pool's names and are not
+        /// leases. An index reused by a later scope declares one
         /// local per <see cref="LocalType"/>.</summary>
         public IReadOnlyList<ParameterExpression> Registers =>
             _declared.Where(Leases.Contains).Distinct().ToList();

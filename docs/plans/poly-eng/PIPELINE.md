@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-10-26 (Part 0): queue = GitHub issues; slice plan = draft PR body + pinned PLAN comment. Do not treat this file as live SoT.
+
 <!-- Canonical pipeline. Box paths (/home/box/..., /workspace/...) are the shared Grok Bot box where mills run; they are the one allowed exception to the repo-relative-links rule. -->
 # Poly engineering pipeline (rebuilt 2026-10-07; single reviewer 22:10)
 

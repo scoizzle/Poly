@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-10-26 (Part 0): queue = GitHub issues; slice plan = draft PR body + pinned PLAN comment. Do not treat this file as live SoT.
+
 # Poly board: the one live queue
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**

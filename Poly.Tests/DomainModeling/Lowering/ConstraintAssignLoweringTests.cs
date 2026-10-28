@@ -422,6 +422,116 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(instance.GetProperty<string>("Body")).IsEqualTo("");
     }
 
+    [Test]
+    public async Task EqualityAssign_OutOfValue_FailsAndLeavesPriorValue() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Widget: entity {
+              Status: Text equals("Active") optional
+              SetStatus: action (status: Text) {
+                assign Status to status
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "Active" },
+            domain: domain);
+
+        var result = instance.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = "Inactive" });
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("must equal");
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task EqualsAssign_ModuleBody_ContainsMustEqualGuard() {
+        var (domain, analysis, session) = EvolveWithSession("""
+            domain Lab
+            Widget: entity {
+              Status: Text equals("Active") optional
+              SetStatus: action (status: Text) {
+                assign Status to status
+              }
+            }
+            """);
+        session.Lower(domain, analysis);
+        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+            domain, "Widget", "SetStatus", out var method)).IsTrue();
+        await Assert.That(method?.Body).IsNotNull();
+        var moduleCs = new CSharpGenerator().Generate(method!.Body!);
+        await Assert.That(moduleCs).Contains("must equal");
+        await Assert.That(moduleCs).Contains("Failure");
+    }
+
+    [Test]
+    public async Task EqualityAssign_NullOnOptional_FailsAndLeavesPriorValue() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Widget: entity {
+              Status: Text equals("Active") optional
+              SetStatus: action (status: Text) {
+                assign Status to status
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "Active" },
+            domain: domain);
+
+        var result = instance.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = null });
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("must equal");
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task EqualityAssign_InValue_SucceedsAndWrites() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Widget: entity {
+              Status: Text equals("Active") optional
+              SetStatus: action (status: Text) { assign Status to status }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Status"] = "Active" },
+            domain: domain);
+
+        var result = instance.InvokeAction("SetStatus",
+            new Dictionary<string, object?> { ["status"] = "Active" });
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task AssignPatternBeforeLength_ReportsCategoryOrderFirst() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]{3}$") length(3, 10)
+              Relabel: action (code: Text) { assign Code to code }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Code"] = "ABC" },
+            domain: domain);
+
+        var result = instance.InvokeAction("Relabel",
+            new Dictionary<string, object?> { ["code"] = "ab" });
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("must be at least 3");
+    }
+
     private static Entity PermitEntity() {
         var plate = new Property("Plate", new DomainTypeReference("Text"), [new UniqueConstraint()]);
         return new Entity("Permit",

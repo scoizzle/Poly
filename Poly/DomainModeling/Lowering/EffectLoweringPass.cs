@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
@@ -264,7 +262,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         NeedsRequiredValueCheck(prop)
         || prop.Constraints.Any(c => c is RangeConstraint
             or LengthConstraint
-            or PatternConstraint)
+            or PatternConstraint
+            or EqualityConstraint)
         || (DomainToCSharpExporter.TryResolveEnumType(
                 _domain, _analysis, prop.Type.TypeName, out var enumType)
             && enumType is { MemberNames.Count: > 0 });
@@ -286,7 +285,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Fail-before-mutate wrap for assign: local RHS, constraint Failure checks
-    /// (required → range → length → pattern → enum member), optional EnsureUnique, then assign.
+    /// (required → range → length → pattern → equality → enum member), optional EnsureUnique, then assign.
     /// </summary>
     private Node WrapConstrainedAssign(
         Node destination,
@@ -328,116 +327,42 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     private void AppendAssignConstraintChecks(
         List<Node> nodes, Property prop, Node valueRef) {
-        var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
-                  || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
-        var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
-                    || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
-        var hasRequired = EntityStructureAnalyzer.IsRequired(prop);
 
-        Node Fail(string msg) => AssignConstraintFailure(msg);
+        Node Fail(Node msg) => AssignConstraintFailure(msg);
 
-        if (NeedsRequiredValueCheck(prop)) {
-            if (isText) {
-                nodes.Add(new IfStatement(
-                    new Invoke(
-                        new Member(TypeReference.To<string>(), "IsNullOrEmpty"),
-                        [valueRef]),
-                    new Block([Fail($"'{prop.Name}' is required.")])));
-            }
-            else {
-                nodes.Add(new IfStatement(
-                    new Equal(valueRef, new Constant(null)),
-                    new Block([Fail($"'{prop.Name}' is required.")])));
-            }
-        }
+        // Optional length checks share one outer !IsNullOrEmpty guard; the writer owns
+        // the predicate (check.Presence), the call site owns the grouping Block.
+        var lengthChecks = new List<ConstraintCheckWriter.Check>();
+        Node? lengthGroup = null;
 
-        foreach (var r in prop.Constraints.OfType<RangeConstraint>()) {
-            if (!isNumber)
-                continue;
-            if (r.Minimum is not null) {
-                var minVal = ConvertAssignConstraintConstant(r.Minimum);
-                if (minVal is not null) {
-                    nodes.Add(new IfStatement(
-                        new LessThan(valueRef, minVal),
-                        new Block([Fail(
-                            $"'{prop.Name}' must be >= {FormatConstraintValue(r.Minimum)}.")])));
-                }
-            }
-            if (r.Maximum is not null) {
-                var maxVal = ConvertAssignConstraintConstant(r.Maximum);
-                if (maxVal is not null) {
-                    nodes.Add(new IfStatement(
-                        new GreaterThan(valueRef, maxVal),
-                        new Block([Fail(
-                            $"'{prop.Name}' must be <= {FormatConstraintValue(r.Maximum)}.")])));
-                }
-            }
-        }
-
-        foreach (var l in prop.Constraints.OfType<LengthConstraint>()) {
-            if (!isText)
-                continue;
-            var lengthChecks = new List<Node>();
-            var lenAccess = new Member(valueRef, "Length");
-            if (l.MinLength > 0) {
-                lengthChecks.Add(new IfStatement(
-                    new LessThan(lenAccess, new Constant((long)l.MinLength)),
-                    new Block([Fail(
-                        $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
-            }
-            if (l.MaxLength < int.MaxValue) {
-                lengthChecks.Add(new IfStatement(
-                    new GreaterThan(lenAccess, new Constant((long)l.MaxLength)),
-                    new Block([Fail(
-                        $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
-            }
+        void FlushLength() {
             if (lengthChecks.Count == 0)
-                continue;
-            if (!hasRequired) {
-                // Optional length: skip when null/empty (do not Failure).
-                nodes.Add(new IfStatement(
-                    new Syntactic.Not(
-                        new Invoke(
-                            new Member(TypeReference.To<string>(), "IsNullOrEmpty"),
-                            [valueRef])),
-                    new Block(lengthChecks)));
-            }
-            else {
-                nodes.AddRange(lengthChecks);
-            }
+                return;
+            var inner = new List<Node>();
+            foreach (var c in lengthChecks)
+                inner.Add(new IfStatement(c.Condition, new Block([Fail(c.Message)])));
+            if (lengthGroup is not null)
+                nodes.Add(new IfStatement(lengthGroup, new Block(inner)));
+            else
+                nodes.AddRange(inner);
+            lengthChecks.Clear();
+            lengthGroup = null;
         }
 
-        foreach (var p in prop.Constraints.OfType<PatternConstraint>()) {
-            if (!isText)
+        foreach (var check in ConstraintCheckWriter.ChecksFor(
+                     _entity, prop, _domain, _analysis,
+                     ConstraintCheckWriter.ConstraintCheckStyle.Assign,
+                     valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {
+            if (check.Kind is ConstraintCheckWriter.Kind.LengthMinimum
+                or ConstraintCheckWriter.Kind.LengthMaximum) {
+                lengthChecks.Add(check);
+                lengthGroup = check.Presence;
                 continue;
-            // Null RHS: skip IsMatch (align ValidateConstraints: only check when string).
-            nodes.Add(new IfStatement(
-                new Syntactic.And(
-                    new NotEqual(valueRef, new Constant(null)),
-                    new Syntactic.Not(
-                        new Invoke(
-                            new Member(
-                                TypeReference.To<System.Text.RegularExpressions.Regex>(),
-                                "IsMatch"),
-                            [valueRef, new Constant(p.Pattern)]))),
-                new Block([Fail(
-                    $"'{prop.Name}' does not match the required pattern.")])));
-        }
-
-        if (DomainToCSharpExporter.TryResolveEnumType(
-                _domain, _analysis, prop.Type.TypeName, out var enumType)
-            && enumType is { MemberNames.Count: > 0 }) {
-            Node? notMember = null;
-            var enumTypeRef = new NamedTypeReference(enumType.Name);
-            foreach (var member in enumType.MemberNames) {
-                var ne = new NotEqual(valueRef, new Member(enumTypeRef, member));
-                notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
             }
-            nodes.Add(new IfStatement(
-                notMember!,
-                new Block([Fail(
-                    $"'{prop.Name}' is not a valid member of {enumType.Name}.")])));
+            FlushLength();
+            nodes.Add(new IfStatement(check.GuardedCondition, new Block([Fail(check.Message)])));
         }
+        FlushLength();
     }
 
     /// <summary>
@@ -445,57 +370,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// caller has a result type; <c>throw ConstraintFailureException</c> in void
     /// export contexts (ctor / stage entry) — same split as create-in fail-closed.
     /// </summary>
-    private Node AssignConstraintFailure(string message) {
+    private Node AssignConstraintFailure(Node message) {
         if (_context.ActionResultType is null) {
             return new ThrowStatement(new New(
                 new NamedTypeReference("ConstraintFailureException"),
-                new Constant(message)));
+                message));
         }
-        return ReturnCallerFailure(new Constant(message));
+        return ReturnCallerFailure(message);
     }
-
-    private static Constant? ConvertAssignConstraintConstant(object? value) {
-        if (value is null) return null;
-        if (value is long l) return new Constant(l);
-        if (value is int i) return new Constant((long)i);
-        if (value is double d) return d == Math.Floor(d)
-            ? new Constant((long)d)
-            : new Constant(d);
-        if (value is decimal m) return new Constant((double)m);
-        if (value is string s) return new Constant(s);
-        if (value is bool b) return new Constant(b);
-        return new Constant(value.ToString());
-    }
-
-    /// <summary>Formats a constraint bound for a validation message. Invariant, so the message
-    /// text is the same whatever the culture that simulates or emits it.</summary>
-    internal static string FormatConstraintValue(object? value) => value switch {
-        null => "?",
-        double d => d == Math.Floor(d) ? d.ToString("F0", CultureInfo.InvariantCulture) : d.ToString("G", CultureInfo.InvariantCulture),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "?"
-    };
 
     /// <summary>
     /// Requiredness is "no <c>optional</c>". Text rejects null or empty; other
     /// reference-typed properties reject null. Value types have no null to reject.
     /// </summary>
-    private bool NeedsRequiredValueCheck(Property prop) {
-        if (!EntityStructureAnalyzer.IsRequired(prop))
-            return false;
-        if (string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
-            || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal))
-            return true;
-        return IsAssignableNullableDomainType(prop.Type.TypeName);
-    }
-
-    private bool IsAssignableNullableDomainType(string typeName) {
-        if (_domain is not null
-            && _domain.Types.OfType<EnumType>().Any(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal)))
-            return false;
-        return !DomainTypeMapping.IsNonNullableClrValueType(
-            RuntimeAnalysisCache.ClrTypeName(_domain, typeName));
-    }
+    private bool NeedsRequiredValueCheck(Property prop) =>
+        ConstraintCheckWriter.RequiredApplies(_entity, prop, _domain, _analysis);
 
     private Node? RouteWithRuntimeCreate(Effect effect) =>
         Route(effect);
@@ -924,7 +813,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         var nav = new Member(Subject, DomainToCSharpExporter.ToPascalCase(runtimeRel.Name));
         var guard = new IfStatement(
             new NotEqual(nav, new Constant(null)),
-            new Block([AssignConstraintFailure(Relationship.LinkViolationMessage(runtimeRel.Name))]));
+            new Block([AssignConstraintFailure(new Constant(Relationship.LinkViolationMessage(runtimeRel.Name)))]));
         if (create is Block block)
             return new Block([guard, .. block.Nodes], block.Variables);
         return new Block([guard, create]);

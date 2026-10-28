@@ -56,6 +56,8 @@ public class CreateInitializerDateTimeOffsetTests {
 
         await Assert.That(result.Succeeded).IsTrue();
         var session = instance.CreatedChildren.Single();
+        await Assert.That(session.Entity.Name).IsEqualTo("Session");
+        await Assert.That(session.GetProperty<string>("Token")).IsEqualTo("t");
         await Assert.That(session.GetProperty<object>("ExpiresAt")).IsTypeOf<DateTime>();
         var expiresAt = session.GetProperty<DateTime>("ExpiresAt");
         await Assert.That(expiresAt).IsGreaterThanOrEqualTo(before.AddMinutes(30));

@@ -137,6 +137,8 @@ public sealed class DomainSession {
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!extensions.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in extensions) {
             if (string.IsNullOrWhiteSpace(id))
@@ -173,6 +175,8 @@ public sealed class DomainSession {
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))

@@ -31,16 +31,28 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
-    public async Task ForExtensions_WithoutTemporal_NowIsProperty() {
-        var session = DomainSession.ForExtensions([]);
-        await Assert.That(session.Language.Grammar.TryGetPattern("expr-primary", "now", out _)).IsFalse();
+    public async Task UsesStorage_TemporalStillLoaded() {
+        var session = DomainSession.ForExtensions(["storage"]);
+        await Assert.That(session.Extensions).IsEquivalentTo(new[] { "storage" });
+        await Assert.That(session.PrimitiveSeeds.Any(seed => seed.Name == "Date")).IsTrue();
+        await Assert.That(session.Contributions.Any(c =>
+            c.Stage == PipelineStage.Load && c.LibraryId == ExtensionCatalog.TemporalId)).IsTrue();
         var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
-        await Assert.That(expr).IsTypeOf<PropertyAccess>();
+        await Assert.That(expr).IsTypeOf<Now>();
+    }
+
+    [Test]
+    public async Task ForExtensions_WithoutUses_LoadsTemporalImplicitly() {
+        var session = DomainSession.ForExtensions([]);
+        await Assert.That(session.Extensions).IsEmpty();
+        await Assert.That(session.PrimitiveSeeds.Any(seed => seed.Name == "Date")).IsTrue();
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
+        await Assert.That(expr).IsTypeOf<Now>();
     }
 
     [Test]
     public async Task ForExtensions_WithAndWithoutTemporal_SameGrammar() {
-        var withTemporal = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var withTemporal = DomainSession.ForExtensions(["temporal"]);
         var without = DomainSession.ForExtensions([]);
         await Assert.That(ReferenceEquals(withTemporal.Language.Grammar, DslGrammar.Core)).IsTrue();
         await Assert.That(ReferenceEquals(without.Language.Grammar, DslGrammar.Core)).IsTrue();
@@ -139,11 +151,15 @@ public sealed class DomainSessionTests {
         await Assert.That(analysis.Telemetry.Passes.Any(p => p.PassName == "Temporal")).IsFalse();
         await Assert.That(analysis.GetMetadata<TemporalVocabularyMetadata>(withTemporal.Domain!)).IsNull();
 
-        var without = DomainFactory.Create("D") with { Extensions = [] };
-        var empty = DomainSession.Open(without);
-        await Assert.That(empty.Meaning.Inference.Handlers).IsEmpty();
-        var emptyAnalysis = empty.Analyze(without);
-        await Assert.That(emptyAnalysis.GetMetadata<TemporalVocabularyMetadata>(without)).IsNull();
+        await Assert.That(withTemporal.Domain!.Extensions.Contains(ExtensionCatalog.TemporalId)).IsFalse();
+
+        var authored = DomainFactory.Create("Authored") with { Extensions = [ExtensionCatalog.TemporalId] };
+        var withId = DomainSession.Open(authored);
+        await Assert.That(withId.Extensions).Contains(ExtensionCatalog.TemporalId);
+        await Assert.That(withId.Meaning.Inference.Handlers.Count).IsGreaterThan(0);
+        var authoredAnalysis = withId.Analyze(authored);
+        await Assert.That(authoredAnalysis.Telemetry.Passes.Any(p => p.PassName == "Temporal")).IsFalse();
+        await Assert.That(authoredAnalysis.GetMetadata<TemporalVocabularyMetadata>(authored)).IsNull();
     }
 
     [Test]

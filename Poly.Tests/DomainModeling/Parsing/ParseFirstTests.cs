@@ -59,7 +59,7 @@ public sealed class ParseFirstTests {
                 Overdue: policy { Now - 12 Days }
             }
             """);
-        var session = DomainSession.ForDocument(tree, []);
+        var session = SessionBuilder.CreateEmpty().LoadCore().Build();
 
         await Assert.That(() => new DomainResolver(tree, session).Resolve())
             .Throws<FormatException>()

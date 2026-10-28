@@ -509,7 +509,8 @@ public class PolyDslRoundTripTests {
         await Assert.That(result.Succeeded).IsTrue();
 
         var primitives = result.Root!.Types.OfType<Poly.DomainModeling.Ontology.PrimitiveType>().ToList();
-        await Assert.That(primitives.Count).IsEqualTo(5);
+        await Assert.That(primitives.Count).IsEqualTo(9);
+        await Assert.That(primitives.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count()).IsEqualTo(9);
         var entities = result.Root.Types.OfType<Entity>().ToList();
         await Assert.That(entities.Count).IsEqualTo(2);
     }

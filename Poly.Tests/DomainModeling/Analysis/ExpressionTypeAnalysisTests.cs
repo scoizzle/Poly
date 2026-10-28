@@ -357,11 +357,10 @@ public class ExpressionTypeAnalysisTests {
     }
 
     /// <summary>
-    /// Clock folds (<c>Now</c>/<c>Today</c>) are parse-time. The empty parser
-    /// leaves them as property names, which a policy then rejects.
+    /// Clock folds (<c>Now</c>/<c>Today</c>) are parse-time and need the temporal library.
     /// </summary>
     private static EvolutionResult ParseClock(string dsl) {
-        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], []))
             .Apply(changes, session: session);

@@ -143,7 +143,7 @@ Secondary context only (naming, not a source of principles): `docs/decisions/202
 
 **Where it lives in code.**
 
-- Catalog of known ids: `Poly/DomainModeling/Compile/ExtensionCatalog.cs`. Core in-assembly libraries: `temporal`, `storage`, `persistence`. Product language seed is `temporal`; authoring seed adds `storage`.
+- Catalog of known ids: `Poly/DomainModeling/Compile/ExtensionCatalog.cs`. Core in-assembly libraries: `temporal`, `storage`, `persistence`. Temporal is implicit at Load and is not a product-language seed; the authoring seed is `storage`.
 - Library contract: `Poly/DomainModeling/Compile/IDomainLibrary.cs` (`Id`, `Register`, optional primitive seeds).
 - Mutable assembly, then freeze: `Poly/DomainModeling/Compile/SessionBuilder.cs` (`Load`, `AddAnalyzer`, `AddArtifactContributor`, `Build`). Duplicate library id or duplicate analyzer pass name throws.
 - Session construction from ids: `DomainSession.ForExtensions`, `DomainSession.Open` (ids taken from an existing domain), `DomainSession.ForSource` (peek `uses` from text, else a seed) in `Poly/DomainModeling/Compile/DomainSession.cs`. Peek: `Poly/DomainModeling/Compile/DomainCompilation.cs`.

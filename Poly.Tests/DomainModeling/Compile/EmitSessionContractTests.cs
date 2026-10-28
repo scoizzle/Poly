@@ -299,7 +299,7 @@ public sealed class EmitSessionContractTests {
               Due: policy { Expiry < Now }
             }
             """;
-        var session = DomainSession.ForSource(poly, seed: [], catalog: Catalog);
+        var session = SessionBuilder.CreateEmpty().LoadCore().Build();
         var changes = new PolyDslParser(poly, session).Parse();
         var addPolicy = changes.OfType<AddPolicyToEntityChange>().Single();
         await Assert.That(addPolicy.Policy.Expression).IsTypeOf<Comparison>();

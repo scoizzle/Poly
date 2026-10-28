@@ -571,6 +571,197 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_SelfRelCreateInParent_ParentArgIsNullAndBodySetsThisParent() {
+        // G6 parent-only: the new parent's own parent is null, not `this` (a cycle).
+        const string dsl = """
+            domain Test
+            Account: entity {
+              Name: Text required
+              parent: Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createParent = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateParent(");
+        await Assert.That(createParent).Contains("Account.Create(name, (Account?)null)");
+        await Assert.That(createParent).Contains("this.Parent = account");
+        await Assert.That(createParent).DoesNotContain("Attach");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_SelfRelCreateInParent_WithChildren_NullParentEmptyChildren_AttachesThisOnce() {
+        const string dsl = """
+            domain Test
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createParent = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateParent(");
+        await Assert.That(createParent).Contains("Account.Create(name, (Account?)null, new List<Account>())");
+        await Assert.That(createParent).Contains("this.Parent = account");
+        await Assert.That(createParent.Split("account.AttachChildren(this)").Length - 1).IsEqualTo(1);
+        await Assert.That(createParent).DoesNotContain("Account.Create(name, this");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_SelfRelCreateInChildren_ParentThisEmptyChildren_SkipsFieldAdd() {
+        const string dsl = """
+            domain Test
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddChild: action { create in children { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateChildren(");
+        await Assert.That(createChildren).Contains("Account.Create(name, this, new List<Account>())");
+        await Assert.That(createChildren).DoesNotContain("_children.Add");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_SingularCreateIn_AttachesThisToUniqueInverseCollection() {
+        // G8: a singular create-in sets this.Order and attaches `this` to the target's
+        // unique inverse collection (order.AttachItems(this)); no double add.
+        const string dsl = """
+            domain Test
+            Order: entity {
+              Code: Text required
+              items: many Item
+            }
+            Item: entity {
+              Name: Text required
+              order: Order
+              Active: stage {
+                Add: action { create in order { Code: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createOrder = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> CreateOrder(");
+        await Assert.That(createOrder).Contains("this.Order = order");
+        await Assert.That(createOrder).Contains("order.AttachItems(this)");
+        await Assert.That(createOrder).DoesNotContain("_items.Add");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_SelfRelCreateIn_TwoCollections_NoThisAndFieldAddOnce() {
+        const string dsl = """
+            domain Test
+            Account: entity {
+              Name: Text required
+              primary: many Account
+              secondary: many Account
+              Active: stage {
+                Add: action { create in primary { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreatePrimary(");
+        await Assert.That(createPrimary).Contains("Account.Create(name, new List<Account>(), new List<Account>())");
+        await Assert.That(createPrimary.Split("this._primary.Add").Length - 1).IsEqualTo(1);
+        await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
+        await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
+        await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_SelfRelCreateIn_TwoSingulars_NoThisAndFieldAddOnce() {
+        const string dsl = """
+            domain Test
+            Account: entity {
+              Name: Text required
+              primary: Account
+              secondary: Account
+              children: many Account
+              Active: stage {
+                Add: action { create in children { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateChildren(");
+        await Assert.That(createChildren)
+            .Contains("Account.Create(name, (Account?)null, (Account?)null, new List<Account>())");
+        await Assert.That(createChildren.Split("this._children.Add").Length - 1).IsEqualTo(1);
+        await Assert.That(createChildren).DoesNotContain("Account.Create(name, this");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_CreateNavIsPublic_AttachNavIsInternal() {
+        const string dsl = """
+            domain Test
+            Child: entity {
+              Name: Text required
+            }
+            Parent: entity {
+              Name: Text required
+              children: many Child
+              Active: stage {
+                Add: action { create in children { Name: "x" } }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        await Assert.That(cs).Contains("public DomainResult<Child> CreateChildren(");
+        await Assert.That(cs).DoesNotContain("private DomainResult<Child> CreateChildren(");
+        await Assert.That(cs).Contains("internal void AttachChildren(");
+        await Assert.That(cs).DoesNotContain("public void AttachChildren(");
+    }
+
+    [Test]
     public async Task ToSyntax_ViaProvider_DoesNotRequireAnalysisResultCast() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         INodeMetadataProvider metadata = analysis;

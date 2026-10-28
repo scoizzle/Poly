@@ -105,6 +105,17 @@ public abstract class ParitySide(Domain domain) {
         Record($"use {type}", () => (true, null, null));
     }
 
+    /// <summary>
+    /// Makes the linked target of a navigation the current entity and records its state,
+    /// so a test can assert the child's side of a link rather than only the source's.
+    /// </summary>
+    public void UseLinked(string relationship, int index = 0) {
+        var target = LinkedTarget(relationship, index);
+        var type = TypeName(target);
+        (_current, _model) = (target, Domain.Types.OfType<Entity>().Single(e => e.Name == type));
+        Record($"use {relationship}[{index}]", () => (true, null, null));
+    }
+
     public void Invoke(string action, params (string Name, object? Value)[] args) =>
         Record($"invoke {action}", () => InvokeCore(action, args));
 
@@ -115,6 +126,7 @@ public abstract class ParitySide(Domain domain) {
     protected abstract StepResult CreateCore(Entity model, (string Name, object? Value)[] values);
     protected abstract StepResult InvokeCore(string action, (string Name, object? Value)[] args);
     protected abstract object? EvaluateCore(string policy);
+    protected abstract object LinkedTarget(string relationship, int index);
     protected abstract Dictionary<string, string?> StateOf(object entity, Entity model);
     protected abstract string TypeName(object entity);
 

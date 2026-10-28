@@ -71,7 +71,7 @@ public sealed partial record DomainEntityInstance {
                 $"'{relationshipName}' targets '{relationship.Target.TypeName}'.");
         }
         Store.Link(relationshipName, this, child);
-        TryLinkCreateInBackReference(child);
+        TryLinkCreateInBackReference(child, relationshipName);
     }
 
     /// <summary>
@@ -479,9 +479,12 @@ public sealed partial record DomainEntityInstance {
     /// <summary>
     /// After <c>create in opportunities { … }</c>, bind the child's unique to-one
     /// back to this source (<c>Opportunity.account</c>) so Rel-exists policies match
-    /// the C# auto-wired back-ref.
+    /// the C# auto-wired back-ref. A self relationship whose create-in writes the
+    /// same navigation (<c>create in parent</c> on <c>parent: Account</c>) is not a
+    /// back-reference: linking it would point the new child back at this source
+    /// (a cycle). The inverse is the target's collection, which <c>Attach*</c> owns.
     /// </summary>
-    internal void TryLinkCreateInBackReference(DomainEntityInstance child) {
+    internal void TryLinkCreateInBackReference(DomainEntityInstance child, string? relationshipName) {
         if (Store is null) return;
         var backs = child.Entity.Navigations
             .Where(n => n.Cardinality is not (RelationshipCardinality.OneToMany
@@ -489,6 +492,10 @@ public sealed partial record DomainEntityInstance {
                 && string.Equals(n.Target.TypeName, Entity.Name, StringComparison.Ordinal))
             .ToList();
         if (backs.Count != 1)
+            return;
+        if (relationshipName is not null
+            && string.Equals(child.Entity.Name, Entity.Name, StringComparison.Ordinal)
+            && string.Equals(backs[0].Name, relationshipName, StringComparison.Ordinal))
             return;
         Store.Link(backs[0].Name, child, this);
     }

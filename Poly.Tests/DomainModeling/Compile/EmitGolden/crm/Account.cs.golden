@@ -54,7 +54,7 @@ public class Account
         get => this._tickets;
     }
     public AccountStage CurrentStage { get; private set; }
-    private DomainResult<Site> CreateHq(string city, string region)
+    public DomainResult<Site> CreateHq(string city, string region)
     {
         var siteResult = Site.Create(city, region);
         if (!siteResult.IsSuccess)
@@ -65,7 +65,7 @@ public class Account
         this.Hq = site;
         return DomainResult<Site>.Success(site);
     }
-    private DomainResult<Contact> CreateContacts(string email, string name)
+    public DomainResult<Contact> CreateContacts(string email, string name)
     {
         var contactResult = Contact.Create(email, name, this);
         if (!contactResult.IsSuccess)
@@ -79,7 +79,7 @@ public class Account
     {
         this._contacts.Add(child);
     }
-    private DomainResult<Opportunity> CreateOpportunities(long amount, string title, Contact? contact = null, DateOnly? closeBy = null)
+    public DomainResult<Opportunity> CreateOpportunities(long amount, string title, Contact? contact = null, DateOnly? closeBy = null)
     {
         var opportunityResult = Opportunity.Create(amount, title, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
@@ -96,7 +96,7 @@ public class Account
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
     }
-    private DomainResult<Ticket> CreateTickets(string subject)
+    public DomainResult<Ticket> CreateTickets(string subject)
     {
         var ticketResult = Ticket.Create(subject, this);
         if (!ticketResult.IsSuccess)

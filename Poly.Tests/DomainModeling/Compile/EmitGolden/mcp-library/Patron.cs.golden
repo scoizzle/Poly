@@ -29,7 +29,7 @@ public class Patron
     {
         get => this._fines;
     }
-    private DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
+    public DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
     {
         var loanResult = Loan.Create(book, amount);
         if (!loanResult.IsSuccess)
@@ -45,6 +45,17 @@ public class Patron
     {
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
+    }
+    public DomainResult<Fine> CreateFines(string reason, long amount = 0L)
+    {
+        var fineResult = Fine.Create(reason, amount);
+        if (!fineResult.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(fineResult.ErrorMessage ?? "");
+        }
+        var fine = fineResult.Value;
+        this._fines.Add(fine);
+        return DomainResult<Fine>.Success(fine);
     }
     internal void AttachFines(Fine child)
     {
@@ -67,7 +78,7 @@ public class Patron
     public bool GoodStanding() => this.Status == "Active";
     internal void WhenEachLoanOverdue(Loan loan)
     {
-        var create0 = Fine.Create("Overdue", loan.Amount);
+        var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
             throw new ConstraintFailureException(create0.ErrorMessage ?? "");

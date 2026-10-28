@@ -45,7 +45,7 @@ public class Reservation
     public Guest? Guest { get; private set; }
     public Room? Room { get; private set; }
     public ReservationStage CurrentStage { get; private set; }
-    private DomainResult<Folio> CreateFolio(long balance = 0L)
+    public DomainResult<Folio> CreateFolio(long balance = 0L)
     {
         var folioResult = Folio.Create(this, balance);
         if (!folioResult.IsSuccess)

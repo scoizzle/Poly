@@ -43,6 +43,14 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 
     protected override string TypeName(object entity) => ((DomainEntityInstance)entity).Entity.Name;
 
+    protected override object LinkedTarget(string relationship, int index) {
+        var targets = _store.GetLinkedTargets(relationship, (DomainEntityInstance)Current);
+        if (index < 0 || index >= targets.Count)
+            throw new ArgumentException(
+                $"'{relationship}' has {targets.Count} linked target(s); cannot use index {index}.");
+        return targets[index];
+    }
+
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var instance = (DomainEntityInstance)entity;
         var state = model.Properties.ToDictionary(p => p.Name, p => instance.GetProperty<object>(p.Name)?.ToString());
@@ -96,6 +104,20 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
 
     protected override string TypeName(object entity) => entity.GetType().Name;
+
+    protected override object LinkedTarget(string relationship, int index) {
+        var value = Read(Current, relationship);
+        if (value is System.Collections.IList list) {
+            if (index < 0 || index >= list.Count)
+                throw new ArgumentException(
+                    $"'{relationship}' has {list.Count} linked target(s); cannot use index {index}.");
+            return list[index]!;
+        }
+        if (value is null || index != 0)
+            throw new ArgumentException(
+                $"'{relationship}' has no linked target at index {index}.");
+        return value;
+    }
 
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var state = model.Properties.ToDictionary(p => p.Name, p => Read(entity, p.Name)?.ToString());

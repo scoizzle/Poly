@@ -69,7 +69,7 @@ public class Opportunity
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
-    private DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
+    public DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
     {
         var activityResult = Activity.Create(subject, this, dueOn);
         if (!activityResult.IsSuccess)
@@ -83,7 +83,7 @@ public class Opportunity
     {
         this._activities.Add(child);
     }
-    private DomainResult<Line> CreateLines(long qty, long unitPrice, Product? product = null)
+    public DomainResult<Line> CreateLines(long qty, long unitPrice, Product? product = null)
     {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
@@ -97,7 +97,7 @@ public class Opportunity
     {
         this._lines.Add(child);
     }
-    private DomainResult<Quote> CreateQuotes(long amount, string title)
+    public DomainResult<Quote> CreateQuotes(long amount, string title)
     {
         var quoteResult = Quote.Create(amount, title, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)

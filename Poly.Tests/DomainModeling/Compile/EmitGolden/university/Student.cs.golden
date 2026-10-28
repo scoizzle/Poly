@@ -40,7 +40,7 @@ public class Student
         get => this._enrollments;
     }
     public StudentStage CurrentStage { get; private set; }
-    private DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
+    public DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
     {
         var enrollmentResult = Enrollment.Create(section, this, dueDate, enrolledOn, grade);
         if (!enrollmentResult.IsSuccess)

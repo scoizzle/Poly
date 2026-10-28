@@ -33,7 +33,7 @@ public class Quote
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    private DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
+    public DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)

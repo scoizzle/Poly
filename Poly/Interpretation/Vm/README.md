@@ -46,8 +46,8 @@ Past that it lives only in its frame slot. Temps and helpers (`_coal`, `_shift`,
 
 Frame slots are the observation copy, not the variable's home. A write assigns
 the lease. The lease is stored into `_slots[_fp + n]` only at an observation:
-block exit, catch exit, the debug hook while a hook is attached, and a suspend
-spill. Arguments and the result are frame slots too.
+the debug hook (which carries the block-exit and catch-exit copies) while a hook
+is attached, and a suspend spill. Arguments and the result are frame slots too.
 
 ### Storage locations
 
@@ -68,7 +68,8 @@ no lease. A cell-backed local is wrapped in its cell. The lease holds the cell's
 handle, never `cell[0]`. `VariableReadRaw`/`VariableWriteRaw` resolve the
 binding's own storage without the capture indirection.
 
-`Value` is a placed result: the read, the local, and its `LocalType`.
+`Value` is a placed result: `Code` runs, `Read` names the value after it runs,
+`Place` is the `SlotLocation`, and `Type` is its `LocalType`.
 `EmitScope.Yield` spills a computation into the next pool local and returns
 that assignment. The scope's dispose rewinds anything that was not yielded.
 
@@ -88,7 +89,7 @@ release it, so the ring is a pool of result locations rather than an ambient
 cursor that every consumer re-derived as `RingDepth - 1`.
 
 - An expression leaves its result at the top of the ring, which is where
-  `CompiledNode.Result` points.
+  `Value.Place` points and `Value.Read` reads it.
 - A node whose value leaves through another channel — a `return` inside an inlined
   arm, or a statement with no value — reports no result, and `RequireResult` fails
   closed for a consumer that needs one.
@@ -353,8 +354,9 @@ IEEE bit patterns, and heap references allocate through
   locals allocated inline during the AST walk; no global allocator pass and no
   runtime push/pop for expression evaluation.
 - **Frame slots are observation copies**: arguments and the result live in
-  `_slots[_fp + n]`. A variable lease is copied there at block exit, catch exit,
-  a debug hook, and a suspend spill. A write does not copy.
+  `_slots[_fp + n]`. A variable lease is copied there by the debug hook (which
+  carries the block-exit and catch-exit copies) and at a suspend spill. A write
+  does not copy.
 - **Pooled buffers**: `VmValueStack` and `VmManagedObjectHeap` rent their backing
   arrays, so short-lived executions do not allocate them.
 - **Compiled delegates**: the emitter builds a LINQ expression and compiles it to

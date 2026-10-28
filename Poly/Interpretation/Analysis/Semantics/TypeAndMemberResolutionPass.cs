@@ -204,7 +204,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ClrTypeReference clrTypeRef => context.TypeDefinitions.GetTypeDefinition(clrTypeRef.RuntimeType),
             NamedTypeReference named =>
                 AstTypeReferenceResolver.TryResolve(named, context.TypeDefinitions),
-            OptionalTypeReference optional => ResolveNodeType(context, optional.InnerType),
+            OptionalTypeReference optional => ResolveOptionalType(context, optional),
             PrimitiveTypeReference prim => prim.PrimitiveId.GetClrType() is { } clr
                 ? context.TypeDefinitions.GetTypeDefinition(clr)
                 : null,
@@ -330,20 +330,52 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (leftType == null || rightType == null)
             return null;
 
+        bool lift = IsNullableType(leftType) || IsNullableType(rightType);
+        leftType = PeelNullable(context, leftType);
+        rightType = PeelNullable(context, rightType);
+
         var leftRank = GetNumericRank(leftType);
         var rightRank = GetNumericRank(rightType);
 
         // Promote to the wider numeric type (C#-style); fall back to the
         // left operand type when either side is not a numeric primitive.
+        ITypeDefinition? promoted;
         if (leftRank is null || rightRank is null)
-            return leftType;
+            promoted = leftType;
+        else {
+            promoted = leftRank >= rightRank ? leftType : rightType;
+            // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
+            // must accept a later int write), so a char result becomes int.
+            if (promoted.GetRuntimeType() == typeof(char))
+                promoted = context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted;
+        }
 
-        var promoted = leftRank >= rightRank ? leftType : rightType;
-        // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
-        // must accept a later int write), so a char result becomes int.
-        return promoted.GetRuntimeType() == typeof(char)
-            ? context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted
-            : promoted;
+        if (!lift || promoted.GetRuntimeType() is not { IsValueType: true } runtime
+            || Nullable.GetUnderlyingType(runtime) is not null)
+            return promoted;
+        return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime))
+            ?? promoted;
+    }
+
+    private static bool IsNullableType(ITypeDefinition type) =>
+        type.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null;
+
+    private static ITypeDefinition PeelNullable(AnalysisContext context, ITypeDefinition type) {
+        if (type.GetRuntimeType() is not { } runtime
+            || Nullable.GetUnderlyingType(runtime) is not { } underlying)
+            return type;
+        return context.TypeDefinitions.GetTypeDefinition(underlying) ?? type;
+    }
+
+    /// <summary>A value-type optional is <c>Nullable&lt;T&gt;</c>. A reference optional
+    /// stays the reference: null is already its absent value.</summary>
+    private static ITypeDefinition? ResolveOptionalType(
+        AnalysisContext context, OptionalTypeReference optional) {
+        var inner = ResolveNodeType(context, optional.InnerType);
+        if (inner?.GetRuntimeType() is not { IsValueType: true } runtime
+            || Nullable.GetUnderlyingType(runtime) is not null)
+            return inner;
+        return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime));
     }
 
     private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
@@ -372,6 +404,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (leftType == null || rightType == null)
             return null;
 
+        // A nullable operand lifts the result (`1L | age` is `long?`). A pair of
+        // required operands keeps the left type, which is the width those operators
+        // already had.
+        if (IsNullableType(leftType) || IsNullableType(rightType))
+            return PromoteNumeric(context, leftType, rightType);
         return leftType;
     }
 

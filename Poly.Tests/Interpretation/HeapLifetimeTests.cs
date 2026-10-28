@@ -104,7 +104,8 @@ public class HeapLifetimeTests {
     }
 
     private static readonly Regex ArrayCacheLocal = new("^_f?arr\\d+$", RegexOptions.Compiled);
-    private static readonly Regex RegisterLocal = new("^_[dfi]?reg\\d+$", RegexOptions.Compiled);
+    // A variable is a pool lease (_r/_d/_f/_i/_n), not a _reg local.
+    private static readonly Regex RegisterLocal = new("^_(?:[rdfi]\\d+|n\\d+_\\w+)$", RegexOptions.Compiled);
 
     private static AbiEmitter.BuiltVmProgram Build(Node program) =>
         AbiEmitter.Build(program, Interpreter.Analyze(program), CompilationMode.NoDebug);
@@ -143,8 +144,8 @@ public class HeapLifetimeTests {
         }
     }
 
-    /// <summary>The handle argument must read the variable's own storage — a register or a
-    /// frame slot — not a ring temp the emitter kept for another purpose.</summary>
+    /// <summary>The handle argument must read the variable's own lease or its frame
+    /// slot, not a constant the emitter invented.</summary>
     private sealed class SlotReadFinder : ExpressionVisitor {
         public bool Found { get; private set; }
 
@@ -228,7 +229,7 @@ public class HeapLifetimeTests {
         var slotRead = new SlotReadFinder();
         slotRead.Visit(argument);
         await Assert.That(slotRead.Found).IsTrue()
-            .Because("the handle is read from the variable's slot before the cache is "
+            .Because("the handle is read from the variable's lease before the cache is "
                 + $"cleared: {argument}");
     }
 

@@ -1,7 +1,7 @@
 # VM ABI Reference
 
 This document describes the Poly Virtual Machine's Application Binary Interface (ABI)
-in detail: the call frame layout, register model, value representation, and calling
+in detail: the call frame layout, local pool, value representation, and calling
 convention.
 
 ## Overview
@@ -110,65 +110,85 @@ bridged lambda returning to a CLR delegate or `Expression<D>`, is the single dec
 
 Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed long)`, `[1..] = `long[1]` cells. Function-table bodies read and write `cell[0]`. The enclosing frame stores a heap handle to the same cell in the captured variable's slot. Capture lists come from analysis (`LambdaCaptureMetadata`). `Invoke(Variable)` is typed as the lambda body's value, so result unwrap reads a scalar word by the body's CLR type (a `bool` is 0/non-zero) rather than treating ABI `1` as heap handle 1. `VariableLayout.IsUpvalueCell` tells `VmDebugger.GetLocals` to present `cell[0]`. Invoke fails closed if an upvalue slot is not a `long[1]`.
 
-## Ring Register Model
+## Local pool
 
-The emitter uses ring registers during compilation — locals `_rN` (word), `_dN`
-(double), `_fN` (float) that hold temporary values during expression evaluation:
+The emitter keeps hot values in one `LocalPool`. Variable leases, expression temps,
+and named helpers (`_coal`, `_shift`, `_callSp`, `_callerFp`) share that cursor.
+A local's name is its `LocalType`:
 
 | Property | Value |
 |----------|-------|
 | Allocation | Inline during the AST walk, on demand (no pre-pass) |
 | High-water | The deepest statement in a block, not the block's total |
-| Release | An emitter holds a `Context.RingScope`; disposal restores the depth, and a block restarts each statement at its entry depth |
-| JIT behavior | CLR JIT can enregister ring locals |
+| Release | `EmitScope` disposal rewinds anything that was not yielded; a block restarts each statement at its entry depth |
+| JIT behavior | Pool locals are ordinary CLR locals, so the JIT can enregister them |
 
-### A slot carries a representation
+### A slot carries a `LocalType`
 
-A ring slot is keyed by **(index, representation)**, not by index alone
-(`Context.RingVar(int, Type)`). Ring depth rewinds after every statement, so absolute
-index 3 holds a `double` in one statement and a `long` in the next; one local per index
-would have to be assigned a value of the wrong type, and `Expression.Assign` rejects a
-mismatched type rather than coercing. Distinct locals per representation keep every
-assignment type-correct.
+A pool local is keyed by **(index, `LocalType`)**, not by index alone
+(`LocalPool.Ring` / `Context.RingVar`). Ring depth rewinds after every statement, so
+absolute index 3 holds a `double` in one statement and a `long` in the next; one local
+per index would have to be assigned a value of the wrong type, and `Expression.Assign`
+rejects a mismatched type rather than coercing. Distinct locals per `LocalType` keep
+every assignment type-correct.
 
-| Value | Slot local | Contents |
+| Value | Pool local | Contents |
 |-------|-----------|----------|
 | `double` | `_dN` | the value itself |
 | `float` | `_fN` | the value itself, 32-bit |
+| `int` | `_iN` | the value itself |
+| `Nullable<T>` | `_nN_T` | the nullable value |
 | every other scalar, a handle, or an unresolved representation | `_rN` | the `long` word |
 
 An IEEE arm stores into and reads from the local of its own type, so an arithmetic
 chain — `zx*zx + zy*zy` — contains no `BitConverter` call between its operands. The
-**word is the fallback**: a representation analysis cannot resolve is not an error, and
-integer programs keep their local count unchanged.
+**word is the fallback**: a representation analysis cannot resolve is not an error.
+An `int` keeps its own local; every other integer stays a word, so the local count
+does not grow.
 
-### A variable register carries a representation too
+### A variable is a pool lease
 
-A program's hot state is not on the ring — it is in variables. A variable is backed by a
-register (`_regN`) while the body has fewer than 32 live ones, and by a frame slot
-(`_slots[_fp + n]`) after that. The same rule applies to a register:
+A variable is a `Local` leased from the same pool, at most 32 live
+(`MaxVariableLeases`). A write assigns the lease. There is no copy on write. The
+33rd simultaneous variable has no free lease and lives only in its frame slot
+(`_slots[_fp + n]`).
 
-| Variable | Register local | Contents |
-|----------|---------------|----------|
-| `double` | `_dregN` | the value itself |
-| `float` | `_fregN` | the value itself, 32-bit |
-| every other value | `_regN` | the `long` word |
-| a **captured** (cell-backed) local | `_regN` | the capture cell's heap handle |
+A lease uses the same `LocalType` names as a temp. A captured (cell-backed) lease
+holds the capture cell's heap handle, not `cell[0]`, because the cell is where the
+value lives; typing the lease by the variable's value would coerce the handle.
 
-A captured local's register holds the handle, not the value, because the cell is where
-the value lives; typing it by the variable's value would coerce the handle.
+A lease index is released when its scope ends and reused by the next scope's
+variable, which may have a different `LocalType`. Index 0 can back a `double` in
+one block and a word in the next. Leases are keyed by **(index, `LocalType`)**,
+so two variables never alias one `ParameterExpression` at two types.
+`RegisterIndex_ReusedAcrossRepresentations_DoesNotAlias` is the test.
 
-A register index is released when its scope ends and reused by the next scope's variable,
-which may have a different representation — index 0 can back a `double` in one block and
-a word in the next. Registers are therefore keyed by **(index, representation)** exactly
-as ring slots are (`Context.RegisterVar`), so two variables can never alias one
-`ParameterExpression` at two types. `RegisterIndex_ReusedAcrossRepresentations_DoesNotAlias`
-is the test.
+Reading a `double` variable into a pool local of the same type is a copy, and
+assigning one is a copy: no conversion per access. The numeric conversion between
+width classes (an integer assigned to a `double` widens, a `double` assigned to an
+integer truncates) happens once, at the assignment, in `AbiEmitter.AssignedValue`.
 
-Reading a `double` variable into a ring slot of the same type is a copy, and assigning
-one is a copy: no conversion per access. The numeric conversion between width classes
-(an integer assigned to a `double` widens, a `double` assigned to an integer truncates)
-happens once, at the assignment, in `AbiEmitter.AssignedValue`.
+**Frame slots are observation copies.** A lease is stored into `_slots[_fp + n]`
+only at an observation point:
+
+| Point | When |
+|-------|------|
+| Block exit | Inside the hook guard, and only while a hook is attached |
+| Catch exit | Inside the hook guard, after a catch body, and only while a hook is attached |
+| Debug hook | Inside the hook guard, before the call, and only while a hook is attached |
+| Suspend | Once per suspend point. Resume re-enters the method and CLR locals start at zero |
+
+The suspend store is the frame encoding of the local (`SlotLocation.Frame.Write`,
+which is `LocalType.Encode`; a nullable boxes). The reload is `LocalType.FromWord`,
+and it is the first expression after the resume label, before the suspended flag
+is cleared. The spill set is each live local that dies on resume and is read after
+it: variable leases, enclosing temps still needed, and helpers assigned before the
+suspend and read after it (`LocalPool.LiveHelpers`). A binding whose only home is
+already a frame word is not spilled. A cell spills its handle once. A binding is
+never spilled twice.
+
+`Value` is that placement when a consumer needs it: the read, the local, and its
+`LocalType`. `EmitScope.Yield` spills a computation into the next pool local.
 
 **Bitcasts only at a word boundary.** `BitConverter.DoubleToInt64Bits` /
 `Int64BitsToDouble` (wrapped once, in `RingCodec.ToIeee` / `FromIeee`) appear only where
@@ -177,7 +197,7 @@ a value must move as a word:
 | Boundary | Why |
 |----------|-----|
 | `_slots[_fp + n]` read/write | a frame slot is a `long` word |
-| the block-exit `_slots` snapshot store | `VmDebugger.GetLocals` reads frame slots |
+| the `_slots` observation copy | inside the hook guard, so `VmDebugger.GetLocals` can read a run that had a hook attached |
 | `long[1]` capture cells | the cell is one `long` |
 | `VmCall.Invoke` result and CLR call results | a call answers in the caller's word |
 | a `RingRegion` slot | regions are word-addressed, and every region consumer reads a word |
@@ -190,7 +210,10 @@ word form of both IEEE widths is a `double`'s bits.
 The tree rule is checked structurally: `VmTree.Scan.IeeeArithmeticWithBitcasts` lists
 every IEEE arithmetic node whose operand or result converts at the operation, and
 `VmTree.Scan.RegisterBitcasts` lists every bitcast that reads or is stored into a
-variable's own register (excluding the frame snapshot and a call argument).
+variable lease. The scan uses the `LocalType` registry (an IEEE local with
+`DoubleToInt64Bits`, or a non-IEEE local with `Int64BitsToDouble`), so a lease
+named `_rN` or `_dN` is still visible. The frame snapshot and a call argument
+are excluded.
 `IeeeRingSlotTests` and `TypedVariableStorageTests` fail if either list is non-empty.
 
 `CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
@@ -227,7 +250,7 @@ An out-of-range index still throws `IndexOutOfRangeException` from the CLR check
 **The local is keyed by `(slot, element type)`** (`Context.PromoteArray`), not by the
 `Variable`, because the rest of the emitter resolves bindings by slot and a slot is
 released at the end of a block and handed to the next sibling scope's variable —
-`_arrN` for a register slot, `_farrN` for a frame slot. Two element types never alias
+`_arrN` for a lease index, `_farrN` for a frame slot. Two element types never alias
 one local: a `long[]` and an `object[]` cannot be assigned to the same
 `ParameterExpression`.
 
@@ -270,7 +293,7 @@ slot reuse the clear makes safe.
 
 | Mode | DebugHook | Resume dispatch | Use Case |
 |------|-----------|----------------|----------|
-| `Normal` | Active | Only when a `SuspendNode` registered a step | Development, debugging, stepping |
+| `Normal` | Active | Only when a `SuspendNode` recorded a step | Development, debugging, stepping |
 | `NoDebug` | Omitted | Omitted | Production, benchmarks |
 
 In `NoDebug` mode, the emitted expression tree omits all debug checks,
@@ -293,16 +316,22 @@ CLR types (`FromClr`/`ToClr` at compile time, `ToRing`/`Cast`/`TypeAs`/
 `UnboxNullable` at runtime). `RingCodec.ToIeee`/`FromIeee` are the one writer and
 reader of the double/long bitcast.
 
-Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Local`, `Cell`);
-`Context.Resolve` maps a binding to one, so an emit site asks for the location
-instead of re-deriving `_slots[_fp + n]`. Each location states the `Representation` it
-holds — a typed register or a typed ring slot holds the value, a frame slot and a cell
-hold the word — and `ReadAs` / `Write` convert only when the requested representation
-differs, so a value crosses the word boundary once at the crossing. Two classifiers
-answer two questions: `RingCodec.UnderlyingKindFor`
-(does the *underlying* type fit one slot as bits; peels `Nullable`) and
-`ValueRepresentationClassifier.KindFor` (what does a *node* of this type put in
-its slot; a nullable is a heap handle).
+Where the slot lives is `SlotLocation` (`Ring`, `Frame`, `Local`, `Cell`). There is
+no `View`. `Context.Resolve` maps a binding to one, so an emit site asks for the
+location instead of re-deriving `_slots[_fp + n]`. Each location states the
+`Representation` it holds — a typed lease or a typed pool local holds the value, a
+frame slot and a cell hold the word — and `ReadAs` / `Write` convert only when the
+requested representation differs. A typed read of a stored word is
+`LocalType.FromWord`; a typed write is `Encode`. A value crosses the word boundary
+once at the crossing. `ValueRepresentationClassifier.KindFor` is the one
+classifier: what does a *node* of this type put in its slot. A nullable is a
+heap handle (its frame word is a boxed `Nullable<T>`; 0 is absent), while its
+pool local is typed `Nullable<T>` (`_nN_T`), so the value is never read as a
+word. There is no second "underlying" classifier; arithmetic on a nullable
+lifts to its underlying type and the slot stays the typed local.
+
+The table is the word a frame slot, a cell, or a call result holds. A pool local
+for `int`, `float`, or `double` holds the CLR value; `Encode` writes this word.
 
 The representation table:
 

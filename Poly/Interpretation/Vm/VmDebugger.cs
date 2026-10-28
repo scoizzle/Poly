@@ -115,6 +115,10 @@ public sealed class VmDebugger : IDisposable {
         });
 
         WaitForBoundary(ct);
+        if (_state.Status == InterpreterStatus.Suspended) {
+            CurrentLocals = GetLocals(_state);
+            return CaptureResult();
+        }
         if (_completed.WaitOne(0))
             return CaptureCompleted();
         return CaptureResult();
@@ -136,6 +140,10 @@ public sealed class VmDebugger : IDisposable {
 
         WaitForBoundary(ct);
 
+        if (_state.Status == InterpreterStatus.Suspended) {
+            CurrentLocals = GetLocals(_state);
+            return CaptureResult();
+        }
         if (_completed.WaitOne(0))
             return CaptureCompleted();
         return CaptureResult();
@@ -161,10 +169,12 @@ public sealed class VmDebugger : IDisposable {
         while (true) {
             WaitHandle.WaitAny(handles);
             ct.ThrowIfCancellationRequested();
+            if (_state.Status == InterpreterStatus.Suspended) {
+                CurrentLocals = GetLocals(_state);
+                return CaptureResult();
+            }
             if (_completed.WaitOne(0))
                 return CaptureCompleted();
-            if (_state.Status == InterpreterStatus.Suspended)
-                return CaptureResult();
         }
     }
 
@@ -269,11 +279,12 @@ public sealed class VmDebugger : IDisposable {
         if (debugInfo is null || debugInfo.Variables.Count == 0)
             return Array.Empty<(string, long)>();
         var slots = state.Stack.RawSlots;
-        const int fp = 0;
+        int fp = state.FramePos;
         var result = new (string, long)[debugInfo.Variables.Count];
         for (int i = 0; i < debugInfo.Variables.Count; i++) {
             var v = debugInfo.Variables[i];
-            long raw = (fp + v.FrameOffset < slots.Length)
+            int index = fp + v.FrameOffset;
+            long raw = (uint)index < (uint)slots.Length
                 ? slots[fp + v.FrameOffset] : 0L;
             result[i] = (v.Name, DecodeLocal(v, raw, state.Heap));
         }

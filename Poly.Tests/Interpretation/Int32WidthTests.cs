@@ -78,21 +78,19 @@ public class Int32WidthTests {
         await Assert.That(Raw(program)).IsEqualTo(60000L)
             .Because("short + short is an int addition, so 30000 + 30000 is 60000 and not -5536");
 
-        var promoted = ArithmeticNodes(program, ExpressionType.Add)
-            .Where(node => node.Type == typeof(int)
-                && IsWordToInt(node.Left) && IsWordToInt(node.Right))
-            .ToList();
-        await Assert.That(promoted.Count).IsEqualTo(1)
-            .Because("the program's own addition is the one 32-bit operation whose operands "
-                + "widen from the word to int; found " + promoted.Count);
+        // The int32 family lives in an int local, so short + short is already int + int.
+        // `_fp + n` is the emitter's own frame arithmetic and is not this addition.
+        // A long or uint operand is the case that still widens, and that is a different test.
+        var addition = ArithmeticNodes(program, ExpressionType.Add)
+            .Single(node => node.Type == typeof(int)
+                && node.Left is not ParameterExpression { Name: "_fp" });
+        await Assert.That(addition.Left.Type).IsEqualTo(typeof(int));
+        await Assert.That(addition.Right.Type).IsEqualTo(typeof(int));
+        await Assert.That(Conversions(addition)
+                .Count(convert => convert.Operand.Type == typeof(long) && convert.Type == typeof(int)))
+            .IsEqualTo(0)
+            .Because("a short already occupies an int local, so the addition does not widen a word");
     }
-
-    /// <summary>A word read widened to <c>int</c>: the shape a promoted smaller integral
-    /// type takes, and not the shape of the emitter's own frame-pointer arithmetic.</summary>
-    private static bool IsWordToInt(Expression expression) =>
-        expression is UnaryExpression { NodeType: ExpressionType.Convert } convert
-        && convert.Type == typeof(int)
-        && convert.Operand.Type == typeof(long);
 
     /// <summary>An <c>int</c> read into a <c>long</c> expression widens exactly once, at the
     /// operand, and keeps its value.</summary>

@@ -21,7 +21,7 @@ public static partial class AbiEmitter {
     private static Expression EmitResult(Expression call, Type? returnType, Context ctx) =>
         returnType == typeof(void)
             ? Block(call, Constant(0L))
-            : RingCodec.FromClr(call, returnType, ctx.HeapLocal);
+            : RingCodec.ToFrame(call, returnType ?? call.Type, ctx.HeapLocal);
 
     /// <summary>
     /// Invoke: for Lambda targets, compile the body inline (no separate delegate).
@@ -95,9 +95,15 @@ public static partial class AbiEmitter {
                                 continue;
                             }
                             var ringVal = ctx.RingVar(argSlots[i]);
-                            methodArgs[i] = RingCodec.ToClr(
-                                ringVal, methodParams[i].ParameterType, invoke.Arguments[i],
-                                ctx.Analysis, ctx.HeapLocal);
+                            var parameterType = methodParams[i].ParameterType;
+                            var sourceClr = ctx.ClrTypeOf(invoke.Arguments[i]);
+                            methodArgs[i] = Nullable.GetUnderlyingType(parameterType) is not null
+                                && sourceClr is not null
+                                && Nullable.GetUnderlyingType(sourceClr) is not null
+                                ? new SlotLocation.Ring(argSlots[i]).ReadAs(ctx, parameterType)
+                                : RingCodec.ToClr(
+                                    ringVal, parameterType, invoke.Arguments[i],
+                                    ctx.Analysis, ctx.HeapLocal);
                         }
                     }
 
@@ -106,14 +112,11 @@ public static partial class AbiEmitter {
                         callExpr = Call(null, methodInfo, methodArgs);
                     }
                     else {
-                        var instanceObj = Call(ctx.HeapLocal,
-                            HeapUnsafeGet,
-                            Convert(ctx.RingVar(instanceSlot), typeof(int)));
-                        // Convert from 'object' to the declaring type so Expression.Call
-                        // can resolve the method. This is a no-op cast at runtime for
-                        // reference types but satisfies Expression tree type validation.
                         var declaringType = methodInfo.DeclaringType!;
-                        callExpr = Call(Convert(instanceObj, declaringType), methodInfo, methodArgs);
+                        var receiverClr = ctx.ClrTypeOf(member.Value) ?? declaringType;
+                        callExpr = Call(
+                            InstanceCallTarget(ctx.RingVar(instanceSlot), receiverClr, declaringType, ctx),
+                            methodInfo, methodArgs);
                     }
 
                     // Build the full expression sequence: instance → args → call → result
@@ -175,23 +178,22 @@ public static partial class AbiEmitter {
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
 
             var astReceiver = ctx.OpenRing();
-            int astInstanceSlot = astReceiver.Add(CompileNode(member.Value, ctx));
+            var astInstanceSlot = astReceiver.AddValue(CompileNode(member.Value, ctx));
 
             var astArgs = ctx.OpenRing();
-            int[] astArgSlots = new int[invoke.Arguments.Length];
+            var astArgSlots = new Value[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++)
-                astArgSlots[i] = astArgs.Add(CompileNode(invoke.Arguments[i], ctx));
+                astArgSlots[i] = astArgs.AddValue(CompileNode(invoke.Arguments[i], ctx));
 
-            var astInstanceObj = Call(ctx.HeapLocal, HeapUnsafeGet,
-                Convert(ctx.RingVar(astInstanceSlot), typeof(int)));
+            var astInstanceObj = InstanceObject(astInstanceSlot.Read, ctx.ClrTypeOf(member.Value), ctx);
             var argObjs = new Expression[invoke.Arguments.Length];
             for (int i = 0; i < invoke.Arguments.Length; i++) {
                 // An argument the emitter cannot place is a compile error, not a handle.
                 bool scalar = RingCodec.IsStackScalar(invoke.Arguments[i], ctx.Analysis);
                 argObjs[i] = scalar
-                    ? Convert(ctx.RingVar(astArgSlots[i]), typeof(object))
+                    ? ScalarArgument(astArgSlots[i].Read, ctx.ClrTypeOf(invoke.Arguments[i]), ctx)
                     : Call(ctx.HeapLocal, HeapUnsafeGet,
-                        Convert(ctx.RingVar(astArgSlots[i]), typeof(int)));
+                        Convert(astArgSlots[i].Read, typeof(int)));
             }
 
             var invokeCall = Call(
@@ -202,12 +204,12 @@ public static partial class AbiEmitter {
                 NewArrayInit(typeof(object), argObjs),
                 Constant(astBodyReject, typeof(string)));
 
-            int astSlot = ctx.AllocSlot();
-            ctx.RingDepth = astSlot + 1;
+            var astSlot = ctx.Reserve();
+            ctx.RingDepth = astSlot.RingSlot + 1;
             var astBody = new List<Expression>(astArgs.Count + 4);
             astBody.AddRange(astReceiver.Steps);
             astBody.AddRange(astArgs.Steps);
-            var unsetReceiver = UnsetReceiverGuard(member.Value, ctx.RingVar(astInstanceSlot), ctx);
+            var unsetReceiver = UnsetReceiverGuard(member.Value, astInstanceSlot.Read, ctx);
             if (unsetReceiver is not null)
                 astBody.Add(unsetReceiver);
 
@@ -217,7 +219,7 @@ public static partial class AbiEmitter {
             bool isVoid = method is not null
                 && (returnClr == typeof(void)
                     || string.Equals(method.MemberTypeDefinition.Name, "void", StringComparison.Ordinal));
-            astBody.Add(Assign(ctx.RingVar(astSlot),
+            astBody.Add(Assign(astSlot.Read,
                 EmitResult(invokeCall, isVoid ? typeof(void) : returnClr, ctx)));
             return Block(astBody);
         }
@@ -250,17 +252,18 @@ public static partial class AbiEmitter {
             // argument slots of its own.
             ctx.PushScope();
             int savedNextParamSlot = ctx.SaveAndResetParamSlots();
-            ctx.PushFrameParameters();
             foreach (var param in lambda.Parameters)
-                ctx.MapFrameParameter(param, ctx.DeclareParameter(param));
+                ctx.DeclareParameter(param);
             int saveDepth = ctx.RingDepth;
 
             var preBody = new List<Expression>();   // before inline body
             var postBody = new List<Expression>();  // after inline body
             var spProp = Property(Property(ctx.State, "Stack"), "StackPointer");
 
-            var callSp = Variable(typeof(int), "_callSp");
-            var callerFramePos = Variable(typeof(int), "_callerFp");
+            using var callSpLease = ctx.LeaseHelper(typeof(int), "_callSp");
+            using var callerFramePosLease = ctx.LeaseHelper(typeof(int), "_callerFp");
+            var callSp = callSpLease.Local;
+            var callerFramePos = callerFramePosLease.Local;
             preBody.Add(Assign(callSp, spProp));
             // SetArgs seeded the arguments at slots[callSp + index]; the frame pointer
             // is that first slot, so parameters resolve at FP + index. The caller's
@@ -287,9 +290,9 @@ public static partial class AbiEmitter {
             // The caller's slot below `saveDepth` is a word, so a typed body result is
             // converted once here rather than left as a typed local nobody reports.
             if (bodyResultSlot != saveDepth
-                || RingCodec.IsTypedSlot(RingCodec.SlotTypeOf(bodyExpr.Type)))
+                || RingCodec.IsTypedSlot(RingCodec.SlotTypeOf(bodyExpr.ClrType)))
                 postBody.Add(Assign(ctx.RingVar(saveDepth),
-                    ctx.RingWord(bodyResultSlot, bodyExpr.Type)));
+                    ctx.RingWord(bodyResultSlot, bodyExpr.ClrType)));
             postBody.Add(Assign(ctx.FramePosLocal, callerFramePos));
             // The block must end on its value: its own type is what the caller reports as
             // the result's representation, and the frame restore above is an int.
@@ -297,10 +300,8 @@ public static partial class AbiEmitter {
 
             ctx.ParamSlotOffset = savedParamOffset;  // restore
             ctx.RestoreParamSlots(savedNextParamSlot);  // restore outer param slot counter
-            ctx.PopFrameParameters();
             ctx.PopScope();
-            var locals = new List<ParameterExpression> { callSp, callerFramePos };
-            return Block(locals, Block(preBody.Concat(postBody)));
+            return Block(preBody.Concat(postBody));
         }
 
         if (invoke.Delegate is Poly.Ast.Nodes.Variable or Poly.Ast.Nodes.Parameter)
@@ -363,8 +364,8 @@ public static partial class AbiEmitter {
                 continue;
             var hole = node.Holes[i];
             var holeRing = ctx.OpenRing();
-            int holeSlot = holeRing.Add(CompileNode(hole, ctx));
-            parts.Add(HoleToClrObject(hole, ctx.RingVar(holeSlot), ctx));
+            var holeSlot = holeRing.AddValue(CompileNode(hole, ctx));
+            parts.Add(HoleToClrObject(hole, holeSlot.Read, ctx));
             seq.AddRange(holeRing.Steps);
         }
 
@@ -406,19 +407,19 @@ public static partial class AbiEmitter {
             throw new InvalidOperationException(
                 $"VM compile rejected: lambda has {stored.Lambda.Parameters.Count} parameter(s) but invoke has {invoke.Arguments.Length} argument(s).");
         var ring = ctx.OpenRing();
-        int targetSlot = ring.Add(CompileNode(invoke.Delegate, ctx));
-        int[] argSlots = new int[invoke.Arguments.Length];
+        var targetSlot = ring.AddValue(CompileNode(invoke.Delegate, ctx));
+        var argSlots = new Value[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++)
-            argSlots[i] = ring.Add(CompileNode(invoke.Arguments[i], ctx));
+            argSlots[i] = ring.AddValue(CompileNode(invoke.Arguments[i], ctx));
         var argInits = new Expression[invoke.Arguments.Length];
         for (int i = 0; i < invoke.Arguments.Length; i++)
-            argInits[i] = ctx.RingVar(argSlots[i]);
-        int outSlot = ctx.AllocSlot();
-        ctx.RingDepth = outSlot + 1;
-        var call = Assign(ctx.RingVar(outSlot),
+            argInits[i] = argSlots[i].Read;
+        var outSlot = ctx.Reserve();
+        ctx.RingDepth = outSlot.RingSlot + 1;
+        var call = Assign(outSlot.Read,
             Call(null, InvokeHeapClosureInfo,
                 ctx.State,
-                ctx.RingVar(targetSlot),
+                targetSlot.Read,
                 ctx.FunctionTableExpr!,
                 NewArrayInit(typeof(long), argInits)));
         return ring.Then(call);
@@ -514,7 +515,7 @@ public static partial class AbiEmitter {
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
         // Instance calls pass the receiver handle at frame slot 0. User
-        // parameters start at slot 1 and are matched by name.
+        // parameters start at slot 1 and are matched by the parameter node.
         if (instanceSlot)
             fnCtx.ParamSlotOffset = -1;
         var bodyExprs = new List<Expression>();
@@ -542,9 +543,8 @@ public static partial class AbiEmitter {
         // for the receiver. Without the reserve, block-local zeros land on the
         // arguments (CreatePermits plate became 0 before Permit.Create).
         fnCtx.PushScope();
-        fnCtx.PushFrameParameters();
         foreach (var param in parameters)
-            fnCtx.MapFrameParameter(param, fnCtx.DeclareParameter(param));
+            fnCtx.DeclareParameter(param);
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
         // Compile body
@@ -555,7 +555,7 @@ public static partial class AbiEmitter {
         // a body that yields none — so a caller never reads a slot the callee left
         // untouched. An IsAsync method returns a completed Task / Task<T> instead.
         Expression? resultValue = fnCtx.RingDepth > 0
-            ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.Type)
+            ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.ClrType)
             : null;
         if (asyncReturn is not null)
             resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
@@ -627,7 +627,7 @@ public static partial class AbiEmitter {
     /// </summary>
     private static Expression WrapAsyncResult(Expression? bodyValue, Type asyncReturn, Context ctx, Node? source) {
         if (asyncReturn == typeof(Task))
-            return RingCodec.FromClr(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
+            return RingCodec.ToFrame(Property(null, TaskCompletedTaskInfo), asyncReturn, ctx.HeapLocal);
         var resultType = asyncReturn.GetGenericArguments()[0];
         if (bodyValue is null)
             throw new InvalidOperationException(
@@ -638,7 +638,7 @@ public static partial class AbiEmitter {
                 $"VM compile rejected: async method returning '{asyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
         var yielded = RingCodec.ToClr(bodyValue, resultType, source, ctx.Analysis, ctx.HeapLocal);
         var task = Call(TaskFromResultInfo.MakeGenericMethod(resultType), yielded);
-        return RingCodec.FromClr(task, asyncReturn, ctx.HeapLocal);
+        return RingCodec.ToFrame(task, asyncReturn, ctx.HeapLocal);
     }
 
     // Compiled AST constructors and methods, per definition node and compilation
@@ -803,7 +803,7 @@ public static partial class AbiEmitter {
                     out var bridgePrelude, out var bridgeArgument)) {
                 ring.AddUncounted(bridgePrelude);
                 int bridged = ring.AddValue(
-                    RingCodec.FromClr(bridgeArgument, parameterType, ctx.HeapLocal));
+                    RingCodec.ToFrame(bridgeArgument, parameterType ?? bridgeArgument.Type, ctx.HeapLocal));
                 values.Add(ctx.RingVar(bridged));
                 continue;
             }
@@ -821,11 +821,13 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>A callee parameter's storage convention, from its declaration.
-    /// Inline value types (including nullable inline types, which IsInline peels)
-    /// are raw slots; non-inline value types and references live on the heap.</summary>
+    /// An inline value type is a raw slot. A <c>Nullable&lt;T&gt;</c> is a handle:
+    /// the callee unboxes it into a local.</summary>
     private static bool ParameterReadsRawSlot(IParameter parameter) {
         var runtimeType = parameter.ParameterTypeDefinition.GetRuntimeType();
-        return runtimeType is not null && RingCodec.IsInline(runtimeType);
+        return runtimeType is not null
+            && Nullable.GetUnderlyingType(runtimeType) is null
+            && RingCodec.IsInline(runtimeType);
     }
 
     /// <summary>An omitted argument's default, stored by the callee parameter's
@@ -850,9 +852,9 @@ public static partial class AbiEmitter {
                 throw new InvalidOperationException(
                     $"Instance method '{member.MemberName}' cannot be invoked on a type name.");
             var receiverRing = ctx.OpenRing();
-            int instanceSlot = receiverRing.Add(CompileNode(member.Value, ctx));
+            var instanceSlot = receiverRing.AddValue(CompileNode(member.Value, ctx));
             seq.AddRange(receiverRing.Steps);
-            receiver = ctx.RingVar(instanceSlot);
+            receiver = instanceSlot.Read;
         }
 
         var parameters = definition.Parameters ?? [];
@@ -1152,6 +1154,40 @@ public static partial class AbiEmitter {
             Equal(handle, Constant(0L)),
             Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
     }
+
+    /// <summary>The receiver of a resolved instance call. A temporal word is the
+    /// value (<c>DateTime.AddDays</c> must not treat <c>ToBinary</c> as a heap
+    /// index). Every other receiver is still the heap object.</summary>
+    private static Expression InstanceCallTarget(
+        Expression word, Type? receiverClr, Type declaringType, Context ctx) {
+        var temporal = TemporalWord(receiverClr) ? receiverClr
+            : TemporalWord(declaringType) ? declaringType
+            : null;
+        if (temporal is not null)
+            return LocalType.Decode(word, temporal, declaringType, ctx.HeapLocal);
+        return Convert(
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int))),
+            declaringType);
+    }
+
+    /// <summary>A name-dispatched receiver as <c>object</c>. A temporal word is
+    /// decoded; a handle is still the heap object.</summary>
+    private static Expression InstanceObject(Expression word, Type? clr, Context ctx) {
+        if (TemporalWord(clr))
+            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
+        return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
+    }
+
+    /// <summary>A scalar argument of a name-dispatched call. A temporal word boxes
+    /// the CLR value; an int or IEEE word boxes as it always has.</summary>
+    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) {
+        if (TemporalWord(clr))
+            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
+        return Convert(word, typeof(object));
+    }
+
+    private static bool TemporalWord(Type? clr) =>
+        clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true };
 
     private static Expression MissingClrArgument(ParameterInfo parameter) {
         if (!parameter.HasDefaultValue)

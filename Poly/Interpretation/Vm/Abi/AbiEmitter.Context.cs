@@ -14,27 +14,16 @@ public static partial class AbiEmitter {
 
     public sealed class Context {
         private readonly ParameterExpression _stateParam;
-        private readonly Dictionary<(int Index, Type Representation), ParameterExpression> _ringVars = new();
         private readonly List<ParameterExpression> _locals = new();
-
-        /// <summary>One local per distinct <c>typeof</c> type, holding that type object's heap
-        /// handle. Seeded once before the program body runs, so evaluating <c>typeof</c> is a
-        /// local read rather than an allocation per evaluation.</summary>
-        private readonly Dictionary<Type, ParameterExpression> _typeHandles = new();
+        private readonly LocalPool _pool;
 
         /// <summary>The seeded-handle local for <paramref name="runtimeType"/>, declared on
-        /// first use. Two <c>typeof</c> sites for one type share it.</summary>
-        public ParameterExpression TypeHandleLocal(Type runtimeType) {
-            if (!_typeHandles.TryGetValue(runtimeType, out var local)) {
-                local = Variable(typeof(long), $"_type{_typeHandles.Count}");
-                _typeHandles[runtimeType] = local;
-                _locals.Add(local);
-            }
-            return local;
-        }
+        /// first use. Two <c>typeof</c> sites for one type share it. The pool holds the
+        /// local for the method.</summary>
+        public ParameterExpression TypeHandleLocal(Type runtimeType) => _pool.TypeHandle(runtimeType);
 
         /// <summary>The type handles registered while compiling, in declaration order.</summary>
-        public IEnumerable<KeyValuePair<Type, ParameterExpression>> TypeHandles => _typeHandles;
+        public IEnumerable<KeyValuePair<Type, ParameterExpression>> TypeHandles => _pool.TypeHandles;
 
         public Context() {
             _stateParam = Parameter(typeof(VmState), "state");
@@ -49,6 +38,7 @@ public static partial class AbiEmitter {
             _locals.Add(InstanceHandle);
             EntryLabel = Label("_entry");
             ExitLabel = Label("_exit");
+            _pool = new LocalPool(_locals);
         }
 
         public ParameterExpression State => _stateParam;
@@ -74,7 +64,23 @@ public static partial class AbiEmitter {
             return label;
         }
 
+        internal bool IsResumeTarget(LabelTarget target) {
+            foreach (var label in _resumeLabels.Values)
+                if (ReferenceEquals(label, target))
+                    return true;
+            return false;
+        }
+
+        internal void EnterUnresumable() => _unresumable++;
+
+        internal void LeaveUnresumable() => _unresumable--;
+
+        /// <summary>Suspend inside try, catch, finally, using, or foreach cannot
+        /// resume: the CLR will not jump into a try, and leaving runs finally.</summary>
+        internal bool InUnresumable => _unresumable > 0;
+
         private readonly Dictionary<int, LabelTarget> _resumeLabels = new();
+        private int _unresumable;
 
         public Expression EmitPcDispatch(Expression defaultBody) {
             if (_resumeLabels.Count == 0) return Empty();
@@ -116,9 +122,11 @@ public static partial class AbiEmitter {
         public Expression SlotsStackPointer =>
             Property(Property(_stateParam, StateStackProperty), ValueStackStackPointerProperty);
 
-        public int RingDepth { get; set; }
-        private int _maxDepth;
-        public int MaxRingDepth => _maxDepth;
+        public int RingDepth {
+            get => _pool.Depth;
+            set => _pool.Depth = value;
+        }
+        public int MaxRingDepth => _pool.MaxDepth;
 
         /// <summary>Open a scoped ring region. Each <see cref="RingRegion.Add"/>
         /// folds its result into the next contiguous slot, so callers never
@@ -205,6 +213,17 @@ public static partial class AbiEmitter {
                 return target;
             }
 
+            /// <summary>Add a compiled value and name its region slot. The region
+            /// stores the word, so <see cref="Value.Read"/> is that word and
+            /// <see cref="Value.Type"/> keeps the value's own shape for
+            /// <see cref="Word"/>.</summary>
+            public Value AddValue(Value value) {
+                int target = Add(value.Code);
+                var read = _ctx.RingVar(target);
+                return new Value(read, read, new SlotLocation.Ring(target),
+                    value.Type ?? LocalType.Of(value.ClrType));
+            }
+
             /// <summary>Append a step that produces no ring value (a prelude or spill
             /// assignment). Does not touch <see cref="Count"/> or <see cref="RingDepth"/>.</summary>
             public void AddUncounted(Expression step) => _steps.Add(step);
@@ -229,16 +248,12 @@ public static partial class AbiEmitter {
             }
         }
 
-        private int _bridgeLocalCounter;
-
         /// <summary>Declares a typed local in the outermost block for a lambda-bridge
         /// spill. The local is closed over by a nested delegate/expression tree, so it
-        /// must live outside the invoke's expression sequence.</summary>
-        public ParameterExpression DeclareBridgeLocal(Type type, string name) {
-            var variable = Variable(type, $"_lambda_{name}_{_bridgeLocalCounter++}");
-            _locals.Add(variable);
-            return variable;
-        }
+        /// must live outside the invoke's expression sequence. The pool holds it for
+        /// the method.</summary>
+        public ParameterExpression DeclareBridgeLocal(Type type, string name) =>
+            _pool.Bridge(type, name);
 
         public ParameterExpression RingVar(int absoluteIndex) =>
             RingVar(absoluteIndex, typeof(long));
@@ -250,27 +265,56 @@ public static partial class AbiEmitter {
         /// statement and a <c>long</c> in the next; one local per index would have to be
         /// assigned a value of the wrong type. An IEEE slot keeps the value itself, so
         /// no operation inside an expression has to bitcast it.</para></summary>
-        public ParameterExpression RingVar(int absoluteIndex, Type representation) {
-            if (!_ringVars.TryGetValue((absoluteIndex, representation), out var v)) {
-                v = Variable(representation, RingLocalName(absoluteIndex, representation));
-                _ringVars[(absoluteIndex, representation)] = v;
-                _locals.Add(v);
+        public ParameterExpression RingVar(int absoluteIndex, Type representation) =>
+            _pool.Ring(absoluteIndex, representation);
+
+        /// <summary>The next ring slot, held for the caller. A block rewind releases it.</summary>
+        public ParameterExpression HoldRing(Type representation) => _pool.HoldRing(representation);
+
+        /// <summary>A helper local (<c>_coal</c>, <c>_shift</c>, <c>_callSp</c>,
+        /// <c>_callerFp</c>). Dispose returns it to the pool.</summary>
+        internal LocalPool.HelperLease LeaseHelper(Type type, string stem) =>
+            _pool.LeaseHelper(type, stem);
+
+        /// <summary>A scope whose <see cref="EmitScope.Yield"/> spills a value
+        /// and whose dispose rewinds anything that was not yielded.</summary>
+        internal EmitScope Scope() => new(this);
+
+        /// <summary>Rewinds the ring to <paramref name="entryDepth"/> when disposed.
+        /// A block disposes the previous statement's scope at the next statement
+        /// and leaves the last one undisposed, so the block value stays put.</summary>
+        internal StatementScope OpenStatement(int entryDepth) => new(this, entryDepth);
+
+        internal sealed class StatementScope : IDisposable {
+            private readonly Context _context;
+            private readonly int _entry;
+            private bool _hold;
+
+            internal StatementScope(Context context, int entry) {
+                _context = context;
+                _entry = entry;
             }
-            if (absoluteIndex + 1 > _maxDepth)
-                _maxDepth = absoluteIndex + 1;
-            return v;
+
+            /// <summary>The block's value stays at the depth this statement left.</summary>
+            internal void Hold() => _hold = true;
+
+            public void Dispose() {
+                if (!_hold)
+                    _context.RingDepth = _entry;
+            }
         }
 
-        private static string RingLocalName(int index, Type representation) =>
-            representation == typeof(double) ? $"_d{index}"
-                : representation == typeof(float) ? $"_f{index}"
-                : representation == typeof(int) ? $"_i{index}"
-                : $"_r{index}";
-
-        /// <summary>The word form of a ring slot: the local at its own representation,
-        /// converted to the <c>long</c> word only when that representation is IEEE.</summary>
+        /// <summary>The word form of a ring slot. A <c>Nullable&lt;T&gt;</c> local
+        /// boxes here; every other local uses <see cref="RingCodec.ToWord"/>.</summary>
         public Expression RingWord(int absoluteIndex, Type representation) =>
-            RingCodec.ToWord(RingVar(absoluteIndex, representation));
+            RingCodec.ToFrame(RingVar(absoluteIndex, representation), representation, HeapLocal);
+
+        /// <summary>The word form of a compiled value. A placed value reads its own
+        /// slot at its own shape; a value with no place converts once.</summary>
+        internal Expression Word(Value value) =>
+            value.Place is SlotLocation.Ring ring
+                ? RingWord(ring.Slot, value.ClrType)
+                : RingCodec.ToWord(value.Read);
 
         /// <summary>The ring representation of a node's value: its own type for an IEEE or
         /// <c>int</c> scalar, the word for every other shape — including one analysis could
@@ -279,30 +323,35 @@ public static partial class AbiEmitter {
         /// closed: see <see cref="RingCodec.IntegerArithmeticWidth"/>.)</summary>
         public Type SlotTypeOf(Node node) {
             var (kind, clr) = RepresentationOf(node);
+            if (clr is not null && Nullable.GetUnderlyingType(clr) is not null)
+                return clr;
             return kind is ValueRepresentationKind.StackScalar ? RingCodec.SlotTypeOf(clr) : typeof(long);
         }
 
-        public int AllocSlot() {
-            int slot = RingDepth;
-            RingDepth = slot + 1;
-            if (slot + 1 > _maxDepth)
-                _maxDepth = slot + 1;
-            return slot;
+        public int AllocSlot() => _pool.Alloc();
+
+        /// <summary>Reserve the next ring slot and return it as a value the caller
+        /// writes. The read is the slot; the caller stores into
+        /// <see cref="Value.Read"/> once it has a value.</summary>
+        internal Value Reserve(Type? representation = null) {
+            int slot = AllocSlot();
+            var rep = representation ?? typeof(long);
+            var read = RingVar(slot, rep);
+            return new Value(read, read, new SlotLocation.Ring(slot, rep), LocalType.Of(rep));
         }
 
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
-        private readonly Dictionary<Variable, RegisterSlot> _variableRegisters = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<Variable, VariableLease> _variableLeases = new(ReferenceEqualityComparer.Instance);
         private readonly Stack<List<Variable>> _scopeVars = new();
         private int _nextFrameSlot;
-        private const int MaxRegisterCount = 32;
-        private readonly Dictionary<(int Index, Type Representation), ParameterExpression> _regVars = new();
-        private readonly List<bool> _regUsed = new();
-        private readonly Dictionary<(bool Register, int Index, Type ElementType), ParameterExpression> _arrayLocals = new();
-        private readonly Dictionary<(bool Register, int Index), ParameterExpression> _promotedArrays = new();
-
-        /// <summary>A register index and the representation the variable bound to it needs.
+        /// <summary>Simultaneous variable leases. The 33rd variable in a scope stays a
+        /// frame word: it has no local to spill, and its word survives resume.</summary>
+        private const int MaxVariableLeases = 32;
+        private int _liveLeases;
+        private readonly Dictionary<ParameterExpression, int> _spillSlots = new(ReferenceEqualityComparer.Instance);
+        /// <summary>A ring index and the representation the variable's lease holds.
         /// The index is what a scope releases; the representation is what the local holds.</summary>
-        private readonly record struct RegisterSlot(int Index, Type Representation);
+        private readonly record struct VariableLease(int Index, Type Representation);
 
         public void PushScope() {
             _scopeStack.Push(new Dictionary<Variable, int>(ReferenceEqualityComparer.Instance));
@@ -313,13 +362,13 @@ public static partial class AbiEmitter {
             if (_scopeVars.Count > 0) {
                 var frame = _scopeStack.Peek();
                 foreach (var v in _scopeVars.Peek()) {
-                    if (_variableRegisters.TryGetValue(v, out var reg)) {
-                        _regUsed[reg.Index] = false;
-                        _variableRegisters.Remove(v);
-                        _promotedArrays.Remove((true, reg.Index));
+                    if (_variableLeases.TryGetValue(v, out var lease)) {
+                        _variableLeases.Remove(v);
+                        _liveLeases--;
+                        _pool.ForgetPromoted(register: true, lease.Index);
                     }
                     if (frame.TryGetValue(v, out int slot))
-                        _promotedArrays.Remove((false, slot));
+                        _pool.ForgetPromoted(register: false, slot);
                 }
             }
             _scopeStack.Pop();
@@ -332,19 +381,111 @@ public static partial class AbiEmitter {
             var scope = _scopeStack.Peek();
             var stores = new List<Expression>(vars.Count);
             foreach (var v in vars) {
-                if (_variableRegisters.TryGetValue(v, out var reg) && scope.TryGetValue(v, out int slot)) {
-                    stores.Add(Assign(
-                        ArrayAccess(SlotsLocal, Add(FramePosLocal, Constant(slot))),
-                        RingCodec.ToWord(RegisterVar(reg))));
+                if (_variableLeases.TryGetValue(v, out var lease) && scope.TryGetValue(v, out int slot)) {
+                    stores.Add(new SlotLocation.Frame(slot).Write(this, LeaseLocal(lease)));
                 }
             }
             return stores;
         }
 
+        private readonly Stack<HashSet<Variable>?> _readsAfter = new();
+
+        /// <summary>Bindings read at or after the statement being emitted. Null means
+        /// the emitter could not prove a straight-line continuation (a loop or a
+        /// goto), so the suspend spill keeps the conservative set.</summary>
+        internal bool HasReadsAfterScope => _readsAfter.Count > 0;
+
+        internal HashSet<Variable>? ReadsAfterSuspend =>
+            _readsAfter.Count > 0 ? _readsAfter.Peek() : null;
+
+        internal void PushReadsAfter(HashSet<Variable>? reads) => _readsAfter.Push(reads);
+
+        internal void PopReadsAfter() => _readsAfter.Pop();
+
+        /// <summary>Store every live local that dies on resume, and build the matching
+        /// reload. A frame-only binding is absent: its word already survives. A cell
+        /// spills the handle local, never <c>cell[0]</c>. Each local is spilled once,
+        /// to the variable's own frame slot or to a spill slot stable for that local.
+        /// The store uses <see cref="SlotLocation.Write"/>, which is <see cref="LocalType.Encode"/>:
+        /// <see cref="LocalType.ToWord"/> does not box a <c>Nullable&lt;T&gt;</c>.
+        /// <para>A variable lease is spilled only when the statement's remaining
+        /// reads name it. A binding read only before the suspend does not need the
+        /// store or the reload.</para></summary>
+        internal void SpillBarrier(int ringDepth, List<Expression> stores, List<Expression> reloads) {
+            var seen = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
+            var readsAfter = ReadsAfterSuspend;
+            foreach (var scope in _scopeStack) {
+                foreach (var (variable, frameSlot) in scope) {
+                    if (readsAfter is not null && !readsAfter.Contains(variable)) {
+                        // A lease the barrier leaves alone must also stay out of the
+                        // ring-local pass below: the same local is still below the
+                        // cursor, and spilling it there would defeat the filter.
+                        if (_variableLeases.TryGetValue(variable, out var skipped))
+                            seen.Add(LeaseLocal(skipped));
+                        continue;
+                    }
+                    if (!_variableLeases.TryGetValue(variable, out var lease))
+                        continue;
+                    var local = LeaseLocal(lease);
+                    if (!seen.Add(local))
+                        continue;
+                    stores.Add(new SlotLocation.Frame(frameSlot).Write(this, local));
+                    reloads.Add(Reload(local, frameSlot));
+                }
+            }
+            foreach (var helper in _pool.LiveHelpers) {
+                if (!seen.Add(helper))
+                    continue;
+                int frameSlot = SpillFrame(helper);
+                stores.Add(new SlotLocation.Frame(frameSlot).Write(this, helper));
+                reloads.Add(Reload(helper, frameSlot));
+            }
+            var ring = new List<ParameterExpression>();
+            _pool.CollectBelow(ringDepth, ring);
+            foreach (var local in ring) {
+                if (!seen.Add(local))
+                    continue;
+                int frameSlot = SpillFrame(local);
+                stores.Add(new SlotLocation.Frame(frameSlot).Write(this, local));
+                reloads.Add(Reload(local, frameSlot));
+            }
+            // A promoted array cache is a CLR reference, not a frame word. Resume
+            // zeros it. The heap object survives, so the reload reads it back from
+            // the handle after that handle has been restored.
+            foreach (var scope in _scopeStack) {
+                foreach (var (variable, frameSlot) in scope) {
+                    if (readsAfter is not null && !readsAfter.Contains(variable))
+                        continue;
+                    if (!TryArrayCache(variable, out var cache))
+                        continue;
+                    Expression handle = _variableLeases.TryGetValue(variable, out var lease)
+                        ? LeaseLocal(lease)
+                        : new SlotLocation.Frame(frameSlot).Read(this);
+                    reloads.Add(Assign(cache, Convert(
+                        Call(HeapLocal, HeapUnsafeGet, Convert(handle, typeof(int))),
+                        cache.Type)));
+                }
+            }
+        }
+
+        private Expression Reload(ParameterExpression local, int frameSlot) {
+            var word = new SlotLocation.Frame(frameSlot).Read(this);
+            var form = LocalType.Of(local.Type);
+            return Assign(local, form.FromWord(word, local.Type, HeapLocal));
+        }
+
+        private int SpillFrame(ParameterExpression local) {
+            if (_spillSlots.TryGetValue(local, out int slot))
+                return slot;
+            slot = _nextFrameSlot++;
+            _spillSlots[local] = slot;
+            return slot;
+        }
+
         /// <summary>
         /// Keep locals from colliding with root SetArgs slots (slot 0 = this,
         /// slots 1..N = declared root parameters). EmitScopeStores writes
-        /// register-backed variables into <c>_slots[FP+slot]</c>; without this
+        /// leased variables into <c>_slots[FP+slot]</c>; without this
         /// reserve, create0/create1 wipe parameter values before they are read.
         /// </summary>
         public void ReserveFrameSlots(int count) {
@@ -357,71 +498,41 @@ public static partial class AbiEmitter {
                 throw new InvalidOperationException("No active scope");
             int slot = _nextFrameSlot++;
             _scopeStack.Peek()[v] = slot;
-
-            int regIdx = -1;
-            for (int i = 0; i < _regUsed.Count; i++) {
-                if (!_regUsed[i]) { regIdx = i; break; }
-            }
-            if (regIdx < 0 && _regUsed.Count < MaxRegisterCount)
-                regIdx = AddRegister();
-
             _scopeVars.Peek().Add(v);
             _variableLayouts.Add(new VariableLayout(v.Name, slot, NeedsCell(v)));
-            if (regIdx < 0)
+            if (_liveLeases >= MaxVariableLeases)
                 return;
-
-            _regUsed[regIdx] = true;
-            _variableRegisters[v] = new RegisterSlot(regIdx, RegisterRepresentation(v));
+            int index = _pool.Alloc();
+            var representation = LeaseRepresentation(v);
+            _pool.Ring(index, representation);
+            _variableLeases[v] = new VariableLease(index, representation);
+            _liveLeases++;
         }
 
-        /// <summary>The representation a variable's register holds: the variable's own
+        /// <summary>The representation a variable's lease holds: the variable's own
         /// value shape for an IEEE local, the <c>long</c> word for every other value — and
-        /// the word for a cell-backed local, whose register holds the capture cell's heap
+        /// the word for a cell-backed local, whose lease holds the capture cell's heap
         /// handle rather than the value.</summary>
-        private Type RegisterRepresentation(Variable v) =>
+        private Type LeaseRepresentation(Variable v) =>
             NeedsCell(v) ? typeof(long) : SlotTypeOf(v);
 
         /// <summary>The zero a declared local starts at, at its own representation.</summary>
-        public Expression VariableZero(Variable v) => RegisterRepresentation(v) switch {
-            var t when t == typeof(double) => Constant(0.0),
-            var t when t == typeof(float) => Constant(0.0f),
-            var t when t == typeof(int) => Constant(0),
-            _ => Constant(0L),
-        };
-
-        /// <summary>Reserve the next register index. The local itself is declared on first
-        /// use at the representation its variable needs, so an index carries only the
-        /// high-water of simultaneous register-backed variables.</summary>
-        private int AddRegister() {
-            int index = _regUsed.Count;
-            _regUsed.Add(false);
-            return index;
+        public Expression VariableZero(Variable v) {
+            var representation = LeaseRepresentation(v);
+            if (Nullable.GetUnderlyingType(representation) is not null)
+                return Default(representation);
+            return representation switch {
+                var t when t == typeof(double) => Constant(0.0),
+                var t when t == typeof(float) => Constant(0.0f),
+                var t when t == typeof(int) => Constant(0),
+                _ => Constant(0L),
+            };
         }
 
-        /// <summary>The register local for <paramref name="reg"/>, declared on first use.
-        /// <para>A register index is released when its scope ends and reused by the next
-        /// scope's variable, which may have a different representation; index 0 can back a
-        /// <c>double</c> in one block and a word in the next. One local per index would then
-        /// have to be assigned a value of the wrong type, so — exactly as a ring slot does —
-        /// the table declares one local per (index, representation). Two variables can never
-        /// alias one <see cref="ParameterExpression"/> at two types, which is what keeps
-        /// <c>Expression.Assign</c> fail-closed instead of silently coercing.</para></summary>
-        private ParameterExpression RegisterVar(RegisterSlot reg) => RegisterVar(reg.Index, reg.Representation);
-
-        private ParameterExpression RegisterVar(int index, Type representation) {
-            if (!_regVars.TryGetValue((index, representation), out var variable)) {
-                variable = Variable(representation, RegisterLocalName(index, representation));
-                _regVars[(index, representation)] = variable;
-                _locals.Add(variable);
-            }
-            return variable;
-        }
-
-        private static string RegisterLocalName(int index, Type representation) =>
-            representation == typeof(double) ? $"_dreg{index}"
-                : representation == typeof(float) ? $"_freg{index}"
-                : representation == typeof(int) ? $"_ireg{index}"
-                : $"_reg{index}";
+        /// <summary>The leased local. The pool declares one local per (index, representation),
+        /// so a scope that reuses an index at another type does not alias the parameter.</summary>
+        private ParameterExpression LeaseLocal(VariableLease lease) =>
+            _pool.Ring(lease.Index, lease.Representation);
 
         /// <summary>Bind a promoted variable's array to the typed CLR local that caches it,
         /// and return that local so the declaring block can clear it at scope exit.
@@ -433,14 +544,7 @@ public static partial class AbiEmitter {
         public ParameterExpression PromoteArray(Variable v, Type elementType) {
             if (!TryOwnSlot(v, out var slot))
                 throw Unresolved(v);
-            var key = (slot.Register, slot.Index, elementType);
-            if (!_arrayLocals.TryGetValue(key, out var local)) {
-                local = Variable(elementType, ArrayLocalName(slot));
-                _arrayLocals[key] = local;
-                _locals.Add(local);
-            }
-            _promotedArrays[(slot.Register, slot.Index)] = local;
-            return local;
+            return _pool.ArrayLocal(slot, elementType, ArrayLocalName(slot));
         }
 
         /// <summary>The cache local for the storage <paramref name="v"/> resolves to, or
@@ -449,7 +553,7 @@ public static partial class AbiEmitter {
         /// being the declaring node still finds its cache.</summary>
         public bool TryArrayCache(Variable v, out ParameterExpression local) {
             if (TryOwnSlot(v, out var slot)
-                && _promotedArrays.TryGetValue((slot.Register, slot.Index), out var found)) {
+                && _pool.TryPromoted((slot.Register, slot.Index), out var found)) {
                 local = found;
                 return true;
             }
@@ -465,8 +569,8 @@ public static partial class AbiEmitter {
             slot = default;
             if (BoundParameter(v) is not null)
                 return false;
-            if (TryGetRegister(v, out var reg)) {
-                slot = (true, reg.Index);
+            if (TryGetLease(v, out var lease)) {
+                slot = (true, lease.Index);
                 return true;
             }
             if (TryGetVariable(v, out int index)) {
@@ -483,64 +587,50 @@ public static partial class AbiEmitter {
         public IReadOnlyList<VariableLayout> VariableLayouts => _variableLayouts;
 
         public bool IsDeclared(Variable v) =>
-            _variableRegisters.ContainsKey(v) || TryGetVariable(v, out _);
+            TryGetVariable(v, out _);
 
         public bool TryGetVariable(Variable v, out int slot) {
             // Identity first: a Variable node is its binding, so a node that is a
             // declaration resolves to that declaration even when an inner scope
             // shadows the name.
+            if (TryGetVariableIdentity(v, out slot))
+                return true;
+            // A reader emits a fresh Variable per identifier. The bind pass records
+            // the declaration node; that node, not the name, is the binding.
+            if (DeclaredVariable(v) is { } declaration && !ReferenceEquals(declaration, v)
+                && TryGetVariableIdentity(declaration, out slot))
+                return true;
+            slot = -1;
+            return false;
+        }
+
+        private bool TryGetVariableIdentity(Variable v, out int slot) {
             foreach (var scope in _scopeStack) {
                 if (scope.TryGetValue(v, out slot))
                     return true;
-            }
-            // Name fallback from the innermost scope outward: catch VariableName is
-            // a string and body refs are new Variable(name), and a shadowing
-            // declaration must beat an outer binding of the same name.
-            foreach (var scope in _scopeStack) {
-                foreach (var (key, s) in scope) {
-                    if (key.Name == v.Name) {
-                        slot = s;
-                        return true;
-                    }
-                }
             }
             slot = -1;
             return false;
         }
 
-        private bool TryGetRegister(Variable v, out RegisterSlot register) {
+        private bool TryGetLease(Variable v, out VariableLease lease) {
             // Identity first: a Variable node is its binding, so a node that is a
             // declaration resolves to that declaration even when an inner scope
             // shadows the name.
-            if (_variableRegisters.TryGetValue(v, out register))
+            if (_variableLeases.TryGetValue(v, out lease))
                 return true;
-            // If v is itself a declaration in some scope, the register fallback must not
-            // guess by name: a same-named inner binding could then shadow it here while
-            // the scope-aware TryGetVariable still resolves v by identity (reads and
-            // writes would disagree). Report not-found so the caller uses that path.
+            // v is itself a declaration that did not take a lease (the frame-only
+            // fallback past MaxVariableLeases). Do not follow a reference that points
+            // back at v, and do not pick a same-named inner lease.
             foreach (var scope in _scopeStack) {
                 if (scope.ContainsKey(v)) {
-                    register = default;
+                    lease = default;
                     return false;
                 }
             }
-            // Name fallback from the innermost scope outward. A flat name scan over
-            // _variableRegisters is unordered and would let an outer shadowed binding
-            // win; the innermost declaration of the name is the correct binding.
-            foreach (var vars in _scopeVars) {
-                foreach (var key in vars) {
-                    if (!string.Equals(key.Name, v.Name, StringComparison.Ordinal))
-                        continue;
-                    // The innermost binding with this name decides. If it is
-                    // slot-backed (no free register), report not-found so the caller
-                    // falls through to the scope-aware TryGetVariable.
-                    if (_variableRegisters.TryGetValue(key, out register))
-                        return true;
-                    register = default;
-                    return false;
-                }
-            }
-            register = default;
+            if (DeclaredVariable(v) is { } declaration && !ReferenceEquals(declaration, v))
+                return TryGetLease(declaration, out lease);
+            lease = default;
             return false;
         }
 
@@ -599,8 +689,8 @@ public static partial class AbiEmitter {
                     ? new SlotLocation.Frame(paramIndex - ParamSlotOffset)
                     : null;
             }
-            if (TryGetRegister(v, out var reg))
-                return new SlotLocation.Local(RegisterVar(reg), reg.Representation);
+            if (TryGetLease(v, out var lease))
+                return new SlotLocation.Local(LeaseLocal(lease), lease.Representation);
             return TryGetVariable(v, out int slotIndex)
                 ? new SlotLocation.Frame(slotIndex)
                 : null;
@@ -640,77 +730,40 @@ public static partial class AbiEmitter {
             FrameSlotRead(paramIndex - ParamSlotOffset);
 
         private Dictionary<Parameter, int>? _inlineParameters;
-        private readonly List<Dictionary<string, int>> _inlineParameterScopes = new();
-        private readonly List<Dictionary<string, int>> _frameParameterScopes = new();
+        private int _inlineParameterDepth;
 
-        /// <summary>Enter an inline-lambda parameter scope. Names resolve
-        /// innermost-first, so an inner lambda parameter shadows an outer one or
-        /// an outer local of the same name.</summary>
-        public void PushInlineParameters() => _inlineParameterScopes.Add(new(StringComparer.Ordinal));
+        /// <summary>Enter an inline-lambda parameter scope. The depth keeps a
+        /// parameter's slot from aliasing the instance handle while the body emits.</summary>
+        public void PushInlineParameters() => _inlineParameterDepth++;
 
         public void PopInlineParameters() {
-            if (_inlineParameterScopes.Count > 0)
-                _inlineParameterScopes.RemoveAt(_inlineParameterScopes.Count - 1);
+            if (_inlineParameterDepth > 0)
+                _inlineParameterDepth--;
         }
 
         public void MapInlineParameter(Parameter parameter, int ringSlot) {
             _inlineParameters ??= new(ReferenceEqualityComparer.Instance);
             _inlineParameters[parameter] = ringSlot;
-            if (_inlineParameterScopes.Count > 0)
-                _inlineParameterScopes[^1][parameter.Name] = ringSlot;
         }
 
         public bool TryGetInlineParameter(Parameter parameter, out int ringSlot) {
             if (_inlineParameters is { } map && map.TryGetValue(parameter, out ringSlot))
                 return true;
-            // Fall back to the *live* parameter scopes by name. The flat map is never
-            // trimmed when a scope pops, so scanning it by name could bind a popped
-            // parameter to a ring slot the emitter has since reused.
-            return TryGetInlineParameter(parameter.Name, out ringSlot);
-        }
-
-        /// <summary>Resolve a body <see cref="Variable"/> whose name is an inline
-        /// lambda parameter to that parameter's argument ring slot. The reader
-        /// emits a fresh <see cref="Variable"/> per identifier, so name is the
-        /// only link between a lambda parameter and its uses.</summary>
-        public bool TryGetInlineParameter(string name, out int ringSlot) {
-            for (int i = _inlineParameterScopes.Count - 1; i >= 0; i--) {
-                if (_inlineParameterScopes[i].TryGetValue(name, out ringSlot))
-                    return true;
-            }
+            if (BoundDeclaredParameter(parameter) is { } declaration
+                && !ReferenceEquals(declaration, parameter)
+                && _inlineParameters is { } declared
+                && declared.TryGetValue(declaration, out ringSlot))
+                return true;
             ringSlot = 0;
             return false;
         }
 
         public void ClearInlineParameters() {
             _inlineParameters = null;
-            _inlineParameterScopes.Clear();
+            _inlineParameterDepth = 0;
         }
 
-        public bool HasInlineParameters => _inlineParameterScopes.Count > 0;
-
-        /// <summary>Enter a lambda-function parameter scope whose values live in
-        /// value-stack slots (<see cref="ParameterRead"/>), not ring registers.</summary>
-        public void PushFrameParameters() => _frameParameterScopes.Add(new(StringComparer.Ordinal));
-
-        public void PopFrameParameters() {
-            if (_frameParameterScopes.Count > 0)
-                _frameParameterScopes.RemoveAt(_frameParameterScopes.Count - 1);
-        }
-
-        /// <summary>Record a frame parameter's slot in the current scope. Callers pair
-        /// this with <see cref="PushFrameParameters"/>; indexing directly fails loud if
-        /// that pairing is ever broken (an auto-created scope would leak instead).</summary>
-        public void MapFrameParameter(Parameter parameter, int paramIndex) =>
-            _frameParameterScopes[^1][parameter.Name] = paramIndex;
-        public bool TryGetFrameParameter(string name, out int paramIndex) {
-            for (int i = _frameParameterScopes.Count - 1; i >= 0; i--) {
-                if (_frameParameterScopes[i].TryGetValue(name, out paramIndex))
-                    return true;
-            }
-            paramIndex = 0;
-            return false;
-        }
+        public bool HasInlineParameters => _inlineParameterDepth > 0;
 
         private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
 
@@ -773,12 +826,10 @@ public static partial class AbiEmitter {
         public bool TryGetParameterSlot(Parameter p, out int slot) {
             if (_parameters.TryGetValue(p, out slot))
                 return true;
-            foreach (var (param, s) in _parameters) {
-                if (param.Name == p.Name) {
-                    slot = s;
-                    return true;
-                }
-            }
+            if (BoundDeclaredParameter(p) is { } declaration
+                && !ReferenceEquals(declaration, p)
+                && _parameters.TryGetValue(declaration, out slot))
+                return true;
             slot = 0;
             return false;
         }
@@ -810,6 +861,22 @@ public static partial class AbiEmitter {
                 ? parameter
                 : null;
         }
+
+        /// <summary>The declaration a use is bound to by the bind pass, or null when
+        /// <paramref name="variable"/> is itself the declaration or the use is unbound.
+        /// The binding is the identity edge; no name lookup.</summary>
+        public Variable? DeclaredVariable(Variable variable) {
+            if (Analysis?.GetMetadata<VariableAnalysisMetadata>(variable) is not { } metadata)
+                return null;
+            return metadata.VariableReferences.TryGetValue(variable, out var declaration)
+                ? declaration
+                : null;
+        }
+
+        /// <summary>The in-scope parameter a different <see cref="Parameter"/> instance
+        /// was bound to, or null when <paramref name="parameter"/> is itself declared.</summary>
+        public Parameter? BoundDeclaredParameter(Parameter parameter) =>
+            Analysis?.GetMetadata<ParameterBindingMetadata>(parameter)?.Declaration;
 
         public Expression VariableReadRaw(Variable v) =>
             ResolveRaw(v) is { } storage

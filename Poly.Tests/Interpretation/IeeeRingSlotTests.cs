@@ -47,9 +47,10 @@ public class IeeeRingSlotTests {
 
     /// <summary>A double stored by one statement and read by the next keeps its value in
     /// the typed ring slot and in a typed register, so the store and the read themselves
-    /// cost nothing. What is left is the word boundaries the ABI charges once each: the
-    /// assignment's own result on the word ring (one per statement), the block-exit frame
-    /// snapshot (one per variable), and the program's result slot.</summary>
+    /// cost nothing. What is left in <see cref="CompilationMode.NoDebug"/> is the word
+    /// boundaries execution still charges: the assignment's own result on the word ring
+    /// (one per statement) and the program's result slot. The block-exit frame snapshot
+    /// is absent, because that copy runs only while a debug hook is attached.</summary>
     [Test, Timeout(10_000)]
     public async Task IeeeAcrossStatements_CrossesTheBoundaryOnce(CancellationToken ct) {
         var zero = new Variable("zero");
@@ -64,9 +65,9 @@ public class IeeeRingSlotTests {
 
         await Assert.That(scan.RegisterBitcasts).IsEmpty()
             .Because("the register holds the double, so neither statement converts on access");
-        await Assert.That(VmTree.BitcastCount(built.Expression)).IsEqualTo(5)
-            .Because("two assignment results on the word ring, two block-exit frame "
-                + "snapshots, and the root result slot");
+        await Assert.That(VmTree.BitcastCount(built.Expression)).IsEqualTo(3)
+            .Because("two assignment results on the word ring and the root result slot; "
+                + "NoDebug does not snapshot the leases into the frame");
         await Assert.That(ResultOf(program)).IsEqualTo(0.5)
             .Because("the typed slot still round-trips its value through the word");
     }
@@ -115,16 +116,15 @@ public class IeeeRingSlotTests {
     /// <summary>The collision the slot table exists for: ring depth rewinds after every
     /// statement, so index 0 holds a <c>double</c> in the first statement and a
     /// <c>long</c> in the second. One local per index cannot be assigned both, so the
-    /// slot table declares one local per (index, representation).</summary>
+    /// slot table declares one local per (index, representation). The program has no
+    /// variables: a variable lease would pin the low indexes for the whole block, and
+    /// the collision belongs to expression temps.</summary>
     [Test, Timeout(10_000)]
     public async Task RingSlot_HoldingTwoRepresentations_DeclaresTwoLocals(CancellationToken ct) {
-        var value = new Variable("value");
-        var count = new Variable("count");
         var program = new Block([
-            new Assignment(value, new Add(new Multiply(new Constant(1.5), new Constant(1.5)),
-                new Constant(0.25))),
-            new Assignment(count, new Constant(7L)),
-        ], [value, count]);
+            new Add(new Multiply(new Constant(1.5), new Constant(1.5)), new Constant(0.25)),
+            new Constant(7L),
+        ]);
 
         var atZero = Scan(program).RingLocalsAt(0);
         var names = atZero.Select(local => local.Name).ToList();

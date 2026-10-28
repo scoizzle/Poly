@@ -7,27 +7,14 @@ namespace Poly.Tests.Interpretation;
 /// Two rules with the same signature and different questions. These tests pin
 /// the split so a future reader does not "fix" one into the other:
 /// <list type="bullet">
-/// <item><see cref="RingCodec.UnderlyingKindFor"/> asks whether a type's
-/// <em>underlying</em> value is long-representable (boxing, array element shapes,
-/// unboxing). It peels a nullable, so <c>int?</c> is a word.</item>
 /// <item><see cref="ValueRepresentationClassifier.KindFor"/> asks what a
-/// <em>node</em> of that type puts in its slot. A nullable is boxed into a heap
-/// handle, which is what <c>UsesNullSentinel</c> and <c>UnboxIfHeapNullable</c>
-/// already assume.</item>
+/// node of that type puts in its slot. A nullable is a heap handle. An
+/// integral, char, bool, enum, or IEEE type is an inline word.</item>
 /// </list>
 /// Handle 0 is the ABI null sentinel and is never a live object, so the two
 /// deref idioms (guarded and unguarded) agree.
 /// </summary>
 public class SlotInvariantsTests {
-    [Test, Timeout(10_000)]
-    public async Task Nullable_UnderlyingValue_IsAWord(CancellationToken ct) {
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(int?)))
-            .IsEqualTo(ValueRepresentationKind.StackScalar);
-        await Assert.That(RingCodec.IsInline(typeof(int?))).IsTrue();
-        await Assert.That(RingCodec.UnderlyingKindFor(typeof(double?)))
-            .IsEqualTo(ValueRepresentationKind.StackScalar);
-    }
-
     [Test, Timeout(10_000)]
     public async Task Nullable_SlotKind_IsAHandle(CancellationToken ct) {
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(int?)))
@@ -45,8 +32,12 @@ public class SlotInvariantsTests {
             typeof(double), typeof(float), typeof(string), typeof(object),
             typeof(int[]), typeof(DateTime), typeof(decimal),
         }) {
-            await Assert.That((ValueRepresentationKind)RingCodec.UnderlyingKindFor(type))
-                .IsEqualTo(ValueRepresentationClassifier.KindFor(type));
+            // DateTime is a one-word temporal (ToBinary), so it agrees with the
+            // scalars. DateTimeOffset does not: it is 16 bytes and stays a handle.
+            var expected = type.IsPrimitive || type.IsEnum || type == typeof(DateTime)
+                ? ValueRepresentationKind.StackScalar
+                : ValueRepresentationKind.HeapRef;
+            await Assert.That(ValueRepresentationClassifier.KindFor(type)).IsEqualTo(expected);
         }
     }
 

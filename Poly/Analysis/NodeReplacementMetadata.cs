@@ -14,15 +14,34 @@ static class NodeReplacementMetadataExtensions {
         /// Registers a node replacement so that backends substitute <paramref name="replacement"/>
         /// in place of <paramref name="node"/> during code generation.
         /// </summary>
-        public void SetNodeReplacement(Node node, Node replacement) =>
+        public void SetNodeReplacement(Node node, Node replacement) {
+            ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(node);
+            ArgumentNullException.ThrowIfNull(replacement);
+
             context.Metadata.Set(node, new NodeReplacementMetadata(replacement));
+        }
     }
 
     extension(INodeMetadataProvider provider) {
         /// <summary>
         /// Gets the replacement node registered for <paramref name="node"/>, or null if none.
         /// </summary>
-        public Node? GetNodeReplacement(Node node) =>
-            provider.GetMetadata<NodeReplacementMetadata>(node)?.Replacement;
+        public Node? GetNodeReplacement(Node node) {
+            ArgumentNullException.ThrowIfNull(provider);
+            ArgumentNullException.ThrowIfNull(node);
+
+            return provider.GetMetadata<NodeReplacementMetadata>(node)?.Replacement;
+        }
+
+        public Node GetEffectiveNode(Node node) {
+            ArgumentNullException.ThrowIfNull(provider);
+            ArgumentNullException.ThrowIfNull(node);
+
+            while (node is not null && provider.GetNodeReplacement(node) is Node replacement)
+                node = replacement;
+
+            return node!;
+        }
     }
 }

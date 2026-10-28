@@ -213,7 +213,11 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (left == typeof(decimal) || right == typeof(decimal)) {
+        // Decimal.Add does not lift: rewriting `decimal? + 1m` would turn null into 0.
+        // A nullable operand keeps the operator so the VM can lift it.
+        if ((left == typeof(decimal) || right == typeof(decimal))
+            && Nullable.GetUnderlyingType(left) is null
+            && Nullable.GetUnderlyingType(right) is null) {
             if (!RewriteDecimalArithmetic(context, parent, leftNode, rightNode, kind))
                 Report(context, leftNode,
                     $"decimal arithmetic could not be resolved ({kind})");
@@ -606,6 +610,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             if ((srcNumeric && destNumeric)
                 || (srcCat is Cat.Enum && destNumeric)
                 || (srcNumeric && destCat is Cat.Enum)) {
+                // Convert.ToInt16 throws. An unchecked C# cast wraps, and the emitter
+                // compiles that cast. A checked cast keeps Convert.To*, which throws.
+                if (UncheckedIntegerCast(typeCast, source, dest))
+                    return;
                 if (TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                     return;
             }
@@ -618,6 +626,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (sc is Cat.Unknown or Cat.Null || dc is Cat.Unknown or Cat.Null)
             return;
         if (sc is Cat.Number && dc is Cat.Number) {
+            if (UncheckedIntegerCast(typeCast, source, dest))
+                return;
             if (destDef is not null && srcDef is not null
                 && TryRewriteNumericConvert(context, typeCast, typeCast.Operand, destDef, srcDef))
                 return;
@@ -939,6 +949,12 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool IsIeeeFloating(Type type) =>
         type == typeof(double) || type == typeof(float);
+
+    /// <summary>An unchecked cast between integer widths. The emitter narrows it;
+    /// <see cref="Convert"/> would throw instead of wrapping.</summary>
+    private static bool UncheckedIntegerCast(TypeCast typeCast, Type? source, Type? dest) =>
+        !typeCast.IsChecked && source is not null && dest is not null
+        && IsIntegerType(source) && IsIntegerType(dest);
 
     private static bool IsIntegerType(Type type) =>
         type == typeof(int) || type == typeof(long) || type == typeof(short) || type == typeof(byte)

@@ -19,10 +19,10 @@ public static partial class AbiEmitter {
             ParameterExpression? cachedArray = null;
             bool cachedStore = indexAccess.Value is Variable cached
                 && ctx.TryArrayCache(cached, out cachedArray);
-            int arrSlot = cachedStore ? -1 : ring.Add(CompileNode(indexAccess.Value, ctx));
-            int idxSlot = ring.Add(CompileNode(
+            Value? arrSlot = cachedStore ? null : ring.AddValue(CompileNode(indexAccess.Value, ctx));
+            var idxSlot = ring.AddValue(CompileNode(
                 indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
-            int valSlot = ring.Add(CompileNode(a.Value, ctx));
+            var valSlot = ring.AddValue(CompileNode(a.Value, ctx));
 
             Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
                 ? clrElem.RuntimeType
@@ -31,15 +31,15 @@ public static partial class AbiEmitter {
             Expression store;
             if (cachedStore)
                 store = RingCodec.CachedElementWrite(
-                    cachedArray!, ctx.RingVar(idxSlot), ctx.RingVar(valSlot), elemType, valueIsIeee);
+                    cachedArray!, idxSlot.Read, valSlot.Read, elemType, valueIsIeee);
             else
                 store = RingCodec.ArrayElementWrite(
-                    ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
+                    ctx.HeapLocal, arrSlot!.Value.Read, idxSlot.Read, valSlot.Read,
                     elemType, valueIsIeee);
 
-            ctx.RingDepth = (cachedStore ? idxSlot : arrSlot) + 1;
-            return ring.Then(Block(store, Assign(
-                ctx.RingVar(cachedStore ? idxSlot : arrSlot), ctx.RingVar(valSlot))));
+            var storeSlot = cachedStore ? idxSlot : arrSlot!.Value;
+            ctx.RingDepth = storeSlot.RingSlot + 1;
+            return ring.Then(Block(store, Assign(storeSlot.Read, valSlot.Read)));
         }
 
         if (a.Destination is Member member) {
@@ -49,48 +49,61 @@ public static partial class AbiEmitter {
                     $"Assignment to unresolved member '{member.MemberName}'");
 
             var ring = ctx.OpenRing();
-            int instanceSlot = ring.Add(CompileNode(member.Value, ctx));
-            int valueSlot = ring.Add(CompileNode(a.Value, ctx));
+            var instanceSlot = ring.AddValue(CompileNode(member.Value, ctx));
+            var valueSlot = ring.AddValue(CompileNode(a.Value, ctx));
 
             Expression instanceObj;
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
-            bool isInlineValueType = declaringTypeDef is ClrTypeDefinition clrDef
+            var inlineClr = declaringTypeDef is ClrTypeDefinition clrDef
                 && clrDef.RuntimeType.IsValueType
-                && RingCodec.IsInline(clrDef.RuntimeType);
-            if (isInlineValueType)
-                instanceObj = Convert(ctx.RingVar(instanceSlot), typeof(object));
+                && RingCodec.IsInline(clrDef.RuntimeType)
+                ? clrDef.RuntimeType
+                : null;
+            if (inlineClr is not null)
+                instanceObj = LocalType.Of(inlineClr) is LocalType.TemporalLocal { IsWord: true }
+                    ? Convert(
+                        LocalType.Decode(instanceSlot.Read, inlineClr, inlineClr, ctx.HeapLocal),
+                        typeof(object))
+                    : Convert(instanceSlot.Read, typeof(object));
             else
                 instanceObj = Call(ctx.HeapLocal,
                     HeapUnsafeGet,
-                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+                    Convert(instanceSlot.Read, typeof(int)));
 
             var memberTypeDef = resolved.MemberTypeDefinition;
             var clrMemberType = memberTypeDef.GetRuntimeType()
                 ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
-            if (clrMemberType is not null
+            if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
+                writeValue = NullableMemberWrite(a.Value, valueSlot.RingSlot, clrMemberType, memberUnderlying, ctx);
+            }
+            else if (clrMemberType is not null
                 && clrMemberType.IsValueType
                 && RingCodec.IsInline(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
-                    writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
+                    writeValue = Condition(Equal(valueSlot.Read, Constant(0L)),
                         Constant(false, typeof(object)),
                         Constant(true, typeof(object)));
+                else if (LocalType.Of(clrMemberType) is LocalType.TemporalLocal { IsWord: true })
+                    writeValue = Convert(
+                        LocalType.Decode(valueSlot.Read, clrMemberType, clrMemberType, ctx.HeapLocal),
+                        typeof(object));
                 else
-                    writeValue = Convert(Convert(ctx.RingVar(valueSlot), clrMemberType), typeof(object));
+                    writeValue = Convert(Convert(valueSlot.Read, clrMemberType), typeof(object));
             }
             else {
                 writeValue = Call(ctx.HeapLocal,
                     HeapUnsafeGet,
-                    Convert(ctx.RingVar(valueSlot), typeof(int)));
+                    Convert(valueSlot.Read, typeof(int)));
             }
 
             var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
-            var outSlot = ctx.AllocSlot();
-            ctx.RingDepth = outSlot + 1;
+            var outSlot = ctx.Reserve();
+            ctx.RingDepth = outSlot.RingSlot + 1;
             return ring.Then(Block(
                 writeExpr ?? throw new NotSupportedException(
                     $"Member '{member.MemberName}' does not support EmitWrite"),
-                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot))));
+                Assign(outSlot.Read, valueSlot.Read)));
         }
 
         if (a.Destination is not Variable destVar) {
@@ -138,10 +151,15 @@ public static partial class AbiEmitter {
     /// </summary>
     private static Expression AssignedValue(
         Context ctx, Variable destination, Node value, int valueIndex, Expression compiled) {
-        var valueType = ctx.SlotTypeOf(value);
         var emitted = ctx.RingVar(valueIndex, RingCodec.SlotTypeOf(compiled.Type));
+        var destType = ctx.SlotTypeOf(destination);
+        // A bool? local cannot be assigned the 0/1 long a comparison leaves.
+        // Convert(long, bool) does not exist; the nullable operand does the 0/1 test.
+        if (Nullable.GetUnderlyingType(destType) is not null)
+            return AsNullableOperand(value, emitted, destType, ctx);
+        var valueType = ctx.SlotTypeOf(value);
         var decoded = valueType == emitted.Type ? emitted : RingCodec.FromWord(emitted, valueType);
-        return RingCodec.NumericTo(decoded, ctx.SlotTypeOf(destination));
+        return RingCodec.NumericTo(decoded, destType);
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
@@ -178,29 +196,49 @@ public static partial class AbiEmitter {
         var stmtExprs = new List<Expression>(block.Nodes.Count);
         int entryDepth = ctx.RingDepth;
         Type? valueClrType = null;
+        Context.StatementScope? open = null;
         for (int i = 0; i < block.Nodes.Count; i++) {
             var statement = block.Nodes[i];
             // A comment or a label emits no code and no value, so it must not release
             // what the previous statement left: that value is still the block's result
             // (`[return x, comment]` yields x).
             bool resetsDepth = statement is not (Comment or LabelDeclaration);
-            if (resetsDepth)
-                ctx.RingDepth = entryDepth;
-            var code = CompileStatement(statement, ctx);
+            if (resetsDepth) {
+                open?.Dispose();
+                open = ctx.OpenStatement(entryDepth);
+            }
+            // The suspend spill reads this set: a variable lease is stored only when
+            // a later statement (or the rest of this one) names the binding. A loop
+            // or a goto makes the continuation unknowable, so it keeps the
+            // conservative all-leases set.
+            var readsAfter = ReadsAfterFrom(block.Nodes, i, ctx);
+            ctx.PushReadsAfter(readsAfter);
+            Expression code;
+            try {
+                code = CompileStatement(statement, ctx);
+            }
+            finally {
+                ctx.PopReadsAfter();
+            }
             stmtExprs.Add(code);
             if (statement is not Comment)
                 valueClrType = code.Type;
         }
+        if (open is not null) {
+            open.Hold();
+            open.Dispose();
+        }
         var stores = ctx.EmitScopeStores();
         ctx.PopScope();
+        var observation = WhenDebugHookAttached(ctx, stores);
         var all = new List<Expression>(
-            varInitExprs.Count + stmtExprs.Count + stores.Count + releases.Count + cacheClears.Count);
+            varInitExprs.Count + stmtExprs.Count + (observation is null ? 0 : 1) + releases.Count + cacheClears.Count);
         all.AddRange(varInitExprs);
         all.AddRange(stmtExprs);
-        // The block-exit snapshot is also what VmDebugger.GetLocals reads after
-        // execution, when no hook was ever attached, so it stays unconditional.
-        // Per-statement stores live inside the hook guard (CompileStatement).
-        all.AddRange(stores);
+        // The snapshot is what the hook's span and a later GetLocals read. It runs
+        // only while DebugHook is attached. NoDebug has no hook property, so it emits none.
+        if (observation is not null)
+            all.Add(observation);
         // A promoted array's cache local is keyed by slot, and a slot is handed to the
         // next sibling block's variable, so it is cleared once its own scope is over: a
         // later block that read it before defining its own array then fails closed on
@@ -215,12 +253,57 @@ public static partial class AbiEmitter {
         // the value's — an IEEE value stays a double instead of being read as bits, and a
         // word value stays a word instead of the array a cache clear holds.
         var valueSlotType = RingCodec.SlotTypeOf(valueClrType);
-        bool trailing = stores.Count > 0 || releases.Count > 0 || cacheClears.Count > 0;
+        // The hook guard is void, so a block that appends one has to re-read its value
+        // or the block's type collapses to void and the ring result is read at the wrong width.
+        bool trailing = observation is not null || releases.Count > 0 || cacheClears.Count > 0;
         if (trailing && ctx.RingDepth > entryDepth
-            && (RingCodec.IsTypedSlot(valueSlotType) || cacheClears.Count > 0))
+            && (observation is not null || RingCodec.IsTypedSlot(valueSlotType) || cacheClears.Count > 0))
             all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
     }
+
+    /// <summary>The bindings read at or after statement <paramref name="start"/>.
+    /// Null when the continuation is not straight-line: a loop, a goto, or a label
+    /// can re-enter a read the suffix does not contain, so the suspend spill keeps
+    /// the conservative set.</summary>
+    private static HashSet<Variable>? ReadsAfterFrom(IReadOnlyList<Node> nodes, int start, Context ctx) {
+        HashSet<Variable>? inherited =
+            ctx.HasReadsAfterScope ? ctx.ReadsAfterSuspend : new HashSet<Variable>();
+        if (inherited is null)
+            return null;
+        var reads = new HashSet<Variable>(inherited, ReferenceEqualityComparer.Instance);
+        for (int i = start; i < nodes.Count; i++) {
+            if (ContainsLoopOrGoto(nodes[i]))
+                return null;
+            CollectReads(nodes[i], ctx, reads);
+        }
+        return reads;
+    }
+
+    private static void CollectReads(Node node, Context ctx, HashSet<Variable> into) {
+        switch (node) {
+            case Block block:
+                foreach (var child in block.Nodes)
+                    CollectReads(child, ctx, into);
+                return;
+            case Variable variable:
+                into.Add(ctx.DeclaredVariable(variable) ?? variable);
+                return;
+            case Poly.Ast.Nodes.Parameter:
+                return;
+            default:
+                foreach (var child in node.Children)
+                    if (child is not null)
+                        CollectReads(child, ctx, into);
+                return;
+        }
+    }
+
+    private static bool ContainsLoopOrGoto(Node node) => node switch {
+        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
+            or GotoStatement or LabelDeclaration => true,
+        _ => node.Children.Any(child => child is not null && ContainsLoopOrGoto(child))
+    };
 
     /// <summary>True when the last statement that produces the block's value is the
     /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
@@ -356,10 +439,10 @@ public static partial class AbiEmitter {
 
     private static Expression EmitSwitch(SwitchStatement sw, Context ctx) {
         var ring = ctx.OpenRing();
-        int valSlot = ring.Add(CompileNode(sw.Value, ctx));
-        int savedDepth = ring.Base + 1;
+        var val = ring.AddValue(CompileNode(sw.Value, ctx));
+        int savedDepth = val.RingSlot + 1;
 
-        int outSlot = ctx.AllocSlot();
+        var outValue = ctx.Reserve();
         // Every arm is compiled from the slot after the value, and a scope restores to
         // it, so one write bases the whole switch on the same region.
         ctx.RingDepth = savedDepth;
@@ -371,11 +454,11 @@ public static partial class AbiEmitter {
                 def = Compile(sw.DefaultCase, ctx);
             }
             rest = Block(def.Code,
-                Assign(ctx.RingVar(outSlot),
+                Assign(outValue.Read,
                     RingCodec.ToWord(def.RequireResult(sw.DefaultCase).Read(ctx))));
         }
         else {
-            rest = Assign(ctx.RingVar(outSlot), Constant(0L));
+            rest = Assign(outValue.Read, Constant(0L));
         }
 
         for (int i = sw.Cases.Count - 1; i >= 0; i--) {
@@ -393,16 +476,16 @@ public static partial class AbiEmitter {
             rest = Block(
                 pattern.Code,
                 IfThenElse(
-                    Equal(ctx.RingVar(valSlot),
+                    Equal(val.Read,
                         RingCodec.ToWord(pattern.RequireResult(c.Pattern).Read(ctx))),
                     Block(body.Code,
-                        Assign(ctx.RingVar(outSlot),
+                        Assign(outValue.Read,
                             RingCodec.ToWord(body.RequireResult(c.Body).Read(ctx)))),
                     rest));
         }
 
-        ctx.RingDepth = outSlot + 1;
-        return ring.Then(Block(rest, ctx.RingVar(outSlot)));
+        ctx.RingDepth = outValue.RingSlot + 1;
+        return ring.Then(Block(rest, outValue.Read));
     }
 
     /// <summary>Where a loop's test runs: at the top of each iteration, or after its
@@ -542,61 +625,94 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitTryCatchFinally(TryCatchFinally tcf, Context ctx) {
-        var tryBody = CompileNode(tcf.TryBlock, ctx);
-        Expression? finallyBody = null;
-        if (tcf.FinallyBlock != null) {
-            finallyBody = CompileNode(tcf.FinallyBlock, ctx);
-        }
-        if (tcf.CatchClauses == null || tcf.CatchClauses.Count == 0) {
-            return finallyBody != null ? TryFinally(tryBody, finallyBody) : tryBody;
-        }
-        // Catch bodies are void. A value-producing try (an assignment, an await)
-        // has to match, or Expression.TryCatch rejects the tree.
-        if (tryBody.Type != typeof(void))
-            tryBody = Block(tryBody, Empty());
-        var catchBlocks = new List<CatchBlock>();
-        foreach (var clause in tcf.CatchClauses) {
-            var exType = ResolveCatchClrType(clause.ExceptionType, ctx);
-            var exParam = Parameter(exType, clause.VariableName ?? "ex");
-            ctx.PushScope();
-            Variable? synthetic = null;
-            if (!string.IsNullOrEmpty(clause.VariableName)) {
-                synthetic = new Variable(clause.VariableName);
-                ctx.DeclareVariable(synthetic);
+        ctx.EnterUnresumable();
+        try {
+            var tryBody = CompileNode(tcf.TryBlock, ctx).Code;
+            Expression? finallyBody = null;
+            if (tcf.FinallyBlock != null) {
+                finallyBody = CompileNode(tcf.FinallyBlock, ctx).Code;
             }
-            var bodyExpr = CompileNode(clause.Body, ctx);
-            var allocate = Call(ctx.HeapLocal, HeapAllocate, Convert(exParam, typeof(object)));
-            var handle = Convert(allocate, typeof(long));
-            Expression catchBodyExpr = bodyExpr;
-            if (synthetic != null) {
-                catchBodyExpr = Block(
-                    ctx.VariableWrite(synthetic, handle),
-                    bodyExpr
-                );
+            if (tcf.CatchClauses == null || tcf.CatchClauses.Count == 0) {
+                return finallyBody != null ? TryFinally(tryBody, finallyBody) : tryBody;
             }
-            var catchStores = ctx.EmitScopeStores();
-            if (catchStores.Count > 0)
-                catchBodyExpr = Block(catchBodyExpr, Block(catchStores));
-            ctx.PopScope();
-            catchBlocks.Add(Catch(exParam,
-                catchBodyExpr.Type == typeof(void)
-                    ? catchBodyExpr
-                    : Block(catchBodyExpr, Empty())));
+            // Catch bodies are void. A value-producing try (an assignment, an await)
+            // has to match, or Expression.TryCatch rejects the tree.
+            if (tryBody.Type != typeof(void))
+                tryBody = Block(tryBody, Empty());
+            var catchBlocks = new List<CatchBlock>();
+            foreach (var clause in tcf.CatchClauses) {
+                var exType = ResolveCatchClrType(clause.ExceptionType, ctx);
+                var exParam = Parameter(exType, clause.VariableName ?? "ex");
+                ctx.PushScope();
+                Variable? synthetic = null;
+                if (!string.IsNullOrEmpty(clause.VariableName)) {
+                    // The bind pass already built the declaration the body uses point at.
+                    // A second Variable of the same name would not be that binding.
+                    synthetic = ctx.Analysis?.GetMetadata<CatchBindingMetadata>(clause.Body)?.Declaration
+                        ?? new Variable(clause.VariableName);
+                    ctx.DeclareVariable(synthetic);
+                }
+                var bodyExpr = CompileNode(clause.Body, ctx);
+                var allocate = Call(ctx.HeapLocal, HeapAllocate, Convert(exParam, typeof(object)));
+                var handle = Convert(allocate, typeof(long));
+                Expression catchBodyExpr = bodyExpr;
+                if (synthetic != null) {
+                    catchBodyExpr = Block(
+                        ctx.VariableWrite(synthetic, handle),
+                        bodyExpr
+                    );
+                }
+                var catchStores = ctx.EmitScopeStores();
+                var catchObservation = WhenDebugHookAttached(ctx, catchStores);
+                if (catchObservation is not null)
+                    catchBodyExpr = Block(catchBodyExpr, catchObservation);
+                ctx.PopScope();
+                catchBlocks.Add(Catch(exParam,
+                    catchBodyExpr.Type == typeof(void)
+                        ? catchBodyExpr
+                        : Block(catchBodyExpr, Empty())));
+            }
+            if (finallyBody != null) {
+                return TryCatchFinally(tryBody, finallyBody, catchBlocks.ToArray());
+            }
+            return TryCatch(tryBody, catchBlocks.ToArray());
         }
-        if (finallyBody != null) {
-            return TryCatchFinally(tryBody, finallyBody, catchBlocks.ToArray());
+        finally {
+            ctx.LeaveUnresumable();
         }
-        return TryCatch(tryBody, catchBlocks.ToArray());
+    }
+
+    /// <summary>Lease-to-frame copies exist for the debugger. They run only inside
+    /// <c>if (state.DebugHook != null)</c>. <see cref="CompilationMode.NoDebug"/> never
+    /// sets the hook property, so it emits no copy and no check. A frame-only binding
+    /// is absent from <paramref name="stores"/>: its word is already the slot.</summary>
+    private static Expression? WhenDebugHookAttached(Context ctx, IReadOnlyList<Expression> stores) {
+        if (stores.Count == 0 || ctx.DebugHookProp is null)
+            return null;
+        // IfThen demands a void body. An assignment's type is the stored word, so the
+        // copies cannot be the block's tail.
+        var body = new List<Expression>(stores.Count + 1);
+        body.AddRange(stores);
+        body.Add(Empty());
+        return IfThen(
+            NotEqual(ctx.DebugHookProp, Constant(null, ctx.DebugHookProp.Type)),
+            Block(body));
     }
 
     private static Expression EmitSuspendNode(SuspendNode sn, Context ctx) {
         if (!ctx.IsRootBody)
             throw new UnresumableBodyRejection(
                 $"VM compile rejected: SuspendNode '{sn}' is only executable in the compilation-unit body; a compiled function or lambda body emits no resume dispatch.");
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: SuspendNode '{sn}' cannot resume inside try, catch, finally, using, or foreach.");
         int step = ctx.StepCounter++;
         ctx.RecordStepNode(step, sn);
         var resumeLabel = ctx.RegisterOrGetResumeLabel(step);
         var innerExpr = CompileNode(sn.Inner, ctx);
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        ctx.SpillBarrier(ctx.RingDepth, spill, reload);
         var setCurrentNode = Block(
             Assign(Property(ctx.State, nameof(VmState.CurrentAstNode)), Constant(sn)),
             Assign(Property(ctx.State, nameof(VmState.CurrentNodeId)), Constant(sn.Id, typeof(NodeId?))));
@@ -612,15 +728,17 @@ public static partial class AbiEmitter {
             Property(ctx.State, nameof(VmState.Status)),
             Constant(InterpreterStatus.Running));
         // Resume label is AFTER suspend+exit so Resume falls through to later statements.
-        return Block(
-            innerExpr,
-            setCurrentNode,
-            setStatus,
-            saveResumeId,
-            saveFramePos,
-            Goto(ctx.ExitLabel),
-            Label(resumeLabel),
-            clearSuspended);
+        // The reload is the first expression after the label: resume re-enters the
+        // method and CLR locals start at zero. It must not follow EmitPcDispatch.
+        var resumed = new List<Expression> {
+            innerExpr, setCurrentNode, setStatus, saveResumeId, saveFramePos
+        };
+        resumed.AddRange(spill);
+        resumed.Add(Goto(ctx.ExitLabel));
+        resumed.Add(Label(resumeLabel));
+        resumed.AddRange(reload);
+        resumed.Add(clearSuspended);
+        return Block(resumed);
     }
 
     private static Expression EmitParameter(Parameter p, Context ctx) {
@@ -628,6 +746,13 @@ public static partial class AbiEmitter {
         if (ctx.TryGetCapture(p, out int capIndex)) {
             return Assign(ctx.RingVar(slot), EmitCaptureCellValue(ctx, capIndex));
         }
+        var nullable = ctx.TryClrType(p) ?? (p.TypeReference is null ? null : ctx.TryClrType(p.TypeReference));
+        var storage = ctx.Resolve(p);
+        if (nullable is not null && Nullable.GetUnderlyingType(nullable) is not null
+            && storage.Representation == typeof(long))
+            return Assign(
+                ctx.RingVar(slot, nullable),
+                storage.ReadAs(ctx, nullable));
         return Assign(ctx.RingVar(slot), ParameterValue(p, ctx));
     }
 
@@ -791,45 +916,51 @@ public static partial class AbiEmitter {
     /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, Context ctx) {
-        // A foreach yields no ring value: the collection slot and the body's slots are
-        // dead when it completes, so the whole emission closes one ring scope.
-        using var ringScope = ctx.OpenRingScope();
-        ctx.PushScope();
-        ctx.DeclareVariable(fel.LoopVariable);
-        Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
-            ? EmitUpvalueCellInit(fel.LoopVariable, ctx)
-            : Empty();
+        ctx.EnterUnresumable();
+        try {
+            // A foreach yields no ring value: the collection slot and the body's slots are
+            // dead when it completes, so the whole emission closes one ring scope.
+            using var ringScope = ctx.OpenRingScope();
+            ctx.PushScope();
+            ctx.DeclareVariable(fel.LoopVariable);
+            Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
+                ? EmitUpvalueCellInit(fel.LoopVariable, ctx)
+                : Empty();
 
-        var ring = ctx.OpenRing();
-        int colSlot = ring.Add(CompileNode(fel.Collection, ctx));
+            var ring = ctx.OpenRing();
+            var col = ring.AddValue(CompileNode(fel.Collection, ctx));
 
-        var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
-        var colObj = Variable(typeof(object), "_col");
+            var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
+            var colObj = Variable(typeof(object), "_col");
 
-        var loop = EmitLoopScaffold(
-            new LoopPlan(
-                "foreach",
-                fel.Label,
-                LoopTestPosition.BeforeBody,
-                Test: _ => Call(enumerator, EnumeratorMoveNext),
-                PerIteration: c => c.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, c)),
-                Body: c => CompileNode(fel.Body, c),
-                AfterContinue: null),
-            ctx);
+            var loop = EmitLoopScaffold(
+                new LoopPlan(
+                    "foreach",
+                    fel.Label,
+                    LoopTestPosition.BeforeBody,
+                    Test: _ => Call(enumerator, EnumeratorMoveNext),
+                    PerIteration: c => c.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, enumerator, c)),
+                    Body: c => CompileNode(fel.Body, c),
+                    AfterContinue: null),
+                ctx);
 
-        ctx.PopScope();
+            ctx.PopScope();
 
-        return ring.Then(Block(
-            [enumerator, colObj],
-            loopVarCellInit,
-            Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
-                Convert(ctx.RingVar(colSlot), typeof(int)))),
-            Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
-            TryFinally(
-                loop,
-                IfThen(
-                    TypeIs(enumerator, typeof(IDisposable)),
-                    Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose)))));
+            return ring.Then(Block(
+                [enumerator, colObj],
+                loopVarCellInit,
+                Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                    Convert(col.Read, typeof(int)))),
+                Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
+                TryFinally(
+                    loop,
+                    IfThen(
+                        TypeIs(enumerator, typeof(IDisposable)),
+                        Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose)))));
+        }
+        finally {
+            ctx.LeaveUnresumable();
+        }
     }
 
     /// <summary>The ring value stored into the loop variable each iteration. Without a declared
@@ -884,23 +1015,29 @@ public static partial class AbiEmitter {
 
     /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
     private static Expression EmitUsingStatement(UsingStatement us, Context ctx) {
-        // A using yields nothing: the resource slot and the body's slots are dead when
-        // it completes, so the whole emission closes one ring scope.
-        using var ringScope = ctx.OpenRingScope();
-        var resourceExpr = CompileNode(us.Resource, ctx);
-        int resSlot = ctx.RingDepth - 1;
-        var bodyExpr = CompileNode(us.Body, ctx);
-        var resObj = Variable(typeof(object), "_using");
-        return Block(
-            [resObj],
-            resourceExpr,
-            Assign(resObj, Call(ctx.HeapLocal, HeapUnsafeGet,
-                Convert(ctx.RingVar(resSlot), typeof(int)))),
-            TryFinally(
-                bodyExpr,
-                IfThen(
-                    TypeIs(resObj, typeof(IDisposable)),
-                    Call(Convert(resObj, typeof(IDisposable)), IDisposableDispose))));
+        ctx.EnterUnresumable();
+        try {
+            // A using yields nothing: the resource slot and the body's slots are dead when
+            // it completes, so the whole emission closes one ring scope.
+            using var ringScope = ctx.OpenRingScope();
+            var resourceExpr = CompileNode(us.Resource, ctx);
+            int resSlot = ctx.RingDepth - 1;
+            var bodyExpr = CompileNode(us.Body, ctx);
+            var resObj = Variable(typeof(object), "_using");
+            return Block(
+                [resObj],
+                resourceExpr,
+                Assign(resObj, Call(ctx.HeapLocal, HeapUnsafeGet,
+                    Convert(ctx.RingVar(resSlot), typeof(int)))),
+                TryFinally(
+                    bodyExpr,
+                    IfThen(
+                        TypeIs(resObj, typeof(IDisposable)),
+                        Call(Convert(resObj, typeof(IDisposable)), IDisposableDispose))));
+        }
+        finally {
+            ctx.LeaveUnresumable();
+        }
     }
 
     private static Type ResolveCatchClrType(Node? exceptionType, Context ctx) {
@@ -926,8 +1063,8 @@ public static partial class AbiEmitter {
         }
 
         var ring = ctx.OpenRing();
-        int resultSlot = ring.Add(CompileNode(ret.Value, ctx));
-        Expression value = ctx.RingVar(resultSlot);
+        var result = ring.AddValue(CompileNode(ret.Value, ctx));
+        Expression value = result.Read;
         if (ctx.AsyncReturn is not null)
             value = WrapAsyncResult(value, ctx.AsyncReturn, ctx, ret.Value);
 

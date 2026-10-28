@@ -516,6 +516,10 @@ internal static class DictionaryBackedValue {
     /// value-type read: unboxing the condition then casts the zero to <c>Missing</c>.
     /// </summary>
     internal static Expression MissingKeyFallback(ITypeDefinition targetType) {
+        // An unset optional value is null. Nullable<T> has no primitive, so the
+        // value-type zero below would not apply and Missing cannot convert to T?.
+        if (targetType.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null)
+            return Expression.Constant(null, typeof(object));
         var convert = ConvertMethod(targetType.PrimitiveType);
         if (convert is null || !convert.ReturnType.IsValueType)
             return Expression.Convert(Expression.Constant(System.Reflection.Missing.Value), typeof(object));

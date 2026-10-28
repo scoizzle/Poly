@@ -7,26 +7,18 @@ using Context = Poly.Interpretation.Vm.Abi.AbiEmitter.Context;
 namespace Poly.Interpretation.Vm.Abi;
 
 /// <summary>
-/// Where a value physically lives in the emitted body. The VM has one value
-/// representation (a <c>long</c> slot, inline word or heap handle) but four
-/// storage locations, and before this type every site re-derived the address:
+/// Where a value physically lives in the emitted body. Four places, and a
+/// binding resolves to exactly one (<see cref="Context.Resolve(Variable)"/>):
 /// <list type="bullet">
-/// <item><see cref="Ring"/> — a transient expression-stack local (<c>_rN</c>);</item>
-/// <item><see cref="Frame"/> — one frame slot, <c>_slots[_fp + n]</c> (a local,
-/// a parameter, or the result slot);</item>
-/// <item><see cref="Local"/> — a plain CLR local (a <c>_regN</c> register or the
-/// instance handle);</item>
-/// <item><see cref="Cell"/> — a <c>long[1]</c> capture cell reached through a
-/// closure array or through a handle stored in a slot.</item>
+/// <item><see cref="Ring"/> — a transient pool local (<c>_rN</c>, <c>_dN</c>,
+/// <c>_fN</c>, <c>_iN</c>, <c>_nN_T</c>);</item>
+/// <item><see cref="Frame"/> — one frame word, <c>_slots[_fp + n]</c>;</item>
+/// <item><see cref="Local"/> — a plain CLR local (a pool lease or the instance
+/// handle);</item>
+/// <item><see cref="Cell"/> — element 0 of a <c>long[1]</c> capture cell.</item>
 /// </list>
-/// A binding resolves to exactly one of these (<see cref="Context.Resolve(Variable)"/>),
-/// so a read or a write is one call instead of a ladder re-implemented per site.
-/// Each location states the <see cref="Representation"/> it holds: a variable's register
-/// holds the value itself when the variable is IEEE (<c>double</c> / <c>float</c>) and the
-/// <c>long</c> word otherwise, while a ring slot, a frame slot, and a capture cell hold
-/// whatever the slot table or the word array says. A read converts only when the
-/// requested representation differs from the storage's, and a write does the same, so a
-/// value crosses the word boundary once at the crossing and never per access.
+/// A typed read of a stored word is <see cref="LocalType.FromWord"/>. There is
+/// no view layered on a place.
 /// </summary>
 internal abstract record SlotLocation {
 
@@ -36,17 +28,33 @@ internal abstract record SlotLocation {
     /// <summary>An expression yielding the stored value at <see cref="Representation"/>.</summary>
     public abstract Expression Read(Context ctx);
 
-    /// <summary>An expression yielding the stored value at
-    /// <paramref name="representation"/>; a storage of that representation is a copy.</summary>
-    public Expression ReadAs(Context ctx, Type representation) =>
-        representation == Representation
-            ? Read(ctx)
-            : RingCodec.AsRepresentation(Read(ctx), representation);
+    /// <summary>The stored word read as <paramref name="representation"/>. A
+    /// <c>long</c> slot uses that form directly. A slot that already holds the
+    /// value converts from its own form.</summary>
+    public Expression ReadAs(Context ctx, Type representation) {
+        if (representation == Representation)
+            return Read(ctx);
+        if (Representation == typeof(long)) {
+            var form = LocalType.Of(representation);
+            return form.FromWord(Read(ctx), form.Clr, ctx.HeapLocal);
+        }
+        if (representation == typeof(long))
+            return LocalType.Encode(Read(ctx), Representation, ctx.HeapLocal);
+        return LocalType.Of(Representation).FromWord(Read(ctx), representation, ctx.HeapLocal);
+    }
 
-    /// <summary>An expression storing <paramref name="value"/>, which may be at any
-    /// representation; it converts once when it differs from the storage's.</summary>
-    public Expression Write(Context ctx, Expression value) =>
-        Store(ctx, RingCodec.AsRepresentation(value, Representation));
+    /// <summary>Store <paramref name="value"/> in this slot's form. A <c>long</c>
+    /// slot encodes the value's own form. A typed slot decodes into its form.</summary>
+    public Expression Write(Context ctx, Expression value) {
+        if (value.Type == Representation)
+            return Store(ctx, value);
+        if (Representation == typeof(long))
+            return Store(ctx, LocalType.Encode(value, value.Type, ctx.HeapLocal));
+        if (value.Type == typeof(long))
+            return Store(ctx, LocalType.Decode(value, Representation, Representation, ctx.HeapLocal));
+        var word = LocalType.Encode(value, value.Type, ctx.HeapLocal);
+        return Store(ctx, LocalType.Decode(word, Representation, Representation, ctx.HeapLocal));
+    }
 
     /// <summary>Store a value already at <see cref="Representation"/>.</summary>
     protected abstract Expression Store(Context ctx, Expression value);
@@ -54,7 +62,8 @@ internal abstract record SlotLocation {
     /// <summary>A ring slot: a transient expression-stack local, named for the
     /// representation it carries (<c>_rN</c> word, <c>_dN</c> double, <c>_fN</c> float).</summary>
     internal sealed record Ring(int Slot, Type? SlotRepresentation = null) : SlotLocation {
-        public override Type Representation => RingCodec.SlotTypeOf(SlotRepresentation);
+        public override Type Representation =>
+            SlotRepresentation is { } clr ? LocalType.Of(clr).SlotType : typeof(long);
 
         public override Expression Read(Context ctx) => ctx.RingVar(Slot, Representation);
 
@@ -73,8 +82,7 @@ internal abstract record SlotLocation {
             Assign(ctx.FrameSlotRead(Base), value);
     }
 
-    /// <summary>A plain CLR local: a register (<c>_regN</c> word, <c>_dregN</c> double,
-    /// <c>_fregN</c> float) or the instance handle (<c>_this</c>).</summary>
+    /// <summary>A plain CLR local: a pool lease, or the instance handle (<c>_this</c>).</summary>
     internal sealed record Local(ParameterExpression Variable, Type Storage) : SlotLocation {
         public override Type Representation => Storage;
 

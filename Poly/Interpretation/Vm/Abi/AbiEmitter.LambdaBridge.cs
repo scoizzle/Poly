@@ -174,8 +174,8 @@ public static partial class AbiEmitter {
             return true;
         }
 
-        // A reader emits a Variable for a module parameter use. Resolve the parameter
-        // through the bind pass first; the name is a fallback for an unbound use.
+        // A reader emits a Variable for a module parameter use. The bind pass links
+        // that use to the parameter; an unbound use is not a stored lambda.
         if (argument is Variable use) {
             if (ctx.BoundParameter(use) is { } boundParameter) {
                 if (ctx.TryGetCapture(use, out int captureIndex)) {
@@ -187,21 +187,12 @@ public static partial class AbiEmitter {
                 throw new InvalidOperationException(
                     $"VM compile rejected: bound parameter '{boundParameter.Name}' is not in any scope here.");
             }
-            if (ctx.TryGetInlineParameter(use.Name, out int ringSlot)) {
-                handle = ctx.RingVar(ringSlot);
-                return true;
-            }
-            if (ctx.TryGetFrameParameter(use.Name, out int paramIndex)) {
-                handle = ctx.ParameterRead(paramIndex);
-                return true;
-            }
         }
         // A directly built Parameter use resolves through the emitter's parameter
         // maps; the runtime dispatch accepts a host delegate or a VM closure.
         if (argument is Parameter parameterUse
             && (ctx.TryGetParameterSlot(parameterUse, out _)
-                || ctx.TryGetFrameParameter(parameterUse.Name, out _)
-                || ctx.TryGetInlineParameter(parameterUse.Name, out _))) {
+                || ctx.TryGetInlineParameter(parameterUse, out _))) {
             handle = ParameterValue(parameterUse, ctx);
             return true;
         }
@@ -257,7 +248,7 @@ public static partial class AbiEmitter {
             else if (capture.Parameter is { } parameter) {
                 if (!ctx.TryGetParameterSlot(parameter, out _)
                     && !ctx.TryGetCapture(parameter, out _)
-                    && !ctx.TryGetFrameParameter(parameter.Name, out _))
+                    )
                     return false;
             }
         }
@@ -520,21 +511,30 @@ public static partial class AbiEmitter {
     private static Expression PureParameter(Parameter parameter, PureLambdaContext ctx) {
         if (ctx.ParametersByNode.TryGetValue(parameter, out var byNode))
             return byNode;
-        if (ctx.ParametersByName.TryGetValue(parameter.Name, out var byName))
-            return byName;
+        if (ctx.Abi.BoundDeclaredParameter(parameter) is { } declaration
+            && !ReferenceEquals(declaration, parameter)
+            && ctx.ParametersByNode.TryGetValue(declaration, out byNode))
+            return byNode;
         if (ctx.CapturesByBinding.TryGetValue(parameter, out var capture))
             return capture;
-        if (ctx.CapturesByName.TryGetValue(parameter.Name, out capture))
+        if (ctx.Abi.BoundDeclaredParameter(parameter) is { } declared
+            && !ReferenceEquals(declared, parameter)
+            && ctx.CapturesByBinding.TryGetValue(declared, out capture))
             return capture;
         throw RejectPure(parameter, $"parameter '{parameter.Name}' is neither a lambda parameter nor a captured value");
     }
 
     private static Expression PureVariable(Variable variable, PureLambdaContext ctx) {
-        // A lambda parameter shadows an outer binding of the same name.
-        if (ctx.ParametersByName.TryGetValue(variable.Name, out var parameter))
-            return parameter;
-        if (ctx.CapturesByName.TryGetValue(variable.Name, out var capture))
-            return capture;
+        // A lambda parameter shadows an outer binding of the same name. The bind
+        // pass records that edge on the use; the name is not a second key.
+        if (ctx.Abi.BoundParameter(variable) is { } parameter
+            && ctx.ParametersByNode.TryGetValue(parameter, out var parameterExpression))
+            return parameterExpression;
+        if (ctx.CapturesByBinding.TryGetValue(variable, out var byUse))
+            return byUse;
+        if (ctx.Abi.DeclaredVariable(variable) is { } declaration
+            && ctx.CapturesByBinding.TryGetValue(declaration, out var byDeclaration))
+            return byDeclaration;
         throw RejectPure(variable, $"variable '{variable.Name}' is not a lambda parameter or a captured value");
     }
 
@@ -790,11 +790,9 @@ public static partial class AbiEmitter {
             for (int i = 0; i < parameters.Length; i++) {
                 var expression = Parameter(parameters[i].ParameterType, parameters[i].Name);
                 ParameterExpressions.Add(expression);
-                ParametersByName[lambda.Parameters[i].Name] = expression;
+                ParametersByNode[lambda.Parameters[i]] = expression;
                 AllowedExpressions.Add(expression);
             }
-            foreach (var parameter in lambda.Parameters)
-                ParametersByNode[parameter] = ParametersByName[parameter.Name];
         }
 
         public Lambda Lambda { get; }
@@ -804,18 +802,15 @@ public static partial class AbiEmitter {
         public List<ParameterExpression> ParameterExpressions { get; }
         public Dictionary<Parameter, ParameterExpression> ParametersByNode { get; } =
             new(ReferenceEqualityComparer.Instance);
-        public Dictionary<string, ParameterExpression> ParametersByName { get; } =
-            new(StringComparer.Ordinal);
         public Dictionary<object, ParameterExpression> CapturesByBinding { get; } =
             new(ReferenceEqualityComparer.Instance);
-        public Dictionary<string, ParameterExpression> CapturesByName { get; } =
-            new(StringComparer.Ordinal);
         public HashSet<ParameterExpression> AllowedExpressions { get; } =
             new(ReferenceEqualityComparer.Instance);
 
         public void AddCapture(Capture capture, ParameterExpression local) {
             CapturesByBinding[capture.Binding] = local;
-            CapturesByName[CaptureName(capture)] = local;
+            if (capture.Variable is { } variable && Abi.DeclaredVariable(variable) is { } declaration)
+                CapturesByBinding[declaration] = local;
             AllowedExpressions.Add(local);
         }
     }

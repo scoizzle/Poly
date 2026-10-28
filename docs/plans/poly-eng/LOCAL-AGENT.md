@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-10-26 (Part 0): queue = GitHub issues; slice plan = draft PR body + pinned PLAN comment. Do not treat this file as live SoT.
+
 # Poly convergence: running the remaining slices from a local agent
 
 Single entry point as of 2026-10-10 21:33 CT. The bot pipeline (Foreman, 100x, Grug, mill runs) is suspended. Scot runs each slice himself with a local coding agent (Cursor, Claude Code or similar) in his own clone of `scoizzle/Poly`. Nothing here needs a bot, `mill.sh` or a box path.

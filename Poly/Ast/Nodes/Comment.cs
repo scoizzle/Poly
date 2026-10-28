@@ -7,6 +7,6 @@ namespace Poly.Ast.Nodes;
 /// The VM should skip this node during execution.
 /// </summary>
 /// <param name="Text">Human-readable message about what was not lowered.</param>
-public sealed record Comment(string Text) : Expression {
+public sealed record Comment(string Text) : Statement {
     public override string ToString() => $"/* {Text} */";
 }

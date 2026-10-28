@@ -17,9 +17,23 @@ namespace Poly.Tests.TestHelpers;
 /// block.
 /// </summary>
 internal static class VmTree {
-    private static readonly Regex RingLocal = new("^_[rdfi](\\d+)$", RegexOptions.Compiled);
-    private static readonly Regex VariableRegister = new("^_(?:d|f|i)?reg(\\d+)$", RegexOptions.Compiled);
+    // LocalType's slot families, the names LocalPool.RingLocalName emits.
+    // Nullable is _n{index}_{Underlying}. A variable lease uses the same names;
+    // there is no _reg family.
+    private static readonly Regex RingLocal = new("^_(?:[rdfi](\\d+)|n(\\d+)_\\w+)$", RegexOptions.Compiled);
     private static readonly Regex ArrayCacheLocal = new("^_f?arr(\\d+)$", RegexOptions.Compiled);
+
+    private static bool TryRingIndex(string? name, out int index) {
+        index = 0;
+        if (name is null)
+            return false;
+        var match = RingLocal.Match(name);
+        if (!match.Success)
+            return false;
+        var group = match.Groups[1].Success ? match.Groups[1] : match.Groups[2];
+        index = int.Parse(group.Value, System.Globalization.CultureInfo.InvariantCulture);
+        return true;
+    }
 
     /// <summary>
     /// One emitted loop: the break target its test jumps to and the top-level items of
@@ -112,7 +126,18 @@ internal static class VmTree {
         private readonly List<BinaryExpression> _comparisons = [];
         private readonly HashSet<Expression> _bitcastArguments = new(ReferenceEqualityComparer.Instance);
         private readonly HashSet<Expression> _boundaryBitcasts = new(ReferenceEqualityComparer.Instance);
-        private readonly List<MethodCallExpression> _registerBitcasts = [];
+        private readonly List<(MethodCallExpression Call, ParameterExpression Local)> _leaseBitcasts = [];
+        private readonly HashSet<ParameterExpression> _zeroInits = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _rejectedZero = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _cellInits = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _rejectedCell = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _assignedRing = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<ParameterExpression, int> _ringAssigns = new(ReferenceEqualityComparer.Instance);
+        private readonly HashSet<ParameterExpression> _zeroRead = new(ReferenceEqualityComparer.Instance);
+        private ParameterExpression? _pendingZero;
+        private ParameterExpression? _writing;
+        private bool _snapshot;
+        private HashSet<ParameterExpression>? _leases;
         private readonly List<MethodCallExpression> _heapDerefs = [];
         private readonly List<MethodCallExpression> _callFrames = [];
         private readonly List<MethodCallExpression> _callFramesWithArgumentArray = [];
@@ -173,31 +198,42 @@ internal static class VmTree {
 
         protected override Expression VisitParameter(ParameterExpression node) {
             _occurrences[node] = _occurrences.GetValueOrDefault(node) + 1;
+            // A declaration zero that is read before the next store is a temp.
+            // The cached element store reads its index slot, then the result copy
+            // assigns that slot again; the read is what keeps the slot out.
+            // A frame snapshot reads every live lease before the statement runs, and
+            // that copy is not a use of the declaration zero.
+            if (!ReferenceEquals(node, _writing)
+                && !_snapshot
+                && _zeroInits.Contains(node)
+                && _ringAssigns.GetValueOrDefault(node) == 1)
+                _zeroRead.Add(node);
             return base.VisitParameter(node);
         }
 
         protected override Expression VisitBinary(BinaryExpression node) {
+            if (node.NodeType == ExpressionType.Assign)
+                NoteRingAssign(node.Left, node.Right);
             if (node.NodeType == ExpressionType.Assign
                 && node.Left is ParameterExpression assigned
-                && RingLocal.Match(assigned.Name ?? string.Empty) is { Success: true } ring)
-                _assignedRings.Add(int.Parse(ring.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
+                && TryRingIndex(assigned.Name, out int ring))
+                _assignedRings.Add(ring);
             if (node.NodeType == ExpressionType.ArrayIndex && node.Left == _slots)
                 _slotIndexes.Add(node.Right);
-            // The block-exit snapshot store is the frame boundary: a register written into
-            // _slots converts once there, by design.
             if (node.NodeType == ExpressionType.Assign
-                && node.Left is BinaryExpression { NodeType: ExpressionType.ArrayIndex } target
-                && target.Left == _slots
-                && IsBitcastCall(node.Right))
-                _boundaryBitcasts.Add(node.Right);
-            // A register stored through a bitcast is the write half of the same per-access
-            // conversion: a typed register stores the value itself.
+                && IsFrameSlot(node.Left)) {
+                // The observation copy is the sanctioned word boundary.
+                if (IsBitcastCall(node.Right))
+                    _boundaryBitcasts.Add(node.Right);
+            }
+            // A lease stored through a bitcast is the write half of a per-access
+            // conversion. A typed lease stores the value itself.
             if (node.NodeType == ExpressionType.Assign
                 && node.Left is ParameterExpression stored
-                && IsVariableRegister(stored)
+                && TryRingIndex(stored.Name, out _)
                 && node.Right is MethodCallExpression conversion
-                && IsBitcastCall(conversion))
-                _registerBitcasts.Add(conversion);
+                && IsLeaseBitcast(conversion))
+                NoteLeaseBitcast(conversion, stored);
             if (node.NodeType == ExpressionType.Assign
                 && node.Left is ParameterExpression storedCache
                 && IsArrayCacheLocal(storedCache))
@@ -213,6 +249,22 @@ internal static class VmTree {
                 or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
                 or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual)
                 _comparisons.Add(node);
+            if (node.NodeType == ExpressionType.Assign && IsFrameSlot(node.Left)) {
+                Visit(node.Left);
+                bool savedSnapshot = _snapshot;
+                _snapshot = true;
+                Visit(node.Right);
+                _snapshot = savedSnapshot;
+                return node;
+            }
+            if (node.NodeType == ExpressionType.Assign && node.Left is ParameterExpression target) {
+                var saved = _writing;
+                _writing = target;
+                Visit(node.Left);
+                _writing = saved;
+                Visit(node.Right);
+                return node;
+            }
             return base.VisitBinary(node);
         }
 
@@ -241,17 +293,120 @@ internal static class VmTree {
             }
             if (IsBitcastCall(node)
                 && !_boundaryBitcasts.Contains(node)
-                && node.Arguments.Any(IsVariableRegister)
-                && !_registerBitcasts.Contains(node))
-                _registerBitcasts.Add(node);
+                && IsLeaseBitcast(node)
+                && UnwrapLocal(node.Arguments[0]) is { } read)
+                NoteLeaseBitcast(node, read);
             return base.VisitMethodCall(node);
         }
 
-        /// <summary>True for a register local: a variable's own storage, <c>_regN</c>
-        /// word, <c>_dregN</c> double, or <c>_fregN</c> float.</summary>
-        internal static bool IsVariableRegister(Expression expression) =>
-            expression is ParameterExpression parameter
-            && VariableRegister.IsMatch(parameter.Name ?? string.Empty);
+        private void NoteLeaseBitcast(MethodCallExpression call, ParameterExpression local) {
+            if (_leaseBitcasts.Any(pair => ReferenceEquals(pair.Call, call) && ReferenceEquals(pair.Local, local)))
+                return;
+            _leaseBitcasts.Add((call, local));
+        }
+
+        /// <summary>A <c>_slots[_fp + n]</c> store. The emitter writes the frame
+        /// through <see cref="Expression.ArrayAccess"/>, which is an
+        /// <see cref="IndexExpression"/>, and through <c>ArrayIndex</c>.</summary>
+        private bool IsFrameSlot(Expression expression) =>
+            expression is IndexExpression { Object: ParameterExpression indexed } && indexed == _slots
+            || expression is BinaryExpression { NodeType: ExpressionType.ArrayIndex, Left: ParameterExpression array }
+                && array == _slots;
+
+        private static ParameterExpression? UnwrapLocal(Expression? expression) {
+            while (expression is UnaryExpression {
+                NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked
+            } unary)
+                expression = unary.Operand;
+            if (expression is MethodCallExpression call && IsBitcastCall(call) && call.Arguments.Count > 0)
+                return UnwrapLocal(call.Arguments[0]);
+            return expression as ParameterExpression;
+        }
+
+        /// <summary>A bitcast whose argument is a pool local, classified by
+        /// <see cref="LocalType"/>. An IEEE local encodes with
+        /// <c>DoubleToInt64Bits</c>. A word local decoded with
+        /// <c>Int64BitsToDouble</c> is the per-access read a typed lease does
+        /// not do. The name is not consulted: <c>_reg</c> is gone, and temps
+        /// share the pool's names.</summary>
+        private static bool IsLeaseBitcast(Expression expression) {
+            if (expression is not MethodCallExpression call || !IsBitcastCall(call) || call.Arguments.Count == 0)
+                return false;
+            var local = UnwrapLocal(call.Arguments[0]);
+            if (local is null || !TryRingIndex(local.Name, out _))
+                return false;
+            var form = LocalType.Of(local.Type);
+            return call.Method.Name == nameof(BitConverter.DoubleToInt64Bits)
+                ? form is LocalType.IEEELocal
+                : form is not LocalType.IEEELocal;
+        }
+
+        /// <summary>Variable leases. A cell lease is the capture allocate. A value
+        /// lease is the declaration zero that the program assigns again.
+        /// <c>NoDebug</c> emits no observation copy, so a frame store cannot be the
+        /// signal. A zero copied into another pool local, or a zero assigned only
+        /// once, or a zero read before it is assigned again, is a temp. A pool
+        /// local reused for a later value after an allocate is a temp too. A frame
+        /// snapshot of the lease is not that read.</summary>
+        private HashSet<ParameterExpression> Leases {
+            get {
+                if (_leases is not null)
+                    return _leases;
+                _leases = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
+                foreach (var local in _zeroInits) {
+                    if (!_rejectedZero.Contains(local)
+                        && !_zeroRead.Contains(local)
+                        && _ringAssigns.GetValueOrDefault(local) >= 2)
+                        _leases.Add(local);
+                }
+                foreach (var local in _cellInits)
+                    if (!_rejectedCell.Contains(local))
+                        _leases.Add(local);
+                return _leases;
+            }
+        }
+
+        /// <summary>A declaration init is <c>local = zero</c> (or the cell
+        /// handle's heap allocate). The value temp of an assignment is also
+        /// <c>temp = zero</c> when the value is zero, and the next assign copies
+        /// that temp into the lease. That copy is what keeps the temp out.</summary>
+        private void NoteRingAssign(Expression left, Expression right) {
+            if (_pendingZero is { } pending) {
+                if (left is ParameterExpression target
+                    && target != pending
+                    && TryRingIndex(target.Name, out _)
+                    && UnwrapLocal(right) == pending)
+                    _rejectedZero.Add(pending);
+                _pendingZero = null;
+            }
+            if (left is ParameterExpression counted && TryRingIndex(counted.Name, out _))
+                _ringAssigns[counted] = _ringAssigns.GetValueOrDefault(counted) + 1;
+            if (left is ParameterExpression overwritten
+                && _cellInits.Contains(overwritten)
+                && !IsHeapAllocate(right))
+                _rejectedCell.Add(overwritten);
+            if (left is not ParameterExpression local || !TryRingIndex(local.Name, out _) || !_assignedRing.Add(local))
+                return;
+            if (IsZeroConstant(right)) {
+                _zeroInits.Add(local);
+                _pendingZero = local;
+            }
+            else if (IsHeapAllocate(right))
+                _cellInits.Add(local);
+        }
+
+        private static bool IsZeroConstant(Expression expression) => expression switch {
+            ConstantExpression { Value: 0 or 0L or 0.0 or 0f or false } => true,
+            DefaultExpression => true,
+            _ => false,
+        };
+
+        private static bool IsHeapAllocate(Expression expression) {
+            while (expression is UnaryExpression unary)
+                expression = unary.Operand;
+            return expression is MethodCallExpression { Method.Name: "Allocate", Method.DeclaringType: { } type }
+                && type == typeof(VmManagedObjectHeap);
+        }
 
         internal static bool IsBitcastCall(Expression expression) =>
             VmTree.IsBitcastCall(expression);
@@ -271,13 +426,13 @@ internal static class VmTree {
                 .ToList();
 
         /// <summary>Indexes of the ring locals (<c>_rN</c> word, <c>_dN</c> double,
-        /// <c>_fN</c> float), distinct and in declaration order. A slot index can
+        /// <c>_fN</c> float, <c>_iN</c> int, <c>_nN_T</c> nullable), distinct and in
+        /// declaration order. A slot index can
         /// declare more than one local — one per representation — because the ring
         /// depth rewinds between statements.</summary>
         public IReadOnlyList<int> RingIndexes =>
-            _declared.Select(d => RingLocal.Match(d.Name ?? string.Empty))
-                .Where(m => m.Success)
-                .Select(m => int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture))
+            _declared.Select(d => TryRingIndex(d.Name, out int index) ? index : -1)
+                .Where(index => index >= 0)
                 .Distinct()
                 .OrderBy(index => index)
                 .ToList();
@@ -287,22 +442,28 @@ internal static class VmTree {
 
         /// <summary>Ring locals declared for one index, one per representation.</summary>
         public IReadOnlyList<ParameterExpression> RingLocalsAt(int index) =>
-            _declared.Where(d => RingLocal.Match(d.Name ?? string.Empty) is { Success: true } m
-                && int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) == index)
+            _declared.Where(d => TryRingIndex(d.Name, out int parsed) && parsed == index)
                 .ToList();
 
-        /// <summary>The variable registers the body declares, in tree order. A register
-        /// index can declare more than one local — one per representation — for the same
-        /// reason a ring slot can: the index is reused by a later scope.</summary>
+        /// <summary>The variable leases the body declares, in tree order. A lease is a
+        /// pool local whose declaration zero is assigned again without being read,
+        /// or a cell allocate that stays the local's value. <c>NoDebug</c> emits no
+        /// observation copy. Statement temps share the pool's names and are not
+        /// leases. An index reused by a later scope declares one
+        /// local per <see cref="LocalType"/>.</summary>
         public IReadOnlyList<ParameterExpression> Registers =>
-            _declared.Where(IsVariableRegister).ToList();
+            _declared.Where(Leases.Contains).Distinct().ToList();
 
-        /// <summary>Bitcasts at a variable's own register boundary: a bitcast that reads a
-        /// register local, or is the value assigned to one. The two sanctioned word
+        /// <summary>Bitcasts at a variable lease: a bitcast that reads a lease, or is
+        /// the value assigned to one, classified by <see cref="LocalType"/> rather than
+        /// by a <c>_reg</c> name. The two sanctioned word
         /// boundaries are excluded — the block-exit <c>_slots</c> snapshot store and a CLR
         /// call argument — because those convert once per crossing rather than per access.
-        /// A typed variable has none of these; a word-backed one has one per access.</summary>
-        public IReadOnlyList<MethodCallExpression> RegisterBitcasts => _registerBitcasts;
+        /// A typed variable has none of these.</summary>
+        public IReadOnlyList<MethodCallExpression> RegisterBitcasts =>
+            _leaseBitcasts.Where(pair => Leases.Contains(pair.Local))
+                .Select(pair => pair.Call)
+                .ToList();
 
         /// <summary>Comparison nodes, in tree order. The emitter's own frame-pointer
         /// and status tests are comparisons too, so a consumer filters by shape.</summary>

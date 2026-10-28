@@ -144,8 +144,8 @@ public class ArrayLocalCacheTests {
                 + string.Join(", ", caches.Select(local => local.Name)));
 
         var registers = scan.Registers.Select(local => local.Name ?? string.Empty).Distinct().ToList();
-        await Assert.That(registers).IsEquivalentTo(new[] { "_reg0" })
-            .Because("both sibling blocks' arrays live in register 0 — the reuse the null "
+        await Assert.That(registers).IsEquivalentTo(new[] { "_r0" })
+            .Because("both sibling blocks' array handles share the released _r0 lease — the reuse the null "
                 + "makes safe: " + string.Join(", ", registers));
 
         var stores = scan.ArrayCacheStores.Select(store => store.Value).ToList();

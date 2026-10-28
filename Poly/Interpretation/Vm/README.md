@@ -35,42 +35,55 @@ The compiled delegate keeps the hot state in locals:
 | `_fp` | `FramePos` — first argument slot of the current frame |
 | `_heap` | `state.Heap` |
 | `_this` | `_slots[_fp]` — instance handle for the frame |
-| `_regN` | register-backed local variables (`_reg0`, `_reg1`, …), created on demand |
-| `_rN` | ring slots for expression evaluation (`_r0`, `_r1`, …) |
+| pool locals | one `LocalPool` cursor for variable leases, expression temps, and named helpers |
 
-Ring slots are ordinary CLR locals, so the JIT enregisters them; the ring is a
-compile-time naming discipline, not a runtime stack. Frame slots are only written
-for values that outlive an expression (arguments, spilled locals, the result), and
-for the debug hook's local span.
+Pool locals are ordinary CLR locals, so the JIT enregisters them. The pool is a
+compile-time naming discipline, not a runtime stack. A local's name is its
+`LocalType`: `_dN` double, `_fN` float, `_iN` int, `_nN_T` nullable, and `_rN`
+for every other word. A variable takes the next free lease (at most 32 live).
+Past that it lives only in its frame slot. Temps and helpers (`_coal`, `_shift`,
+`_callSp`, `_callerFp`) sit above the leases that are still live.
+
+Frame slots are the observation copy, not the variable's home. A write assigns
+the lease. The lease is stored into `_slots[_fp + n]` only at an observation:
+block exit, catch exit, the debug hook while a hook is attached, and a suspend
+spill. Arguments and the result are frame slots too.
 
 ### Storage locations
 
-A value has one representation (a `long` slot, inline word or heap handle) but
-lives in one of four places. `SlotLocation` names them, and a read or a write is
-one call instead of a per-site branch:
+A value has one `LocalType` and lives in one of four places. `SlotLocation` names
+them. There is no `View`: a typed read of a stored word is `LocalType.FromWord`,
+and a typed write is `Encode`.
 
 | Location | Address | Used for |
 |----------|---------|----------|
-| `Ring` | `_rN` | transient expression-stack values |
+| `Ring` | a pool index | a temp whose home is the ring cursor |
 | `Frame` | `_slots[_fp + n]` | a local, a parameter, the result slot |
-| `Local` | a CLR local | a `_regN` register, `_this` |
+| `Local` | a CLR local | a variable lease, a helper, `_this` |
 | `Cell` | `long[1]` element 0 | a capture cell, reached through a closure array or a slot handle |
 
 `Context.Resolve` is the one binding resolver: a closure capture cell first, then
-the bound-parameter / register / frame-slot ladder, wrapping a cell-backed local
-in its cell. `VariableReadRaw`/`VariableWriteRaw` resolve the binding's own
-storage without the capture indirection.
+the bound parameter, then the variable's lease, then its frame slot when it has
+no lease. A cell-backed local is wrapped in its cell. The lease holds the cell's
+handle, never `cell[0]`. `VariableReadRaw`/`VariableWriteRaw` resolve the
+binding's own storage without the capture indirection.
 
-Shape is `RingCodec`'s job and is not stored on the location. Two classifiers
-answer two different questions: `RingCodec.UnderlyingKindFor` asks whether a
-type's *underlying* value is long-representable (it peels a nullable), while
-`ValueRepresentationClassifier.KindFor` asks what a *node* of that type puts in
-its slot (a nullable is a heap handle).
+`Value` is a placed result: the read, the local, and its `LocalType`.
+`EmitScope.Yield` spills a computation into the next pool local and returns
+that assignment. The scope's dispose rewinds anything that was not yielded.
+
+Shape is `RingCodec`'s job and is not stored on the location.
+`ValueRepresentationClassifier.KindFor` is the one classifier: what a node of a
+type puts in its slot. A nullable is `HeapRef` — its frame word is a boxed
+`Nullable<T>`, and 0 is absent — while its pool local is typed `Nullable<T>`
+(`_nN_T`, `SlotType` is the nullable itself), so the value is never read as a
+word. There is no second "underlying" classifier; arithmetic on a nullable
+lifts to its underlying type, and the slot stays the typed local.
 
 ### Where a result lives
 
-`CompileNode` returns a `CompiledNode`: the code, and the `SlotLocation` its result
-occupies once that code has run. Naming the location is what lets a consumer
+`CompileNode` returns a `Value`: the code, the read, and the `SlotLocation` its
+result occupies once that code has run. Naming the location is what lets a consumer
 release it, so the ring is a pool of result locations rather than an ambient
 cursor that every consumer re-derived as `RingDepth - 1`.
 
@@ -95,8 +108,9 @@ ring locals for a body whose deepest statement needs 13.
 ## What the emitted body looks like
 
 Worked example: `var x = 2; x + 1` (a block with one local and one expression).
-The body below is the actual tree from `AbiEmitter.Build`, with empty
-`default(void)` dispatch nodes elided.
+The body below is the shape `AbiEmitter.Build` emits, with empty `default(void)`
+dispatch nodes elided. `x` is the lease `_r0`. The assignment and the add use
+temps from the same pool.
 
 ### `NoDebug`
 
@@ -109,15 +123,14 @@ The body below is the actual tree from `AbiEmitter.Build`, with empty
         ? state.FramePos : 0;
     long _this = _slots[_fp];
 
-    long _reg0 = 0;          // x
-    long _r0, _r1;
+    long _r0 = 0;            // x, the variable lease
+    long _r1, _r2, _r3;      // temps above the lease
 
 _entry:
-    _r0 = 2;                 // x = 2
-    _reg0 = _r0;
-    _r1 = _reg0 + 1;         // x + 1
-    _slots[_fp + 0] = _reg0; // block-exit snapshot for VmDebugger.GetLocals
-    _slots[_fp] = _r1;       // publish the result at FramePos
+    _r1 = 2;                 // x = 2
+    _r0 = _r1;               // a write assigns the lease
+    _r3 = _r0 + 1;           // x + 1
+    _slots[_fp] = _r3;       // publish the result at FramePos
     state.Stack.StackPointer = _fp + 1;
 _exit:
 }
@@ -134,8 +147,8 @@ _exit:
         ? state.FramePos : 0;
     long _this = _slots[_fp];
 
-    long _reg0 = 0;          // x
-    long _r0, _r1;
+    long _r0 = 0;            // x, the variable lease
+    long _r1, _r2, _r3;
 
 _entry:
     // root statement (the block)
@@ -145,44 +158,51 @@ _entry:
             new ReadOnlySpan<long>(_slots, _fp, 1), _heap);
     }
 
-    _reg0 = 0;
+    _r0 = 0;
 
     // x = 2
     if (state.DebugHook != null) {
-        _slots[_fp + 0] = _reg0;          // EmitScopeStores
+        _slots[_fp + 0] = _r0;            // observation copy for the hook span
         state.CurrentAstNode = <x = 2>;
         state.DebugHook(<x = 2>,
             new ReadOnlySpan<long>(_slots, _fp, 1), _heap);
     }
-    _r0 = 2;
-    _reg0 = _r0;
+    _r1 = 2;
+    _r0 = _r1;
 
     // x + 1
     if (state.DebugHook != null) {
-        _slots[_fp + 0] = _reg0;
+        _slots[_fp + 0] = _r0;
         state.CurrentAstNode = <x + 1>;
         state.DebugHook(<x + 1>,
             new ReadOnlySpan<long>(_slots, _fp, 1), _heap);
     }
-    _r1 = _reg0 + 1;
+    _r3 = _r0 + 1;
 
-    // block-exit snapshot: unconditional, because VmDebugger.GetLocals reads it
-    // after execution even when no hook was attached
-    _slots[_fp + 0] = _reg0;
+    // block-exit snapshot, same guard as the per-statement copy
+    if (state.DebugHook != null) {
+        _slots[_fp + 0] = _r0;
+    }
 
-    _slots[_fp] = _r1;
+    _slots[_fp] = _r3;
     state.Stack.StackPointer = _fp + 1;
 _exit:
 }
 ```
 
-`Normal` adds, per statement, the scope stores (register-backed locals mirrored
-into frame slots), `CurrentAstNode`, and the guarded `DebugHook` call. `NoDebug`
-emits none of that. The per-statement stores sit **inside** the hook guard because
-their only consumer is the hook's `ReadOnlySpan<long>`. The block-exit snapshot is
-the exception: it stays unconditional so `VmDebugger.GetLocals` can read the frame
-after execution even when no hook was attached. Slot-backed variables already live
-in `_slots`; register-backed ones read/write `_regN`.
+`Normal` adds, per statement, the observation copy inside the hook guard,
+`CurrentAstNode`, and the guarded `DebugHook` call. `NoDebug` emits none of that.
+The per-statement copy and the block-exit copy both sit **inside** the hook guard.
+Their consumer is the hook's `ReadOnlySpan<long>`, and `VmDebugger.GetLocals` after
+a run that had a hook attached. A catch copies the same way when the catch body
+ends. `NoDebug` emits none of these copies. A variable with no lease already lives
+in `_slots`; a lease is read and written in place.
+
+A `SuspendNode` spills each live lease, each enclosing temp still needed after
+resume, and each helper assigned before the suspend and read after it. The store
+is the frame encoding of the local (a cell spills its handle, not `cell[0]`).
+The reload is the first expression after the resume label, before the suspended
+flag is cleared. A binding whose only home is already a frame word is not spilled.
 
 The tree shape of one guarded statement:
 
@@ -190,7 +210,7 @@ The tree shape of one guarded statement:
 IfThen(
   NotEqual(state.DebugHook, null),
   Block(
-    Block(Assign(_slots[_fp + 0], _reg0)),
+    Block(Assign(_slots[_fp + 0], _r0)),
     Assign(state.CurrentAstNode, Constant(node)),
     Invoke(state.DebugHook, Constant(node),
            New(ReadOnlySpan<long>(_slots, _fp, 1)), _heap)))
@@ -312,8 +332,9 @@ Uses a background thread with blocking hooks. Zero overhead when not stepping.
 
 `DebugHook` fires for the program root and each `Block` child. The span covers the
 current frame's slots, and the scope stores immediately before it make
-register-backed locals current. `NoDebug` does not emit the hook, the
-`CurrentAstNode` assignment, or the scope stores.
+the live leases current in that span. `NoDebug` does not emit the hook, the
+`CurrentAstNode` assignment, or the lease copies. Block exit and catch exit use
+the same null check.
 
 ## Value Marshalling
 
@@ -331,14 +352,14 @@ IEEE bit patterns, and heap references allocate through
 - **Ring locals, not an evaluation stack**: values flow through `_r0.._rN` CLR
   locals allocated inline during the AST walk; no global allocator pass and no
   runtime push/pop for expression evaluation.
-- **Frame slots for what outlives an expression**: arguments, spilled locals, and
-  the result live in `_slots[_fp + n]`; register-backed locals are mirrored there
-  only when the debug hook needs the span.
+- **Frame slots are observation copies**: arguments and the result live in
+  `_slots[_fp + n]`. A variable lease is copied there at block exit, catch exit,
+  a debug hook, and a suspend spill. A write does not copy.
 - **Pooled buffers**: `VmValueStack` and `VmManagedObjectHeap` rent their backing
   arrays, so short-lived executions do not allocate them.
 - **Compiled delegates**: the emitter builds a LINQ expression and compiles it to
   `Action<VmState>`; no bytecode, no dispatch loop. Resume dispatch on
-  `state.ProgramCounter` exists only when a `SuspendNode` registered a step.
+  `state.ProgramCounter` exists only when a `SuspendNode` recorded a step.
 - **Native control flow and EH**: loops, branches, and try/catch/finally use CLR
   `Loop`, `Condition`, `Goto`, and `TryCatchFinally` nodes.
 

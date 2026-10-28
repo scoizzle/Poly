@@ -2,7 +2,7 @@
 
 Authoritative always-on policy. User-wide agent defaults are a baseline; this file wins. Open [`docs/CORE.md`](docs/CORE.md) before changing platform machinery.
 
-**Before you edit, check:** Is this a CORE mechanism change (then update `docs/CORE.md` in the same change)? Does the board's `CURRENT` admit the work? Does a new `Node` need a `NodeFacts` row plus a `CompileNodeInner` arm in lockstep? Does the file already carry edits you did not make — then preserve them; never revert, stage, or clean them up.
+**Before you edit, check:** Is this a CORE mechanism change (then update `docs/CORE.md` in the same change)? Is the work an open GitHub issue under umbrella #305 (or its successor)? Does a new `Node` need a `NodeFacts` row plus a `CompileNodeInner` arm in lockstep? Does the file already carry edits you did not make — then preserve them; never revert, stage, or clean them up.
 
 ## Core tenets
 
@@ -57,9 +57,9 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 - Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No new `#region`.
 - **DSL:** before authoring, call `get_dsl_guide` (short body). Pass `section` for one heading, or `all` for [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md). Update that file in the same change as the parser, printer, tokenizer, or an MCP tool that authors DSL.
 - **Placement:** Ast → `Poly/Ast/`; analysis framework → `Poly/Analysis/`; semantic passes → `Poly/Interpretation/Analysis/`; VM → `Poly/Interpretation/Vm/`; C# language surface → `Poly/Interpretation/CSharp/`; types → `Poly/Introspection/`; domain → `Poly/DomainModeling/`; grammar engine → `Poly/Grammar/`; MCP → `Poly.Mcp/`.
-- **Admission:** [`docs/plans/poly-eng/board.md`](docs/plans/poly-eng/board.md) is the only CURRENT, and its row bookkeeping is [`docs/plans/poly-eng/README.md`](docs/plans/poly-eng/README.md) §Record rules — no docs-only bookkeeping PRs, no second status schema. If the board is `(none)`, open only the suite `THEN` names, via [`docs/plans/parked/README.md`](docs/plans/parked/README.md); a label with no entry there is reported, not guessed at. `docs/plans/archive/` and `docs/plans/parked/` are not queues.
-- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md) (severity: `bug` | `suggestion` | `nit`, §6; every `bug` ships a validated failing test in the report, §3.10 — no red test, no bug). Follow-ups are evidence until a human adds them to `THEN`. Pre-ship → [`docs/agent/pr1-uncommitted-review-gate.md`](docs/agent/pr1-uncommitted-review-gate.md) (fail closed; 🔴 and 🟠 block, per phenomenal §6; pr1 Step 6; suite green).
-- **Doc roles:** CORE = machinery map · `docs/decisions/` = why · `docs/plans/` = execution (archive DONE) · `docs/agent/` = protocols. A CORE mechanism change updates CORE in the same change.
+- **Admission:** The queue is GitHub epic and sub-issues under umbrella [#305](https://github.com/scoizzle/Poly/issues/305) or its successor. The slice plan is the draft pull-request body. The first pinned pull-request comment that starts with `PLAN |` freezes that body as mill plan-first proof. Do not create `docs/plans/poly-eng/tasks/*.md`. [`board.md`](docs/plans/poly-eng/board.md), [`PIPELINE.md`](docs/plans/poly-eng/PIPELINE.md), and [`LOCAL-AGENT.md`](docs/plans/poly-eng/LOCAL-AGENT.md) are superseded (2026-10-26, Part 0). Do not treat those files, [`docs/plans/archive/`](docs/plans/archive/), or [`docs/plans/parked/`](docs/plans/parked/) as the live queue.
+- **Review:** adversarial → [`docs/agent/phenomenal-review.md`](docs/agent/phenomenal-review.md) (severity: `bug` | `suggestion` | `nit`, §6; every `bug` ships a validated failing test in the report, §3.10 — no red test, no bug). Follow-ups are evidence until a human files them as a GitHub issue under the umbrella. Pre-ship → [`docs/agent/pr1-uncommitted-review-gate.md`](docs/agent/pr1-uncommitted-review-gate.md) (fail closed; 🔴 and 🟠 block, per phenomenal §6; pr1 Step 6; suite green).
+- **Doc roles:** CORE = machinery map · `docs/decisions/` = why · `docs/plans/` = historical execution (archive DONE; not the live queue) · `docs/agent/` = protocols. A CORE mechanism change updates CORE in the same change.
 
 ## C# surface
 

@@ -341,6 +341,34 @@ public class VmDebuggerTests {
     }
 
     [Test]
+    public async Task FrameCopy_OfALeasedLocal_RunsOnlyWhileDebugHookIsAttached() {
+        var x = new Variable("x");
+        var y = new Variable("y");
+        var body = new Block([
+            new Assignment(x, new Constant(11L)),
+            new Assignment(y, new Constant(22L)),
+            x
+        ], [x, y]);
+
+        var bare = Interpreter.Compile(body);
+        using (var exec = Interpreter.Execute(bare)) {
+            await Assert.That(exec.RawValue).IsEqualTo(11L);
+            await Assert.That(Local(exec.State, "y")).IsEqualTo(0L);
+        }
+
+        var hooked = Interpreter.Compile(body);
+        using (var exec = Interpreter.Execute(hooked, s => s.DebugHook = (_, _, _) => { })) {
+            await Assert.That(Local(exec.State, "y")).IsEqualTo(22L);
+        }
+
+        var noDebug = Interpreter.Compile(body, CompilationMode.NoDebug);
+        using (var exec = Interpreter.Execute(noDebug)) {
+            await Assert.That(exec.RawValue).IsEqualTo(11L);
+            await Assert.That(Local(exec.State, "y")).IsEqualTo(0L);
+        }
+    }
+
+    [Test]
     public async Task VmDebugger_NestedBlocks_FrameOffsetsAreDistinct() {
         var outer = new Variable("outer");
         var inner = new Variable("inner");
@@ -357,7 +385,7 @@ public class VmDebuggerTests {
         var outerLayout = info!.Variables.First(v => v.Name == "outer");
         var innerLayout = info.Variables.First(v => v.Name == "inner");
         await Assert.That(outerLayout.FrameOffset).IsNotEqualTo(innerLayout.FrameOffset);
-        using var exec = Interpreter.Execute(program);
+        using var exec = Interpreter.Execute(program, s => s.DebugHook = (_, _, _) => { });
         var locals = VmDebugger.GetLocals(exec.State);
         await Assert.That(locals.First(l => l.Name == "outer").Value).IsEqualTo(1L);
         await Assert.That(locals.First(l => l.Name == "inner").Value).IsEqualTo(2L);
@@ -403,7 +431,7 @@ public class VmDebuggerTests {
             new Assignment(fn, new Lambda([], x)),
             x
         ], [x, fn]));
-        using var exec = Interpreter.Execute(program);
+        using var exec = Interpreter.Execute(program, s => s.DebugHook = (_, _, _) => { });
         var locals = VmDebugger.GetLocals(exec.State);
         var xEntry = locals.First(l => l.Name == "x");
         await Assert.That(xEntry.Value).IsEqualTo(11L);
@@ -489,4 +517,7 @@ public class VmDebuggerTests {
         var r = start.IsSuspend ? start : dbg.Continue();
         await Assert.That(r.IsSuspend || dbg.State.Status == InterpreterStatus.Suspended).IsTrue();
     }
+
+    private static long Local(VmState state, string name) =>
+        VmDebugger.GetLocals(state).First(local => local.Name == name).Value;
 }

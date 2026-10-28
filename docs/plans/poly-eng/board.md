@@ -1,3 +1,5 @@
+> SUPERSEDED 2026-10-26 (Part 0): queue = GitHub issues; slice plan = draft PR body + pinned PLAN comment. Do not treat this file as live SoT.
+
 # Poly board: the one live queue
 
 **Bot pipeline suspended 2026-10-10 21:33 CT; Scot runs slices from a local agent per [LOCAL-AGENT.md](LOCAL-AGENT.md).**
@@ -82,6 +84,7 @@ No behaviour change; the existing suite is the oracle.
 | ABI4 | SetArgs ring-spill consolidation | ABI3 | [tasks/ABI4.md](tasks/ABI4.md) |
 | ABI5 | Register-file prune: lazy `_regN`, grow by one, dead surface | ABI4 | [tasks/ABI5.md](tasks/ABI5.md) |
 | ABI6 | One storage-location model (`SlotLocation`), one IEEE codec, one classifier name | ABI5 | [tasks/ABI6.md](tasks/ABI6.md) |
+| ABI7 | One local model (`LocalType`), one lease pool, copies only at observation points, suspend as a spill barrier (no registers) | ABI6 | [tasks/ABI7.md](tasks/ABI7.md) |
 
 ## Interpretation simplification (admitted 2026-10-22 by Scot; a separate lane, does not move row 4)
 

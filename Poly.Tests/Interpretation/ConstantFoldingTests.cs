@@ -536,4 +536,57 @@ public class ConstantFoldingTests {
         using var exec = Interpreter.Execute(Interpreter.Compile(add));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(5L);
     }
+
+    [Test]
+    public async Task UnsignedInt_Equal_Double_FoldsTrue() {
+        var ast = new Equal(Wrap(2u), Wrap(2.0d));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    [Test]
+    public async Task ULongMax_Equal_ItsDouble_FoldsTrue() {
+        var ast = new Equal(Wrap(ulong.MaxValue), Wrap((double)ulong.MaxValue));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    [Test]
+    public async Task UnsignedInt_Equal_Float_FoldsTrue() {
+        var ast = new Equal(Wrap(16777217u), Wrap(16777216f));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    /// <summary><c>int</c> against <c>float</c> promotes to <c>float</c>. Widening both
+    /// to <c>double</c> first answers false, because 16777217 is exact as a double.</summary>
+    [Test]
+    public async Task Int_Equal_Float_FoldsTrue() {
+        var ast = new Equal(Wrap(16777217), Wrap(16777216f));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    [Test]
+    public async Task ULongMax_GreaterThan_One_FoldsTrue() {
+        var ast = new GreaterThan(Wrap(ulong.MaxValue), Wrap(1));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    [Test]
+    public async Task SignedMinusOne_Equal_ULongMax_FoldsFalse() {
+        var ast = new Equal(Wrap(-1), Wrap(ulong.MaxValue));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is false).IsTrue();
+    }
+
+    [Test]
+    public async Task ULongMax_DividedByTwo_FoldsUnsigned() {
+        var ast = new Divide(Wrap(ulong.MaxValue), Wrap(2UL));
+        await Assert.That(Fold(ast).GetConstantValue(ast)).IsEqualTo(ulong.MaxValue / 2);
+    }
+
+    private static INodeMetadataProvider Fold(Node ast) =>
+        new AnalyzerBuilder().UseThisReferenceContext()
+            .UseVariableScopeValidator()
+            .UseTypeAndMemberResolver()
+            .UseSideEffectAnalysis()
+            .UseJumpTargetResolution()
+            .UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(ast);
 }

@@ -37,7 +37,7 @@ public static partial class AbiEmitter {
         }
         if (!eq && (IsBoolOperand(left, lv, ctx) || IsBoolOperand(right, rv, ctx)))
             throw new InvalidOperationException(
-                "VM compile rejected: no ordering operator for 'Boolean'.");
+                "VM compile rejected: ordering comparison of 'Boolean' is not supported.");
         if (TryDecimalCompare(left, right, lv, rv, cf, ctx) is { } decimalCompare)
             return decimalCompare;
         if (eq && AreHeapValues(ctx, left, right)) {
@@ -72,6 +72,19 @@ public static partial class AbiEmitter {
         // high bits, so a raw-word compare is not DateTime's own order.
         if (TemporalWord(ctx.ClrTypeOf(left)) || TemporalWord(ctx.ClrTypeOf(right)))
             return CompareTemporal(left, right, lv, rv, cf, eq, ctx);
+        // C# promotes a ulong pair to ulong and a ulong/signed pair to a domain that
+        // holds both. The word is a bitcast, so comparing the raw long would read
+        // ulong.MaxValue as -1.
+        var leftClr = UnderlyingOf(left, lv, ctx) ?? lv.Type;
+        var rightClr = UnderlyingOf(right, rv, ctx) ?? rv.Type;
+        if (leftClr == typeof(ulong) || rightClr == typeof(ulong)) {
+            var target = IsUnsignedOrChar(leftClr) && IsUnsignedOrChar(rightClr)
+                ? typeof(ulong)
+                : typeof(decimal);
+            return cf(
+                RingCodec.FromFrame(lv, leftClr, target, ctx.HeapLocal),
+                RingCodec.FromFrame(rv, rightClr, target, ctx.HeapLocal));
+        }
         // The operands must compare at one width: `Expression.Equal(int, long)` has no
         // such overload. Two ints compare as ints; one long makes it a 64-bit compare.
         var width = lv.Type == rv.Type ? lv.Type
@@ -105,6 +118,11 @@ public static partial class AbiEmitter {
                 throw RejectBinary(leftType, rightType);
             promoted = typeof(bool);
         }
+        else if (leftType == typeof(ulong) || rightType == typeof(ulong)) {
+            promoted = IsUnsignedOrChar(leftType) && IsUnsignedOrChar(rightType)
+                ? typeof(ulong)
+                : typeof(decimal);
+        }
         else {
             promoted = CSharpBinaryNumericType(leftType, rightType, shift: false);
         }
@@ -115,8 +133,10 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>A required <c>decimal</c> compared with an integral converts the
-    /// integral. <c>decimal</c> against <c>float</c> or <c>double</c> has no operator.
-    /// Same-type decimal stays on the heap path.</summary>
+    /// integral. <c>decimal</c> against <c>float</c> or <c>double</c> runs in
+    /// <c>double</c>, the conversion C# binary promotion picks; the decimal is
+    /// converted, never the floating value. Same-type decimal stays on the heap
+    /// path.</summary>
     private static Expression? TryDecimalCompare(
         Node left, Node right, Expression lv, Expression rv,
         Func<Expression, Expression, BinaryExpression> cf, Context ctx) {
@@ -124,16 +144,26 @@ public static partial class AbiEmitter {
         var rightType = UnderlyingOf(right, rv, ctx);
         if (leftType != typeof(decimal) && rightType != typeof(decimal))
             return null;
-        if (leftType is not null && RingCodec.IsIeee(leftType)
-            || rightType is not null && RingCodec.IsIeee(rightType))
-            throw RejectBinary(leftType, rightType);
+        bool leftIeee = leftType is not null && RingCodec.IsIeee(leftType);
+        bool rightIeee = rightType is not null && RingCodec.IsIeee(rightType);
+        if (leftIeee || rightIeee) {
+            Expression AsDouble(Node node, Expression value, Type? clr) {
+                var actual = clr ?? value.Type;
+                if (actual == typeof(decimal)) {
+                    var dec = RingCodec.FromFrame(value, typeof(decimal), typeof(decimal), ctx.HeapLocal);
+                    return Convert(dec, typeof(double));
+                }
+                return RingCodec.FromFrame(value, actual, typeof(double), ctx.HeapLocal);
+            }
+            return cf(AsDouble(left, lv, leftType), AsDouble(right, rv, rightType));
+        }
         if (leftType == typeof(decimal) && rightType == typeof(decimal))
             return null;
         if (!ConvertsToDecimal(leftType) || !ConvertsToDecimal(rightType))
             return null;
         return cf(
-            RingCodec.FromFrame(lv, UnderlyingOf(left, lv, ctx) ?? lv.Type, typeof(decimal), ctx.HeapLocal),
-            RingCodec.FromFrame(rv, UnderlyingOf(right, rv, ctx) ?? rv.Type, typeof(decimal), ctx.HeapLocal));
+            RingCodec.FromFrame(lv, leftType ?? lv.Type, typeof(decimal), ctx.HeapLocal),
+            RingCodec.FromFrame(rv, rightType ?? rv.Type, typeof(decimal), ctx.HeapLocal));
     }
 
     /// <summary>Comparison as a ring value: the bool test the condition path already uses,
@@ -179,8 +209,20 @@ public static partial class AbiEmitter {
         var clr = ctx.ClrTypeOf(node);
         if (TemporalWord(clr))
             return Convert(LocalType.Decode(value, clr, clr!, ctx.HeapLocal), typeof(object));
+        // A required value type lives in the heap, but handle 0 means the parameter
+        // was never seeded, not a legitimate default. A reference type and a nullable
+        // keep null as a value.
+        if (clr is { IsValueType: true } && Nullable.GetUnderlyingType(clr) is null)
+            return RequiredHeapValue(value, clr, ctx);
         return HeapValueToObject(value, ctx);
     }
+
+    private static Expression RequiredHeapValue(Expression value, Type clr, Context ctx) =>
+        Condition(
+            Equal(value, Constant(0L)),
+            Throw(New(InvalidOperationExceptionStringCtor,
+                Constant($"VM: required {clr.Name} value is absent")), typeof(object)),
+            HeapValueToObject(value, ctx));
 
     private static Expression CompareTemporal(
         Node left, Node right, Expression lv, Expression rv,

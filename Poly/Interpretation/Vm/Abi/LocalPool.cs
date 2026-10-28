@@ -203,7 +203,12 @@ internal sealed class EmitScope : IDisposable {
         var slotType = RingCodec.SlotTypeOf(value.Type);
         var local = _ctx.HoldRing(slotType);
         _yielded = _ctx.RingDepth - 1;
-        return Place(local, value);
+        // A ulong or enum result is a word, not an assignment to a long local's CLR
+        // type. An IEEE slot already matches and keeps the value itself.
+        var stored = local.Type == value.Type
+            ? value
+            : RingCodec.ToFrame(value, value.Type, _ctx.HeapLocal);
+        return Place(local, stored);
     }
 
     public void Dispose() => _ctx.RingDepth = _yielded is int slot ? slot + 1 : _entry;

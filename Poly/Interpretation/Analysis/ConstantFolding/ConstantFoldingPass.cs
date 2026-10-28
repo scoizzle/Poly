@@ -465,6 +465,11 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!leftValue.HasValue || !rightValue.HasValue)
             return FoldResult.NotFoldable;
 
+        // C# has no ordering operator for bool. The emitter fails closed; folding
+        // here would hide the rejection behind a constant.
+        if (leftValue.Value is bool || rightValue.Value is bool)
+            return FoldResult.NotFoldable;
+
         try {
             var result = operation(leftValue.Value!, rightValue.Value!);
             return FoldResult.Success(result);
@@ -665,6 +670,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     private static object? Divide(object a, object b) => (a, b) switch {
         (int x, int y) when y != 0 => x / y,
         (long x, long y) when y != 0 => x / y,
+        (ulong x, ulong y) when y != 0 => x / y,
         (double x, double y) when y != 0 => x / y,
         (float x, float y) when y != 0 => x / y,
         (decimal x, decimal y) when y != 0 => x / y,
@@ -695,39 +701,98 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         _ => null
     };
 
-    private static bool FloatingEquals(object? a, object? b) {
-        if (a is not null && b is not null) {
-            if ((a is double or float || b is double or float)
-                && TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
-                return da == db;
-            if (TryConvertToDecimal(a, out var ma) && TryConvertToDecimal(b, out var mb))
-                return ma == mb;
-        }
-        return object.Equals(a, b);
+    /// <summary>The same promotion the VM comparison uses. An integral operand
+    /// becomes <c>float</c> when the other side is <c>float</c>, not <c>double</c>:
+    /// <c>16777217 == 16777216f</c> is true only after the float rounding.</summary>
+    private enum NumericPromotion { None, Double, Float, Decimal }
+
+    private static NumericPromotion Promote(object a, object b) {
+        bool aReal = a is float or double;
+        bool bReal = b is float or double;
+        if ((a is decimal && bReal) || (b is decimal && aReal))
+            return NumericPromotion.Double;
+        if (a is double || b is double)
+            return NumericPromotion.Double;
+        if (a is float || b is float)
+            return NumericPromotion.Float;
+        if (a is decimal || b is decimal)
+            return NumericPromotion.Decimal;
+        if (IsIntegralOrChar(a) && IsIntegralOrChar(b))
+            return NumericPromotion.Decimal;
+        return NumericPromotion.None;
     }
 
-    /// <summary>Exact numeric comparison for integral, char or decimal operands. A char is
-    /// its code point, so `'a' == 97` folds true; <see cref="Convert.ToDecimal(object)"/>
-    /// throws for a char, hence the explicit arm.</summary>
-    private static bool TryConvertToDecimal(object value, out decimal result) {
-        switch (value) {
-            case char c: result = c; return true;
-            case decimal m: result = m; return true;
-            case int or long or short or byte or sbyte or ushort or uint or ulong:
-                result = Convert.ToDecimal(value);
-                return true;
-            default:
-                result = 0;
-                return false;
-        }
+    private static bool IsIntegralOrChar(object value) =>
+        value is byte or sbyte or short or ushort or int or uint or long or ulong or char;
+
+    private static double AsDouble(object value) => value switch {
+        double d => d,
+        float f => f,
+        decimal m => (double)m,
+        char c => c,
+        ulong ul => ul,
+        uint ui => ui,
+        long l => l,
+        int i => i,
+        short s => s,
+        ushort us => us,
+        byte b => b,
+        sbyte sb => sb,
+        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to double."),
+    };
+
+    private static float AsFloat(object value) => value switch {
+        float f => f,
+        char c => c,
+        ulong ul => (float)ul,
+        uint ui => (float)ui,
+        long l => (float)l,
+        int i => (float)i,
+        short s => (float)s,
+        ushort us => (float)us,
+        byte b => b,
+        sbyte sb => sb,
+        decimal m => (float)m,
+        double d => (float)d,
+        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to float."),
+    };
+
+    private static decimal AsDecimal(object value) => value switch {
+        decimal m => m,
+        char c => c,
+        ulong ul => ul,
+        uint ui => ui,
+        long l => l,
+        int i => i,
+        short s => s,
+        ushort us => us,
+        byte b => b,
+        sbyte sb => sb,
+        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to decimal."),
+    };
+
+    private static bool FloatingEquals(object? a, object? b) {
+        if (a is null || b is null)
+            return object.Equals(a, b);
+        return Promote(a, b) switch {
+            NumericPromotion.Double => AsDouble(a) == AsDouble(b),
+            NumericPromotion.Float => AsFloat(a) == AsFloat(b),
+            NumericPromotion.Decimal => AsDecimal(a) == AsDecimal(b),
+            _ => object.Equals(a, b),
+        };
     }
 
     private static bool FloatingCompare(object a, object b, Func<double, double, bool> op) {
-        if (a is double or float || b is double or float) {
-            if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db))
-                return op(da, db);
-        }
-        return op(Compare(a, b), 0);
+        // C# has no ordering operator for bool. Declining leaves the node for the
+        // emitter, which rejects it. Folding it would answer a value C# does not have.
+        if (a is bool && b is bool)
+            throw new InvalidOperationException("ordering comparison of bool");
+        return Promote(a, b) switch {
+            NumericPromotion.Double => op(AsDouble(a), AsDouble(b)),
+            NumericPromotion.Float => op(AsFloat(a), AsFloat(b)),
+            NumericPromotion.Decimal => op(AsDecimal(a).CompareTo(AsDecimal(b)), 0),
+            _ => op(Compare(a, b), 0),
+        };
     }
 
     private static int Compare(object a, object b) {

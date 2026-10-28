@@ -655,6 +655,19 @@ public static partial class AbiEmitter {
                 RingCodec.FromFrame(leftVal, ctx.ClrTypeOf(left) ?? leftVal.Type, target, ctx.HeapLocal),
                 RingCodec.FromFrame(rightVal, ctx.ClrTypeOf(right) ?? rightVal.Type, target, ctx.HeapLocal));
         }
+        // ulong is a bitcast in the word. Dividing or shifting the signed word turns
+        // ulong.MaxValue into -1, so the operands are materialised as ulong first.
+        var leftUnderlying = UnderlyingOf(left, leftVal, ctx) ?? leftVal.Type;
+        var rightUnderlying = UnderlyingOf(right, rightVal, ctx) ?? rightVal.Type;
+        if (leftUnderlying == typeof(ulong) || rightUnderlying == typeof(ulong)) {
+            if (factory == LeftShift || factory == RightShift)
+                return factory(
+                    RingCodec.FromFrame(leftVal, leftUnderlying, typeof(ulong), ctx.HeapLocal),
+                    RingCodec.AsRepresentation(rightVal, typeof(int)));
+            return factory(
+                RingCodec.FromFrame(leftVal, leftUnderlying, typeof(ulong), ctx.HeapLocal),
+                RingCodec.FromFrame(rightVal, rightUnderlying, typeof(ulong), ctx.HeapLocal));
+        }
         // A shift's result width is its left operand's; its count is always an int in C#.
         if (factory == LeftShift || factory == RightShift)
             return factory(
@@ -740,7 +753,10 @@ public static partial class AbiEmitter {
     private static Type? UnderlyingOf(Node node, Expression value, Context ctx) {
         if (node is Constant { Value: null })
             return null;
-        var clr = ctx.ClrTypeOf(node) ?? value.Type;
+        var clr = ctx.ClrTypeOf(node)
+            ?? ctx.TryClrType(node)
+            ?? (node is Constant constant ? constant.Value?.GetType() : null)
+            ?? value.Type;
         return Nullable.GetUnderlyingType(clr) ?? clr;
     }
 
@@ -816,8 +832,11 @@ public static partial class AbiEmitter {
 
     /// <summary>The width one operand's own arithmetic runs at: <c>int</c> for the types C#
     /// promotes to 32 bits, the word otherwise.</summary>
-    private static Type IntegerWidthOf(Node node, Context ctx) =>
-        RingCodec.IsInt32Width(ResolvedOperandType(node, ctx)) ? typeof(int) : typeof(long);
+    private static Type IntegerWidthOf(Node node, Context ctx) {
+        var type = ResolvedOperandType(node, ctx);
+        return type == typeof(ulong) ? typeof(ulong)
+            : RingCodec.IsInt32Width(type) ? typeof(int) : typeof(long);
+    }
 
     /// <summary>The CLR type analysis resolved for an arithmetic operand, or a rejection
     /// that names the operand.</summary>

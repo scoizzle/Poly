@@ -125,4 +125,22 @@ public class NumericTypePromotionTests {
         // Assert
         await Assert.That(Math.Abs(exec.GetValue<double>() - 13.14) < 0.01).IsTrue();
     }
+
+    [Test]
+    public async Task NumericTypePromotion_Divide_ULongByTwo_UsesUnsignedValue() {
+        var n = new Parameter("n", TypeReference.To<ulong>());
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(new Divide(n, new Constant(2UL))),
+            s => s.SetArgs(ulong.MaxValue));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(ulong.MaxValue / 2);
+    }
+
+    [Test]
+    public async Task NumericTypePromotion_ShiftRight_ULong_IsLogical() {
+        var n = new Parameter("n", TypeReference.To<ulong>());
+        using var exec = Interpreter.Execute(
+            Interpreter.Compile(new ShiftRight(n, new Constant(1))),
+            s => s.SetArgs(ulong.MaxValue));
+        await Assert.That(exec.GetValue<ulong>()).IsEqualTo(ulong.MaxValue >> 1);
+    }
 }

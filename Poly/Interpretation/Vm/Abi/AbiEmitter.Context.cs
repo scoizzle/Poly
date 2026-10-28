@@ -213,6 +213,17 @@ public static partial class AbiEmitter {
                 return target;
             }
 
+            /// <summary>Add a compiled value and name its region slot. The region
+            /// stores the word, so <see cref="Value.Read"/> is that word and
+            /// <see cref="Value.Type"/> keeps the value's own shape for
+            /// <see cref="Word"/>.</summary>
+            public Value AddValue(Value value) {
+                int target = Add(value.Code);
+                var read = _ctx.RingVar(target);
+                return new Value(read, read, new SlotLocation.Ring(target),
+                    value.Type ?? LocalType.Of(value.ClrType));
+            }
+
             /// <summary>Append a step that produces no ring value (a prelude or spill
             /// assignment). Does not touch <see cref="Count"/> or <see cref="RingDepth"/>.</summary>
             public void AddUncounted(Expression step) => _steps.Add(step);
@@ -298,6 +309,13 @@ public static partial class AbiEmitter {
         public Expression RingWord(int absoluteIndex, Type representation) =>
             RingCodec.ToFrame(RingVar(absoluteIndex, representation), representation, HeapLocal);
 
+        /// <summary>The word form of a compiled value. A placed value reads its own
+        /// slot at its own shape; a value with no place converts once.</summary>
+        internal Expression Word(Value value) =>
+            value.Place is SlotLocation.Ring ring
+                ? RingWord(ring.Slot, value.ClrType)
+                : RingCodec.ToWord(value.Read);
+
         /// <summary>The ring representation of a node's value: its own type for an IEEE or
         /// <c>int</c> scalar, the word for every other shape — including one analysis could
         /// not resolve, which is the storage fallback rather than a failure. (An integer
@@ -311,6 +329,16 @@ public static partial class AbiEmitter {
         }
 
         public int AllocSlot() => _pool.Alloc();
+
+        /// <summary>Reserve the next ring slot and return it as a value the caller
+        /// writes. The read is the slot; the caller stores into
+        /// <see cref="Value.Read"/> once it has a value.</summary>
+        internal Value Reserve(Type? representation = null) {
+            int slot = AllocSlot();
+            var rep = representation ?? typeof(long);
+            var read = RingVar(slot, rep);
+            return new Value(read, read, new SlotLocation.Ring(slot, rep), LocalType.Of(rep));
+        }
 
         private readonly Stack<Dictionary<Variable, int>> _scopeStack = new();
         private readonly Dictionary<Variable, VariableLease> _variableLeases = new(ReferenceEqualityComparer.Instance);
@@ -360,16 +388,42 @@ public static partial class AbiEmitter {
             return stores;
         }
 
+        private readonly Stack<HashSet<Variable>?> _readsAfter = new();
+
+        /// <summary>Bindings read at or after the statement being emitted. Null means
+        /// the emitter could not prove a straight-line continuation (a loop or a
+        /// goto), so the suspend spill keeps the conservative set.</summary>
+        internal bool HasReadsAfterScope => _readsAfter.Count > 0;
+
+        internal HashSet<Variable>? ReadsAfterSuspend =>
+            _readsAfter.Count > 0 ? _readsAfter.Peek() : null;
+
+        internal void PushReadsAfter(HashSet<Variable>? reads) => _readsAfter.Push(reads);
+
+        internal void PopReadsAfter() => _readsAfter.Pop();
+
         /// <summary>Store every live local that dies on resume, and build the matching
         /// reload. A frame-only binding is absent: its word already survives. A cell
         /// spills the handle local, never <c>cell[0]</c>. Each local is spilled once,
         /// to the variable's own frame slot or to a spill slot stable for that local.
         /// The store uses <see cref="SlotLocation.Write"/>, which is <see cref="LocalType.Encode"/>:
-        /// <see cref="LocalType.ToWord"/> does not box a <c>Nullable&lt;T&gt;</c>.</summary>
+        /// <see cref="LocalType.ToWord"/> does not box a <c>Nullable&lt;T&gt;</c>.
+        /// <para>A variable lease is spilled only when the statement's remaining
+        /// reads name it. A binding read only before the suspend does not need the
+        /// store or the reload.</para></summary>
         internal void SpillBarrier(int ringDepth, List<Expression> stores, List<Expression> reloads) {
             var seen = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
+            var readsAfter = ReadsAfterSuspend;
             foreach (var scope in _scopeStack) {
                 foreach (var (variable, frameSlot) in scope) {
+                    if (readsAfter is not null && !readsAfter.Contains(variable)) {
+                        // A lease the barrier leaves alone must also stay out of the
+                        // ring-local pass below: the same local is still below the
+                        // cursor, and spilling it there would defeat the filter.
+                        if (_variableLeases.TryGetValue(variable, out var skipped))
+                            seen.Add(LeaseLocal(skipped));
+                        continue;
+                    }
                     if (!_variableLeases.TryGetValue(variable, out var lease))
                         continue;
                     var local = LeaseLocal(lease);
@@ -400,6 +454,8 @@ public static partial class AbiEmitter {
             // the handle after that handle has been restored.
             foreach (var scope in _scopeStack) {
                 foreach (var (variable, frameSlot) in scope) {
+                    if (readsAfter is not null && !readsAfter.Contains(variable))
+                        continue;
                     if (!TryArrayCache(variable, out var cache))
                         continue;
                     Expression handle = _variableLeases.TryGetValue(variable, out var lease)

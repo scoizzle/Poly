@@ -19,10 +19,10 @@ public static partial class AbiEmitter {
             ParameterExpression? cachedArray = null;
             bool cachedStore = indexAccess.Value is Variable cached
                 && ctx.TryArrayCache(cached, out cachedArray);
-            int arrSlot = cachedStore ? -1 : ring.Add(CompileNode(indexAccess.Value, ctx));
-            int idxSlot = ring.Add(CompileNode(
+            Value? arrSlot = cachedStore ? null : ring.AddValue(CompileNode(indexAccess.Value, ctx));
+            var idxSlot = ring.AddValue(CompileNode(
                 indexAccess.Arguments.Length > 0 ? indexAccess.Arguments[0] : new Constant(0), ctx));
-            int valSlot = ring.Add(CompileNode(a.Value, ctx));
+            var valSlot = ring.AddValue(CompileNode(a.Value, ctx));
 
             Type? elemType = ctx.Analysis?.GetResolvedType(indexAccess) is ClrTypeDefinition clrElem
                 ? clrElem.RuntimeType
@@ -31,15 +31,15 @@ public static partial class AbiEmitter {
             Expression store;
             if (cachedStore)
                 store = RingCodec.CachedElementWrite(
-                    cachedArray!, ctx.RingVar(idxSlot), ctx.RingVar(valSlot), elemType, valueIsIeee);
+                    cachedArray!, idxSlot.Read, valSlot.Read, elemType, valueIsIeee);
             else
                 store = RingCodec.ArrayElementWrite(
-                    ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), ctx.RingVar(valSlot),
+                    ctx.HeapLocal, arrSlot!.Value.Read, idxSlot.Read, valSlot.Read,
                     elemType, valueIsIeee);
 
-            ctx.RingDepth = (cachedStore ? idxSlot : arrSlot) + 1;
-            return ring.Then(Block(store, Assign(
-                ctx.RingVar(cachedStore ? idxSlot : arrSlot), ctx.RingVar(valSlot))));
+            var storeSlot = cachedStore ? idxSlot : arrSlot!.Value;
+            ctx.RingDepth = storeSlot.RingSlot + 1;
+            return ring.Then(Block(store, Assign(storeSlot.Read, valSlot.Read)));
         }
 
         if (a.Destination is Member member) {
@@ -49,8 +49,8 @@ public static partial class AbiEmitter {
                     $"Assignment to unresolved member '{member.MemberName}'");
 
             var ring = ctx.OpenRing();
-            int instanceSlot = ring.Add(CompileNode(member.Value, ctx));
-            int valueSlot = ring.Add(CompileNode(a.Value, ctx));
+            var instanceSlot = ring.AddValue(CompileNode(member.Value, ctx));
+            var valueSlot = ring.AddValue(CompileNode(a.Value, ctx));
 
             Expression instanceObj;
             var declaringTypeDef = resolved.DeclaringTypeDefinition;
@@ -62,48 +62,48 @@ public static partial class AbiEmitter {
             if (inlineClr is not null)
                 instanceObj = LocalType.Of(inlineClr) is LocalType.TemporalLocal { IsWord: true }
                     ? Convert(
-                        LocalType.Decode(ctx.RingVar(instanceSlot), inlineClr, inlineClr, ctx.HeapLocal),
+                        LocalType.Decode(instanceSlot.Read, inlineClr, inlineClr, ctx.HeapLocal),
                         typeof(object))
-                    : Convert(ctx.RingVar(instanceSlot), typeof(object));
+                    : Convert(instanceSlot.Read, typeof(object));
             else
                 instanceObj = Call(ctx.HeapLocal,
                     HeapUnsafeGet,
-                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+                    Convert(instanceSlot.Read, typeof(int)));
 
             var memberTypeDef = resolved.MemberTypeDefinition;
             var clrMemberType = memberTypeDef.GetRuntimeType()
                 ?? memberTypeDef.PrimitiveType?.GetClrType();
             Expression writeValue;
             if (clrMemberType is not null && Nullable.GetUnderlyingType(clrMemberType) is { } memberUnderlying) {
-                writeValue = NullableMemberWrite(a.Value, valueSlot, clrMemberType, memberUnderlying, ctx);
+                writeValue = NullableMemberWrite(a.Value, valueSlot.RingSlot, clrMemberType, memberUnderlying, ctx);
             }
             else if (clrMemberType is not null
                 && clrMemberType.IsValueType
                 && RingCodec.IsInline(clrMemberType)) {
                 if (clrMemberType == typeof(bool))
-                    writeValue = Condition(Equal(ctx.RingVar(valueSlot), Constant(0L)),
+                    writeValue = Condition(Equal(valueSlot.Read, Constant(0L)),
                         Constant(false, typeof(object)),
                         Constant(true, typeof(object)));
                 else if (LocalType.Of(clrMemberType) is LocalType.TemporalLocal { IsWord: true })
                     writeValue = Convert(
-                        LocalType.Decode(ctx.RingVar(valueSlot), clrMemberType, clrMemberType, ctx.HeapLocal),
+                        LocalType.Decode(valueSlot.Read, clrMemberType, clrMemberType, ctx.HeapLocal),
                         typeof(object));
                 else
-                    writeValue = Convert(Convert(ctx.RingVar(valueSlot), clrMemberType), typeof(object));
+                    writeValue = Convert(Convert(valueSlot.Read, clrMemberType), typeof(object));
             }
             else {
                 writeValue = Call(ctx.HeapLocal,
                     HeapUnsafeGet,
-                    Convert(ctx.RingVar(valueSlot), typeof(int)));
+                    Convert(valueSlot.Read, typeof(int)));
             }
 
             var writeExpr = resolved.EmitWrite(instanceObj, writeValue);
-            var outSlot = ctx.AllocSlot();
-            ctx.RingDepth = outSlot + 1;
+            var outSlot = ctx.Reserve();
+            ctx.RingDepth = outSlot.RingSlot + 1;
             return ring.Then(Block(
                 writeExpr ?? throw new NotSupportedException(
                     $"Member '{member.MemberName}' does not support EmitWrite"),
-                Assign(ctx.RingVar(outSlot), ctx.RingVar(valueSlot))));
+                Assign(outSlot.Read, valueSlot.Read)));
         }
 
         if (a.Destination is not Variable destVar) {
@@ -207,7 +207,19 @@ public static partial class AbiEmitter {
                 open?.Dispose();
                 open = ctx.OpenStatement(entryDepth);
             }
-            var code = CompileStatement(statement, ctx);
+            // The suspend spill reads this set: a variable lease is stored only when
+            // a later statement (or the rest of this one) names the binding. A loop
+            // or a goto makes the continuation unknowable, so it keeps the
+            // conservative all-leases set.
+            var readsAfter = ReadsAfterFrom(block.Nodes, i, ctx);
+            ctx.PushReadsAfter(readsAfter);
+            Expression code;
+            try {
+                code = CompileStatement(statement, ctx);
+            }
+            finally {
+                ctx.PopReadsAfter();
+            }
             stmtExprs.Add(code);
             if (statement is not Comment)
                 valueClrType = code.Type;
@@ -249,6 +261,49 @@ public static partial class AbiEmitter {
             all.Add(ctx.RingVar(ctx.RingDepth - 1, valueSlotType));
         return Block(all);
     }
+
+    /// <summary>The bindings read at or after statement <paramref name="start"/>.
+    /// Null when the continuation is not straight-line: a loop, a goto, or a label
+    /// can re-enter a read the suffix does not contain, so the suspend spill keeps
+    /// the conservative set.</summary>
+    private static HashSet<Variable>? ReadsAfterFrom(IReadOnlyList<Node> nodes, int start, Context ctx) {
+        HashSet<Variable>? inherited =
+            ctx.HasReadsAfterScope ? ctx.ReadsAfterSuspend : new HashSet<Variable>();
+        if (inherited is null)
+            return null;
+        var reads = new HashSet<Variable>(inherited, ReferenceEqualityComparer.Instance);
+        for (int i = start; i < nodes.Count; i++) {
+            if (ContainsLoopOrGoto(nodes[i]))
+                return null;
+            CollectReads(nodes[i], ctx, reads);
+        }
+        return reads;
+    }
+
+    private static void CollectReads(Node node, Context ctx, HashSet<Variable> into) {
+        switch (node) {
+            case Block block:
+                foreach (var child in block.Nodes)
+                    CollectReads(child, ctx, into);
+                return;
+            case Variable variable:
+                into.Add(ctx.DeclaredVariable(variable) ?? variable);
+                return;
+            case Poly.Ast.Nodes.Parameter:
+                return;
+            default:
+                foreach (var child in node.Children)
+                    if (child is not null)
+                        CollectReads(child, ctx, into);
+                return;
+        }
+    }
+
+    private static bool ContainsLoopOrGoto(Node node) => node switch {
+        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
+            or GotoStatement or LabelDeclaration => true,
+        _ => node.Children.Any(child => child is not null && ContainsLoopOrGoto(child))
+    };
 
     /// <summary>True when the last statement that produces the block's value is the
     /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
@@ -384,10 +439,10 @@ public static partial class AbiEmitter {
 
     private static Expression EmitSwitch(SwitchStatement sw, Context ctx) {
         var ring = ctx.OpenRing();
-        int valSlot = ring.Add(CompileNode(sw.Value, ctx));
-        int savedDepth = ring.Base + 1;
+        var val = ring.AddValue(CompileNode(sw.Value, ctx));
+        int savedDepth = val.RingSlot + 1;
 
-        int outSlot = ctx.AllocSlot();
+        var outValue = ctx.Reserve();
         // Every arm is compiled from the slot after the value, and a scope restores to
         // it, so one write bases the whole switch on the same region.
         ctx.RingDepth = savedDepth;
@@ -399,11 +454,11 @@ public static partial class AbiEmitter {
                 def = Compile(sw.DefaultCase, ctx);
             }
             rest = Block(def.Code,
-                Assign(ctx.RingVar(outSlot),
+                Assign(outValue.Read,
                     RingCodec.ToWord(def.RequireResult(sw.DefaultCase).Read(ctx))));
         }
         else {
-            rest = Assign(ctx.RingVar(outSlot), Constant(0L));
+            rest = Assign(outValue.Read, Constant(0L));
         }
 
         for (int i = sw.Cases.Count - 1; i >= 0; i--) {
@@ -421,16 +476,16 @@ public static partial class AbiEmitter {
             rest = Block(
                 pattern.Code,
                 IfThenElse(
-                    Equal(ctx.RingVar(valSlot),
+                    Equal(val.Read,
                         RingCodec.ToWord(pattern.RequireResult(c.Pattern).Read(ctx))),
                     Block(body.Code,
-                        Assign(ctx.RingVar(outSlot),
+                        Assign(outValue.Read,
                             RingCodec.ToWord(body.RequireResult(c.Body).Read(ctx)))),
                     rest));
         }
 
-        ctx.RingDepth = outSlot + 1;
-        return ring.Then(Block(rest, ctx.RingVar(outSlot)));
+        ctx.RingDepth = outValue.RingSlot + 1;
+        return ring.Then(Block(rest, outValue.Read));
     }
 
     /// <summary>Where a loop's test runs: at the top of each iteration, or after its
@@ -572,10 +627,10 @@ public static partial class AbiEmitter {
     private static Expression EmitTryCatchFinally(TryCatchFinally tcf, Context ctx) {
         ctx.EnterUnresumable();
         try {
-            var tryBody = CompileNode(tcf.TryBlock, ctx);
+            var tryBody = CompileNode(tcf.TryBlock, ctx).Code;
             Expression? finallyBody = null;
             if (tcf.FinallyBlock != null) {
-                finallyBody = CompileNode(tcf.FinallyBlock, ctx);
+                finallyBody = CompileNode(tcf.FinallyBlock, ctx).Code;
             }
             if (tcf.CatchClauses == null || tcf.CatchClauses.Count == 0) {
                 return finallyBody != null ? TryFinally(tryBody, finallyBody) : tryBody;
@@ -873,7 +928,7 @@ public static partial class AbiEmitter {
                 : Empty();
 
             var ring = ctx.OpenRing();
-            int colSlot = ring.Add(CompileNode(fel.Collection, ctx));
+            var col = ring.AddValue(CompileNode(fel.Collection, ctx));
 
             var enumerator = Variable(typeof(System.Collections.IEnumerator), "_en");
             var colObj = Variable(typeof(object), "_col");
@@ -895,7 +950,7 @@ public static partial class AbiEmitter {
                 [enumerator, colObj],
                 loopVarCellInit,
                 Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet,
-                    Convert(ctx.RingVar(colSlot), typeof(int)))),
+                    Convert(col.Read, typeof(int)))),
                 Assign(enumerator, Call(null, GetEnumeratorOrThrowInfo, colObj)),
                 TryFinally(
                     loop,
@@ -1008,8 +1063,8 @@ public static partial class AbiEmitter {
         }
 
         var ring = ctx.OpenRing();
-        int resultSlot = ring.Add(CompileNode(ret.Value, ctx));
-        Expression value = ctx.RingVar(resultSlot);
+        var result = ring.AddValue(CompileNode(ret.Value, ctx));
+        Expression value = result.Read;
         if (ctx.AsyncReturn is not null)
             value = WrapAsyncResult(value, ctx.AsyncReturn, ctx, ret.Value);
 

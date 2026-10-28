@@ -163,9 +163,27 @@ internal sealed class LocalPool {
     }
 }
 
-/// <summary>A value the emitter has placed: the read, the local that holds it,
-/// and the <see cref="LocalType"/> of that local.</summary>
-internal readonly record struct Value(Expression Read, ParameterExpression Local, LocalType Type);
+/// <summary>A value the emitter has placed. <see cref="Code"/> runs to produce it;
+/// <see cref="Read"/> names the value after that code has run (the same expression
+/// when the node landed nowhere in particular); <see cref="Place"/> is where the
+/// emitter put it, when it has a place; and <see cref="Type"/> is the
+/// <see cref="LocalType"/> of that place. Compile returns this instead of a bare
+/// ring index, so a consumer reads <see cref="Read"/> or re-reads
+/// <see cref="SlotLocation.Read"/> rather than naming a slot.</summary>
+internal readonly record struct Value(Expression Code, Expression Read, SlotLocation? Place, LocalType? Type) {
+    /// <summary>The CLR type of the value's own shape.</summary>
+    public Type ClrType => Type?.Clr ?? Code.Type;
+
+    /// <summary>The ring index of a placed value. Cursor arithmetic is the one
+    /// place an index is still named; it is derived from the place, not threaded
+    /// through the emitter as a separate operand.</summary>
+    public int RingSlot => Place is SlotLocation.Ring ring
+        ? ring.Slot
+        : throw new InvalidOperationException("the value has no ring slot.");
+
+    /// <summary>The read as the code a consumer that has not run the node yet needs.</summary>
+    public static implicit operator Expression(Value value) => value.Code;
+}
 
 /// <summary>The default emit shape. <see cref="Yield"/> spills a computation
 /// into the next ring slot and keeps that slot. Disposing without a yield

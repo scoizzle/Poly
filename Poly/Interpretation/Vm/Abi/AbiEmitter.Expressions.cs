@@ -231,19 +231,18 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
-        int leftSlot = ring.Add(CompileNode(and.LeftHandValue, ctx));
+        var left = ring.AddValue(CompileNode(and.LeftHandValue, ctx));
 
-        var rightExpr = CompileNode(and.RightHandValue, ctx);
-        int rightSlot = ctx.RingDepth - 1;
+        var right = CompileNode(and.RightHandValue, ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    Equal(ctx.RingVar(leftSlot), Constant(0L)),
+                    Equal(left.Read, Constant(0L)),
                     Constant(0L),
                     Block(
-                        rightExpr,
-                        ctx.RingWord(rightSlot, rightExpr.Type)))));
+                        right.Code,
+                        ctx.Word(right)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
@@ -252,19 +251,18 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
-        int leftSlot = ring.Add(CompileNode(or.LeftHandValue, ctx));
+        var left = ring.AddValue(CompileNode(or.LeftHandValue, ctx));
 
-        var rightExpr = CompileNode(or.RightHandValue, ctx);
-        int rightSlot = ctx.RingDepth - 1;
+        var right = CompileNode(or.RightHandValue, ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    NotEqual(ctx.RingVar(leftSlot), Constant(0L)),
+                    NotEqual(left.Read, Constant(0L)),
                     Constant(1L),
                     Block(
-                        rightExpr,
-                        ctx.RingWord(rightSlot, rightExpr.Type)))));
+                        right.Code,
+                        ctx.Word(right)))));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
@@ -273,9 +271,9 @@ public static partial class AbiEmitter {
     /// in-place shape, not a spill of a value form.</summary>
     private static Expression EmitNot(Not not, Context ctx) {
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(not.Value, ctx));
-        var result = Assign(ctx.RingVar(slot),
-            Condition(Equal(ctx.RingVar(slot), Constant(0L)), Constant(1L), Constant(0L)));
+        var slot = ring.AddValue(CompileNode(not.Value, ctx));
+        var result = Assign(slot.Read,
+            Condition(Equal(slot.Read, Constant(0L)), Constant(1L), Constant(0L)));
         return ring.Then(result);
     }
 
@@ -284,18 +282,18 @@ public static partial class AbiEmitter {
     /// the frame word would negate the handle.</summary>
     private static Expression EmitUnaryMinus(UnaryMinus unaryMinus, Context ctx) {
         var ring = ctx.OpenRing();
-        var compiled = Compile(unaryMinus.Operand, ctx);
+        var compiled = CompileNode(unaryMinus.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Negate(nullable), ctx);
-        int slot = ring.Add(compiled.Code);
+        var slot = ring.AddValue(compiled);
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
-            var dbl = RingCodec.FromIeee(ctx.RingVar(slot));
-            result = Assign(ctx.RingVar(slot),
+            var dbl = RingCodec.FromIeee(slot.Read);
+            result = Assign(slot.Read,
                 RingCodec.ToIeee(Negate(dbl)));
         }
         else {
-            result = Assign(ctx.RingVar(slot), Negate(ctx.RingVar(slot)));
+            result = Assign(slot.Read, Negate(slot.Read));
         }
         return ring.Then(result);
     }
@@ -304,27 +302,27 @@ public static partial class AbiEmitter {
     /// of a value form. A nullable operand uses the lifted operator.</summary>
     private static Expression EmitBitwiseNot(BitwiseNot n, Context ctx) {
         var ring = ctx.OpenRing();
-        var compiled = Compile(n.Operand, ctx);
+        var compiled = CompileNode(n.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Not(nullable), ctx);
-        int slot = ring.Add(compiled.Code);
-        return ring.Then(Assign(ctx.RingVar(slot), Not(ctx.RingVar(slot))));
+        var slot = ring.AddValue(compiled);
+        return ring.Then(Assign(slot.Read, Not(slot.Read)));
     }
 
     /// <summary>The operand's <c>Nullable&lt;T&gt;</c> value, or null when the slot is a word.</summary>
-    private static Expression? NullableValue(CompiledNode compiled, Context ctx) =>
-        compiled.Result?.Representation is { } rep && Nullable.GetUnderlyingType(rep) is not null
-            ? Block(compiled.Code, compiled.Result.Read(ctx))
+    private static Expression? NullableValue(Value compiled, Context ctx) =>
+        compiled.Place?.Representation is { } rep && Nullable.GetUnderlyingType(rep) is not null
+            ? Block(compiled.Code, compiled.Read)
             : null;
 
     /// <summary>PopCount via System.Numerics.BitOperations.PopCount, in the operand's own
     /// ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitPopCount(PopCount pc, Context ctx) {
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(pc.Operand, ctx));
+        var slot = ring.AddValue(CompileNode(pc.Operand, ctx));
         var call = Call(null, BitOperationsPopCount,
-            Convert(ctx.RingVar(slot), typeof(ulong)));
-        return ring.Then(Assign(ctx.RingVar(slot), Convert(call, typeof(long))));
+            Convert(slot.Read, typeof(ulong)));
+        return ring.Then(Assign(slot.Read, Convert(call, typeof(long))));
     }
 
     /// <summary>Member access via CLR reflection: resolve from analysis metadata
@@ -347,7 +345,7 @@ public static partial class AbiEmitter {
             return EmitResolvedMember(resolved, null, slot, ctx, Empty());
         }
 
-        int instanceSlot = ring.Add(CompileNode(m.Value, ctx));
+        var instanceSlot = ring.AddValue(CompileNode(m.Value, ctx));
 
         if (resolved?.LifetimeModifier == LifetimeModifier.Static) {
             return EmitResolvedMember(resolved, null, ring.Base, ctx, Block(ring.Steps));
@@ -366,14 +364,14 @@ public static partial class AbiEmitter {
                 // A temporal word is not a boxed long. DateTime.Year needs the value.
                 instanceObj = LocalType.Of(inlineClr) is LocalType.TemporalLocal { IsWord: true }
                     ? Convert(
-                        LocalType.Decode(ctx.RingVar(instanceSlot), inlineClr, inlineClr, ctx.HeapLocal),
+                        LocalType.Decode(instanceSlot.Read, inlineClr, inlineClr, ctx.HeapLocal),
                         typeof(object))
-                    : Convert(ctx.RingVar(instanceSlot), typeof(object));
+                    : Convert(instanceSlot.Read, typeof(object));
             }
             else {
                 instanceObj = Call(ctx.HeapLocal,
                     HeapUnsafeGet,
-                    Convert(ctx.RingVar(instanceSlot), typeof(int)));
+                    Convert(instanceSlot.Read, typeof(int)));
             }
             var prelude = ring.Then(
                 IfThen(
@@ -491,7 +489,7 @@ public static partial class AbiEmitter {
     /// type at runtime (so a null handle is false). An unresolvable target fails closed.</summary>
     private static Expression EmitTypeIs(TypeIs t, Context ctx) {
         var ring = ctx.OpenRing();
-        int resultSlot = ring.Add(CompileNode(t.Operand, ctx));
+        var resultSlot = ring.AddValue(CompileNode(t.Operand, ctx));
 
         // The reader folds `x is T` to a primitive/named reference, not a ClrTypeReference,
         // and analysis resolves the TypeIs node itself to bool — so resolve the target from
@@ -515,14 +513,14 @@ public static partial class AbiEmitter {
                             $"VM compile rejected: cannot resolve the static type of '{t.Operand}' in '{t}'.");
                     }
                     var answer = Ast.Nodes.TypeIs.StaticTypeIsMatch(operandStatic, targetType) ? 1L : 0L;
-                    return ring.Then(Assign(ctx.RingVar(resultSlot), Constant(answer)));
+                    return ring.Then(Assign(resultSlot.Read, Constant(answer)));
                 }
             case ValueRepresentationKind.HeapRef: {
                     var heapObj = Call(ctx.HeapLocal,
                         HeapUnsafeGet,
-                        Convert(ctx.RingVar(resultSlot), typeof(int)));
+                        Convert(resultSlot.Read, typeof(int)));
                     var result = Condition(Expression.TypeIs(heapObj, targetType), Constant(1L), Constant(0L));
-                    return ring.Then(Assign(ctx.RingVar(resultSlot), result));
+                    return ring.Then(Assign(resultSlot.Read, result));
                 }
             default:
                 throw new InvalidOperationException(
@@ -564,11 +562,11 @@ public static partial class AbiEmitter {
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved CLR type.");
 
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(await.Operand, ctx));
+        var slot = ring.AddValue(CompileNode(await.Operand, ctx));
         // A reference awaitable (Task) or a boxed struct awaitable (ValueTask, custom)
         // both arrive as a heap handle; deref then convert to the awaitable type.
         var operandObj = Convert(
-            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ctx.RingVar(slot), typeof(int))),
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(slot.Read, typeof(int))),
             operandType);
 
         MethodInfo? helper = null;
@@ -593,16 +591,16 @@ public static partial class AbiEmitter {
 
         var call = Call(helper, operandObj);
         if (resultType is null) {
-            return ring.Then(Block(call, Assign(ctx.RingVar(slot), Constant(0L))));
+            return ring.Then(Block(call, Assign(slot.Read, Constant(0L))));
         }
-        return ring.Then(Assign(ctx.RingVar(slot), RingCodec.ToFrame(call, resultType, ctx.HeapLocal)));
+        return ring.Then(Assign(slot.Read, RingCodec.ToFrame(call, resultType, ctx.HeapLocal)));
     }
 
     /// <summary>Await of an awaitable that is not one of the well-known BCL shapes.
     /// <c>GetResult</c> runs only after <c>IsCompleted</c>, blocking on
     /// <c>UnsafeOnCompleted</c> / <c>OnCompleted</c> when it is not.</summary>
     private static Expression EmitStructuralAwait(
-        Await await, Expression operandObj, Context.RingRegion ring, int slot, Context ctx) {
+        Await await, Expression operandObj, Context.RingRegion ring, Value slot, Context ctx) {
         var operandTypeDef = ctx.Analysis?.GetResolvedType(await.Operand)
             ?? throw new InvalidOperationException(
                 $"VM compile rejected: Await operand '{await.Operand}' has no resolved type.");
@@ -614,10 +612,10 @@ public static partial class AbiEmitter {
 
         var result = AwaitPattern.CompileGetResult(operandObj, binding);
         if (binding.GetResult.ReturnType == typeof(void)) {
-            return ring.Then(Block(result, Assign(ctx.RingVar(slot), Constant(0L))));
+            return ring.Then(Block(result, Assign(slot.Read, Constant(0L))));
         }
         return ring.Then(
-            Assign(ctx.RingVar(slot), RingCodec.ToFrame(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
+            Assign(slot.Read, RingCodec.ToFrame(result, binding.GetResult.ReturnType, ctx.HeapLocal)));
     }
 
     /// <summary>TypeAs: heap object assignable to T keeps the handle; otherwise ABI null.</summary>
@@ -627,10 +625,10 @@ public static partial class AbiEmitter {
         if (targetType.IsValueType)
             throw new InvalidOperationException($"VM compile rejected: TypeAs target '{targetType}' is a value type.");
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(t.Operand, ctx));
+        var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         return ring.Then(
-            Assign(ctx.RingVar(slot),
-                Call(null, TypeAsAbiInfo, ctx.HeapLocal, ctx.RingVar(slot), Constant(targetType, typeof(Type)))));
+            Assign(slot.Read,
+                Call(null, TypeAsAbiInfo, ctx.HeapLocal, slot.Read, Constant(targetType, typeof(Type)))));
     }
 
     /// <summary>TypeCast after analysis rewrites: identity, reference downcast, or unbox.
@@ -642,24 +640,24 @@ public static partial class AbiEmitter {
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
         var ring = ctx.OpenRing();
-        int slot = ring.Add(CompileNode(t.Operand, ctx));
+        var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
         // An unchecked integer cast wraps, the way `(short)32768` is -32768.
         // Convert.ToInt16 throws, so this is not that call. A reference cast
         // stays on the heap helper below.
         if (IsIntegralCast(sourceType) && IsIntegralCast(targetType)) {
-            var asSource = LocalType.Decode(ctx.RingVar(slot), sourceType, sourceType, ctx.HeapLocal);
+            var asSource = LocalType.Decode(slot.Read, sourceType, sourceType, ctx.HeapLocal);
             Expression converted = t.IsChecked
                 ? ConvertChecked(asSource, targetType)
                 : Convert(asSource, targetType);
             return ring.Then(Assign(
-                ctx.RingVar(slot),
+                slot.Read,
                 LocalType.Encode(converted, targetType, ctx.HeapLocal)));
         }
         return ring.Then(
-            Assign(ctx.RingVar(slot),
-                Call(null, CastAbiInfo, ctx.HeapLocal, ctx.RingVar(slot),
+            Assign(slot.Read,
+                Call(null, CastAbiInfo, ctx.HeapLocal, slot.Read,
                     Constant(targetType, typeof(Type)))));
     }
 
@@ -673,16 +671,16 @@ public static partial class AbiEmitter {
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
     private static Expression EmitDefault(Default d, Context ctx) {
-        int slot = ctx.AllocSlot();
         var target = ResolveClrType(d.TargetType, d, ctx);
+        var slot = ctx.Reserve(target == typeof(double) || target == typeof(float) ? target : null);
         if (target == typeof(double) || target == typeof(float))
-            return Assign(ctx.RingVar(slot, target), Default(target));
+            return Assign(ctx.RingVar(slot.RingSlot, target), Default(target));
         if (target is null || (target.IsValueType && RingCodec.IsInline(target))
             || target == typeof(bool)
             || !target.IsValueType)
-            return Assign(ctx.RingVar(slot), Constant(0L));
+            return Assign(slot.Read, Constant(0L));
         var instance = Activator.CreateInstance(target);
-        return Assign(ctx.RingVar(slot),
+        return Assign(slot.Read,
             Convert(Call(ctx.HeapLocal, HeapAllocate,
                 Convert(Constant(instance, typeof(object)), typeof(object))), typeof(long)));
     }
@@ -693,8 +691,8 @@ public static partial class AbiEmitter {
         // The Type is known here, so its heap entry is seeded once per program (Build) and this
         // arm is a local read. Allocating inline made a typeof in a loop one heap entry per
         // iteration, and nothing recycles a type object.
-        int slot = ctx.AllocSlot();
-        return Assign(ctx.RingVar(slot), ctx.TypeHandleLocal(runtime));
+        var slot = ctx.Reserve();
+        return Assign(slot.Read, ctx.TypeHandleLocal(runtime));
     }
 
     /// <summary>StridedSetBits: bit-level strided set (handle, start, step, limit).</summary>
@@ -706,13 +704,13 @@ public static partial class AbiEmitter {
         bool cached = ssb.Array is Variable receiver
             && ctx.TryArrayCache(receiver, out cachedArray)
             && cachedArray!.Type == typeof(long[]);
-        int arrSlot = cached ? -1 : ring.Add(CompileNode(ssb.Array, ctx));
-        int startSlot = ring.Add(CompileNode(ssb.StartValue, ctx));
-        int stepSlot = ring.Add(CompileNode(ssb.Step, ctx));
-        int limitSlot = ring.Add(CompileNode(ssb.Limit, ctx));
+        Value? arrSlot = cached ? null : ring.AddValue(CompileNode(ssb.Array, ctx));
+        var startSlot = ring.AddValue(CompileNode(ssb.StartValue, ctx));
+        var stepSlot = ring.AddValue(CompileNode(ssb.Step, ctx));
+        var limitSlot = ring.AddValue(CompileNode(ssb.Limit, ctx));
 
         // ABI-level strided set: the promoted local, or the heap array cast to long[].
-        var arrObj = cached ? cachedArray! : RingCodec.LongArray(ctx.HeapLocal, ctx.RingVar(arrSlot));
+        var arrObj = cached ? cachedArray! : RingCodec.LongArray(ctx.HeapLocal, arrSlot!.Value.Read);
         var j = Variable(typeof(long), "_bits_j");
         var loopStart = Label("_stride_loop");
         var loopEnd = Label("_stride_done");
@@ -720,13 +718,13 @@ public static partial class AbiEmitter {
             Assign(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
                 Or(ArrayAccess(arrObj, Convert(RightShift(j, Constant(6)), typeof(int))),
                     LeftShift(Constant(1L), Convert(And(j, Constant(63L)), typeof(int))))),
-            Assign(j, Add(j, ctx.RingVar(stepSlot))), // j += step
-            IfThen(GreaterThan(j, ctx.RingVar(limitSlot)), Goto(loopEnd)),
+            Assign(j, Add(j, stepSlot.Read)), // j += step
+            IfThen(GreaterThan(j, limitSlot.Read), Goto(loopEnd)),
             Goto(loopStart)
         );
         var result = Block(
             [j],
-            Assign(j, ctx.RingVar(startSlot)), // j = start
+            Assign(j, startSlot.Read), // j = start
             Label(loopStart),
             loopBody,
             Label(loopEnd)

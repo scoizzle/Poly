@@ -223,7 +223,19 @@ public static partial class AbiEmitter {
         IReadOnlyList<Type?>? RootParameterClrTypes,
         SlotLocation? RootResult);
 
-    private static Expression CompileNode(Node node, Context ctx) => Compile(node, ctx).Code;
+    private static Value CompileNode(Node node, Context ctx) => CompileValue(node, ctx);
+
+    /// <summary>Compile a node and name its value. <see cref="Value.Code"/> is the
+    /// expression to run; <see cref="Value.Read"/> is the value it leaves. The
+    /// location is the node's <see cref="CompiledNode.Result"/>, so a consumer that
+    /// wants the value after the code has run uses <c>Read</c> and never
+    /// <c>RingDepth - 1</c>.</summary>
+    private static Value CompileValue(Node node, Context ctx) {
+        var compiled = Compile(node, ctx);
+        var read = compiled.Result is { } place ? place.Read(ctx) : compiled.Code;
+        var type = compiled.Result is { } p ? LocalType.Of(p.Representation) : null;
+        return new Value(compiled.Code, read, compiled.Result, type);
+    }
 
     /// <summary>A node's value: its code, then a read of the slot that code left the result
     /// in. Every arm leaves one, so this is the only way a value is reached — there is no
@@ -550,8 +562,8 @@ public static partial class AbiEmitter {
     /// allocates once, so the local and the variable's slot hold the same object.</summary>
     private static Expression EmitNewArray(NewArray n, Context ctx, ParameterExpression? cacheLocal) {
         var ring = ctx.OpenRing();
-        int lenSlot = ring.Add(CompileNode(n.Length, ctx));
-        int slot = ctx.AllocSlot();
+        var lenSlot = ring.AddValue(CompileNode(n.Length, ctx));
+        var slot = ctx.Reserve();
         // A VM array stores scalar slots in a `long[]` and heap handles in an `object[]`;
         // the index routes key on the element's CLR value-type-ness, so creation must agree
         // (a `PrimitiveTypeReference` element such as `long` used to become `object`).
@@ -567,12 +579,12 @@ public static partial class AbiEmitter {
         // Always a heap array here. The frame-local small-array encoding was removed: it was
         // not readable through a member access and no caller tracked its base offset.
         Type elemType = RingCodec.ArraySlotElementType(elementClr);
-        var arr = NewArrayBounds(elemType, Convert(ctx.RingVar(lenSlot), typeof(int)));
+        var arr = NewArrayBounds(elemType, Convert(lenSlot.Read, typeof(int)));
         if (cacheLocal is not null)
             ring.AddUncounted(Assign(cacheLocal, arr));
         Expression source = cacheLocal is null ? arr : cacheLocal;
         var handle = Call(ctx.HeapLocal, HeapAllocate, Convert(source, typeof(object)));
-        return ring.Then(Assign(ctx.RingVar(slot), Convert(handle, typeof(long))));
+        return ring.Then(Assign(slot.Read, Convert(handle, typeof(long))));
     }
 
     /// <summary>The CLR type of an array's element from the type pass, or null when it
@@ -588,23 +600,23 @@ public static partial class AbiEmitter {
         // A promoted array is the CLR local the definition bound, so the element is the
         // array object indexed — one bounds check, no heap deref, no cast.
         if (n.Value is Variable cached && ctx.TryArrayCache(cached, out var arrayLocal)) {
-            int cachedIdxSlot = ring.Add(CompileNode(
+            var cachedIdxSlot = ring.AddValue(CompileNode(
                 n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
-            int cachedOutSlot = ctx.AllocSlot();
+            var cachedOutSlot = ctx.Reserve();
             var cachedRead = RingCodec.CachedElementRead(
-                arrayLocal, ctx.RingVar(cachedIdxSlot), ctx.HeapLocal);
-            return ring.Then(Assign(ctx.RingVar(cachedOutSlot), cachedRead));
+                arrayLocal, cachedIdxSlot.Read, ctx.HeapLocal);
+            return ring.Then(Assign(cachedOutSlot.Read, cachedRead));
         }
-        int arrSlot = ring.Add(CompileNode(n.Value, ctx));
-        int idxSlot = ring.Add(CompileNode(
+        var arrSlot = ring.AddValue(CompileNode(n.Value, ctx));
+        var idxSlot = ring.AddValue(CompileNode(
             n.Arguments.Length > 0 ? n.Arguments[0] : new Constant(0), ctx));
-        int outSlot = ctx.AllocSlot();
+        var outSlot = ctx.Reserve();
         Type? elementType = ctx.Analysis?.GetResolvedType(n) is ClrTypeDefinition clrElem
             ? clrElem.RuntimeType
             : null;
         var read = RingCodec.ArrayElementRead(
-            ctx.HeapLocal, ctx.RingVar(arrSlot), ctx.RingVar(idxSlot), elementType);
-        return ring.Then(Assign(ctx.RingVar(outSlot), read));
+            ctx.HeapLocal, arrSlot.Read, idxSlot.Read, elementType);
+        return ring.Then(Assign(outSlot.Read, read));
     }
 
     private static Expression SpillToRing(Expression value, Context ctx) {

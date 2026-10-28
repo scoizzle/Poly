@@ -1,5 +1,7 @@
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Abi;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -29,6 +31,40 @@ public class SuspendStateTests {
         await Assert.That(exec.IsSuspended).IsTrue();
         using var resumed = exec.Resume();
         await Assert.That(resumed.Result.GetValue<long>()).IsEqualTo(42L);
+    }
+
+    [Test]
+    public async Task VariableReadOnlyBeforeSuspend_IsNotSpilled() {
+        var a = new Variable("a");
+        var b = new Variable("b");
+        var node = new Block([
+            new Assignment(a, new Constant(1L)),
+            new Assignment(b, new Constant(2L)),
+            new SuspendNode(new Constant(0L), "mid"),
+            new Add(b, new Constant(1L)),
+        ], [a, b]);
+
+        var built = AbiEmitter.Build(node, Interpreter.Analyze(node), CompilationMode.NoDebug);
+        var aOffset = built.DebugInfo.Variables.Single(v => v.Name == "a").FrameOffset;
+        var bOffset = built.DebugInfo.Variables.Single(v => v.Name == "b").FrameOffset;
+
+        var text = ExpressionText.Render(built.Expression.Body);
+        var beforeExit = text[..text.IndexOf("Goto -> _exit", StringComparison.Ordinal)];
+
+        await Assert.That(Occurrences(beforeExit, $"_slots[(_fp + {aOffset})]")).IsEqualTo(0)
+            .Because("a is not read after the suspend, so the barrier has nothing to preserve");
+        await Assert.That(Occurrences(beforeExit, $"_slots[(_fp + {bOffset})]")).IsEqualTo(1)
+            .Because("b is read after the suspend, so the barrier stores it once");
+    }
+
+    private static int Occurrences(string text, string value) {
+        int count = 0;
+        int at = 0;
+        while ((at = text.IndexOf(value, at, StringComparison.Ordinal)) >= 0) {
+            count++;
+            at += value.Length;
+        }
+        return count;
     }
 
     [Test]

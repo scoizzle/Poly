@@ -359,7 +359,7 @@ public sealed partial class DomainToCSharpExporter {
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
                 if (EffectHelpers.CreatesIn(entity, rel.Name))
-                    AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
+                    AddCreateSingularNavMethod(entity, rel, domain!, subscriberSubs, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),

@@ -529,6 +529,23 @@ internal static class RuntimeAnalysisCache {
         }
     }
 
+    /// <summary>
+    /// Test hook: replace the GetOrLower-cached lowered module. Throws when no module
+    /// is cached, so a test cannot overwrite a module a Lower/Emit never produced.
+    /// Used by <c>EmitRefusesVmErrorsTests</c> to make Emit fail closed.
+    /// </summary>
+    internal static void ReplaceModule(Domain domain, IReadOnlyList<TypeDefinitionNode> module) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(module);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            if (holder.Module is null)
+                throw new InvalidOperationException(
+                    "Module is not cached; Lower the domain before replacing the module.");
+            holder.Module = module;
+        }
+    }
+
     private static Holder GetHolder(Domain domain) =>
         Cache.GetValue(domain, static d =>
             new Holder { Session = DomainSession.ForExtensions(d.Extensions) });

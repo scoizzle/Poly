@@ -51,7 +51,7 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(indexParameter.Position).IsEqualTo(0);
         await Assert.That(indexParameter.ParameterTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(int));
 
-        var method = resolvedType.Methods.Single();
+        var method = resolvedType.Methods.WithName("Format").Single();
         var methodParameters = method.Parameters.ToArray();
         await Assert.That(methodParameters.Length).IsEqualTo(2);
         await Assert.That(methodParameters[0].Name).IsEqualTo("value");
@@ -90,9 +90,45 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(valueType.Name).IsEqualTo("T");
         await Assert.That(valueType.GetRuntimeType()).IsEqualTo(typeof(object));
 
-        var wrap = resolvedType.Methods.Single();
+        var wrap = resolvedType.Methods.WithName("Wrap").Single();
         await Assert.That(wrap.Parameters.Single().ParameterTypeDefinition.Name).IsEqualTo("T");
         await Assert.That(wrap.MemberTypeDefinition.Name).IsEqualTo("Box");
+    }
+
+    [Test]
+    public async Task Analyze_ClosedGenericStaticMember_SubstitutesTypeArgument() {
+        var widget = new TypeDefinitionNode("Widget", "Sample");
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Wrap",
+                    new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("T")]),
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))],
+                    IsStatic: true)
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            "Sample",
+            Properties: [
+                new PropertyDefinitionNode(
+                    "Closed",
+                    new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("Widget", "Sample")]))
+            ]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .Build()
+            .Analyze(new Block([widget, box, holder]));
+        var closed = analysis.GetMetadata<TypeDefinitionMetadata>(holder)?.TypeDefinition?
+            .Properties.Single().MemberTypeDefinition;
+
+        await Assert.That(closed).IsNotNull();
+        var wrap = closed!.Methods.WithName("Wrap").Single();
+        await Assert.That(wrap.Parameters.Single().ParameterTypeDefinition.Name).IsEqualTo("Widget");
+        await Assert.That(wrap.Parameters.Single().ParameterTypeDefinition.FullName).IsEqualTo("Sample.Widget");
     }
 
     [Test]
@@ -498,14 +534,18 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(plainDef).IsNotSameReferenceAs(genericDef);
         await Assert.That(plainDef!.GenericParameters.Any()).IsFalse();
         await Assert.That(genericDef!.GenericParameters.Count()).IsEqualTo(1);
-        await Assert.That(plainDef.Methods.Single().Parameters.Any()).IsFalse();
-        await Assert.That(genericDef.Methods.Single().Parameters.Count()).IsEqualTo(1);
+        await Assert.That(plainDef.Methods.WithName("Success").Single().Parameters.Any()).IsFalse();
+        await Assert.That(genericDef.Methods.WithName("Success").Single().Parameters.Count()).IsEqualTo(1);
 
         var resolvedHolder = ctx.GetMetadata<TypeDefinitionMetadata>(holder)?.TypeDefinition;
         await Assert.That(resolvedHolder).IsNotNull();
         var plainProp = resolvedHolder!.Properties.Single(p => p.Name == "Plain").MemberTypeDefinition;
         var closedProp = resolvedHolder.Properties.Single(p => p.Name == "Closed").MemberTypeDefinition;
         await Assert.That(plainProp).IsSameReferenceAs(plainDef);
-        await Assert.That(closedProp).IsSameReferenceAs(genericDef);
+        // The open definition is unchanged: its Success parameter is still the T placeholder.
+        await Assert.That(genericDef.Methods.WithName("Success").Single().Parameters.Single().ParameterTypeDefinition.Name).IsEqualTo("T");
+        // The closed view substitutes T; it is a distinct resolution product, not the open definition.
+        await Assert.That(closedProp).IsNotSameReferenceAs(genericDef);
+        await Assert.That(closedProp.Methods.WithName("Success").Single().Parameters.Single().ParameterTypeDefinition.GetRuntimeType()).IsEqualTo(typeof(string));
     }
 }

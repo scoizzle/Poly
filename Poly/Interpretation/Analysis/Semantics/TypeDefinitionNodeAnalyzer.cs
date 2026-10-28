@@ -133,6 +133,11 @@ public static class TypeDefinitionNodeAnalyzerExtensions {
 internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly TypeDefinitionNode _node;
     private readonly ITypeDefinitionProvider _provider;
+    private readonly IReadOnlyDictionary<string, ITypeDefinition>? _substitutions;
+    private static long _nextOpenId;
+    private readonly long _openId;
+    private readonly object _closureLock = new();
+    private readonly Dictionary<string, AstTypeDefinition> _closures = new(StringComparer.Ordinal);
     private readonly Lazy<ITypeDefinition?> _baseType;
     private readonly Lazy<IReadOnlyList<ITypeDefinition>> _interfaces;
     private readonly Lazy<IReadOnlyList<IParameter>> _genericParameters;
@@ -145,9 +150,20 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ITypeField>> _fields;
     private readonly Lazy<IReadOnlyList<ITypeMember>> _members;
 
-    public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider) {
+    public AstTypeDefinition(TypeDefinitionNode node, ITypeDefinitionProvider provider)
+        : this(node, provider, substitutions: null,
+            openId: System.Threading.Interlocked.Increment(ref _nextOpenId)) {
+    }
+
+    private AstTypeDefinition(
+        TypeDefinitionNode node,
+        ITypeDefinitionProvider provider,
+        IReadOnlyDictionary<string, ITypeDefinition>? substitutions,
+        long openId) {
         _node = node;
         _provider = provider;
+        _substitutions = substitutions;
+        _openId = openId;
         _baseType = new(() => _node.BaseType is null ? null : ResolveType(_node.BaseType));
         _interfaces = new(() => _node.Interfaces?.Select(ResolveType).ToArray() ?? []);
         _genericParameters = new(() => MapParameters(_node.GenericParameters));
@@ -165,6 +181,69 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
     /// <summary>Provider this type was resolved against, including sibling AST types.</summary>
     internal ITypeDefinitionProvider ResolutionProvider => _provider;
+
+    /// <summary>
+    /// Close this open definition over <paramref name="arguments"/>: a new view with the
+    /// same node and its own substitution map and member lazies. Never mutates this
+    /// instance. Closed views are resolution products and are never registered. Views
+    /// are interned by structural argument identity so two resolutions of the same closed generic
+    /// are reference-equal for member matching.
+    /// </summary>
+    internal AstTypeDefinition Close(IReadOnlyList<ITypeDefinition> arguments) {
+        var parameters = _node.GenericParameters;
+        if (parameters is null || parameters.Count == 0 || arguments.Count != parameters.Count)
+            return this;
+        if (_substitutions is not null)
+            throw new InvalidOperationException("A closed generic view cannot be closed again.");
+        var key = string.Join("|", arguments.Select(ArgumentKey));
+        lock (_closureLock) {
+            if (_closures.TryGetValue(key, out var cached))
+                return cached;
+            var substitutions = new Dictionary<string, ITypeDefinition>(StringComparer.Ordinal);
+            for (var i = 0; i < parameters.Count; i++)
+                substitutions[parameters[i].Name] = arguments[i];
+            var closed = new AstTypeDefinition(_node, _provider, substitutions, _openId);
+            _closures[key] = closed;
+            return closed;
+        }
+    }
+
+    /// <summary>The argument this closed view substitutes for a bare generic-parameter name, or null.</summary>
+    internal ITypeDefinition? TrySubstitute(string name) =>
+        _substitutions is not null && _substitutions.TryGetValue(name, out var substituted)
+            ? substituted
+            : null;
+
+    /// <summary>Structural identity of this definition for closed-view interning.</summary>
+    internal string InterningKey {
+        get {
+            var key = $"ast:{_openId}";
+            if (_substitutions is null)
+                return key;
+            var parameters = _node.GenericParameters;
+            if (parameters is null)
+                return key;
+            var arguments = new List<string>(parameters.Count);
+            foreach (var parameter in parameters) {
+                arguments.Add(_substitutions.TryGetValue(parameter.Name, out var argument)
+                    ? ArgumentKey(argument)
+                    : "?");
+            }
+            return $"{key}<{string.Join("|", arguments)}>";
+        }
+    }
+
+    private static string ArgumentKey(ITypeDefinition argument) => argument switch {
+        AstTypeDefinition ast => ast.InterningKey,
+        AstCollectionTypeDefinition collection => $"collection:{collection.Kind}:{ArgumentKey(collection.ElementType)}",
+        AstGenericParameterTypeDefinition parameter => $"parameter:{parameter.Name}@{DeclaringKey(parameter.DeclaringType)}",
+        _ => $"clr:{argument.GetRuntimeTypeOrThrow()}"
+    };
+
+    private static string DeclaringKey(ITypeDefinition declaring) =>
+        declaring is AstTypeDefinition ast
+            ? ast.InterningKey
+            : $"clr:{declaring.GetRuntimeTypeOrThrow()}";
 
     public string Name => _node.Name;
     public string? Namespace => _node.Namespace;
@@ -249,7 +328,8 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
         return ComposeInheritedMembers(
             _declaredMethods.Value,
             static typeDefinition => typeDefinition.Methods,
-            static method => $"{method.Name}|{method.LifetimeModifier}|{GetParameterSignature(method.Parameters)}");
+            static method => $"{method.Name}|{method.LifetimeModifier}|{GetParameterSignature(method.Parameters)}",
+            static method => method.AccessModifier == AccessModifier.Public && !method.IsStatic);
     }
 
     private List<ITypeField> BuildFields() {
@@ -262,7 +342,8 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     private List<TMember> ComposeInheritedMembers<TMember>(
         IEnumerable<TMember> declaredMembers,
         Func<ITypeDefinition, IEnumerable<TMember>> inheritedMemberSelector,
-        Func<TMember, string> keySelector) {
+        Func<TMember, string> keySelector,
+        Func<TMember, bool>? inheritedFilter = null) {
         ArgumentNullException.ThrowIfNull(declaredMembers);
         ArgumentNullException.ThrowIfNull(inheritedMemberSelector);
         ArgumentNullException.ThrowIfNull(keySelector);
@@ -274,6 +355,18 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
 
         if (BaseType is not null) {
             AddMembers(inheritedMemberSelector(BaseType));
+        }
+        else {
+            // Every C# type with no declared base derives from System.Object; its
+            // members (ToString, Equals, GetHashCode, GetType) are available on an
+            // AST type too. Declared members already added above still win by key.
+            var objectType = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(object));
+            if (objectType is not null) {
+                var inherited = inheritedMemberSelector(objectType);
+                if (inheritedFilter is not null)
+                    inherited = inherited.Where(inheritedFilter);
+                AddMembers(inherited);
+            }
         }
 
         foreach (var implementedInterface in Interfaces) {
@@ -741,6 +834,11 @@ internal static class AstTypeReferenceResolver {
             return clr.GetTypeDefinition(typeof(void));
 
         if (allowTypeParameter && enclosing is not null && named.Namespace is null) {
+            // A closed view's own argument overrides the open parameter scan:
+            // `T` inside `Box<Widget>` is `Widget`, not the open `T`.
+            if (enclosing is AstTypeDefinition closed
+                && closed.TrySubstitute(named.TypeName) is { } substituted)
+                return substituted;
             foreach (var genericParameter in enclosing.GenericParameters) {
                 if (string.Equals(genericParameter.Name, named.TypeName, StringComparison.Ordinal))
                     return new AstGenericParameterTypeDefinition(genericParameter, enclosing);
@@ -839,6 +937,10 @@ internal static class AstTypeReferenceResolver {
         ITypeDefinition open,
         ITypeDefinition[] args,
         ClrTypeDefinitionRegistry clr) {
+        // An AST generic closes through its own substitution map; the CLR branch below
+        // would otherwise close it through its RuntimeType (IDictionary<,> for 2-arity).
+        if (open is AstTypeDefinition astOpen)
+            return astOpen.Close(args);
         if (open is not IClrTypeDefinition clrOpen)
             return open;
 

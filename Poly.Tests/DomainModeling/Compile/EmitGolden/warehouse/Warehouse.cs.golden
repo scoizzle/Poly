@@ -129,6 +129,10 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
         }
+        if (string.IsNullOrEmpty(zip))
+        {
+            return DomainResult<Warehouse>.Failure("'Zip' is required.");
+        }
         if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
         {
             return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");

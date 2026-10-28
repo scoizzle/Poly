@@ -11,6 +11,7 @@ internal static class ConstraintValidation {
         ArgumentNullException.ThrowIfNull(constraint);
         return constraint switch {
             RequiredConstraint => value is not null,
+            OptionalConstraint => true, // optional is the opt-out of requiredness; any value (incl. null) is legal
             RangeConstraint r => IsInRange(value, r.Minimum, r.Maximum),
             LengthConstraint l => IsValidLength(value, l.MinLength, l.MaxLength),
             PatternConstraint p => IsValidPattern(value, p.Pattern),
@@ -24,6 +25,7 @@ internal static class ConstraintValidation {
     public static string Describe(Constraint constraint) {
         return constraint switch {
             RequiredConstraint => "required (non-null)",
+            OptionalConstraint => "optional",
             RangeConstraint r => FormatRange(r),
             LengthConstraint l => $"length({l.MinLength}, {l.MaxLength})",
             PatternConstraint p => $"pattern({p.Pattern})",

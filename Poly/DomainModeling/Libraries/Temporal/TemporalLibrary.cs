@@ -7,8 +7,9 @@ public sealed record TemporalVocabularyMetadata : IAnalysisMetadata;
 
 /// <summary>
 /// Temporal concepts: Date/Time/DateTime/Duration catalog types (seeded when this
-/// library is imported), clocks, and duration units on existing expression shapes.
-/// Loaded via <see cref="ExtensionCatalog"/>; meaning is session-scoped.
+/// library is loaded), clocks, and duration units on existing expression shapes.
+/// Product sessions load it implicitly at Load; an explicit <c>uses temporal</c>
+/// still resolves. Meaning is session-scoped.
 /// </summary>
 public sealed class TemporalLibrary : IDomainLibrary {
     public string Id => "temporal";

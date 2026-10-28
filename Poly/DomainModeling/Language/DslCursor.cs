@@ -21,9 +21,11 @@ public class DslCursor : IDslParseCursor {
     /// <summary>
     /// Factory ctor so the matcher and cursor share ONE reader instance (the matcher
     /// and cursor read the same committed position). Used when the grammar depends on
-    /// parser inputs (PolyDslParser).
+    /// the session's tables (DomainResolver).
     /// </summary>
-    public DslCursor(DslTokenReader reader, Func<DslTokenReader, Matcher<DslToken, DslTokenKind>> matcherFactory)
+    public DslCursor(
+        ITokenReader<DslToken, DslTokenKind> reader,
+        Func<ITokenReader<DslToken, DslTokenKind>, Matcher<DslToken, DslTokenKind>> matcherFactory)
         : this(reader, matcherFactory(reader)) {
     }
 

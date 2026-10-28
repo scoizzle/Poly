@@ -22,7 +22,7 @@ public sealed class DomainExtensionTests {
 
     [Test]
     public async Task Parse_DuplicateUses_FailsClosed() {
-        await Assert.That(() => DomainCompilation.PeekExtensions("""
+        await Assert.That(() => DslSyntaxTree.Parse("""
             domain T
             uses temporal
             uses temporal
@@ -38,27 +38,29 @@ public sealed class DomainExtensionTests {
     }
 
     [Test]
-    public async Task Print_EmitsUses_InDomainOrder() {
+    public async Task Print_OmitsImplicitTemporal() {
         var domain = new Domain("T", []) { Extensions = ["temporal", "storage"] };
         var printed = new DomainDslPrinter(DomainSession.Open(domain)).Print(domain);
 
-        await Assert.That(printed.StartsWith("domain T\nuses temporal\nuses storage\n", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.StartsWith("domain T\nuses storage\n", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("uses temporal", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
-    public async Task WithSeed_WhenSourceOmitsUses_StampsSdkDefaults() {
+    public async Task WithSeed_WhenSourceOmitsUses_RecordsStorageNotTemporal() {
         var poly = """
             domain T
             Item: entity { Name: Text }
             """;
-        var host = DomainSession.ForSource(poly, ExtensionCatalog.ProductLanguage);
+        var host = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = DomainCompilation.WithSeed(
             new PolyDslParser(poly, host).Parse(),
-            ExtensionCatalog.ProductLanguage);
+            ExtensionCatalog.ProductAuthoring);
         var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Root!.Extensions).IsEquivalentTo(new[] { "temporal" });
+        await Assert.That(result.Root!.Extensions).IsEquivalentTo(new[] { "storage" });
+        await Assert.That(result.Root.Extensions.Contains("temporal")).IsFalse();
     }
 
     [Test]
@@ -125,20 +127,36 @@ public sealed class DomainExtensionTests {
     }
 
     [Test]
-    public async Task DomainFactory_Create_RecordsTemporal() {
+    public async Task DomainFactory_Create_DoesNotRecordImplicitTemporal() {
         var domain = DomainFactory.Create("Orders");
-        await Assert.That(domain.Extensions).Contains("temporal");
+        await Assert.That(domain.Extensions).IsEmpty();
+        await Assert.That(domain.Types.OfType<PrimitiveType>().Any(p => p.Name == "Date")).IsTrue();
     }
 
     [Test]
-    public async Task Parse_DateType_WithoutTemporal_UnknownType() {
+    public async Task Parse_DateType_WithoutTemporalInRawSession_UnknownType() {
         var poly = """
             domain T
             Item: entity { Due: Date }
             """;
-        await Assert.That(() => new PolyDslParser(poly).Parse())
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(() => new PolyDslParser(poly, raw).Parse())
             .Throws<FormatException>()
             .WithMessageContaining("Date");
+    }
+
+    [Test]
+    public async Task Parse_DateType_WithoutUses_SeedsTemporal() {
+        var poly = """
+            domain T
+            Item: entity { Due: Date }
+            """;
+        var changes = new PolyDslParser(poly).Parse();
+        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Root!.Extensions.Contains("temporal")).IsFalse();
+        await Assert.That(result.Root.Types.OfType<PrimitiveType>().Any(p => p.Name == "Date")).IsTrue();
     }
 
     [Test]

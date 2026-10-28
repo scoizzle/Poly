@@ -52,8 +52,8 @@ demo/                      Demo applications
 domain Orders
 
 Customer: entity {
-  Name: Text required
-  Email: Text required unique
+  Name: Text
+  Email: Text unique
   Places: many Order
 }
 

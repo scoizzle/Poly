@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
@@ -48,6 +49,18 @@ public sealed class SessionBuilder {
     /// </summary>
     public SessionBuilder LoadCore() {
         Register(new CoreLibrary());
+        return this;
+    }
+
+    /// <summary>
+    /// Loads <see cref="TemporalLibrary"/> at <see cref="PipelineStage.Load"/>
+    /// without recording <c>temporal</c> as an authored extension id.
+    /// </summary>
+    public SessionBuilder LoadTemporal() {
+        var library = new TemporalLibrary();
+        Register(library);
+        foreach (var (name, category) in library.PrimitiveSeeds)
+            _primitiveSeeds.Add((library.Id, name, category));
         return this;
     }
 

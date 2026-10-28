@@ -124,8 +124,8 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("""
             domain Col
             Address: entity {
-              Line1: Text required
-              City: Text required
+              Line1: Text
+              City: Text
             }
             """);
         var rendered = Render(d);
@@ -570,7 +570,7 @@ public class MinimalApiGeneratorTests {
             domain Registration
             Program: entity {
               Code: Text unique
-              Name: Text required
+              Name: Text
             }
             Student: entity {
               Email: Text unique

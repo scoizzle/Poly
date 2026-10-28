@@ -16,23 +16,23 @@ public class SameNameRelationshipSourceScopingTests {
         domain Test
 
         Machine: entity {
-          Name: Text
+          Name: Text optional
           orders: many Order
           HasMachineOrders: policy { count orders > 0 }
         }
 
         Book: entity {
-          Title: Text
+          Title: Text optional
           orders: many Order2
           HasBookOrders: policy { count orders > 0 }
         }
 
         Order: entity {
-          Code: Text
+          Code: Text optional
         }
 
         Order2: entity {
-          Sku: Text
+          Sku: Text optional
         }
         """;
 

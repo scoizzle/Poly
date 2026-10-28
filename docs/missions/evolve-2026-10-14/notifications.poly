@@ -2,7 +2,7 @@ domain Notifications
 uses temporal
 
 User: entity {
-  Name: Text required
+  Name: Text
   UnreadBadge: Number default(0)
   SeenCount: Number default(0)
   LastBody: Text
@@ -31,7 +31,7 @@ User: entity {
 }
 
 Notification: entity {
-  Body: Text required
+  Body: Text
   Status: Text default("unread")
   Unread: stage {
     entry { assign Status to "unread" }

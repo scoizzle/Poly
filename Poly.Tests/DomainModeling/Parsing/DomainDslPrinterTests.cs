@@ -10,7 +10,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public sealed class DomainDslPrinterTests {
     [Test]
     public async Task PrintExpression_DateOperation_WithoutBinder_Throws() {
-        var printer = new DomainDslPrinter();
+        var printer = new DomainDslPrinter(SessionBuilder.CreateEmpty().LoadCore().Build());
         var expr = new DateOperation(
             DomainExpression.Property("DueDate"),
             DomainExpression.Literal(14),

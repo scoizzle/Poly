@@ -21,7 +21,7 @@ public class UniqueSimulatePrintAgreeTests {
     private const string Dsl = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
         }
         Lot: entity {
           widgets: many Widget

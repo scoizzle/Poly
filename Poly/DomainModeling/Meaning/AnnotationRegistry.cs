@@ -5,8 +5,8 @@ namespace Poly.DomainModeling.Meaning;
 
 /// <summary>
 /// Registry of pack-provided annotation syntax handlers. Populated by packs at
-/// registration time and consumed by <see cref="Parsing.PolyDslParser"/> (for
-/// keyword validation) and <see cref="Parsing.DomainDslPrinter"/> (for facet printing).
+/// registration time and consumed by <see cref="Language.DomainResolver"/> (for
+/// keyword validation) and <see cref="Language.DomainDslPrinter"/> (for facet printing).
 /// </summary>
 public sealed class AnnotationRegistry {
     private readonly Dictionary<string, IAnnotationSyntax> _syntaxByKeyword = new(StringComparer.Ordinal);

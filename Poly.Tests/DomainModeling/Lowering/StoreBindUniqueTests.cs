@@ -56,7 +56,7 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
-    public async Task NonUniqueAssign_Runtime_IsBareAssignment() {
+    public async Task NonUniqueAssign_Runtime_ChecksRequiredNotUnique() {
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var entity = new Entity("Person",
             Properties: [name],
@@ -68,7 +68,9 @@ public class StoreBindUniqueTests {
             DomainExpression.Property("Name"),
             DomainExpression.Literal("Ada")));
 
-        await Assert.That(lowered).IsTypeOf<Assignment>();
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs).Contains("IsNullOrEmpty");
+        await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 
     [Test]
@@ -76,7 +78,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 assign Plate to plate
               }
@@ -150,7 +152,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate != "") {
                   assign Plate to plate

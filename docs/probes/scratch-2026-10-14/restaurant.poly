@@ -10,22 +10,22 @@ Money: value {
 }
 
 MenuItem: entity {
-  Code: Text unique required length(2, 12)
-  Name: Text required
-  Price: Number range(0, 500) required
+  Code: Text unique length(2, 12)
+  Name: Text
+  Price: Number range(0, 500)
   Course: Course default(Main)
 }
 
 DiningTable: entity {
-  Code: Text unique required
+  Code: Text unique
   Zone: Zone default(Main)
-  Seats: Number range(1, 12) required
+  Seats: Number range(1, 12)
   reservations: many Reservation
 }
 
 Guest: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   Visits: Number default(0)
   reservations: many Reservation
   Active: stage {
@@ -43,7 +43,7 @@ Guest: entity {
 }
 
 Reservation: entity {
-  PartySize: Number range(1, 20) required
+  PartySize: Number range(1, 20)
   Day: Date default(Today)
   ClosedAt: Date
   guest: Guest
@@ -98,8 +98,8 @@ Order: entity {
 }
 
 OrderLine: entity {
-  Qty: Number range(1, 20) required
-  UnitPrice: Number range(0, 500) required
+  Qty: Number range(1, 20)
+  UnitPrice: Number range(0, 500)
   menuItem: MenuItem
   order: Order
   Placed: stage {

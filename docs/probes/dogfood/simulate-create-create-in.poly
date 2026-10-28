@@ -8,7 +8,7 @@ uses storage
 // Compare list / policy / returnInstanceId after each action.
 
 Patron: entity {
-  Name: Text required
+  Name: Text
   fines: many Fine
   HasFines: policy { fines exists }
   HasFineCount: policy { count fines > 0 }
@@ -25,7 +25,7 @@ Patron: entity {
 }
 
 Fine: entity {
-  Amount: Number range(0, 500) required
-  Reason: Text required
+  Amount: Number range(0, 500)
+  Reason: Text
   patron: Patron
 }

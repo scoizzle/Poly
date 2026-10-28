@@ -9,7 +9,7 @@ namespace Poly.Tests.Mcp;
 /// </summary>
 public sealed class McpPackSharedInputsTests {
     [Test]
-    public async Task ApplyAndExportDsl_RoundTripDomainExtensions() {
+    public async Task ApplyAndExportDsl_OmitsImplicitTemporal() {
         var (sessionId, _) = McpTestTools.Store.Create("PackShared");
 
         var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
@@ -25,7 +25,8 @@ public sealed class McpPackSharedInputsTests {
         await Assert.That(exported.Success).IsTrue();
         var poly = exported.Data!.GetType().GetProperty("poly")?.GetValue(exported.Data) as string;
         await Assert.That(poly).IsNotNull();
-        await Assert.That(poly!).Contains("uses temporal");
+        await Assert.That(poly!.Contains("uses temporal", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(poly!).Contains("uses storage");
         await Assert.That(poly!).Contains("Due < Now");
     }
 }

@@ -123,9 +123,9 @@ public sealed class DslCompiler {
         DomainSession session;
         List<DomainChange> changes;
         try {
-            session = OpenCompileSession(polyText, mode, dbms, extraLibraries);
-            var parser = new PolyDslParser(polyText, session);
-            changes = DomainCompilation.WithSeed(parser.Parse(), SeedFor(dbms, mode)).ToList();
+            var tree = DslSyntaxTree.Parse(polyText);
+            session = OpenCompileSession(tree, mode, dbms, extraLibraries);
+            changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), SeedFor(dbms, mode)).ToList();
         }
         catch (FormatException ex) {
             return Fail($"Parse error: {ex.Message}");
@@ -247,18 +247,17 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// One session for parse, analyze, and artifacts. Source <c>uses</c> wins
+    /// One session for parse, analyze, and artifacts. The document's <c>uses</c> wins
     /// over the DBMS seed; <paramref name="extraLibraries"/> are always loaded.
     /// CompileMode never seeds <c>http</c> — that id arrives via source <c>uses</c>
     /// or an extra library with that catalog id.
     /// </summary>
     private static DomainSession OpenCompileSession(
-        string polyText,
+        DslSyntaxTree tree,
         CompileMode mode,
         DbmsPack dbms,
         IReadOnlyList<IDomainLibrary> extraLibraries) {
-        var peeked = DomainCompilation.PeekExtensions(polyText);
-        var ids = new List<string>(peeked.Count > 0 ? peeked : SeedFor(dbms, mode));
+        var ids = new List<string>(tree.Uses.Count > 0 ? tree.Uses : SeedFor(dbms, mode));
         var seen = new HashSet<string>(ids, StringComparer.Ordinal);
         var catalog = CompilerCatalog;
         foreach (var library in extraLibraries) {
@@ -280,6 +279,8 @@ public sealed class DslCompiler {
         // Load-time registration (not bag invent): host producers for loaded doors.
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!ids.Exists(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var loaded = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))

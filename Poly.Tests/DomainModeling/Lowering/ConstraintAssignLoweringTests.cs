@@ -11,7 +11,8 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// Item 6: required/range/length/pattern/enum lower on assign in EffectLoweringPass
-/// (same tree for simulate + C# print). Optional length skips empty without required.
+/// (same tree for simulate + C# print). A property without <c>optional</c> rejects
+/// empty text; an <c>optional</c> length skips empty.
 /// </summary>
 public class ConstraintAssignLoweringTests {
     [Test]
@@ -140,14 +141,13 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(cs.Contains("!= null") || cs.Contains("is not null")).IsTrue();
         await Assert.That(cs).Contains("IsMatch");
 
-        // Bag Text reads coerce null→"" so runtime Failure (prior retained);
-        // never ArgumentNullException from Regex.IsMatch.
+        // A bare Text property is required, so null fails that check before
+        // the pattern guard. The prior value stays.
         var result = instance.InvokeAction("Relabel",
             new Dictionary<string, object?> { ["code"] = null });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage)
-            .Contains("does not match the required pattern");
+        await Assert.That(result.ErrorMessage).Contains("'Code' is required.");
         await Assert.That(instance.GetProperty<string>("Code")).IsEqualTo("OK");
     }
 
@@ -156,7 +156,7 @@ public class ConstraintAssignLoweringTests {
         var (domain, _) = Evolve("""
             domain Lab
             Label: entity {
-              Name: Text length(7, 20) required
+              Name: Text length(7, 20)
               Rename: action (name: Text) {
                 assign Name to name
               }
@@ -176,7 +176,7 @@ public class ConstraintAssignLoweringTests {
     }
 
     [Test]
-    public async Task Length_WithoutRequired_EmptySucceeds_TooShortFails() {
+    public async Task Length_BareProperty_EmptyFails_TooShortFails() {
         var (domain, _) = Evolve("""
             domain Lab
             Note: entity {
@@ -187,13 +187,14 @@ public class ConstraintAssignLoweringTests {
             }
             """);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
-        var emptyOk = DomainEntityInstance.Create(entity,
+        var emptyFail = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Body"] = "abcdefg" },
             domain: domain);
-        var emptyResult = emptyOk.InvokeAction("Edit",
+        var emptyResult = emptyFail.InvokeAction("Edit",
             new Dictionary<string, object?> { ["body"] = "" });
-        await Assert.That(emptyResult.Succeeded).IsTrue();
-        await Assert.That(emptyOk.GetProperty<string>("Body")).IsEqualTo("");
+        await Assert.That(emptyResult.Succeeded).IsFalse();
+        await Assert.That(emptyResult.ErrorMessage).Contains("is required");
+        await Assert.That(emptyFail.GetProperty<string>("Body")).IsEqualTo("abcdefg");
 
         var shortFail = DomainEntityInstance.Create(entity,
             new Dictionary<string, object?> { ["Body"] = "abcdefg" },
@@ -319,7 +320,7 @@ public class ConstraintAssignLoweringTests {
             Widget: entity {
               Score: Number range(1, 10) default(5)
               Status: PatronStatus default(Active)
-              Name: Text required
+              Name: Text
               Code: Text length(2, 5)
               Tag: Text pattern("^[A-Z]+$")
               SetScore: action { assign Score to 7 }
@@ -361,7 +362,7 @@ public class ConstraintAssignLoweringTests {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
-              Name: Text required
+              Name: Text
               Rename: action (name: Text) {
                 assign Name to name
               }
@@ -377,6 +378,48 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.ErrorMessage).Contains("'Name' is required.");
         await Assert.That(instance.GetProperty<string>("Name")).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task BareTextAssign_Empty_IsFailure() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Person: entity {
+              Name: Text
+              Rename: action (name: Text) {
+                assign Name to name
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Name"] = "Ada" },
+            domain: domain);
+
+        var result = instance.InvokeAction("Rename",
+            new Dictionary<string, object?> { ["name"] = "" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.ErrorMessage).Contains("'Name' is required.");
+        await Assert.That(instance.GetProperty<string>("Name")).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task Length_Optional_EmptySucceeds() {
+        var (domain, _) = Evolve("""
+            domain Lab
+            Note: entity {
+              Body: Text length(7, 20) optional
+              Edit: action (body: Text) {
+                assign Body to body
+              }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
+        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var result = instance.InvokeAction("Edit",
+            new Dictionary<string, object?> { ["body"] = "" });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(instance.GetProperty<string>("Body")).IsEqualTo("");
     }
 
     private static Entity PermitEntity() {

@@ -3,14 +3,14 @@ uses temporal
 uses http
 
 Address: entity {
-  Line1: Text required
-  City: Text required
+  Line1: Text
+  City: Text
   Zip: Text pattern("^\d{5}$")
 }
 
 Courier: entity {
-  Name: Text required
-  Capacity: Number range(1, 200) required
+  Name: Text
+  Capacity: Number range(1, 200)
   stops: many Stop
   Available: stage {
     Assign: action (order: Order) -> Stop {
@@ -24,8 +24,8 @@ Courier: entity {
 }
 
 Customer: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   Status: Text default("open")
   address: owned Address
   orders: many Order
@@ -43,7 +43,7 @@ Customer: entity {
 }
 
 Order: entity {
-  Total: Number range(0, 100000) required
+  Total: Number range(0, 100000)
   customer: Customer
   stops: many Stop
   Placed: stage {

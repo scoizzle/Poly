@@ -1,7 +1,7 @@
 domain AmbigBackref
 
 User: entity {
-  Name: Text required
+  Name: Text
   tasks: many Task
 
   MakeTask: action {
@@ -10,7 +10,7 @@ User: entity {
 }
 
 Task: entity {
-  Title: Text required
+  Title: Text
   assignedTo: User
   reviewedBy: User
   New: stage { }

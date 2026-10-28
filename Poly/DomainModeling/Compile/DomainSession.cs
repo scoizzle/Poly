@@ -137,6 +137,8 @@ public sealed class DomainSession {
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!extensions.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in extensions) {
             if (string.IsNullOrWhiteSpace(id))
@@ -148,36 +150,33 @@ public sealed class DomainSession {
         return builder.Build();
     }
 
-    /// <summary>Peeks <c>uses</c> (or <paramref name="seed"/>) and loads those libraries. Unknown id throws.</summary>
-    public static DomainSession ForSource(
-        string poly,
+    /// <summary>Loads the document's <c>uses</c> ids (or <paramref name="seed"/> when it lists none). Unknown id throws.</summary>
+    public static DomainSession ForDocument(
+        DslSyntaxTree tree,
         IReadOnlyList<string> seed,
         ExtensionCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        var ids = DomainCompilation.PeekExtensions(poly);
-        if (ids.Count == 0)
-            ids = seed;
-        return ForExtensions(ids, catalog);
+        return ForExtensions(tree.Uses.Count > 0 ? tree.Uses : seed, catalog);
     }
 
     /// <summary>
-    /// <see cref="ForSource"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
+    /// <see cref="ForDocument"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
     /// The pack is not added to <see cref="Extensions"/> when the source <c>uses</c>
     /// list omitted it, so <see cref="WithDomain"/> keeps the handlers.
     /// </summary>
-    public static DomainSession ForAuthoringSource(
-        string poly,
+    public static DomainSession ForAuthoringDocument(
+        DslSyntaxTree tree,
         IReadOnlyList<string> seed,
         ExtensionCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        var ids = DomainCompilation.PeekExtensions(poly);
-        if (ids.Count == 0)
-            ids = seed;
+        var ids = tree.Uses.Count > 0 ? tree.Uses : seed;
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))
@@ -188,6 +187,26 @@ public sealed class DomainSession {
         }
         StorageFacetLibrary.EnsureRegistered(builder);
         return builder.Build();
+    }
+
+    /// <summary>Parses <paramref name="poly"/> and loads its libraries. Unknown id throws.</summary>
+    public static DomainSession ForSource(
+        string poly,
+        IReadOnlyList<string> seed,
+        ExtensionCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(seed);
+        return ForDocument(DslSyntaxTree.Parse(poly), seed, catalog);
+    }
+
+    /// <summary>Parses <paramref name="poly"/> and loads it with the authoring pack.</summary>
+    public static DomainSession ForAuthoringSource(
+        string poly,
+        IReadOnlyList<string> seed,
+        ExtensionCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(seed);
+        return ForAuthoringDocument(DslSyntaxTree.Parse(poly), seed, catalog);
     }
 
     /// <summary>Keeps tables when <c>uses</c> is unchanged; reloads when it changes.</summary>

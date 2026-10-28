@@ -56,6 +56,7 @@ public class PassDependencyDeclarationTests {
         await Assert.That(Index(OwnershipAggregatePass.Id)).IsLessThan(Index(StoragePass.Id));
         await Assert.That(Index(EffectTopologyPass.Id)).IsLessThan(Index(CrossReferencePass.Id));
         await Assert.That(Index(ConstraintPropagationAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
+        await Assert.That(Index(EntityStructureAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(RequiredPropertiesPass.Id)).IsLessThan(Index(RuleCoverageAnalyzer.Id));
         await Assert.That(Index(EffectFactsPass.Id)).IsLessThan(Index(EffectAnalyzer.Id));

@@ -2,7 +2,7 @@ domain Sessions
 uses temporal
 
 User: entity {
-  Name: Text required
+  Name: Text
   sessions: many Session
 
   Login: action -> Session {

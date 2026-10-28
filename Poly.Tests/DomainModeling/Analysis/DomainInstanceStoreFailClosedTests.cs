@@ -12,7 +12,7 @@ public class DomainInstanceStoreFailClosedTests {
         var orderPending = new Stage("Pending", [submit], [], [], []);
         var orderActive = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [],
             Policies: [],
             Stages: [orderPending, orderActive]);
@@ -24,7 +24,7 @@ public class DomainInstanceStoreFailClosedTests {
         };
 
         var tracker = new Entity("Tracker",
-            [new Property("Label", new DomainTypeReference("Text"), [])],
+            [new Property("Label", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [new Poly.DomainModeling.Ontology.Action("Reset", InvocationResult.Void, [], [], [])],
             Policies: [],
             Stages: [trackerPending]);
@@ -225,7 +225,7 @@ public class DomainInstanceStoreFailClosedTests {
         var initial = new Stage("Initial", [], [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var entity = new Entity("Standalone",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             [], [],
             Stages: [initial, active]);
         var instance = DomainEntityInstance.Create(entity,
@@ -282,7 +282,7 @@ public class DomainInstanceStoreFailClosedTests {
     [Test]
     public async Task Link_NoDomain_SecondTarget_Allows() {
         var entity = new Entity("Standalone",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             [], [], []);
         var source = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
         var t1 = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
@@ -424,7 +424,7 @@ public class DomainInstanceStoreFailClosedTests {
     [Test]
     public async Task Unlink_NoDomain_Allows() {
         var entity = new Entity("Standalone",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             [], [], []);
         var source = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
         var target = DomainEntityInstance.Create(entity, new Dictionary<string, object?>(), domain: null);
@@ -493,10 +493,10 @@ public class DomainInstanceStoreFailClosedTests {
 
     private static Domain BuildOwnedLinkDomain() {
         var child = new Entity("Child",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var parent = new Entity("Parent",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var relationship = new Relationship(
             "Kid",
@@ -509,13 +509,13 @@ public class DomainInstanceStoreFailClosedTests {
 
     private static Domain BuildSameNameOwnedDomain() {
         var child = new Entity("Child",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var parent = new Entity("Parent",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var sponsor = new Entity("Sponsor",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var owned = new Relationship(
             "Kid",
@@ -534,10 +534,10 @@ public class DomainInstanceStoreFailClosedTests {
 
     private static Domain BuildOwnedCollectionDomain() {
         var child = new Entity("Child",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var parent = new Entity("Parent",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var relationship = new Relationship(
             "Kids",
@@ -550,10 +550,10 @@ public class DomainInstanceStoreFailClosedTests {
 
     private static Domain BuildSingularLinkDomain() {
         var child = new Entity("Child",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var parent = new Entity("Parent",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var relationship = new Relationship(
             "Kid",

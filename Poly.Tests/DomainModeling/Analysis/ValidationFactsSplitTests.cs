@@ -28,7 +28,7 @@ public class ValidationFactsSplitTests {
         var domain = ParseDomain("""
             domain Test
             Customer: entity {
-              Name: Text required
+              Name: Text
               Email: Text
               HasName: policy { Name exists }
               Active: stage {
@@ -62,7 +62,7 @@ public class ValidationFactsSplitTests {
               lines: many Line
             }
             Line: entity {
-              Qty: Number
+              Qty: Number optional
             }
             """);
 
@@ -96,7 +96,7 @@ public class ValidationFactsSplitTests {
               lines: many Line
             }
             Line: entity {
-              Qty: Number
+              Qty: Number optional
             }
             """);
 

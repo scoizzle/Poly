@@ -19,7 +19,7 @@ public class EnumCreateMessageAgreeTests {
         domain Shop
         Tier: enum { Basic, Plus, Elite }
         Member: entity {
-          Name: Text required
+          Name: Text
           Level: Tier
         }
         """;

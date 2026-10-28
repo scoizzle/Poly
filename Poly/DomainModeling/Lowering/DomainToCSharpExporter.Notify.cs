@@ -124,6 +124,8 @@ public sealed partial class DomainToCSharpExporter {
         // pointing back to the source → wired with `this`, excluded from the factory
         // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
         var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
+        var requiredProps = metadata.GetStructure(targetEntity)?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(targetEntity);
 
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsNavigation && parameter.IsBackReference) {
@@ -153,11 +155,9 @@ public sealed partial class DomainToCSharpExporter {
             var paramName = ToCamelCase(parameter.Name);
             var mapped = MapDomainTypeRef(parameter.Type, domain, metadata);
             // Nav params are optional references (unbound initializers pass null) —
-            // emit nullable to match the property/ctor and avoid CS8625.
-            // A non-required value type is the same: omitted create-in passes null.
-            var optionalValue = !parameter.IsNavigation
-                && IsUnrequiredDomainValue(domain, targetEntity, parameter.Name);
-            var propRef = parameter.IsNavigation || optionalValue
+            // emit nullable to match the property/ctor and avoid CS8625. Scalar ctor
+            // params are required by construction; optional scalars are trailing params.
+            var propRef = parameter.IsNavigation
                 ? (Node)new OptionalTypeReference(mapped)
                 : mapped;
             // Same node in the signature and the Create call. A second untyped
@@ -171,34 +171,41 @@ public sealed partial class DomainToCSharpExporter {
             createArgs.Add(param);
         }
 
-        // NOTE: properties with DefaultValueConstraint are NOT included in
-        // the Target.Create() parameter list — they are set directly in the
-        // constructor body from their default expression. Do NOT append them
-        // to createArgs here; the Create factory already handles them.
+        // NOTE: defaulted and optional properties are NOT included in
+        // the Target.Create() parameter list — they are trailing params
+        // from TrailingOmittableProperties below.
 
-        // Defaulted props of the target become TRAILING optional method params (C#
-        // optional params must be last) and are forwarded to Target.Create — so a
-        // `create in { DefaultedProp: value }` override flows through construction.
-        var entryAssigned = metadata.GetStructure(targetEntity)?.EntryAssignedPropertyNames
-            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(targetEntity);
-        foreach (var prop in targetEntity.Properties.OrderBy(p => p.Name)) {
-            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            if (defaultConstraint is null) continue;
-            if (entryAssigned.Contains(prop.Name)) continue;
-
+        // Defaulted and optional props of the target become TRAILING optional method
+        // params (C# optional params must be last) and are forwarded to Target.Create —
+        // so a `create in { Prop: value }` override flows through construction.
+        foreach (var prop in TrailingOmittableProperties(targetEntity, metadata)) {
             var paramName = ToCamelCase(prop.Name);
             var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
-            var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                defaultConstraint.Expression,
-                new NamedTypeReference(prop.Type.TypeName),
-                RuntimeAnalysisCache.MeaningFor(domain),
-                RuntimeAnalysisCache.FormsFor(domain));
-            var trailing = runtimeExpr is not null
-                ? new Parameter(paramName,
+            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
+            Parameter trailing;
+            if (defaultConstraint is null) {
+                // Optional with no default: omitted passes null (never ""/0).
+                trailing = new Parameter(paramName,
                     new OptionalTypeReference(mapped),
-                    DefaultValue: new Constant(null))
-                : new Parameter(paramName, mapped,
-                    DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata));
+                    DefaultValue: new Constant(null));
+            }
+            else {
+                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
+                    defaultConstraint.Expression,
+                    new NamedTypeReference(prop.Type.TypeName),
+                    RuntimeAnalysisCache.MeaningFor(domain),
+                    RuntimeAnalysisCache.FormsFor(domain));
+                if (runtimeExpr is not null) {
+                    trailing = new Parameter(paramName,
+                        new OptionalTypeReference(mapped),
+                        DefaultValue: new Constant(null));
+                }
+                else {
+                    trailing = new Parameter(paramName,
+                        requiredProps.Contains(prop.Name) ? mapped : new OptionalTypeReference(mapped),
+                        DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata));
+                }
+            }
             methodParams.Add(trailing);
             createArgs.Add(trailing);
         }
@@ -364,17 +371,21 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Trailing optional Create/ctor parameters: defaulted properties that are
-    /// not entry-assigned, in the order the Create factory appends them.
+    /// Trailing omittable Create/ctor parameters: defaulted or optional properties
+    /// that are not entry-assigned, in the order the Create factory appends them.
     /// </summary>
-    internal static List<Property> TrailingDefaultedProperties(
+    internal static List<Property> TrailingOmittableProperties(
         Entity entity,
         INodeMetadataProvider metadata) {
-        var entryAssigned = metadata.GetStructure(entity)?.EntryAssignedPropertyNames
+        var structure = metadata.GetStructure(entity);
+        var entryAssigned = structure?.EntryAssignedPropertyNames
             ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
+        var required = structure?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
         var list = new List<Property>();
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            if (!prop.Constraints.OfType<DefaultValueConstraint>().Any())
+            if (required.Contains(prop.Name)
+                && !prop.Constraints.OfType<DefaultValueConstraint>().Any())
                 continue;
             if (entryAssigned.Contains(prop.Name))
                 continue;
@@ -404,9 +415,10 @@ public sealed partial class DomainToCSharpExporter {
     /// nodes as assign.
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model. Defaulted props ARE constructor
-    /// params (optional overrides), so their constraints are validated too; only
-    /// entry-assigned props (body-initialized, never ctor params) are skipped.
+    /// carry constraints in the current domain model. Requiredness guards come from the
+    /// published fact; a defaulted property's own default supplies the value. Other
+    /// constraint guards still apply to defaulted params. Entry-assigned props are
+    /// body-initialized, never ctor params, so they are skipped.
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
         Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps,
@@ -417,6 +429,8 @@ public sealed partial class DomainToCSharpExporter {
         var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
+        var requiredProps = analysis.GetStructure(entity)?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
@@ -441,37 +455,45 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(resultType, "Failure"),
                     msg));
 
+            // An optional parameter is nullable, so a value constraint only applies
+            // when the caller supplied a value. The printed `&&` lets flow analysis see
+            // a non-null value inside the comparison (and skips an omitted null).
+            var nullableParam = paramRef.TypeReference is OptionalTypeReference;
+            Node WhenPresent(Node condition) => nullableParam
+                ? new Syntactic.And(new NotEqual(paramRef, new Constant(null)), condition)
+                : condition;
+
+            // Required-by-default: the ctor parameter must carry a value, except when
+            // default(...) supplies one. Value types can never be null at runtime, so
+            // only Text/String and nullable reference types need a guard.
+            if (requiredProps.Contains(prop.Name)
+                && !prop.Constraints.Any(c => c is DefaultValueConstraint)) {
+                if (isText) {
+                    checks.Add(new IfStatement(
+                        new Invoke(
+                            new Member(
+                                new PrimitiveTypeReference(PrimType.String),
+                                "IsNullOrEmpty"),
+                            [paramRef]),
+                        new Block([Failure(
+                            $"'{prop.Name}' is required.")])));
+                }
+                else if (IsNullableDomainType(prop.Type.TypeName, domain)) {
+                    checks.Add(new IfStatement(
+                        new Equal(paramRef, new Constant(null)),
+                        new Block([Failure(
+                            $"'{prop.Name}' is required.")])));
+                }
+            }
+
             foreach (var constraint in prop.Constraints) {
                 switch (constraint) {
-                    case RequiredConstraint:
-                        // Required: skip for value types (Number, Boolean,
-                        // DateTime, etc.) — they can never be null at runtime.
-                        // Only Text/String and entity reference types benefit
-                        // from runtime required checks.
-                        if (isText) {
-                            checks.Add(new IfStatement(
-                                new Invoke(
-                                    new Member(
-                                        new PrimitiveTypeReference(PrimType.String),
-                                        "IsNullOrEmpty"),
-                                    [paramRef]),
-                                new Block([Failure(
-                                    $"'{prop.Name}' is required.")])));
-                        }
-                        else if (IsNullableDomainType(prop.Type.TypeName, domain)) {
-                            checks.Add(new IfStatement(
-                                new Equal(paramRef, new Constant(null)),
-                                new Block([Failure(
-                                    $"'{prop.Name}' is required.")])));
-                        }
-                        break;
-
                     case RangeConstraint r:
                         if (isNumber && r.Minimum is not null) {
                             var minVal = ConvertToConstant(r.Minimum);
                             if (minVal is not null) {
                                 checks.Add(new IfStatement(
-                                    new LessThan(paramRef, minVal),
+                                    WhenPresent(new LessThan(paramRef, minVal)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be >= {EffectLoweringPass.FormatConstraintValue(r.Minimum)}.")])));
                             }
@@ -480,7 +502,7 @@ public sealed partial class DomainToCSharpExporter {
                             var maxVal = ConvertToConstant(r.Maximum);
                             if (maxVal is not null) {
                                 checks.Add(new IfStatement(
-                                    new GreaterThan(paramRef, maxVal),
+                                    WhenPresent(new GreaterThan(paramRef, maxVal)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be <= {EffectLoweringPass.FormatConstraintValue(r.Maximum)}.")])));
                             }
@@ -492,15 +514,15 @@ public sealed partial class DomainToCSharpExporter {
                             var lenAccess = new Member(paramRef, "Length");
                             if (l.MinLength > 0) {
                                 checks.Add(new IfStatement(
-                                    new LessThan(lenAccess,
-                                        new Constant((long)l.MinLength)),
+                                    WhenPresent(new LessThan(lenAccess,
+                                        new Constant((long)l.MinLength))),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
                             }
                             if (l.MaxLength < int.MaxValue) {
                                 checks.Add(new IfStatement(
-                                    new GreaterThan(lenAccess,
-                                        new Constant((long)l.MaxLength)),
+                                    WhenPresent(new GreaterThan(lenAccess,
+                                        new Constant((long)l.MaxLength))),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
                             }
@@ -510,14 +532,14 @@ public sealed partial class DomainToCSharpExporter {
                     case PatternConstraint p:
                         if (isText) {
                             checks.Add(new IfStatement(
-                                new Syntactic.Not(
+                                WhenPresent(new Syntactic.Not(
                                     new Invoke(
                                         new Member(
                                             new NamedTypeReference(
                                                 "System.Text.RegularExpressions.Regex"),
                                             "IsMatch"),
                                         [paramRef,
-                                         new Constant(p.Pattern)])),
+                                         new Constant(p.Pattern)]))),
                                 new Block([Failure(
                                     $"'{prop.Name}' does not match the required pattern.")])));
                         }
@@ -526,8 +548,8 @@ public sealed partial class DomainToCSharpExporter {
                     case EqualityConstraint eq:
                         if (eq.ExpectedValue is not null) {
                             checks.Add(new IfStatement(
-                                new NotEqual(paramRef,
-                                    new Constant(eq.ExpectedValue)),
+                                WhenPresent(new NotEqual(paramRef,
+                                    new Constant(eq.ExpectedValue))),
                                 new Block([Failure(
                                     $"'{prop.Name}' must equal {eq.ExpectedValue}.")])));
                         }
@@ -559,7 +581,7 @@ public sealed partial class DomainToCSharpExporter {
                     notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
                 }
                 checks.Add(new IfStatement(
-                    notMember!,
+                    WhenPresent(notMember!),
                     new Block([FailureNode(
                         InvalidEnumMemberMessage(paramRef, enumType.Name, prop.Name))])));
             }

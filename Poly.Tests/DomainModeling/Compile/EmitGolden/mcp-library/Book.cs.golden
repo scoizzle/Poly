@@ -25,6 +25,10 @@ public class Book
         {
             return DomainResult<Book>.Failure("'Copies' must be <= 1000.");
         }
+        if (string.IsNullOrEmpty(isbn))
+        {
+            return DomainResult<Book>.Failure("'Isbn' is required.");
+        }
         if (string.IsNullOrEmpty(title))
         {
             return DomainResult<Book>.Failure("'Title' is required.");

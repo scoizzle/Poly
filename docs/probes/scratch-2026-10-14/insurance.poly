@@ -12,8 +12,8 @@ Payments: contract external paygate v1 {
 }
 
 Policyholder: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   SettledCount: Number default(0)
   claims: many Claim
   Active: stage {
@@ -30,8 +30,8 @@ Policyholder: entity {
 }
 
 Policy: entity {
-  Number: Text unique required length(4, 16)
-  Coverage: Number range(0, 1000000) required
+  Number: Text unique length(4, 16)
+  Coverage: Number range(0, 1000000)
   holder: Policyholder
   claims: many Claim
   ReviewAll: action {
@@ -41,14 +41,14 @@ Policy: entity {
 }
 
 Adjuster: entity {
-  Name: Text required
+  Name: Text
   Specialty: Text
   claims: many Claim
 }
 
 Claim: entity {
-  ClaimNumber: Text unique required
-  Amount: Number range(0, 1000000) required
+  ClaimNumber: Text unique
+  Amount: Number range(0, 1000000)
   Reviewed: Number default(0)
   holder: Policyholder
   cover: Policy
@@ -88,7 +88,7 @@ Claim: entity {
 }
 
 Document: entity {
-  Kind: Text required
+  Kind: Text
   claim: Claim
   Attached: stage { }
 }

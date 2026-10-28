@@ -843,7 +843,7 @@ public sealed class MinimalApiGenerator {
                 result.Add(argument);
                 continue;
             }
-            if (IsTrailingDefault(entity, parameter.Name))
+            if (IsTrailingOmittable(entity, parameter.Name))
                 continue;
             if (!string.Equals(parameter.Name, "db", StringComparison.Ordinal))
                 throw new InvalidOperationException(
@@ -854,14 +854,15 @@ public sealed class MinimalApiGenerator {
         return result;
     }
 
-    private bool IsTrailingDefault(Entity entity, string parameterName) {
+    private bool IsTrailingOmittable(Entity entity, string parameterName) {
         if (!_entityStructureLookup.TryGetValue(entity.Name, out var structure))
             return false;
         foreach (var property in entity.Properties) {
             if (!string.Equals(ToCamelCase(property.Name), parameterName, StringComparison.Ordinal))
                 continue;
-            return property.Constraints.OfType<DefaultValueConstraint>().Any()
-                && !structure.EntryAssignedPropertyNames.Contains(property.Name);
+            return !structure.EntryAssignedPropertyNames.Contains(property.Name)
+                && (!structure.RequiredPropertyNames.Contains(property.Name)
+                    || property.Constraints.OfType<DefaultValueConstraint>().Any());
         }
         return false;
     }
@@ -1010,7 +1011,9 @@ public sealed class MinimalApiGenerator {
     }
 
     /// <summary>The effective constraints for a property: its analysis-verified-or-declared
-    /// range plus the declared length/pattern/required/equality constraints.</summary>
+    /// range, the declared length/pattern/equality constraints, and requiredness.
+    /// A property is required unless it is marked <c>optional</c>, so the action DTO
+    /// still gets <c>[Required]</c> without a <c>required</c> word on the property.</summary>
     private IReadOnlyList<Constraint> EffectivePropertyConstraints(Entity owner, string propertyName) {
         var result = new List<Constraint>();
         var range = GetPropertyRange(owner, propertyName);
@@ -1021,6 +1024,10 @@ public sealed class MinimalApiGenerator {
             result.AddRange(prop.Constraints.Where(c =>
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
                     or EqualityConstraint));
+        if (_entityStructureLookup.TryGetValue(owner.Name, out var structure)
+            && structure.RequiredPropertyNames.Contains(propertyName)
+            && result.All(c => c is not RequiredConstraint))
+            result.Insert(0, new RequiredConstraint());
         return result;
     }
 
@@ -1124,6 +1131,10 @@ public sealed class MinimalApiGenerator {
                     or EqualityConstraint));
 
             var attrs = BuildConstraintAttributes(clrType, effective);
+            // Every member of the create DTO is a required ctor slot (optional
+            // properties are absent from the DTO), so every string member is [Required].
+            if (clrType == "string" && attrs.All(a => a.Name != "Required"))
+                attrs = [new AttributeNode("Required", []), .. attrs];
             // Enum-typed members: the CLR enum type enforces membership at binding; the
             // [EnumDataType] attribute additionally declares the allowed-value union on the
             // contract and fails loud at validation if binding ever bypasses the type.

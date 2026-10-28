@@ -4,8 +4,8 @@ uses temporal
 Term: enum { Fall, Spring, Summer }
 
 Instructor: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   Ready: stage {
     GoOnLeave: action { transition to Leave }
   }
@@ -15,13 +15,13 @@ Instructor: entity {
 }
 
 Course: entity {
-  Code: Text unique required length(3, 12)
-  Title: Text required
+  Code: Text unique length(3, 12)
+  Title: Text
 }
 
 Student: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   MaxCredits: Number range(1, 24) default(18)
   OpenCredits: Number default(0)
   Holds: Number default(0)
@@ -68,7 +68,7 @@ Student: entity {
 }
 
 Section: entity {
-  Cap: Number range(1, 200) required
+  Cap: Number range(1, 200)
   SeatsTaken: Number default(0)
   OfferingTerm: Term
   course: Course

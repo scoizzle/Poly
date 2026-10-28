@@ -248,7 +248,7 @@ public class ActionEntityReturnTests {
         // (Token.Lexeme) — otherwise the generated Create factory throws at runtime.
         var message = EvolveExpectingError("""
             domain CreateReq
-            Token: entity { Lexeme: Text required }
+            Token: entity { Lexeme: Text }
             Box: entity {
               tokens: many Token
               Make: action -> Token {
@@ -264,7 +264,7 @@ public class ActionEntityReturnTests {
         // Providing every required property → no DMEFF011.
         var (_, analysis) = Evolve("""
             domain CreateOk
-            Token: entity { Lexeme: Text required }
+            Token: entity { Lexeme: Text }
             Box: entity {
               tokens: many Token
               Make: action -> Token {
@@ -285,7 +285,7 @@ public class ActionEntityReturnTests {
         var (_, analysis) = Evolve("""
             domain CreateBackRef
             Pet: entity {
-              Name: Text required
+              Name: Text
               owner: Owner
             }
             Owner: entity {
@@ -306,7 +306,7 @@ public class ActionEntityReturnTests {
         var message = EvolveExpectingError("""
             domain CreateNonBackRef
             Pet: entity {
-              Name: Text required
+              Name: Text
               owner: Owner
             }
             Owner: entity {
@@ -324,7 +324,7 @@ public class ActionEntityReturnTests {
         // A required property WITH a default does not need an explicit initializer.
         var (_, analysis) = Evolve("""
             domain CreateDefault
-            Token: entity { Lexeme: Text required default("let") }
+            Token: entity { Lexeme: Text default("let") }
             Box: entity {
               tokens: many Token
               Make: action -> Token {
@@ -399,7 +399,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_CreateInNavInitializerUniqueCollision_IsFailure() {
         var (domain, _) = Evolve("""
             domain Test
-            Book: entity { ISBN: Text unique required }
+            Book: entity { ISBN: Text unique }
             Patron: entity {
               loans: many Loan
               CheckOut: action (book: Book) {
@@ -429,7 +429,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text required pattern("^[A-Z0-9]{2,8}$")
+              Plate: Text pattern("^[A-Z0-9]{2,8}$")
             }
             Lot: entity {
               Occupied: Number default(0)
@@ -458,7 +458,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Occupied: Number default(0)
@@ -522,7 +522,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 assign Plate to plate
               }
@@ -549,7 +549,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Occupied: Number default(0)
@@ -584,7 +584,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             """);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
@@ -613,7 +613,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate != "") {
                   assign Plate to plate
@@ -642,7 +642,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate == "") {
                 } else {
@@ -672,7 +672,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate != "") {
                   if (plate != "") {
@@ -703,7 +703,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Create: Boolean default(false)
@@ -754,7 +754,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Create: Boolean default(true)
@@ -790,9 +790,9 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_RequireRelExists_BlocksWhenUnlinked() {
         var (domain, _) = Evolve("""
             domain Campus
-            Advisor: entity { Name: Text required }
+            Advisor: entity { Name: Text }
             Student: entity {
-              Name: Text required
+              Name: Text
               Meetings: Number default(0)
               advisor: Advisor
               HasAdvisor: policy { advisor exists }
@@ -821,9 +821,9 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_RequireCustomerExists_BlocksWhenUnlinked() {
         var (domain, _) = Evolve("""
             domain Billing
-            Customer: entity { Name: Text required }
+            Customer: entity { Name: Text }
             Line: entity {
-              Sku: Text required
+              Sku: Text
               Open: stage {
                 Post: action { transition to Posted }
               }
@@ -861,7 +861,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Kitchen
             Station: entity {
-              Name: Text required
+              Name: Text
               Ready: stage {
                 Fire: action { transition to Busy }
               }
@@ -870,7 +870,7 @@ public class ActionEntityReturnTests {
               }
             }
             Ticket: entity {
-              TableNo: Text required
+              TableNo: Text
               station: Station
               Queued: stage {
                 Send: action {
@@ -924,7 +924,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -954,7 +954,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -981,7 +981,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1010,7 +1010,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1041,8 +1041,8 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
-              Rate: Number range(1, 999) required
+              Nights: Number range(1, 21)
+              Rate: Number range(1, 999)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1071,8 +1071,8 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
-              Rate: Number range(1, 999) required
+              Nights: Number range(1, 21)
+              Rate: Number range(1, 999)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1102,11 +1102,11 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              A: Number range(1, 9) required
-              B: Number range(1, 9) required
-              C: Number range(1, 9) required
-              D: Number range(1, 9) required
-              E: Number range(1, 9) required
+              A: Number range(1, 9)
+              B: Number range(1, 9)
+              C: Number range(1, 9)
+              D: Number range(1, 9)
+              E: Number range(1, 9)
             }
             Guest: entity {
               Book: action (a: Number, b: Number, c: Number, d: Number, e: Number, confirm: Boolean) {
@@ -1139,11 +1139,11 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              A: Number range(1, 9) required
-              B: Number range(1, 9) required
-              C: Number range(1, 9) required
-              D: Number range(1, 9) required
-              E: Number range(1, 9) required
+              A: Number range(1, 9)
+              B: Number range(1, 9)
+              C: Number range(1, 9)
+              D: Number range(1, 9)
+              E: Number range(1, 9)
             }
             Guest: entity {
               Book: action (a: Number, b: Number, c: Number, d: Number, e: Number, confirm: Boolean) {
@@ -1177,7 +1177,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1209,7 +1209,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1253,7 +1253,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1299,7 +1299,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1344,7 +1344,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               Flag: Number default(1)
@@ -1368,7 +1368,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Code: Text pattern("^[A-Z]{3}$") required
+              Code: Text pattern("^[A-Z]{3}$")
             }
             Guest: entity {
               Flag: Number default(1)
@@ -1399,7 +1399,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               Flag: Number default(1)
@@ -1430,7 +1430,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Code: Text pattern("^[A-Z]{3}$") required
+              Code: Text pattern("^[A-Z]{3}$")
             }
             Guest: entity {
               Flag: Number default(1)
@@ -1463,7 +1463,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Code: Text pattern("^[A-Z]{3}$") required
+              Code: Text pattern("^[A-Z]{3}$")
             }
             Guest: entity {
               Flag: Number default(1)
@@ -1499,7 +1499,7 @@ public class ActionEntityReturnTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Patron: entity {
               Flag: Text
@@ -1651,7 +1651,7 @@ public class ActionEntityReturnTests {
               Used: Number default(0)
               Apply: action (item: Widget) { assign Used to Used + 1 }
             }
-            Gadget: entity { Name: Text required }
+            Gadget: entity { Name: Text }
             Host: entity {
               widget: Widget
               Open: stage {

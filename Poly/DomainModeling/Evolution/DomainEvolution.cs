@@ -74,7 +74,7 @@ public sealed class DomainEvolution {
     private (Domain Domain, IReadOnlyList<Node> ModifiedNodes, IReadOnlyList<string> Errors) ApplyChanges(
         Domain current,
         IReadOnlyList<DomainChange> changes,
-        MutationTargetIndexMetadata mutationIndex) {
+        MutationTargetIndexMetadata? mutationIndex) {
         if (changes.Count == 0)
             return (current, [], []);
 
@@ -87,12 +87,16 @@ public sealed class DomainEvolution {
         return (context.ToDomain(), context.ModifiedNodes, context.Errors);
     }
 
-    private MutationTargetIndexMetadata ResolveMutationTargetIndex(
+    private MutationTargetIndexMetadata? ResolveMutationTargetIndex(
         AnalysisResult? priorAnalysis,
         DomainSession? session) {
         var index = priorAnalysis?.GetMutationIndex(_current);
         if (index is not null)
             return index;
+
+        // An empty seed has no mutation targets, so no seed analysis runs.
+        if (_current.Types.Count == 0)
+            return null;
 
         var currentAnalysis = ResolveSession(_current, session).Analyze(_current);
         return currentAnalysis.GetMutationIndex(_current)

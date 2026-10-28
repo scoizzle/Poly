@@ -13,7 +13,7 @@ Money: value {
 }
 
 Customer: entity {
-  Name: Text required
+  Name: Text
   disputes: many Dispute
 
   NoLost: policy { none disputes where Outcome == "Lost" }
@@ -25,7 +25,7 @@ Customer: entity {
 }
 
 Dispute: entity {
-  Reason: Text required
+  Reason: Text
   Disputed: Money
   Outcome: Outcome default(Pending)
 

@@ -158,11 +158,11 @@ public class McpSmokeTests {
             domain Demo
 
             Account: entity {
-              Name: Text required
+              Name: Text
             }
 
             Lead: entity {
-              Name: Text required
+              Name: Text
               account: Account
             }
             """);
@@ -878,8 +878,8 @@ public class McpSmokeTests {
             domain Orders
 
             Product: entity {
-              SKU: Text required unique
-              Name: Text required
+              SKU: Text unique
+              Name: Text
             }
             """);
 
@@ -913,7 +913,7 @@ public class McpSmokeTests {
             domain Orders
 
             Customer: entity {
-              Name: Text required
+              Name: Text
               Places: many Order
             }
 
@@ -978,8 +978,8 @@ public class McpSmokeTests {
             domain Test
 
             Item: entity {
-              SKU: Text required unique
-              Name: Text required
+              SKU: Text unique
+              Name: Text
             }
             """);
 
@@ -992,7 +992,7 @@ public class McpSmokeTests {
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!).Contains("domain Test");
         await Assert.That(poly).Contains("Item: entity");
-        await Assert.That(poly).Contains("SKU: Text required unique");
+        await Assert.That(poly).Contains("SKU: Text unique");
 
         // Round-trip it: re-apply and verify
         var response2 = McpTestTools.Dsl.ApplyDsl(sessionId, poly!);
@@ -1519,7 +1519,7 @@ public class McpSmokeTests {
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Support
             Agent: entity {
-              Handle: Text unique required
+              Handle: Text unique
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
@@ -1538,9 +1538,9 @@ public class McpSmokeTests {
         var (sessionId, _) = McpTestTools.Store.Create("Billing");
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Billing
-            Customer: entity { Name: Text required }
+            Customer: entity { Name: Text }
             Line: entity {
-              Sku: Text required
+              Sku: Text
               Open: stage {
                 Post: action { transition to Posted }
               }
@@ -2680,7 +2680,7 @@ E: entity {{
             domain Test
             Tier: enum { Basic, Plus, Elite }
             Member: entity {
-              Name: Text required
+              Name: Text
               Level: Tier
             }
             """);
@@ -2748,7 +2748,7 @@ E: entity {{
             domain Test
             Status: enum { Off, On }
             Rack: entity {
-              Name: Text required
+              Name: Text
               LastPing: Text default("none")
               Power: Number default(10)
               Status: Status default(On)
@@ -3398,7 +3398,7 @@ E: entity {{
             domain Test
             Item: entity {
               Code: Text unique column("C")
-              Name: Text column("N") required
+              Name: Text column("N")
               Qty: Number range(0,) column("Q")
               Flag: Boolean column("F") unique
             }
@@ -3410,7 +3410,7 @@ E: entity {{
         await Assert.That(export.Success).IsTrue();
         var poly = extractPolyFromExport(export);
         await Assert.That(poly).Contains("unique column(\"C\")");
-        await Assert.That(poly).Contains("required column(\"N\")");
+        await Assert.That(poly).Contains("column(\"N\")");
         await Assert.That(poly).Contains("range(0, ) column(\"Q\")");
         await Assert.That(poly).Contains("unique column(\"F\")");
 

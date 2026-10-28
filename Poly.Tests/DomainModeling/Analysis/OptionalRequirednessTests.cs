@@ -53,19 +53,19 @@ public class OptionalRequirednessTests {
     }
 
     [Test]
-    public async Task Analyze_RequiredAndOptional_ReportsError() {
-        var message = EvolveExpectingError("""
+    public async Task Parse_RequiredWord_IsRejected() {
+        var message = Assert.Throws<FormatException>(() => Evolve("""
             domain Both
             Token: entity { Lexeme: Text required optional }
-            """);
-        await Assert.That(message).Contains("both 'required' and 'optional'");
+            """));
+        await Assert.That(message!.Message).Contains("'required' is not a constraint");
     }
 
     [Test]
     public async Task Analyze_RequiredWithDefault_MayBeOmitted() {
         var (domain, analysis) = Evolve("""
             domain CreateDefault
-            Token: entity { Lexeme: Text required default("let") }
+            Token: entity { Lexeme: Text default("let") }
             Box: entity {
               tokens: many Token
               Make: action -> Token {

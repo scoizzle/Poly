@@ -188,6 +188,7 @@ public sealed class DomainResolver : DslCursor {
                 "Enable a pack that registers this keyword, or remove the annotation.");
         }
 
+        RejectRetiredRequiredWord();
         Expect(TokenKind.LBrace);
 
         EnsurePrimitivesOnce(changes);
@@ -414,6 +415,8 @@ public sealed class DomainResolver : DslCursor {
 
             break;
         }
+
+        RejectRetiredRequiredWord();
     }
 
     /// <summary>
@@ -1114,6 +1117,7 @@ public sealed class DomainResolver : DslCursor {
                 if (c is not null)
                     constraints.Add(c);
             }
+            RejectRetiredRequiredWord();
             properties.Add(new Property(propName, new DomainTypeReference(typeName), constraints));
         }
         Expect(TokenKind.RBrace);
@@ -1300,6 +1304,7 @@ public sealed class DomainResolver : DslCursor {
         }
         var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
 
+        RejectRetiredRequiredWord();
         _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned));
     }
 
@@ -1420,10 +1425,6 @@ public sealed class DomainResolver : DslCursor {
 
     private Constraint? ParseConstraint() {
         switch (Current.Kind) {
-            case TokenKind.Required:
-                Advance();
-                return new RequiredConstraint();
-
             case TokenKind.Optional:
                 Advance();
                 return new OptionalConstraint();
@@ -1553,11 +1554,25 @@ public sealed class DomainResolver : DslCursor {
     };
 
     private static bool IsConstraint(TokenKind kind) => kind switch {
-        TokenKind.Required or TokenKind.Optional or TokenKind.Unique or TokenKind.Range
+        TokenKind.Optional or TokenKind.Unique or TokenKind.Range
             or TokenKind.Length or TokenKind.Pattern
             or TokenKind.Equals or TokenKind.Equality or TokenKind.Enum => true,
         _ => false,
     };
+
+    /// <summary>
+    /// <c>required</c> is not a constraint. A property is required unless it is marked
+    /// <c>optional</c>. A member whose name is <c>required</c> stays legal
+    /// (<c>required: Text</c>).
+    /// </summary>
+    private void RejectRetiredRequiredWord() {
+        if (Current.Kind == TokenKind.Identifier
+            && string.Equals(Current.Text, "required", StringComparison.Ordinal)
+            && !PeekIs(TokenKind.Colon)) {
+            throw Error(
+                "'required' is not a constraint. A property is required unless it is marked 'optional'.");
+        }
+    }
 
     private static readonly HashSet<string> _unsupportedKeywords = new(StringComparer.OrdinalIgnoreCase) {
         "actor", "schedule", "parallel", "for", "function"

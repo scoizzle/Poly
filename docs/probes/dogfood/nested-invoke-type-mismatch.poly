@@ -13,7 +13,7 @@ Widget: entity {
 }
 
 Gadget: entity {
-  Name: Text required
+  Name: Text
 }
 
 Child: entity {

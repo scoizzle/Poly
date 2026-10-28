@@ -23,7 +23,7 @@ public class CreateInWatchedStageTests {
           Start: action { create in jobs { Title: "a" } }
         }
         Job: entity {
-          Title: Text required
+          Title: Text
           Open: stage { }
         }
         """;
@@ -37,7 +37,7 @@ public class CreateInWatchedStageTests {
           Start: action { create in jobs { Title: "a" } }
         }
         Job: entity {
-          Title: Text required
+          Title: Text
           New: stage { }
           Open: stage { }
         }

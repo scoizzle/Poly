@@ -78,7 +78,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 assign Plate to plate
               }
@@ -152,7 +152,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate != "") {
                   assign Plate to plate

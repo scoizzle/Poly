@@ -22,7 +22,7 @@ public class C1aRootProgramParamsTests {
     public async Task C1a_ActionWithParams_ModuleBodyKeepsParameter_AndInvokeBindsPlate() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {

@@ -2,7 +2,7 @@ domain JobQueue
 uses temporal
 
 Queue: entity {
-  Name: Text required
+  Name: Text
   FinishedCount: Number default(0)
   FailedCount: Number default(0)
   LastJob: Text
@@ -23,7 +23,7 @@ Queue: entity {
 }
 
 Job: entity {
-  Title: Text required
+  Title: Text
   Retries: Number default(0)
   MaxRetries: Number default(3)
 

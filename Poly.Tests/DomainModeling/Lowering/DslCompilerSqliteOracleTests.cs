@@ -343,7 +343,7 @@ public class DslCompilerSqliteOracleTests {
         var result = compiler.Compile("""
             domain Demo
             Book: entity {
-              Title: Text required length(2, 50)
+              Title: Text length(2, 50)
               Code: Text pattern("^[A-Z]{2}-[0-9]{3}$")
               Pages: Number range(1, 10000)
 

@@ -8,7 +8,7 @@ Mode: enum {
 }
 
 Query: entity {
-  PatternText: Text required
+  PatternText: Text
   MatchMode: Mode default(Fixed)
   IgnoreCase: Boolean default(false)
   Invert: Boolean default(false)
@@ -42,7 +42,7 @@ Query: entity {
 }
 
 Source: entity {
-  Path: Text required
+  Path: Text
   HitCount: Number default(0)
   lines: many owned Line
   hits: many owned Hit
@@ -70,8 +70,8 @@ Source: entity {
 }
 
 Line: entity {
-  LineNo: Number required
-  Content: Text required
+  LineNo: Number
+  Content: Text
 
   Unmarked: stage {
     Check: action (needle: Text) {
@@ -90,6 +90,6 @@ Line: entity {
 }
 
 Hit: entity {
-  LineNumber: Number required
-  Content: Text required
+  LineNumber: Number
+  Content: Text
 }

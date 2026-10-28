@@ -22,7 +22,7 @@ namespace Poly.Tests.DomainModeling.Compile;
 public class ContributedMethodTests {
     private const string Poly = """
         domain Lab
-        Widget: entity { Code: Text required unique }
+        Widget: entity { Code: Text unique }
         Lot: entity {
           widgets: many Widget
           Note: Text optional
@@ -38,7 +38,7 @@ public class ContributedMethodTests {
     private const string PolyWithDefaults = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
           tags: many Tag
         }
         Tag: entity {
@@ -54,7 +54,7 @@ public class ContributedMethodTests {
     private const string PolyTwoUnique = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
           Sku: Text optional unique
         }
         Lot: entity {
@@ -67,14 +67,14 @@ public class ContributedMethodTests {
     private const string PolyRootUnique = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
         }
         """;
 
     private const string PolyRootUniqueWithNav = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
           tags: many Tag
         }
         Tag: entity { Label: Text }

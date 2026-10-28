@@ -1011,7 +1011,9 @@ public sealed class MinimalApiGenerator {
     }
 
     /// <summary>The effective constraints for a property: its analysis-verified-or-declared
-    /// range plus the declared length/pattern/required/equality constraints.</summary>
+    /// range, the declared length/pattern/equality constraints, and requiredness.
+    /// A property is required unless it is marked <c>optional</c>, so the action DTO
+    /// still gets <c>[Required]</c> without a <c>required</c> word on the property.</summary>
     private IReadOnlyList<Constraint> EffectivePropertyConstraints(Entity owner, string propertyName) {
         var result = new List<Constraint>();
         var range = GetPropertyRange(owner, propertyName);
@@ -1022,6 +1024,10 @@ public sealed class MinimalApiGenerator {
             result.AddRange(prop.Constraints.Where(c =>
                 c is LengthConstraint or PatternConstraint or RequiredConstraint
                     or EqualityConstraint));
+        if (_entityStructureLookup.TryGetValue(owner.Name, out var structure)
+            && structure.RequiredPropertyNames.Contains(propertyName)
+            && result.All(c => c is not RequiredConstraint))
+            result.Insert(0, new RequiredConstraint());
         return result;
     }
 

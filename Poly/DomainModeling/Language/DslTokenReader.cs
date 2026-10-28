@@ -204,7 +204,6 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "Text" => DslTokenKind.Text,
         "Number" => DslTokenKind.NumberType,
         "Boolean" => DslTokenKind.BooleanType,
-        "required" => DslTokenKind.Required,
         "optional" => DslTokenKind.Optional,
         "unique" => DslTokenKind.Unique,
         "range" => DslTokenKind.Range,

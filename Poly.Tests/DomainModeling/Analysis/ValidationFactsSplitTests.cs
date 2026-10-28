@@ -28,7 +28,7 @@ public class ValidationFactsSplitTests {
         var domain = ParseDomain("""
             domain Test
             Customer: entity {
-              Name: Text required
+              Name: Text
               Email: Text
               HasName: policy { Name exists }
               Active: stage {

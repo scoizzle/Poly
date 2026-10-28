@@ -20,7 +20,7 @@ public class SliceASharedModuleBodyTests {
     public async Task SliceA_SharedModuleBody_InterpreterAndPrint_AgreeWithoutConsumerFlag() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {

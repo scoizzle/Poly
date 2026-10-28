@@ -67,9 +67,9 @@ public class ParityTests {
     const string PolicyDsl = """
         domain Library
         Patron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique
-          MaxItems: Number range(0, 20) required
+          MaxItems: Number range(0, 20)
           loans: many Loan
           HasOverdueLoans: policy { any loans where Status is "Overdue" }
         }
@@ -81,9 +81,9 @@ public class ParityTests {
     const string QuantifierDsl = """
         domain Library
         Patron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique
-          MaxItems: Number range(0, 20) required
+          MaxItems: Number range(0, 20)
           loans: many Loan
           AllActiveLoans: policy { all loans where Status is "Active" }
           NoneLostLoans: policy { none loans where Status is "Lost" }
@@ -161,7 +161,7 @@ public class ParityTests {
     const string RequiredDsl = """
         domain Lab
         Widget: entity {
-          Name: Text required
+          Name: Text
         }
         """;
 
@@ -189,7 +189,7 @@ public class ParityTests {
     const string AssignRequiredDsl = """
         domain Lab
         Person: entity {
-          Name: Text required
+          Name: Text
           Rename: action (name: Text) {
             assign Name to name
           }

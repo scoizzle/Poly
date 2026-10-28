@@ -1,7 +1,7 @@
 domain Library
 
 Patron: entity {
-  Name: Text required
+  Name: Text
   Status: Text default("Active")
   GoodStanding: policy { Status is "Active" }
   loans: many Loan
@@ -19,7 +19,7 @@ Patron: entity {
 }
 
 Book: entity {
-  Title: Text required
+  Title: Text
   Isbn: Text unique
   Copies: Number range(0, 1000) default(1)
 }

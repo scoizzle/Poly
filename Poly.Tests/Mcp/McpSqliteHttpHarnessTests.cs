@@ -16,7 +16,7 @@ public sealed class McpSqliteHttpHarnessTests {
         uses http
 
         Item: entity {
-          Name: Text required
+          Name: Text
           Qty: Number
           Bump: action { assign Qty to Qty + 1 }
         }

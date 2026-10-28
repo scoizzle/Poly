@@ -21,7 +21,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -166,7 +166,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -230,7 +230,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -245,7 +245,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -259,7 +259,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 AssessByType: action { }
               }
@@ -277,7 +277,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
             }
             """);
         var fromAnalysis = RuntimeAnalysisCache.Analysis(domain);
@@ -290,7 +290,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
             }
             Fine: entity {
@@ -313,7 +313,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
             }
             """);
         var first = RuntimeAnalysisCache.Index(domain);

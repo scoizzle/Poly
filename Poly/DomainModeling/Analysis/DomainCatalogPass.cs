@@ -192,7 +192,7 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
         if (primitiveType.TypeCategory.Is(TypeCategory.Nullable)) {
             context.ReportError(
                 primitiveType,
-                $"Primitive '{primitiveType.Name}' must not use TypeCategory.Nullable. Domain nullability is modeled by requiredness (`required` by default, `optional` to opt out).",
+                $"Primitive '{primitiveType.Name}' must not use TypeCategory.Nullable. Domain nullability is modeled by requiredness (required unless marked `optional`).",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
 

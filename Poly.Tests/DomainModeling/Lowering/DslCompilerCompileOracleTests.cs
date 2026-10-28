@@ -19,13 +19,13 @@ public class DslCompilerCompileOracleTests {
         domain Library
 
         Book: entity {
-          Title: Text required
+          Title: Text
           ISBN: Text unique
           Pages: Number range(1, 10000)
         }
 
         Patron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique
           loans: many Loan
           CheckOut: action -> Loan {

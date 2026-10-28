@@ -53,7 +53,7 @@ public sealed class AnalysisReportArtifactTests {
         const string dsl = """
             domain Spotless
             Item: entity {
-              Name: Text required
+              Name: Text
               Open: stage { }
             }
             """;
@@ -93,7 +93,7 @@ public sealed class AnalysisReportArtifactTests {
         const string dsl = """
             domain Spotless
             Item: entity {
-              Name: Text required
+              Name: Text
               Open: stage { }
             }
             """;

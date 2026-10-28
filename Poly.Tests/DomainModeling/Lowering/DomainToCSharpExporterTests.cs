@@ -27,19 +27,19 @@ public class DomainToCSharpExporterTests {
         PremiumTier: enum { Silver, Gold, Platinum }
 
         Book: entity {
-          Title: Text required
-          Author: Text required
+          Title: Text
+          Author: Text
           ISBN: Text unique length(10, 17)
           Pages: Number range(1, 10000)
           Genre: Genre
         }
 
         Patron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique pattern("^[^@]+@[^@]+$")
           MemberSince: Date default(Today)
           Status: PatronStatus default(Active)
-          MaxItems: Number range(0, 20) required
+          MaxItems: Number range(0, 20)
           CurrentBorrowCount: Number default(0)
           OutstandingFines: Number default(0)
           loans: many Loan
@@ -115,7 +115,7 @@ public class DomainToCSharpExporterTests {
         }
 
         Fine: entity {
-          Amount: Number required
+          Amount: Number
           Reason: Text
           DateIssued: DateTime default(Now)
           Paid: Boolean optional
@@ -140,7 +140,7 @@ public class DomainToCSharpExporterTests {
         }
 
         PremiumPatron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique pattern("^[^@]+@[^@]+$")
           RewardPoints: Number
           Tier: PremiumTier default(Silver)
@@ -469,7 +469,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               Total: Number range(0, )
               customer: Customer
               lines: many OrderLine
@@ -477,7 +477,7 @@ public class DomainToCSharpExporterTests {
             }
 
             OrderLine: entity {
-              Sku: Text required
+              Sku: Text
             }
 
             Note: entity {
@@ -515,7 +515,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               customer: Customer
             }
             """;
@@ -555,7 +555,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               customer: Customer
               primaryContact: Customer
             }
@@ -1380,7 +1380,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               Total: Number range(0, )
               customer: Customer
               lines: many OrderLine
@@ -1388,7 +1388,7 @@ public class DomainToCSharpExporterTests {
             }
 
             OrderLine: entity {
-              Sku: Text required
+              Sku: Text
             }
 
             Note: entity {
@@ -1444,7 +1444,7 @@ public class DomainToCSharpExporterTests {
             TokenKind: enum { Identifier, Numeric, Keyword }
 
             Token: entity {
-              Kind: TokenKind required
+              Kind: TokenKind
             }
 
             Box: entity {
@@ -1536,7 +1536,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Campus
             Advisor: entity {
-              Name: Text required
+              Name: Text
               Age: Number
             }
             Customer: entity {
@@ -1563,7 +1563,7 @@ public class DomainToCSharpExporterTests {
 
             Token: entity { Kind: Text }
             Compilation: entity {
-              Name: Text required
+              Name: Text
               tokens: many Token
               Build: action -> Token {
                 create in tokens { Kind: "k" }
@@ -1695,7 +1695,7 @@ public class DomainToCSharpExporterTests {
             domain Demo
             Severity: enum { Hint, Warning, Error }
             Diagnostic: entity {
-              Code: Text required
+              Code: Text
               Severity: Severity default(Warning)
             }
             Compilation: entity {
@@ -1912,7 +1912,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Pallet: entity { Qty: Number }
             Dock: entity {
-              Name: Text required
+              Name: Text
               pallets: many Pallet
             }
             """);
@@ -1929,7 +1929,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -1978,9 +1978,9 @@ public class DomainToCSharpExporterTests {
     public async Task Export_SingularNav_IsOptionalCtorParam() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Campus
-            Advisor: entity { Name: Text required }
+            Advisor: entity { Name: Text }
             Student: entity {
-              Name: Text required
+              Name: Text
               advisor: Advisor
             }
             """);
@@ -2026,7 +2026,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Gym
             Member: entity {
-              Email: Text required
+              Email: Text
               Visits: Number default(0)
               Active: stage {
                 entry { assign Visits to 0 }
@@ -2128,7 +2128,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Tier: enum { Basic, Plus }
             Product: entity {
-              SKU: Text required
+              SKU: Text
               Tier: Tier default(Basic)
               make: action { create Product { SKU: "P1" Tier: Plus } }
             }
@@ -2151,15 +2151,15 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
               AssessByType: action -> Fine {
                 create Fine { Amount: 5 Reason: "TypeCreate" }
               }
             }
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
               patron: Patron
             }
             """);
@@ -2186,18 +2186,18 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Clerk: entity {
-              Name: Text required
+              Name: Text
               Hire: action (name: Text) -> Patron {
                 create Patron { Name: name }
               }
             }
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
             }
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
             }
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
@@ -2216,7 +2216,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             TokenKind: enum { Keyword, Identifier }
             Token: entity {
-              Lexeme: Text required
+              Lexeme: Text
               Kind: TokenKind
             }
             Compilation: entity {
@@ -2359,7 +2359,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             File: entity {
-              Name: Text required
+              Name: Text
               Content: Text
               Mode: Number
             }
@@ -2410,7 +2410,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2441,7 +2441,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2470,7 +2470,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2502,7 +2502,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2534,7 +2534,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2569,7 +2569,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2605,7 +2605,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Create: Boolean default(true)
@@ -2640,7 +2640,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2673,7 +2673,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2705,7 +2705,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Code: Text pattern("^[A-Z]{3}$") required
+              Code: Text pattern("^[A-Z]{3}$")
             }
             Guest: entity {
               Flag: Number default(1)
@@ -2745,11 +2745,11 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain CrmTiny
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
             }
             Contact: entity {
-              Name: Text required
+              Name: Text
               account: owned Account
               OpenAccount: action (name: Text) {
                 create in account { Name: name }
@@ -2882,11 +2882,11 @@ public class DomainToCSharpExporterTests {
     private const string PublicCreateWireInversesDsl = """
         domain HotelStay
         Guest: entity {
-          Name: Text required
+          Name: Text
           reservations: many Reservation
         }
         Room: entity {
-          Number: Text required
+          Number: Text
           Occupied: Boolean default(false)
           stays: many Reservation
           when stays InHouse {

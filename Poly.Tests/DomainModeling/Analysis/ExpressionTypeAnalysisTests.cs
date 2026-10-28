@@ -441,7 +441,7 @@ public class ExpressionTypeAnalysisTests {
               Used: Number default(0)
               Apply: action (item: Widget) { assign Used to Used + 1 }
             }
-            Gadget: entity { Name: Text required }
+            Gadget: entity { Name: Text }
             Host: entity {
               widget: Widget
               Open: stage {

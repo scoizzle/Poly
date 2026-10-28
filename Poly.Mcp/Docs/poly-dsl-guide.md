@@ -95,8 +95,8 @@ value bag / constructor parameter like a scalar initializer.
 created entity must be provided in the `create` / `create in` initializers,
 unless it has a `default` or the first stage's `entry` effects assign it. Only
 scalar/enum-typed properties carry constraints — navigation properties cannot be
-marked either way in that tail (`nav: Type required` / `optional` is a parse
-error), so the back-reference exemption simply means the auto-wired nav needs no
+marked `optional` (`nav: Type optional` is a parse error), and `required` is not
+a constraint word, so the back-reference exemption simply means the auto-wired nav needs no
 initializer value. Analysis rejects a create that omits a required property — the
 generated `Create` factory would otherwise throw at runtime.
 
@@ -294,7 +294,6 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
-| Required | `required` | `Name: Text required` |
 | Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
@@ -311,7 +310,7 @@ to set a default value:
 Color: enum { Red, Green, Blue }
 
 Item: entity {
-  Name: Text required
+  Name: Text
   Color: Color default(Red)     // typed by enum, default by member name
   Status: MemberStatus default(Active)
 }
@@ -336,9 +335,8 @@ Token: entity {
 ```
 
 A property without `optional` rejects a missing or empty Text value when it is written.
-`required` is only the explicit spelling of that default. Carrying both `required` and
-`optional` on one property is an analysis error — required is the default and `optional`
-is its opt-out.
+The word `required` is not a constraint. Writing it is a positioned parse error:
+a property is required unless it is marked `optional`.
 
 `optional` applies to entity properties only. Value-type (`value { ... }`) and contract
 payload members are always required fields; `optional` there is a positioned parse error.
@@ -366,7 +364,7 @@ not matter:
 ```poly
 Item: entity table("INVENTORY") {
   Code: Text unique column("CODE", "VARCHAR2(20)")
-  Name: Text column("NAME") required
+  Name: Text column("NAME")
   Qty: Number range(0, ) column("QUANTITY")
 }
 ```
@@ -1108,7 +1106,6 @@ SetName: action (newName: Text) {
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
-| Required | `required` | `Name: Text required` |
 | Optional | `optional` | `Note: Text optional` |
 | Unique | `unique` | `Email: Text unique` |
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
@@ -1140,7 +1137,7 @@ attributes below. What reaches the database:
 | `range` | `HasCheckConstraint` only when invariant analysis verified every writer stays inside the range. An unverified range is not a CHECK. |
 | `length(min, max)` | `HasMaxLength(max)` only. The minimum is not a CHECK. |
 | `pattern` | No SQL projection. The pattern is still enforced when the VM writes the value. |
-| `required` (or no `optional`) | `IsRequired()` for reference-typed columns. |
+| no `optional` | `IsRequired()` for reference-typed columns. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
 Minimal API transport projects them onto DTO validation attributes, so the API boundary
@@ -1153,7 +1150,7 @@ enforces the same envelopes the domain declares:
   it; otherwise the declared range.
 - `length(min, max)` → `[MinLength(min)]` + `[MaxLength(max)]`.
 - `pattern(regex)` → `[RegularExpression(regex)]`.
-- `required` (or no `optional`) → `[Required]` (reference-typed properties). Every
+- no `optional` → `[Required]` (reference-typed properties). Every
   string member of the create DTO is `[Required]`: each member is a required ctor
   slot, and optional members are absent from that DTO.
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
@@ -1241,7 +1238,7 @@ uses temporal
 uses storage
 
 Customer: entity {
-  Name: Text required
+  Name: Text
   Email: Text unique
   orders: many Order
 }

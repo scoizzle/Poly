@@ -1,5 +1,6 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 
@@ -51,5 +52,69 @@ public sealed class OptionalKeywordTests {
             """));
         await Assert.That(message!.Message).Contains("optional");
         await Assert.That(message.Message).Contains("value-type members");
+    }
+
+    [Test]
+    public async Task Parse_RequiredWord_IsRejected() {
+        var message = Assert.Throws<FormatException>(() => Parse("""
+            domain D
+            Token: entity { Note: Text required }
+            """));
+        await Assert.That(message!.Message).Contains("'required' is not a constraint");
+        await Assert.That(message.Message).Contains("optional");
+    }
+
+    [Test]
+    public async Task Parse_RequiredWord_AfterAnotherConstraint_IsRejected() {
+        var message = Assert.Throws<FormatException>(() => Parse("""
+            domain D
+            Token: entity { Code: Text unique required }
+            """));
+        await Assert.That(message!.Message).Contains("'required' is not a constraint");
+    }
+
+    [Test]
+    public async Task Parse_RequiredWord_OnValueType_IsRejected() {
+        var message = Assert.Throws<FormatException>(() => Parse("""
+            domain D
+            Payload: value { Note: Text required }
+            """));
+        await Assert.That(message!.Message).Contains("'required' is not a constraint");
+    }
+
+    [Test]
+    public async Task Parse_RequiredWord_OnNavigation_IsRejected() {
+        var message = Assert.Throws<FormatException>(() => Parse("""
+            domain D
+            Item: entity { Name: Text }
+            Box: entity { items: many Item required }
+            """));
+        await Assert.That(message!.Message).Contains("'required' is not a constraint");
+    }
+
+    [Test]
+    public async Task Parse_PropertyNamedRequired_IsLegal() {
+        var domain = Parse("""
+            domain D
+            Token: entity { required: Text }
+            """);
+        var property = domain.Types.OfType<Entity>().Single().Properties.Single();
+        await Assert.That(property.Name).IsEqualTo("required");
+        await Assert.That(property.Constraints.Any(c => c is RequiredConstraint)).IsFalse();
+    }
+
+    [Test]
+    public async Task Print_RequiredConstraint_OmitsTheWord() {
+        var domain = new Domain("D", [
+            new Entity("Token", [
+                new Property("Note", new DomainTypeReference("Text"), [
+                    new RequiredConstraint(),
+                    new UniqueConstraint(),
+                ]),
+            ], [], [], []),
+        ]);
+        var printed = new DomainDslPrinter().Print(domain);
+        await Assert.That(printed).Contains("Note: Text unique");
+        await Assert.That(printed.Contains("required", StringComparison.Ordinal)).IsFalse();
     }
 }

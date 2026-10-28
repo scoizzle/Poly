@@ -6,7 +6,7 @@ AccountKind: enum { Checking, Savings, Credit }
 TxnKind: enum { Deposit, Withdrawal, Transfer }
 
 Account: entity {
-  Number: Text unique required length(6, 12)
+  Number: Text unique length(6, 12)
   Kind: AccountKind default(Checking)
   Currency: Text equals("USD")
   Balance: Number range(0, 100000000) default(0)
@@ -34,7 +34,7 @@ Account: entity {
 }
 
 Transaction: entity {
-  Amount: Number range(1, 10000000) required
+  Amount: Number range(1, 10000000)
   Kind: TxnKind default(Deposit)
   account: Account
   Pending: stage {

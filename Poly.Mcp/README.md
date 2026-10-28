@@ -83,8 +83,8 @@ Write the full domain in a single `.poly` DSL document and apply it in one shot.
 domain Orders
 
 Customer: entity {
-  Name: Text required
-  Email: Text required unique
+  Name: Text
+  Email: Text unique
   Places: many Order
 }
 

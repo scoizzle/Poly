@@ -17,7 +17,7 @@ public class DslCompilerArtifactContributorTests {
         domain Library
 
         Book: entity {
-          Title: Text required
+          Title: Text
           Pages: Number
         }
         """;

@@ -156,7 +156,7 @@ public class ConstraintAssignLoweringTests {
         var (domain, _) = Evolve("""
             domain Lab
             Label: entity {
-              Name: Text length(7, 20) required
+              Name: Text length(7, 20)
               Rename: action (name: Text) {
                 assign Name to name
               }
@@ -320,7 +320,7 @@ public class ConstraintAssignLoweringTests {
             Widget: entity {
               Score: Number range(1, 10) default(5)
               Status: PatronStatus default(Active)
-              Name: Text required
+              Name: Text
               Code: Text length(2, 5)
               Tag: Text pattern("^[A-Z]+$")
               SetScore: action { assign Score to 7 }
@@ -362,7 +362,7 @@ public class ConstraintAssignLoweringTests {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
-              Name: Text required
+              Name: Text
               Rename: action (name: Text) {
                 assign Name to name
               }

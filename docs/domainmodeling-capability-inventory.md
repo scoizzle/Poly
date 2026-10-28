@@ -38,7 +38,7 @@ Codegen (optional host):
 |-----------|-----|-------------|-----------|--------|
 | Entity definition | `Book: entity { }` | `add` kind=`entity` | `Entity.cs`, `Evolution/DomainChange.cs` | ✅ |
 | Property with type | `Title: Text` | `add` kind=`property` | `Property.cs` | ✅ |
-| Constraint: Required | `Name: Text required` | `add` kind=`constraint` (type=Required) | `Constraints/RequiredConstraint.cs` | ✅ |
+| Requiredness | a property is required unless marked `optional`; the word `required` is a parse error | `add` kind=`constraint` (type=Required) still builds `RequiredConstraint` | `Constraints/RequiredConstraint.cs`, `EntityStructureAnalyzer.IsRequired` | ✅ |
 | Constraint: Unique | `ISBN: Text unique` | `add` kind=`constraint` (type=Unique) | `Constraints/UniqueConstraint.cs` | ✅ |
 | Constraint: Range | `Age: Number range(0, 150)` | `add` kind=`constraint` (type=Range, min/max) | `Constraints/RangeConstraint.cs` | ✅ |
 | Constraint: Length | `Code: Text length(1, 50)` | `add` kind=`constraint` (type=Length, min/max) | `Constraints/LengthConstraint.cs` | ✅ |

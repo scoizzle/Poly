@@ -30,14 +30,14 @@ public sealed class NavNameShadowsEntityTypeTests {
         var analysis = Analyze("""
             domain Col
             Claim: entity {
-              Kind: Text required
+              Kind: Text
               evidence: many Evidence
               Attach: action (kind: Text) -> Evidence {
                 create in evidence { Kind: kind }
               }
             }
             Evidence: entity {
-              Kind: Text required
+              Kind: Text
               claim: Claim
             }
             """);
@@ -88,7 +88,7 @@ public sealed class NavNameShadowsEntityTypeTests {
               }
             }
             Document: entity {
-              Kind: Text required
+              Kind: Text
             }
             """);
 
@@ -106,11 +106,11 @@ public sealed class NavNameShadowsEntityTypeTests {
         var analysis = Analyze("""
             domain Col
             Claim: entity {
-              Kind: Text required
+              Kind: Text
               evidence: many Evidence
             }
             Evidence: entity {
-              Kind: Text required
+              Kind: Text
               claim: Claim
             }
             """);

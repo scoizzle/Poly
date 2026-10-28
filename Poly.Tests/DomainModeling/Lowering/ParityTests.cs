@@ -517,6 +517,84 @@ public class ParityTests {
     }
 
     [Test]
+    public async Task Invoke_SelfRelCreateInChildren_LinksChildAndCountsOne() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddChild: action { create in children { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInChildren")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddChild");
+                side.UseLinked("children");
+            });
+        await Assert.That(outcomes[0].State["children"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["children"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[2].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Invoke_SelfRelCreateInParent_LinksParentAndCountsOne() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInParent")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddParent");
+                side.UseLinked("parent");
+            });
+        await Assert.That(outcomes[0].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["children"]).IsEqualTo("0");
+        // The new parent must not point back at the root (a cycle); its inverse
+        // collection holds the root instead.
+        await Assert.That(outcomes[2].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Invoke_SingularCreateIn_AttachesThisToTargetInverseCollection() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Orders
+            Order: entity {
+              Code: Text required
+              items: many Item
+            }
+            Item: entity {
+              Name: Text required
+              order: Order
+              Active: stage {
+                Add: action { create in order { Code: "x" } }
+              }
+            }
+            """, "ParitySingularCreateInAttach")
+            .AssertAgree(side => {
+                side.Create("Order", ("Code", "o1"));
+                side.Create("Item", ("Name", "i1"));
+                side.Invoke("Add");
+                side.UseLinked("order");
+            });
+        await Assert.That(outcomes[2].State["order"]).IsEqualTo("1");
+        await Assert.That(outcomes[3].State["items"]).IsEqualTo("1");
+    }
+
+    [Test]
     public async Task Create_ForSecondEntity_RecordsThatEntitysState() {
         var outcomes = await ParityScenario.FromDsl(ActionFailDsl, "ParitySecondCreate")
             .AssertAgree(side => {

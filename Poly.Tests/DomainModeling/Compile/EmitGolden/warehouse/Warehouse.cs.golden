@@ -29,7 +29,7 @@ public class Warehouse
     {
         get => this._trucks;
     }
-    private DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, long currentLoad = 0L)
+    public DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, long currentLoad = 0L)
     {
         var truckResult = Truck.Create(maxLoad, vin, db, this, new List<Delivery>(), currentLoad);
         if (!truckResult.IsSuccess)

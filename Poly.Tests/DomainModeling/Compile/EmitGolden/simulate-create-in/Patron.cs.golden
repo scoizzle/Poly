@@ -26,7 +26,7 @@ public class Patron
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    private DomainResult<Fine> CreateFines(long amount, string reason)
+    public DomainResult<Fine> CreateFines(long amount, string reason)
     {
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)

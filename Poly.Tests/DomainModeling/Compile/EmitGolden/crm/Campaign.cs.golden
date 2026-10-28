@@ -27,7 +27,7 @@ public class Campaign
         get => this._members;
     }
     public CampaignStage CurrentStage { get; private set; }
-    private DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
+    public DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
     {
         var campaignMemberResult = CampaignMember.Create(contact, this);
         if (!campaignMemberResult.IsSuccess)

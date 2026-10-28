@@ -99,6 +99,27 @@ public sealed partial class DomainToCSharpExporter {
         INodeMetadataProvider metadata) =>
         AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName: null, methods, metadata);
 
+    /// <summary>
+    /// For a self-relationship <c>create in rel</c>, the unique singular navigation on
+    /// <paramref name="targetEntity"/> whose target is <paramref name="sourceEntityName"/>.
+    /// This is the peer the new instance wires to <c>this</c> (e.g. <c>Account.parent</c>
+    /// for a <c>create in children</c>); null when there is none or it is ambiguous.
+    /// Unlike <see cref="FindAutoWireBackReference"/>, it does not skip self-relationships.
+    /// </summary>
+    private static Relationship? FindSelfRelPeerSingular(Entity targetEntity, string sourceEntityName) {
+        Relationship? found = null;
+        var count = 0;
+        foreach (var nav in targetEntity.Navigations) {
+            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+                continue;
+            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+                found = nav;
+                count++;
+            }
+        }
+        return count == 1 ? found : null;
+    }
+
     private static void AddCreateNavMethod(
         Entity entity,
         Relationship rel,
@@ -134,14 +155,26 @@ public sealed partial class DomainToCSharpExporter {
         // pointing back to the source → wired with `this`, excluded from the factory
         // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
         var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
+        var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
+        var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
+            or RelationshipCardinality.ManyToMany;
 
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsNavigation && parameter.IsBackReference) {
-                // Self-rel slot (Account.parent) is `this` only when *this* entity is
-                // that type. Contact.create-in account must not pass a Contact as Account.
-                createArgs.Add(string.Equals(entity.Name, targetEntity.Name, StringComparison.Ordinal)
-                    ? (Node)new ThisReference()
-                    : TypedNull(parameter.Type.TypeName));
+                // Self-rel slot. A self collection (including `rel` when it is a
+                // collection) starts empty; a singular self-nav wires `this` only as
+                // the peer of a collection create-in; every other self singular is null.
+                if (parameter.IsCollection) {
+                    createArgs.Add(new New(
+                        new NamedTypeReference("List",
+                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
+                    continue;
+                }
+                createArgs.Add(isCollectionRel
+                    && selfPeerSingular is not null
+                    && string.Equals(parameter.Name, selfPeerSingular.Name, StringComparison.Ordinal)
+                        ? (Node)new ThisReference()
+                        : TypedNull(parameter.Type.TypeName));
                 continue;
             }
 
@@ -241,7 +274,7 @@ public sealed partial class DomainToCSharpExporter {
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
         // _field.Add / Register* / peer Attach when Create wired this collection.
         var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = autoWireBackRef is not null
+        var createWiredThisCollection = (autoWireBackRef is not null || selfPeerSingular is not null)
             && fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
@@ -257,6 +290,15 @@ public sealed partial class DomainToCSharpExporter {
                 bodyNodes.Add(new Assignment(
                     new Member(new ThisReference(), pascalName),
                     local));
+
+                // A singular create-in links `this` into the target's unique inverse
+                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
+                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
+                if (inverse is not null) {
+                    bodyNodes.Add(new Invoke(
+                        new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [new ThisReference()]));
+                }
             }
 
             // Subscription registration when Create did not Attach this relation.
@@ -301,7 +343,7 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Block(bodyNodes, [localResult, local]),
-            AccessModifier: AccessModifier.Private
+            AccessModifier: AccessModifier.Public
         ));
     }
 

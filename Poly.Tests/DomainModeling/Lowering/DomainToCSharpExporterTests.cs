@@ -682,21 +682,21 @@ public class DomainToCSharpExporterTests {
             .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
 
-        var assignment = FindFirstAssignment(handler!.Body);
-        await Assert.That(assignment).IsNotNull();
-
-        // Destination: this.Status
-        await Assert.That(assignment!.Destination).IsTypeOf<Member>();
-        var target = (Member)assignment.Destination;
-        await Assert.That(target.MemberName).IsEqualTo("Status");
-        await Assert.That(target.Value).IsTypeOf<ThisReference>();
-
-        // Value: order.Code (Parameter "order", not this.order)
-        await Assert.That(assignment.Value).IsTypeOf<Member>();
-        var value = (Member)assignment.Value;
+        // The requiredness check copies order.Code into a local, then writes this.Status.
+        var seeded = FindFirstAssignment(handler!.Body);
+        await Assert.That(seeded).IsNotNull();
+        await Assert.That(seeded!.Value).IsTypeOf<Member>();
+        var value = (Member)seeded.Value;
         await Assert.That(value.MemberName).IsEqualTo("Code");
         await Assert.That(value.Value).IsTypeOf<Parameter>();
         await Assert.That(((Parameter)value.Value).Name).IsEqualTo("order");
+
+        var stored = FindAssignmentToMember(handler.Body, "Status");
+        await Assert.That(stored).IsNotNull();
+        await Assert.That(stored!.Destination).IsTypeOf<Member>();
+        var target = (Member)stored.Destination;
+        await Assert.That(target.MemberName).IsEqualTo("Status");
+        await Assert.That(target.Value).IsTypeOf<ThisReference>();
     }
 
     [Test]
@@ -744,17 +744,20 @@ public class DomainToCSharpExporterTests {
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<ThisReference>();
 
-        var assignment = FindFirstAssignment(handler.Body);
-        await Assert.That(assignment).IsNotNull();
-        await Assert.That(assignment!.Destination).IsTypeOf<Member>();
-        var dest = (Member)assignment.Destination;
-        await Assert.That(dest.MemberName).IsEqualTo("Status");
-        await Assert.That(dest.Value).IsTypeOf<ThisReference>();
-        await Assert.That(assignment.Value).IsTypeOf<Member>();
-        var value = (Member)assignment.Value;
+        var seeded = FindFirstAssignment(handler.Body);
+        await Assert.That(seeded).IsNotNull();
+        await Assert.That(seeded!.Value).IsTypeOf<Member>();
+        var value = (Member)seeded.Value;
         await Assert.That(value.MemberName).IsEqualTo("Code");
         await Assert.That(value.Value).IsTypeOf<Parameter>();
         await Assert.That(((Parameter)value.Value).Name).IsEqualTo("order");
+
+        var stored = FindAssignmentToMember(handler.Body, "Status");
+        await Assert.That(stored).IsNotNull();
+        await Assert.That(stored!.Destination).IsTypeOf<Member>();
+        var dest = (Member)stored.Destination;
+        await Assert.That(dest.MemberName).IsEqualTo("Status");
+        await Assert.That(dest.Value).IsTypeOf<ThisReference>();
     }
 
     [Test]
@@ -1411,6 +1414,19 @@ public class DomainToCSharpExporterTests {
         if (node is Assignment a) return a;
         foreach (var child in node.Children) {
             var found = FindFirstAssignment(child);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
+    private static Assignment? FindAssignmentToMember(Node? node, string memberName) {
+        if (node is null) return null;
+        if (node is Assignment a
+            && a.Destination is Member member
+            && string.Equals(member.MemberName, memberName, StringComparison.Ordinal))
+            return a;
+        foreach (var child in node.Children) {
+            var found = FindAssignmentToMember(child, memberName);
             if (found is not null) return found;
         }
         return null;

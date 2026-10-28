@@ -261,8 +261,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private bool HasAssignableConstraints(Property prop) =>
-        prop.Constraints.Any(c => c is RequiredConstraint
-            or RangeConstraint
+        NeedsRequiredValueCheck(prop)
+        || prop.Constraints.Any(c => c is RangeConstraint
             or LengthConstraint
             or PatternConstraint)
         || (DomainToCSharpExporter.TryResolveEnumType(
@@ -321,7 +321,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <summary>
     /// Emits assign-time constraint guards matching Create factory /
     /// <c>ValidateConstraints</c> messages. Enum-typed properties get a
-    /// not-any-member guard. Optional length (no Required) skips empty values.
+    /// not-any-member guard. An <c>optional</c> length skips empty values.
     /// Uses <see cref="ClrTypeReference"/> for string/Regex statics so the VM
     /// resolves MethodInfo (NamedTypeReference is export-shaped only).
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
@@ -332,11 +332,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                   || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
         var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                     || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
-        var hasRequired = prop.Constraints.OfType<RequiredConstraint>().Any();
+        var hasRequired = EntityStructureAnalyzer.IsRequired(prop);
 
         Node Fail(string msg) => AssignConstraintFailure(msg);
 
-        foreach (var _ in prop.Constraints.OfType<RequiredConstraint>()) {
+        if (NeedsRequiredValueCheck(prop)) {
             if (isText) {
                 nodes.Add(new IfStatement(
                     new Invoke(
@@ -344,7 +344,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                         [valueRef]),
                     new Block([Fail($"'{prop.Name}' is required.")])));
             }
-            else if (IsAssignableNullableDomainType(prop.Type.TypeName)) {
+            else {
                 nodes.Add(new IfStatement(
                     new Equal(valueRef, new Constant(null)),
                     new Block([Fail($"'{prop.Name}' is required.")])));
@@ -474,6 +474,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         double d => d == Math.Floor(d) ? d.ToString("F0", CultureInfo.InvariantCulture) : d.ToString("G", CultureInfo.InvariantCulture),
         _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "?"
     };
+
+    /// <summary>
+    /// Requiredness is "no <c>optional</c>". Text rejects null or empty; other
+    /// reference-typed properties reject null. Value types have no null to reject.
+    /// </summary>
+    private bool NeedsRequiredValueCheck(Property prop) {
+        if (!EntityStructureAnalyzer.IsRequired(prop))
+            return false;
+        if (string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
+            || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal))
+            return true;
+        return IsAssignableNullableDomainType(prop.Type.TypeName);
+    }
 
     private bool IsAssignableNullableDomainType(string typeName) {
         if (_domain is not null

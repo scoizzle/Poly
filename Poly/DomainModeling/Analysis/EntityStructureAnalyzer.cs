@@ -94,10 +94,13 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     /// stage's entry effects initialize their targets — both are create exceptions, not
     /// different requiredness.
     /// </summary>
+    internal static bool IsRequired(Property property) =>
+        !property.Constraints.Any(static c => c is OptionalConstraint);
+
     internal static IReadOnlySet<string> ComputeRequiredPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties) {
-            if (!prop.Constraints.Any(c => c is OptionalConstraint))
+            if (IsRequired(prop))
                 names.Add(prop.Name);
         }
         return names;

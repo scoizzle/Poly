@@ -114,4 +114,18 @@ public class OptionalRequirednessTests {
         var token = domain.Types.OfType<Entity>().Single();
         await Assert.That(analysis.GetStructure(token)!.RequiredPropertyNames.Contains("Lexeme")).IsFalse();
     }
+
+    [Test]
+    public async Task ActionParameter_Bare_IsRequired() {
+        var (domain, _) = Evolve("""
+            domain Params
+            Token: entity {
+              Lexeme: Text
+              Rename: action (name: Text) { assign Lexeme to name }
+            }
+            """);
+        var behavior = BehaviorMetadata.BuildBehavior(domain);
+        var rename = behavior.Entities.Single(e => e.Name == "Token").Actions.Single(a => a.Name == "Rename");
+        await Assert.That(rename.Parameters.Single().IsRequired).IsTrue();
+    }
 }

@@ -59,7 +59,7 @@ public sealed record BehaviorMetadata(BehaviorModel Behavior) {
 
         var parameters = action.Parameters.Select(p => {
             var isEntityRef = IsEntityRefParam(analysis, p, entityLookup);
-            var isRequired = p.Constraints.Any(c => c is RequiredConstraint);
+            var isRequired = EntityStructureAnalyzer.IsRequired(p);
             return new BehaviorParameter(p.Name, p.Type.TypeName, isRequired, isEntityRef);
         }).ToList();
 

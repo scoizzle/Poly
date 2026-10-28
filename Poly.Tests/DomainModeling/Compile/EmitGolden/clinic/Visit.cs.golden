@@ -44,16 +44,17 @@ public class Visit
     public DomainResult AssignDoctor(Doctor doctor)
     {
         var assignValue0 = "assigned";
-        if (!System.String.IsNullOrEmpty(assignValue0))
+        if (System.String.IsNullOrEmpty(assignValue0))
         {
-            if (assignValue0.Length < 2L)
-            {
-                return DomainResult.Failure("'Reason' must be at least 2 characters.");
-            }
-            if (assignValue0.Length > 200L)
-            {
-                return DomainResult.Failure("'Reason' must be at most 200 characters.");
-            }
+            return DomainResult.Failure("'Reason' is required.");
+        }
+        if (assignValue0.Length < 2L)
+        {
+            return DomainResult.Failure("'Reason' must be at least 2 characters.");
+        }
+        if (assignValue0.Length > 200L)
+        {
+            return DomainResult.Failure("'Reason' must be at most 200 characters.");
         }
         this.Reason = assignValue0;
         return DomainResult.Success();

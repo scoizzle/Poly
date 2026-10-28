@@ -15,7 +15,12 @@ public class Schedule
     public string State { get; private set; } = default!;
     public DomainResult Open()
     {
-        this.State = "open";
+        var assignValue0 = "open";
+        if (System.String.IsNullOrEmpty(assignValue0))
+        {
+            return DomainResult.Failure("'State' is required.");
+        }
+        this.State = assignValue0;
         return DomainResult.Success();
     }
     public static DomainResult<Schedule> Create(string day, string state)

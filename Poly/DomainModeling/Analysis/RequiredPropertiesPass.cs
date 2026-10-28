@@ -8,7 +8,7 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Fact emitter: publishes <see cref="RequiredPropertiesMetadata"/> on entities and
-/// stages from policy Exists targets and RequiredConstraint.
+/// stages from policy Exists targets and properties required by default.
 /// Stage metadata is published from the entity visit (the only path with the property
 /// map needed to resolve Exists targets to Property objects).
 /// Diagnostics for policy expressions live in <see cref="PolicyConstraintAnalyzer"/>.
@@ -33,11 +33,14 @@ internal sealed class RequiredPropertiesPass : INodeAnalyzer {
             CollectRequiredFromExpression(policy.Expression, entityPropMap, requiredByPolicy);
         }
 
+        var required = EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+        var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
         foreach (var property in entity.Properties) {
-            if (property.Constraints.Any(static c => c is RequiredConstraint)
-                && !requiredByPolicy.Contains(property)) {
+            if (!required.Contains(property.Name)) continue;
+            if (entryAssigned.Contains(property.Name)) continue;
+            if (property.Constraints.OfType<DefaultValueConstraint>().Any()) continue;
+            if (!requiredByPolicy.Contains(property))
                 requiredByPolicy.Add(property);
-            }
         }
 
         if (requiredByPolicy.Count > 0) {

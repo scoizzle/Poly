@@ -335,9 +335,10 @@ Token: entity {
 }
 ```
 
-`required` is the explicit spelling of the default (a value rule: the value must not be
-empty when it is written). Carrying both `required` and `optional` on one property is an
-analysis error — required is the default and `optional` is its opt-out.
+A property without `optional` rejects a missing or empty Text value when it is written.
+`required` is only the explicit spelling of that default. Carrying both `required` and
+`optional` on one property is an analysis error — required is the default and `optional`
+is its opt-out.
 
 `optional` applies to entity properties only. Value-type (`value { ... }`) and contract
 payload members are always required fields; `optional` there is a positioned parse error.

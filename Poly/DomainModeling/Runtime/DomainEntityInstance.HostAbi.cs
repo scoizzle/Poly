@@ -484,9 +484,6 @@ public sealed partial record DomainEntityInstance {
     /// back-reference: linking it would point the new child back at this source
     /// (a cycle). The inverse is the target's collection, which <c>Attach*</c> owns.
     /// </summary>
-    internal void TryLinkCreateInBackReference(DomainEntityInstance child) =>
-        TryLinkCreateInBackReference(child, relationshipName: null);
-
     internal void TryLinkCreateInBackReference(DomainEntityInstance child, string? relationshipName) {
         if (Store is null) return;
         var backs = child.Entity.Navigations

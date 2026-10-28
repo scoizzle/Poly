@@ -1066,9 +1066,10 @@ public sealed partial class DomainToCSharpExporter {
             return;
         fields.Add(new FieldDefinitionNode(
             "_automaticStageChain",
-            new NamedTypeReference(
-                "HashSet",
-                TypeArguments: [new PrimitiveTypeReference(PrimType.String)]),
+            new OptionalTypeReference(
+                new NamedTypeReference(
+                    "HashSet",
+                    TypeArguments: [new PrimitiveTypeReference(PrimType.String)])),
             AccessModifier: AccessModifier.Private));
         methods.Add(new MethodDefinitionNode(
             "NoteAutomaticStage",

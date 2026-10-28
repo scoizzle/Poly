@@ -48,6 +48,28 @@ public static class ExportedCSharp {
         return new AssemblyLoadContext(assemblyName, isCollectible: true).LoadFromStream(pe);
     }
 
+    /// <summary>
+    /// Compiles a sample's emitted files together as one compilation with
+    /// warnings-as-errors and returns the error diagnostics. Unlike
+    /// <see cref="CompileAndLoad"/>, this takes multiple sources (cross-file
+    /// entity types) and does not load an assembly.
+    /// </summary>
+    public static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> CompileWithWarningsAsErrors(
+        string assemblyName, IReadOnlyList<(string FileName, string Source)> files) {
+        var trees = files
+            .Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName))
+            .ToArray();
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
+            .Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+            .WithGeneralDiagnosticOption(ReportDiagnostic.Error);
+        var compilation = CSharpCompilation.Create(assemblyName, trees, references, options);
+        return compilation.GetDiagnostics()
+            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+            .ToArray();
+    }
+
     /// <summary>Calls the widest public static Create by named args; returns the DomainResult.</summary>
     public static object InvokeCreate(Type type, params (string Name, object? Value)[] named) {
         var create = type.GetMethods(BindingFlags.Public | BindingFlags.Static)

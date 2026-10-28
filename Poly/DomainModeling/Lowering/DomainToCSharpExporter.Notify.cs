@@ -48,14 +48,23 @@ public sealed partial class DomainToCSharpExporter {
                     }
                 }
                 else {
+                    // A singular navigation is optional (unlinked until a later link),
+                    // so every per-stage registration shares ONE null guard: dereferencing
+                    // this.{Nav} in the constructor would NRE when the target is absent.
+                    var registrations = new List<Node>();
                     foreach (var info in perStage) {
-                        bodyNodes.Add(new Invoke(
+                        registrations.Add(new Invoke(
                             new Member(
                                 new Member(new ThisReference(), pascalNavName),
                                 SubscriberRegisterMethodName(info)),
                             [new ThisReference()])
                         );
                     }
+                    bodyNodes.Add(new IfStatement(
+                        new NotEqual(
+                            new Member(new ThisReference(), pascalNavName),
+                            new Constant(null!)),
+                        new Block(registrations)));
                 }
             }
         }
@@ -85,9 +94,10 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity,
         Relationship rel,
         Domain domain,
+        List<SubscriptionInfo>? subscriberSubs,
         List<MethodDefinitionNode> methods,
         INodeMetadataProvider metadata) =>
-        AddCreateNavMethod(entity, rel, domain, subscriberSubs: null, fieldName: null, methods, metadata);
+        AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName: null, methods, metadata);
 
     private static void AddCreateNavMethod(
         Entity entity,

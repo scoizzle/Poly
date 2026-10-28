@@ -540,6 +540,118 @@ public class InvalidProgramTests {
     }
 
     [Test]
+    public async Task Invoke_ClosedGenericStaticMember_SubstitutesTypeArgument() {
+        var widget = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Wrap",
+                    new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("T")]),
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))],
+                    IsStatic: true)
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var call = new Invoke(
+            new Member(
+                new NamedTypeReference("Box", "Sample", TypeArguments: [new NamedTypeReference("Widget", "Sample")]),
+                "Wrap"),
+            new New(new NamedTypeReference("Widget", "Sample")));
+
+        await AssertNoVmMemberError(new Block([widget, box, call]));
+    }
+
+    [Test]
+    public async Task Invoke_ClosedGenericArgument_SameClosing_Resolves() {
+        var widget = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            Methods: [
+                new MethodDefinitionNode(
+                    "Wrap",
+                    new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("T")]),
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))],
+                    IsStatic: true),
+                new MethodDefinitionNode(
+                    "Take",
+                    new TypeReference("void"),
+                    Parameters: [new Parameter("item", new NamedTypeReference("Box", TypeArguments: [new NamedTypeReference("T")]))],
+                    IsStatic: true)
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var closed = new NamedTypeReference(
+            "Box",
+            "Sample",
+            TypeArguments: [new NamedTypeReference("Widget", "Sample")]);
+        var wrapped = new Invoke(
+            new Member(closed, "Wrap"),
+            new New(new NamedTypeReference("Widget", "Sample")));
+        var take = new Invoke(new Member(closed, "Take"), wrapped);
+
+        await AssertNoVmMemberError(new Block([widget, box, wrapped, take]));
+    }
+
+    [Test]
+    public async Task Invoke_ClosedGenericOverCollection_SameClosing_Resolves() {
+        var widget = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            GenericParameters: [new Parameter("T")]);
+        var boxOfList = new NamedTypeReference(
+            "Box",
+            "Sample",
+            TypeArguments: [
+                new NamedTypeReference(
+                    "List",
+                    TypeArguments: [new NamedTypeReference("Widget", "Sample")])
+            ]);
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()],
+            Properties: [new PropertyDefinitionNode("Held", boxOfList)],
+            Methods: [
+                new MethodDefinitionNode(
+                    "Take",
+                    new TypeReference("void"),
+                    Parameters: [new Parameter("item", boxOfList)])
+            ]);
+        var call = new Invoke(
+            new Member(new New(new NamedTypeReference("Holder", "Sample")), "Take"),
+            new Member(new New(new NamedTypeReference("Holder", "Sample")), "Held"));
+
+        await AssertNoVmMemberError(new Block([widget, box, holder, call]));
+    }
+
+    [Test]
+    public async Task Invoke_ObjectProtectedMember_IsRejected() {
+        var widget = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var call = new Invoke(
+            new Member(new New(new NamedTypeReference("Widget", "Sample")), "MemberwiseClone"));
+
+        var analysis = Interpreter.Analyze(new Block([widget, call]));
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("MemberwiseClone", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
     public async Task New_ExactSingleArgConstructor_UnresolvedArgument_ResolvesExactConstructor() {
         var order = new TypeDefinitionNode(
             "Order",

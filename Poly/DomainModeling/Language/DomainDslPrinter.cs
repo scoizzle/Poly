@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
@@ -69,6 +70,8 @@ public sealed class DomainDslPrinter {
             "header",
             fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = domain.Name }));
         foreach (var extensionId in domain.Extensions) {
+            if (string.Equals(extensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+                continue;
             _sb.AppendLine(_printTable.Print(
                 "uses",
                 "id",

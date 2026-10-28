@@ -20,8 +20,8 @@ public sealed class TemporalPackPrintRoundTripTests {
         domain TemporalDomain
 
         Loan: entity {
-          DueDate: Date
-          ExpiryDate: Date
+          DueDate: DateTime
+          ExpiryDate: DateTime
           Recent: policy { Now - 12 Days > DueDate }
           Renew: policy { DueDate + 14 Days > ExpiryDate }
           Expired: policy { ExpiryDate < Now }
@@ -168,10 +168,20 @@ public sealed class TemporalPackPrintRoundTripTests {
     // ── Missing pack fails closed both ways ──────────────────────
 
     [Test]
+    public async Task TemporalParse_WithoutUses_NowMinusDays_Parses() {
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 12 Days");
+        await Assert.That(expr).IsTypeOf<DateOperation>();
+
+        var changes = new PolyDslParser(TemporalDomain).Parse();
+        await Assert.That(changes.OfType<AddPolicyToEntityChange>().Any(p => p.Policy.Name == "Recent")).IsTrue();
+    }
+
+    [Test]
     public async Task TemporalParse_WithoutPack_NowMinusDays_Rejects() {
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 12 Days"))
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 12 Days", raw))
             .Throws<FormatException>();
-        await Assert.That(() => new PolyDslParser(TemporalDomain).Parse())
+        await Assert.That(() => new PolyDslParser(TemporalDomain, raw).Parse())
             .Throws<FormatException>();
     }
 
@@ -179,12 +189,13 @@ public sealed class TemporalPackPrintRoundTripTests {
     public async Task TemporalPrint_WithoutPack_DateOperation_Throws() {
         var domain = Apply(TemporalDomain, TemporalInputs());
 
-        var noInputsPrinter = new DomainDslPrinter();
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var noInputsPrinter = new DomainDslPrinter(raw);
         await Assert.That(() => noInputsPrinter.Print(domain))
             .Throws<InvalidOperationException>();
 
-        var defaultInputsPrinter = new DomainDslPrinter(DomainSession.ForExtensions([]));
-        await Assert.That(() => defaultInputsPrinter.Print(domain))
+        var rawAgain = new DomainDslPrinter(SessionBuilder.CreateEmpty().LoadCore().Build());
+        await Assert.That(() => rawAgain.Print(domain))
             .Throws<InvalidOperationException>();
     }
 }

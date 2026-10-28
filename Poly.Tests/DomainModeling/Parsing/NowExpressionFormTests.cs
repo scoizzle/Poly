@@ -33,7 +33,8 @@ public class NowExpressionFormTests {
 
     [Test]
     public async Task Now_WithoutForm_IsPropertyAccess() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now");
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now", raw);
 
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)expr).Name).IsEqualTo("Now");
@@ -51,7 +52,8 @@ public class NowExpressionFormTests {
 
     [Test]
     public async Task Today_WithoutForm_IsPropertyAccess() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Today");
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var expr = DslExpressionFragment.ParseExpressionFragment("Today", raw);
 
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)expr).Name).IsEqualTo("Today");

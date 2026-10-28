@@ -74,4 +74,4 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6f085887 | planned | S0/#325 merged; issues #310/#305 |
 | 2026-10-25 | implementer | opencode/opencode-go/deepseek-v4.1-flash | 0ee50b29 | pushed | tests 4573/4575; sweep: header scan retired, 2 pre-existing InvariantCulture env failures (no ICU) |
-| 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6501436d | merged #326 | - |
+| 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6501436d | merged #326 | squash-merged to integration/pipeline; S1 planned on top |

@@ -18,7 +18,7 @@ public class DateDifferenceDurationTests {
 
     /// <summary>Duration literals (<c>1 Days</c>) need the temporal pack at parse time.</summary>
     private static EvolutionResult ParseTemporal(string dsl) {
-        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .Apply(changes, session: session);

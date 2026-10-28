@@ -159,7 +159,7 @@ internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logg
     /// <summary>
     /// Creates a new domain session with the canonical built-in primitive types.
     /// The bootstrapped domain includes canonical primitives (Boolean, Number, Text, Uuid, Binary)
-    /// plus Temporal types (Date, Time, DateTime, Duration) from product <c>uses temporal</c>.
+    /// plus Temporal types (Date, Time, DateTime, Duration) loaded implicitly at Load.
     /// Returns a sessionId that must be passed to other tools.
     /// </summary>
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]

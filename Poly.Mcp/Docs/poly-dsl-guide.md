@@ -191,12 +191,12 @@ Suspended: stage {
 
 Every valid `.poly` document starts with a domain name. Optional `uses` lines list
 **extensions** this compilation unit depends on (additive facts). Product `apply_dsl`
-seeds `temporal` and `storage` when none are listed. Unknown or duplicate ids
+seeds `storage` when none are listed. Temporal is implicit: Load always registers it,
+and the printer never writes `uses temporal`. Unknown or duplicate ids
 fail closed. Another Poly domain is a `contract`, not a `uses` line.
 
 ```poly
 domain MyDomain
-uses temporal
 uses storage
 ```
 
@@ -915,8 +915,8 @@ or two `Date` properties) is rejected at analysis.
 **Fail-closed (library not loaded):** without the temporal library, `Date` / `Time` / `DateTime` /
 `Duration` are unknown catalog types, `Now` stays a plain `PropertyAccess` (never a clock read),
 temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and `DateOperation` printing throws.
-Product sessions load Temporal via `uses temporal` (or the SDK/MCP seed). A unit that does not
-list Temporal does not get clock meaning or temporal primitives.
+Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that never calls
+`LoadTemporal` does not get clock meaning or temporal primitives.
 
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
@@ -1234,7 +1234,6 @@ it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they ar
 
 ```poly
 domain Orders
-uses temporal
 uses storage
 
 Customer: entity {

@@ -34,7 +34,7 @@ using Poly.DomainModeling.Bootstrap;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Packs;
 
-Domain domain = DomainFactory.Create("Orders"); // seeds uses temporal
+Domain domain = DomainFactory.Create("Orders"); // temporal primitives; no uses temporal
 var session = DomainSession.Open(domain);
 
 var result = new DomainEvolution(domain).Evolve()

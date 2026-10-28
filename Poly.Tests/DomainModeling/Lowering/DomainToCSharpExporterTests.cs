@@ -3194,6 +3194,103 @@ public class DomainToCSharpExporterTests {
         await Assert.That(printFalse).IsFalse();
     }
 
+    private const string SingularSubscriptionDsl = """
+        domain Watch
+        Paper: entity {
+          A: stage {
+            Advance: action { transition to B }
+          }
+          B: stage { }
+        }
+        Tr: entity {
+          Tracks: Paper
+          P: stage {
+            when Tracks B {
+              transition to Q
+            }
+          }
+          Q: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Emit_SingularSubscriptionOnNullableNav_GuardsRegistration() {
+        // R1: a `when` subscription through a singular navigation registers `this` on the
+        // target from the constructor. An unlinked (null) nav must not be dereferenced.
+        var (domain, analysis) = ParseAndAnalyze(SingularSubscriptionDsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var init = ExportedCSharp.ExtractMethod(cs, "void InitializeSubscriptions(");
+        await Assert.That(init).Contains("if (this.Tracks != null)");
+        var guard = init.IndexOf("if (this.Tracks != null)", StringComparison.Ordinal);
+        var registration = init.IndexOf("this.Tracks.RegisterTrTracksBSubscriber(this)", StringComparison.Ordinal);
+        await Assert.That(registration).IsGreaterThan(guard);
+        await Assert.That(registration).IsGreaterThan(-1);
+    }
+
+    [Test]
+    public async Task Create_WithoutPaper_DoesNotThrow() {
+        // R1 runtime: constructing Tr without linking a Paper must not NRE in
+        // InitializeSubscriptions (this.Tracks is null).
+        var (domain, analysis) = ParseAndAnalyze(SingularSubscriptionDsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs, "WithoutPaper");
+        var tr = ExportedCSharp.CreateEntity(asm.GetType("Tr")!);
+        await Assert.That(tr).IsNotNull();
+    }
+
+    [Test]
+    public async Task Emit_SingularCreateIn_RegistersSubscriptionOnCreatedTarget() {
+        // R1 makes an unlinked start legal; the later `create in Tracks` link must
+        // register the subscriber on the created target, like the simulator's link.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Watch
+            Paper: entity {
+              Title: Text
+              A: stage { Advance: action { transition to B } }
+              B: stage { }
+            }
+            Tr: entity {
+              Tracks: Paper
+              P: stage {
+                Adopt: action { create in Tracks { Title: "x" } }
+                when Tracks B { transition to Q }
+              }
+              Q: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Paper> CreateTracks(");
+        await Assert.That(create).Contains("this.Tracks =");
+        await Assert.That(create).Contains("RegisterTrTracksBSubscriber");
+    }
+
+    [Test]
+    public async Task Emit_AutomaticStageChain_IsNullable() {
+        // R2: _automaticStageChain is compared/assigned null, so it must print as
+        // HashSet<string>? or the export raises CS8618/CS8625 under warnings-as-errors.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Entry
+            Z: entity {
+              Tag: Text
+              A: stage {
+                entry { transition to B }
+              }
+              B: stage { }
+            }
+            """);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).Contains("HashSet<string>? _automaticStageChain");
+        await Assert.That(cs).DoesNotContain("HashSet<string> _automaticStageChain");
+    }
+
     private static string[] CompileExported(string cs) {
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

@@ -46,6 +46,8 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 
 **Current consumers:** lower → Interpreter (scratch Store bound) | `session.Emit` (C# module) + bag-gated host files. MCP: `create_instance` → `evaluate_policy` / `invoke_action`.
 
+**Emit gate:** `session.Emit` registers the `vm-analysis-report`, then refuses (throws the first VM error) when the interpretation analysis of the lowered module reports an error; the report and the catalog stay on the session.
+
 **Words (current bind, not frozen):** `Domain` = facts. Analysis publishes **bags**. Surfaces (`uses sqlite` / `uses http`) select implementations. Lowering **reads** bags; the operation tree has no bag types. Bind is caller-supplied. Detail: [`docs/decisions/2026-09-03-facts-concerns-bags-store-bind.md`](decisions/2026-09-03-facts-concerns-bags-store-bind.md).
 
 | Hard line | Implication |

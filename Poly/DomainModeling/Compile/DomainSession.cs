@@ -319,7 +319,9 @@ public sealed class DomainSession {
     /// <summary>
     /// Entity-module C# files from the lowered module. Persistence and HTTP host
     /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
-    /// not this method.
+    /// not this method. Registers the <c>vm-analysis-report</c>, then refuses
+    /// (throwing the first VM error) before printing when the interpretation
+    /// analysis of the lowered module reports an error.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -331,6 +333,16 @@ public sealed class DomainSession {
         ArtifactCatalog = catalog;
         var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
         RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
+        try {
+            ThrowIfVmHasErrors(interpAnalysis);
+        }
+        catch {
+            // A refused Emit leaves the new catalog on the session (and the VM report
+            // above) so the failure is inspectable; the reference report is normally
+            // registered after printing.
+            RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
+            throw;
+        }
         var writer = new CSharpWriter(interpAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.

@@ -34,8 +34,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly INodeMetadataProvider? _analysis;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
+    private readonly IReadOnlySet<string>? _previousStageNotifyStages;
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
+    private readonly string? _lifecyclePropertyName;
+    private readonly string? _lifecycleEnumTypeName;
     private readonly LoweringContext _context;
     /// <summary>Entity has entry/exit transitions: emit the shared loop-guard Note.</summary>
     private readonly bool _emitAutomaticStageGuard;
@@ -65,8 +68,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _analysis = context.Analysis;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNotifyStages = context.PostTransitionNotifyStages;
+        _previousStageNotifyStages = context.PreviousStageNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
+        _lifecyclePropertyName = context.LifecyclePropertyName;
+        _lifecycleEnumTypeName = context.LifecycleEnumTypeName;
         _emitAutomaticStageGuard = EffectHelpers.HasAutomaticTransitions(entity);
         IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
         if (context.ActionParameterNames is { Count: > 0 }) {
@@ -515,7 +521,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// OnEntry/OnExit effects lower into <paramref name="bodySink"/>. Create
     /// effects lower as one composite so nested structure stays intact.
     /// </summary>
-    private void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
+    internal void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
         if (effects.Count == 0)
             return;
         if (HasCreate(effects)) {
@@ -548,7 +554,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// source-stage exit effects (when known; once — no self-re-entry), CurrentStage
     /// assignment, target-stage entry effects (once), then
     /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
-    /// stage (see <see cref="LoweringContext.PostTransitionNotifyStages"/>).
+    /// stage (see <see cref="LoweringContext.PreviousStageNotifyStages"/>).
     /// Does not emit instance <c>Notify</c> — that method exists only on the
     /// simulator heap object; printed classes do not have one. Emits
     /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#
@@ -567,7 +573,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Variable? previousStage = null;
         var notifyTarget = _postTransitionNotifyStages is not null
             && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
-        if (notifyTarget) {
+        var needsPrevious = notifyTarget
+            && _previousStageNotifyStages is not null
+            && _previousStageNotifyStages.Contains(t.TargetStage.StageName);
+        if (needsPrevious) {
             previousStage = _names.Next("previousStage");
             nodes.Add(new Assignment(
                 previousStage,
@@ -637,10 +646,26 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(Subject, "CurrentStage"),
             stageValue));
 
-        if (previousStage is not null) {
+        // G7: keep the lifecycle property in lockstep with CurrentStage. Emit
+        // this.{LifecycleProperty} = {LifecycleEnum}.X after the stage assign and
+        // before entry effects, unless the target stage's entry already assigns it
+        // at the top level (Visit.CheckedIn entry { assign State to CheckedIn }).
+        if (_lifecyclePropertyName is not null && _lifecycleEnumTypeName is not null) {
+            var entryAssignsLifecycle = targetStage is not null
+                && targetStage.OnEntryEffects.OfType<AssignEffect>().Any(ae =>
+                    ae.Target is PropertyAccess pa
+                    && string.Equals(pa.Name, _lifecyclePropertyName, StringComparison.Ordinal));
+            if (!entryAssignsLifecycle) {
+                nodes.Add(new Assignment(
+                    new Member(Subject, _lifecyclePropertyName),
+                    new Member(new NamedTypeReference(_lifecycleEnumTypeName), t.TargetStage.StageName)));
+            }
+        }
+
+        if (notifyTarget) {
             tryNodes.Add(new Invoke(
                 new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
-                [previousStage]));
+                needsPrevious ? [previousStage!] : []));
         }
 
         Node tryBody = tryNodes.Count switch {
@@ -806,9 +831,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
             if (targetEntity is not null && _analysis is not null) {
                 var esm = _analysis.GetStructure(targetEntity);
+                if (esm is { HasStages: false })
+                    throw new InvalidOperationException(
+                        $"Entity '{targetEntity.Name}' has only an implicit stage; " +
+                        "a stage membership filter needs an explicit stage.");
                 if (esm?.StageEnumTypeName is { } custom) return custom;
             }
-            if (targetEntity is not null && targetEntity.Stages.Count > 0)
+            if (targetEntity is not null
+                && targetEntity.Stages.Count > 0
+                && !EntityStructureAnalyzer.IsImplicitStage(targetEntity))
                 return $"{targetName}Stage";
         }
         return $"{targetName ?? relationshipName}Stage";

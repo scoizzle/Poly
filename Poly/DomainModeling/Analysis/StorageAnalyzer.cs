@@ -208,7 +208,8 @@ public sealed class StorageAnalyzer {
             isRoot = agg?.IsRoot ?? !HasRequiredEntityRef(entity);
             var stageEnumType = _domain.Types.OfType<EnumType>()
                 .FirstOrDefault(e => e.Name == $"{entity.Name}Stage");
-            if (stageEnumType is not null || entity.Stages.Count > 0) {
+            if (!EntityStructureAnalyzer.IsImplicitStage(entity)
+                && (stageEnumType is not null || entity.Stages.Count > 0)) {
                 hasStages = true;
                 stagePropertyName = "CurrentStage";
                 stageEnumTypeName = stageEnumType?.Name ?? $"{entity.Name}Stage";

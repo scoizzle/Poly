@@ -209,11 +209,19 @@ public sealed partial record DomainEntityInstance {
             var notifySubscribers = $"Notify{stage.Name}Subscribers";
             if (!methodNames.Add(notifySubscribers))
                 continue;
+            // Both arities: a when-each/any-only group prints no parameter, a
+            // when-all group prints the nullable previous stage. InvokeNamed
+            // dispatches by name and accepts either call shape.
             methods.Add(new MethodDefinitionNode(
                 notifySubscribers,
                 new TypeReference("void"),
                 Parameters: [new Parameter("previousStage",
                     new PrimitiveTypeReference(Prim.String))],
+                Body: new Block([])));
+            methods.Add(new MethodDefinitionNode(
+                notifySubscribers,
+                new TypeReference("void"),
+                Parameters: null,
                 Body: new Block([])));
         }
         methods.Add(new MethodDefinitionNode(

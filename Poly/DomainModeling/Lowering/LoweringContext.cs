@@ -38,9 +38,14 @@ namespace Poly.DomainModeling.Lowering;
 /// <param name="PostTransitionNotifyStages">
 /// Optional set of stage names that have subscription notify methods. When a
 /// transition targets one of these stages, <see cref="EffectLoweringPass"/>
-/// captures <c>CurrentStage</c> before the assign and emits
-/// <c>Notify{Stage}Subscribers(previousStageN)</c> after it. The pass builds
+/// emits <c>Notify{Stage}Subscribers(...)</c> after the assign. The pass builds
 /// that invoke; callers only name the watched stages.
+/// </param>
+/// <param name="PreviousStageNotifyStages">
+/// Optional subset of <paramref name="PostTransitionNotifyStages"/> whose
+/// <c>when all</c> handlers read the previous stage. The pass captures
+/// <c>CurrentStage</c> before the assign and passes it; other notifiers take no
+/// argument.
 /// </param>
 /// <param name="SourceStageName">
 /// Optional name of the source stage from which a transition originates.
@@ -51,6 +56,16 @@ namespace Poly.DomainModeling.Lowering;
 /// Optional map from property name to enum type name. When present, literal
 /// comparisons against enum-typed properties emit qualified member access
 /// (e.g. <c>PatronStatus.Active</c>) instead of string literals.
+/// </param>
+/// <param name="LifecyclePropertyName">
+/// Optional lifecycle property name — the property whose enum type's member set
+/// equals the stage set. A <see cref="EffectLoweringPass"/> that lowers a
+/// <c>StageTransitionEffect</c> assigns <c>this.{LifecyclePropertyName}</c> to the
+/// target stage's member after setting <c>CurrentStage</c>. Paired with
+/// <see cref="LifecycleEnumTypeName"/>; both null or both set.
+/// </param>
+/// <param name="LifecycleEnumTypeName">
+/// Enum type name for <see cref="LifecyclePropertyName"/>; null together with it.
 /// </param>
 /// <param name="NavigationNameResolver">
 /// Optional mapper from a DSL relationship/navigation name to the generated C#
@@ -93,8 +108,11 @@ public sealed record LoweringContext(
     Domain? Domain = null,
     string? StageEnumTypeName = null,
     IReadOnlySet<string>? PostTransitionNotifyStages = null,
+    IReadOnlySet<string>? PreviousStageNotifyStages = null,
     string? SourceStageName = null,
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
+    string? LifecyclePropertyName = null,
+    string? LifecycleEnumTypeName = null,
     Func<string, string>? NavigationNameResolver = null,
     Func<string, bool>? IsCollectionNavigation = null,
     Func<string, string?>? PropertyTypeResolver = null,

@@ -137,87 +137,43 @@ public class Opportunity
         {
             return DomainResult.Failure("'Propose' blocked by policy 'HasAccount'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = OpportunityStage.Propose;
         {
             {
-                var assignValue1 = 40L;
-                if (assignValue1 < 0L)
+                var assignValue0 = 40L;
+                if (assignValue0 < 0L)
                 {
                     return DomainResult.Failure("'Probability' must be >= 0.");
                 }
-                if (assignValue1 > 100L)
+                if (assignValue0 > 100L)
                 {
                     return DomainResult.Failure("'Probability' must be <= 100.");
                 }
-                this.Probability = assignValue1;
+                this.Probability = assignValue0;
             }
-            this.NotifyProposeSubscribers(previousStage0);
+            this.NotifyProposeSubscribers();
         }
         return DomainResult.Success();
     }
     public DomainResult Lose()
     {
-        if (this.CurrentStage == OpportunityStage.Qualify)
+        if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
-            var previousStage0 = this.CurrentStage;
             this.CurrentStage = OpportunityStage.Lost;
             {
                 {
-                    var assignValue1 = 0L;
-                    if (assignValue1 < 0L)
+                    var assignValue0 = 0L;
+                    if (assignValue0 < 0L)
                     {
                         return DomainResult.Failure("'Probability' must be >= 0.");
                     }
-                    if (assignValue1 > 100L)
+                    if (assignValue0 > 100L)
                     {
                         return DomainResult.Failure("'Probability' must be <= 100.");
                     }
-                    this.Probability = assignValue1;
+                    this.Probability = assignValue0;
                 }
-                this.NotifyLostSubscribers(previousStage0);
-            }
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == OpportunityStage.Propose)
-        {
-            var previousStage2 = this.CurrentStage;
-            this.CurrentStage = OpportunityStage.Lost;
-            {
-                {
-                    var assignValue3 = 0L;
-                    if (assignValue3 < 0L)
-                    {
-                        return DomainResult.Failure("'Probability' must be >= 0.");
-                    }
-                    if (assignValue3 > 100L)
-                    {
-                        return DomainResult.Failure("'Probability' must be <= 100.");
-                    }
-                    this.Probability = assignValue3;
-                }
-                this.NotifyLostSubscribers(previousStage2);
-            }
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == OpportunityStage.Commit)
-        {
-            var previousStage4 = this.CurrentStage;
-            this.CurrentStage = OpportunityStage.Lost;
-            {
-                {
-                    var assignValue5 = 0L;
-                    if (assignValue5 < 0L)
-                    {
-                        return DomainResult.Failure("'Probability' must be >= 0.");
-                    }
-                    if (assignValue5 > 100L)
-                    {
-                        return DomainResult.Failure("'Probability' must be <= 100.");
-                    }
-                    this.Probability = assignValue5;
-                }
-                this.NotifyLostSubscribers(previousStage4);
+                this.NotifyLostSubscribers();
             }
             return DomainResult.Success();
         }
@@ -225,7 +181,7 @@ public class Opportunity
     }
     public DomainResult<Activity> Log(string subject)
     {
-        if (this.CurrentStage == OpportunityStage.Qualify)
+        if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
             var create0 = this.CreateActivities(subject);
             if (!create0.IsSuccess)
@@ -235,31 +191,11 @@ public class Opportunity
             var created1 = create0.Value;
             return DomainResult<Activity>.Success(created1);
         }
-        if (this.CurrentStage == OpportunityStage.Propose)
-        {
-            var create2 = this.CreateActivities(subject);
-            if (!create2.IsSuccess)
-            {
-                return DomainResult<Activity>.Failure(create2.ErrorMessage ?? "");
-            }
-            var created3 = create2.Value;
-            return DomainResult<Activity>.Success(created3);
-        }
-        if (this.CurrentStage == OpportunityStage.Commit)
-        {
-            var create4 = this.CreateActivities(subject);
-            if (!create4.IsSuccess)
-            {
-                return DomainResult<Activity>.Failure(create4.ErrorMessage ?? "");
-            }
-            var created5 = create4.Value;
-            return DomainResult<Activity>.Success(created5);
-        }
         return DomainResult<Activity>.Failure("'Log' is not valid for the current stage on entity 'Opportunity'.");
     }
     public DomainResult<Line> AddLine(Product sku, long qty)
     {
-        if (this.CurrentStage == OpportunityStage.Qualify)
+        if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
             var assignValue0 = this.Amount + qty * sku.ListPrice;
             if (assignValue0 < 0L)
@@ -278,46 +214,6 @@ public class Opportunity
             }
             var created2 = create1.Value;
             return DomainResult<Line>.Success(created2);
-        }
-        if (this.CurrentStage == OpportunityStage.Propose)
-        {
-            var assignValue3 = this.Amount + qty * sku.ListPrice;
-            if (assignValue3 < 0L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be >= 0.");
-            }
-            if (assignValue3 > 100000000L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
-            }
-            this.Amount = assignValue3;
-            var create4 = this.CreateLines(qty, sku.ListPrice, sku);
-            if (!create4.IsSuccess)
-            {
-                return DomainResult<Line>.Failure(create4.ErrorMessage ?? "");
-            }
-            var created5 = create4.Value;
-            return DomainResult<Line>.Success(created5);
-        }
-        if (this.CurrentStage == OpportunityStage.Commit)
-        {
-            var assignValue6 = this.Amount + qty * sku.ListPrice;
-            if (assignValue6 < 0L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be >= 0.");
-            }
-            if (assignValue6 > 100000000L)
-            {
-                return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
-            }
-            this.Amount = assignValue6;
-            var create7 = this.CreateLines(qty, sku.ListPrice, sku);
-            if (!create7.IsSuccess)
-            {
-                return DomainResult<Line>.Failure(create7.ErrorMessage ?? "");
-            }
-            var created8 = create7.Value;
-            return DomainResult<Line>.Success(created8);
         }
         return DomainResult<Line>.Failure("'AddLine' is not valid for the current stage on entity 'Opportunity'.");
     }
@@ -366,22 +262,21 @@ public class Opportunity
         {
             return DomainResult.Failure("'Win' requires stage 'Commit' on entity 'Opportunity'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = OpportunityStage.Won;
         {
             {
-                var assignValue1 = 100L;
-                if (assignValue1 < 0L)
+                var assignValue0 = 100L;
+                if (assignValue0 < 0L)
                 {
                     return DomainResult.Failure("'Probability' must be >= 0.");
                 }
-                if (assignValue1 > 100L)
+                if (assignValue0 > 100L)
                 {
                     return DomainResult.Failure("'Probability' must be <= 100.");
                 }
-                this.Probability = assignValue1;
+                this.Probability = assignValue0;
             }
-            this.NotifyWonSubscribers(previousStage0);
+            this.NotifyWonSubscribers();
         }
         return DomainResult.Success();
     }
@@ -455,7 +350,7 @@ public class Opportunity
         }
         this._accountOpportunitiesLostSubscribers.Add(subscriber);
     }
-    internal void NotifyWonSubscribers(OpportunityStage? previousStage)
+    internal void NotifyWonSubscribers()
     {
         this.EnterNotifyCascade("Won");
         try
@@ -474,7 +369,7 @@ public class Opportunity
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyProposeSubscribers(OpportunityStage? previousStage)
+    internal void NotifyProposeSubscribers()
     {
         this.EnterNotifyCascade("Propose");
         try
@@ -492,7 +387,7 @@ public class Opportunity
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyLostSubscribers(OpportunityStage? previousStage)
+    internal void NotifyLostSubscribers()
     {
         this.EnterNotifyCascade("Lost");
         try
@@ -542,70 +437,5 @@ public class Opportunity
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
-    }
-    private void OnEntryQualify()
-    {
-        var assignValue0 = 10L;
-        if (assignValue0 < 0L)
-        {
-            throw new ConstraintFailureException("'Probability' must be >= 0.");
-        }
-        if (assignValue0 > 100L)
-        {
-            throw new ConstraintFailureException("'Probability' must be <= 100.");
-        }
-        this.Probability = assignValue0;
-    }
-    private void OnEntryPropose()
-    {
-        var assignValue0 = 40L;
-        if (assignValue0 < 0L)
-        {
-            throw new ConstraintFailureException("'Probability' must be >= 0.");
-        }
-        if (assignValue0 > 100L)
-        {
-            throw new ConstraintFailureException("'Probability' must be <= 100.");
-        }
-        this.Probability = assignValue0;
-    }
-    private void OnEntryCommit()
-    {
-        var assignValue0 = 80L;
-        if (assignValue0 < 0L)
-        {
-            throw new ConstraintFailureException("'Probability' must be >= 0.");
-        }
-        if (assignValue0 > 100L)
-        {
-            throw new ConstraintFailureException("'Probability' must be <= 100.");
-        }
-        this.Probability = assignValue0;
-    }
-    private void OnEntryWon()
-    {
-        var assignValue0 = 100L;
-        if (assignValue0 < 0L)
-        {
-            throw new ConstraintFailureException("'Probability' must be >= 0.");
-        }
-        if (assignValue0 > 100L)
-        {
-            throw new ConstraintFailureException("'Probability' must be <= 100.");
-        }
-        this.Probability = assignValue0;
-    }
-    private void OnEntryLost()
-    {
-        var assignValue0 = 0L;
-        if (assignValue0 < 0L)
-        {
-            throw new ConstraintFailureException("'Probability' must be >= 0.");
-        }
-        if (assignValue0 > 100L)
-        {
-            throw new ConstraintFailureException("'Probability' must be <= 100.");
-        }
-        this.Probability = assignValue0;
     }
 }

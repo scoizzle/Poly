@@ -1124,6 +1124,7 @@ public class DomainToCSharpExporterTests {
             Line: entity {
               Qty: Number
               IsPaid: policy { Qty > 0 }
+              Draft: stage { }
               Active: stage { }
               Mark: action (amount: Number) { assign Qty to amount }
             }
@@ -1269,6 +1270,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Task: entity {
+              Open: stage { }
               Done: stage { }
             }
             Project: entity {
@@ -1519,6 +1521,7 @@ public class DomainToCSharpExporterTests {
 
             WorkItem: entity {
               Code: Text
+              Open: stage { }
               Done: stage { }
             }
             Project: entity {
@@ -2060,7 +2063,10 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("TicketStage.Draft");
         await Assert.That(cs).Contains("TicketStage.Open");
         await Assert.That(cs).Contains("'Cancel' is not valid for the current stage");
-        await Assert.That(cs.Split("this.CurrentStage = TicketStage.Closed").Length - 1).IsEqualTo(2);
+        // Identical stage copies share one body behind a stage-set guard.
+        await Assert.That(cs).Contains(
+            "this.CurrentStage == TicketStage.Draft || this.CurrentStage == TicketStage.Open");
+        await Assert.That(cs.Split("this.CurrentStage = TicketStage.Closed").Length - 1).IsEqualTo(1);
     }
 
     [Test]
@@ -3480,6 +3486,360 @@ public class DomainToCSharpExporterTests {
 
         await Assert.That(cs).Contains("HashSet<string>? _automaticStageChain");
         await Assert.That(cs).DoesNotContain("HashSet<string> _automaticStageChain");
+    }
+
+    // ── G7: one lifecycle value on every transition ───────────────
+
+    [Test]
+    public async Task Export_LifecycleEnumMatchingStages_AssignedOnTransition() {
+        const string dsl = """
+            domain Shop
+            OrderState: enum { Pending, Paid, Shipped }
+            Order: entity {
+              State: OrderState default(Pending)
+              Pending: stage {
+                Pay: action { transition to Paid }
+              }
+              Paid: stage { }
+              Shipped: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var pay = ExportedCSharp.ExtractMethod(cs, "DomainResult Pay(");
+        await Assert.That(pay).Contains("this.State = OrderState.Paid");
+    }
+
+    [Test]
+    public async Task Export_LifecycleEnumMemberSetDiffers_NoAssign() {
+        // TruckStatus has Maintenance, so its member set differs from the stage set —
+        // Status is a plain enum property, not the lifecycle, and no assign is emitted.
+        const string dsl = """
+            domain Fleet
+            TruckStatus: enum { Idle, EnRoute, Maintenance }
+            Truck: entity {
+              Status: TruckStatus default(Idle)
+              Dispatch: action { transition to EnRoute }
+              Idle: stage { }
+              EnRoute: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
+        await Assert.That(dispatch).DoesNotContain("this.Status = TruckStatus.");
+    }
+
+    [Test]
+    public async Task Export_TwoLifecycleEnumCandidates_Throws() {
+        const string dsl = """
+            domain Shop
+            OrderState: enum { Pending, Paid }
+            PaidState: enum { Pending, Paid }
+            Order: entity {
+              State: OrderState
+              PaidStatus: PaidState
+              Pending: stage { }
+              Paid: stage { }
+            }
+            """;
+        await Assert.That(() => ParseAndAnalyze(dsl))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("State")
+            .And.WithMessageContaining("PaidStatus");
+    }
+
+    // ── G10: one body per shared stage copy ──────────────────────
+
+    [Test]
+    public async Task Export_SharedStageCopies_EmitOneBodyWithStageSetGuard() {
+        const string dsl = """
+            domain Crm
+            Opportunity: entity {
+              Note: Text
+              A: stage { Log: action { assign Note to "x" } }
+              B: stage { Log: action { assign Note to "x" } }
+              C: stage { Log: action { assign Note to "x" } }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var log = ExportedCSharp.ExtractMethod(cs, "DomainResult Log(");
+        await Assert.That(log).Contains("this.CurrentStage == OpportunityStage.A");
+        await Assert.That(log).Contains("this.CurrentStage == OpportunityStage.B");
+        await Assert.That(log).Contains("this.CurrentStage == OpportunityStage.C");
+        // One merged body: the shared effect is printed exactly once.
+        await Assert.That(CountOccurrences(log, "this.Note = \"x\"")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Export_StageCopiesWithDifferentStagePolicies_NotMerged() {
+        var domain = new DomainEvolution(DomainFactory.Create("Crm")).Evolve()
+            .AddEntity("Opportunity")
+            .AddPropertyToEntity("Opportunity", new Property("Note", new DomainTypeReference("Text"), []))
+            .AddStage("Opportunity", "A")
+            .AddStage("Opportunity", "B")
+            .AddPolicyToStage("Opportunity", "A", "Ready", DomainExpression.Literal(true))
+            .AddActionToStage("Opportunity", "A", "Log")
+            .AddActionToStage("Opportunity", "B", "Log")
+            .Apply();
+        if (!domain.Succeeded)
+            throw new InvalidOperationException(domain.FailureSummary);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain.Root!);
+        var types = new DomainToCSharpExporter().Export(domain.Root!, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var log = ExportedCSharp.ExtractMethod(cs, "DomainResult Log(");
+        // Two distinct guards — not one merged stage-set guard.
+        await Assert.That(log).Contains("this.CurrentStage == OpportunityStage.A");
+        await Assert.That(log).Contains("this.CurrentStage == OpportunityStage.B");
+        await Assert.That(log).DoesNotContain(
+            "this.CurrentStage == OpportunityStage.A || this.CurrentStage == OpportunityStage.B");
+    }
+
+    // ── G5: sensible initial stage + one entry body ───────────────
+
+    [Test]
+    public async Task Export_TruckCreate_StartsIdle_AndDispatchEntersEnRoute() {
+        const string dsl = """
+            domain Fleet
+            TruckStatus: enum { Idle, EnRoute }
+            Truck: entity {
+              Status: TruckStatus default(Idle)
+              Dispatch: action { transition to EnRoute }
+              Idle: stage { }
+              EnRoute: stage {
+                entry { assign Status to EnRoute }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var ctor = cs[cs.IndexOf("private Truck()", StringComparison.Ordinal)..];
+        ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
+        await Assert.That(ctor).Contains("this.CurrentStage = TruckStage.Idle");
+        await Assert.That(ctor).DoesNotContain("this.Status = TruckStatus.EnRoute");
+
+        var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
+        await Assert.That(dispatch).Contains("this.CurrentStage = TruckStage.EnRoute");
+        await Assert.That(dispatch).Contains("TruckStatus.EnRoute");
+        await Assert.That(dispatch).Contains("this.Status =");
+    }
+
+    // ── G17: stage-scoped legal source ───────────────────────────
+
+    [Test]
+    public async Task Export_StageScopedShip_HasPaidGuard() {
+        const string dsl = """
+            domain Orders
+            OrderState: enum { Pending, Paid, Shipped }
+            Order: entity {
+              State: OrderState default(Pending)
+              Pending: stage {
+                Pay: action { transition to Paid }
+              }
+              Paid: stage {
+                Ship: action { transition to Shipped }
+              }
+              Shipped: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var ship = ExportedCSharp.ExtractMethod(cs, "DomainResult Ship(");
+        await Assert.That(ship).Contains("requires stage 'Paid'");
+        await Assert.That(ship).Contains("this.CurrentStage = OrderStage.Shipped");
+    }
+
+    // ── G21: implicit single stage ───────────────────────────────
+
+    [Test]
+    public async Task Export_ImplicitSingleStage_OmitsStageEnumAndCurrentStage() {
+        const string dsl = """
+            domain Shop
+            Patron: entity {
+              Name: Text required
+              Active: stage {
+                Ping: action { }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).DoesNotContain("enum PatronStage");
+        await Assert.That(cs).DoesNotContain("PatronStage CurrentStage");
+        var ping = ExportedCSharp.ExtractMethod(cs, "DomainResult Ping(");
+        await Assert.That(ping).DoesNotContain("requires stage");
+    }
+
+    [Test]
+    public async Task Export_OneStageWithEntry_KeepsStageEnum() {
+        const string dsl = """
+            domain Shop
+            Widget: entity {
+              Tag: Text
+              A: stage {
+                entry { assign Tag to "x" }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).Contains("enum WidgetStage");
+        await Assert.That(cs).Contains("public WidgetStage CurrentStage");
+    }
+
+    [Test]
+    public async Task Export_ForInImplicitStage_Throws() {
+        const string dsl = """
+            domain Shop
+            Patron: entity {
+              Name: Text required
+              Active: stage {
+                Ping: action { }
+              }
+            }
+            Clerk: entity {
+              patrons: many Patron
+              Nudge: action {
+                for patrons as p where p in Active
+                  invoke p.Ping()
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(() => new DomainToCSharpExporter().Export(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("implicit stage");
+    }
+
+    // ── D10: no dead OnEntry/OnExit members ──────────────────────
+
+    [Test]
+    public async Task Export_StageEntryAndExit_NoDeadOnEntryOrOnExitMembers() {
+        const string dsl = """
+            domain Shop
+            Widget: entity {
+              Tag: Text
+              A: stage {
+                entry { assign Tag to "x" }
+                Next: action { transition to B }
+              }
+              B: stage {
+                exit { assign Tag to "y" }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).DoesNotContain("OnEntryA");
+        await Assert.That(cs).DoesNotContain("OnExitB");
+    }
+
+    // ── D12: previousStage only for when all ─────────────────────
+
+    [Test]
+    public async Task Export_WhenEachOnlyNotifier_HasNoPreviousStageParameter() {
+        const string dsl = """
+            domain Watch
+            Paper: entity {
+              Title: Text
+              A: stage { Advance: action { transition to B } }
+              B: stage { }
+            }
+            Tr: entity {
+              Tracks: Paper
+              P: stage {
+                when Tracks B { transition to Q }
+              }
+              Q: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).Contains("void NotifyBSubscribers()");
+        await Assert.That(cs).DoesNotContain("void NotifyBSubscribers(PaperStage?");
+    }
+
+    [Test]
+    public async Task Export_WhenAllNotifier_KeepsPreviousStageParameter() {
+        const string dsl = """
+            domain Watch
+            Item: entity {
+              A: stage { Done: action { transition to B } }
+              B: stage { }
+            }
+            Board: entity {
+              items: many Item
+              P: stage {
+                when all items B { transition to Q }
+              }
+              Q: stage { }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        await Assert.That(cs).Contains("void NotifyBSubscribers(ItemStage? previousStage)");
+    }
+
+    [Test]
+    public async Task Export_CreateInWhenEachFirstStage_NotifiesWithNoArgument() {
+        const string dsl = """
+            domain Watch
+            Child: entity {
+              Name: Text required
+              A: stage {
+                entry { assign Name to "x" }
+              }
+              B: stage { }
+            }
+            Parent: entity {
+              children: many Child
+              Flag: Text
+              P: stage {
+                Add: action { create in children { Name: "n" } }
+                when children A { assign Flag to "y" }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var cs = new CSharpGenerator().Generate(types);
+
+        var add = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreateChildren(");
+        await Assert.That(add).Contains("NotifyASubscribers()");
+        await Assert.That(add).DoesNotContain("NotifyASubscribers(null)");
+    }
+
+    private static int CountOccurrences(string text, string needle) {
+        var count = 0;
+        var idx = 0;
+        while ((idx = text.IndexOf(needle, idx, StringComparison.Ordinal)) >= 0) {
+            count++;
+            idx += needle.Length;
+        }
+        return count;
     }
 
     private static string[] CompileExported(string cs) {

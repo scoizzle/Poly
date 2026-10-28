@@ -319,15 +319,19 @@ public sealed partial class DomainToCSharpExporter {
         // A create-in lands the child in its first stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
-        if (targetEntity.Stages.Count > 0) {
+        if (metadata.GetStructure(targetEntity)?.HasStages == true) {
             var firstStage = targetEntity.Stages[0].Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
                     && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
+                var needsPrevious = subscriberSubs.Any(i =>
+                    string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
+                    && string.Equals(i.StageName, firstStage, StringComparison.Ordinal)
+                    && NeedsAllPreviousStage(i));
                 bodyNodes.Add(new Invoke(
                     new Member(local, $"Notify{firstStage}Subscribers"),
-                    [new Constant(null)]));
+                    needsPrevious ? [new Constant(null)] : []));
             }
         }
 

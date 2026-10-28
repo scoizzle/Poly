@@ -2,11 +2,6 @@
 using System;
 using System.Collections.Generic;
 
-public enum PatronStage
-{
-    Active = 0
-}
-
 public class Patron
 {
     private List<Fine> _fines;
@@ -18,24 +13,18 @@ public class Patron
     {
         this.Name = name;
         this._fines = new List<Fine>(fines ?? new List<Fine>());
-        this.CurrentStage = PatronStage.Active;
     }
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Fine> Fines
     {
         get => this._fines;
     }
-    public PatronStage CurrentStage { get; private set; }
     internal void AttachFines(Fine child)
     {
         this._fines.Add(child);
     }
     public DomainResult<Fine> AssessByType()
     {
-        if (this.CurrentStage != PatronStage.Active)
-        {
-            return DomainResult<Fine>.Failure("'AssessByType' requires stage 'Active' on entity 'Patron'.");
-        }
         var create0 = Fine.Create(5L, "TypeCreate");
         if (!create0.IsSuccess)
         {

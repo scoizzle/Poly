@@ -2,11 +2,6 @@
 using System;
 using System.Collections.Generic;
 
-public enum SectionStage
-{
-    InService = 0
-}
-
 public class Section
 {
     private Section()
@@ -18,20 +13,14 @@ public class Section
         this.Name = name;
         this.Occupied = occupied;
         this.Hall = hall;
-        this.CurrentStage = SectionStage.InService;
     }
     public long Capacity { get; private set; }
     public long DayRate { get; private set; }
     public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
-    public SectionStage CurrentStage { get; private set; }
     public DomainResult Occupy()
     {
-        if (this.CurrentStage != SectionStage.InService)
-        {
-            return DomainResult.Failure("'Occupy' requires stage 'InService' on entity 'Section'.");
-        }
         if (!this.CanBook())
         {
             return DomainResult.Failure("'Occupy' blocked by policy 'CanBook'.");
@@ -58,10 +47,6 @@ public class Section
     }
     public DomainResult Vacate()
     {
-        if (this.CurrentStage != SectionStage.InService)
-        {
-            return DomainResult.Failure("'Vacate' requires stage 'InService' on entity 'Section'.");
-        }
         if (!this.IsOccupied())
         {
             return DomainResult.Failure("'Vacate' blocked by policy 'IsOccupied'.");

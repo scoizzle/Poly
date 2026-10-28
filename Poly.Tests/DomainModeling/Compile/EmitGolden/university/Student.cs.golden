@@ -219,8 +219,4 @@ public class Student
         }
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
-    private void OnEntrySuspended()
-    {
-        this.Holds = this.Holds + 1L;
-    }
 }

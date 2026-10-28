@@ -45,16 +45,16 @@ Visit: entity {
   patient: Patient
   primaryDoctor: Doctor
 
-  CheckIn: action {
-    transition to CheckedIn
-  }
-
   // Action with an entity-ref param (Doctor) -> action DTO gets doctorId
   AssignDoctor: action (doctor: Doctor) {
     assign Reason to "assigned"
   }
 
-  Scheduled: stage { }
+  Scheduled: stage {
+    CheckIn: action {
+      transition to CheckedIn
+    }
+  }
   CheckedIn: stage {
     entry { assign State to CheckedIn }
   }

@@ -35,18 +35,10 @@ public class Ticket
     }
     public DomainResult Close()
     {
-        if (this.CurrentStage == TicketStage.New)
+        if (this.CurrentStage == TicketStage.New || this.CurrentStage == TicketStage.Working)
         {
-            var previousStage0 = this.CurrentStage;
             this.CurrentStage = TicketStage.Closed;
-            this.NotifyClosedSubscribers(previousStage0);
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == TicketStage.Working)
-        {
-            var previousStage1 = this.CurrentStage;
-            this.CurrentStage = TicketStage.Closed;
-            this.NotifyClosedSubscribers(previousStage1);
+            this.NotifyClosedSubscribers();
             return DomainResult.Success();
         }
         return DomainResult.Failure("'Close' is not valid for the current stage on entity 'Ticket'.");
@@ -66,7 +58,7 @@ public class Ticket
         }
         this._accountTicketsClosedSubscribers.Add(subscriber);
     }
-    internal void NotifyClosedSubscribers(TicketStage? previousStage)
+    internal void NotifyClosedSubscribers()
     {
         this.EnterNotifyCascade("Closed");
         try

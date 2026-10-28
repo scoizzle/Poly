@@ -127,7 +127,11 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
                 null => "0",
                 _ => "1", // a to-one navigation holding its target
             };
-        state["Stage"] = Read(entity, "CurrentStage")?.ToString();
+        // An implicit single stage has no printed CurrentStage; the value is
+        // constant, so report the model's stage on both sides.
+        var currentStage = Read(entity, "CurrentStage")?.ToString();
+        state["Stage"] = currentStage
+            ?? (model.Stages.Count == 1 ? model.Stages[0].Name : null);
         return state;
     }
 

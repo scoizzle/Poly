@@ -61,12 +61,7 @@ public class EventHold
     }
     public DomainResult Cancel()
     {
-        if (this.CurrentStage == EventHoldStage.Requested)
-        {
-            this.CurrentStage = EventHoldStage.Cancelled;
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == EventHoldStage.Confirmed)
+        if (this.CurrentStage == EventHoldStage.Requested || this.CurrentStage == EventHoldStage.Confirmed)
         {
             this.CurrentStage = EventHoldStage.Cancelled;
             return DomainResult.Success();
@@ -144,9 +139,8 @@ public class EventHold
         {
             return DomainResult.Failure(invoke0.ErrorMessage ?? "");
         }
-        var previousStage1 = this.CurrentStage;
         this.CurrentStage = EventHoldStage.Released;
-        this.NotifyReleasedSubscribers(previousStage1);
+        this.NotifyReleasedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult ReleaseSection()
@@ -168,9 +162,8 @@ public class EventHold
         {
             return DomainResult.Failure(invoke0.ErrorMessage ?? "");
         }
-        var previousStage1 = this.CurrentStage;
         this.CurrentStage = EventHoldStage.Released;
-        this.NotifyReleasedSubscribers(previousStage1);
+        this.NotifyReleasedSubscribers();
         return DomainResult.Success();
     }
     public bool DatesValid() => this.EndDate > this.StartDate;
@@ -193,7 +186,7 @@ public class EventHold
         }
         this._guestEventsReleasedSubscribers.Add(subscriber);
     }
-    internal void NotifyReleasedSubscribers(EventHoldStage? previousStage)
+    internal void NotifyReleasedSubscribers()
     {
         this.EnterNotifyCascade("Released");
         try

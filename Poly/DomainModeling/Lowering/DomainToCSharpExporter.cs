@@ -221,7 +221,9 @@ public sealed partial class DomainToCSharpExporter {
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
         // is the single source; fall back to the derivation only for the null-analysis path.
-        var stageEnumTypeName = esm.StageEnumTypeName ?? $"{entity.Name}Stage";
+        var stageEnumTypeName = esm.HasStages
+            ? esm.StageEnumTypeName ?? $"{entity.Name}Stage"
+            : null;
 
         // Properties assigned by the initial stage's entry effects are body-initialized
         // (the ctor already runs those effects after setting CurrentStage) — they must
@@ -411,11 +413,16 @@ public sealed partial class DomainToCSharpExporter {
         // defaults — `create in { DefaultedProp: value }` flows through construction.
         ctorParams.AddRange(defaultedCtorParams);
 
-        // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass builds
-        // the invoke with a unique previousStageN capture for when-all.
+        // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass captures
+        // the previous stage only when a when-all handler reads it.
         IReadOnlySet<string>? postTransitionNotifyStages = null;
+        IReadOnlySet<string>? previousStageNotifyStages = null;
         if (targetSubs is { Count: > 0 }) {
             postTransitionNotifyStages = targetSubs
+                .Select(s => s.StageName)
+                .ToHashSet(StringComparer.Ordinal);
+            previousStageNotifyStages = targetSubs
+                .Where(NeedsAllPreviousStage)
                 .Select(s => s.StageName)
                 .ToHashSet(StringComparer.Ordinal);
         }
@@ -424,7 +431,8 @@ public sealed partial class DomainToCSharpExporter {
         // Same action name on multiple stages is one C# method that dispatches on
         // CurrentStage. Emitting one method per stage produced illegal duplicate members
         // (FieldService WorkOrder.Cancel on Draft/Scheduled/Blocked).
-        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages, domain, metadata);
+        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages,
+            previousStageNotifyStages, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
         // One unqualified method per policy name. Entity, stage, and action-local
@@ -530,9 +538,10 @@ public sealed partial class DomainToCSharpExporter {
                 // Nullable: a create-in lands the child in its first stage with no prior
                 // stage, so the caller passes null. `when all` guards read it as
                 // "transitioned from" and a fresh entry must not match.
+                var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
                 var notifyPrevious = new Parameter(
                     "previousStage",
-                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName)));
+                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
@@ -558,7 +567,7 @@ public sealed partial class DomainToCSharpExporter {
                 methods.Add(new MethodDefinitionNode(
                     $"Notify{stageGroup.Key}Subscribers",
                     new TypeReference("void"),
-                    Parameters: [notifyPrevious],
+                    Parameters: needsPrevious ? [notifyPrevious] : null,
                     Body: new Block([
                         new Invoke(
                             new Member(new ThisReference(), "EnterNotifyCascade"),
@@ -611,7 +620,10 @@ public sealed partial class DomainToCSharpExporter {
                         Analysis: metadata,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames,
-                        PostTransitionNotifyStages: postTransitionNotifyStages);
+                        LifecyclePropertyName: esm.LifecyclePropertyName,
+                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
+                        PostTransitionNotifyStages: postTransitionNotifyStages,
+                        PreviousStageNotifyStages: previousStageNotifyStages);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -635,7 +647,7 @@ public sealed partial class DomainToCSharpExporter {
                     var stageGate = new IfStatement(
                         new NotEqual(
                             new Member(new ThisReference(), "CurrentStage"),
-                            new Member(new NamedTypeReference(stageEnumTypeName), info.SubscriberStageName)),
+                            new Member(new NamedTypeReference(stageEnumTypeName!), info.SubscriberStageName)),
                         new Block([new Return()]));
                     handlerBody = new Block([stageGate, handlerBody]);
                 }
@@ -680,7 +692,7 @@ public sealed partial class DomainToCSharpExporter {
                 // transition it fires whenever at least one linked record is in
                 // any watched stage (union of StageNames).
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
-                    && info.TargetEntity.Stages.Count > 0
+                    && metadata.GetStructure(info.TargetEntity)?.HasStages == true
                     && info.Subscription.StageNames.Count > 0) {
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched");
@@ -724,8 +736,8 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Stage enum + CurrentStage property ────────────────────
-        if (entity.Stages.Count > 0) {
-            var enumTypeName = stageEnumTypeName;
+        if (esm.HasStages) {
+            var enumTypeName = stageEnumTypeName!;
             typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
 
             props.Add(new PropertyDefinitionNode(
@@ -746,12 +758,12 @@ public sealed partial class DomainToCSharpExporter {
             var bodyNodes = new List<Node>();
             bodyNodes.AddRange(ctorAssignments);
 
-            if (entity.Stages.Count > 0) {
+            if (esm.HasStages) {
                 var firstStage = entity.Stages[0];
                 bodyNodes.Add(new Assignment(
                     new Member(new ThisReference(), "CurrentStage"),
                     new Member(
-                        new NamedTypeReference(stageEnumTypeName),
+                        new NamedTypeReference(stageEnumTypeName!),
                         firstStage.Name)));
 
                 // Apply the initial stage's entry effects in the constructor.
@@ -763,13 +775,15 @@ public sealed partial class DomainToCSharpExporter {
                         new ThisReference(),
                         Analysis: metadata,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames);
+                        StageEnumTypeName: stageEnumTypeName,
+                        EnumPropertyNames: esm.EnumPropertyNames,
+                        LifecyclePropertyName: esm.LifecyclePropertyName,
+                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
+                        PostTransitionNotifyStages: postTransitionNotifyStages,
+                        PreviousStageNotifyStages: previousStageNotifyStages,
+                        SourceStageName: firstStage.Name);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
-                    foreach (var entryEffect in firstStage.OnEntryEffects) {
-                        var lowered = entryPass.Route(entryEffect);
-                        if (lowered is not null)
-                            bodyNodes.Add(lowered);
-                    }
+                    entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
                 }
             }
 

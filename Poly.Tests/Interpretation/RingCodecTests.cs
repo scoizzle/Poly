@@ -40,7 +40,7 @@ public class RingCodecTests {
     }
 
     [Test]
-    public async Task KindFor_EnumAndNullableEnum_AreStackScalars() {
+    public async Task KindFor_Enum_IsStackScalar_AndNullableEnum_IsHeapRef() {
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DayOfWeek))).IsEqualTo(ValueRepresentationKind.StackScalar);
         await Assert.That(ValueRepresentationClassifier.KindFor(typeof(DayOfWeek?))).IsEqualTo(ValueRepresentationKind.HeapRef);
     }

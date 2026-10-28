@@ -323,11 +323,12 @@ location instead of re-deriving `_slots[_fp + n]`. Each location states the
 frame slot and a cell hold the word — and `ReadAs` / `Write` convert only when the
 requested representation differs. A typed read of a stored word is
 `LocalType.FromWord`; a typed write is `Encode`. A value crosses the word boundary
-once at the crossing. Two classifiers
-answer two questions: `RingCodec.UnderlyingKindFor`
-(does the *underlying* type fit one slot as bits; peels `Nullable`) and
-`ValueRepresentationClassifier.KindFor` (what does a *node* of this type put in
-its slot; a nullable is a heap handle).
+once at the crossing. `ValueRepresentationClassifier.KindFor` is the one
+classifier: what does a *node* of this type put in its slot. A nullable is a
+heap handle (its frame word is a boxed `Nullable<T>`; 0 is absent), while its
+pool local is typed `Nullable<T>` (`_nN_T`), so the value is never read as a
+word. There is no second "underlying" classifier; arithmetic on a nullable
+lifts to its underlying type and the slot stays the typed local.
 
 The table is the word a frame slot, a cell, or a call result holds. A pool local
 for `int`, `float`, or `double` holds the CLR value; `Encode` writes this word.

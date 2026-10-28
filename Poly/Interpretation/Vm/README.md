@@ -72,16 +72,18 @@ binding's own storage without the capture indirection.
 `EmitScope.Yield` spills a computation into the next pool local and returns
 that assignment. The scope's dispose rewinds anything that was not yielded.
 
-Shape is `RingCodec`'s job and is not stored on the location. Two classifiers
-answer two different questions: `RingCodec.UnderlyingKindFor` asks whether a
-type's *underlying* value is long-representable (it peels a nullable), while
-`ValueRepresentationClassifier.KindFor` asks what a *node* of that type puts in
-its slot (a nullable is a heap handle).
+Shape is `RingCodec`'s job and is not stored on the location.
+`ValueRepresentationClassifier.KindFor` is the one classifier: what a node of a
+type puts in its slot. A nullable is `HeapRef` — its frame word is a boxed
+`Nullable<T>`, and 0 is absent — while its pool local is typed `Nullable<T>`
+(`_nN_T`, `SlotType` is the nullable itself), so the value is never read as a
+word. There is no second "underlying" classifier; arithmetic on a nullable
+lifts to its underlying type, and the slot stays the typed local.
 
 ### Where a result lives
 
-`CompileNode` returns a `CompiledNode`: the code, and the `SlotLocation` its result
-occupies once that code has run. Naming the location is what lets a consumer
+`CompileNode` returns a `Value`: the code, the read, and the `SlotLocation` its
+result occupies once that code has run. Naming the location is what lets a consumer
 release it, so the ring is a pool of result locations rather than an ambient
 cursor that every consumer re-derived as `RingDepth - 1`.
 

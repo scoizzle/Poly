@@ -54,7 +54,8 @@ public class QuantifierLoopTests {
         var (domain, _) = Evolve(BasketDsl);
         var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var store = new DomainInstanceStore();
-        var inst = DomainEntityInstance.Create(order, domain: domain);
+        var inst = DomainEntityInstance.Create(order,
+            new Dictionary<string, object?> { ["Ready"] = true }, domain);
         store.Add(inst);
         await Assert.That(inst.EvaluatePolicy(order.Policies.First(p => p.Name == "AllOpen"))).IsFalse();
         await Assert.That(inst.EvaluatePolicy(order.Policies.First(p => p.Name == "AnyOpen"))).IsFalse();
@@ -67,7 +68,8 @@ public class QuantifierLoopTests {
         var orderEnt = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var lineEnt = domain.Types.OfType<Entity>().First(e => e.Name == "Line");
         var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderEnt, domain: domain);
+        var order = DomainEntityInstance.Create(orderEnt,
+            new Dictionary<string, object?> { ["Ready"] = true }, domain);
         var openA = DomainEntityInstance.Create(lineEnt,
             new Dictionary<string, object?> { ["Qty"] = 1L, ["Open"] = true }, domain);
         var openB = DomainEntityInstance.Create(lineEnt,

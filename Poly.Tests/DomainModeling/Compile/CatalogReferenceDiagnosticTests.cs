@@ -14,12 +14,12 @@ public sealed class CatalogReferenceDiagnosticTests {
         domain Parking
 
         Permit: entity {
-          Plate: Text required
+          Plate: Text
           Open: stage { }
         }
 
         Garage: entity {
-          Name: Text required
+          Name: Text
         }
         """;
 

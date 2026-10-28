@@ -21,7 +21,7 @@ public class TextConcatParityTests {
         """;
 
     static void CreateAndTag(ParitySide side) {
-        side.Create("Item", ("Status", "paid"), ("Suffix", "x"), ("Count", 3L), ("Total", 1L), ("Code", ""));
+        side.Create("Item", ("Status", "paid"), ("Suffix", "x"), ("Count", 3L), ("Total", 1L), ("Code", "seed"));
         side.Invoke("Tag");
     }
 

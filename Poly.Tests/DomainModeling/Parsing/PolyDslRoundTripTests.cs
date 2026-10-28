@@ -13,8 +13,8 @@ public class PolyDslRoundTripTests {
             domain TestDomain
 
             Product: entity {
-              SKU: Text required unique
-              Name: Text required
+              SKU: Text unique
+              Name: Text
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -405,7 +405,7 @@ public class PolyDslRoundTripTests {
             domain Minimal
 
             Person: entity {
-              Name: Text required
+              Name: Text
               Age: Number range(0, 150)
             }
             """;
@@ -426,7 +426,7 @@ public class PolyDslRoundTripTests {
             domain Simple
 
             Task: entity {
-              Title: Text required
+              Title: Text
             }
             """;
 
@@ -573,8 +573,8 @@ public class PolyDslRoundTripTests {
             domain Test
 
             Item: entity {
-              Code: Text required unique
-              Name: Text required
+              Code: Text unique
+              Name: Text
               Qty: Number range(0, 999)
               Label: Text length(1, 10)
               Email: Text pattern("[^@]+@[^@]+")
@@ -589,7 +589,6 @@ public class PolyDslRoundTripTests {
 
         var item = result.Root!.Types.OfType<Entity>().Single();
         var code = item.Properties.Single(p => p.Name == "Code");
-        await Assert.That(code.Constraints.Any(c => c is RequiredConstraint)).IsTrue();
         await Assert.That(code.Constraints.Any(c => c is UniqueConstraint)).IsTrue();
 
         var printer = new DomainDslPrinter();
@@ -909,7 +908,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
-              Title: Text
+              Title: Text optional
             }
             """;
 

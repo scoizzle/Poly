@@ -296,7 +296,7 @@ public class UnwrittenRelationshipAnalysisTests {
             }
             Booking: entity {
               member: Member
-              Label: Text
+              Label: Text optional
             }
             """);
 

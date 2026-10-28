@@ -5,21 +5,21 @@ uses http
 Tier: enum { Basic, Plus, Elite }
 
 Plan: entity {
-  Code: Text unique required length(2, 16)
-  Name: Text required
-  Price: Number range(0, 5000) required
+  Code: Text unique length(2, 16)
+  Name: Text
+  Price: Number range(0, 5000)
   Tier: Tier
 }
 
 Trainer: entity {
-  Name: Text required
+  Name: Text
   Specialty: Text
   sessions: many ClassSession
 }
 
 Member: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   JoinedOn: Date default(Today)
   ExpiresOn: Date default(Today)
   Visits: Number default(0)
@@ -53,9 +53,9 @@ Member: entity {
 }
 
 ClassSession: entity {
-  Name: Text required
+  Name: Text
   StartsAt: Date default(Today)
-  Capacity: Number range(1, 50) required
+  Capacity: Number range(1, 50)
   AttendedCount: Number default(0)
   trainer: Trainer
   bookings: many Booking

@@ -13,7 +13,7 @@ public class SubscriptionSingleFireTests {
         uses temporal
 
         Queue: entity {
-          Name: Text required
+          Name: Text
           FinishedCount: Number default(0)
           FailedCount: Number default(0)
           jobs: many Job
@@ -31,7 +31,7 @@ public class SubscriptionSingleFireTests {
         }
 
         Job: entity {
-          Title: Text required
+          Title: Text
           Retries: Number default(0)
           MaxRetries: Number default(3)
 

@@ -188,7 +188,7 @@ public class SimulateCreateDogfoodTests {
             uses storage
 
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
               waived: many Fine
               HasFines: policy { fines exists }
@@ -203,8 +203,8 @@ public class SimulateCreateDogfoodTests {
             }
 
             Fine: entity {
-              Amount: Number range(0, 500) required
-              Reason: Text required
+              Amount: Number range(0, 500)
+              Reason: Text
               patron: Patron
             }
             """;
@@ -233,7 +233,7 @@ public class SimulateCreateDogfoodTests {
             uses storage
 
             Clerk: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Hire: action (name: Text) -> Patron {
                   create Patron { Name: name }
@@ -242,13 +242,13 @@ public class SimulateCreateDogfoodTests {
             }
 
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
             }
 
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
             }
             """;
         await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
@@ -272,7 +272,7 @@ public class SimulateCreateDogfoodTests {
             uses storage
 
             Desk: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 CheckOut: action (reason: Text) -> Fine {
                   create Fine { Amount: 1 Reason: reason }
@@ -281,13 +281,13 @@ public class SimulateCreateDogfoodTests {
             }
 
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
               patron: Patron
             }
 
             Patron: entity {
-              Name: Text required
+              Name: Text
             }
             """;
         await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
@@ -312,7 +312,7 @@ public class SimulateCreateDogfoodTests {
             uses storage
 
             Clerk: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Open: action (name: Text) -> Account {
                   create Account { Name: name }
@@ -321,7 +321,7 @@ public class SimulateCreateDogfoodTests {
             }
 
             Account: entity {
-              Name: Text required
+              Name: Text
               Opened: Date default(Today)
             }
             """;

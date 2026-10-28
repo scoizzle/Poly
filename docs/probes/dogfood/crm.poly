@@ -12,20 +12,20 @@ Billing: contract external billing v1 {
 Industry: enum { Technology, Healthcare, Finance, Other }
 
 Site: entity {
-  City: Text required
+  City: Text
   Region: Text
 }
 
 Product: entity {
-  Sku: Text unique required length(3, 32)
-  Name: Text required
-  ListPrice: Number range(0, 100000000) required
+  Sku: Text unique length(3, 32)
+  Name: Text
+  ListPrice: Number range(0, 100000000)
 }
 
 Lead: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
-  Company: Text required
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Company: Text
   account: Account
   HasAccount: policy { account exists }
   New: stage {
@@ -41,7 +41,7 @@ Lead: entity {
 }
 
 Account: entity {
-  Name: Text required
+  Name: Text
   Industry: Industry
   parent: Account
   WonCount: Number default(0)
@@ -92,8 +92,8 @@ Account: entity {
 }
 
 Contact: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   account: Account
   Active: stage {
     Retire: action { transition to Inactive }
@@ -104,8 +104,8 @@ Contact: entity {
 }
 
 Opportunity: entity {
-  Title: Text required
-  Amount: Number range(0, 100000000) required
+  Title: Text
+  Amount: Number range(0, 100000000)
   CloseBy: Date default(Today)
   Probability: Number range(0, 100) default(10)
   account: Account
@@ -178,7 +178,7 @@ Opportunity: entity {
 }
 
 Activity: entity {
-  Subject: Text required
+  Subject: Text
   DueOn: Date default(Today)
   opportunity: Opportunity
   Open: stage {
@@ -191,8 +191,8 @@ Activity: entity {
 }
 
 Quote: entity {
-  Title: Text required
-  Amount: Number range(0, 100000000) required
+  Title: Text
+  Amount: Number range(0, 100000000)
   opportunity: Opportunity
   lines: many QuoteLine
   Draft: stage {
@@ -211,7 +211,7 @@ Quote: entity {
 }
 
 Campaign: entity {
-  Name: Text required
+  Name: Text
   members: many CampaignMember
   Active: stage {
     Enroll: action (who: Contact) -> CampaignMember {
@@ -228,7 +228,7 @@ CampaignMember: entity {
 }
 
 Ticket: entity {
-  Subject: Text required
+  Subject: Text
   account: Account
   New: stage {
     Work: action { transition to Working }
@@ -241,15 +241,15 @@ Ticket: entity {
 }
 
 Line: entity {
-  Qty: Number range(1, 10000) required
-  UnitPrice: Number range(0, 100000000) required
+  Qty: Number range(1, 10000)
+  UnitPrice: Number range(0, 100000000)
   product: Product
   opportunity: Opportunity
 }
 
 QuoteLine: entity {
-  Qty: Number range(1, 10000) required
-  UnitPrice: Number range(0, 100000000) required
+  Qty: Number range(1, 10000)
+  UnitPrice: Number range(0, 100000000)
   product: Product
   quote: Quote
 }

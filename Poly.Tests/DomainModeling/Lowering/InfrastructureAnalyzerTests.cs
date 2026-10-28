@@ -64,7 +64,7 @@ public class InfrastructureAnalyzerTests {
         var infra = AnalyzeFull("""
             domain Test
             Book: entity {
-              Title: Text required
+              Title: Text
               ISBN: Text unique
             }
             """);
@@ -138,7 +138,7 @@ public class InfrastructureAnalyzerTests {
         var infra = AnalyzeFull("""
             domain Test
             Book: entity {
-              Title: Text required
+              Title: Text
               Pages: Number range(1, 10000)
             }
             """);
@@ -422,7 +422,7 @@ public class InfrastructureAnalyzerTests {
         const string poly = """
             domain Test
             Book: entity {
-              Title: Text required
+              Title: Text
               ISBN: Text unique
             }
             Patron: entity {

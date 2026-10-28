@@ -1,6 +1,6 @@
 # TASK parse-first - Resolve: move parse-time meaning out of parser; retire PeekExtensions
 
-Status: in review. Branch slice/parse-first. Lane A. Review 2. Implement mill: OpenCode (review on Grok).
+Status: merged #326 `6501436d` 2026-10-25. Branch slice/parse-first. Lane A. Review 2. Implement mill: OpenCode (review on Grok).
 Plan card: [#310](https://github.com/scoizzle/Poly/issues/310) under umbrella [#305](https://github.com/scoizzle/Poly/issues/305). Decisions #14 (parse-first), #15 (stage name Resolve) and #16 (DomainModeling assumes nothing about simulation) are accepted in #305; this slice implements #14/#15 and changes neither.
 
 ## Scope
@@ -74,3 +74,4 @@ none
 |------|-----|------|-----|-----------------|----------|
 | 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6f085887 | planned | S0/#325 merged; issues #310/#305 |
 | 2026-10-25 | implementer | opencode/opencode-go/deepseek-v4.1-flash | 0ee50b29 | pushed | tests 4573/4575; sweep: header scan retired, 2 pre-existing InvariantCulture env failures (no ICU) |
+| 2026-10-25 | planner | opencode/deepseek-v4.1-flash | 6501436d | merged #326 | - |

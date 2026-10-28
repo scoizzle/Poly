@@ -9,7 +9,7 @@ public sealed class CatalogIndexTests {
         domain Library
 
         Patron: entity {
-          Name: Text required
+          Name: Text
           fines: many Fine
           Active: stage {
             AssessByType: action { }
@@ -25,7 +25,7 @@ public sealed class CatalogIndexTests {
         domain Parking
 
         Permit: entity {
-          Plate: Text required
+          Plate: Text
         }
         """;
 
@@ -33,7 +33,7 @@ public sealed class CatalogIndexTests {
         domain Patron
 
         Patron: entity {
-          Name: Text required
+          Name: Text
         }
         """;
 

@@ -17,8 +17,8 @@ CargoKind: enum {
 
 // Root entity with full constraint surface
 Warehouse: entity {
-  Code: Text required length(2, 10) unique pattern("^WH-[0-9]{3}$")
-  Name: Text required length(3, 50)
+  Code: Text length(2, 10) unique pattern("^WH-[0-9]{3}$")
+  Name: Text length(3, 50)
   Zip: Text pattern("^\\d{5}$")
   Capacity: Number range(1, 10000)
   SafetyStock: Number range(0, 5000) default(100)
@@ -46,7 +46,7 @@ Warehouse: entity {
 
 // Child entity (aggregate) with back-ref
 Truck: entity {
-  Vin: Text required length(17, 17) unique pattern("^[A-HJ-NPR-Z0-9]{17}$")
+  Vin: Text length(17, 17) unique pattern("^[A-HJ-NPR-Z0-9]{17}$")
   MaxLoad: Number range(1, 40000)
   CurrentLoad: Number range(0, 40000) default(0)
   Status: TruckStatus default(Idle)
@@ -74,7 +74,7 @@ Truck: entity {
 
 // Grandchild under Truck
 Delivery: entity {
-  Reference: Text required length(4, 20)
+  Reference: Text length(4, 20)
   Weight: Number range(1, 40000)
   truck: Truck
 

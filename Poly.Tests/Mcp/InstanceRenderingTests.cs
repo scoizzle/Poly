@@ -14,7 +14,7 @@ public class InstanceRenderingTests {
     private const string NavDomain = """
         domain InstanceNavRender
         Guest: entity {
-          Name: Text required
+          Name: Text
           reservations: many Reservation
           Active: stage {
             Book: action (table: DiningTable, size: Number) -> Reservation {
@@ -26,12 +26,12 @@ public class InstanceRenderingTests {
           }
         }
         DiningTable: entity {
-          Code: Text required
-          Seats: Number required
+          Code: Text
+          Seats: Number
           reservations: many Reservation
         }
         Reservation: entity {
-          PartySize: Number required
+          PartySize: Number
           guest: Guest
           table: DiningTable
           Booked: stage { }

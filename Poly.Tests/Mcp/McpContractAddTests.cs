@@ -65,7 +65,7 @@ public class McpContractAddTests {
             domain Billing
 
             Order: entity {
-              Total: Number required
+              Total: Number
               Pay(amount: Number): action { }
             }
 

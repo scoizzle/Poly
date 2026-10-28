@@ -894,18 +894,6 @@ public sealed partial class DomainToCSharpExporter {
             string.Equals(v.Name, typeName, StringComparison.Ordinal));
 
     /// <summary>
-    /// A domain value property with no <c>required</c> constraint. Create and
-    /// CreateNav take <c>T?</c> so an omitted initializer can pass null.
-    /// </summary>
-    internal static bool IsUnrequiredDomainValue(Domain domain, Entity entity, string propertyName) {
-        var prop = entity.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
-        if (prop is null || prop.Constraints.Any(c => c is RequiredConstraint))
-            return false;
-        return IsDomainValueType(domain, prop.Type.TypeName);
-    }
-
-    /// <summary>
     /// Lowers a <see cref="DefaultValueConstraint"/> to its C# constant/enum node,
     /// used as an optional-parameter default on the Create/CreateNav/ctor signatures.
     /// Returns null for runtime defaults (now/today/guid) — those use a

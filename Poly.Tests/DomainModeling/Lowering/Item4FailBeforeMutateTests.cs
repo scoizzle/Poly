@@ -21,7 +21,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -58,7 +58,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis, session) = EvolveWithSession("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -102,7 +102,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -130,7 +130,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -172,7 +172,7 @@ public class Item4FailBeforeMutateTests {
             domain Yard
             Widget: entity {
               Active: Boolean default(false)
-              Label: Text required
+              Label: Text
             }
             Bin: entity {
               Active: Boolean default(false)

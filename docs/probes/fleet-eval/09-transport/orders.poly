@@ -10,8 +10,8 @@ OrderState: enum {
 
 // Root aggregate with a child collection
 Customer: entity {
-  Email: Text required unique
-  Name: Text required length(2, 100)
+  Email: Text unique
+  Name: Text length(2, 100)
   Tier: Text default("standard")
   orders: many Order
 
@@ -64,7 +64,7 @@ Order: entity {
 }
 
 OrderItem: entity {
-  Sku: Text required pattern("^[A-Z]{3}-[0-9]{4}$")
+  Sku: Text pattern("^[A-Z]{3}-[0-9]{4}$")
   Qty: Number range(1, 1000)
   order: Order
 }

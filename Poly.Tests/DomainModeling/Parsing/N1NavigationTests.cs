@@ -110,7 +110,7 @@ public class N1NavigationTests {
             domain Test
 
             Passport: entity {
-              PassNum: Text required unique
+              PassNum: Text unique
             }
 
             Person: entity {

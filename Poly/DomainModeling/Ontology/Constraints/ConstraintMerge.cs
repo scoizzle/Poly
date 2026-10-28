@@ -3,8 +3,8 @@ namespace Poly.DomainModeling.Ontology.Constraints;
 /// <summary>
 /// Combines two constraints of the same type into the net (more restrictive) version of
 /// that constraint type — the intersection. Used by the invariant model so combinations
-/// are not just numeric ranges: range, length, required, equality, and pattern all
-/// merge to a net constraint. Returns null when the types differ, the merge is not
+/// are not just numeric ranges: range, length, required, optional, equality, and
+/// pattern all merge to a net constraint. Returns null when the types differ, the merge is not
 /// statically expressible, or the intersection is empty (unsatisfiable).
 /// </summary>
 public static class ConstraintMerge {
@@ -16,6 +16,7 @@ public static class ConstraintMerge {
             (RangeConstraint a, RangeConstraint b) => MergeRange(a, b),
             (LengthConstraint a, LengthConstraint b) => MergeLength(a, b),
             (RequiredConstraint, RequiredConstraint) => new RequiredConstraint(),
+            (OptionalConstraint, OptionalConstraint) => new OptionalConstraint(),
             (EqualityConstraint a, EqualityConstraint b) =>
                 Equals(a.ExpectedValue, b.ExpectedValue) ? a : null,
             (PatternConstraint a, PatternConstraint b) =>

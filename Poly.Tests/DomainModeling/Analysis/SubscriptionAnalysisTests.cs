@@ -397,7 +397,7 @@ public class SubscriptionAnalysisTests {
         // Domain: Tracker ──Tracks──► Order. Subscriber (Tracker) is relationship SOURCE.
         // Tracker has a Pending stage with subscription: when Tracks Active { assign Status to "Triggered" }.
         // Order is just the target entity that transitions.
-        var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
+        var statusProp = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [statusProp], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [

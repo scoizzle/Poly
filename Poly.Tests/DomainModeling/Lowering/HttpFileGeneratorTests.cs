@@ -57,8 +57,8 @@ public class HttpFileGeneratorTests {
         var http = Render(ParseDomain("""
             domain Col
             Address: entity {
-              Line1: Text required
-              City: Text required
+              Line1: Text
+              City: Text
             }
             """));
         await Assert.That(http).Contains("### ──────────── Addresses ────────────");

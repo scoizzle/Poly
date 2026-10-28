@@ -11,7 +11,7 @@ public static class PolyIdeSamples {
         uses http
 
         Item: entity {
-          Name: Text required
+          Name: Text
           Qty: Number
           Bump: action { assign Qty to Qty + 1 }
         }
@@ -23,7 +23,7 @@ public static class PolyIdeSamples {
         uses storage
 
         Customer: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique
           orders: many Order
         }
@@ -52,7 +52,7 @@ public static class PolyIdeSamples {
         domain Parking
 
         Permit: entity {
-          Plate: Text required
+          Plate: Text
         }
         """;
 

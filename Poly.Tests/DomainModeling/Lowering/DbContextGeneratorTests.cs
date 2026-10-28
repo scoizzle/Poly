@@ -109,7 +109,7 @@ public class DbContextGeneratorTests {
         var domain = ParseDomain("""
             domain Test
             Item: entity {
-              Title: Text required
+              Title: Text
             }
             """);
         var omc = OnModelCreating(domain);

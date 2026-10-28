@@ -6,10 +6,10 @@ RunStatus: enum { Draft, Open, Approved, Paid }
 SheetStatus: enum { Draft, Submitted, Approved, Rejected }
 
 Employee: entity {
-  Name: Text required
-  Email: Text unique required pattern("^[^@]+@[^@]+$")
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
   Kind: PayKind default(Salaried)
-  Rate: Number range(0, 1000) required
+  Rate: Number range(0, 1000)
   Gross: Number default(0)
   Net: Number default(0)
   timesheets: many Timesheet
@@ -29,7 +29,7 @@ Employee: entity {
 }
 
 Timesheet: entity {
-  Hours: Number range(0, 400) required
+  Hours: Number range(0, 400)
   Day: Date default(Today)
   employee: Employee
   Draft: stage {
@@ -69,7 +69,7 @@ PayRun: entity {
 }
 
 Payslip: entity {
-  Amount: Number range(0, 1000000) required
+  Amount: Number range(0, 1000000)
   run: PayRun
   Added: stage { }
 }

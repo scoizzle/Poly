@@ -19,6 +19,10 @@ public class Site
         {
             return DomainResult<Site>.Failure("'City' is required.");
         }
+        if (string.IsNullOrEmpty(region))
+        {
+            return DomainResult<Site>.Failure("'Region' is required.");
+        }
         var created = new Site(city, region);
         return DomainResult<Site>.Success(created);
     }

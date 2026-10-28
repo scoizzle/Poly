@@ -18,7 +18,7 @@ public class PipelineTransformationTests {
     public async Task SessionLower_IsTheModuleEmitPrints() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -38,7 +38,7 @@ public class PipelineTransformationTests {
     public async Task SessionLower_PopulatesNamedActionMethodBody() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -59,7 +59,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_UsesTheModuleMethodBody_NotAReloweredCopy() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -91,7 +91,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_RunsTheModuleMethodBody_NotAReloweredEffectWalk() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -131,7 +131,7 @@ public class PipelineTransformationTests {
         // Ontology residual stop: named invoke never falls back to LowerActionBody.
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -165,7 +165,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_SecondCall_UsesCachedOperationBody() {
         var (domain, _, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -283,7 +283,7 @@ public class PipelineTransformationTests {
     public async Task ConditionalCreateIn_DoesNotWarnDropped_AndRuns() {
         var (domain, analysis, session) = Evolve("""
             domain Box
-            Token: entity { Kind: Text required }
+            Token: entity { Kind: Text }
             Parser: entity {
               tokens: many Token
               Rush: Boolean default(false)

@@ -234,24 +234,27 @@ public sealed partial class DomainToCSharpExporter {
         // ── Entity properties (sorted for deterministic output) ──
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
-            var isRequired = prop.Constraints.Any(c => c is RequiredConstraint);
+            // Requiredness is the published fact: required is the default, `optional`
+            // is its opt-out. No constraint re-scan decides nullability.
+            var isRequired = esm.RequiredPropertyNames.Contains(prop.Name);
+            var propertyType = isRequired ? propRef : new OptionalTypeReference(propRef);
             var isDomainValue = IsDomainValueType(domain, prop.Type.TypeName);
             List<Node>? constraints = null;
             if (isRequired)
                 constraints = [new Constant("required")];
 
             // CS8618: the parameterless materialization ctor does not assign
-            // reference properties. Text uses `default!`. A domain value record
+            // reference properties. Text uses `default!`. A required domain value record
             // is default-constructed so a missing initializer is still non-null.
             Syntactic.PropertyInitializerDefinitionNode? initializer = null;
-            if (IsNonNullableReferenceScalar(propRef))
+            if (IsNonNullableReferenceScalar(propertyType))
                 initializer = new Syntactic.PropertyInitializerDefinitionNode(
                     new Syntactic.NullForgiving(new Syntactic.Default()));
-            else if (isDomainValue)
+            else if (isDomainValue && isRequired)
                 initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(propRef));
 
             props.Add(new PropertyDefinitionNode(
-                prop.Name, propRef,
+                prop.Name, propertyType,
                 Getter: new PropertyGetterDefinitionNode(),
                 // private set — domain state changes only through the Create factory /
                 // action effects (no same-assembly backdoor mutability).
@@ -288,7 +291,7 @@ public sealed partial class DomainToCSharpExporter {
                 }
                 else {
                     var defaultNode = LowerDefaultConstantNode(defaultValue, prop, domain, metadata);
-                    defaultedCtorParams.Add(new Parameter(paramName, propRef, DefaultValue: defaultNode));
+                    defaultedCtorParams.Add(new Parameter(paramName, propertyType, DefaultValue: defaultNode));
                     ctorAssignments.Add(new Assignment(
                         new Member(new ThisReference(), prop.Name),
                         new Parameter(paramName)));
@@ -296,20 +299,23 @@ public sealed partial class DomainToCSharpExporter {
                 continue; // skip ctor param — handled as a trailing optional param
             }
 
-            // No default expression — full constructor param + assignment.
-            // A non-required value record accepts null and becomes `new T()`.
-            if (isDomainValue && !isRequired) {
-                ctorParams.Add(new Parameter(paramName, new OptionalTypeReference(propRef)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), prop.Name),
-                    new Syntactic.Coalesce(new Parameter(paramName), new New(propRef))));
-            }
-            else {
-                ctorParams.Add(new Parameter(paramName, propRef));
+            // Optional with no default: a trailing `T? = null` parameter assigned
+            // directly, so an omitted value stores null (not ""/0).
+            if (!isRequired) {
+                defaultedCtorParams.Add(new Parameter(paramName,
+                    new OptionalTypeReference(propRef),
+                    DefaultValue: new Constant(null)));
                 ctorAssignments.Add(new Assignment(
                     new Member(new ThisReference(), prop.Name),
                     new Parameter(paramName)));
+                continue;
             }
+
+            // Required with no default — full constructor param + assignment.
+            ctorParams.Add(new Parameter(paramName, propRef));
+            ctorAssignments.Add(new Assignment(
+                new Member(new ThisReference(), prop.Name),
+                new Parameter(paramName)));
         }
 
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──

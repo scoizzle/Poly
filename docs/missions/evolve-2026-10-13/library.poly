@@ -12,12 +12,12 @@ Mailer: contract external mailer v1 {
 }
 
 Book: entity {
-  Title: Text required
+  Title: Text
   Isbn: Text unique
 }
 
 Patron: entity {
-  Name: Text required
+  Name: Text
   Email: Text unique
   Status: Text
   LastOverdue: Date

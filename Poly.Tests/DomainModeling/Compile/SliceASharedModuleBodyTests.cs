@@ -20,7 +20,7 @@ public class SliceASharedModuleBodyTests {
     public async Task SliceA_SharedModuleBody_InterpreterAndPrint_AgreeWithoutConsumerFlag() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -100,7 +100,7 @@ public class SliceASharedModuleBodyTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
         inst.TransitionStage("Done");
         await Assert.That(inst.CurrentStage).IsEqualTo("Done");

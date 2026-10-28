@@ -166,7 +166,7 @@ public sealed class EmitSessionContractTests {
               Number: Text
               stays: many Stay
               Book: action (guest: Text) -> Stay {
-                create in stays { Guest: guest }
+                create in stays { Guest: guest Industry: Hospitality }
               }
             }
             """;

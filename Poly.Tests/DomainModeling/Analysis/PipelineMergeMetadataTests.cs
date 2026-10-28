@@ -363,7 +363,7 @@ public class PipelineMergeMetadataTests {
             uses persistence
             Profile: entity { City: Text }
             Customer: entity {
-              Name: Text required
+              Name: Text
               Email: Text unique
               Status: Text default("Active")
               profile: owned Profile

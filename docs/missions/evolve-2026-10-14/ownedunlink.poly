@@ -2,7 +2,7 @@ domain OwnedUnlink
 uses temporal
 
 Cart: entity {
-  Name: Text required
+  Name: Text
   lines: many owned Line
   notes: many Note
 
@@ -12,7 +12,7 @@ Cart: entity {
 }
 
 Line: entity {
-  Sku: Text required
+  Sku: Text
   New: stage { }
 }
 

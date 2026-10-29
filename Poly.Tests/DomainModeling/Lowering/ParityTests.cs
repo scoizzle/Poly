@@ -597,6 +597,24 @@ public class ParityTests {
     }
 
     [Test]
+    public async Task Create_WhenFirstStageEntryTransitions_UpdatesLifecycleEnumOnBothSides() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            OrderState: enum { Draft, Paid }
+            Order: entity {
+              State: OrderState default(Draft)
+              Draft: stage {
+                entry { transition to Paid }
+              }
+              Paid: stage { }
+            }
+            """, "ParityEntryTransitionLifecycleEnum")
+            .AssertAgree(side => side.Create("Order"));
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Paid");
+        await Assert.That(outcomes[0].State["State"]).IsEqualTo("Paid");
+    }
+
+    [Test]
     public async Task SingleStageEntity_AgreesOnStage() {
         var outcomes = await ParityScenario.FromDsl("""
             domain Shop

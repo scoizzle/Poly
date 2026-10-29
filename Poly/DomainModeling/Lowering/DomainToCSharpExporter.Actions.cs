@@ -125,10 +125,16 @@ public sealed partial class DomainToCSharpExporter {
                 entityLevel = action;
         }
 
-        // An implicit single stage has no enum and no guard; a duplicate entity-level
-        // copy and the stage copy lower to the same unguarded body.
+        // An implicit single stage has no enum and no guard. Mirror the multi-stage
+        // empty-copy rule: an empty stage copy falls back to the entity-level body,
+        // but a non-empty stage copy wins.
         if (stageEnumTypeName is null) {
-            AddActionMethod(entity, entityLevel ?? variants[0].Action, methods,
+            var stageAction = variants.FirstOrDefault(v => v.SourceStage is not null).Action;
+            var chosen = stageAction is not null
+                && (stageAction.Effects.Count > 0 || stageAction.Policies.Count > 0)
+                ? stageAction
+                : entityLevel ?? stageAction ?? variants[0].Action;
+            AddActionMethod(entity, chosen, methods,
                 stageEnumTypeName, postTransitionNotifyStages, previousStageNotifyStages,
                 sourceStageName: null, domain, analysis);
             return;

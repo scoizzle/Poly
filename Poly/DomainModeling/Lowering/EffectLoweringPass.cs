@@ -829,18 +829,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (targetName is not null && _domain is not null) {
             var targetEntity = _domain.Types.OfType<Entity>()
                 .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
-            if (targetEntity is not null && _analysis is not null) {
-                var esm = _analysis.GetStructure(targetEntity);
-                if (esm is { HasStages: false })
+            if (targetEntity is not null) {
+                if (_analysis is not null) {
+                    var esm = _analysis.GetStructure(targetEntity);
+                    if (esm is { HasStages: false })
+                        throw new InvalidOperationException(
+                            $"Entity '{targetEntity.Name}' has only an implicit stage; " +
+                            "a stage membership filter needs an explicit stage.");
+                    if (esm?.StageEnumTypeName is { } custom) return custom;
+                }
+                if (EntityStructureAnalyzer.IsImplicitStage(targetEntity, _domain))
                     throw new InvalidOperationException(
                         $"Entity '{targetEntity.Name}' has only an implicit stage; " +
                         "a stage membership filter needs an explicit stage.");
-                if (esm?.StageEnumTypeName is { } custom) return custom;
+                if (targetEntity.Stages.Count > 0)
+                    return $"{targetName}Stage";
             }
-            if (targetEntity is not null
-                && targetEntity.Stages.Count > 0
-                && !EntityStructureAnalyzer.IsImplicitStage(targetEntity))
-                return $"{targetName}Stage";
         }
         return $"{targetName ?? relationshipName}Stage";
     }

@@ -306,8 +306,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 case LengthConstraint:
                     return false;
                 case PatternConstraint pattern when value is Constant { Value: string text }:
-                    if (text.Length > 0
-                        && !System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
+                    // Assign-side pattern checks reject empty too (only null skips);
+                    // an empty constant is not a satisfying value.
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
                         return false;
                     break;
                 case PatternConstraint:

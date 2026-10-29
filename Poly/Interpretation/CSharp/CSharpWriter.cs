@@ -1659,7 +1659,8 @@ public sealed class CSharpWriter {
         || ContainsIdentifier(text, "IEnumerable")
         || ContainsIdentifier(text, "IReadOnlyList")
         || ContainsIdentifier(text, "Dictionary")
-        || ContainsIdentifier(text, "HashSet");
+        || ContainsIdentifier(text, "HashSet")
+        || ContainsIdentifier(text, "ISet");
 
     private static bool ContainsIdentifier(string text, string identifier) {
         for (var index = text.IndexOf(identifier, StringComparison.Ordinal);

@@ -49,9 +49,8 @@ public class Enrollment
             return DomainResult.Failure("'Confirm' blocked by policy 'SectionFull'.");
         }
         this.DueDate = this.EnrolledOn.AddDays((int)14L);
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Registered;
-        this.NotifyRegisteredSubscribers(previousStage0);
+        this.NotifyRegisteredSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Withdraw()
@@ -60,9 +59,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Dropped;
-        this.NotifyDroppedSubscribers(previousStage0);
+        this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult RecordGrade(long score)
@@ -105,9 +103,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Complete' requires stage 'Registered' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Completed;
-        this.NotifyCompletedSubscribers(previousStage0);
+        this.NotifyCompletedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Drop()
@@ -116,9 +113,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Drop' requires stage 'Registered' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Dropped;
-        this.NotifyDroppedSubscribers(previousStage0);
+        this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
     public bool SectionFull() => this.Section != null && this.Section!.SeatsTaken >= 1L;
@@ -183,7 +179,7 @@ public class Enrollment
         }
         this._sectionEnrollmentsDroppedSubscribers.Add(subscriber);
     }
-    internal void NotifyDroppedSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyDroppedSubscribers()
     {
         this.EnterNotifyCascade("Dropped");
         try
@@ -208,7 +204,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCompletedSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyCompletedSubscribers()
     {
         this.EnterNotifyCascade("Completed");
         try
@@ -227,7 +223,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyRegisteredSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyRegisteredSubscribers()
     {
         this.EnterNotifyCascade("Registered");
         try

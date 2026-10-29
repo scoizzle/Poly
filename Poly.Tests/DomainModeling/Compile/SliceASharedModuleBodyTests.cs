@@ -72,7 +72,7 @@ public class SliceASharedModuleBodyTests {
     }
 
     [Test]
-    public async Task SliceA_SharedModuleBody_EntryExit_SameTreeAsModuleMethod() {
+    public async Task SliceA_SharedModuleBody_EntryExit_CachedBodyWithoutDeadMember() {
         var (domain, analysis, session) = Evolve("""
             domain Flow
             Ticket: entity {
@@ -85,17 +85,17 @@ public class SliceASharedModuleBodyTests {
             """);
         var module = session.Lower(domain, analysis);
         var ticket = module.First(t => t.Name == "Ticket");
+        // D10: the body stays in the runtime cache; the printed type no longer
+        // carries the dead OnExitDraft member.
         var onExit = ticket.Methods?.FirstOrDefault(m => m.Name == "OnExitDraft");
-        await Assert.That(onExit).IsNotNull();
-        await Assert.That(onExit!.Body).IsNotNull();
-        await Assert.That(ContainsNode<ThisReference>(onExit.Body!)).IsTrue();
+        await Assert.That(onExit).IsNull();
 
         await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
             domain, "Ticket", "Draft", "exit", out var exitBody)).IsTrue();
         await Assert.That(exitBody).IsNotNull();
-        await Assert.That(ReferenceEquals(onExit.Body, exitBody)).IsTrue();
+        await Assert.That(ContainsNode<ThisReference>(exitBody!)).IsTrue();
 
-        var printed = new CSharpGenerator().Generate(onExit.Body!);
+        var printed = new CSharpGenerator().Generate(exitBody!);
         await Assert.That(printed.Length).IsGreaterThan(0);
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");

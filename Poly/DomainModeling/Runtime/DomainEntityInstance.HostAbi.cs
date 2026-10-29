@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.Interpretation;
 
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -175,8 +176,21 @@ public sealed partial record DomainEntityInstance {
             NoteAutomaticStage(targetStageName);
             CurrentStage = targetStageName;
 
+            // G7: an automatic/entry transition must keep a matching lifecycle enum
+            // property in lockstep with CurrentStage. The printed StageTransition
+            // emits this in the module body; this arm is the simulate-side equivalent.
+            var targetStage = ResolveTransitionStage(analysis, targetStageName);
+            var structure = analysis?.GetStructure(Entity);
+            if (structure?.LifecyclePropertyName is { } lifecycle) {
+                var entryAssignsLifecycle = targetStage?.OnEntryEffects
+                    .OfType<AssignEffect>()
+                    .Any(ae => ae.Target is PropertyAccess pa
+                        && string.Equals(pa.Name, lifecycle, StringComparison.Ordinal)) == true;
+                if (!entryAssignsLifecycle)
+                    SetProperty(lifecycle, targetStageName);
+            }
+
             try {
-                var targetStage = ResolveTransitionStage(analysis, targetStageName);
                 if (targetStage?.OnEntryEffects is { Count: > 0 }) {
                     RunTransitionEffectList(
                         targetStage.OnEntryEffects, notifyStore,

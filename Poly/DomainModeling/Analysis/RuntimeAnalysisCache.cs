@@ -248,26 +248,19 @@ internal static class RuntimeAnalysisCache {
             if (entity is null || entity.Stages.Count == 0)
                 continue;
 
-            var existingNames = new HashSet<string>(
-                (td.Methods ?? []).Select(m => m.Name), StringComparer.Ordinal);
             var esm = analysis.GetStructure(entity);
-            List<MethodDefinitionNode>? extras = null;
-
             foreach (var stage in entity.Stages) {
                 // Whole-batch EntryExitBodies exclude nested StageTransitionEffect (no-nested
                 // TransitionStage path). Segments cache contiguous non-ST fragments for the
                 // mixed flush/recurse path — execute binds those, never LowerActionBody.
+                // The bodies stay in the cache; the printed type no longer carries the
+                // dead OnEntry*/OnExit* members (D10).
                 var entryBatch = stage.OnEntryEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (entryBatch.Count > 0) {
-                    var name = $"OnEntry{stage.Name}";
                     var entryMethod = BuildStageBatchMethodExport(
-                        entity, domain, analysis, esm, name, entryBatch);
+                        entity, domain, analysis, esm, $"OnEntry{stage.Name}", entryBatch);
                     entryExit[(entity.Name, stage.Name, "entry")] = entryMethod.Body!;
-                    if (existingNames.Add(name)) {
-                        extras ??= [];
-                        extras.Add(entryMethod);
-                    }
                 }
                 CacheEntryExitSegments(
                     entryExitSegments, entity, domain, analysis, esm,
@@ -276,23 +269,14 @@ internal static class RuntimeAnalysisCache {
                 var exitBatch = stage.OnExitEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (exitBatch.Count > 0) {
-                    var name = $"OnExit{stage.Name}";
                     var exitMethod = BuildStageBatchMethodExport(
-                        entity, domain, analysis, esm, name, exitBatch);
+                        entity, domain, analysis, esm, $"OnExit{stage.Name}", exitBatch);
                     entryExit[(entity.Name, stage.Name, "exit")] = exitMethod.Body!;
-                    if (existingNames.Add(name)) {
-                        extras ??= [];
-                        extras.Add(exitMethod);
-                    }
                 }
                 CacheEntryExitSegments(
                     entryExitSegments, entity, domain, analysis, esm,
                     stage.Name, "exit", stage.OnExitEffects);
             }
-
-            if (extras is null)
-                continue;
-            types[i] = td with { Methods = [.. td.Methods ?? [], .. extras] };
         }
         return (types, entryExit, entryExitSegments);
     }
@@ -366,7 +350,9 @@ internal static class RuntimeAnalysisCache {
             new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            EnumPropertyNames: esm?.EnumPropertyNames);
+            EnumPropertyNames: esm?.EnumPropertyNames,
+            LifecyclePropertyName: esm?.LifecyclePropertyName,
+            LifecycleEnumTypeName: esm?.LifecycleEnumTypeName);
         var pass = new EffectLoweringPass(entity, ctx);
         var body = pass.LowerActionBody(effects) ?? new Block([]);
         return new MethodDefinitionNode(

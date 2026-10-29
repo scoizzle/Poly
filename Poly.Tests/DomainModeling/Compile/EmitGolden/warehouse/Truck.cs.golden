@@ -4,9 +4,9 @@ using System.Collections.Generic;
 
 public enum TruckStage
 {
-    EnRoute = 0,
-    OutOfService = 1,
-    Idle = 2
+    Idle = 0,
+    EnRoute = 1,
+    OutOfService = 2
 }
 
 public class Truck
@@ -16,22 +16,15 @@ public class Truck
     {
         this._deliveries = new List<Delivery>();
     }
-    private Truck(long maxLoad, string vin, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L)
+    private Truck(long maxLoad, string vin, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
         this.CurrentLoad = currentLoad;
         this.MaxLoad = maxLoad;
+        this.Status = status;
         this.Vin = vin;
         this.Warehouse = warehouse;
         this._deliveries = new List<Delivery>(deliveries ?? new List<Delivery>());
-        this.CurrentStage = TruckStage.EnRoute;
-        {
-            var assignValue0 = TruckStatus.EnRoute;
-            if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
-            {
-                throw new ConstraintFailureException("'Status' is not a valid member of TruckStatus.");
-            }
-            this.Status = assignValue0;
-        }
+        this.CurrentStage = TruckStage.Idle;
     }
     public long CurrentLoad { get; private set; }
     public long MaxLoad { get; private set; }
@@ -75,7 +68,7 @@ public class Truck
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
-    public static DomainResult<Truck> Create(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L)
+    public static DomainResult<Truck> Create(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
         if (currentLoad < 0L)
         {
@@ -92,6 +85,10 @@ public class Truck
         if (maxLoad > 40000L)
         {
             return DomainResult<Truck>.Failure("'MaxLoad' must be <= 40000.");
+        }
+        if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
+        {
+            return DomainResult<Truck>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
         }
         if (string.IsNullOrEmpty(vin))
         {
@@ -113,7 +110,7 @@ public class Truck
         {
             return DomainResult<Truck>.Failure("Unique constraint violated: 'Vin' value is already used on another 'Truck'.");
         }
-        var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad);
+        var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad, status);
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);
@@ -122,14 +119,5 @@ public class Truck
         return DomainResult<Truck>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
-    private void OnEntryEnRoute()
-    {
-        var assignValue0 = TruckStatus.EnRoute;
-        if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
-        {
-            throw new ConstraintFailureException("'Status' is not a valid member of TruckStatus.");
-        }
-        this.Status = assignValue0;
-    }
     public static System.Boolean ExistsWithVin(Poly.DomainModeling.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

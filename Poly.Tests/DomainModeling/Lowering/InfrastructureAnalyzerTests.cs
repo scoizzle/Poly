@@ -57,6 +57,26 @@ public class InfrastructureAnalyzerTests {
         return new TestInfra(storage, topology, behavior, aggregate);
     }
 
+    [Test]
+    public async Task Storage_WatchedSingleStageEntity_KeepsCurrentStageWithoutAnalysisMetadata() {
+        const string poly = """
+            domain Work
+            User: entity {
+              jobs: many Job
+              when jobs Open { }
+            }
+            Job: entity {
+              Title: Text required
+              Open: stage { }
+            }
+            """;
+        var withAnalysis = AnalyzeWithAnalysis(poly).Storage.Entities.Single(e => e.Name == "Job");
+        var withoutAnalysis = AnalyzeFull(poly).Storage.Entities.Single(e => e.Name == "Job");
+        await Assert.That(withAnalysis.HasStages).IsTrue();
+        await Assert.That(withoutAnalysis.HasStages).IsEqualTo(withAnalysis.HasStages);
+        await Assert.That(withoutAnalysis.StagePropertyName).IsEqualTo(withAnalysis.StagePropertyName);
+    }
+
     // ── Root/child detection ──────────────────────────────────
 
     [Test]

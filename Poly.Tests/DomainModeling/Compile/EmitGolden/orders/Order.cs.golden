@@ -42,11 +42,6 @@ public class Order
     {
         this._items.Add(child);
     }
-    public DomainResult Ship()
-    {
-        this.CurrentStage = OrderStage.Shipped;
-        return DomainResult.Success();
-    }
     public DomainResult Cancel(string reason)
     {
         var assignValue0 = reason;
@@ -59,6 +54,7 @@ public class Order
         }
         this.CancelReason = assignValue0;
         this.CurrentStage = OrderStage.Cancelled;
+        this.State = OrderState.Cancelled;
         return DomainResult.Success();
     }
     public DomainResult ApplyDiscount(long amount)
@@ -82,6 +78,17 @@ public class Order
             return DomainResult.Failure("'Pay' requires stage 'Pending' on entity 'Order'.");
         }
         this.CurrentStage = OrderStage.Paid;
+        this.State = OrderState.Paid;
+        return DomainResult.Success();
+    }
+    public DomainResult Ship()
+    {
+        if (this.CurrentStage != OrderStage.Paid)
+        {
+            return DomainResult.Failure("'Ship' requires stage 'Paid' on entity 'Order'.");
+        }
+        this.CurrentStage = OrderStage.Shipped;
+        this.State = OrderState.Shipped;
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;

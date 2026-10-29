@@ -100,6 +100,30 @@ public sealed partial class DomainToCSharpExporter {
         AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName: null, methods, metadata);
 
     /// <summary>
+    /// True when the target entity's <c>Notify{Stage}Subscribers</c> group carries the
+    /// nullable previous-stage parameter: at least one subscription in the domain
+    /// targeting <paramref name="targetEntity"/> at <paramref name="stageName"/> is
+    /// <c>when all</c>. The signature is per (target, stage), not per relationship.
+    /// </summary>
+    private static bool StageGroupNeedsPrevious(Entity targetEntity, string stageName, Domain domain) {
+        foreach (var source in domain.Types.OfType<Entity>()) {
+            var subscriptions = source.Subscriptions
+                .Concat(source.Stages.SelectMany(s => s.Subscriptions));
+            foreach (var subscription in subscriptions) {
+                if (subscription.Quantifier != StageSubscriptionQuantifier.All
+                    || !subscription.StageNames.Contains(stageName, StringComparer.Ordinal))
+                    continue;
+                var navigation = source.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, subscription.RelationshipName, StringComparison.Ordinal));
+                if (navigation is not null
+                    && string.Equals(navigation.Target.TypeName, targetEntity.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// For a self-relationship <c>create in rel</c>, the unique singular navigation on
     /// <paramref name="targetEntity"/> whose target is <paramref name="sourceEntityName"/>.
     /// This is the peer the new instance wires to <c>this</c> (e.g. <c>Account.parent</c>
@@ -319,15 +343,16 @@ public sealed partial class DomainToCSharpExporter {
         // A create-in lands the child in its first stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
-        if (targetEntity.Stages.Count > 0) {
+        if (metadata.GetStructure(targetEntity)?.HasStages == true) {
             var firstStage = targetEntity.Stages[0].Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
                     && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
+                var needsPrevious = StageGroupNeedsPrevious(targetEntity, firstStage, domain);
                 bodyNodes.Add(new Invoke(
                     new Member(local, $"Notify{firstStage}Subscribers"),
-                    [new Constant(null)]));
+                    needsPrevious ? [new Constant(null)] : []));
             }
         }
 

@@ -30,9 +30,8 @@ public class Loan
         {
             return DomainResult.Failure("'MarkOverdue' requires stage 'Active' on entity 'Loan'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = LoanStage.Overdue;
-        this.NotifyOverdueSubscribers(previousStage0);
+        this.NotifyOverdueSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Return()
@@ -69,7 +68,7 @@ public class Loan
         }
         this._patronLoansOverdueSubscribers.Add(subscriber);
     }
-    internal void NotifyOverdueSubscribers(LoanStage? previousStage)
+    internal void NotifyOverdueSubscribers()
     {
         this.EnterNotifyCascade("Overdue");
         try

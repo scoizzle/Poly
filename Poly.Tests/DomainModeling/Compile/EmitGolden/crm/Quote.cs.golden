@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum QuoteStage
@@ -12,11 +11,7 @@ public enum QuoteStage
 
 public class Quote
 {
-    private List<QuoteLine> _lines;
-    private Quote()
-    {
-        this._lines = new List<QuoteLine>();
-    }
+    private List<QuoteLine> _lines = new List<QuoteLine>();
     private Quote(long amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
         this.Amount = amount;
@@ -33,7 +28,7 @@ public class Quote
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    private DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
+    public DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)

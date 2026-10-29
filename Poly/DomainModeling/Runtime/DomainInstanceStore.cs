@@ -225,7 +225,7 @@ public sealed class DomainInstanceStore {
                     }
                 }
                 Link(relationshipName, creator, child);
-                creator.TryLinkCreateInBackReference(child);
+                creator.TryLinkCreateInBackReference(child, relationshipName);
             }
         }
         catch (InvalidOperationException ex) {

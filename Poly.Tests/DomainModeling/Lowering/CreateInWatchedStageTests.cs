@@ -55,7 +55,7 @@ public class CreateInWatchedStageTests {
 
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
-        await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers(null)")).IsEqualTo(1);
+        await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers()")).IsEqualTo(1);
     }
 
     [Test]
@@ -70,16 +70,17 @@ public class CreateInWatchedStageTests {
 
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
-        await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers(null)")).IsEqualTo(0);
+        await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers()")).IsEqualTo(0);
     }
 
     [Test]
-    public async Task Create_InWatchedStage_NotifyParameterIsNullable() {
-        // A create-in has no previous stage, so the printed call passes null. The
-        // parameter must be nullable or the generated C# fails to compile (CS1503).
+    public async Task Create_InWatchedStage_NotifyHasNoPreviousStageParameter() {
+        // A when-each notifier has no previous-stage parameter; create-in passes no
+        // argument (D12). The when-all path keeps the nullable parameter.
         var (domain, analysis) = Evolve(Positive);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
-        await Assert.That(cs).Contains("NotifyOpenSubscribers(JobStage? previousStage)");
+        await Assert.That(cs).Contains("NotifyOpenSubscribers()");
+        await Assert.That(cs).DoesNotContain("NotifyOpenSubscribers(JobStage?");
     }
 
     private static DomainEntityInstance CreateUser(Domain domain) {

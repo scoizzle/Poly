@@ -10,20 +10,14 @@ public enum AccountStage
 
 public class Account
 {
-    private List<Contact> _contacts;
-    private List<Opportunity> _opportunities;
-    private List<Ticket> _tickets;
-    private Account()
-    {
-        this._contacts = new List<Contact>();
-        this._opportunities = new List<Opportunity>();
-        this._tickets = new List<Ticket>();
-    }
+    private List<Contact> _contacts = new List<Contact>();
+    private List<Opportunity> _opportunities = new List<Opportunity>();
+    private List<Ticket> _tickets = new List<Ticket>();
     private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
     {
-        this.ClosedTickets = closedTickets;
         this.Industry = industry;
         this.Name = name;
+        this.ClosedTickets = closedTickets;
         this.OpenPipeline = openPipeline;
         this.WonCount = wonCount;
         this.Parent = parent;
@@ -54,7 +48,7 @@ public class Account
         get => this._tickets;
     }
     public AccountStage CurrentStage { get; private set; }
-    private DomainResult<Site> CreateHq(string city, string region)
+    public DomainResult<Site> CreateHq(string city, string region)
     {
         var siteResult = Site.Create(city, region);
         if (!siteResult.IsSuccess)
@@ -65,7 +59,7 @@ public class Account
         this.Hq = site;
         return DomainResult<Site>.Success(site);
     }
-    private DomainResult<Contact> CreateContacts(string email, string name)
+    public DomainResult<Contact> CreateContacts(string email, string name)
     {
         var contactResult = Contact.Create(email, name, this);
         if (!contactResult.IsSuccess)
@@ -79,7 +73,7 @@ public class Account
     {
         this._contacts.Add(child);
     }
-    private DomainResult<Opportunity> CreateOpportunities(long amount, string title, Contact? contact = null, DateOnly? closeBy = null)
+    public DomainResult<Opportunity> CreateOpportunities(long amount, string title, Contact? contact = null, DateOnly? closeBy = null)
     {
         var opportunityResult = Opportunity.Create(amount, title, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
@@ -96,7 +90,7 @@ public class Account
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
     }
-    private DomainResult<Ticket> CreateTickets(string subject)
+    public DomainResult<Ticket> CreateTickets(string subject)
     {
         var ticketResult = Ticket.Create(subject, this);
         if (!ticketResult.IsSuccess)

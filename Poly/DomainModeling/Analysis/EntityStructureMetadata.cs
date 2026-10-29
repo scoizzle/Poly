@@ -53,7 +53,21 @@ public sealed record EntityStructureMetadata(
     /// and written twice, e.g. StartedAt). Published so the exporter's ctor emission
     /// and this signature stay in lockstep without re-deriving the rule.
     /// </summary>
-    IReadOnlySet<string> EntryAssignedPropertyNames = null!
+    IReadOnlySet<string> EntryAssignedPropertyNames = null!,
+
+    /// <summary>
+    /// Property name whose type is a domain enum whose member-name set is exactly
+    /// equal to the entity's stage-name set — the lifecycle property a transition
+    /// keeps in lockstep with <c>CurrentStage</c>. Null when there is no such
+    /// property (or the entity has no stage enum). See <see cref="LifecycleEnumTypeName"/>.
+    /// </summary>
+    string? LifecyclePropertyName = null,
+
+    /// <summary>Enum type name for <see cref="LifecyclePropertyName"/>; null together with it.</summary>
+    string? LifecycleEnumTypeName = null,
+
+    /// <summary>Scalar properties assigned only by effects (no create initializer).</summary>
+    IReadOnlySet<string>? AssignOnlyPropertyNames = null
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(
@@ -61,5 +75,6 @@ public sealed record ConstructorParameterOrder(
     DomainTypeReference Type,
     bool IsNavigation,
     bool IsBackReference,
-    bool IsCollection = false
+    bool IsCollection = false,
+    bool IsOptional = false
 );

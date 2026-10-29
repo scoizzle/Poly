@@ -45,8 +45,9 @@ public sealed class LowerTreesTests {
             "scaffolding|Parking|Lower\nsource-domain|Parking|Lower\n" +
             "entity|Parking/Garage|Lower\nsource-entity|Parking/Garage|Lower\n" +
             "entity|Parking/Permit|Lower\nsource-entity|Parking/Permit|Lower");
+        // Permit has one implicit stage, so no stage enum tree is emitted (G21).
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking", "Permit"], "entity"))!))
-            .IsEquivalentTo(["Permit", "PermitStage"]);
+            .IsEquivalentTo(["Permit"]);
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking", "Garage"], "entity"))!))
             .IsEquivalentTo(["Garage"]);
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking"], "scaffolding"))!))

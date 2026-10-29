@@ -1,16 +1,12 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Delivery
 {
-    private Delivery()
-    { }
-    private Delivery(string notes, string reference, long weight, Truck? truck = null)
+    private Delivery() { }
+    private Delivery(string reference, long weight, string notes = "", Truck? truck = null)
     {
-        this.Notes = notes;
         this.Reference = reference;
         this.Weight = weight;
+        this.Notes = notes;
         this.Truck = truck;
     }
     public string Notes { get; private set; } = default!;
@@ -22,7 +18,7 @@ public class Delivery
         this.Notes = notes;
         return DomainResult.Success();
     }
-    public static DomainResult<Delivery> Create(string notes, string reference, long weight, Truck? truck = null)
+    public static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)
     {
         if (string.IsNullOrEmpty(reference))
         {
@@ -44,7 +40,7 @@ public class Delivery
         {
             return DomainResult<Delivery>.Failure("'Weight' must be <= 40000.");
         }
-        var created = new Delivery(notes, reference, weight, truck);
+        var created = new Delivery(reference, weight, notes, truck);
         if (truck != null)
         {
             truck.AttachDeliveries(created);

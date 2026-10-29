@@ -15,8 +15,6 @@ public class EventHold
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
-    private EventHold()
-    { }
     private EventHold(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         this.Capacity = capacity;
@@ -61,12 +59,7 @@ public class EventHold
     }
     public DomainResult Cancel()
     {
-        if (this.CurrentStage == EventHoldStage.Requested)
-        {
-            this.CurrentStage = EventHoldStage.Cancelled;
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == EventHoldStage.Confirmed)
+        if (this.CurrentStage == EventHoldStage.Requested || this.CurrentStage == EventHoldStage.Confirmed)
         {
             this.CurrentStage = EventHoldStage.Cancelled;
             return DomainResult.Success();
@@ -89,7 +82,7 @@ public class EventHold
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure("'StartHall' requires a linked 'hall' on entity 'EventHold'.");
         }
         var invoke0 = this.Hall.Occupy();
         if (!invoke0.IsSuccess)
@@ -111,7 +104,7 @@ public class EventHold
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure("'StartSection' requires a linked 'section' on entity 'EventHold'.");
         }
         var invoke0 = this.Section.Occupy();
         if (!invoke0.IsSuccess)
@@ -137,16 +130,15 @@ public class EventHold
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Vacate' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure("'ReleaseHall' requires a linked 'hall' on entity 'EventHold'.");
         }
         var invoke0 = this.Hall.Vacate();
         if (!invoke0.IsSuccess)
         {
             return DomainResult.Failure(invoke0.ErrorMessage ?? "");
         }
-        var previousStage1 = this.CurrentStage;
         this.CurrentStage = EventHoldStage.Released;
-        this.NotifyReleasedSubscribers(previousStage1);
+        this.NotifyReleasedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult ReleaseSection()
@@ -161,16 +153,15 @@ public class EventHold
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'Vacate' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure("'ReleaseSection' requires a linked 'section' on entity 'EventHold'.");
         }
         var invoke0 = this.Section.Vacate();
         if (!invoke0.IsSuccess)
         {
             return DomainResult.Failure(invoke0.ErrorMessage ?? "");
         }
-        var previousStage1 = this.CurrentStage;
         this.CurrentStage = EventHoldStage.Released;
-        this.NotifyReleasedSubscribers(previousStage1);
+        this.NotifyReleasedSubscribers();
         return DomainResult.Success();
     }
     public bool DatesValid() => this.EndDate > this.StartDate;
@@ -193,7 +184,7 @@ public class EventHold
         }
         this._guestEventsReleasedSubscribers.Add(subscriber);
     }
-    internal void NotifyReleasedSubscribers(EventHoldStage? previousStage)
+    internal void NotifyReleasedSubscribers()
     {
         this.EnterNotifyCascade("Released");
         try

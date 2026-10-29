@@ -307,7 +307,7 @@ public class MinimalApiGeneratorTests {
         var rendered = Render(d with { Types = types });
 
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string @value { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string value { get; init; }");
     }
 
     [Test]

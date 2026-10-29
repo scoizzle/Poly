@@ -269,7 +269,7 @@ public class ParityTests {
         """;
 
     [Test]
-    public async Task Invoke_WhenUnboundContractEndpoint_FailsTheSameWay() {
+    public async Task Invoke_WhenUnboundContractEndpoint_TracesAndSucceeds() {
         var outcomes = await ParityScenario.FromDsl(UnboundAdapterDsl, "ParityUnboundAdapter")
             .AssertAgree(side => {
                 side.Create("Order");
@@ -278,9 +278,8 @@ public class ParityTests {
                     ["Currency"] = "USD"
                 }));
             });
-        await Assert.That(outcomes[1].Success).IsFalse();
-        await Assert.That(outcomes[1].Message).IsEqualTo(
-            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].Message).IsNull();
     }
 
     [Test]
@@ -379,6 +378,34 @@ public class ParityTests {
         await Assert.That(outcomes[2].State["Status"]).IsEqualTo("Suspended");
         await Assert.That(outcomes[2].State["Stage"]).IsEqualTo("Closed");
         await Assert.That(outcomes[3].State["IsActive"]).IsEqualTo("False");
+    }
+
+    [Test]
+    public async Task Pay_AssignsLifecycleEnum_IsPaidTrueAfterPay() {
+        const string dsl = """
+            domain Shop
+            OrderState: enum { Pending, Paid, Shipped }
+            Order: entity {
+              State: OrderState default(Pending)
+              IsPaid: policy { State is "Paid" }
+              Pending: stage {
+                Pay: action { transition to Paid }
+              }
+              Paid: stage { }
+              Shipped: stage { }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "ParityLifecycleEnum")
+            .AssertAgree(side => {
+                side.Create("Order");
+                side.EvaluatePolicy("IsPaid");
+                side.Invoke("Pay");
+                side.EvaluatePolicy("IsPaid");
+            });
+        await Assert.That(outcomes[0].State["State"]).IsEqualTo("Pending");
+        await Assert.That(outcomes[1].State["IsPaid"]).IsEqualTo("False");
+        await Assert.That(outcomes[2].State["State"]).IsEqualTo("Paid");
+        await Assert.That(outcomes[3].State["IsPaid"]).IsEqualTo("True");
     }
 
     [Test]
@@ -514,6 +541,121 @@ public class ParityTests {
         await Assert.That(outcomes[1].Success).IsTrue();
         await Assert.That(outcomes[1].State["fines"]).IsEqualTo("1");
         await Assert.That(outcomes[2].State["HasPatronOnFine"]).IsEqualTo("True");
+    }
+
+    [Test]
+    public async Task Invoke_SelfRelCreateInChildren_LinksChildAndCountsOne() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddChild: action { create in children { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInChildren")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddChild");
+                side.UseLinked("children");
+            });
+        await Assert.That(outcomes[0].State["children"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["children"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[2].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Invoke_SelfRelCreateInParent_LinksParentAndCountsOne() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain SelfRel
+            Account: entity {
+              Name: Text required
+              parent: Account
+              children: many Account
+              Active: stage {
+                AddParent: action { create in parent { Name: "x" } }
+              }
+            }
+            """, "ParitySelfRelCreateInParent")
+            .AssertAgree(side => {
+                side.Create("Account", ("Name", "root"));
+                side.Invoke("AddParent");
+                side.UseLinked("parent");
+            });
+        await Assert.That(outcomes[0].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[1].State["parent"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["children"]).IsEqualTo("0");
+        // The new parent must not point back at the root (a cycle); its inverse
+        // collection holds the root instead.
+        await Assert.That(outcomes[2].State["parent"]).IsEqualTo("0");
+        await Assert.That(outcomes[2].State["children"]).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Create_WhenFirstStageEntryTransitions_UpdatesLifecycleEnumOnBothSides() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            OrderState: enum { Draft, Paid }
+            Order: entity {
+              State: OrderState default(Draft)
+              Draft: stage {
+                entry { transition to Paid }
+              }
+              Paid: stage { }
+            }
+            """, "ParityEntryTransitionLifecycleEnum")
+            .AssertAgree(side => side.Create("Order"));
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Paid");
+        await Assert.That(outcomes[0].State["State"]).IsEqualTo("Paid");
+    }
+
+    [Test]
+    public async Task SingleStageEntity_AgreesOnStage() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Patron: entity {
+              Name: Text required
+              Active: stage {
+                Ping: action { }
+              }
+            }
+            """, "ParityImplicitStage")
+            .AssertAgree(side => {
+                side.Create("Patron", ("Name", "Ada"));
+                side.Invoke("Ping");
+            });
+        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("Active");
+        await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("Active");
+    }
+
+    [Test]
+    public async Task Invoke_SingularCreateIn_AttachesThisToTargetInverseCollection() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Orders
+            Order: entity {
+              Code: Text required
+              items: many Item
+            }
+            Item: entity {
+              Name: Text required
+              order: Order
+              Active: stage {
+                Add: action { create in order { Code: "x" } }
+              }
+            }
+            """, "ParitySingularCreateInAttach")
+            .AssertAgree(side => {
+                side.Create("Order", ("Code", "o1"));
+                side.Create("Item", ("Name", "i1"));
+                side.Invoke("Add");
+                side.UseLinked("order");
+            });
+        await Assert.That(outcomes[2].State["order"]).IsEqualTo("1");
+        await Assert.That(outcomes[3].State["items"]).IsEqualTo("1");
     }
 
     [Test]

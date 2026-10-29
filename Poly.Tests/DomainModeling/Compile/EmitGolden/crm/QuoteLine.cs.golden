@@ -1,11 +1,6 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class QuoteLine
 {
-    private QuoteLine()
-    { }
     private QuoteLine(long qty, long unitPrice, Product? product = null, Quote? quote = null)
     {
         this.Qty = qty;

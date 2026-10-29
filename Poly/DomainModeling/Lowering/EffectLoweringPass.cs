@@ -34,8 +34,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly INodeMetadataProvider? _analysis;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
+    private readonly IReadOnlySet<string>? _previousStageNotifyStages;
     private string? _sourceStageName;
     private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
+    private readonly string? _lifecyclePropertyName;
+    private readonly string? _lifecycleEnumTypeName;
     private readonly LoweringContext _context;
     /// <summary>Entity has entry/exit transitions: emit the shared loop-guard Note.</summary>
     private readonly bool _emitAutomaticStageGuard;
@@ -65,8 +68,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         _analysis = context.Analysis;
         _stageEnumTypeName = context.StageEnumTypeName;
         _postTransitionNotifyStages = context.PostTransitionNotifyStages;
+        _previousStageNotifyStages = context.PreviousStageNotifyStages;
         _sourceStageName = context.SourceStageName;
         _enumPropertyNames = context.EnumPropertyNames;
+        _lifecyclePropertyName = context.LifecyclePropertyName;
+        _lifecycleEnumTypeName = context.LifecycleEnumTypeName;
         _emitAutomaticStageGuard = EffectHelpers.HasAutomaticTransitions(entity);
         IReadOnlyDictionary<string, Node>? parameters = context.Parameters;
         if (context.ActionParameterNames is { Count: > 0 }) {
@@ -249,7 +255,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         var needsConstraintWrap = assignProp is not null
-            && HasAssignableConstraints(assignProp);
+            && HasAssignableConstraints(assignProp)
+            && !SatisfiesAssignConstraints(assignProp, value.Value);
         Node assignment = uniqueName is null && !needsConstraintWrap
             ? new Assignment(target.Value, value.Value)
             : WrapConstrainedAssign(
@@ -258,6 +265,82 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 value.Value,
                 uniqueName);
         return LoweredExpression.Before([target, value], assignment);
+    }
+
+    /// <summary>
+    /// True when a constant/enum-member RHS provably satisfies every emit-time
+    /// constraint on the property, so the assignment needs no fail-before-mutate
+    /// wrap. Non-constant RHS, unique properties, and any unsatisfied check keep
+    /// the wrap.
+    /// </summary>
+    private bool SatisfiesAssignConstraints(Property prop, Node value) {
+        if (IsUniqueProperty(prop.Name))
+            return false;
+        var enumType = DomainToCSharpExporter.TryResolveEnumType(
+            _domain, _analysis, prop.Type.TypeName, out var resolved)
+            ? resolved
+            : null;
+        foreach (var constraint in prop.Constraints) {
+            switch (constraint) {
+                case RequiredConstraint:
+                    if (prop.Type.TypeName is "Text" or "String") {
+                        if (value is not Constant { Value: string s } || string.IsNullOrEmpty(s))
+                            return false;
+                    }
+                    else if (value is Constant { Value: null }) {
+                        return false;
+                    }
+                    break;
+                case RangeConstraint range when TryNumeric(value, out var number):
+                    if (range.Minimum is not null && number < Convert.ToDouble(range.Minimum))
+                        return false;
+                    if (range.Maximum is not null && number > Convert.ToDouble(range.Maximum))
+                        return false;
+                    break;
+                case RangeConstraint:
+                    return false;
+                case LengthConstraint length when value is Constant { Value: string text }:
+                    if (text.Length < length.MinLength || text.Length > length.MaxLength)
+                        return false;
+                    break;
+                case LengthConstraint:
+                    return false;
+                case PatternConstraint pattern when value is Constant { Value: string text }:
+                    // Assign-side pattern checks reject empty too (only null skips);
+                    // an empty constant is not a satisfying value.
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
+                        return false;
+                    break;
+                case PatternConstraint:
+                    return false;
+            }
+        }
+        if (enumType is not null
+            && !(value is Member { Value: NamedTypeReference typeRef, MemberName: var member }
+                && string.Equals(typeRef.TypeName, enumType.Name, StringComparison.Ordinal)
+                && enumType.MemberNames.Contains(member, StringComparer.Ordinal)))
+            return false;
+        return true;
+    }
+
+    private static bool TryNumeric(Node value, out double number) {
+        switch (value) {
+            case Constant { Value: long l }:
+                number = l;
+                return true;
+            case Constant { Value: int i }:
+                number = i;
+                return true;
+            case Constant { Value: double d }:
+                number = d;
+                return true;
+            case Constant { Value: decimal m }:
+                number = (double)m;
+                return true;
+            default:
+                number = 0;
+                return false;
+        }
     }
 
     private bool HasAssignableConstraints(Property prop) =>
@@ -426,7 +509,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (DomainToCSharpExporter.TryResolveEnumType(
                 _domain, _analysis, prop.Type.TypeName, out var enumType)
-            && enumType is { MemberNames.Count: > 0 }) {
+            && enumType is { MemberNames.Count: > 0 }
+            && !(valueRef is Member { Value: NamedTypeReference typeRef, MemberName: var memberName }
+                && string.Equals(typeRef.TypeName, enumType.Name, StringComparison.Ordinal)
+                && enumType.MemberNames.Contains(memberName, StringComparer.Ordinal))) {
             Node? notMember = null;
             var enumTypeRef = new NamedTypeReference(enumType.Name);
             foreach (var member in enumType.MemberNames) {
@@ -515,7 +601,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// OnEntry/OnExit effects lower into <paramref name="bodySink"/>. Create
     /// effects lower as one composite so nested structure stays intact.
     /// </summary>
-    private void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
+    internal void AppendInlinedStageEffects(IReadOnlyList<Effect> effects, List<Node> bodySink) {
         if (effects.Count == 0)
             return;
         if (HasCreate(effects)) {
@@ -548,7 +634,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// source-stage exit effects (when known; once — no self-re-entry), CurrentStage
     /// assignment, target-stage entry effects (once), then
     /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
-    /// stage (see <see cref="LoweringContext.PostTransitionNotifyStages"/>).
+    /// stage (see <see cref="LoweringContext.PreviousStageNotifyStages"/>).
     /// Does not emit instance <c>Notify</c> — that method exists only on the
     /// simulator heap object; printed classes do not have one. Emits
     /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#
@@ -567,7 +653,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Variable? previousStage = null;
         var notifyTarget = _postTransitionNotifyStages is not null
             && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
-        if (notifyTarget) {
+        var needsPrevious = notifyTarget
+            && _previousStageNotifyStages is not null
+            && _previousStageNotifyStages.Contains(t.TargetStage.StageName);
+        if (needsPrevious) {
             previousStage = _names.Next("previousStage");
             nodes.Add(new Assignment(
                 previousStage,
@@ -637,25 +726,46 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             new Member(Subject, "CurrentStage"),
             stageValue));
 
-        if (previousStage is not null) {
-            tryNodes.Add(new Invoke(
-                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
-                [previousStage]));
+        // G7: keep the lifecycle property in lockstep with CurrentStage. Emit
+        // this.{LifecycleProperty} = {LifecycleEnum}.X after the stage assign and
+        // before entry effects, unless the target stage's entry already assigns it
+        // at the top level (Visit.CheckedIn entry { assign State to CheckedIn }).
+        if (_lifecyclePropertyName is not null && _lifecycleEnumTypeName is not null) {
+            var entryAssignsLifecycle = targetStage is not null
+                && targetStage.OnEntryEffects.OfType<AssignEffect>().Any(ae =>
+                    ae.Target is PropertyAccess pa
+                    && string.Equals(pa.Name, _lifecyclePropertyName, StringComparison.Ordinal));
+            if (!entryAssignsLifecycle) {
+                nodes.Add(new Assignment(
+                    new Member(Subject, _lifecyclePropertyName),
+                    new Member(new NamedTypeReference(_lifecycleEnumTypeName), t.TargetStage.StageName)));
+            }
         }
 
-        Node tryBody = tryNodes.Count switch {
-            0 => new Block([]),
-            1 => tryNodes[0],
-            _ => new Block(tryNodes)
-        };
-        if (tryNodes.Count > 0)
-            nodes.Add(tryBody);
+        if (notifyTarget) {
+            tryNodes.Add(new Invoke(
+                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                needsPrevious ? [previousStage!] : []));
+        }
+
+        // Splice a lowered entry Block into this transition body (D13) while
+        // keeping its locals on the returned block.
+        var tryLocals = new List<Node>();
+        var flatTry = new List<Node>();
+        foreach (var tryNode in tryNodes)
+            CollectNode(flatTry, tryLocals, tryNode);
+        if (flatTry.Count > 0)
+            nodes.AddRange(flatTry);
 
         _sourceStageName = t.TargetStage.StageName;
 
-        if (previousStage is null)
-            return nodes.Count == 1 ? nodes[0] : new Block(nodes);
-        return new Block(nodes, [previousStage]);
+        var locals = new List<Node>();
+        if (previousStage is not null)
+            locals.Add(previousStage);
+        locals.AddRange(tryLocals);
+        if (locals.Count == 0 && nodes.Count == 1)
+            return nodes[0];
+        return new Block(nodes, locals);
     }
 
     /// <summary>
@@ -683,7 +793,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var guard = new IfStatement(
                 new Equal(navMember, new Constant(null!)),
                 new Block([ReturnCallerFailure(new Constant(
-                    $"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
+                    $"'{_context.ActionName ?? i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
             var resultVar = _names.Next("invoke");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
             return LoweredExpression.Before(loweredArgs, new Block([
@@ -751,15 +861,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Node? predicateGuard = null;
         if (e.Predicate is not null) {
             Node predicateExpr = e.Predicate switch {
-                ForEachNamedPolicy p => (Node)new Invoke(
-                    new Member(loopVar, p.PolicyName)),
-                ForEachStageMembership s => new Equal(
+                ForEachNamedPolicy p => new Poly.Ast.Nodes.Not(
+                    new Invoke(new Member(loopVar, p.PolicyName))),
+                ForEachStageMembership s => new NotEqual(
                     new Member(loopVar, "CurrentStage"),
                     new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
                 _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
             };
             predicateGuard = new IfStatement(
-                new Poly.Ast.Nodes.Not(predicateExpr),
+                predicateExpr,
                 new Block([new ContinueStatement()]));
         }
 
@@ -804,12 +914,22 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         if (targetName is not null && _domain is not null) {
             var targetEntity = _domain.Types.OfType<Entity>()
                 .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
-            if (targetEntity is not null && _analysis is not null) {
-                var esm = _analysis.GetStructure(targetEntity);
-                if (esm?.StageEnumTypeName is { } custom) return custom;
+            if (targetEntity is not null) {
+                if (_analysis is not null) {
+                    var esm = _analysis.GetStructure(targetEntity);
+                    if (esm is { HasStages: false })
+                        throw new InvalidOperationException(
+                            $"Entity '{targetEntity.Name}' has only an implicit stage; " +
+                            "a stage membership filter needs an explicit stage.");
+                    if (esm?.StageEnumTypeName is { } custom) return custom;
+                }
+                if (EntityStructureAnalyzer.IsImplicitStage(targetEntity, _domain))
+                    throw new InvalidOperationException(
+                        $"Entity '{targetEntity.Name}' has only an implicit stage; " +
+                        "a stage membership filter needs an explicit stage.");
+                if (targetEntity.Stages.Count > 0)
+                    return $"{targetName}Stage";
             }
-            if (targetEntity is not null && targetEntity.Stages.Count > 0)
-                return $"{targetName}Stage";
         }
         return $"{targetName ?? relationshipName}Stage";
     }

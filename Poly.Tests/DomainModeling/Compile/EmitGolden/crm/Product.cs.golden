@@ -1,11 +1,6 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Product
 {
-    private Product()
-    { }
     private Product(long listPrice, string name, string sku)
     {
         this.ListPrice = listPrice;
@@ -44,5 +39,5 @@ public class Product
         var created = new Product(listPrice, name, sku);
         return DomainResult<Product>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

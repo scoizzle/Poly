@@ -57,7 +57,10 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var isRoot = !HasRequiredEntityRef(entity, lookup) && !IsOwnedTarget(entity, domain);
 
         // ── Stage tracking ────────────────────────────────────
-        var hasStages = entity.Stages.Count > 0;
+        // A single stage with no entry/exit, no stage policy, and no transition
+        // into it is implicit: the lifecycle is constant and the printed type
+        // needs no stage enum or CurrentStage field (G21).
+        var hasStages = entity.Stages.Count > 0 && !IsImplicitStage(entity, domain);
         string? stageEnumTypeName = null;
         IReadOnlyDictionary<string, Stage>? stageByName = null;
         if (hasStages) {
@@ -68,8 +71,40 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
-        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup);
+        var assignOnlyPropertyNames = ComputeAssignOnlyPropertyNames(entity);
+        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup, assignOnlyPropertyNames);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
+
+        // ── Lifecycle detection ────────────────────────────────
+        // A property whose type is a domain enum whose member-name set is exactly
+        // equal (ordinal, same count) to the entity's stage-name set is the lifecycle
+        // property. Exactly one candidate → that property; zero → none; more than
+        // one → throw (fail closed, never guess).
+        string? lifecyclePropertyName = null;
+        string? lifecycleEnumTypeName = null;
+        if (hasStages) {
+            var stageNames = entity.Stages.Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
+            var candidates = new List<(string Property, string Enum)>();
+            foreach (var prop in entity.Properties) {
+                if (!lookup.Types.TryGetValue(prop.Type.TypeName, out var resolved)
+                    || resolved is not EnumType enumType)
+                    continue;
+                if (enumType.MemberNames.Count != stageNames.Count)
+                    continue;
+                if (!enumType.MemberNames.All(stageNames.Contains))
+                    continue;
+                candidates.Add((prop.Name, enumType.Name));
+            }
+            if (candidates.Count > 1) {
+                throw new InvalidOperationException(
+                    $"Entity '{entity.Name}' has multiple lifecycle-enum candidate properties " +
+                    $"({string.Join(", ", candidates.Select(c => $"'{c.Property}'"))}); cannot infer the lifecycle property.");
+            }
+            if (candidates.Count == 1) {
+                lifecyclePropertyName = candidates[0].Property;
+                lifecycleEnumTypeName = candidates[0].Enum;
+            }
+        }
 
         // ── Enum-typed property map (property name → enum type name) ──
         Dictionary<string, string>? enumPropertyNames = null;
@@ -83,7 +118,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
-            enumPropertyNames, entryAssignedPropertyNames
+            enumPropertyNames, entryAssignedPropertyNames,
+            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames
         );
     }
 
@@ -105,9 +141,124 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return names;
     }
 
+    private static IReadOnlySet<string> ComputeAssignOnlyPropertyNames(Entity entity) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Walk(IEnumerable<Effect> effects) {
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case AssignEffect { Target: PropertyAccess property }:
+                        names.Add(property.Name);
+                        break;
+                    case CompositeEffect composite:
+                        Walk(composite.Effects);
+                        break;
+                    case ConditionalEffect conditional:
+                        Walk(conditional.ThenEffects);
+                        if (conditional.ElseEffects is not null)
+                            Walk(conditional.ElseEffects);
+                        break;
+                }
+            }
+        }
+        foreach (var action in entity.Actions)
+            Walk(action.Effects);
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions)
+                Walk(action.Effects);
+            Walk(stage.OnEntryEffects);
+            Walk(stage.OnExitEffects);
+            foreach (var subscription in stage.Subscriptions)
+                Walk(subscription.Effects);
+        }
+        foreach (var subscription in entity.Subscriptions)
+            Walk(subscription.Effects);
+        return names;
+    }
+
+    private static bool EmptyIsLegal(Property prop, DomainTypeLookupMetadata lookup) {
+        if (prop.Constraints.Any(c => c is RequiredConstraint or UniqueConstraint))
+            return false;
+        if (lookup.Types.TryGetValue(prop.Type.TypeName, out var type) && type is EnumType)
+            return false;
+        if (prop.Type.TypeName is not ("Text" or "String" or "Number" or "Int" or "Boolean"))
+            return false;
+        foreach (var range in prop.Constraints.OfType<RangeConstraint>()) {
+            if (range.Minimum is not null && Convert.ToDouble(range.Minimum) > 0)
+                return false;
+            if (range.Maximum is not null && Convert.ToDouble(range.Maximum) < 0)
+                return false;
+        }
+        foreach (var length in prop.Constraints.OfType<LengthConstraint>()) {
+            if (length.MinLength > 0)
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// True when the entity has exactly one stage that is not observable: no
+    /// entry/exit effects, no stage policies, and no effect transitions into it.
+    /// Such a stage is constant, so the printer omits the stage enum and
+    /// <c>CurrentStage</c>; stage-scoped actions become entity-level.
+    /// </summary>
+    internal static bool IsImplicitStage(Entity entity, Domain? domain = null) {
+        if (entity.Stages.Count != 1)
+            return false;
+        var stage = entity.Stages[0];
+        if (stage.OnEntryEffects.Count > 0
+            || stage.OnExitEffects.Count > 0
+            || stage.Policies.Count > 0
+            || stage.Subscriptions.Count > 0)
+            return false;
+        if (domain is not null && IsWatchedStage(entity, stage.Name, domain))
+            return false;
+        return !TransitionsTo(entity, stage.Name);
+    }
+
+    /// <summary>True when any subscription in the domain watches <paramref name="stageName"/> on <paramref name="entity"/>.</summary>
+    private static bool IsWatchedStage(Entity entity, string stageName, Domain domain) {
+        foreach (var source in domain.Types.OfType<Entity>()) {
+            var subscriptions = source.Subscriptions
+                .Concat(source.Stages.SelectMany(s => s.Subscriptions));
+            foreach (var subscription in subscriptions) {
+                if (!subscription.StageNames.Contains(stageName, StringComparer.Ordinal))
+                    continue;
+                var target = source.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, subscription.RelationshipName, StringComparison.Ordinal));
+                if (target is not null
+                    && string.Equals(target.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool TransitionsTo(Entity entity, string stageName) {
+        static bool In(IEnumerable<Effect> effects, string target) =>
+            effects.Any(effect => effect switch {
+                StageTransitionEffect transition =>
+                    string.Equals(transition.TargetStage.StageName, target, StringComparison.Ordinal),
+                CompositeEffect composite => In(composite.Effects, target),
+                ConditionalEffect conditional =>
+                    In(conditional.ThenEffects, target)
+                    || (conditional.ElseEffects is not null && In(conditional.ElseEffects, target)),
+                _ => false
+            });
+
+        return entity.Actions.Any(a => In(a.Effects, stageName))
+            || entity.Subscriptions.Any(s => In(s.Effects, stageName))
+            || entity.Stages.Any(stage =>
+                stage.Actions.Any(a => In(a.Effects, stageName))
+                || In(stage.OnEntryEffects, stageName)
+                || In(stage.OnExitEffects, stageName)
+                || stage.Subscriptions.Any(s => In(s.Effects, stageName)));
+    }
+
     private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
-        Entity entity, DomainTypeLookupMetadata lookup) {
+        Entity entity, DomainTypeLookupMetadata lookup, IReadOnlySet<string> assignOnly) {
         var parameters = new List<ConstructorParameterOrder>();
+        var required = new List<ConstructorParameterOrder>();
+        var optional = new List<ConstructorParameterOrder>();
 
         // Props assigned by the FIRST stage's entry effects are body-initialized in
         // the exported ctor (which runs those effects after setting CurrentStage) —
@@ -118,8 +269,15 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             if (entryAssignedProps.Contains(prop.Name)) continue;
-            parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
+            var isOptional = assignOnly.Contains(prop.Name)
+                && EmptyIsLegal(prop, lookup);
+            var order = new ConstructorParameterOrder(
+                prop.Name, prop.Type, IsNavigation: false, IsBackReference: false,
+                IsOptional: isOptional);
+            (isOptional ? optional : required).Add(order);
         }
+        parameters.AddRange(required);
+        parameters.AddRange(optional);
 
         foreach (var rel in entity.Navigations) {
             var isMany = rel.Cardinality is RelationshipCardinality.OneToMany

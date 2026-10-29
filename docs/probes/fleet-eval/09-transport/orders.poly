@@ -37,10 +37,6 @@ Order: entity {
 
   IsPaid: policy { State is "Paid" }
 
-  Ship: action {
-    transition to Shipped
-  }
-
   Cancel: action (reason: Text) {
     assign CancelReason to reason
     transition to Cancelled
@@ -55,7 +51,11 @@ Order: entity {
       transition to Paid
     }
   }
-  Paid: stage { }
+  Paid: stage {
+    Ship: action {
+      transition to Shipped
+    }
+  }
   Shipped: stage { }
   Delivered: stage { }
   Cancelled: stage { }

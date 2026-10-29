@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum LeadStage
 {
     New = 0,
@@ -11,8 +8,6 @@ public enum LeadStage
 
 public class Lead
 {
-    private Lead()
-    { }
     private Lead(string company, string email, string name, Account? account = null)
     {
         this.Company = company;
@@ -70,5 +65,5 @@ public class Lead
         var created = new Lead(company, email, name, account);
         return DomainResult<Lead>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

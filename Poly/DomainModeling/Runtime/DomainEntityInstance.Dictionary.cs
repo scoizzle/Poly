@@ -36,7 +36,7 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
                 if (!ReferenceEquals(child.Store, store) && !store.TryAdd(child, out var error))
                     throw new InvalidOperationException(error ?? "Failed to register linked instance.");
                 store.Link(nav.Name, this, child);
-                TryLinkCreateInBackReference(child);
+                TryLinkCreateInBackReference(child, nav.Name);
                 return;
             }
             _values[key] = value;
@@ -106,7 +106,7 @@ public sealed partial record DomainEntityInstance : IDictionary<string, object?>
         if (!ReferenceEquals(child.Store, store) && !store.TryAdd(child, out var error))
             throw new InvalidOperationException(error ?? "Failed to register linked instance.");
         store.Link(navigation.Name, this, child);
-        TryLinkCreateInBackReference(child);
+        TryLinkCreateInBackReference(child, navigation.Name);
     }
 
     /// <summary>

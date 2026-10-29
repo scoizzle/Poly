@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum ContactStage
 {
     Active = 0,
@@ -10,8 +7,6 @@ public enum ContactStage
 
 public class Contact
 {
-    private Contact()
-    { }
     private Contact(string email, string name, Account? account = null)
     {
         this.Email = email;
@@ -62,5 +57,5 @@ public class Contact
         }
         return DomainResult<Contact>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

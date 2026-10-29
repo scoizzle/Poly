@@ -1,11 +1,6 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Course
 {
-    private Course()
-    { }
     private Course(string code, string title)
     {
         this.Code = code;
@@ -34,5 +29,5 @@ public class Course
         var created = new Course(code, title);
         return DomainResult<Course>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum RoomStage
@@ -10,18 +9,14 @@ public enum RoomStage
 
 public class Room
 {
-    private List<Reservation> _stays;
-    private Room()
-    {
-        this._stays = new List<Reservation>();
-    }
+    private List<Reservation> _stays = new List<Reservation>();
     private Room(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
     {
-        this.Dirty = dirty;
         this.Floor = floor;
         this.MaxOccupancy = maxOccupancy;
         this.NightlyRate = nightlyRate;
         this.Number = number;
+        this.Dirty = dirty;
         this.Occupied = occupied;
         this.Offline = offline;
         this.Property = property;
@@ -92,7 +87,7 @@ public class Room
     {
         this.Occupied = true;
     }
-    internal void WhenEachReservationDeparted()
+    internal void WhenEachReservationDeparted_SetOccupied()
     {
         this.Occupied = false;
     }
@@ -104,7 +99,7 @@ public class Room
     {
         this.Occupied = false;
     }
-    internal void WhenEachReservationDeparted_2()
+    internal void WhenEachReservationDeparted_SetDirty()
     {
         this.Dirty = true;
     }
@@ -172,5 +167,5 @@ public class Room
             target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

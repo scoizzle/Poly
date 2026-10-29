@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Ontology.Effects;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -106,19 +107,61 @@ public sealed partial class DomainToCSharpExporter {
         IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
         var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
         foreach (var (_, subList) in subscriptionsBySubscriber) {
-            var counts = new Dictionary<(string Stage, string Target, string Quantifier, bool HasPeer), int>();
+            var groups = subList
+                .GroupBy(info => (
+                    info.StageName,
+                    info.TargetEntity.Name,
+                    QuantifierName(info.Subscription.Quantifier),
+                    HasPeerBinding(info)))
+                .ToDictionary(g => g.Key, g => g.ToList());
             foreach (var info in subList) {
                 var hasPeer = HasPeerBinding(info);
                 var quantifier = QuantifierName(info.Subscription.Quantifier);
                 var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
-                counts.TryGetValue(key, out var occurrence);
-                counts[key] = occurrence + 1;
-                var suffix = occurrence == 0 ? "" : $"_{occurrence + 1}";
-                map[info] = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}{suffix}";
+                var name = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}";
+                var group = groups[key];
+                if (group.Count == 1) {
+                    map[info] = name;
+                    continue;
+                }
+                // Name every handler in a multi-handler group by its effect, not
+                // by declaration order (`_2` says nothing).
+                var label = EffectLabel(info.Subscription);
+                var occurrence = group.TakeWhile(other => !ReferenceEquals(other, info))
+                    .Count(other => string.Equals(EffectLabel(other.Subscription), label, StringComparison.Ordinal));
+                map[info] = occurrence == 0 ? $"{name}_{label}" : $"{name}_{label}_{occurrence + 1}";
             }
         }
         return map;
     }
+
+    /// <summary>Splice a lowered handler body's statements/locals after a prefix (D13).</summary>
+    private static Block Prefixed(List<Node> prefix, Node body, List<Node>? locals = null) {
+        if (body is Block block) {
+            prefix.AddRange(block.Nodes);
+            locals ??= [];
+            locals.AddRange(block.Variables);
+        }
+        else {
+            prefix.Add(body);
+        }
+        return new Block(prefix, locals ?? []);
+    }
+
+    private static string EffectLabel(SubscriptionDispatchPlanEntry subscription) =>
+        EffectLabel(subscription.Effects.FirstOrDefault()) ?? "Effect";
+
+    private static string? EffectLabel(Effect? effect) => effect switch {
+        AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
+        InvokeActionEffect invoke => $"Call{invoke.ActionName}",
+        StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
+        CreateEntityInstance create => $"Create{create.Type.TypeName}",
+        CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
+        CompositeEffect composite => composite.Effects.Select(EffectLabel).FirstOrDefault(l => l is not null),
+        ConditionalEffect conditional => EffectLabel(conditional.ThenEffects.FirstOrDefault())
+            ?? (conditional.ElseEffects is null ? null : EffectLabel(conditional.ElseEffects.FirstOrDefault())),
+        _ => null,
+    };
 
     private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
         StageSubscriptionQuantifier.Any => "Any",
@@ -191,6 +234,12 @@ public sealed partial class DomainToCSharpExporter {
 
     // ── Per-entity builder ──────────────────────────────────────
 
+    private static Node EmptyDefault(DomainTypeReference type) => type.TypeName switch {
+        "Text" or "String" => new Constant(""),
+        "Boolean" => new Constant(false),
+        _ => new Constant(0L),
+    };
+
     internal static IReadOnlyList<TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         Domain domain,
@@ -221,7 +270,9 @@ public sealed partial class DomainToCSharpExporter {
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
         // is the single source; fall back to the derivation only for the null-analysis path.
-        var stageEnumTypeName = esm.StageEnumTypeName ?? $"{entity.Name}Stage";
+        var stageEnumTypeName = esm.HasStages
+            ? esm.StageEnumTypeName ?? $"{entity.Name}Stage"
+            : null;
 
         // Properties assigned by the initial stage's entry effects are body-initialized
         // (the ctor already runs those effects after setting CurrentStage) — they must
@@ -312,6 +363,46 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
+        // ── Scalar constructor slots in the published ESM order ──
+        // Required scalars first, then optional assign-only scalars. Defaulted
+        // properties are not in this list; they stay in defaultedCtorParams.
+        var scalarOrder = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+        if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
+            var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
+            var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
+            var assignmentsByProp = ctorAssignments
+                .OfType<Assignment>()
+                .Where(a => a.Destination is Member { MemberName: var name }
+                    && scalarProps.Contains(name))
+                .GroupBy(a => ((Member)a.Destination).MemberName, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            var retainedAssignments = ctorAssignments
+                .Where(a => a is not Assignment {
+                    Destination: Member { MemberName: var name }
+                } || !scalarProps.Contains(name))
+                .ToList();
+            var reordered = new List<Parameter>();
+            var assignments = new List<Node>();
+            foreach (var order in scalarOrder) {
+                var name = ToCamelCase(order.Name);
+                if (!paramsByName.TryGetValue(name, out var parameter))
+                    continue;
+                if (order.IsOptional)
+                    parameter = parameter with { DefaultValue = EmptyDefault(order.Type) };
+                reordered.Add(parameter);
+                assignments.Add(assignmentsByProp.TryGetValue(order.Name, out var assignment)
+                    ? assignment
+                    : new Assignment(
+                        new Member(new ThisReference(), order.Name),
+                        new Parameter(name)));
+            }
+            ctorParams.Clear();
+            ctorParams.AddRange(reordered);
+            ctorAssignments.Clear();
+            ctorAssignments.AddRange(assignments);
+            ctorAssignments.AddRange(retainedAssignments);
+        }
+
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
         foreach (var rel in domainRelationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
@@ -337,6 +428,7 @@ public sealed partial class DomainToCSharpExporter {
                 fields.Add(new FieldDefinitionNode(
                     fieldName,
                     listType,
+                    DefaultValue: new New(listType),
                     AccessModifier: AccessModifier.Private
                 ));
 
@@ -359,7 +451,7 @@ public sealed partial class DomainToCSharpExporter {
                 // at EF materialization) — emit nullable so the generated code has
                 // no non-nullable-uninitialized warnings (CS8618).
                 if (EffectHelpers.CreatesIn(entity, rel.Name))
-                    AddCreateSingularNavMethod(entity, rel, domain!, methods, metadata);
+                    AddCreateSingularNavMethod(entity, rel, domain!, subscriberSubs, methods, metadata);
                 props.Add(new PropertyDefinitionNode(
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
@@ -411,11 +503,16 @@ public sealed partial class DomainToCSharpExporter {
         // defaults — `create in { DefaultedProp: value }` flows through construction.
         ctorParams.AddRange(defaultedCtorParams);
 
-        // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass builds
-        // the invoke with a unique previousStageN capture for when-all.
+        // Watched stages get Notify{Stage}Subscribers; EffectLoweringPass captures
+        // the previous stage only when a when-all handler reads it.
         IReadOnlySet<string>? postTransitionNotifyStages = null;
+        IReadOnlySet<string>? previousStageNotifyStages = null;
         if (targetSubs is { Count: > 0 }) {
             postTransitionNotifyStages = targetSubs
+                .Select(s => s.StageName)
+                .ToHashSet(StringComparer.Ordinal);
+            previousStageNotifyStages = targetSubs
+                .Where(NeedsAllPreviousStage)
                 .Select(s => s.StageName)
                 .ToHashSet(StringComparer.Ordinal);
         }
@@ -424,7 +521,8 @@ public sealed partial class DomainToCSharpExporter {
         // Same action name on multiple stages is one C# method that dispatches on
         // CurrentStage. Emitting one method per stage produced illegal duplicate members
         // (FieldService WorkOrder.Cancel on Draft/Scheduled/Blocked).
-        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages, domain, metadata);
+        AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages,
+            previousStageNotifyStages, domain, metadata);
 
         // ── Policies as bool methods ──────────────────────────────
         // One unqualified method per policy name. Entity, stage, and action-local
@@ -530,9 +628,10 @@ public sealed partial class DomainToCSharpExporter {
                 // Nullable: a create-in lands the child in its first stage with no prior
                 // stage, so the caller passes null. `when all` guards read it as
                 // "transitioned from" and a fresh entry must not match.
+                var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
                 var notifyPrevious = new Parameter(
                     "previousStage",
-                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName)));
+                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
@@ -558,7 +657,7 @@ public sealed partial class DomainToCSharpExporter {
                 methods.Add(new MethodDefinitionNode(
                     $"Notify{stageGroup.Key}Subscribers",
                     new TypeReference("void"),
-                    Parameters: [notifyPrevious],
+                    Parameters: needsPrevious ? [notifyPrevious] : null,
                     Body: new Block([
                         new Invoke(
                             new Member(new ThisReference(), "EnterNotifyCascade"),
@@ -611,7 +710,10 @@ public sealed partial class DomainToCSharpExporter {
                         Analysis: metadata,
                         Domain: domain,
                         EnumPropertyNames: esm.EnumPropertyNames,
-                        PostTransitionNotifyStages: postTransitionNotifyStages);
+                        LifecyclePropertyName: esm.LifecyclePropertyName,
+                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
+                        PostTransitionNotifyStages: postTransitionNotifyStages,
+                        PreviousStageNotifyStages: previousStageNotifyStages);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -619,9 +721,9 @@ public sealed partial class DomainToCSharpExporter {
                             "Subscription effects could not be lowered to a Syntax AST node.");
                     // A subscription is its own trigger for the automatic-transition loop guard.
                     if (EffectHelpers.HasAutomaticTransitions(entity))
-                        handlerBody = new Block([
-                            new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")),
-                            handlerBody]);
+                        handlerBody = Prefixed(
+                            [new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain"))],
+                            handlerBody);
                 }
                 else {
                     handlerBody = new Block([]);
@@ -635,9 +737,9 @@ public sealed partial class DomainToCSharpExporter {
                     var stageGate = new IfStatement(
                         new NotEqual(
                             new Member(new ThisReference(), "CurrentStage"),
-                            new Member(new NamedTypeReference(stageEnumTypeName), info.SubscriberStageName)),
+                            new Member(new NamedTypeReference(stageEnumTypeName!), info.SubscriberStageName)),
                         new Block([new Return()]));
-                    handlerBody = new Block([stageGate, handlerBody]);
+                    handlerBody = Prefixed([stageGate], handlerBody);
                 }
 
                 // `when all Rel Stage…` fires once, on the transition where the last
@@ -665,14 +767,14 @@ public sealed partial class DomainToCSharpExporter {
                         InWatchedStages(
                             previousStageParam, targetStageEnumName, info.Subscription.StageNames),
                         new Block([new Return()]));
-                    handlerBody = new Block(
+                    handlerBody = Prefixed(
                         [
                             new Assignment(matchedVar, new Constant(false)),
                             gateLoop,
                             emptyCheck,
-                            alreadyWatched,
-                            handlerBody
+                            alreadyWatched
                         ],
+                        handlerBody,
                         [matchedVar]);
                 }
 
@@ -680,7 +782,7 @@ public sealed partial class DomainToCSharpExporter {
                 // transition it fires whenever at least one linked record is in
                 // any watched stage (union of StageNames).
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
-                    && info.TargetEntity.Stages.Count > 0
+                    && metadata.GetStructure(info.TargetEntity)?.HasStages == true
                     && info.Subscription.StageNames.Count > 0) {
                     var linkedVar = new Variable("linkedTarget");
                     var matchedVar = new Variable("linkedMatched");
@@ -700,8 +802,9 @@ public sealed partial class DomainToCSharpExporter {
                     var noneMatched = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
                         new Block([new Return()]));
-                    handlerBody = new Block(
-                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched, handlerBody],
+                    handlerBody = Prefixed(
+                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched],
+                        handlerBody,
                         [matchedVar]);
                 }
 
@@ -724,8 +827,8 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         // ── Stage enum + CurrentStage property ────────────────────
-        if (entity.Stages.Count > 0) {
-            var enumTypeName = stageEnumTypeName;
+        if (esm.HasStages) {
+            var enumTypeName = stageEnumTypeName!;
             typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
 
             props.Add(new PropertyDefinitionNode(
@@ -746,12 +849,12 @@ public sealed partial class DomainToCSharpExporter {
             var bodyNodes = new List<Node>();
             bodyNodes.AddRange(ctorAssignments);
 
-            if (entity.Stages.Count > 0) {
+            if (esm.HasStages) {
                 var firstStage = entity.Stages[0];
                 bodyNodes.Add(new Assignment(
                     new Member(new ThisReference(), "CurrentStage"),
                     new Member(
-                        new NamedTypeReference(stageEnumTypeName),
+                        new NamedTypeReference(stageEnumTypeName!),
                         firstStage.Name)));
 
                 // Apply the initial stage's entry effects in the constructor.
@@ -763,13 +866,15 @@ public sealed partial class DomainToCSharpExporter {
                         new ThisReference(),
                         Analysis: metadata,
                         Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames);
+                        StageEnumTypeName: stageEnumTypeName,
+                        EnumPropertyNames: esm.EnumPropertyNames,
+                        LifecyclePropertyName: esm.LifecyclePropertyName,
+                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
+                        PostTransitionNotifyStages: postTransitionNotifyStages,
+                        PreviousStageNotifyStages: previousStageNotifyStages,
+                        SourceStageName: firstStage.Name);
                     var entryPass = new EffectLoweringPass(entity, entryCtx);
-                    foreach (var entryEffect in firstStage.OnEntryEffects) {
-                        var lowered = entryPass.Route(entryEffect);
-                        if (lowered is not null)
-                            bodyNodes.Add(lowered);
-                    }
+                    entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
                 }
             }
 
@@ -781,29 +886,18 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), "InitializeSubscriptions")));
             }
 
-            // Private parameterless constructor for EF Core materialization.
-            var paramlessBody = new List<Node>();
-            foreach (var f in fields) {
-                var isOptional = f.FieldType is OptionalTypeReference;
-                if (isOptional) continue;
-                paramlessBody.Add(new Assignment(
-                    new Member(new ThisReference(), f.Name),
-                    new New(f.FieldType)));
-            }
-
-            // Full constructor — only the static Create factory can construct
-            // instances with data. EntityFramework uses the parameterless ctor.
-            // With no Create parameters both would be `private T()` (CS0111), so
-            // the full constructor, field initialisers first, is the only one.
-            if (ctorParams.Count > 0) {
+            // Private parameterless constructor only when a persistence pack is
+            // loaded (EF materialization). Collection fields carry their list
+            // initializer, so this ctor is always empty (D9).
+            var hasPersistence = metadata.GetMetadata<PersistenceSurfaceMetadata>(domain) is not null;
+            if (ctorParams.Count > 0 && hasPersistence) {
                 ctors = [new ConstructorDefinitionNode(
                     Parameters: null,
-                    Body: new Block(paramlessBody),
+                    Body: null,
                     AccessModifier: AccessModifier.Private
                 )];
             }
             else {
-                bodyNodes.InsertRange(0, paramlessBody);
                 ctors = [];
             }
             ctors = [.. ctors, new ConstructorDefinitionNode(

@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum WaitOfferStage
@@ -14,8 +13,6 @@ public class WaitOffer
     private List<Section>? _sectionWaitlistOfferedSubscribers;
     private List<Section>? _sectionWaitlistCancelledSubscribers;
     private int _notifyDepth;
-    private WaitOffer()
-    { }
     private WaitOffer(Student? student = null, Section? section = null)
     {
         this.Student = student;
@@ -31,25 +28,17 @@ public class WaitOffer
         {
             return DomainResult.Failure("'Seat' requires stage 'Queued' on entity 'WaitOffer'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = WaitOfferStage.Offered;
-        this.NotifyOfferedSubscribers(previousStage0);
+        this.NotifyOfferedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Cancel()
     {
-        if (this.CurrentStage == WaitOfferStage.Queued)
+        if (this.CurrentStage == WaitOfferStage.Queued || this.CurrentStage == WaitOfferStage.Offered)
         {
             var previousStage0 = this.CurrentStage;
             this.CurrentStage = WaitOfferStage.Cancelled;
             this.NotifyCancelledSubscribers(previousStage0);
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == WaitOfferStage.Offered)
-        {
-            var previousStage1 = this.CurrentStage;
-            this.CurrentStage = WaitOfferStage.Cancelled;
-            this.NotifyCancelledSubscribers(previousStage1);
             return DomainResult.Success();
         }
         return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'WaitOffer'.");
@@ -84,7 +73,7 @@ public class WaitOffer
         }
         this._sectionWaitlistCancelledSubscribers.Add(subscriber);
     }
-    internal void NotifyOfferedSubscribers(WaitOfferStage? previousStage)
+    internal void NotifyOfferedSubscribers()
     {
         this.EnterNotifyCascade("Offered");
         try

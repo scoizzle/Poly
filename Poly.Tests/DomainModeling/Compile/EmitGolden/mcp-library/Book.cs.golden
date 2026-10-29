@@ -1,16 +1,12 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Book
 {
-    private Book()
-    { }
+    private Book() { }
     private Book(string isbn, string title, long copies = 1L)
     {
-        this.Copies = copies;
         this.Isbn = isbn;
         this.Title = title;
+        this.Copies = copies;
     }
     public long Copies { get; private set; }
     public string Isbn { get; private set; } = default!;
@@ -37,6 +33,6 @@ public class Book
         db.Record("Book", "Isbn", isbn);
         return DomainResult<Book>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
     public static System.Boolean ExistsWithIsbn(Poly.DomainModeling.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "Isbn", isbn);
 }

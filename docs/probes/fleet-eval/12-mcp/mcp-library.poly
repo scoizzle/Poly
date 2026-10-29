@@ -8,7 +8,7 @@ Patron: entity {
   fines: many Fine
 
   when loans Overdue as loan {
-    create Fine { Amount: (loan Amount) Reason: "Overdue" }
+    create in fines { Amount: (loan Amount) Reason: "Overdue" }
   }
 
   CheckOut: action (book: Book) -> Loan

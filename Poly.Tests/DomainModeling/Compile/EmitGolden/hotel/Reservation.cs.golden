@@ -20,8 +20,6 @@ public class Reservation
     private List<Room>? _roomStaysNoShowSubscribers;
     private List<Guest>? _guestReservationsDepartedSubscribers;
     private int _notifyDepth;
-    private Reservation()
-    { }
     private Reservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
         this.CheckInDate = checkInDate;
@@ -45,7 +43,7 @@ public class Reservation
     public Guest? Guest { get; private set; }
     public Room? Room { get; private set; }
     public ReservationStage CurrentStage { get; private set; }
-    private DomainResult<Folio> CreateFolio(long balance = 0L)
+    public DomainResult<Folio> CreateFolio(long balance = 0L)
     {
         var folioResult = Folio.Create(this, balance);
         if (!folioResult.IsSuccess)
@@ -79,18 +77,10 @@ public class Reservation
     }
     public DomainResult Cancel()
     {
-        if (this.CurrentStage == ReservationStage.Requested)
+        if (this.CurrentStage == ReservationStage.Requested || this.CurrentStage == ReservationStage.Confirmed)
         {
-            var previousStage0 = this.CurrentStage;
             this.CurrentStage = ReservationStage.Cancelled;
-            this.NotifyCancelledSubscribers(previousStage0);
-            return DomainResult.Success();
-        }
-        if (this.CurrentStage == ReservationStage.Confirmed)
-        {
-            var previousStage1 = this.CurrentStage;
-            this.CurrentStage = ReservationStage.Cancelled;
-            this.NotifyCancelledSubscribers(previousStage1);
+            this.NotifyCancelledSubscribers();
             return DomainResult.Success();
         }
         return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'Reservation'.");
@@ -122,9 +112,8 @@ public class Reservation
         {
             return DomainResult.Failure(create0.ErrorMessage ?? "");
         }
-        var previousStage1 = this.CurrentStage;
         this.CurrentStage = ReservationStage.InHouse;
-        this.NotifyInHouseSubscribers(previousStage1);
+        this.NotifyInHouseSubscribers();
         return DomainResult.Success();
     }
     public DomainResult MarkNoShow()
@@ -133,9 +122,8 @@ public class Reservation
         {
             return DomainResult.Failure("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = ReservationStage.NoShow;
-        this.NotifyNoShowSubscribers(previousStage0);
+        this.NotifyNoShowSubscribers();
         return DomainResult.Success();
     }
     public DomainResult PostStayCharge()
@@ -150,7 +138,7 @@ public class Reservation
         }
         if (this.Folio == null)
         {
-            return DomainResult.Failure("'PostRoomNight' requires a linked 'folio' on entity 'Reservation'.");
+            return DomainResult.Failure("'PostStayCharge' requires a linked 'folio' on entity 'Reservation'.");
         }
         var invoke0 = this.Folio.PostRoomNight(this.NightlyRate);
         if (!invoke0.IsSuccess)
@@ -177,9 +165,8 @@ public class Reservation
         {
             return DomainResult.Failure("'CheckOut' blocked by policy 'BillSettled'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = ReservationStage.Departed;
-        this.NotifyDepartedSubscribers(previousStage0);
+        this.NotifyDepartedSubscribers();
         return DomainResult.Success();
     }
     public bool DatesValid() => this.CheckOutDate > this.CheckInDate;
@@ -264,7 +251,7 @@ public class Reservation
         }
         this._guestReservationsDepartedSubscribers.Add(subscriber);
     }
-    internal void NotifyInHouseSubscribers(ReservationStage? previousStage)
+    internal void NotifyInHouseSubscribers()
     {
         this.EnterNotifyCascade("InHouse");
         try
@@ -282,7 +269,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyDepartedSubscribers(ReservationStage? previousStage)
+    internal void NotifyDepartedSubscribers()
     {
         this.EnterNotifyCascade("Departed");
         try
@@ -291,8 +278,8 @@ public class Reservation
             {
                 foreach (var sub in this._roomStaysDepartedSubscribers)
                 {
-                    sub.WhenEachReservationDeparted();
-                    sub.WhenEachReservationDeparted_2();
+                    sub.WhenEachReservationDeparted_SetOccupied();
+                    sub.WhenEachReservationDeparted_SetDirty();
                 }
             }
             if (this._guestReservationsDepartedSubscribers != null)
@@ -308,7 +295,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCancelledSubscribers(ReservationStage? previousStage)
+    internal void NotifyCancelledSubscribers()
     {
         this.EnterNotifyCascade("Cancelled");
         try
@@ -326,7 +313,7 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyNoShowSubscribers(ReservationStage? previousStage)
+    internal void NotifyNoShowSubscribers()
     {
         this.EnterNotifyCascade("NoShow");
         try

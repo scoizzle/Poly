@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum CampaignStage
@@ -10,11 +9,7 @@ public enum CampaignStage
 
 public class Campaign
 {
-    private List<CampaignMember> _members;
-    private Campaign()
-    {
-        this._members = new List<CampaignMember>();
-    }
+    private List<CampaignMember> _members = new List<CampaignMember>();
     private Campaign(string name, IEnumerable<CampaignMember>? members = null)
     {
         this.Name = name;
@@ -27,7 +22,7 @@ public class Campaign
         get => this._members;
     }
     public CampaignStage CurrentStage { get; private set; }
-    private DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
+    public DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
     {
         var campaignMemberResult = CampaignMember.Create(contact, this);
         if (!campaignMemberResult.IsSuccess)

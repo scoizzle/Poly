@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum VisitStage
 {
     Scheduled = 0,
@@ -30,19 +27,7 @@ public class Visit
     public VisitStage CurrentStage { get; private set; }
     public DomainResult AssignDoctor(Doctor doctor)
     {
-        var assignValue0 = "assigned";
-        if (!System.String.IsNullOrEmpty(assignValue0))
-        {
-            if (assignValue0.Length < 2L)
-            {
-                return DomainResult.Failure("'Reason' must be at least 2 characters.");
-            }
-            if (assignValue0.Length > 200L)
-            {
-                return DomainResult.Failure("'Reason' must be at most 200 characters.");
-            }
-        }
-        this.Reason = assignValue0;
+        this.Reason = "assigned";
         return DomainResult.Success();
     }
     public DomainResult CheckIn()
@@ -52,25 +37,21 @@ public class Visit
             return DomainResult.Failure("'CheckIn' requires stage 'Scheduled' on entity 'Visit'.");
         }
         this.CurrentStage = VisitStage.CheckedIn;
-        {
-            var assignValue0 = VisitState.CheckedIn;
-            if (assignValue0 != VisitState.Scheduled && assignValue0 != VisitState.CheckedIn && assignValue0 != VisitState.InTreatment && assignValue0 != VisitState.Completed && assignValue0 != VisitState.NoShow)
-            {
-                return DomainResult.Failure("'State' is not a valid member of VisitState.");
-            }
-            this.State = assignValue0;
-        }
+        this.State = VisitState.CheckedIn;
         return DomainResult.Success();
     }
     public static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
-        if (reason.Length < 2L)
+        if (!string.IsNullOrEmpty(reason))
         {
-            return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");
-        }
-        if (reason.Length > 200L)
-        {
-            return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
+            if (reason.Length < 2L)
+            {
+                return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");
+            }
+            if (reason.Length > 200L)
+            {
+                return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
+            }
         }
         if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
         {

@@ -347,6 +347,14 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         return operand with { Value = new SN.Not(operand.Value) };
     }
 
+    private static bool IsCount(Node node) =>
+        node is Member { MemberName: "Count" };
+
+    private static Node CountConstant(long value) =>
+        value is >= int.MinValue and <= int.MaxValue
+            ? new Constant((int)value)
+            : new Constant(value);
+
     protected override LoweredExpression Comparison(Comparison c) {
         var left = Route(c.Left);
         var right = Route(c.Right);
@@ -360,6 +368,17 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             var fixedRight = FixEnumLiteral(c.Right, c.Left, loweredLeft);
             if (fixedLeft is not null) loweredLeft = fixedLeft;
             if (fixedRight is not null) loweredRight = fixedRight;
+        }
+
+        // Count is an int; compare it to an int literal so the printed form is
+        // `Count > 0`, not `Count > 0L` (G18). Sum accumulators stay long.
+        if (IsCount(loweredLeft)
+            && loweredRight is Constant { Value: long leftCount }) {
+            loweredRight = CountConstant(leftCount);
+        }
+        else if (IsCount(loweredRight)
+            && loweredLeft is Constant { Value: long rightCount }) {
+            loweredLeft = CountConstant(rightCount);
         }
 
         // Simplify boolean comparisons: boolProp == true  → boolProp

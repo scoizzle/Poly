@@ -1144,7 +1144,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("foreach (var target0 in this.Lines)");
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
-        await Assert.That(cs).Contains("target2.CurrentStage == LineStage.Active");
+        await Assert.That(cs).Contains("target2.CurrentStage != LineStage.Active");
         await Assert.That(cs).Contains("return DomainResult.Failure(result1.ErrorMessage ?? \"\");");
         await Assert.That(cs).DoesNotContain("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
@@ -1645,7 +1645,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("assignValue0 = TokenKind.Numeric");
+        await Assert.That(cs).Contains("this.Kind = TokenKind.Numeric");
         await Assert.That(cs).DoesNotContain("this.Kind = this.Numeric");
     }
 
@@ -1843,7 +1843,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("assignValue0 = Color.Red");
+        await Assert.That(cs).Contains("this.Color = Color.Red");
         await Assert.That(cs).DoesNotContain("this.Color = Red");
     }
 
@@ -1980,7 +1980,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("this.Assignee == null");
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'Notify' requires a linked 'assignee' on entity 'Issue'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(\"'Go' requires a linked 'assignee' on entity 'Issue'.\")");
         await Assert.That(cs).Contains("this.Assignee.Notify()");
         await Assert.That(cs).DoesNotContain("this.Assignee!");
         await Assert.That(cs).DoesNotContain("this.assignee.Notify");
@@ -3986,6 +3986,101 @@ public class DomainToCSharpExporterTests {
 
         var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreateChildren(");
         await Assert.That(createChildren).Contains("NotifyASubscribers(null)");
+    }
+
+    [Test]
+    public async Task Export_OptionalTextPattern_EmptyIsLegal_BadValueStillFails() {
+        const string dsl = """
+            domain Shop
+            Item: entity {
+              Code: Text required pattern("^[A-Z]{2}$")
+              Zip: Text pattern("^\\d{5}$")
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Item> Create(");
+        await Assert.That(create).Contains("!string.IsNullOrEmpty(zip)");
+        await Assert.That(create).Contains("Regex.IsMatch(zip");
+        await Assert.That(create).DoesNotContain("!string.IsNullOrEmpty(code)");
+    }
+
+    [Test]
+    public async Task Export_CountPolicy_ComparesToIntZero() {
+        const string dsl = """
+            domain School
+            Student: entity {
+              enrollments: many Enrollment
+              HasLoad: policy { count enrollments > 0 }
+              NoLoad: policy { count enrollments == 0 }
+            }
+            Enrollment: entity { Name: Text }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("this.Enrollments.Count > 0");
+        await Assert.That(cs).Contains("this.Enrollments.Count == 0");
+        await Assert.That(cs).DoesNotContain("Count > 0L");
+    }
+
+    [Test]
+    public async Task Export_EntryEnumAssign_SkipsMembershipWalk() {
+        const string dsl = """
+            domain Fleet
+            TruckStatus: enum { Idle, EnRoute }
+            Truck: entity {
+              Status: TruckStatus default(Idle)
+              Dispatch: action { transition to EnRoute }
+              Idle: stage { }
+              EnRoute: stage {
+                entry { assign Status to EnRoute }
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
+        await Assert.That(dispatch).Contains("this.Status = TruckStatus.EnRoute");
+        await Assert.That(dispatch).DoesNotContain("is not a valid member of TruckStatus");
+    }
+
+    [Test]
+    public async Task Export_NoVerbatimValue_AndOnlyNeededUsings() {
+        const string dsl = """
+            domain Shop
+            Item: entity {
+              Name: Text required
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+
+        await Assert.That(cs).Contains("this.Value = value;");
+        await Assert.That(cs).DoesNotContain("@value");
+        await Assert.That(cs).DoesNotContain("using System;");
+        await Assert.That(cs).DoesNotContain("using System.Collections.Generic;");
+    }
+
+    [Test]
+    public async Task Export_DuplicateWhenHandlers_NamedAfterEffect() {
+        const string dsl = """
+            domain Hotel
+            Stay: entity {
+              Departed: stage { }
+            }
+            Room: entity {
+              Occupied: Boolean default(false)
+              Dirty: Boolean default(false)
+              stays: many Stay
+              when stays Departed { assign Occupied to false }
+              when stays Departed { assign Dirty to true }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("WhenEachStayDeparted_SetOccupied");
+        await Assert.That(cs).Contains("WhenEachStayDeparted_SetDirty");
+        await Assert.That(cs).DoesNotContain("WhenEachStayDeparted_2");
     }
 
     private static int CountOccurrences(string text, string needle) {

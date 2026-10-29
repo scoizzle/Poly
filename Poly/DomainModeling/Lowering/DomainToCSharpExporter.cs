@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
+using Poly.DomainModeling.Ontology.Effects;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -106,19 +107,61 @@ public sealed partial class DomainToCSharpExporter {
         IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
         var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
         foreach (var (_, subList) in subscriptionsBySubscriber) {
-            var counts = new Dictionary<(string Stage, string Target, string Quantifier, bool HasPeer), int>();
+            var groups = subList
+                .GroupBy(info => (
+                    info.StageName,
+                    info.TargetEntity.Name,
+                    QuantifierName(info.Subscription.Quantifier),
+                    HasPeerBinding(info)))
+                .ToDictionary(g => g.Key, g => g.ToList());
             foreach (var info in subList) {
                 var hasPeer = HasPeerBinding(info);
                 var quantifier = QuantifierName(info.Subscription.Quantifier);
                 var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
-                counts.TryGetValue(key, out var occurrence);
-                counts[key] = occurrence + 1;
-                var suffix = occurrence == 0 ? "" : $"_{occurrence + 1}";
-                map[info] = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}{suffix}";
+                var name = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}";
+                var group = groups[key];
+                if (group.Count == 1) {
+                    map[info] = name;
+                    continue;
+                }
+                // Name every handler in a multi-handler group by its effect, not
+                // by declaration order (`_2` says nothing).
+                var label = EffectLabel(info.Subscription);
+                var occurrence = group.TakeWhile(other => !ReferenceEquals(other, info))
+                    .Count(other => string.Equals(EffectLabel(other.Subscription), label, StringComparison.Ordinal));
+                map[info] = occurrence == 0 ? $"{name}_{label}" : $"{name}_{label}_{occurrence + 1}";
             }
         }
         return map;
     }
+
+    /// <summary>Splice a lowered handler body's statements/locals after a prefix (D13).</summary>
+    private static Block Prefixed(List<Node> prefix, Node body, List<Node>? locals = null) {
+        if (body is Block block) {
+            prefix.AddRange(block.Nodes);
+            locals ??= [];
+            locals.AddRange(block.Variables);
+        }
+        else {
+            prefix.Add(body);
+        }
+        return new Block(prefix, locals ?? []);
+    }
+
+    private static string EffectLabel(SubscriptionDispatchPlanEntry subscription) =>
+        EffectLabel(subscription.Effects.FirstOrDefault()) ?? "Effect";
+
+    private static string? EffectLabel(Effect? effect) => effect switch {
+        AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
+        InvokeActionEffect invoke => $"Call{invoke.ActionName}",
+        StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
+        CreateEntityInstance create => $"Create{create.Type.TypeName}",
+        CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
+        CompositeEffect composite => composite.Effects.Select(EffectLabel).FirstOrDefault(l => l is not null),
+        ConditionalEffect conditional => EffectLabel(conditional.ThenEffects.FirstOrDefault())
+            ?? (conditional.ElseEffects is null ? null : EffectLabel(conditional.ElseEffects.FirstOrDefault())),
+        _ => null,
+    };
 
     private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
         StageSubscriptionQuantifier.Any => "Any",
@@ -631,9 +674,9 @@ public sealed partial class DomainToCSharpExporter {
                             "Subscription effects could not be lowered to a Syntax AST node.");
                     // A subscription is its own trigger for the automatic-transition loop guard.
                     if (EffectHelpers.HasAutomaticTransitions(entity))
-                        handlerBody = new Block([
-                            new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")),
-                            handlerBody]);
+                        handlerBody = Prefixed(
+                            [new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain"))],
+                            handlerBody);
                 }
                 else {
                     handlerBody = new Block([]);
@@ -649,7 +692,7 @@ public sealed partial class DomainToCSharpExporter {
                             new Member(new ThisReference(), "CurrentStage"),
                             new Member(new NamedTypeReference(stageEnumTypeName!), info.SubscriberStageName)),
                         new Block([new Return()]));
-                    handlerBody = new Block([stageGate, handlerBody]);
+                    handlerBody = Prefixed([stageGate], handlerBody);
                 }
 
                 // `when all Rel Stage…` fires once, on the transition where the last
@@ -677,14 +720,14 @@ public sealed partial class DomainToCSharpExporter {
                         InWatchedStages(
                             previousStageParam, targetStageEnumName, info.Subscription.StageNames),
                         new Block([new Return()]));
-                    handlerBody = new Block(
+                    handlerBody = Prefixed(
                         [
                             new Assignment(matchedVar, new Constant(false)),
                             gateLoop,
                             emptyCheck,
-                            alreadyWatched,
-                            handlerBody
+                            alreadyWatched
                         ],
+                        handlerBody,
                         [matchedVar]);
                 }
 
@@ -712,8 +755,9 @@ public sealed partial class DomainToCSharpExporter {
                     var noneMatched = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
                         new Block([new Return()]));
-                    handlerBody = new Block(
-                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched, handlerBody],
+                    handlerBody = Prefixed(
+                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched],
+                        handlerBody,
                         [matchedVar]);
                 }
 

@@ -211,7 +211,7 @@ public class DslCompilerCompileOracleTests {
         var types = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types).Contains("class BillingAdapters");
         await Assert.That(types).Contains("public static DomainResult Charge(");
-        await Assert.That(types).Contains("no in-process adapter");
+        await Assert.That(types).Contains("System.Diagnostics.Debug.WriteLine");
         var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(program.Contains("/api/ledgers")).IsFalse();
 

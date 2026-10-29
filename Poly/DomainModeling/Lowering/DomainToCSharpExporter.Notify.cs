@@ -511,6 +511,7 @@ public sealed partial class DomainToCSharpExporter {
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
                         || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+            var hasRequired = prop.Constraints.OfType<RequiredConstraint>().Any();
 
             Node Failure(string msg) => FailureNode(new Constant(msg));
             Node FailureNode(Node msg) => new Return(
@@ -567,34 +568,62 @@ public sealed partial class DomainToCSharpExporter {
                     case LengthConstraint l:
                         if (isText) {
                             var lenAccess = new Member(paramRef, "Length");
+                            var lengthChecks = new List<Node>();
                             if (l.MinLength > 0) {
-                                checks.Add(new IfStatement(
+                                lengthChecks.Add(new IfStatement(
                                     new LessThan(lenAccess,
                                         new Constant((long)l.MinLength)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
                             }
                             if (l.MaxLength < int.MaxValue) {
-                                checks.Add(new IfStatement(
+                                lengthChecks.Add(new IfStatement(
                                     new GreaterThan(lenAccess,
                                         new Constant((long)l.MaxLength)),
                                     new Block([Failure(
                                         $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
+                            }
+                            if (lengthChecks.Count == 0)
+                                break;
+                            if (hasRequired) {
+                                checks.AddRange(lengthChecks);
+                            }
+                            else {
+                                // Optional text: an empty value is legal (G11).
+                                checks.Add(new IfStatement(
+                                    new Syntactic.Not(
+                                        new Invoke(
+                                            new Member(
+                                                new PrimitiveTypeReference(PrimType.String),
+                                                "IsNullOrEmpty"),
+                                            [paramRef])),
+                                    new Block(lengthChecks)));
                             }
                         }
                         break;
 
                     case PatternConstraint p:
                         if (isText) {
+                            Node notMatch = new Syntactic.Not(
+                                new Invoke(
+                                    new Member(
+                                        new NamedTypeReference(
+                                            "System.Text.RegularExpressions.Regex"),
+                                        "IsMatch"),
+                                    [paramRef,
+                                     new Constant(p.Pattern)]));
+                            if (!hasRequired) {
+                                notMatch = new Syntactic.And(
+                                    new Syntactic.Not(
+                                        new Invoke(
+                                            new Member(
+                                                new PrimitiveTypeReference(PrimType.String),
+                                                "IsNullOrEmpty"),
+                                            [paramRef])),
+                                    notMatch);
+                            }
                             checks.Add(new IfStatement(
-                                new Syntactic.Not(
-                                    new Invoke(
-                                        new Member(
-                                            new NamedTypeReference(
-                                                "System.Text.RegularExpressions.Regex"),
-                                            "IsMatch"),
-                                        [paramRef,
-                                         new Constant(p.Pattern)])),
+                                notMatch,
                                 new Block([Failure(
                                     $"'{prop.Name}' does not match the required pattern.")])));
                         }

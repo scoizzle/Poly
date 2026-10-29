@@ -140,7 +140,7 @@ public class Reservation
         }
         if (this.Folio == null)
         {
-            return DomainResult.Failure("'PostRoomNight' requires a linked 'folio' on entity 'Reservation'.");
+            return DomainResult.Failure("'PostStayCharge' requires a linked 'folio' on entity 'Reservation'.");
         }
         var invoke0 = this.Folio.PostRoomNight(this.NightlyRate);
         if (!invoke0.IsSuccess)
@@ -280,8 +280,8 @@ public class Reservation
             {
                 foreach (var sub in this._roomStaysDepartedSubscribers)
                 {
-                    sub.WhenEachReservationDeparted();
-                    sub.WhenEachReservationDeparted_2();
+                    sub.WhenEachReservationDeparted_SetOccupied();
+                    sub.WhenEachReservationDeparted_SetDirty();
                 }
             }
             if (this._guestReservationsDepartedSubscribers != null)

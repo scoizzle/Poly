@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Section
 {
     private Section()
@@ -36,7 +33,7 @@ public class Section
         this.Occupied = true;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'MarkChildBusy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'Section'.");
         }
         var invoke0 = this.Hall.MarkChildBusy();
         if (!invoke0.IsSuccess)
@@ -54,7 +51,7 @@ public class Section
         this.Occupied = false;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'ClearChildBusy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure("'Vacate' requires a linked 'hall' on entity 'Section'.");
         }
         var invoke0 = this.Hall.ClearChildBusy();
         if (!invoke0.IsSuccess)

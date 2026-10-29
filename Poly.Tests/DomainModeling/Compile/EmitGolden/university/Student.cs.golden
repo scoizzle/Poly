@@ -83,7 +83,7 @@ public class Student
         }
         foreach (var target0 in this.Enrollments)
         {
-            if (!(target0.CurrentStage == EnrollmentStage.Registered))
+            if (target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
@@ -116,7 +116,7 @@ public class Student
         }
         foreach (var target0 in this.Enrollments)
         {
-            if (!(target0.CurrentStage == EnrollmentStage.Registered))
+            if (target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
@@ -168,7 +168,7 @@ public class Student
         return DomainResult.Success();
     }
     public bool AtLimit() => this.OpenCredits >= this.MaxCredits;
-    public bool HasLoad() => this.Enrollments.Count > 0L;
+    public bool HasLoad() => this.Enrollments.Count > 0;
     internal void WhenEachEnrollmentDropped()
     {
         this.OpenCredits = this.OpenCredits - 3L;
@@ -218,5 +218,5 @@ public class Student
             target.RegisterStudentEnrollmentsCompletedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

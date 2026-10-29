@@ -84,16 +84,7 @@ public class Enrollment
         }
         else
         {
-            var assignValue1 = 0L;
-            if (assignValue1 < 0L)
-            {
-                return DomainResult.Failure("'Grade' must be >= 0.");
-            }
-            if (assignValue1 > 100L)
-            {
-                return DomainResult.Failure("'Grade' must be <= 100.");
-            }
-            this.Grade = assignValue1;
+            this.Grade = 0L;
         }
         return DomainResult.Success();
     }

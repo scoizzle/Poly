@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Patron
@@ -54,8 +53,8 @@ public class Patron
         return DomainResult<Fine>.Success(created1);
     }
     public bool HasFines() => this.Fines.Count != 0;
-    public bool HasFineCount() => this.Fines.Count > 0L;
-    public bool NoFines() => this.Fines.Count == 0L;
+    public bool HasFineCount() => this.Fines.Count > 0;
+    public bool NoFines() => this.Fines.Count == 0;
     public static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
     {
         if (string.IsNullOrEmpty(name))

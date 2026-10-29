@@ -526,16 +526,20 @@ public sealed partial class DomainToCSharpExporter {
             var payload = new NamedTypeReference(
                 RuntimeAnalysisCache.ClrTypeName(domain, endpoint.PayloadType.TypeName));
             var domainResult = new NamedTypeReference("DomainResult");
+            var request = new Parameter("request", payload);
             methods.Add(new MethodDefinitionNode(
                 endpoint.Name,
                 domainResult,
-                Parameters: [new Parameter("request", payload)],
+                Parameters: [request],
                 Body: new Block([
-                    new Return(
-                        new Invoke(
-                            new Member(domainResult, "Failure"),
-                            new Constant(
-                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' has no in-process adapter."))),
+                    new Invoke(
+                        new Member(new ClrTypeReference(typeof(System.Diagnostics.Debug)), "WriteLine"),
+                        [new Invoke(
+                            new Member(TypeReference.To<string>(), "Concat"),
+                            [new Constant(
+                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' request: "),
+                             request])]),
+                    new Return(new Invoke(new Member(domainResult, "Success"), [])),
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
@@ -581,6 +585,7 @@ public sealed partial class DomainToCSharpExporter {
             EnumPropertyNames: enumProps,
             LifecyclePropertyName: esm?.LifecyclePropertyName,
             LifecycleEnumTypeName: esm?.LifecycleEnumTypeName,
+            ActionName: action.Name,
             ActionResultType: actionResultType,
             Names: names);
         var effectPass = new EffectLoweringPass(entity, context);

@@ -255,7 +255,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         }
 
         var needsConstraintWrap = assignProp is not null
-            && HasAssignableConstraints(assignProp);
+            && HasAssignableConstraints(assignProp)
+            && !SatisfiesAssignConstraints(assignProp, value.Value);
         Node assignment = uniqueName is null && !needsConstraintWrap
             ? new Assignment(target.Value, value.Value)
             : WrapConstrainedAssign(
@@ -264,6 +265,81 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 value.Value,
                 uniqueName);
         return LoweredExpression.Before([target, value], assignment);
+    }
+
+    /// <summary>
+    /// True when a constant/enum-member RHS provably satisfies every emit-time
+    /// constraint on the property, so the assignment needs no fail-before-mutate
+    /// wrap. Non-constant RHS, unique properties, and any unsatisfied check keep
+    /// the wrap.
+    /// </summary>
+    private bool SatisfiesAssignConstraints(Property prop, Node value) {
+        if (IsUniqueProperty(prop.Name))
+            return false;
+        var enumType = DomainToCSharpExporter.TryResolveEnumType(
+            _domain, _analysis, prop.Type.TypeName, out var resolved)
+            ? resolved
+            : null;
+        foreach (var constraint in prop.Constraints) {
+            switch (constraint) {
+                case RequiredConstraint:
+                    if (prop.Type.TypeName is "Text" or "String") {
+                        if (value is not Constant { Value: string s } || string.IsNullOrEmpty(s))
+                            return false;
+                    }
+                    else if (value is Constant { Value: null }) {
+                        return false;
+                    }
+                    break;
+                case RangeConstraint range when TryNumeric(value, out var number):
+                    if (range.Minimum is not null && number < Convert.ToDouble(range.Minimum))
+                        return false;
+                    if (range.Maximum is not null && number > Convert.ToDouble(range.Maximum))
+                        return false;
+                    break;
+                case RangeConstraint:
+                    return false;
+                case LengthConstraint length when value is Constant { Value: string text }:
+                    if (text.Length < length.MinLength || text.Length > length.MaxLength)
+                        return false;
+                    break;
+                case LengthConstraint:
+                    return false;
+                case PatternConstraint pattern when value is Constant { Value: string text }:
+                    if (text.Length > 0
+                        && !System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
+                        return false;
+                    break;
+                case PatternConstraint:
+                    return false;
+            }
+        }
+        if (enumType is not null
+            && !(value is Member { Value: NamedTypeReference typeRef, MemberName: var member }
+                && string.Equals(typeRef.TypeName, enumType.Name, StringComparison.Ordinal)
+                && enumType.MemberNames.Contains(member, StringComparer.Ordinal)))
+            return false;
+        return true;
+    }
+
+    private static bool TryNumeric(Node value, out double number) {
+        switch (value) {
+            case Constant { Value: long l }:
+                number = l;
+                return true;
+            case Constant { Value: int i }:
+                number = i;
+                return true;
+            case Constant { Value: double d }:
+                number = d;
+                return true;
+            case Constant { Value: decimal m }:
+                number = (double)m;
+                return true;
+            default:
+                number = 0;
+                return false;
+        }
     }
 
     private bool HasAssignableConstraints(Property prop) =>
@@ -432,7 +508,10 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         if (DomainToCSharpExporter.TryResolveEnumType(
                 _domain, _analysis, prop.Type.TypeName, out var enumType)
-            && enumType is { MemberNames.Count: > 0 }) {
+            && enumType is { MemberNames.Count: > 0 }
+            && !(valueRef is Member { Value: NamedTypeReference typeRef, MemberName: var memberName }
+                && string.Equals(typeRef.TypeName, enumType.Name, StringComparison.Ordinal)
+                && enumType.MemberNames.Contains(memberName, StringComparer.Ordinal))) {
             Node? notMember = null;
             var enumTypeRef = new NamedTypeReference(enumType.Name);
             foreach (var member in enumType.MemberNames) {
@@ -668,19 +747,24 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 needsPrevious ? [previousStage!] : []));
         }
 
-        Node tryBody = tryNodes.Count switch {
-            0 => new Block([]),
-            1 => tryNodes[0],
-            _ => new Block(tryNodes)
-        };
-        if (tryNodes.Count > 0)
-            nodes.Add(tryBody);
+        // Splice a lowered entry Block into this transition body (D13) while
+        // keeping its locals on the returned block.
+        var tryLocals = new List<Node>();
+        var flatTry = new List<Node>();
+        foreach (var tryNode in tryNodes)
+            CollectNode(flatTry, tryLocals, tryNode);
+        if (flatTry.Count > 0)
+            nodes.AddRange(flatTry);
 
         _sourceStageName = t.TargetStage.StageName;
 
-        if (previousStage is null)
-            return nodes.Count == 1 ? nodes[0] : new Block(nodes);
-        return new Block(nodes, [previousStage]);
+        var locals = new List<Node>();
+        if (previousStage is not null)
+            locals.Add(previousStage);
+        locals.AddRange(tryLocals);
+        if (locals.Count == 0 && nodes.Count == 1)
+            return nodes[0];
+        return new Block(nodes, locals);
     }
 
     /// <summary>
@@ -708,7 +792,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             var guard = new IfStatement(
                 new Equal(navMember, new Constant(null!)),
                 new Block([ReturnCallerFailure(new Constant(
-                    $"'{i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
+                    $"'{_context.ActionName ?? i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
             var resultVar = _names.Next("invoke");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
             return LoweredExpression.Before(loweredArgs, new Block([
@@ -776,15 +860,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Node? predicateGuard = null;
         if (e.Predicate is not null) {
             Node predicateExpr = e.Predicate switch {
-                ForEachNamedPolicy p => (Node)new Invoke(
-                    new Member(loopVar, p.PolicyName)),
-                ForEachStageMembership s => new Equal(
+                ForEachNamedPolicy p => new Poly.Ast.Nodes.Not(
+                    new Invoke(new Member(loopVar, p.PolicyName))),
+                ForEachStageMembership s => new NotEqual(
                     new Member(loopVar, "CurrentStage"),
                     new Member(new NamedTypeReference(TargetStageEnumTypeName(relName)), s.StageName)),
                 _ => throw new NotSupportedException($"Unsupported ForEachInvoke predicate '{e.Predicate.GetType().Name}'."),
             };
             predicateGuard = new IfStatement(
-                new Poly.Ast.Nodes.Not(predicateExpr),
+                predicateExpr,
                 new Block([new ContinueStatement()]));
         }
 

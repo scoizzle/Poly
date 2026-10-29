@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum PropertyStage
@@ -86,7 +85,7 @@ public class Property
         this.CurrentStage = PropertyStage.Open;
         return DomainResult.Success();
     }
-    public bool HasHalls() => this.Halls.Count > 0L;
+    public bool HasHalls() => this.Halls.Count > 0;
     public static DomainResult<Property> Create(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         if (string.IsNullOrEmpty(city))

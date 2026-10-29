@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum SectionStage
@@ -108,7 +107,7 @@ public class Section
         }
         if (this.Instructor == null)
         {
-            return DomainResult.Failure("'GoOnLeave' requires a linked 'instructor' on entity 'Section'.");
+            return DomainResult.Failure("'StaffLeave' requires a linked 'instructor' on entity 'Section'.");
         }
         var invoke0 = this.Instructor.GoOnLeave();
         if (!invoke0.IsSuccess)
@@ -128,7 +127,7 @@ public class Section
     }
     public bool AtCap() => this.SeatsTaken >= this.Cap;
     public bool HasInstructor() => this.Instructor != null;
-    public bool HasWaiters() => this.Waitlist.Count > 0L;
+    public bool HasWaiters() => this.Waitlist.Count > 0;
     internal void WhenEachEnrollmentRegistered()
     {
         this.SeatsTaken = this.SeatsTaken + 1L;
@@ -151,9 +150,7 @@ public class Section
         {
             return;
         }
-        {
-            this.OfferedSeats = this.OfferedSeats + 1L;
-        }
+        this.OfferedSeats = this.OfferedSeats + 1L;
     }
     internal void WhenAllWaitOfferCancelled(WaitOfferStage? previousStage)
     {
@@ -174,9 +171,7 @@ public class Section
         {
             return;
         }
-        {
-            this.WaitCleared = 1L;
-        }
+        this.WaitCleared = 1L;
     }
     public static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
     {

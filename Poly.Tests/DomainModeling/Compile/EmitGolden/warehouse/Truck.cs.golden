@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum TruckStage
@@ -57,14 +56,7 @@ public class Truck
     public DomainResult Dispatch()
     {
         this.CurrentStage = TruckStage.EnRoute;
-        {
-            var assignValue0 = TruckStatus.EnRoute;
-            if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
-            {
-                return DomainResult.Failure("'Status' is not a valid member of TruckStatus.");
-            }
-            this.Status = assignValue0;
-        }
+        this.Status = TruckStatus.EnRoute;
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
@@ -118,6 +110,6 @@ public class Truck
         db.Record("Truck", "Vin", vin);
         return DomainResult<Truck>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
     public static System.Boolean ExistsWithVin(Poly.DomainModeling.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

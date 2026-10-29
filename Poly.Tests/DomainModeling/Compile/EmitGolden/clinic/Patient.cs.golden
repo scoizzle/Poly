@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Patient
@@ -27,7 +26,7 @@ public class Patient
     {
         foreach (var target0 in this.Visits)
         {
-            if (!(target0.CurrentStage == VisitStage.Scheduled))
+            if (target0.CurrentStage != VisitStage.Scheduled)
             {
                 continue;
             }

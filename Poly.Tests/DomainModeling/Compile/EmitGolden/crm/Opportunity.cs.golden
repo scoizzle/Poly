@@ -37,18 +37,7 @@ public class Opportunity
         this._lines = new List<Line>(lines ?? new List<Line>());
         this._quotes = new List<Quote>(quotes ?? new List<Quote>());
         this.CurrentStage = OpportunityStage.Qualify;
-        {
-            var assignValue0 = 10L;
-            if (assignValue0 < 0L)
-            {
-                throw new ConstraintFailureException("'Probability' must be >= 0.");
-            }
-            if (assignValue0 > 100L)
-            {
-                throw new ConstraintFailureException("'Probability' must be <= 100.");
-            }
-            this.Probability = assignValue0;
-        }
+        this.Probability = 10L;
     }
     public long Amount { get; private set; }
     public DateOnly CloseBy { get; private set; }
@@ -115,7 +104,7 @@ public class Opportunity
     {
         foreach (var target0 in this.Activities)
         {
-            if (!(target0.CurrentStage == ActivityStage.Open))
+            if (target0.CurrentStage != ActivityStage.Open)
             {
                 continue;
             }
@@ -138,21 +127,8 @@ public class Opportunity
             return DomainResult.Failure("'Propose' blocked by policy 'HasAccount'.");
         }
         this.CurrentStage = OpportunityStage.Propose;
-        {
-            {
-                var assignValue0 = 40L;
-                if (assignValue0 < 0L)
-                {
-                    return DomainResult.Failure("'Probability' must be >= 0.");
-                }
-                if (assignValue0 > 100L)
-                {
-                    return DomainResult.Failure("'Probability' must be <= 100.");
-                }
-                this.Probability = assignValue0;
-            }
-            this.NotifyProposeSubscribers();
-        }
+        this.Probability = 40L;
+        this.NotifyProposeSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Lose()
@@ -160,21 +136,8 @@ public class Opportunity
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
             this.CurrentStage = OpportunityStage.Lost;
-            {
-                {
-                    var assignValue0 = 0L;
-                    if (assignValue0 < 0L)
-                    {
-                        return DomainResult.Failure("'Probability' must be >= 0.");
-                    }
-                    if (assignValue0 > 100L)
-                    {
-                        return DomainResult.Failure("'Probability' must be <= 100.");
-                    }
-                    this.Probability = assignValue0;
-                }
-                this.NotifyLostSubscribers();
-            }
+            this.Probability = 0L;
+            this.NotifyLostSubscribers();
             return DomainResult.Success();
         }
         return DomainResult.Failure("'Lose' is not valid for the current stage on entity 'Opportunity'.");
@@ -242,18 +205,7 @@ public class Opportunity
             return DomainResult.Failure("'Commit' blocked by policy 'HasLines'.");
         }
         this.CurrentStage = OpportunityStage.Commit;
-        {
-            var assignValue0 = 80L;
-            if (assignValue0 < 0L)
-            {
-                return DomainResult.Failure("'Probability' must be >= 0.");
-            }
-            if (assignValue0 > 100L)
-            {
-                return DomainResult.Failure("'Probability' must be <= 100.");
-            }
-            this.Probability = assignValue0;
-        }
+        this.Probability = 80L;
         return DomainResult.Success();
     }
     public DomainResult Win()
@@ -263,21 +215,8 @@ public class Opportunity
             return DomainResult.Failure("'Win' requires stage 'Commit' on entity 'Opportunity'.");
         }
         this.CurrentStage = OpportunityStage.Won;
-        {
-            {
-                var assignValue0 = 100L;
-                if (assignValue0 < 0L)
-                {
-                    return DomainResult.Failure("'Probability' must be >= 0.");
-                }
-                if (assignValue0 > 100L)
-                {
-                    return DomainResult.Failure("'Probability' must be <= 100.");
-                }
-                this.Probability = assignValue0;
-            }
-            this.NotifyWonSubscribers();
-        }
+        this.Probability = 100L;
+        this.NotifyWonSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Capture(ChargeRequest request)
@@ -304,7 +243,7 @@ public class Opportunity
         return DomainResult.Success();
     }
     public bool HasAccount() => this.Account != null;
-    public bool HasLines() => this.Lines.Count > 0L;
+    public bool HasLines() => this.Lines.Count > 0;
     internal void RegisterAccountOpportunitiesWonSubscriber(Account subscriber)
     {
         if (this._accountOpportunitiesWonSubscribers == null)

@@ -4102,17 +4102,41 @@ public class DomainToCSharpExporterTests {
         var reason = create.IndexOf("string cancelReason = \"\"", StringComparison.Ordinal);
         await Assert.That(total).IsGreaterThanOrEqualTo(0);
         await Assert.That(reason).IsGreaterThan(total);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+        var order = ExportedCSharp.CreateEntity(asm, "Order", ("total", 5L));
+        await Assert.That(order).IsNotNull();
+    }
+
+    [Test]
+    public async Task Export_PersistenceSeeded_EmptyParameterlessCtorAndFieldInitializer() {
+        var (_, domain, analysis) = Poly.Tests.DomainModeling.Compile.EmitGoldenTests.AnalyzeSampleFile(
+            "docs/probes/fleet-eval/09-transport/orders.poly");
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("private OrderItem() { }");
+        await Assert.That(cs).Contains("_items = new List<OrderItem>()");
     }
 
     [Test]
     public async Task Export_IllegalEmptyAssignOnly_StaysRequired() {
         const string dsl = """
             domain Clinic
+            TruckStatus: enum { Idle, EnRoute }
             Visit: entity {
               Reason: Text length(2, 200)
               CheckIn: action {
                 assign Reason to "seen"
               }
+            }
+            Warehouse: entity {
+              Capacity: Number range(1, 10000)
+              Adjust: action (delta: Number) {
+                assign Capacity to delta
+              }
+            }
+            Truck: entity {
+              Status: TruckStatus default(Idle)
+              Dispatch: action { }
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
@@ -4120,6 +4144,11 @@ public class DomainToCSharpExporterTests {
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Visit> Create(");
         await Assert.That(create).Contains("string reason");
         await Assert.That(create).DoesNotContain("string reason = \"\"");
+        var warehouse = ExportedCSharp.ExtractMethod(cs, "DomainResult<Warehouse> Create(");
+        await Assert.That(warehouse).Contains("long capacity");
+        await Assert.That(warehouse).DoesNotContain("long capacity = 0L");
+        var truck = ExportedCSharp.ExtractMethod(cs, "DomainResult<Truck> Create(");
+        await Assert.That(truck).Contains("TruckStatus status = TruckStatus.Idle");
     }
 
     [Test]

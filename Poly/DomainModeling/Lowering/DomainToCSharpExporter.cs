@@ -370,6 +370,12 @@ public sealed partial class DomainToCSharpExporter {
         if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
             var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
             var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
+            var assignmentsByProp = ctorAssignments
+                .OfType<Assignment>()
+                .Where(a => a.Destination is Member { MemberName: var name }
+                    && scalarProps.Contains(name))
+                .GroupBy(a => ((Member)a.Destination).MemberName, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
             var retainedAssignments = ctorAssignments
                 .Where(a => a is not Assignment {
                     Destination: Member { MemberName: var name }
@@ -384,9 +390,11 @@ public sealed partial class DomainToCSharpExporter {
                 if (order.IsOptional)
                     parameter = parameter with { DefaultValue = EmptyDefault(order.Type) };
                 reordered.Add(parameter);
-                assignments.Add(new Assignment(
-                    new Member(new ThisReference(), order.Name),
-                    new Parameter(name)));
+                assignments.Add(assignmentsByProp.TryGetValue(order.Name, out var assignment)
+                    ? assignment
+                    : new Assignment(
+                        new Member(new ThisReference(), order.Name),
+                        new Parameter(name)));
             }
             ctorParams.Clear();
             ctorParams.AddRange(reordered);

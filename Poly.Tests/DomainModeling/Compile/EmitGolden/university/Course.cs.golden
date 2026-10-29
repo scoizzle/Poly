@@ -1,8 +1,6 @@
 #nullable enable
 public class Course
 {
-    private Course()
-    { }
     private Course(string code, string title)
     {
         this.Code = code;

@@ -3,19 +3,16 @@ using System.Collections.Generic;
 
 public class Warehouse
 {
-    private List<Truck> _trucks;
-    private Warehouse()
-    {
-        this._trucks = new List<Truck>();
-    }
+    private List<Truck> _trucks = new List<Truck>();
+    private Warehouse() { }
     private Warehouse(long capacity, string code, string name, string zip, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
     {
         this.Capacity = capacity;
         this.Code = code;
         this.Name = name;
+        this.Zip = zip;
         this.SafetyStock = safetyStock;
         this.Status = status;
-        this.Zip = zip;
         this._trucks = new List<Truck>(trucks ?? new List<Truck>());
     }
     public long Capacity { get; private set; }

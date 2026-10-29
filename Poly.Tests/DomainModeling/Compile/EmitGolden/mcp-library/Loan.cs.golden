@@ -12,8 +12,7 @@ public class Loan
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
-    private Loan()
-    { }
+    private Loan() { }
     private Loan(Book? book = null, long amount = 0L)
     {
         this.Amount = amount;

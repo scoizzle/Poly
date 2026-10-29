@@ -7,8 +7,6 @@ public enum ContactStage
 
 public class Contact
 {
-    private Contact()
-    { }
     private Contact(string email, string name, Account? account = null)
     {
         this.Email = email;

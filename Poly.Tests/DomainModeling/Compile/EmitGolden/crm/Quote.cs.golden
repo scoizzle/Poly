@@ -11,11 +11,7 @@ public enum QuoteStage
 
 public class Quote
 {
-    private List<QuoteLine> _lines;
-    private Quote()
-    {
-        this._lines = new List<QuoteLine>();
-    }
+    private List<QuoteLine> _lines = new List<QuoteLine>();
     private Quote(long amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
         this.Amount = amount;

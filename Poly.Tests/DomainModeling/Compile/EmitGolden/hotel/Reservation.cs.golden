@@ -20,8 +20,6 @@ public class Reservation
     private List<Room>? _roomStaysNoShowSubscribers;
     private List<Guest>? _guestReservationsDepartedSubscribers;
     private int _notifyDepth;
-    private Reservation()
-    { }
     private Reservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
         this.CheckInDate = checkInDate;

@@ -9,18 +9,13 @@ public enum SectionStage
 
 public class Section
 {
-    private List<Enrollment> _enrollments;
-    private List<WaitOffer> _waitlist;
-    private Section()
-    {
-        this._enrollments = new List<Enrollment>();
-        this._waitlist = new List<WaitOffer>();
-    }
+    private List<Enrollment> _enrollments = new List<Enrollment>();
+    private List<WaitOffer> _waitlist = new List<WaitOffer>();
     private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
     {
         this.Cap = cap;
-        this.OfferedSeats = offeredSeats;
         this.OfferingTerm = offeringTerm;
+        this.OfferedSeats = offeredSeats;
         this.SeatsTaken = seatsTaken;
         this.WaitCleared = waitCleared;
         this.Course = course;

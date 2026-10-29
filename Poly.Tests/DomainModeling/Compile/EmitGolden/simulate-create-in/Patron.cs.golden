@@ -3,11 +3,7 @@ using System.Collections.Generic;
 
 public class Patron
 {
-    private List<Fine> _fines;
-    private Patron()
-    {
-        this._fines = new List<Fine>();
-    }
+    private List<Fine> _fines = new List<Fine>();
     private Patron(string name, IEnumerable<Fine>? fines = null)
     {
         this.Name = name;

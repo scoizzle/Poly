@@ -1,8 +1,6 @@
 #nullable enable
 public class Line
 {
-    private Line()
-    { }
     private Line(long qty, long unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
         this.Qty = qty;

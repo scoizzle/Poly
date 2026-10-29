@@ -71,7 +71,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
-        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup);
+        var assignOnlyPropertyNames = ComputeAssignOnlyPropertyNames(entity);
+        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup, assignOnlyPropertyNames);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
 
         // ── Lifecycle detection ────────────────────────────────
@@ -118,7 +119,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
             enumPropertyNames, entryAssignedPropertyNames,
-            lifecyclePropertyName, lifecycleEnumTypeName
+            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames
         );
     }
 
@@ -138,6 +139,60 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             }
         }
         return names;
+    }
+
+    private static IReadOnlySet<string> ComputeAssignOnlyPropertyNames(Entity entity) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Walk(IEnumerable<Effect> effects) {
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case AssignEffect { Target: PropertyAccess property }:
+                        names.Add(property.Name);
+                        break;
+                    case CompositeEffect composite:
+                        Walk(composite.Effects);
+                        break;
+                    case ConditionalEffect conditional:
+                        Walk(conditional.ThenEffects);
+                        if (conditional.ElseEffects is not null)
+                            Walk(conditional.ElseEffects);
+                        break;
+                }
+            }
+        }
+        foreach (var action in entity.Actions)
+            Walk(action.Effects);
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions)
+                Walk(action.Effects);
+            Walk(stage.OnEntryEffects);
+            Walk(stage.OnExitEffects);
+            foreach (var subscription in stage.Subscriptions)
+                Walk(subscription.Effects);
+        }
+        foreach (var subscription in entity.Subscriptions)
+            Walk(subscription.Effects);
+        return names;
+    }
+
+    private static bool EmptyIsLegal(Property prop, DomainTypeLookupMetadata lookup) {
+        if (prop.Constraints.Any(c => c is RequiredConstraint or UniqueConstraint))
+            return false;
+        if (lookup.Types.TryGetValue(prop.Type.TypeName, out var type) && type is EnumType)
+            return false;
+        if (prop.Type.TypeName is not ("Text" or "String" or "Number" or "Int" or "Boolean"))
+            return false;
+        foreach (var range in prop.Constraints.OfType<RangeConstraint>()) {
+            if (range.Minimum is not null && Convert.ToDouble(range.Minimum) > 0)
+                return false;
+            if (range.Maximum is not null && Convert.ToDouble(range.Maximum) < 0)
+                return false;
+        }
+        foreach (var length in prop.Constraints.OfType<LengthConstraint>()) {
+            if (length.MinLength > 0)
+                return false;
+        }
+        return true;
     }
 
     /// <summary>
@@ -200,8 +255,10 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
-        Entity entity, DomainTypeLookupMetadata lookup) {
+        Entity entity, DomainTypeLookupMetadata lookup, IReadOnlySet<string> assignOnly) {
         var parameters = new List<ConstructorParameterOrder>();
+        var required = new List<ConstructorParameterOrder>();
+        var optional = new List<ConstructorParameterOrder>();
 
         // Props assigned by the FIRST stage's entry effects are body-initialized in
         // the exported ctor (which runs those effects after setting CurrentStage) —
@@ -212,8 +269,15 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             if (entryAssignedProps.Contains(prop.Name)) continue;
-            parameters.Add(new ConstructorParameterOrder(prop.Name, prop.Type, IsNavigation: false, IsBackReference: false));
+            var isOptional = assignOnly.Contains(prop.Name)
+                && EmptyIsLegal(prop, lookup);
+            var order = new ConstructorParameterOrder(
+                prop.Name, prop.Type, IsNavigation: false, IsBackReference: false,
+                IsOptional: isOptional);
+            (isOptional ? optional : required).Add(order);
         }
+        parameters.AddRange(required);
+        parameters.AddRange(optional);
 
         foreach (var rel in entity.Navigations) {
             var isMany = rel.Cardinality is RelationshipCardinality.OneToMany

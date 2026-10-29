@@ -9,13 +9,8 @@ public enum PropertyStage
 
 public class Property
 {
-    private List<Hall> _halls;
-    private List<Room> _rooms;
-    private Property()
-    {
-        this._halls = new List<Hall>();
-        this._rooms = new List<Room>();
-    }
+    private List<Hall> _halls = new List<Hall>();
+    private List<Room> _rooms = new List<Room>();
     private Property(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         this.City = city;

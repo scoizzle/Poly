@@ -10,20 +10,15 @@ public enum GuestStage
 
 public class Guest
 {
-    private List<EventHold> _events;
-    private List<Reservation> _reservations;
-    private Guest()
-    {
-        this._events = new List<EventHold>();
-        this._reservations = new List<Reservation>();
-    }
+    private List<EventHold> _events = new List<EventHold>();
+    private List<Reservation> _reservations = new List<Reservation>();
     private Guest(string email, string name, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
     {
         this.Email = email;
-        this.EventCount = eventCount;
         this.Name = name;
-        this.NightCount = nightCount;
         this.Phone = phone;
+        this.EventCount = eventCount;
+        this.NightCount = nightCount;
         this.StayCount = stayCount;
         this._events = new List<EventHold>(events ?? new List<EventHold>());
         this._reservations = new List<Reservation>(reservations ?? new List<Reservation>());

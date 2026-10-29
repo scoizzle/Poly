@@ -9,11 +9,7 @@ public enum CampaignStage
 
 public class Campaign
 {
-    private List<CampaignMember> _members;
-    private Campaign()
-    {
-        this._members = new List<CampaignMember>();
-    }
+    private List<CampaignMember> _members = new List<CampaignMember>();
     private Campaign(string name, IEnumerable<CampaignMember>? members = null)
     {
         this.Name = name;

@@ -7,8 +7,6 @@ public enum FolioStage
 
 public class Folio
 {
-    private Folio()
-    { }
     private Folio(Reservation? reservation = null, long balance = 0L)
     {
         this.Balance = balance;

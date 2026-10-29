@@ -10,20 +10,14 @@ public enum AccountStage
 
 public class Account
 {
-    private List<Contact> _contacts;
-    private List<Opportunity> _opportunities;
-    private List<Ticket> _tickets;
-    private Account()
-    {
-        this._contacts = new List<Contact>();
-        this._opportunities = new List<Opportunity>();
-        this._tickets = new List<Ticket>();
-    }
+    private List<Contact> _contacts = new List<Contact>();
+    private List<Opportunity> _opportunities = new List<Opportunity>();
+    private List<Ticket> _tickets = new List<Ticket>();
     private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
     {
-        this.ClosedTickets = closedTickets;
         this.Industry = industry;
         this.Name = name;
+        this.ClosedTickets = closedTickets;
         this.OpenPipeline = openPipeline;
         this.WonCount = wonCount;
         this.Parent = parent;

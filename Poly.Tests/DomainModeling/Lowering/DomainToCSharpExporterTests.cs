@@ -3624,7 +3624,7 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        var ctor = cs[cs.IndexOf("private Truck()", StringComparison.Ordinal)..];
+        var ctor = cs[cs.IndexOf("private Truck(", StringComparison.Ordinal)..];
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
         await Assert.That(ctor).Contains("this.CurrentStage = TruckStage.Idle");
         await Assert.That(ctor).DoesNotContain("this.Status = TruckStatus.EnRoute");
@@ -3955,7 +3955,7 @@ public class DomainToCSharpExporterTests {
         var types = new DomainToCSharpExporter().Export(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        var ctor = cs[cs.IndexOf("private Parent()", StringComparison.Ordinal)..];
+        var ctor = cs[cs.IndexOf("private Parent(", StringComparison.Ordinal)..];
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
         await Assert.That(ctor).Contains("this.CreateChildren(\"x\")");
         var back = ExportedCSharp.ExtractMethod(cs, "DomainResult Back(");
@@ -4081,6 +4081,59 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("WhenEachStayDeparted_SetOccupied");
         await Assert.That(cs).Contains("WhenEachStayDeparted_SetDirty");
         await Assert.That(cs).DoesNotContain("WhenEachStayDeparted_2");
+    }
+
+    [Test]
+    public async Task Export_AssignOnlyOptional_IsTrailingOptional() {
+        const string dsl = """
+            domain Shop
+            Order: entity {
+              Total: Number range(0, 100)
+              CancelReason: Text length(0, 200)
+              Cancel: action (reason: Text) {
+                assign CancelReason to reason
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
+        var total = create.IndexOf("long total", StringComparison.Ordinal);
+        var reason = create.IndexOf("string cancelReason = \"\"", StringComparison.Ordinal);
+        await Assert.That(total).IsGreaterThanOrEqualTo(0);
+        await Assert.That(reason).IsGreaterThan(total);
+    }
+
+    [Test]
+    public async Task Export_IllegalEmptyAssignOnly_StaysRequired() {
+        const string dsl = """
+            domain Clinic
+            Visit: entity {
+              Reason: Text length(2, 200)
+              CheckIn: action {
+                assign Reason to "seen"
+              }
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Visit> Create(");
+        await Assert.That(create).Contains("string reason");
+        await Assert.That(create).DoesNotContain("string reason = \"\"");
+    }
+
+    [Test]
+    public async Task Export_NoPersistence_NoParameterlessCtor() {
+        const string dsl = """
+            domain Shop
+            Item: entity {
+              Name: Text required
+              Qty: Number
+            }
+            """;
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).DoesNotContain("private Item()");
     }
 
     private static int CountOccurrences(string text, string needle) {

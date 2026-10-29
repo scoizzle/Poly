@@ -1,8 +1,6 @@
 #nullable enable
 public class Product
 {
-    private Product()
-    { }
     private Product(long listPrice, string name, string sku)
     {
         this.ListPrice = listPrice;

@@ -10,8 +10,7 @@ public enum VisitStage
 
 public class Visit
 {
-    private Visit()
-    { }
+    private Visit() { }
     private Visit(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
         this.Reason = reason;

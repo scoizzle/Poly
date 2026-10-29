@@ -1,8 +1,7 @@
 #nullable enable
 public class Doctor
 {
-    private Doctor()
-    { }
+    private Doctor() { }
     private Doctor(string licenseNo, string name, Schedule? schedule = null)
     {
         this.LicenseNo = licenseNo;

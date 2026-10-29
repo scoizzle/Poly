@@ -10,17 +10,14 @@ public enum TruckStage
 
 public class Truck
 {
-    private List<Delivery> _deliveries;
-    private Truck()
-    {
-        this._deliveries = new List<Delivery>();
-    }
+    private List<Delivery> _deliveries = new List<Delivery>();
+    private Truck() { }
     private Truck(long maxLoad, string vin, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
-        this.CurrentLoad = currentLoad;
         this.MaxLoad = maxLoad;
-        this.Status = status;
         this.Vin = vin;
+        this.CurrentLoad = currentLoad;
+        this.Status = status;
         this.Warehouse = warehouse;
         this._deliveries = new List<Delivery>(deliveries ?? new List<Delivery>());
         this.CurrentStage = TruckStage.Idle;

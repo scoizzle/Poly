@@ -64,7 +64,10 @@ public sealed record EntityStructureMetadata(
     string? LifecyclePropertyName = null,
 
     /// <summary>Enum type name for <see cref="LifecyclePropertyName"/>; null together with it.</summary>
-    string? LifecycleEnumTypeName = null
+    string? LifecycleEnumTypeName = null,
+
+    /// <summary>Scalar properties assigned only by effects (no create initializer).</summary>
+    IReadOnlySet<string>? AssignOnlyPropertyNames = null
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(
@@ -72,5 +75,6 @@ public sealed record ConstructorParameterOrder(
     DomainTypeReference Type,
     bool IsNavigation,
     bool IsBackReference,
-    bool IsCollection = false
+    bool IsCollection = false,
+    bool IsOptional = false
 );

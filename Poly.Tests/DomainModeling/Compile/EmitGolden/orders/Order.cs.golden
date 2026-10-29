@@ -12,17 +12,14 @@ public enum OrderStage
 
 public class Order
 {
-    private List<OrderItem> _items;
-    private Order()
+    private List<OrderItem> _items = new List<OrderItem>();
+    private Order() { }
+    private Order(long total, string cancelReason = "", long discount = 0L, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
-        this._items = new List<OrderItem>();
-    }
-    private Order(string cancelReason, long discount, long total, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
-    {
+        this.Total = total;
         this.CancelReason = cancelReason;
         this.Discount = discount;
         this.State = state;
-        this.Total = total;
         this.Customer = customer;
         this._items = new List<OrderItem>(items ?? new List<OrderItem>());
         this.CurrentStage = OrderStage.Pending;
@@ -91,7 +88,7 @@ public class Order
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;
-    public static DomainResult<Order> Create(string cancelReason, long discount, long total, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    public static DomainResult<Order> Create(long total, string cancelReason = "", long discount = 0L, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
         if (!string.IsNullOrEmpty(cancelReason))
         {
@@ -120,7 +117,7 @@ public class Order
         {
             return DomainResult<Order>.Failure("'Total' must be <= 100000.");
         }
-        var created = new Order(cancelReason, discount, total, customer, items, state);
+        var created = new Order(total, cancelReason, discount, customer, items, state);
         if (customer != null)
         {
             customer.AttachOrders(created);

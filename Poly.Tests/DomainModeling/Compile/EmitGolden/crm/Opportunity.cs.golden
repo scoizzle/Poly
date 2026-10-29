@@ -13,24 +13,18 @@ public enum OpportunityStage
 
 public class Opportunity
 {
-    private List<Activity> _activities;
-    private List<Line> _lines;
-    private List<Quote> _quotes;
+    private List<Activity> _activities = new List<Activity>();
+    private List<Line> _lines = new List<Line>();
+    private List<Quote> _quotes = new List<Quote>();
     private List<Account>? _accountOpportunitiesWonSubscribers;
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
     private int _notifyDepth;
-    private Opportunity()
-    {
-        this._activities = new List<Activity>();
-        this._lines = new List<Line>();
-        this._quotes = new List<Quote>();
-    }
     private Opportunity(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         this.Amount = amount;
-        this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Title = title;
+        this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Account = account;
         this.Contact = contact;
         this._activities = new List<Activity>(activities ?? new List<Activity>());

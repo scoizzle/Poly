@@ -3,13 +3,9 @@ using System.Collections.Generic;
 
 public class Patron
 {
-    private List<Loan> _loans;
-    private List<Fine> _fines;
-    private Patron()
-    {
-        this._loans = new List<Loan>();
-        this._fines = new List<Fine>();
-    }
+    private List<Loan> _loans = new List<Loan>();
+    private List<Fine> _fines = new List<Fine>();
+    private Patron() { }
     private Patron(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
     {
         this.Name = name;

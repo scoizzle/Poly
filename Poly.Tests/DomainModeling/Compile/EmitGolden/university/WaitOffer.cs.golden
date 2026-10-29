@@ -13,8 +13,6 @@ public class WaitOffer
     private List<Section>? _sectionWaitlistOfferedSubscribers;
     private List<Section>? _sectionWaitlistCancelledSubscribers;
     private int _notifyDepth;
-    private WaitOffer()
-    { }
     private WaitOffer(Student? student = null, Section? section = null)
     {
         this.Student = student;

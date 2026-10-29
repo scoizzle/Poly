@@ -9,12 +9,10 @@ public enum ActivityStage
 
 public class Activity
 {
-    private Activity()
-    { }
     private Activity(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
     {
-        this.DueOn = dueOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Subject = subject;
+        this.DueOn = dueOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Opportunity = opportunity;
         this.CurrentStage = ActivityStage.Open;
     }

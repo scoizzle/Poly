@@ -3,11 +3,8 @@ using System.Collections.Generic;
 
 public class Patient
 {
-    private List<Visit> _visits;
-    private Patient()
-    {
-        this._visits = new List<Visit>();
-    }
+    private List<Visit> _visits = new List<Visit>();
+    private Patient() { }
     private Patient(string name, IEnumerable<Visit>? visits = null)
     {
         this.Name = name;

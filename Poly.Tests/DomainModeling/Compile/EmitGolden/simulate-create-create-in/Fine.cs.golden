@@ -1,8 +1,6 @@
 #nullable enable
 public class Fine
 {
-    private Fine()
-    { }
     private Fine(long amount, string reason, Patron? patron = null)
     {
         this.Amount = amount;

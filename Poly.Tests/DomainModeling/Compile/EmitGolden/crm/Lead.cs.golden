@@ -8,8 +8,6 @@ public enum LeadStage
 
 public class Lead
 {
-    private Lead()
-    { }
     private Lead(string company, string email, string name, Account? account = null)
     {
         this.Company = company;

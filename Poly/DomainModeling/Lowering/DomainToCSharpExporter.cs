@@ -234,6 +234,12 @@ public sealed partial class DomainToCSharpExporter {
 
     // ── Per-entity builder ──────────────────────────────────────
 
+    private static Node EmptyDefault(DomainTypeReference type) => type.TypeName switch {
+        "Text" or "String" => new Constant(""),
+        "Boolean" => new Constant(false),
+        _ => new Constant(0L),
+    };
+
     internal static IReadOnlyList<TypeDefinitionNode> BuildTypeDefsForEntity(
         Entity entity,
         Domain domain,
@@ -357,6 +363,46 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
+        // ── Scalar constructor slots in the published ESM order ──
+        // Required scalars first, then optional assign-only scalars. Defaulted
+        // properties are not in this list; they stay in defaultedCtorParams.
+        var scalarOrder = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+        if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
+            var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
+            var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
+            var assignmentsByProp = ctorAssignments
+                .OfType<Assignment>()
+                .Where(a => a.Destination is Member { MemberName: var name }
+                    && scalarProps.Contains(name))
+                .GroupBy(a => ((Member)a.Destination).MemberName, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            var retainedAssignments = ctorAssignments
+                .Where(a => a is not Assignment {
+                    Destination: Member { MemberName: var name }
+                } || !scalarProps.Contains(name))
+                .ToList();
+            var reordered = new List<Parameter>();
+            var assignments = new List<Node>();
+            foreach (var order in scalarOrder) {
+                var name = ToCamelCase(order.Name);
+                if (!paramsByName.TryGetValue(name, out var parameter))
+                    continue;
+                if (order.IsOptional)
+                    parameter = parameter with { DefaultValue = EmptyDefault(order.Type) };
+                reordered.Add(parameter);
+                assignments.Add(assignmentsByProp.TryGetValue(order.Name, out var assignment)
+                    ? assignment
+                    : new Assignment(
+                        new Member(new ThisReference(), order.Name),
+                        new Parameter(name)));
+            }
+            ctorParams.Clear();
+            ctorParams.AddRange(reordered);
+            ctorAssignments.Clear();
+            ctorAssignments.AddRange(assignments);
+            ctorAssignments.AddRange(retainedAssignments);
+        }
+
         // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
         foreach (var rel in domainRelationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
@@ -382,6 +428,7 @@ public sealed partial class DomainToCSharpExporter {
                 fields.Add(new FieldDefinitionNode(
                     fieldName,
                     listType,
+                    DefaultValue: new New(listType),
                     AccessModifier: AccessModifier.Private
                 ));
 
@@ -839,29 +886,18 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), "InitializeSubscriptions")));
             }
 
-            // Private parameterless constructor for EF Core materialization.
-            var paramlessBody = new List<Node>();
-            foreach (var f in fields) {
-                var isOptional = f.FieldType is OptionalTypeReference;
-                if (isOptional) continue;
-                paramlessBody.Add(new Assignment(
-                    new Member(new ThisReference(), f.Name),
-                    new New(f.FieldType)));
-            }
-
-            // Full constructor — only the static Create factory can construct
-            // instances with data. EntityFramework uses the parameterless ctor.
-            // With no Create parameters both would be `private T()` (CS0111), so
-            // the full constructor, field initialisers first, is the only one.
-            if (ctorParams.Count > 0) {
+            // Private parameterless constructor only when a persistence pack is
+            // loaded (EF materialization). Collection fields carry their list
+            // initializer, so this ctor is always empty (D9).
+            var hasPersistence = metadata.GetMetadata<PersistenceSurfaceMetadata>(domain) is not null;
+            if (ctorParams.Count > 0 && hasPersistence) {
                 ctors = [new ConstructorDefinitionNode(
                     Parameters: null,
-                    Body: new Block(paramlessBody),
+                    Body: null,
                     AccessModifier: AccessModifier.Private
                 )];
             }
             else {
-                bodyNodes.InsertRange(0, paramlessBody);
                 ctors = [];
             }
             ctors = [.. ctors, new ConstructorDefinitionNode(

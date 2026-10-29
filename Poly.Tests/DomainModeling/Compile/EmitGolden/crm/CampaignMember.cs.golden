@@ -1,8 +1,6 @@
 #nullable enable
 public class CampaignMember
 {
-    private CampaignMember()
-    { }
     private CampaignMember(Contact? contact = null, Campaign? campaign = null)
     {
         this.Contact = contact;

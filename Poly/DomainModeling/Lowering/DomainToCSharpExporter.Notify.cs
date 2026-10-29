@@ -233,7 +233,9 @@ public sealed partial class DomainToCSharpExporter {
             // so that omission is a legal trailing argument.
             var param = parameter.IsNavigation
                 ? new Parameter(paramName, propRef, DefaultValue: new Constant(null))
-                : new Parameter(paramName, propRef);
+                : parameter.IsOptional
+                    ? new Parameter(paramName, propRef, DefaultValue: EmptyDefault(parameter.Type))
+                    : new Parameter(paramName, propRef);
             methodParams.Add(param);
             createArgs.Add(param);
         }

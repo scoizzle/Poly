@@ -9,17 +9,13 @@ public enum HallStage
 
 public class Hall
 {
-    private List<Section> _sections;
-    private Hall()
-    {
-        this._sections = new List<Section>();
-    }
+    private List<Section> _sections = new List<Section>();
     private Hall(long capacity, long dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
     {
-        this.BusySections = busySections;
         this.Capacity = capacity;
         this.DayRate = dayRate;
         this.Name = name;
+        this.BusySections = busySections;
         this.Occupied = occupied;
         this.Offline = offline;
         this.Property = property;

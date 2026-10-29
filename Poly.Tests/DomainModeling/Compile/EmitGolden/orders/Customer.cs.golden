@@ -3,11 +3,8 @@ using System.Collections.Generic;
 
 public class Customer
 {
-    private List<Order> _orders;
-    private Customer()
-    {
-        this._orders = new List<Order>();
-    }
+    private List<Order> _orders = new List<Order>();
+    private Customer() { }
     private Customer(string email, string name, IEnumerable<Order>? orders = null, string tier = "standard")
     {
         this.Email = email;

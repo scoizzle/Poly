@@ -1,8 +1,6 @@
 #nullable enable
 public class Section
 {
-    private Section()
-    { }
     private Section(long capacity, long dayRate, string name, Hall? hall = null, bool occupied = false)
     {
         this.Capacity = capacity;

@@ -15,8 +15,6 @@ public class EventHold
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
-    private EventHold()
-    { }
     private EventHold(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         this.Capacity = capacity;

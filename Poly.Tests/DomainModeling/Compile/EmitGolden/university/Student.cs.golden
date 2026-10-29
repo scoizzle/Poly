@@ -10,19 +10,15 @@ public enum StudentStage
 
 public class Student
 {
-    private List<Enrollment> _enrollments;
-    private Student()
-    {
-        this._enrollments = new List<Enrollment>();
-    }
+    private List<Enrollment> _enrollments = new List<Enrollment>();
     private Student(string email, string name, IEnumerable<Enrollment>? enrollments = null, long completions = 0L, long holds = 0L, long lastGrade = 0L, long maxCredits = 18L, long openCredits = 0L)
     {
-        this.Completions = completions;
         this.Email = email;
+        this.Name = name;
+        this.Completions = completions;
         this.Holds = holds;
         this.LastGrade = lastGrade;
         this.MaxCredits = maxCredits;
-        this.Name = name;
         this.OpenCredits = openCredits;
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this.CurrentStage = StudentStage.Active;

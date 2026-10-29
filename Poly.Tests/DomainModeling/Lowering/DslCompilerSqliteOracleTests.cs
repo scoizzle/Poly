@@ -332,9 +332,9 @@ public class DslCompilerSqliteOracleTests {
         // Entity DTO: declared pattern.
         await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Code { get; init; }");
         // Action DTO: required + length inherited from `assign Title to value`.
-        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string @value { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string value { get; init; }");
         // Action DTO: pattern inherited from `assign Code to value`.
-        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string @value { get; init; }");
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string value { get; init; }");
     }
 
     [Test]

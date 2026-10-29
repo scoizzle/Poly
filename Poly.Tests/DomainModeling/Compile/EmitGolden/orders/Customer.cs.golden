@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Customer
@@ -47,7 +46,7 @@ public class Customer
     {
         foreach (var target0 in this.Orders)
         {
-            if (!(target0.CurrentStage == OrderStage.Pending))
+            if (target0.CurrentStage != OrderStage.Pending)
             {
                 continue;
             }
@@ -85,6 +84,6 @@ public class Customer
         db.Record("Customer", "Email", email);
         return DomainResult<Customer>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
     public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
 }

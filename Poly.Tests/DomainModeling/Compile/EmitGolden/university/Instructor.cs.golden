@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum InstructorStage
 {
     Ready = 0,
@@ -56,5 +53,5 @@ public class Instructor
         var created = new Instructor(email, name);
         return DomainResult<Instructor>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

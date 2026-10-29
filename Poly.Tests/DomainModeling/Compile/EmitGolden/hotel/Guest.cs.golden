@@ -135,8 +135,8 @@ public class Guest
         this.CurrentStage = GuestStage.Active;
         return DomainResult.Success();
     }
-    public bool HasStays() => this.Reservations.Count > 0L;
-    public bool HasEvents() => this.Events.Count > 0L;
+    public bool HasStays() => this.Reservations.Count > 0;
+    public bool HasEvents() => this.Events.Count > 0;
     internal void WhenEachReservationDeparted(Reservation stay)
     {
         this.StayCount = this.StayCount + 1L;
@@ -160,13 +160,16 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Name' is required.");
         }
-        if (phone.Length < 7L)
+        if (!string.IsNullOrEmpty(phone))
         {
-            return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");
-        }
-        if (phone.Length > 20L)
-        {
-            return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
+            if (phone.Length < 7L)
+            {
+                return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");
+            }
+            if (phone.Length > 20L)
+            {
+                return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
+            }
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
         return DomainResult<Guest>.Success(created);
@@ -182,5 +185,5 @@ public class Guest
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

@@ -10,7 +10,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 public class ContractAdapterFailClosedTests {
     [Test]
-    public async Task UnboundContractAdapter_FailsClosed_OnSimulateAndPrintedCsharp() {
+    public async Task UnboundContractAdapter_TracesAndSucceeds_OnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop
             Order: entity {
@@ -37,12 +37,12 @@ public class ContractAdapterFailClosedTests {
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
         var sim = order.InvokeAction("Pay",
             new Dictionary<string, object?> { ["request"] = request });
-        await Assert.That(sim.Succeeded).IsFalse();
-        await Assert.That(sim.ErrorMessage).Contains("Stripe.Charge");
-        await Assert.That(sim.ErrorMessage!).Contains("no in-process adapter");
+        await Assert.That(sim.Succeeded).IsTrue();
 
-        var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("System.Diagnostics.Debug.WriteLine");
+        await Assert.That(cs).DoesNotContain("has no in-process adapter");
+        var asm = ExportedCSharp.CompileAndLoad(cs);
         var printed = ExportedCSharp.CreateEntity(asm, "Order");
         var reqType = asm.GetType("ChargeRequest")
             ?? throw new InvalidOperationException("ChargeRequest missing");
@@ -54,15 +54,11 @@ public class ContractAdapterFailClosedTests {
         var printedResult = pay.Invoke(printed, [req])
             ?? throw new InvalidOperationException("Pay returned null");
         var printedType = printedResult.GetType();
-        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
-        var printedMessage = printedType.GetProperty("ErrorMessage")!.GetValue(printedResult) as string;
-        await Assert.That(printedMessage).IsEqualTo(sim.ErrorMessage);
-        await Assert.That(printedMessage).IsEqualTo(
-            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printedResult)!).IsTrue();
     }
 
     [Test]
-    public async Task UnboundContractAdapter_TypedAction_FailsClosed_OnSimulateAndPrintedCsharp() {
+    public async Task UnboundContractAdapter_TypedAction_TracesAndSucceeds_OnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop
             Order: entity {
@@ -92,11 +88,10 @@ public class ContractAdapterFailClosedTests {
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
         var sim = order.InvokeAction("Pay",
             new Dictionary<string, object?> { ["request"] = request });
-        await Assert.That(sim.Succeeded).IsFalse();
-        await Assert.That(sim.ErrorMessage).IsEqualTo(
-            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+        await Assert.That(sim.Succeeded).IsTrue();
 
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        await Assert.That(cs).Contains("System.Diagnostics.Debug.WriteLine");
         await Assert.That(cs).Contains(
             "return DomainResult<Line>.Failure(adapterResult.ErrorMessage ?? \"\")");
 
@@ -112,8 +107,6 @@ public class ContractAdapterFailClosedTests {
         var printedResult = pay.Invoke(printed, [req])
             ?? throw new InvalidOperationException("Pay returned null");
         var printedType = printedResult.GetType();
-        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
-        var printedMessage = printedType.GetProperty("ErrorMessage")!.GetValue(printedResult) as string;
-        await Assert.That(printedMessage).IsEqualTo(sim.ErrorMessage);
+        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printedResult)!).IsTrue();
     }
 }

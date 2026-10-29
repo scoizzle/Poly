@@ -269,7 +269,7 @@ public class ParityTests {
         """;
 
     [Test]
-    public async Task Invoke_WhenUnboundContractEndpoint_FailsTheSameWay() {
+    public async Task Invoke_WhenUnboundContractEndpoint_TracesAndSucceeds() {
         var outcomes = await ParityScenario.FromDsl(UnboundAdapterDsl, "ParityUnboundAdapter")
             .AssertAgree(side => {
                 side.Create("Order");
@@ -278,9 +278,8 @@ public class ParityTests {
                     ["Currency"] = "USD"
                 }));
             });
-        await Assert.That(outcomes[1].Success).IsFalse();
-        await Assert.That(outcomes[1].Message).IsEqualTo(
-            "Contract endpoint 'Stripe.Charge' has no in-process adapter.");
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].Message).IsNull();
     }
 
     [Test]

@@ -84,7 +84,7 @@ public class EventHold
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure("'StartHall' requires a linked 'hall' on entity 'EventHold'.");
         }
         var invoke0 = this.Hall.Occupy();
         if (!invoke0.IsSuccess)
@@ -106,7 +106,7 @@ public class EventHold
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure("'StartSection' requires a linked 'section' on entity 'EventHold'.");
         }
         var invoke0 = this.Section.Occupy();
         if (!invoke0.IsSuccess)
@@ -132,7 +132,7 @@ public class EventHold
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Vacate' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure("'ReleaseHall' requires a linked 'hall' on entity 'EventHold'.");
         }
         var invoke0 = this.Hall.Vacate();
         if (!invoke0.IsSuccess)
@@ -155,7 +155,7 @@ public class EventHold
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'Vacate' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure("'ReleaseSection' requires a linked 'section' on entity 'EventHold'.");
         }
         var invoke0 = this.Section.Vacate();
         if (!invoke0.IsSuccess)

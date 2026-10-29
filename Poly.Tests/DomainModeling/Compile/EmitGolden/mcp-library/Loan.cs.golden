@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum LoanStage
@@ -40,16 +39,7 @@ public class Loan
         {
             return DomainResult.Failure("'Return' requires stage 'Overdue' on entity 'Loan'.");
         }
-        var assignValue0 = 0L;
-        if (assignValue0 < 0L)
-        {
-            return DomainResult.Failure("'Amount' must be >= 0.");
-        }
-        if (assignValue0 > 500L)
-        {
-            return DomainResult.Failure("'Amount' must be <= 500.");
-        }
-        this.Amount = assignValue0;
+        this.Amount = 0L;
         this.CurrentStage = LoanStage.Returned;
         return DomainResult.Success();
     }

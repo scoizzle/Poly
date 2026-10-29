@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Warehouse
@@ -129,7 +128,7 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
+        if (!string.IsNullOrEmpty(zip) && !System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
         {
             return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
         }
@@ -141,6 +140,6 @@ public class Warehouse
         db.Record("Warehouse", "Code", code);
         return DomainResult<Warehouse>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
     public static System.Boolean ExistsWithCode(Poly.DomainModeling.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

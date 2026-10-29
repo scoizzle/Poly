@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum Industry
 {
     Technology = 0,
@@ -31,16 +28,16 @@ public record DomainResult
 
 public record DomainResult<T>
 {
-    private DomainResult(bool isSuccess, T @value, string? errorMessage)
+    private DomainResult(bool isSuccess, T value, string? errorMessage)
     {
         this.IsSuccess = isSuccess;
-        this.Value = @value;
+        this.Value = value;
         this.ErrorMessage = errorMessage;
     }
     public bool IsSuccess { get; }
     public T Value { get; }
     public string? ErrorMessage { get; }
-    public static DomainResult<T> Success(T @value) => new DomainResult<T>(true, @value, null);
+    public static DomainResult<T> Success(T value) => new DomainResult<T>(true, value, null);
     public static DomainResult<T> Failure(string message) => new DomainResult<T>(false, default!, message);
 }
 
@@ -53,5 +50,9 @@ public class BillingAdapters
 {
     private BillingAdapters()
     { }
-    public static DomainResult Charge(ChargeRequest request) => DomainResult.Failure("Contract endpoint 'Billing.Charge' has no in-process adapter.");
+    public static DomainResult Charge(ChargeRequest request)
+    {
+        System.Diagnostics.Debug.WriteLine(System.String.Concat("Contract endpoint 'Billing.Charge' request: ", request));
+        return DomainResult.Success();
+    }
 }

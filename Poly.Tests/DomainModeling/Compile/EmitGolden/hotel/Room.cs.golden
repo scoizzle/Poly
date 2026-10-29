@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum RoomStage
@@ -92,7 +91,7 @@ public class Room
     {
         this.Occupied = true;
     }
-    internal void WhenEachReservationDeparted()
+    internal void WhenEachReservationDeparted_SetOccupied()
     {
         this.Occupied = false;
     }
@@ -104,7 +103,7 @@ public class Room
     {
         this.Occupied = false;
     }
-    internal void WhenEachReservationDeparted_2()
+    internal void WhenEachReservationDeparted_SetDirty()
     {
         this.Dirty = true;
     }
@@ -172,5 +171,5 @@ public class Room
             target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
 }

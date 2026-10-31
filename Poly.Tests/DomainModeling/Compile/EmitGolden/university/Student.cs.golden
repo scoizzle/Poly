@@ -10,19 +10,15 @@ public enum StudentStage
 
 public class Student
 {
-    private List<Enrollment> _enrollments;
-    private Student()
-    {
-        this._enrollments = new List<Enrollment>();
-    }
+    private List<Enrollment> _enrollments = new List<Enrollment>();
     private Student(string email, string name, IEnumerable<Enrollment>? enrollments = null, long completions = 0L, long holds = 0L, long lastGrade = 0L, long maxCredits = 18L, long openCredits = 0L)
     {
-        this.Completions = completions;
         this.Email = email;
+        this.Name = name;
+        this.Completions = completions;
         this.Holds = holds;
         this.LastGrade = lastGrade;
         this.MaxCredits = maxCredits;
-        this.Name = name;
         this.OpenCredits = openCredits;
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this.CurrentStage = StudentStage.Active;
@@ -40,7 +36,7 @@ public class Student
         get => this._enrollments;
     }
     public StudentStage CurrentStage { get; private set; }
-    private DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
+    public DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
     {
         var enrollmentResult = Enrollment.Create(section, this, dueDate, enrolledOn, grade);
         if (!enrollmentResult.IsSuccess)
@@ -83,7 +79,7 @@ public class Student
         }
         foreach (var target0 in this.Enrollments)
         {
-            if (!(target0.CurrentStage == EnrollmentStage.Registered))
+            if (target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
@@ -116,7 +112,7 @@ public class Student
         }
         foreach (var target0 in this.Enrollments)
         {
-            if (!(target0.CurrentStage == EnrollmentStage.Registered))
+            if (target0.CurrentStage != EnrollmentStage.Registered)
             {
                 continue;
             }
@@ -168,7 +164,7 @@ public class Student
         return DomainResult.Success();
     }
     public bool AtLimit() => this.OpenCredits >= this.MaxCredits;
-    public bool HasLoad() => this.Enrollments.Count > 0L;
+    public bool HasLoad() => this.Enrollments.Count > 0;
     internal void WhenEachEnrollmentDropped()
     {
         this.OpenCredits = this.OpenCredits - 3L;
@@ -205,6 +201,12 @@ public class Student
             return DomainResult<Student>.Failure("'Name' is required.");
         }
         var created = new Student(email, name, enrollments, completions, holds, lastGrade, maxCredits, openCredits);
+        var uniqueCheck = Student.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Student>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Student", "Email", email);
         return DomainResult<Student>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -218,9 +220,29 @@ public class Student
             target.RegisterStudentEnrollmentsCompletedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
-    private void OnEntrySuspended()
+    private static DomainResult CheckUnique(string propertyName, object value)
     {
-        this.Holds = this.Holds + 1L;
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Student", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Student.CheckUnique(propertyName, value);
     }
 }

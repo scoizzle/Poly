@@ -183,9 +183,9 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
     }
-    public bool Exists(string entity, string property, string @value)
+    public bool Exists(string entity, string property, string value)
     {
-        if (this._pendingKeys.Contains(entity + "\u001f" + property + "\u001f" + @value))
+        if (this._pendingKeys.Contains(entity + "\u001f" + property + "\u001f" + value))
         {
             return true;
         }
@@ -193,7 +193,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
         {
             if (property == "Email")
             {
-                return this.Contacts.Any(e => e.Email == @value);
+                return this.Contacts.Any(e => e.Email == value);
             }
             return false;
         }
@@ -201,7 +201,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
         {
             if (property == "Email")
             {
-                return this.Leads.Any(e => e.Email == @value);
+                return this.Leads.Any(e => e.Email == value);
             }
             return false;
         }
@@ -209,14 +209,14 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
         {
             if (property == "Sku")
             {
-                return this.Products.Any(e => e.Sku == @value);
+                return this.Products.Any(e => e.Sku == value);
             }
             return false;
         }
         return false;
     }
-    public void Record(string entity, string property, string @value)
+    public void Record(string entity, string property, string value)
     {
-        this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + @value);
+        this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + value);
     }
 }

@@ -447,6 +447,38 @@ public sealed class DomainDslPrinter {
     }
 
     /// <summary>
+    /// Canonical identity for one action fragment as it is lowered into a dispatched
+    /// stage body: the action's effects, require gates, and parameter list, plus the
+    /// source stage's policies and OnExit effects (all inlined into that one body).
+    /// Two fragments with the same text lower to the same body and may share a
+    /// stage-set guard. The action name and source-stage name are excluded — they
+    /// are the group key and the guard, not part of the lowered body.
+    /// </summary>
+    internal string PrintActionFragmentKey(Action action, Stage? sourceStage) {
+        _sb.Clear();
+        _sb.Append("params:");
+        foreach (var p in action.Parameters)
+            _sb.Append(p.Name).Append(':').Append(p.Type.TypeName).Append(',');
+        _sb.AppendLine();
+        _sb.Append("require:");
+        foreach (var policy in action.Policies)
+            _sb.Append(policy.Name).Append(',');
+        _sb.AppendLine();
+        _sb.AppendLine("effects:");
+        foreach (var effect in action.Effects)
+            PrintEffect(effect, "  ");
+        _sb.AppendLine("stagePolicies:");
+        if (sourceStage is not null)
+            foreach (var policy in sourceStage.Policies)
+                _sb.Append(policy.Name).Append(',');
+        _sb.AppendLine("onExit:");
+        if (sourceStage is not null)
+            foreach (var effect in sourceStage.OnExitEffects)
+                PrintEffect(effect, "  ");
+        return _sb.ToString();
+    }
+
+    /// <summary>
     /// Effect dispatch for printing. Methods are named by the Effect subtype.
     /// The verb (print) comes from the containing DomainDslPrinter.
     /// </summary>

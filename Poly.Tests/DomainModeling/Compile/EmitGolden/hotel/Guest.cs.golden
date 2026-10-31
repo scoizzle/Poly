@@ -10,20 +10,15 @@ public enum GuestStage
 
 public class Guest
 {
-    private List<EventHold> _events;
-    private List<Reservation> _reservations;
-    private Guest()
-    {
-        this._events = new List<EventHold>();
-        this._reservations = new List<Reservation>();
-    }
+    private List<EventHold> _events = new List<EventHold>();
+    private List<Reservation> _reservations = new List<Reservation>();
     private Guest(string email, string name, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
     {
         this.Email = email;
-        this.EventCount = eventCount;
         this.Name = name;
-        this.NightCount = nightCount;
         this.Phone = phone;
+        this.EventCount = eventCount;
+        this.NightCount = nightCount;
         this.StayCount = stayCount;
         this._events = new List<EventHold>(events ?? new List<EventHold>());
         this._reservations = new List<Reservation>(reservations ?? new List<Reservation>());
@@ -45,7 +40,7 @@ public class Guest
         get => this._reservations;
     }
     public GuestStage CurrentStage { get; private set; }
-    private DomainResult<EventHold> CreateEvents(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Hall? hall = null, Section? section = null)
+    public DomainResult<EventHold> CreateEvents(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Hall? hall = null, Section? section = null)
     {
         var eventHoldResult = EventHold.Create(capacity, dayRate, endDate, headcount, startDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
@@ -60,7 +55,7 @@ public class Guest
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
-    private DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Room? room = null)
+    public DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Room? room = null)
     {
         var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, this, room);
         if (!reservationResult.IsSuccess)
@@ -135,8 +130,8 @@ public class Guest
         this.CurrentStage = GuestStage.Active;
         return DomainResult.Success();
     }
-    public bool HasStays() => this.Reservations.Count > 0L;
-    public bool HasEvents() => this.Events.Count > 0L;
+    public bool HasStays() => this.Reservations.Count > 0;
+    public bool HasEvents() => this.Events.Count > 0;
     internal void WhenEachReservationDeparted(Reservation stay)
     {
         this.StayCount = this.StayCount + 1L;
@@ -173,6 +168,12 @@ public class Guest
             return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
+        var uniqueCheck = Guest.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Guest>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -186,5 +187,29 @@ public class Guest
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Guest", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Guest.CheckUnique(propertyName, value);
+    }
 }

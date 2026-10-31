@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
@@ -17,6 +18,7 @@ public sealed partial class DomainToCSharpExporter {
     private static void AddActionMethods(Entity entity, List<MethodDefinitionNode> methods,
         string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
         Domain? domain, INodeMetadataProvider? analysis) {
         var variants = new List<(Action Action, string? SourceStage)>();
         foreach (var action in entity.Actions)
@@ -29,23 +31,26 @@ public sealed partial class DomainToCSharpExporter {
             var items = group.ToList();
             if (items.Count == 1) {
                 var (action, source) = items[0];
-                AddActionMethod(entity, action, methods, stageEnumTypeName, postTransitionNotifyStages,
+                AddActionMethod(entity, action, methods, stageEnumTypeName,
+                    postTransitionNotifyStages, previousStageNotifyStages,
                     source, domain, analysis);
                 continue;
             }
 
             AddStageDispatchedActionMethod(entity, items, methods, stageEnumTypeName,
-                postTransitionNotifyStages, domain, analysis);
+                postTransitionNotifyStages, previousStageNotifyStages, domain, analysis);
         }
     }
 
     private static void AddActionMethod(Entity entity, Action action,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
         IReadOnlySet<string>? postTransitionNotifyStages = null,
+        IReadOnlySet<string>? previousStageNotifyStages = null,
         string? sourceStageName = null, Domain? domain = null,
         INodeMetadataProvider? analysis = null) {
         var isVoid = action.Result is not { Members.Count: > 0 };
-        var body = BuildFullActionBody(entity, action, stageEnumTypeName, postTransitionNotifyStages,
+        var body = BuildFullActionBody(entity, action, stageEnumTypeName,
+            postTransitionNotifyStages, previousStageNotifyStages,
             loweringSourceStage: sourceStageName, guardSourceStage: sourceStageName,
             domain, analysis, isVoid);
 
@@ -75,12 +80,14 @@ public sealed partial class DomainToCSharpExporter {
     private static Block BuildFullActionBody(Entity entity, Action action,
         string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
         string? loweringSourceStage, string? guardSourceStage, Domain? domain,
         INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
-            postTransitionNotifyStages, loweringSourceStage, domain, analysis, isVoid, names);
+            postTransitionNotifyStages, previousStageNotifyStages,
+            loweringSourceStage, domain, analysis, isVoid, names);
         effectsBody = PrependAdapterInvocation(domain, action, effectsBody, isVoid, analysis);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage);
@@ -90,6 +97,7 @@ public sealed partial class DomainToCSharpExporter {
         List<(Action Action, string? SourceStage)> variants,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
         Domain? domain, INodeMetadataProvider? analysis) {
         var representative = variants[0].Action;
         var paramSignature = string.Join(",", representative.Parameters.Select(p => p.Name));
@@ -116,6 +124,32 @@ public sealed partial class DomainToCSharpExporter {
             if (sourceStage is null)
                 entityLevel = action;
         }
+
+        // An implicit single stage has no enum and no guard. Mirror the multi-stage
+        // empty-copy rule: an empty stage copy falls back to the entity-level body,
+        // but a non-empty stage copy wins.
+        if (stageEnumTypeName is null) {
+            var stageAction = variants.FirstOrDefault(v => v.SourceStage is not null).Action;
+            var chosen = stageAction is not null
+                && (stageAction.Effects.Count > 0 || stageAction.Policies.Count > 0)
+                ? stageAction
+                : entityLevel ?? stageAction ?? variants[0].Action;
+            AddActionMethod(entity, chosen, methods,
+                stageEnumTypeName, postTransitionNotifyStages, previousStageNotifyStages,
+                sourceStageName: null, domain, analysis);
+            return;
+        }
+
+        // G10: group stage copies by identical DSL fragment. Apply the empty-copy
+        // substitution first (an empty/policy-free stage copy uses the entity body),
+        // then key on the fragment: effects + require + source-stage policies +
+        // OnExit effects + parameter names. Identical fragments share one body
+        // guarded by a stage-set equality; a singleton keeps a single-stage if.
+        var printer = domain is null
+            ? new DomainDslPrinter()
+            : new DomainDslPrinter(RuntimeAnalysisCache.Session(domain));
+        var groups = new List<(string Key, Action Action, List<string> Stages)>();
+        var groupIndex = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var (action, sourceStage) in variants) {
             if (sourceStage is null)
                 continue;
@@ -130,18 +164,35 @@ public sealed partial class DomainToCSharpExporter {
                 && entityLevel is not null
                 ? entityLevel
                 : action;
-            var branchBody = BuildFullActionBody(entity, branchAction, stageEnumTypeName, postTransitionNotifyStages,
-                loweringSourceStage: sourceStage, guardSourceStage: null, domain, analysis, isVoid, names);
+            var source = entity.Stages.FirstOrDefault(s =>
+                string.Equals(s.Name, sourceStage, StringComparison.Ordinal));
+            var key = printer.PrintActionFragmentKey(branchAction, source);
+            if (groupIndex.TryGetValue(key, out var idx)) {
+                groups[idx].Stages.Add(sourceStage);
+            }
+            else {
+                groupIndex[key] = groups.Count;
+                groups.Add((key, branchAction, [sourceStage]));
+            }
+        }
+
+        foreach (var group in groups) {
+            var branchBody = BuildFullActionBody(entity, group.Action, stageEnumTypeName,
+                postTransitionNotifyStages, previousStageNotifyStages,
+                loweringSourceStage: group.Stages[0], guardSourceStage: null,
+                domain, analysis, isVoid, names);
             nodes.Add(new IfStatement(
-                new Equal(
+                InWatchedStages(
                     new Member(new ThisReference(), "CurrentStage"),
-                    new Member(new NamedTypeReference(stageEnumTypeName), sourceStage)),
+                    stageEnumTypeName!,
+                    group.Stages),
                 branchBody));
         }
 
         if (entityLevel is not null) {
             var tail = BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
-                postTransitionNotifyStages, loweringSourceStage: null, guardSourceStage: null,
+                postTransitionNotifyStages, previousStageNotifyStages,
+                loweringSourceStage: null, guardSourceStage: null,
                 domain, analysis, isVoid, names);
             nodes.AddRange(tail.Nodes);
             locals.AddRange(tail.Variables);
@@ -475,16 +526,20 @@ public sealed partial class DomainToCSharpExporter {
             var payload = new NamedTypeReference(
                 RuntimeAnalysisCache.ClrTypeName(domain, endpoint.PayloadType.TypeName));
             var domainResult = new NamedTypeReference("DomainResult");
+            var request = new Parameter("request", payload);
             methods.Add(new MethodDefinitionNode(
                 endpoint.Name,
                 domainResult,
-                Parameters: [new Parameter("request", payload)],
+                Parameters: [request],
                 Body: new Block([
-                    new Return(
-                        new Invoke(
-                            new Member(domainResult, "Failure"),
-                            new Constant(
-                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' has no in-process adapter."))),
+                    new Invoke(
+                        new Member(new ClrTypeReference(typeof(System.Diagnostics.Debug)), "WriteLine"),
+                        [new Invoke(
+                            new Member(TypeReference.To<string>(), "Concat"),
+                            [new Constant(
+                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' request: "),
+                             request])]),
+                    new Return(new Invoke(new Member(domainResult, "Success"), [])),
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
@@ -508,10 +563,12 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity, Action action,
         HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
         IReadOnlySet<string>? postTransitionNotifyStages = null,
+        IReadOnlySet<string>? previousStageNotifyStages = null,
         string? sourceStageName = null, Domain? domain = null,
         INodeMetadataProvider? analysis = null, bool isVoid = true, LocalNames? names = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
+        var esm = analysis?.GetStructure(entity);
         Node actionResultType = isVoid
             ? new NamedTypeReference("DomainResult")
             : new NamedTypeReference("DomainResult",
@@ -522,9 +579,13 @@ public sealed partial class DomainToCSharpExporter {
             ActionParameterNames: paramNames,
             StageEnumTypeName: stageEnumTypeName,
             PostTransitionNotifyStages: postTransitionNotifyStages,
+            PreviousStageNotifyStages: previousStageNotifyStages,
             SourceStageName: sourceStageName,
             Domain: domain,
             EnumPropertyNames: enumProps,
+            LifecyclePropertyName: esm?.LifecyclePropertyName,
+            LifecycleEnumTypeName: esm?.LifecycleEnumTypeName,
+            ActionName: action.Name,
             ActionResultType: actionResultType,
             Names: names);
         var effectPass = new EffectLoweringPass(entity, context);
@@ -778,26 +839,36 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record struct: a typed result
+    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record: a typed result
     /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
-    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>.
+    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>. <c>Value</c> stays non-nullable
+    /// <c>T</c> and throws when the result failed. The getter is an expression over
+    /// a private method because <c>CSharpReader</c> accepts <c>get;</c> and
+    /// <c>get =&gt; expr</c>, not a block-bodied getter.
     /// </summary>
     internal static TypeDefinitionNode BuildDomainResultGenericTypeDef() {
-        // public readonly record struct DomainResult<T>
+        // public record DomainResult<T>
         // {
+        //     private T _value;
         //     public bool IsSuccess { get; }
-        //     public T Value { get; }
+        //     public T Value => this.GetValue();
         //     public string? ErrorMessage { get; }
         //
         //     private DomainResult(bool isSuccess, T value, string? errorMessage)
         //     {
         //         IsSuccess = isSuccess;
-        //         Value = value;
+        //         _value = value;
         //         ErrorMessage = errorMessage;
         //     }
         //
         //     public static DomainResult<T> Success(T value) => new(true, value, null);
         //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
+        //     private T GetValue()
+        //     {
+        //         if (!this.IsSuccess)
+        //             throw new System.InvalidOperationException("A failed DomainResult has no Value.");
+        //         return this._value;
+        //     }
         // }
 
         var tParam = new NamedTypeReference("T");
@@ -810,7 +881,8 @@ public sealed partial class DomainToCSharpExporter {
                 new PrimitiveTypeReference(PrimType.Boolean),
                 Getter: new PropertyGetterDefinitionNode()),
             new("Value", tParam,
-                Getter: new PropertyGetterDefinitionNode()),
+                Getter: new PropertyGetterDefinitionNode(
+                    new Invoke(new Member(new ThisReference(), "GetValue")))),
             new("ErrorMessage",
                 new OptionalTypeReference(
                     new PrimitiveTypeReference(PrimType.String)),
@@ -831,7 +903,7 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), "IsSuccess"),
                     new Parameter("isSuccess")),
                 new Assignment(
-                    new Member(new ThisReference(), "Value"),
+                    new Member(new ThisReference(), "_value"),
                     new Parameter("value")),
                 new Assignment(
                     new Member(new ThisReference(), "ErrorMessage"),
@@ -869,6 +941,17 @@ public sealed partial class DomainToCSharpExporter {
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
+            new("GetValue", tParam,
+                Body: new Block([
+                    new IfStatement(
+                        new Syntactic.Not(new Member(new ThisReference(), "IsSuccess")),
+                        new ThrowStatement(
+                            new New(
+                                new NamedTypeReference("System.InvalidOperationException"),
+                                new Constant("A failed DomainResult has no Value.")))),
+                    new Return(new Member(new ThisReference(), "_value")),
+                ]),
+                AccessModifier: AccessModifier.Private),
         };
 
         return new TypeDefinitionNode(
@@ -877,6 +960,12 @@ public sealed partial class DomainToCSharpExporter {
             Properties: props,
             Constructors: [ctor],
             Methods: methods,
+            Fields: [
+                new FieldDefinitionNode(
+                    "_value",
+                    tParam,
+                    AccessModifier: AccessModifier.Private),
+            ],
             Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
         );
     }
@@ -1054,9 +1143,10 @@ public sealed partial class DomainToCSharpExporter {
             return;
         fields.Add(new FieldDefinitionNode(
             "_automaticStageChain",
-            new NamedTypeReference(
-                "HashSet",
-                TypeArguments: [new PrimitiveTypeReference(PrimType.String)]),
+            new OptionalTypeReference(
+                new NamedTypeReference(
+                    "HashSet",
+                    TypeArguments: [new PrimitiveTypeReference(PrimType.String)])),
             AccessModifier: AccessModifier.Private));
         methods.Add(new MethodDefinitionNode(
             "NoteAutomaticStage",

@@ -206,7 +206,7 @@ public class PipelineTransformationTests {
     }
 
     [Test]
-    public async Task InvokeAction_ContractBound_FailsClosedWithoutInProcessAdapter() {
+    public async Task InvokeAction_ContractBound_TracesAndSucceeds() {
         var (domain, analysis, session) = Evolve("""
             domain Shop
             Order: entity {
@@ -234,9 +234,7 @@ public class PipelineTransformationTests {
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
         var result = order.InvokeAction("Pay",
             new Dictionary<string, object?> { ["request"] = request });
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Stripe.Charge");
-        await Assert.That(result.ErrorMessage!).Contains("no in-process adapter");
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     [Test]

@@ -117,4 +117,35 @@ public class AstConstructorDefinitionTests {
         await Assert.That(resolvedConstructor.Parameters.Single().Name).IsEqualTo("total");
         await Assert.That(analysis.GetResolvedType(newNode)!.FullName).IsEqualTo("Sample.Order");
     }
+
+    [Test]
+    public async Task AnalyzeNode_New_ClosedGeneric_SubstitutesTypeArgument() {
+        var widget = new TypeDefinitionNode(
+            "Widget",
+            "Sample",
+            Constructors: [new ConstructorDefinitionNode()]);
+        var box = new TypeDefinitionNode(
+            "Box",
+            "Sample",
+            Constructors: [
+                new ConstructorDefinitionNode(
+                    Parameters: [new Parameter("value", new NamedTypeReference("T"))])
+            ],
+            GenericParameters: [new Parameter("T")]);
+        var newNode = new New(
+            new NamedTypeReference("Box", "Sample", TypeArguments: [new NamedTypeReference("Widget", "Sample")]),
+            new New(new NamedTypeReference("Widget", "Sample")));
+        var root = new Block([widget, box, newNode]);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new TypeDefinitionNodeAnalyzer())
+            .UseThisReferenceContext()
+            .UseTypeAndMemberResolver()
+            .Build()
+            .Analyze(root);
+        var resolvedConstructor = analysis.GetResolvedMember(newNode) as ITypeConstructor;
+
+        await Assert.That(resolvedConstructor).IsNotNull();
+        await Assert.That(resolvedConstructor!.Parameters.Single().ParameterTypeDefinition.Name).IsEqualTo("Widget");
+    }
 }

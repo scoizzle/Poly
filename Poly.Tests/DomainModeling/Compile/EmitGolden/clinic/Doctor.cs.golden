@@ -1,11 +1,7 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Doctor
 {
-    private Doctor()
-    { }
+    private Doctor() { }
     private Doctor(string licenseNo, string name, Schedule? schedule = null)
     {
         this.LicenseNo = licenseNo;
@@ -19,7 +15,7 @@ public class Doctor
     {
         if (this.Schedule == null)
         {
-            return DomainResult.Failure("'Open' requires a linked 'schedule' on entity 'Doctor'.");
+            return DomainResult.Failure("'StartShift' requires a linked 'schedule' on entity 'Doctor'.");
         }
         var invoke0 = this.Schedule.Open();
         if (!invoke0.IsSuccess)
@@ -55,9 +51,39 @@ public class Doctor
             return DomainResult<Doctor>.Failure("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.");
         }
         var created = new Doctor(licenseNo, name, schedule);
+        var uniqueCheck = Doctor.CheckUnique("LicenseNo", licenseNo);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Doctor>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Doctor", "LicenseNo", licenseNo);
         db.Record("Doctor", "LicenseNo", licenseNo);
         return DomainResult<Doctor>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Doctor", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "LicenseNo" && object.Equals(this.LicenseNo, value))
+        {
+            return DomainResult.Success();
+        }
+        return Doctor.CheckUnique(propertyName, value);
+    }
     public static System.Boolean ExistsWithLicenseNo(Poly.DomainModeling.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

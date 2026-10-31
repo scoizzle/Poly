@@ -81,12 +81,12 @@ public class ContractBindingExportTests {
         await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
         await Assert.That(order).Contains("if (!adapterResult.IsSuccess)");
 
-        // The adapter is emitted, not dropped: a DomainResult.Failure stub until
-        // an in-process adapter is registered (no silent no-op).
+        // The adapter is emitted, not dropped: it traces the request and succeeds
+        // until a real in-process adapter seam lands.
         var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types).Contains("class BillingAdapters");
         await Assert.That(types).Contains("public static DomainResult Charge(");
-        await Assert.That(types).Contains("no in-process adapter");
+        await Assert.That(types).Contains("System.Diagnostics.Debug.WriteLine");
 
         // Child Ledger entity never becomes a public route.
         var program = files.Single(f => f.FileName == "Program.cs").Source;

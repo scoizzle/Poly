@@ -1,16 +1,6 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
-public enum SectionStage
-{
-    InService = 0
-}
-
 public class Section
 {
-    private Section()
-    { }
     private Section(long capacity, decimal dayRate, string name, Hall? hall = null, bool occupied = false)
     {
         this.Capacity = capacity;
@@ -18,20 +8,14 @@ public class Section
         this.Name = name;
         this.Occupied = occupied;
         this.Hall = hall;
-        this.CurrentStage = SectionStage.InService;
     }
     public long Capacity { get; private set; }
     public decimal DayRate { get; private set; }
     public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
-    public SectionStage CurrentStage { get; private set; }
     public DomainResult Occupy()
     {
-        if (this.CurrentStage != SectionStage.InService)
-        {
-            return DomainResult.Failure("'Occupy' requires stage 'InService' on entity 'Section'.");
-        }
         if (!this.CanBook())
         {
             return DomainResult.Failure("'Occupy' blocked by policy 'CanBook'.");
@@ -47,7 +31,7 @@ public class Section
         this.Occupied = true;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'MarkChildBusy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'Section'.");
         }
         var invoke0 = this.Hall.MarkChildBusy();
         if (!invoke0.IsSuccess)
@@ -58,10 +42,6 @@ public class Section
     }
     public DomainResult Vacate()
     {
-        if (this.CurrentStage != SectionStage.InService)
-        {
-            return DomainResult.Failure("'Vacate' requires stage 'InService' on entity 'Section'.");
-        }
         if (!this.IsOccupied())
         {
             return DomainResult.Failure("'Vacate' blocked by policy 'IsOccupied'.");
@@ -69,7 +49,7 @@ public class Section
         this.Occupied = false;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'ClearChildBusy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure("'Vacate' requires a linked 'hall' on entity 'Section'.");
         }
         var invoke0 = this.Hall.ClearChildBusy();
         if (!invoke0.IsSuccess)

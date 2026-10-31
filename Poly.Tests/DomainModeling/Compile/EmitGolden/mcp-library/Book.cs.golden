@@ -1,16 +1,12 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Book
 {
-    private Book()
-    { }
+    private Book() { }
     private Book(string isbn, string title, long copies = 1L)
     {
-        this.Copies = copies;
         this.Isbn = isbn;
         this.Title = title;
+        this.Copies = copies;
     }
     public long Copies { get; private set; }
     public string Isbn { get; private set; } = default!;
@@ -38,9 +34,39 @@ public class Book
             return DomainResult<Book>.Failure("Unique constraint violated: 'Isbn' value is already used on another 'Book'.");
         }
         var created = new Book(isbn, title, copies);
+        var uniqueCheck = Book.CheckUnique("Isbn", isbn);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Book>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Book", "Isbn", isbn);
         db.Record("Book", "Isbn", isbn);
         return DomainResult<Book>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Book", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Isbn" && object.Equals(this.Isbn, value))
+        {
+            return DomainResult.Success();
+        }
+        return Book.CheckUnique(propertyName, value);
+    }
     public static System.Boolean ExistsWithIsbn(Poly.DomainModeling.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "Isbn", isbn);
 }

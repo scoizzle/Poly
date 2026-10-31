@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum FolioStage
 {
     Open = 0,
@@ -10,8 +7,6 @@ public enum FolioStage
 
 public class Folio
 {
-    private Folio()
-    { }
     private Folio(Reservation? reservation = null, decimal balance = 0L)
     {
         this.Balance = balance;
@@ -67,16 +62,7 @@ public class Folio
         {
             return DomainResult.Failure("'Settle' blocked by policy 'HasBalance'.");
         }
-        var assignValue0 = 0L;
-        if (assignValue0 < 0m)
-        {
-            return DomainResult.Failure("'Balance' must be >= 0.");
-        }
-        if (assignValue0 > 1000000m)
-        {
-            return DomainResult.Failure("'Balance' must be <= 1000000.");
-        }
-        this.Balance = assignValue0;
+        this.Balance = 0L;
         this.CurrentStage = FolioStage.Settled;
         return DomainResult.Success();
     }

@@ -1,16 +1,11 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Patron
 {
-    private List<Loan> _loans;
-    private List<Fine> _fines;
-    private Patron()
-    {
-        this._loans = new List<Loan>();
-        this._fines = new List<Fine>();
-    }
+    private List<Loan> _loans = new List<Loan>();
+    private List<Fine> _fines = new List<Fine>();
+    private Patron() { }
     private Patron(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
     {
         this.Name = name;
@@ -29,7 +24,7 @@ public class Patron
     {
         get => this._fines;
     }
-    private DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
+    public DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
     {
         var loanResult = Loan.Create(book, amount);
         if (!loanResult.IsSuccess)
@@ -45,6 +40,17 @@ public class Patron
     {
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
+    }
+    public DomainResult<Fine> CreateFines(string reason, long amount = 0L)
+    {
+        var fineResult = Fine.Create(reason, amount);
+        if (!fineResult.IsSuccess)
+        {
+            return DomainResult<Fine>.Failure(fineResult.ErrorMessage ?? "");
+        }
+        var fine = fineResult.Value;
+        this._fines.Add(fine);
+        return DomainResult<Fine>.Success(fine);
     }
     internal void AttachFines(Fine child)
     {
@@ -67,7 +73,7 @@ public class Patron
     public bool GoodStanding() => this.Status == "Active";
     internal void WhenEachLoanOverdue(Loan loan)
     {
-        var create0 = Fine.Create("Overdue", loan.Amount);
+        var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
             throw new ConstraintFailureException(create0.ErrorMessage ?? "");

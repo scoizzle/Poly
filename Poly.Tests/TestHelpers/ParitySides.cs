@@ -43,6 +43,14 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 
     protected override string TypeName(object entity) => ((DomainEntityInstance)entity).Entity.Name;
 
+    protected override object LinkedTarget(string relationship, int index) {
+        var targets = _store.GetLinkedTargets(relationship, (DomainEntityInstance)Current);
+        if (index < 0 || index >= targets.Count)
+            throw new ArgumentException(
+                $"'{relationship}' has {targets.Count} linked target(s); cannot use index {index}.");
+        return targets[index];
+    }
+
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var instance = (DomainEntityInstance)entity;
         var state = model.Properties.ToDictionary(p => p.Name, p => instance.GetProperty<object>(p.Name)?.ToString());
@@ -54,6 +62,8 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 }
 
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
+    internal InMemoryStoragePort Port { get; } = new();
+
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {
             var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;
@@ -97,6 +107,20 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
 
     protected override string TypeName(object entity) => entity.GetType().Name;
 
+    protected override object LinkedTarget(string relationship, int index) {
+        var value = Read(Current, relationship);
+        if (value is System.Collections.IList list) {
+            if (index < 0 || index >= list.Count)
+                throw new ArgumentException(
+                    $"'{relationship}' has {list.Count} linked target(s); cannot use index {index}.");
+            return list[index]!;
+        }
+        if (value is null || index != 0)
+            throw new ArgumentException(
+                $"'{relationship}' has no linked target at index {index}.");
+        return value;
+    }
+
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
         var state = model.Properties.ToDictionary(p => p.Name, p => Read(entity, p.Name)?.ToString());
         foreach (var nav in model.Navigations)
@@ -105,7 +129,11 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
                 null => "0",
                 _ => "1", // a to-one navigation holding its target
             };
-        state["Stage"] = Read(entity, "CurrentStage")?.ToString();
+        // An implicit single stage has no printed CurrentStage; the value is
+        // constant, so report the model's stage on both sides.
+        var currentStage = Read(entity, "CurrentStage")?.ToString();
+        state["Stage"] = currentStage
+            ?? (model.Stages.Count == 1 ? model.Stages[0].Name : null);
         return state;
     }
 
@@ -141,11 +169,13 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
         return array;
     }
 
-    // Printed methods return DomainResult or DomainResult<T>.
+    // Printed methods return DomainResult or DomainResult<T>. A failed DomainResult<T>
+    // throws on Value, so a failing row reads null instead.
     static StepResult Unpack(object result) {
         var type = result.GetType();
-        return ((bool)type.GetProperty("IsSuccess")!.GetValue(result)!,
+        var success = (bool)type.GetProperty("IsSuccess")!.GetValue(result)!;
+        return (success,
             type.GetProperty("ErrorMessage")!.GetValue(result) as string,
-            type.GetProperty("Value")?.GetValue(result));
+            success ? type.GetProperty("Value")?.GetValue(result) : null);
     }
 }

@@ -17,8 +17,6 @@ public class Enrollment
     private List<Section>? _sectionEnrollmentsRegisteredSubscribers;
     private List<Section>? _sectionEnrollmentsDroppedSubscribers;
     private int _notifyDepth;
-    private Enrollment()
-    { }
     private Enrollment(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
     {
         this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -49,9 +47,8 @@ public class Enrollment
             return DomainResult.Failure("'Confirm' blocked by policy 'SectionFull'.");
         }
         this.DueDate = this.EnrolledOn.AddDays((int)14L);
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Registered;
-        this.NotifyRegisteredSubscribers(previousStage0);
+        this.NotifyRegisteredSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Withdraw()
@@ -60,9 +57,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Dropped;
-        this.NotifyDroppedSubscribers(previousStage0);
+        this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult RecordGrade(long score)
@@ -86,16 +82,7 @@ public class Enrollment
         }
         else
         {
-            var assignValue1 = 0L;
-            if (assignValue1 < 0L)
-            {
-                return DomainResult.Failure("'Grade' must be >= 0.");
-            }
-            if (assignValue1 > 100L)
-            {
-                return DomainResult.Failure("'Grade' must be <= 100.");
-            }
-            this.Grade = assignValue1;
+            this.Grade = 0L;
         }
         return DomainResult.Success();
     }
@@ -105,9 +92,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Complete' requires stage 'Registered' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Completed;
-        this.NotifyCompletedSubscribers(previousStage0);
+        this.NotifyCompletedSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Drop()
@@ -116,9 +102,8 @@ public class Enrollment
         {
             return DomainResult.Failure("'Drop' requires stage 'Registered' on entity 'Enrollment'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = EnrollmentStage.Dropped;
-        this.NotifyDroppedSubscribers(previousStage0);
+        this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
     public bool SectionFull() => this.Section != null && this.Section!.SeatsTaken >= 1L;
@@ -183,7 +168,7 @@ public class Enrollment
         }
         this._sectionEnrollmentsDroppedSubscribers.Add(subscriber);
     }
-    internal void NotifyDroppedSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyDroppedSubscribers()
     {
         this.EnterNotifyCascade("Dropped");
         try
@@ -208,7 +193,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyCompletedSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyCompletedSubscribers()
     {
         this.EnterNotifyCascade("Completed");
         try
@@ -227,7 +212,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    internal void NotifyRegisteredSubscribers(EnrollmentStage? previousStage)
+    internal void NotifyRegisteredSubscribers()
     {
         this.EnterNotifyCascade("Registered");
         try

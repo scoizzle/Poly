@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum FineStage
 {
     Resolved = 0,
@@ -10,12 +7,11 @@ public enum FineStage
 
 public class Fine
 {
-    private Fine()
-    { }
+    private Fine() { }
     private Fine(string reason, long amount = 0L)
     {
-        this.Amount = amount;
         this.Reason = reason;
+        this.Amount = amount;
         this.CurrentStage = FineStage.Resolved;
     }
     public long Amount { get; private set; }

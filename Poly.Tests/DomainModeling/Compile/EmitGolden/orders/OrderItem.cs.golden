@@ -1,11 +1,7 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class OrderItem
 {
-    private OrderItem()
-    { }
+    private OrderItem() { }
     private OrderItem(long qty, string sku, Order? order = null)
     {
         this.Qty = qty;

@@ -51,7 +51,9 @@ public class StoreBindUniqueTests {
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
         await Assert.That(create).Contains("var created = new Permit(");
-        await Assert.That(create).DoesNotContain("EnsureUnique");
+        await Assert.That(create).Contains("CheckUnique");
+        await Assert.That(create).Contains("PrintedRecord");
+        await Assert.That(cs).Contains("PrintedCollision");
         await Assert.That(cs).Contains("EnsureUnique(string propertyName");
     }
 

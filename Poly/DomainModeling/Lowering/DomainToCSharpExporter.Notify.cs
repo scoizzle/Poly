@@ -47,14 +47,23 @@ public sealed partial class DomainToCSharpExporter {
                     }
                 }
                 else {
+                    // A singular navigation is optional (unlinked until a later link),
+                    // so every per-stage registration shares ONE null guard: dereferencing
+                    // this.{Nav} in the constructor would NRE when the target is absent.
+                    var registrations = new List<Node>();
                     foreach (var info in perStage) {
-                        bodyNodes.Add(new Invoke(
+                        registrations.Add(new Invoke(
                             new Member(
                                 new Member(new ThisReference(), pascalNavName),
                                 SubscriberRegisterMethodName(info)),
                             [new ThisReference()])
                         );
                     }
+                    bodyNodes.Add(new IfStatement(
+                        new NotEqual(
+                            new Member(new ThisReference(), pascalNavName),
+                            new Constant(null!)),
+                        new Block(registrations)));
                 }
             }
         }
@@ -84,9 +93,55 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity,
         Relationship rel,
         Domain domain,
+        List<SubscriptionInfo>? subscriberSubs,
         List<MethodDefinitionNode> methods,
         INodeMetadataProvider metadata) =>
-        AddCreateNavMethod(entity, rel, domain, subscriberSubs: null, fieldName: null, methods, metadata);
+        AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName: null, methods, metadata);
+
+    /// <summary>
+    /// True when the target entity's <c>Notify{Stage}Subscribers</c> group carries the
+    /// nullable previous-stage parameter: at least one subscription in the domain
+    /// targeting <paramref name="targetEntity"/> at <paramref name="stageName"/> is
+    /// <c>when all</c>. The signature is per (target, stage), not per relationship.
+    /// </summary>
+    private static bool StageGroupNeedsPrevious(Entity targetEntity, string stageName, Domain domain) {
+        foreach (var source in domain.Types.OfType<Entity>()) {
+            var subscriptions = source.Subscriptions
+                .Concat(source.Stages.SelectMany(s => s.Subscriptions));
+            foreach (var subscription in subscriptions) {
+                if (subscription.Quantifier != StageSubscriptionQuantifier.All
+                    || !subscription.StageNames.Contains(stageName, StringComparer.Ordinal))
+                    continue;
+                var navigation = source.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, subscription.RelationshipName, StringComparison.Ordinal));
+                if (navigation is not null
+                    && string.Equals(navigation.Target.TypeName, targetEntity.Name, StringComparison.Ordinal))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// For a self-relationship <c>create in rel</c>, the unique singular navigation on
+    /// <paramref name="targetEntity"/> whose target is <paramref name="sourceEntityName"/>.
+    /// This is the peer the new instance wires to <c>this</c> (e.g. <c>Account.parent</c>
+    /// for a <c>create in children</c>); null when there is none or it is ambiguous.
+    /// Unlike <see cref="FindAutoWireBackReference"/>, it does not skip self-relationships.
+    /// </summary>
+    private static Relationship? FindSelfRelPeerSingular(Entity targetEntity, string sourceEntityName) {
+        Relationship? found = null;
+        var count = 0;
+        foreach (var nav in targetEntity.Navigations) {
+            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+                continue;
+            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
+                found = nav;
+                count++;
+            }
+        }
+        return count == 1 ? found : null;
+    }
 
     private static void AddCreateNavMethod(
         Entity entity,
@@ -125,14 +180,26 @@ public sealed partial class DomainToCSharpExporter {
         var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
         var requiredProps = metadata.GetStructure(targetEntity)?.RequiredPropertyNames
             ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(targetEntity);
+        var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
+        var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
+            or RelationshipCardinality.ManyToMany;
 
         foreach (var parameter in parameterMetadata) {
             if (parameter.IsNavigation && parameter.IsBackReference) {
-                // Self-rel slot (Account.parent) is `this` only when *this* entity is
-                // that type. Contact.create-in account must not pass a Contact as Account.
-                createArgs.Add(string.Equals(entity.Name, targetEntity.Name, StringComparison.Ordinal)
-                    ? (Node)new ThisReference()
-                    : TypedNull(parameter.Type.TypeName));
+                // Self-rel slot. A self collection (including `rel` when it is a
+                // collection) starts empty; a singular self-nav wires `this` only as
+                // the peer of a collection create-in; every other self singular is null.
+                if (parameter.IsCollection) {
+                    createArgs.Add(new New(
+                        new NamedTypeReference("List",
+                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
+                    continue;
+                }
+                createArgs.Add(isCollectionRel
+                    && selfPeerSingular is not null
+                    && string.Equals(parameter.Name, selfPeerSingular.Name, StringComparison.Ordinal)
+                        ? (Node)new ThisReference()
+                        : TypedNull(parameter.Type.TypeName));
                 continue;
             }
 
@@ -165,7 +232,9 @@ public sealed partial class DomainToCSharpExporter {
             // so that omission is a legal trailing argument.
             var param = parameter.IsNavigation
                 ? new Parameter(paramName, propRef, DefaultValue: new Constant(null))
-                : new Parameter(paramName, propRef);
+                : parameter.IsOptional
+                    ? new Parameter(paramName, propRef, DefaultValue: EmptyDefault(parameter.Type))
+                    : new Parameter(paramName, propRef);
             methodParams.Add(param);
             createArgs.Add(param);
         }
@@ -237,7 +306,7 @@ public sealed partial class DomainToCSharpExporter {
         // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
         // _field.Add / Register* / peer Attach when Create wired this collection.
         var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = autoWireBackRef is not null
+        var createWiredThisCollection = (autoWireBackRef is not null || selfPeerSingular is not null)
             && fieldName is not null
             && wiredInverse is not null
             && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
@@ -253,6 +322,15 @@ public sealed partial class DomainToCSharpExporter {
                 bodyNodes.Add(new Assignment(
                     new Member(new ThisReference(), pascalName),
                     local));
+
+                // A singular create-in links `this` into the target's unique inverse
+                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
+                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
+                if (inverse is not null) {
+                    bodyNodes.Add(new Invoke(
+                        new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [new ThisReference()]));
+                }
             }
 
             // Subscription registration when Create did not Attach this relation.
@@ -273,15 +351,16 @@ public sealed partial class DomainToCSharpExporter {
         // A create-in lands the child in its first stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
-        if (targetEntity.Stages.Count > 0) {
+        if (metadata.GetStructure(targetEntity)?.HasStages == true) {
             var firstStage = targetEntity.Stages[0].Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
                     && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
+                var needsPrevious = StageGroupNeedsPrevious(targetEntity, firstStage, domain);
                 bodyNodes.Add(new Invoke(
                     new Member(local, $"Notify{firstStage}Subscribers"),
-                    [new Constant(null)]));
+                    needsPrevious ? [new Constant(null)] : []));
             }
         }
 
@@ -297,7 +376,7 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Block(bodyNodes, [localResult, local]),
-            AccessModifier: AccessModifier.Private
+            AccessModifier: AccessModifier.Public
         ));
     }
 

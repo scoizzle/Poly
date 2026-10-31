@@ -67,7 +67,7 @@ public sealed class AnalysisReportArtifactTests {
     }
 
     [Test]
-    public async Task Emit_RegistersVmAnalysisReportListingErrors() {
+    public async Task Emit_RegistersVmAnalysisReportWithNoErrors() {
         var (session, domain, analysis) = EmitGoldenTests.AnalyzeSampleFile("docs/probes/smoke/smoke.poly");
         var files = session.Emit(domain, analysis);
 
@@ -77,11 +77,9 @@ public sealed class AnalysisReportArtifactTests {
         await Assert.That(artifact!.Descriptor.Producer).IsEqualTo("Emit");
         var report = (AnalysisReport)artifact.Payload!;
         var errors = report.Findings.Where(f => f.Severity == DiagnosticSeverity.Error).ToList();
-        var messages = string.Join("\n", errors.Select(e => e.Message).OrderBy(m => m, StringComparer.Ordinal));
-        // V1/V3/V5 removed the constructor misses. DomainResult<T>.Success is typed.
-        // One non-generic Success call remains.
-        await Assert.That(messages).IsEqualTo(
-            "no matching member 'Success' on 'DomainResult' for invoke with 1 argument(s)");
+        // The closed-generic seam (C8-vm-a) resolves DomainResult<T>.Success(T), so the
+        // smoke sample is VM-clean.
+        await Assert.That(errors).IsEmpty();
         await Assert.That(session.ArtifactCatalog.ToText())
             .Contains($"vm-analysis-report|{domain.Name}|Emit");
         await Assert.That(session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "analysis-report")))

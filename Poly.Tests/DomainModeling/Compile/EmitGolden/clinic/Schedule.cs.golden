@@ -1,12 +1,8 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class Schedule
 {
-    private Schedule()
-    { }
-    private Schedule(string day, string state)
+    private Schedule() { }
+    private Schedule(string day, string state = "")
     {
         this.Day = day;
         this.State = state;
@@ -15,15 +11,10 @@ public class Schedule
     public string State { get; private set; } = default!;
     public DomainResult Open()
     {
-        var assignValue0 = "open";
-        if (System.String.IsNullOrEmpty(assignValue0))
-        {
-            return DomainResult.Failure("'State' is required.");
-        }
-        this.State = assignValue0;
+        this.State = "open";
         return DomainResult.Success();
     }
-    public static DomainResult<Schedule> Create(string day, string state)
+    public static DomainResult<Schedule> Create(string day, string state = "")
     {
         if (string.IsNullOrEmpty(day))
         {

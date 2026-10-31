@@ -1,7 +1,4 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public enum LeadStage
 {
     New = 0,
@@ -11,8 +8,6 @@ public enum LeadStage
 
 public class Lead
 {
-    private Lead()
-    { }
     private Lead(string company, string email, string name, Account? account = null)
     {
         this.Company = company;
@@ -68,7 +63,37 @@ public class Lead
             return DomainResult<Lead>.Failure("'Name' is required.");
         }
         var created = new Lead(company, email, name, account);
+        var uniqueCheck = Lead.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Lead>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Lead", "Email", email);
         return DomainResult<Lead>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Lead", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Lead.CheckUnique(propertyName, value);
+    }
 }

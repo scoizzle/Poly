@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum LoanStage
@@ -13,8 +12,7 @@ public class Loan
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
-    private Loan()
-    { }
+    private Loan() { }
     private Loan(Book? book = null, long amount = 0L)
     {
         this.Amount = amount;
@@ -30,9 +28,8 @@ public class Loan
         {
             return DomainResult.Failure("'MarkOverdue' requires stage 'Active' on entity 'Loan'.");
         }
-        var previousStage0 = this.CurrentStage;
         this.CurrentStage = LoanStage.Overdue;
-        this.NotifyOverdueSubscribers(previousStage0);
+        this.NotifyOverdueSubscribers();
         return DomainResult.Success();
     }
     public DomainResult Return()
@@ -41,16 +38,7 @@ public class Loan
         {
             return DomainResult.Failure("'Return' requires stage 'Overdue' on entity 'Loan'.");
         }
-        var assignValue0 = 0L;
-        if (assignValue0 < 0L)
-        {
-            return DomainResult.Failure("'Amount' must be >= 0.");
-        }
-        if (assignValue0 > 500L)
-        {
-            return DomainResult.Failure("'Amount' must be <= 500.");
-        }
-        this.Amount = assignValue0;
+        this.Amount = 0L;
         this.CurrentStage = LoanStage.Returned;
         return DomainResult.Success();
     }
@@ -69,7 +57,7 @@ public class Loan
         }
         this._patronLoansOverdueSubscribers.Add(subscriber);
     }
-    internal void NotifyOverdueSubscribers(LoanStage? previousStage)
+    internal void NotifyOverdueSubscribers()
     {
         this.EnterNotifyCascade("Overdue");
         try

@@ -1,32 +1,20 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
-
-public enum PatronStage
-{
-    Active = 0
-}
 
 public class Patron
 {
-    private List<Fine> _fines;
-    private Patron()
-    {
-        this._fines = new List<Fine>();
-    }
+    private List<Fine> _fines = new List<Fine>();
     private Patron(string name, IEnumerable<Fine>? fines = null)
     {
         this.Name = name;
         this._fines = new List<Fine>(fines ?? new List<Fine>());
-        this.CurrentStage = PatronStage.Active;
     }
     public string Name { get; private set; } = default!;
     public IReadOnlyList<Fine> Fines
     {
         get => this._fines;
     }
-    public PatronStage CurrentStage { get; private set; }
-    private DomainResult<Fine> CreateFines(long amount, string reason)
+    public DomainResult<Fine> CreateFines(long amount, string reason)
     {
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)
@@ -42,10 +30,6 @@ public class Patron
     }
     public DomainResult<Fine> AssessByType()
     {
-        if (this.CurrentStage != PatronStage.Active)
-        {
-            return DomainResult<Fine>.Failure("'AssessByType' requires stage 'Active' on entity 'Patron'.");
-        }
         var create0 = Fine.Create(5L, "TypeCreate");
         if (!create0.IsSuccess)
         {
@@ -56,10 +40,6 @@ public class Patron
     }
     public DomainResult<Fine> AssessByRel()
     {
-        if (this.CurrentStage != PatronStage.Active)
-        {
-            return DomainResult<Fine>.Failure("'AssessByRel' requires stage 'Active' on entity 'Patron'.");
-        }
         var create0 = this.CreateFines(7L, "CreateIn");
         if (!create0.IsSuccess)
         {
@@ -69,8 +49,8 @@ public class Patron
         return DomainResult<Fine>.Success(created1);
     }
     public bool HasFines() => this.Fines.Count != 0;
-    public bool HasFineCount() => this.Fines.Count > 0L;
-    public bool NoFines() => this.Fines.Count == 0L;
+    public bool HasFineCount() => this.Fines.Count > 0;
+    public bool NoFines() => this.Fines.Count == 0;
     public static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
     {
         if (string.IsNullOrEmpty(name))

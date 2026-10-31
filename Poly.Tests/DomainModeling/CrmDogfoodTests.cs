@@ -214,10 +214,8 @@ public class CrmDogfoodTests {
                     ["Currency"] = "USD"
                 }
             });
-        // Capture binds Billing.Charge; unbound adapter returns Failure.
-        await Assert.That(capture.Succeeded).IsFalse();
-        await Assert.That(capture.ErrorMessage).Contains("Billing.Charge");
-        await Assert.That(capture.ErrorMessage!).Contains("no in-process adapter");
+        // Capture binds Billing.Charge; the printed adapter traces and succeeds.
+        await Assert.That(capture.Succeeded).IsTrue();
 
         var wrap = opp.InvokeAction("CompleteOpenWork");
         await Assert.That(wrap.Succeeded).IsTrue();

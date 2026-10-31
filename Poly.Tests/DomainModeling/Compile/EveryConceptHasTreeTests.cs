@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
 
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 
@@ -183,7 +184,7 @@ public sealed class EveryConceptHasTreeTests {
     }
 
     private static IEnumerable<string> HandlerNames(Entity entity) {
-        var counts = new Dictionary<(string Stage, string Target, string Quantifier, bool HasPeer), int>();
+        var entries = new List<(string Key, string Base, string Label)>();
         foreach (var sub in entity.Subscriptions.Concat(entity.Stages.SelectMany(s => s.Subscriptions))) {
             var rel = entity.Navigations.FirstOrDefault(n =>
                 string.Equals(n.Name, sub.RelationshipName, StringComparison.Ordinal));
@@ -195,23 +196,84 @@ public sealed class EveryConceptHasTreeTests {
             };
             var hasPeer = sub.PeerBinding is { Length: > 0 };
             foreach (var stage in sub.StageNames) {
-                var key = (stage, target, quantifier, hasPeer);
-                counts.TryGetValue(key, out var occurrence);
-                counts[key] = occurrence + 1;
-                var suffix = occurrence == 0 ? "" : $"_{occurrence + 1}";
-                yield return $"When{quantifier}{target}{stage}{suffix}";
+                var key = $"{stage}|{target}|{quantifier}|{hasPeer}";
+                entries.Add((key, $"When{quantifier}{target}{stage}", EffectLabel(sub)));
+            }
+        }
+        foreach (var group in entries.GroupBy(e => e.Key, StringComparer.Ordinal)) {
+            var items = group.ToList();
+            if (items.Count == 1) {
+                yield return items[0].Base;
+                continue;
+            }
+            var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var item in items) {
+                seen.TryGetValue(item.Label, out var occurrence);
+                seen[item.Label] = occurrence + 1;
+                yield return occurrence == 0
+                    ? $"{item.Base}_{item.Label}"
+                    : $"{item.Base}_{item.Label}_{occurrence + 1}";
             }
         }
     }
+
+    private static string EffectLabel(StageSubscription subscription) =>
+        subscription.Effects.FirstOrDefault() switch {
+            AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
+            InvokeActionEffect invoke => $"Call{invoke.ActionName}",
+            StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
+            CreateEntityInstance create => $"Create{create.Type.TypeName}",
+            CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
+            CompositeEffect composite => composite.Effects.Select(e => e switch {
+                AssignEffect { Target: PropertyAccess p } => $"Set{p.Name}",
+                _ => "Effect",
+            }).FirstOrDefault() ?? "Effect",
+            _ => "Effect",
+        };
+
+    // A provably in-range constant assign is the enforcement: no runtime check is
+    // needed for that path (G20), so the concept still has its tree.
+    private static bool HasConstantAssignmentInRange(
+        TypeDefinitionNode entityType, string propName, RangeConstraint range) {
+        foreach (var method in entityType.Methods ?? [])
+            if (method.Body is not null && HasConstantAssignment(method.Body, propName, range))
+                return true;
+        return false;
+    }
+
+    private static bool HasConstantAssignment(Node node, string propName, RangeConstraint range) {
+        if (node is Assignment {
+            Destination: Member { Value: ThisReference, MemberName: var memberName },
+            Value: Constant { Value: var value }
+        }
+            && string.Equals(memberName, propName, StringComparison.Ordinal)
+            && Numeric(value) is { } number
+            && (range.Minimum is null || number >= Convert.ToDouble(range.Minimum))
+            && (range.Maximum is null || number <= Convert.ToDouble(range.Maximum)))
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && HasConstantAssignment(child, propName, range))
+                return true;
+        return false;
+    }
+
+    private static double? Numeric(object? value) => value switch {
+        long l => l,
+        int i => i,
+        double d => d,
+        decimal m => (double)m,
+        _ => null,
+    };
 
     private static bool ConstraintInTree(TypeDefinitionNode entityType, string propName, Constraint constraint) {
         return constraint switch {
             RequiredConstraint =>
                 PropertyHasRequiredMarker(entityType, propName)
                 || HasMessage(entityType, $"'{propName}' is required."),
-            RangeConstraint =>
+            RangeConstraint range =>
                 HasMessage(entityType, $"'{propName}' must be >=")
-                || HasMessage(entityType, $"'{propName}' must be <="),
+                || HasMessage(entityType, $"'{propName}' must be <=")
+                || HasConstantAssignmentInRange(entityType, propName, range),
             LengthConstraint =>
                 HasMessage(entityType, $"'{propName}' must be at least")
                 || HasMessage(entityType, $"'{propName}' must be at most"),

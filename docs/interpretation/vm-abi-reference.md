@@ -187,8 +187,9 @@ suspend and read after it (`LocalPool.LiveHelpers`). A binding whose only home i
 already a frame word is not spilled. A cell spills its handle once. A binding is
 never spilled twice.
 
-`Value` is that placement when a consumer needs it: the read, the local, and its
-`LocalType`. `EmitScope.Yield` spills a computation into the next pool local.
+`Value` is that placement when a consumer needs it: the code, the read, the
+`SlotLocation`, and the `LocalType`. `EmitScope.Yield` spills a computation into
+the next pool local.
 
 **Bitcasts only at a word boundary.** `BitConverter.DoubleToInt64Bits` /
 `Int64BitsToDouble` (wrapped once, in `RingCodec.ToIeee` / `FromIeee`) appear only where
@@ -216,9 +217,9 @@ named `_rN` or `_dN` is still visible. The frame snapshot and a call argument
 are excluded.
 `IeeeRingSlotTests` and `TypedVariableStorageTests` fail if either list is non-empty.
 
-`CompileNode` returns a `CompiledNode`: the code plus the `SlotLocation` that holds
-its result, so nothing has to infer the result from slot depth. Every arm leaves its
-result at `RingDepth - 1` — a value node leaves its value, and a node with no value
+`CompileNode` returns a `Value`: the code, the read, the `SlotLocation` that holds
+its result, and its `LocalType`, so nothing has to infer the result from slot depth.
+Every arm leaves its result at `RingDepth - 1` — a value node leaves its value, and a node with no value
 (a loop, a branch, a jump, a throw) leaves `0L` — so a caller reads a node's result
 without first asking what kind of node produced it, and there is no second value
 compiler. The reported location takes its representation from the arm's own expression

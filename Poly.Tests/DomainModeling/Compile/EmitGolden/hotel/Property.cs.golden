@@ -1,5 +1,4 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public enum PropertyStage
@@ -10,13 +9,8 @@ public enum PropertyStage
 
 public class Property
 {
-    private List<Hall> _halls;
-    private List<Room> _rooms;
-    private Property()
-    {
-        this._halls = new List<Hall>();
-        this._rooms = new List<Room>();
-    }
+    private List<Hall> _halls = new List<Hall>();
+    private List<Room> _rooms = new List<Room>();
     private Property(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         this.City = city;
@@ -36,7 +30,7 @@ public class Property
         get => this._rooms;
     }
     public PropertyStage CurrentStage { get; private set; }
-    private DomainResult<Hall> CreateHalls(long capacity, decimal dayRate, string name, long busySections = 0L, bool occupied = false, bool offline = false)
+    public DomainResult<Hall> CreateHalls(long capacity, decimal dayRate, string name, long busySections = 0L, bool occupied = false, bool offline = false)
     {
         var hallResult = Hall.Create(capacity, dayRate, name, this, new List<Section>(), busySections, occupied, offline);
         if (!hallResult.IsSuccess)
@@ -86,7 +80,7 @@ public class Property
         this.CurrentStage = PropertyStage.Open;
         return DomainResult.Success();
     }
-    public bool HasHalls() => this.Halls.Count > 0L;
+    public bool HasHalls() => this.Halls.Count > 0;
     public static DomainResult<Property> Create(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         if (string.IsNullOrEmpty(city))

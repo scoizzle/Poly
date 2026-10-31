@@ -1,14 +1,10 @@
 #nullable enable
-using System;
 using System.Collections.Generic;
 
 public class Customer
 {
-    private List<Order> _orders;
-    private Customer()
-    {
-        this._orders = new List<Order>();
-    }
+    private List<Order> _orders = new List<Order>();
+    private Customer() { }
     private Customer(string email, string name, IEnumerable<Order>? orders = null, string tier = "standard")
     {
         this.Email = email;
@@ -47,7 +43,7 @@ public class Customer
     {
         foreach (var target0 in this.Orders)
         {
-            if (!(target0.CurrentStage == OrderStage.Pending))
+            if (target0.CurrentStage != OrderStage.Pending)
             {
                 continue;
             }
@@ -82,9 +78,39 @@ public class Customer
             return DomainResult<Customer>.Failure("Unique constraint violated: 'Email' value is already used on another 'Customer'.");
         }
         var created = new Customer(email, name, orders, tier);
+        var uniqueCheck = Customer.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Customer>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Customer", "Email", email);
         db.Record("Customer", "Email", email);
         return DomainResult<Customer>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object @value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Customer", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Customer.CheckUnique(propertyName, value);
+    }
     public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
 }

@@ -1,11 +1,6 @@
 #nullable enable
-using System;
-using System.Collections.Generic;
-
 public class CampaignMember
 {
-    private CampaignMember()
-    { }
     private CampaignMember(Contact? contact = null, Campaign? campaign = null)
     {
         this.Contact = contact;

@@ -84,25 +84,30 @@ public sealed class CSharpWriter {
     public string Write(IReadOnlyList<TypeDefinitionNode> typeDefs, IReadOnlyList<Node>? testStatements) {
         ArgumentNullException.ThrowIfNull(typeDefs);
         return WithDeclScope(() => {
-            var sb = new StringBuilder();
-            sb.AppendLine("#nullable enable");
-            sb.AppendLine("using System;");
-            sb.AppendLine("using System.Collections.Generic;");
-            sb.AppendLine();
+            var body = new StringBuilder();
             if (testStatements is not null) {
                 _fuseUndeclaredName = true;
                 foreach (var stmt in testStatements) {
-                    WriteStatement(sb, stmt, 0);
-                    sb.AppendLine();
+                    WriteStatement(body, stmt, 0);
+                    body.AppendLine();
                 }
                 _fuseUndeclaredName = false;
-                sb.AppendLine();
+                body.AppendLine();
             }
             foreach (var typeDef in typeDefs) {
-                WriteTypeDefinition(sb, typeDef, 0);
-                sb.AppendLine();
+                WriteTypeDefinition(body, typeDef, 0);
+                body.AppendLine();
             }
-            return sb.ToString().TrimEnd();
+
+            var text = body.ToString().TrimEnd();
+            var header = new StringBuilder("#nullable enable\n");
+            if (UsesSystem(text))
+                header.AppendLine("using System;");
+            if (UsesCollections(text))
+                header.AppendLine("using System.Collections.Generic;");
+            if (header.Length > "#nullable enable\n".Length)
+                header.AppendLine();
+            return header.Append(text).ToString();
         });
     }
 
@@ -1642,6 +1647,36 @@ public sealed class CSharpWriter {
         return name[..(dot + 1)] + EscapeIdent(name[(dot + 1)..]);
     }
 
+    private static bool UsesSystem(string text) =>
+        ContainsIdentifier(text, "DateOnly")
+        || ContainsIdentifier(text, "DateTime")
+        || ContainsIdentifier(text, "DateTimeOffset")
+        || ContainsIdentifier(text, "TimeSpan")
+        || ContainsIdentifier(text, "Guid");
+
+    private static bool UsesCollections(string text) =>
+        ContainsIdentifier(text, "List")
+        || ContainsIdentifier(text, "IEnumerable")
+        || ContainsIdentifier(text, "IReadOnlyList")
+        || ContainsIdentifier(text, "Dictionary")
+        || ContainsIdentifier(text, "HashSet")
+        || ContainsIdentifier(text, "ISet");
+
+    private static bool ContainsIdentifier(string text, string identifier) {
+        for (var index = text.IndexOf(identifier, StringComparison.Ordinal);
+             index >= 0;
+             index = text.IndexOf(identifier, index + 1, StringComparison.Ordinal)) {
+            var before = index == 0
+                || !(char.IsLetterOrDigit(text[index - 1]) || text[index - 1] == '_');
+            var afterIndex = index + identifier.Length;
+            var after = afterIndex == text.Length
+                || !(char.IsLetterOrDigit(text[afterIndex]) || text[afterIndex] == '_');
+            if (before && after)
+                return true;
+        }
+        return false;
+    }
+
     private static string EscapeIdent(string name) =>
         CSharpKeywords.Contains(name) ? "@" + name : name;
 
@@ -1658,6 +1693,6 @@ public sealed class CSharpWriter {
         "by","descending","dynamic","equals","file","from","get","global","group","init",
         "into","join","let","managed","nameof","nint","not","notnull","nuint","on",
         "or","orderby","partial","record","remove","required","scoped","select","set",
-        "unmanaged","value","var","when","where","with","yield",
+        "unmanaged","var","when","where","with","yield",
     };
 }

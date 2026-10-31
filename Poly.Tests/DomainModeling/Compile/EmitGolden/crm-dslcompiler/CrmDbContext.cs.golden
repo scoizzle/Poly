@@ -219,4 +219,8 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     {
         this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + value);
     }
+    public void Release(string entity, string property, string value)
+    {
+        this._pendingKeys.Remove(entity + "\u001f" + property + "\u001f" + value);
+    }
 }

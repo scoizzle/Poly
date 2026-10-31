@@ -548,7 +548,7 @@ public class ParityTests {
         var outcomes = await ParityScenario.FromDsl("""
             domain SelfRel
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -573,7 +573,7 @@ public class ParityTests {
         var outcomes = await ParityScenario.FromDsl("""
             domain SelfRel
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -618,7 +618,7 @@ public class ParityTests {
         var outcomes = await ParityScenario.FromDsl("""
             domain Shop
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Ping: action { }
               }
@@ -637,11 +637,11 @@ public class ParityTests {
         var outcomes = await ParityScenario.FromDsl("""
             domain Orders
             Order: entity {
-              Code: Text required
+              Code: Text
               items: many Item
             }
             Item: entity {
-              Name: Text required
+              Name: Text
               order: Order
               Active: stage {
                 Add: action { create in order { Code: "x" } }
@@ -1148,7 +1148,7 @@ public class ParityTests {
         const string dsl = """
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               loans: many Loan
               fines: many Fine
               when loans Overdue as loan {
@@ -1164,7 +1164,7 @@ public class ParityTests {
             }
             Fine: entity {
               Amount: Number range(0, 10) default(0)
-              Reason: Text required
+              Reason: Text
             }
             """;
         var outcomes = await ParityScenario.FromDsl(dsl, "ParitySubscriptionCreateFail")
@@ -1189,7 +1189,7 @@ public class ParityTests {
         const string dsl = """
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               loans: many Loan
               fines: many Fine
               when loans Overdue as loan {
@@ -1206,7 +1206,7 @@ public class ParityTests {
             }
             Fine: entity {
               Amount: Number range(0, 10) default(0)
-              Reason: Text required
+              Reason: Text
             }
             """;
         var outcomes = await ParityScenario.FromDsl(dsl, "ParityNestedSubscriptionCreateFail")

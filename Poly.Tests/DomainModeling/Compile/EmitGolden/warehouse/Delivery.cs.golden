@@ -15,7 +15,12 @@ public class Delivery
     public Truck? Truck { get; private set; }
     public DomainResult Confirm(string notes)
     {
-        this.Notes = notes;
+        var assignValue0 = notes;
+        if (System.String.IsNullOrEmpty(assignValue0))
+        {
+            return DomainResult.Failure("'Notes' is required.");
+        }
+        this.Notes = assignValue0;
         return DomainResult.Success();
     }
     public static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)

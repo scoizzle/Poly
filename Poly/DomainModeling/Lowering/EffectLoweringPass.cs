@@ -274,21 +274,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private bool SatisfiesAssignConstraints(Property prop, Node value) {
         if (IsUniqueProperty(prop.Name))
             return false;
-        var enumType = DomainToCSharpExporter.TryResolveEnumType(
-            _domain, _analysis, prop.Type.TypeName, out var resolved)
-            ? resolved
-            : null;
+        // D14: a constant RHS that provably satisfies a bound is not checked again.
+        // Anything this loop cannot prove (an equality guard, a non-constant RHS, an
+        // unknown constraint kind) keeps the guard — the default is fail closed.
         foreach (var constraint in prop.Constraints) {
             switch (constraint) {
-                case RequiredConstraint:
-                    if (prop.Type.TypeName is "Text" or "String") {
-                        if (value is not Constant { Value: string s } || string.IsNullOrEmpty(s))
-                            return false;
-                    }
-                    else if (value is Constant { Value: null }) {
-                        return false;
-                    }
-                    break;
                 case RangeConstraint range when TryNumeric(value, out var number):
                     if (range.Minimum is not null && number < Convert.ToDouble(range.Minimum))
                         return false;
@@ -304,16 +294,32 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 case LengthConstraint:
                     return false;
                 case PatternConstraint pattern when value is Constant { Value: string text }:
-                    // Assign-side pattern checks reject empty too (only null skips);
-                    // an empty constant is not a satisfying value.
                     if (!System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
                         return false;
                     break;
                 case PatternConstraint:
                     return false;
+                // Markers, not checks: they decide requiredness/defaults, never a guard.
+                case DefaultValueConstraint or OptionalConstraint or UniqueConstraint:
+                    break;
+                default:
+                    return false;
             }
         }
-        if (enumType is not null
+        // Requiredness is a fact on this branch (a property is required unless it is
+        // marked 'optional'), not a constraint object, so it is decided here.
+        if (NeedsRequiredValueCheck(prop)) {
+            if (prop.Type.TypeName is "Text" or "String") {
+                if (value is not Constant { Value: string requiredText } || requiredText.Length == 0)
+                    return false;
+            }
+            else if (value is Constant { Value: null }) {
+                return false;
+            }
+        }
+        if (DomainToCSharpExporter.TryResolveEnumType(
+                _domain, _analysis, prop.Type.TypeName, out var enumType)
+            && enumType is not null
             && !(value is Member { Value: NamedTypeReference typeRef, MemberName: var member }
                 && string.Equals(typeRef.TypeName, enumType.Name, StringComparison.Ordinal)
                 && enumType.MemberNames.Contains(member, StringComparer.Ordinal)))

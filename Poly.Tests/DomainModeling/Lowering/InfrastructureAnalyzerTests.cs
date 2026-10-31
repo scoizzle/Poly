@@ -66,7 +66,7 @@ public class InfrastructureAnalyzerTests {
               when jobs Open { }
             }
             Job: entity {
-              Title: Text required
+              Title: Text
               Open: stage { }
             }
             """;

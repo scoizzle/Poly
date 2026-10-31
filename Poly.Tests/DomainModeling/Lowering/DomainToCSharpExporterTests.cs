@@ -578,7 +578,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
@@ -603,7 +603,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -630,7 +630,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -657,11 +657,11 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Order: entity {
-              Code: Text required
+              Code: Text
               items: many Item
             }
             Item: entity {
-              Name: Text required
+              Name: Text
               order: Order
               Active: stage {
                 Add: action { create in order { Code: "x" } }
@@ -686,7 +686,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               primary: many Account
               secondary: many Account
               Active: stage {
@@ -714,7 +714,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               primary: Account
               secondary: Account
               children: many Account
@@ -742,10 +742,10 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Child: entity {
-              Name: Text required
+              Name: Text
             }
             Parent: entity {
-              Name: Text required
+              Name: Text
               children: many Child
               Active: stage {
                 Add: action { create in children { Name: "x" } }
@@ -2103,7 +2103,7 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_CollectionNav_IsOptionalEmptyCtorParam() {
-        // Warehouse dogfood: Dock.Create required IEnumerable<Pallet> even though
+        // Warehouse dogfood: Dock.Create IEnumerable<Pallet> even though
         // receive uses create-in. Collection navs default to empty.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
@@ -3706,7 +3706,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Ping: action { }
               }
@@ -3746,7 +3746,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Ping: action { }
               }
@@ -3845,7 +3845,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 entry { assign Name to "x" }
               }
@@ -3874,7 +3874,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 Next: action { transition to B }
               }
@@ -3976,7 +3976,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Child: entity {
-              Name: Text required
+              Name: Text
             }
             Parent: entity {
               children: many Child
@@ -4004,7 +4004,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 Next: action { transition to B }
               }
@@ -4030,14 +4030,15 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Code: Text required pattern("^[A-Z]{2}$")
-              Zip: Text pattern("^\\d{5}$")
+              Code: Text pattern("^[A-Z]{2}$")
+              Zip: Text pattern("^\\d{5}$") optional
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Item> Create(");
-        await Assert.That(create).Contains("!string.IsNullOrEmpty(zip)");
+        // An optional slot is null when omitted, so an empty string still has to match.
+        await Assert.That(create).Contains("zip != null && !System.Text.RegularExpressions.Regex.IsMatch(zip");
         await Assert.That(create).Contains("Regex.IsMatch(zip");
         await Assert.That(create).DoesNotContain("!string.IsNullOrEmpty(code)");
     }
@@ -4086,7 +4087,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Name: Text required
+              Name: Text
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
@@ -4126,7 +4127,7 @@ public class DomainToCSharpExporterTests {
             domain Shop
             Order: entity {
               Total: Number range(0, 100)
-              CancelReason: Text length(0, 200)
+              CancelReason: Text length(0, 200) optional
               Cancel: action (reason: Text) {
                 assign CancelReason to reason
               }
@@ -4136,7 +4137,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
         var total = create.IndexOf("long total", StringComparison.Ordinal);
-        var reason = create.IndexOf("string cancelReason = \"\"", StringComparison.Ordinal);
+        var reason = create.IndexOf("cancelReason", StringComparison.Ordinal);
         await Assert.That(total).IsGreaterThanOrEqualTo(0);
         await Assert.That(reason).IsGreaterThan(total);
 
@@ -4193,7 +4194,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Name: Text required
+              Name: Text
               Qty: Number
             }
             """;

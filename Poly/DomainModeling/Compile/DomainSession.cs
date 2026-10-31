@@ -364,6 +364,16 @@ public sealed class DomainSession {
         ArtifactCatalog = catalog;
         var compiled = Compile(domain, analysis);
         RegisterVmAnalysisReport(catalog, domain, compiled.VmAnalysis);
+        try {
+            ThrowIfVmHasErrors(compiled.VmAnalysis);
+        }
+        catch {
+            // A refused Emit leaves the new catalog on the session (and the VM report
+            // above) so the failure is inspectable; the reference report is normally
+            // registered after printing.
+            RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
+            throw;
+        }
         var writer = new CSharpWriter(compiled.VmAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.

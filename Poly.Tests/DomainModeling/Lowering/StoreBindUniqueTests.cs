@@ -68,10 +68,29 @@ public class StoreBindUniqueTests {
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Name"),
-            DomainExpression.Literal("Ada")));
+            DomainExpression.Property("incoming")));
 
         var cs = new CSharpGenerator().Generate(lowered!);
         await Assert.That(cs).Contains("IsNullOrEmpty");
+        await Assert.That(cs).DoesNotContain("EnsureUnique");
+    }
+
+    [Test]
+    public async Task NonUniqueAssign_SatisfiedConstant_SkipsTheGuard() {
+        // D14: a literal that provably satisfies required text is not re-checked.
+        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var entity = new Entity("Person",
+            Properties: [name],
+            Actions: [], Policies: [], Stages: []);
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name))));
+
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property("Name"),
+            DomainExpression.Literal("Ada")));
+
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
         await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 

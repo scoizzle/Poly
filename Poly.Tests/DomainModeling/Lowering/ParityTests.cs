@@ -1083,7 +1083,7 @@ public class ParityTests {
     static (Domain Domain, AnalysisResult Analysis) LoadProbe(string poly) {
         var session = DomainSession.ForSource(poly, ProbeSeed, ProbeCatalog);
         var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProbeSeed);
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!outcome.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 outcome.Analysis.Diagnostics

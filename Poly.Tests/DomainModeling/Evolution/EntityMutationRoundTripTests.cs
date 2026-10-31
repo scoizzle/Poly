@@ -31,7 +31,7 @@ public class EntityMutationRoundTripTests {
         // ensures entity properties all exist on the CLR type, so a CLR type
         // with extra properties is fine — the entity is a subset.
         // To trigger failure we need the entity to have a property the CLR type lacks.
-        var withExtra = new DomainEvolution(domain).Apply(
+        var withExtra = new DomainEvolution(domain).ApplyAndAnalyze(
             [new AddPropertyToEntityChange("Person",
                 new Property("Status", new DomainTypeReference("Text"), []))]);
         var mutatedEntity = withExtra.Root.Types.OfType<Entity>().Single();
@@ -46,7 +46,7 @@ public class EntityMutationRoundTripTests {
         // Start with Person, add Status property, verify against PersonWithStatus
         var domain = DomainFactory.Create("Test", b => b.AddEntityFrom<Person>());
 
-        var withExtra = new DomainEvolution(domain).Apply(
+        var withExtra = new DomainEvolution(domain).ApplyAndAnalyze(
             [new AddPropertyToEntityChange("Person",
                 new Property("Status", new DomainTypeReference("Text"), []))]);
         var mutatedEntity = withExtra.Root.Types.OfType<Entity>().Single();
@@ -61,7 +61,7 @@ public class EntityMutationRoundTripTests {
         // Age is Number in domain, but CLR uses a type that maps differently
         var domain = DomainFactory.Create("Test", b => b.AddEntityFrom<Person>());
 
-        var withChanged = new DomainEvolution(domain).Apply(
+        var withChanged = new DomainEvolution(domain).ApplyAndAnalyze(
             [new RemovePropertyFromEntityChange("Person", "Age"),
              new AddPropertyToEntityChange("Person",
                 new Property("Age", new DomainTypeReference("Text"), []))]);

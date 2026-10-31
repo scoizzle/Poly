@@ -17,7 +17,7 @@ public class PolicyConstraintAnalysisTests {
                    .AddPropertyToEntity("Person", new Property("Name",
                        new DomainTypeReference("Text"), [])));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Person",
                 new Policy("HasName",
                     DomainExpression.GreaterThanOrEqual(
@@ -36,7 +36,7 @@ public class PolicyConstraintAnalysisTests {
                    .AddPropertyToEntity("Person", new Property("Name",
                        new DomainTypeReference("Text"), [])));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Person",
                 new Policy("HasName",
                     DomainExpression.Equal(
@@ -80,7 +80,7 @@ public class PolicyConstraintAnalysisTests {
     }
 
     private static EvolutionResult Parse(string dsl) =>
-        new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(dsl).Parse());
+        new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
 
     [Test]
     public async Task EntityPolicy_OwnedAccess_NestedProperty_NotValidatedAgainstEntity() {
@@ -91,7 +91,7 @@ public class PolicyConstraintAnalysisTests {
                    .AddPropertyToEntity("Person", new Property("BirthCertificate",
                        new DomainTypeReference("Boolean"), [])));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Person",
                 new Policy("HasBirthCert",
                     DomainExpression.Exists(
@@ -116,7 +116,7 @@ public class PolicyConstraintAnalysisTests {
             .Apply().Root;
 
         // TargetField doesn't exist on Target entity (Target has no properties)
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("CheckTarget",
                     DomainExpression.Exists(
@@ -137,7 +137,7 @@ public class PolicyConstraintAnalysisTests {
                        new DomainTypeReference("Text"), []))
                    .AddStage("Person", "Active"));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToStageChange("Person", "Active",
                 new Policy("CheckName",
                     DomainExpression.GreaterThanOrEqual(
@@ -156,7 +156,7 @@ public class PolicyConstraintAnalysisTests {
                        new DomainTypeReference("Number"), []))
                    .AddStage("Person", "Active"));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToStageChange("Person", "Active",
                 new Policy("IsAdult",
                     DomainExpression.GreaterThanOrEqual(
@@ -174,7 +174,7 @@ public class PolicyConstraintAnalysisTests {
                        new DomainTypeReference("Text"), []))
                    .AddAction("Person", "DoSomething"));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToActionChange("Person", "DoSomething",
                 new Policy("CheckName",
                     DomainExpression.GreaterThanOrEqual(
@@ -193,7 +193,7 @@ public class PolicyConstraintAnalysisTests {
                        new DomainTypeReference("Number"), []))
                    .AddAction("Person", "DoSomething"));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToActionChange("Person", "DoSomething",
                 new Policy("IsAdult",
                     DomainExpression.GreaterThanOrEqual(
@@ -217,7 +217,7 @@ public class PolicyConstraintAnalysisTests {
             .AddActionToStage("Person", "Active", "DoIt")
             .Apply().Root;
 
-        var result = new DomainEvolution(withAction).Apply([
+        var result = new DomainEvolution(withAction).ApplyAndAnalyze([
             new AddPolicyToActionChange("Person", "DoIt",
                 new Policy("CheckName",
                     DomainExpression.GreaterThanOrEqual(
@@ -236,7 +236,7 @@ public class PolicyConstraintAnalysisTests {
                    .AddPropertyToEntity("Person", new Property("Name",
                        new DomainTypeReference("Text"), [])));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Person",
                 new Policy("CheckParam",
                     DomainExpression.Equal(
@@ -255,7 +255,7 @@ public class PolicyConstraintAnalysisTests {
                    .AddPropertyToEntity("Person", new Property("Name",
                        new DomainTypeReference("Text"), [])));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Person",
                 new Policy("BadRef",
                     DomainExpression.Exists(
@@ -280,7 +280,7 @@ public class PolicyConstraintAnalysisTests {
             .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
             .Apply().Root;
 
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("HasFlagged",
                     DomainExpression.Any("items",
@@ -301,7 +301,7 @@ public class PolicyConstraintAnalysisTests {
             .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
             .Apply().Root;
 
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("BadRef",
                     DomainExpression.Any("items",
@@ -323,7 +323,7 @@ public class PolicyConstraintAnalysisTests {
             .AddRelationship("link", "Source", "Target", RelationshipCardinality.OneToOne, false)
             .Apply().Root;
 
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("BadQuant",
                     DomainExpression.Any("link",
@@ -338,7 +338,7 @@ public class PolicyConstraintAnalysisTests {
         var start = DomainFactory.Create("Test", builder =>
             builder.AddEntity("Source"));
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("BadQuant",
                     DomainExpression.Any("nonExistentRel",
@@ -358,7 +358,7 @@ public class PolicyConstraintAnalysisTests {
             .AddRelationship("items", "Source", "Target", RelationshipCardinality.OneToMany, false)
             .Apply().Root;
 
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddPolicyToEntityChange("Source",
                 new Policy("CountCheck",
                     DomainExpression.GreaterThan(

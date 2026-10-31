@@ -2199,7 +2199,7 @@ public class DomainEntityInstanceTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var domain = DomainTestFactory.Create("_", [], []);
-        var evolveResult = new DomainEvolution(domain).Apply(changes);
+        var evolveResult = new DomainEvolution(domain).ApplyAndAnalyze(changes);
         await Assert.That(evolveResult.Succeeded).IsTrue();
 
         // Verify the domain has the relationship and create-in effect
@@ -2248,7 +2248,7 @@ public class DomainEntityInstanceTests {
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
         var domain2 = DomainTestFactory.Create("_", [], []);
-        var evolveResult2 = new DomainEvolution(domain2).Apply(changes2);
+        var evolveResult2 = new DomainEvolution(domain2).ApplyAndAnalyze(changes2);
         await Assert.That(evolveResult2.Succeeded).IsTrue();
     }
 

@@ -8,7 +8,7 @@ using Poly.DomainModeling.Ontology.Bootstrap;
 namespace Poly.Tests.DomainModeling.Evolution;
 
 /// <summary>
-/// Proves that <see cref="DomainEvolution.Apply"/> from an empty seed runs the
+/// Proves that <see cref="DomainEvolution.ApplyAndAnalyze"/> from an empty seed runs the
 /// analysis pipeline once, on the proposal, and that a non-empty seed still runs
 /// seed-then-proposal.
 /// </summary>
@@ -19,7 +19,7 @@ public class DomainEvolutionEmptySeedTests {
         var session = SessionBuilder.CreateEmpty().LoadCore().AddAnalyzer(recorder).Build();
 
         var evolution = new DomainEvolution(new Domain("D", []));
-        var result = evolution.Apply([new AddEntityChange("Order", [])], session: session);
+        var result = evolution.ApplyAndAnalyze([new AddEntityChange("Order", [])], session: session);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(recorder.Roots.Count).IsEqualTo(1);
@@ -33,7 +33,7 @@ public class DomainEvolutionEmptySeedTests {
 
         var seed = DomainFactory.Create("D");
         var evolution = new DomainEvolution(seed);
-        var result = evolution.Apply([new AddEntityChange("Order", [])], session: session);
+        var result = evolution.ApplyAndAnalyze([new AddEntityChange("Order", [])], session: session);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(recorder.Roots.Count).IsEqualTo(2);
@@ -45,7 +45,7 @@ public class DomainEvolutionEmptySeedTests {
     public async Task Apply_EmptySeed_InBatchTarget_ResolvesOnLiveOverlay() {
         var session = SessionBuilder.CreateEmpty().LoadCore().Build();
 
-        var result = new DomainEvolution(new Domain("D", [])).Apply(
+        var result = new DomainEvolution(new Domain("D", [])).ApplyAndAnalyze(
             [
                 new AddEntityChange("Order", []),
                 new AddStageChange("Order", "Draft"),
@@ -64,7 +64,7 @@ public class DomainEvolutionEmptySeedTests {
         var session = SessionBuilder.CreateEmpty().LoadCore().Build();
 
         var result = new DomainEvolution(new Domain("D", []))
-            .Apply(
+            .ApplyAndAnalyze(
                 [new AddPolicyToStageChange("Missing", "Draft", new Policy("Guard", DomainExpression.Literal(true)))],
                 session: session);
 

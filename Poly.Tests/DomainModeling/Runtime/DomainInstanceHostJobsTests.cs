@@ -48,7 +48,7 @@ public sealed class DomainInstanceHostJobsTests {
               MakeAll: action { create Target { N: 5 T: "x" B: true {{extraInits}} } }
             }
             """;
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(poly).Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(poly).Parse());
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary);
         return (result.Root!.Types.OfType<Entity>().Single(e => e.Name == "Maker"), result.Root!);

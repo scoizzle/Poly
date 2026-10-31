@@ -18,7 +18,7 @@ public class DomainEvolutionApplicatorTests {
         var change = new AddEntityChange("Order", []);
 
         var evolution = new DomainEvolution(start);
-        var result = evolution.Apply([change]);
+        var result = evolution.ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.WasRolledBack).IsFalse(); // proposal accepted
@@ -37,7 +37,7 @@ public class DomainEvolutionApplicatorTests {
 
         var change = new RemoveEntityChange("Customer");
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Types.OfType<Entity>()).IsEmpty();
@@ -54,7 +54,7 @@ public class DomainEvolutionApplicatorTests {
         var newProp = new Property("Status", new DomainTypeReference("Text"), []);
         var change = new AddPropertyToEntityChange("Order", newProp);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
         await Assert.That(updated.Properties.Count).IsEqualTo(1);
@@ -74,7 +74,7 @@ public class DomainEvolutionApplicatorTests {
             new AddPropertyToEntityChange("Order", new Property("Total", new DomainTypeReference("Int"), []))
         };
 
-        var result = new DomainEvolution(start).Apply(changes);
+        var result = new DomainEvolution(start).ApplyAndAnalyze(changes);
 
         var entities = result.Root.Types.OfType<Entity>().ToList();
         await Assert.That(entities.Count).IsEqualTo(2);
@@ -88,7 +88,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [], []);
         var change = new AddEntityChange("Order", []);
 
-        _ = new DomainEvolution(start).Apply([change]);
+        _ = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         // The original reference must be completely untouched
         await Assert.That(start.Types).IsEmpty();
@@ -108,7 +108,7 @@ public class DomainEvolutionApplicatorTests {
         var change = new AddPropertyToEntityChange("Order",
             new Property("Total", new DomainTypeReference("Int"), []));
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var customerInResult = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
 
@@ -126,7 +126,7 @@ public class DomainEvolutionApplicatorTests {
 
         var change = new AddStageChange("Person", "Alive");
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Stages.Count).IsEqualTo(1);
@@ -142,7 +142,7 @@ public class DomainEvolutionApplicatorTests {
 
         var change = new RemoveStageChange("Person", "Alive");
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Stages).IsEmpty();
@@ -155,7 +155,7 @@ public class DomainEvolutionApplicatorTests {
 
         var change = new AddActionChange("Person", "Die");
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Actions.Count).IsEqualTo(1);
@@ -170,7 +170,7 @@ public class DomainEvolutionApplicatorTests {
 
         var change = new RemoveActionChange("Person", "Die");
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
         await Assert.That(updated.Actions).IsEmpty();
@@ -190,7 +190,7 @@ public class DomainEvolutionApplicatorTests {
             new AddActionChange("Person", "Die")
         };
 
-        var afterFirst = new DomainEvolution(start).Apply(changes1);
+        var afterFirst = new DomainEvolution(start).ApplyAndAnalyze(changes1);
         await Assert.That(afterFirst.Succeeded).IsTrue();
 
         var person = afterFirst.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
@@ -292,7 +292,7 @@ public class DomainEvolutionApplicatorTests {
         var createDeathCert = new CreateEntityInstance(new DomainTypeReference("DeathCertificate"));
         var change = new AddEffectToActionChange("Person", "Die", createDeathCert);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var updatedAction = result.Root.Types
             .OfType<Entity>().Single(e => e.Name == "Person")
@@ -312,7 +312,7 @@ public class DomainEvolutionApplicatorTests {
         var transition = new StageTransitionEffect(new StageReference("Dead"));
         var change = new AddEffectToActionChange("Person", "Die", transition);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         var effects = result.Root.Types
             .OfType<Entity>().Single(e => e.Name == "Person")
@@ -332,7 +332,7 @@ public class DomainEvolutionApplicatorTests {
         var evolution = new DomainEvolution(start);
 
         // Step 1: Core structure + the ValueType target for the Create effect (MVP coverage)
-        var step1 = evolution.Apply(new DomainChange[]
+        var step1 = evolution.ApplyAndAnalyze(new DomainChange[]
         {
             new AddEntityChange("Person", []),
             new AddStageChange("Person", "Alive"),
@@ -346,7 +346,7 @@ public class DomainEvolutionApplicatorTests {
         var dieCreate = new CreateEntityInstance(new DomainTypeReference("DeathCertificate"));
         var dieTransition = new StageTransitionEffect(new StageReference("Dead"));
 
-        var step2 = new DomainEvolution(step1.Root).Apply(new DomainChange[]
+        var step2 = new DomainEvolution(step1.Root).ApplyAndAnalyze(new DomainChange[]
         {
             new AddEffectToActionChange("Person", "Die", dieCreate),
             new AddEffectToActionChange("Person", "Die", dieTransition)
@@ -380,7 +380,7 @@ public class DomainEvolutionApplicatorTests {
         var policy = new Policy("HasBirthCert", DomainExpression.Exists(
             DomainExpression.Property("BirthCertificate")));
 
-        var result = new DomainEvolution(start).Apply([new AddPolicyToEntityChange("Person", policy)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddPolicyToEntityChange("Person", policy)]);
         await Assert.That(result.Succeeded).IsTrue();
 
         var updated = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
@@ -392,7 +392,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task AddRemovePrimitiveType_Works() {
         var start = DomainTestFactory.Create("Test", [], []);
 
-        var result1 = new DomainEvolution(start).Apply([
+        var result1 = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPrimitiveTypeChange("MyText", Poly.Introspection.TypeCategory.Text, [])
         ]);
 
@@ -401,7 +401,7 @@ public class DomainEvolutionApplicatorTests {
         await Assert.That(primitive).IsNotNull();
         await Assert.That(primitive!.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Text);
 
-        var result2 = new DomainEvolution(result1.Root).Apply([
+        var result2 = new DomainEvolution(result1.Root).ApplyAndAnalyze([
             new RemovePrimitiveTypeChange("MyText")
         ]);
 
@@ -418,7 +418,7 @@ public class DomainEvolutionApplicatorTests {
             [new PropertyBinding("Time", DomainExpression.Parameter("TimeOfBirth"))]
         );
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddPrimitiveTypeChange("Timestamp", Poly.Introspection.TypeCategory.DateTime, []),
             new AddValueTypeChange("BirthCertificate", [new Property("Time", new DomainTypeReference("Timestamp"), [])]),
             new AddEntityChange("Person", []),
@@ -509,7 +509,7 @@ public class DomainEvolutionApplicatorTests {
         var transition = new StageTransitionEffect(new StageReference("Dead"));
         var change = new AddEffectToActionChange("Person", "Die", transition);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
         await Assert.That(result.Succeeded).IsTrue();
 
         var evolvedPerson = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Person");
@@ -533,7 +533,7 @@ public class DomainEvolutionApplicatorTests {
 
         var prior = result.Analysis;
         var addPolicyChange = new AddPolicyToEntityChange("Person", new Policy("TestPolicy", DomainExpression.Literal(true)));
-        var next = new DomainEvolution(result.Root).Apply([addPolicyChange], prior);
+        var next = new DomainEvolution(result.Root).ApplyAndAnalyze([addPolicyChange], prior);
         await Assert.That(next.Succeeded).IsTrue();
         await Assert.That(next.Trace.ErrorCount).IsEqualTo(0);
     }
@@ -543,7 +543,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [], []);
 
         // First add the parent stage
-        var afterParent = new DomainEvolution(start).Apply([
+        var afterParent = new DomainEvolution(start).ApplyAndAnalyze([
             new AddEntityChange("Order", []),
             new AddStageChange("Order", "Pending")
         ]);
@@ -553,7 +553,7 @@ public class DomainEvolutionApplicatorTests {
             .Stages.Single(s => s.Name == "Pending").Id;
 
         // Stage hierarchy not supported — add flat stage instead
-        var result = new DomainEvolution(afterParent.Root).Apply([
+        var result = new DomainEvolution(afterParent.Root).ApplyAndAnalyze([
             new AddStageChange("Order", "Approved")
         ]);
 
@@ -576,7 +576,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task AddStage_WithUnknownParent_ReportsStructuralFailure() {
         var start = DomainTestFactory.Create("Test", [], []);
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new AddEntityChange("Order", []),
             new AddStageChange("Order", "Approved")
         ]);
@@ -611,7 +611,7 @@ public class DomainEvolutionApplicatorTests {
         var entity = new Entity("Order", [], [], [], [stage]);
         var start = DomainTestFactory.Create("Test", [entity], []);
 
-        var result = new DomainEvolution(start).Apply([
+        var result = new DomainEvolution(start).ApplyAndAnalyze([
             new RemoveActionFromStageChange("Order", "Pending", "Approve")
         ]);
 
@@ -628,7 +628,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [], []);
 
         // Valid first batch
-        var step1 = new DomainEvolution(start).Apply([
+        var step1 = new DomainEvolution(start).ApplyAndAnalyze([
             new AddEntityChange("Person", []),
             new AddStageChange("Person", "Alive")
         ]);
@@ -641,7 +641,7 @@ public class DomainEvolutionApplicatorTests {
             new AddStageChange("Person", "Dead") // would have been valid alone
         };
 
-        var result = new DomainEvolution(step1.Root).Apply(badBatch);
+        var result = new DomainEvolution(step1.Root).ApplyAndAnalyze(badBatch);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();
@@ -1171,7 +1171,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new AddStageToRelationshipChange("Person", "Friends", new Stage("Active", [], [], [], []))]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddStageToRelationshipChange("Person", "Friends", new Stage("Active", [], [], [], []))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Stages.Count).IsEqualTo(1);
@@ -1186,7 +1186,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []) { Stages = [stage] };
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemoveStageFromRelationshipChange("Person", "Friends", "Active")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveStageFromRelationshipChange("Person", "Friends", "Active")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Stages).IsEmpty();
@@ -1199,7 +1199,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new AddPolicyToRelationshipChange("Person", "Friends", new Policy("MaxFriends", DomainExpression.Literal(10)))]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddPolicyToRelationshipChange("Person", "Friends", new Policy("MaxFriends", DomainExpression.Literal(10)))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Policies.Count).IsEqualTo(1);
@@ -1214,7 +1214,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []) { Policies = [policy] };
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemovePolicyFromRelationshipChange("Person", "Friends", "MaxFriends")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemovePolicyFromRelationshipChange("Person", "Friends", "MaxFriends")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Policies).IsEmpty();
@@ -1330,7 +1330,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_SetDomainNameChange_UpdatesDomainName() {
         var start = DomainTestFactory.Create("OriginalName", [], []);
-        var result = new DomainEvolution(start).Apply([new SetDomainNameChange("Renamed")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new SetDomainNameChange("Renamed")]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Name).IsEqualTo("Renamed");
         await Assert.That(start.Name).IsEqualTo("OriginalName");
@@ -1356,7 +1356,7 @@ public class DomainEvolutionApplicatorTests {
             RelationshipCardinality.ManyToMany, []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], [rel]);
         var prop = new Property("Since", new DomainTypeReference("Text"), []);
-        var result = new DomainEvolution(start).Apply([new AddPropertyToRelationshipChange("Person", "Friends", prop)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddPropertyToRelationshipChange("Person", "Friends", prop)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Properties.Count).IsEqualTo(1);
@@ -1372,7 +1372,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, [prop]);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], [rel]);
-        var result = new DomainEvolution(start).Apply([new RemovePropertyFromRelationshipChange("Person", "Friends", "Since")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemovePropertyFromRelationshipChange("Person", "Friends", "Since")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
         await Assert.That(updatedRel.Properties).IsEmpty();
@@ -1386,7 +1386,7 @@ public class DomainEvolutionApplicatorTests {
         ], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], []);
         var constraint = new RequiredConstraint();
-        var result = new DomainEvolution(start).Apply([new AddConstraintToPropertyChange("Customer", "Email", constraint)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddConstraintToPropertyChange("Customer", "Email", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
@@ -1402,7 +1402,7 @@ public class DomainEvolutionApplicatorTests {
             new Property("Email", new DomainTypeReference("Text"), [constraint])
         ], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new RemoveConstraintFromPropertyChange("Customer", "Email", constraint)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveConstraintFromPropertyChange("Customer", "Email", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var emailProp = updatedEntity.Properties.Single(p => p.Name == "Email");
@@ -1414,7 +1414,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
         var constraint = new RequiredConstraint();
-        var result = new DomainEvolution(start).Apply([new AddConstraintToDomainTypeChange("Text", constraint)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddConstraintToDomainTypeChange("Text", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.Types.Single(t => t.Name == "Text");
         await Assert.That(updated.Constraints.Count).IsEqualTo(1);
@@ -1425,7 +1425,7 @@ public class DomainEvolutionApplicatorTests {
         var constraint = new RequiredConstraint();
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, [constraint]);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new RemoveConstraintFromDomainTypeChange("Text", constraint)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveConstraintFromDomainTypeChange("Text", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.Types.Single(t => t.Name == "Text");
         await Assert.That(updated.Constraints).IsEmpty();
@@ -1439,7 +1439,7 @@ public class DomainEvolutionApplicatorTests {
             new Property("Count", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive, intPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new ChangePropertyTypeChange("Product", "Count", new DomainTypeReference("Integer"))]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new ChangePropertyTypeChange("Product", "Count", new DomainTypeReference("Integer"))]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedEntity = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Product");
         var countProp = updatedEntity.Properties.Single(p => p.Name == "Count");
@@ -1453,7 +1453,7 @@ public class DomainEvolutionApplicatorTests {
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
             RelationshipCardinality.ManyToMany, []);
         var start = DomainTestFactory.Create("Test", [entity], [rel]);
-        var result = new DomainEvolution(start).Apply([new SetRelationshipShapeChange("Person", "Friends",
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new SetRelationshipShapeChange("Person", "Friends",
             NewCardinality: RelationshipCardinality.OneToOne)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updatedRel = result.Relationships().Single(r => r.Name == "Friends");
@@ -1464,7 +1464,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_SetPrimitiveTypeCategory_UpdatesCategory() {
         var textPrimitive = new PrimitiveType("MyText", Poly.Introspection.TypeCategory.Text, []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
-        var result = new DomainEvolution(start).Apply([new SetPrimitiveTypeCategoryChange("MyText", Poly.Introspection.TypeCategory.Numeric)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new SetPrimitiveTypeCategoryChange("MyText", Poly.Introspection.TypeCategory.Numeric)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.Types.OfType<PrimitiveType>().Single(t => t.Name == "MyText");
         await Assert.That(updated.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Numeric);
@@ -1476,7 +1476,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_AddImportedContractChange_AddsContractToDomain() {
         var start = DomainTestFactory.Create("TestDomain", [], []);
         var change = new AddImportedContractChange("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.ImportedContracts.Count).IsEqualTo(1);
         await Assert.That(result.Root.ImportedContracts[0].Name).IsEqualTo("CrmContract");
@@ -1491,7 +1491,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([new RemoveImportedContractChange("CrmContract")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveImportedContractChange("CrmContract")]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.ImportedContracts).IsEmpty();
         await Assert.That(result.Root.ContractBindings).IsEmpty();
@@ -1502,7 +1502,7 @@ public class DomainEvolutionApplicatorTests {
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", []);
         var start = DomainTestFactory.Create("Test", [], []) with { ImportedContracts = [contract] };
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Number"));
-        var result = new DomainEvolution(start).Apply([new AddContractEndpointChange("CrmContract", endpoint)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddContractEndpointChange("CrmContract", endpoint)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
         await Assert.That(updated.Endpoints.Count).IsEqualTo(1);
@@ -1514,7 +1514,7 @@ public class DomainEvolutionApplicatorTests {
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Number"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
         var start = DomainTestFactory.Create("Test", [], []) with { ImportedContracts = [contract] };
-        var result = new DomainEvolution(start).Apply([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveContractEndpointChange("CrmContract", "GetTicket")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.ImportedContracts.Single(c => c.Name == "CrmContract");
         await Assert.That(updated.Endpoints).IsEmpty();
@@ -1533,7 +1533,7 @@ public class DomainEvolutionApplicatorTests {
             ContractBindings = []
         };
         var change = new AddContractBindingChange("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(1);
         await Assert.That(result.Root.ContractBindings[0].ContractName).IsEqualTo("CrmContract");
@@ -1543,7 +1543,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Apply_RemoveContractBindingChange_RemovesBinding() {
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", []);
         var start = DomainTestFactory.Create("Test", [], []) with { ContractBindings = [binding] };
-        var result = new DomainEvolution(start).Apply([new RemoveContractBindingChange("MyBinding")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveContractBindingChange("MyBinding")]);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.ContractBindings).IsEmpty();
     }
@@ -1562,7 +1562,7 @@ public class DomainEvolutionApplicatorTests {
             ContractBindings = [binding]
         };
         var fieldMap = new ContractFieldMap("remoteId", "localId");
-        var result = new DomainEvolution(start).Apply([new AddContractFieldMapChange("MyBinding", fieldMap)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddContractFieldMapChange("MyBinding", fieldMap)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
         await Assert.That(updated.FieldMaps.Count).IsEqualTo(1);
@@ -1583,7 +1583,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([new RemoveContractFieldMapChange("MyBinding", "remoteId")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveContractFieldMapChange("MyBinding", "remoteId")]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.ContractBindings.Single(b => b.Name == "MyBinding");
         await Assert.That(updated.FieldMaps).IsEmpty();
@@ -1594,7 +1594,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "", "v1", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ImportedContracts = [contract] };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("source identifier");
     }
@@ -1604,7 +1604,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "crm://api", "", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ImportedContracts = [contract] };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("missing a version");
     }
@@ -1614,7 +1614,7 @@ public class DomainEvolutionApplicatorTests {
         var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
         var binding = new ContractBinding("MyBinding", "NonExistentContract", "GetTicket", "SomeAction", "input", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ContractBindings = [binding] };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not registered");
     }
@@ -1628,7 +1628,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("does not belong");
     }
@@ -1643,7 +1643,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not found");
     }
@@ -1661,7 +1661,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("missingParam");
     }
@@ -1680,7 +1680,7 @@ public class DomainEvolutionApplicatorTests {
             ImportedContracts = [contract],
             ContractBindings = [binding]
         };
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("incompatible");
     }
@@ -1722,7 +1722,7 @@ public class DomainEvolutionApplicatorTests {
             ContractBindings = [binding]
         };
 
-        var result = new DomainEvolution(start).Apply([]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([]);
         await Assert.That(result.Succeeded).IsTrue();
     }
 
@@ -1840,7 +1840,7 @@ public class DomainEvolutionApplicatorTests {
             new AddPropertyToEntityChange("Order", new Property("Total", new DomainTypeReference("Int"), []))
         };
 
-        var result = evolution.Apply(changes);
+        var result = evolution.ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var order = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Order");
@@ -1856,7 +1856,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity, text], []);
 
         var change = new RemovePropertyFromEntityChange("Order", "NonExistent");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
@@ -1869,7 +1869,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "NonExistent");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
@@ -1884,7 +1884,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity], []);
 
         var change = new RemoveActionChange("Order", "NonExistent");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not found on Entity 'Order'");
@@ -1898,7 +1898,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity], []);
 
         var change = new RemovePolicyFromEntityChange("Person", "NonExistent");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailureSummary).Contains("not found on Entity 'Person'");
@@ -1912,7 +1912,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity, text], []);
 
         var change = new RemovePropertyFromEntityChange("Order", "Status");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Types.OfType<Entity>().Single().Properties).IsEmpty();
@@ -1924,7 +1924,7 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [entity], []);
 
         var change = new RemoveStageChange("Order", "Draft");
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Types.OfType<Entity>().Single().Stages).IsEmpty();
@@ -1961,7 +1961,7 @@ public class DomainEvolutionApplicatorTests {
         var body = DomainExpression.Add(DomainExpression.Parameter("a"), DomainExpression.Parameter("b"));
         var change = new AddFunctionChange("Add", [a, b], number, body);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root).IsNotSameReferenceAs(start);
@@ -1983,7 +1983,7 @@ public class DomainEvolutionApplicatorTests {
         var fn = new DomainFunction("Pi", [], number, DomainExpression.Literal(3L));
         var start = DomainFactory.Create("T") with { Functions = [fn] };
 
-        var result = new DomainEvolution(start).Apply([new AddEntityChange("Order", [])]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddEntityChange("Order", [])]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Functions.Count).IsEqualTo(1);
@@ -1999,7 +1999,7 @@ public class DomainEvolutionApplicatorTests {
         var body = DomainExpression.Parameter("a");
         var change = new AddFunctionChange("Id", [a], new DomainTypeReference("Number"), body);
 
-        var result = new DomainEvolution(start).Apply([change]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([change]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Functions.Single().Parameters[0].Type.TypeName).IsEqualTo("Number");

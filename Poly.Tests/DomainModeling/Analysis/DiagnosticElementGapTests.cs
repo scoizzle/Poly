@@ -113,7 +113,7 @@ public sealed class DiagnosticElementGapTests {
         try {
             var session = DomainSession.ForSource(poly, Seed, Catalog);
             var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), Seed);
-            var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+            var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
             // Even when evolution reports Errors, the analysis (and its diagnostics) is what we check.
             if (outcome.Root is null)
                 return false;

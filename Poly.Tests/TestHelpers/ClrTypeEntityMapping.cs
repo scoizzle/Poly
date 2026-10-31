@@ -93,7 +93,7 @@ public static class ClrTypeEntityMapping {
     /// // Start from a CLR type
     /// var domain = DomainFactory.Create("Test", b => b.AddEntityFrom&lt;Person&gt;());
     /// // Apply mutations
-    /// var result = new DomainEvolution(domain).Apply(changes);
+    /// var result = new DomainEvolution(domain).ApplyAndAnalyze(changes);
     /// // Assert the result matches expected CLR shape
     /// result.Root.Types.OfType&lt;Entity&gt;().Single().EnsureMatchesType&lt;ExpectedPerson&gt;();
     /// </code>

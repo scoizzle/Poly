@@ -21,7 +21,7 @@ public class DomainValidatedEvaluationTests {
 
         // Add a policy referencing a property that exists on the entity
         // (DomainFactory Create cannot inline policies, so we evolve after)
-        var withPolicy = new DomainEvolution(domain).Apply(
+        var withPolicy = new DomainEvolution(domain).ApplyAndAnalyze(
             [new AddPolicyToEntityChange("Person",
                 new Policy("Adult",
                     DomainExpression.GreaterThanOrEqual(
@@ -42,7 +42,7 @@ public class DomainValidatedEvaluationTests {
         var domain = DomainTypeMapper.CreateDomainWithEntity<Person>("Demo");
 
         // Add a policy referencing a non-existent property — now caught at analysis time
-        var withPolicy = new DomainEvolution(domain).Apply(
+        var withPolicy = new DomainEvolution(domain).ApplyAndAnalyze(
             [new AddPolicyToEntityChange("Person",
                 new Policy("HasAge",
                     DomainExpression.GreaterThanOrEqual(

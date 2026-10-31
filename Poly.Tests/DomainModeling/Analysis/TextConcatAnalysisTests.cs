@@ -19,7 +19,7 @@ public class TextConcatAnalysisTests {
 
     // The error messages Analyze gives the domain; empty when it is valid.
     static IReadOnlyList<string> Errors(string dsl) {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(dsl).Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
         return [.. result.Analysis.Diagnostics
             .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
             .Select(d => d.Message)];

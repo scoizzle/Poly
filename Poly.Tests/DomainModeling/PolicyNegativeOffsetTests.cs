@@ -26,7 +26,7 @@ public class PolicyNegativeOffsetTests {
               Ahead: policy { SeenAt > Now + 60 Minutes }
             }
             """, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

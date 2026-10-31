@@ -10,7 +10,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// </summary>
 public sealed class ReservedGeneratedNameTests {
     private static AnalysisResult Analyze(string dsl) {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(dsl).Parse());
         return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
     }

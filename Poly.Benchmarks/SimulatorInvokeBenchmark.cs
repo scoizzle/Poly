@@ -1,9 +1,9 @@
 using BenchmarkDotNet.Attributes;
 
 using Poly.DomainModeling;
-using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 
 namespace Poly.Benchmarks;
@@ -26,7 +26,7 @@ public class SimulatorInvokeBenchmark {
               Relabel: action (plate: Text) { assign Plate to plate }
             }
             """).Parse();
-        var result = new DomainEvolution(new Domain("_", [])).Apply(changes);
+        var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary);
         var domain = result.Root;

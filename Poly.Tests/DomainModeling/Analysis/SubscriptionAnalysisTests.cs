@@ -25,7 +25,7 @@ public class SubscriptionAnalysisTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
                 string.Join("; ", result.Analysis.Diagnostics.Where(d =>
@@ -46,7 +46,7 @@ public class SubscriptionAnalysisTests {
         var customer = MakeEntity("Customer");
         var domain = ValidDomain.Create("Test", [entity, customer], [rel]);
 
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new RemoveStageSubscriptionChange("Order", "Pending",
                 new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []))
         ]);
@@ -64,7 +64,7 @@ public class SubscriptionAnalysisTests {
         var domain = ValidDomain.Create("Test", [entity], []);
 
         // Remove a subscription that doesn't exist — should fail-loud per fail-loud convention
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new RemoveStageSubscriptionChange("Order", "Pending",
                 new StageSubscription("NonExistentRel", ["Active"], StageSubscriptionQuantifier.Each, []))
         ]);
@@ -191,7 +191,7 @@ public class SubscriptionAnalysisTests {
 
         // Add a subscription via evolution
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
-        var result = new DomainEvolution(domain).Apply([
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([
             new AddStageSubscriptionChange("Order", "Pending", sub)
         ]);
 
@@ -508,7 +508,7 @@ public class SubscriptionAnalysisTests {
             }
             """, ctx);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.Analysis.Diagnostics.Any(d =>

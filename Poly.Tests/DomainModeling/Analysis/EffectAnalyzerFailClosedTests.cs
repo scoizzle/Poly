@@ -113,7 +113,7 @@ public class EffectAnalyzerFailClosedTests {
 
     private static AnalysisResult AnalyzeDsl(string dsl) {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(dsl).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
         return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
     }
 

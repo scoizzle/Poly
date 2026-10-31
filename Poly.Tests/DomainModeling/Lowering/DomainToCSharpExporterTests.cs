@@ -158,7 +158,7 @@ public class DomainToCSharpExporterTests {
         string poly, DomainSession? parserInputs) {
         var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
@@ -983,7 +983,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1012,7 +1012,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1038,7 +1038,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1067,7 +1067,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 

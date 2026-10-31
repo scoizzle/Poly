@@ -1153,7 +1153,7 @@ public class McpSmokeTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Relationships().Count).IsEqualTo(1);
         await Assert.That(result.Relationships()[0].Name).IsEqualTo("Tracks");
@@ -2056,7 +2056,7 @@ public class McpSmokeTests {
     public async Task Parser_PathPrefix_RelBoolProp_CreatesRelationshipNav() {
         // Q1.2: `Rel BoolProp` should parse to RelationshipNavigation
         var poly = "domain Test\nItem: entity {\n  Flag: Boolean\n}\n";
-        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(poly).Parse()).Root;
         // Build a policy expression via DSL that uses a hypothetical relationship
         // We test parser directly via PolyDslParser on a policy expression

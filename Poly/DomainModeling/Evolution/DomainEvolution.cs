@@ -8,13 +8,9 @@ using ValueType = Poly.DomainModeling.Ontology.ValueType;
 namespace Poly.DomainModeling.Evolution;
 
 /// <summary>
-/// Entry point for analysis-gated evolution over an immutable Domain.
-/// 
-/// This is the thin layer that preserves the model evolution pattern (batch changes,
-/// analysis gate, rich trace + original root on failure) while the underlying model
-/// is immutable records. There is no explicit transaction/commit/rollback model.
-/// On analysis failure the proposed new root is simply discarded; the caller retains
-/// the original snapshot. Atomicity is free because of immutability.
+/// Mutates an immutable domain. <see cref="Apply"/> applies a batch and does not analyze.
+/// <see cref="ApplyAndAnalyze"/> is the analysis gate: on failure the proposal is discarded
+/// and the original root is returned. There is no transaction; immutability is the rollback.
 /// </summary>
 public sealed class DomainEvolution {
     private readonly Domain _current;
@@ -26,13 +22,38 @@ public sealed class DomainEvolution {
     public Domain Current => _current;
 
     /// <summary>
-    /// Applies a batch of changes against the current snapshot.
-    /// Produces a proposed new root, runs analysis, and returns either a successful
-    /// result with the new root or a rolled-back result containing the original root + diagnostics.
-    /// <paramref name="session"/> supplies the analysis pipeline (type maps/conventions); when null
-    /// the core catalog resolves the proposed domain's extensions.
+    /// Applies a batch of changes and does not analyze. Mutation errors reject the
+    /// proposal and return the original root. A supplied <paramref name="priorAnalysis"/>
+    /// is used only when it already carries a mutation index; a missing index does not
+    /// analyze the seed. <paramref name="session"/> is checked for extension ids and is
+    /// not an analysis pipeline.
     /// </summary>
-    public EvolutionResult Apply(
+    public MutationResult Apply(
+        IReadOnlyList<DomainChange> changes,
+        AnalysisResult? priorAnalysis = null,
+        DomainSession? session = null) {
+        var start = DateTime.UtcNow;
+        var (proposed, _, mutationErrors) = ApplyChanges(
+            _current, changes, priorAnalysis?.GetMutationIndex(_current));
+        EnsureSessionLoaded(proposed, session);
+
+        var rejected = mutationErrors.Count > 0;
+        var trace = BuildMutationTrace(changes, rejected, DateTime.UtcNow - start, mutationErrors.Count);
+        return rejected
+            ? MutationResult.Rejected(_current, trace, mutationErrors)
+            : MutationResult.Applied(proposed, trace);
+    }
+
+    /// <summary>
+    /// Applies a batch, analyzes the proposal, and returns either that proposal and its
+    /// analysis or the original root when analysis or mutation failed.
+    /// <paramref name="session"/> supplies the pipeline; when null,
+    /// <see cref="DomainSession.ForExtensions"/> resolves the domain's extensions.
+    /// A prior analysis that already carries the mutation index is used as-is.
+    /// Otherwise an empty seed is not analyzed, and a non-empty seed is analyzed
+    /// once for that index. The proposal is always analyzed.
+    /// </summary>
+    public EvolutionResult ApplyAndAnalyze(
         IReadOnlyList<DomainChange> changes,
         AnalysisResult? priorAnalysis = null,
         DomainSession? session = null) {
@@ -42,15 +63,7 @@ public sealed class DomainEvolution {
 
         var (proposed, _, mutationErrors) = ApplyChanges(_current, changes, mutationIndex);
 
-        // The passed session is the link of this compile. A uses id it did not
-        // load is an unresolved import, not a successful analysis.
-        if (session is not null) {
-            foreach (var id in proposed.Extensions) {
-                if (!session.Extensions.Contains(id, StringComparer.Ordinal))
-                    throw new InvalidOperationException(
-                        $"Domain depends on extension '{id}' but the analysis session has not loaded it.");
-            }
-        }
+        EnsureSessionLoaded(proposed, session);
 
         var analysis = ResolveSession(proposed, session).Analyze(proposed);
 
@@ -106,6 +119,36 @@ public sealed class DomainEvolution {
 
     private static DomainSession ResolveSession(Domain domain, DomainSession? session) =>
         session ?? DomainSession.ForExtensions(domain.Extensions);
+
+    // The passed session is the link of this compile. A uses id it did not
+    // load is an unresolved import, not a successful analysis.
+    private static void EnsureSessionLoaded(Domain proposed, DomainSession? session) {
+        if (session is null)
+            return;
+
+        foreach (var id in proposed.Extensions) {
+            if (!session.Extensions.Contains(id, StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    $"Domain depends on extension '{id}' but the analysis session has not loaded it.");
+        }
+    }
+
+    private static EvolutionTrace BuildMutationTrace(
+        IReadOnlyList<DomainChange> changes,
+        bool proposalRejected,
+        TimeSpan duration,
+        int mutationErrorCount) {
+        var steps = changes
+            .Select(c => new EvolutionStep(c.GetDescription()))
+            .ToList();
+
+        return new EvolutionTrace(
+            steps,
+            RolledBack: proposalRejected,
+            Duration: duration,
+            ErrorCount: mutationErrorCount,
+            WarningCount: 0);
+    }
 
     private EvolutionTrace BuildTrace(
         IReadOnlyList<DomainChange> changes,
@@ -533,5 +576,5 @@ public sealed class EvolutionBuilder {
     /// or a rejected proposal result (WasRolledBack = true) with the original root + diagnostics + trace.
     /// </summary>
     public EvolutionResult Apply(AnalysisResult? priorAnalysis = null, DomainSession? session = null)
-        => _evolution.Apply(_changes, priorAnalysis, session);
+        => _evolution.ApplyAndAnalyze(_changes, priorAnalysis, session);
 }

@@ -14,7 +14,7 @@ public class HttpFileGeneratorTests {
         }
         var parser = new PolyDslParser(poly, ExtensionCatalog.Core.Authoring);
         var changes = parser.Parse();
-        var result = new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
     }

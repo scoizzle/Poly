@@ -1,7 +1,7 @@
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
@@ -70,7 +70,7 @@ public class EntryExitTransitionEmitTests {
 
     static (Domain Domain, AnalysisResult Analysis, System.Reflection.Assembly Assembly) EmitAndCompile(string poly, string assemblyName) {
         var session = DomainSession.ForSource(poly, seed: [], catalog: ExtensionCatalog.Core);
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(new PolyDslParser(poly, session).Parse(), session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         if (!outcome.Succeeded)
             throw new InvalidOperationException(string.Join("; ", outcome.Analysis.Diagnostics.Select(d => d.Message)));
         var domain = outcome.Root;

@@ -30,7 +30,7 @@ public sealed class TemporalPackPrintRoundTripTests {
 
     private static Domain Apply(string poly, DomainSession inputs) {
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException($"Apply of temporal domain failed: {result.FailureSummary}");
         return result.Root!;

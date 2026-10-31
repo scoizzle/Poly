@@ -99,7 +99,7 @@ public class SkippedIfCreateInVmTests {
 
     private static (Domain Domain, Entity Reading) Evolve() {
         var changes = new PolyDslParser(Billing).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

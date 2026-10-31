@@ -14,7 +14,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 public class UnwrittenRelationshipAnalysisTests {
     private static (Domain Domain, AnalysisResult Analysis) Analyze(string dsl) {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(dsl).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)

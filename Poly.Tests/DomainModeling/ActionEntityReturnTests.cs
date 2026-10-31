@@ -15,7 +15,7 @@ namespace Poly.Tests.DomainModeling;
 public class ActionEntityReturnTests {
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -38,7 +38,7 @@ public class ActionEntityReturnTests {
     /// concatenated error messages (fail-closed: evolution must reject it).</summary>
     private static string EvolveExpectingError(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (result.Succeeded)
             throw new InvalidOperationException("Expected evolution to fail, but it succeeded.");
         return string.Join("; ",

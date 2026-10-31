@@ -167,6 +167,12 @@ public class Guest
             }
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
+        var uniqueCheck = Guest.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Guest>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -180,5 +186,29 @@ public class Guest
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Guest", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Guest.CheckUnique(propertyName, value);
+    }
 }

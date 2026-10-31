@@ -134,9 +134,39 @@ public class Warehouse
             return DomainResult<Warehouse>.Failure("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.");
         }
         var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
+        var uniqueCheck = Warehouse.CheckUnique("Code", code);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Warehouse>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Warehouse", "Code", code);
         db.Record("Warehouse", "Code", code);
         return DomainResult<Warehouse>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Warehouse", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Code" && object.Equals(this.Code, value))
+        {
+            return DomainResult.Success();
+        }
+        return Warehouse.CheckUnique(propertyName, value);
+    }
     public static System.Boolean ExistsWithCode(Poly.DomainModeling.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

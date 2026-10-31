@@ -41,7 +41,14 @@ public sealed class ParityScenario {
         var simulate = new SimulateSide(_domain);
         var printed = new PrintedSide(_domain, _assembly);
         steps(simulate);
-        steps(printed);
+        var previous = DomainInstanceStore.PrintedPort.Value;
+        DomainInstanceStore.PrintedPort.Value = printed.Port;
+        try {
+            steps(printed);
+        }
+        finally {
+            DomainInstanceStore.PrintedPort.Value = previous;
+        }
         return (simulate.Outcomes, printed.Outcomes);
     }
 

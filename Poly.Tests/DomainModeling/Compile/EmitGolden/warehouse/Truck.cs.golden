@@ -100,6 +100,12 @@ public class Truck
             return DomainResult<Truck>.Failure("Unique constraint violated: 'Vin' value is already used on another 'Truck'.");
         }
         var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad, status);
+        var uniqueCheck = Truck.CheckUnique("Vin", vin);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Truck>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Truck", "Vin", vin);
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);
@@ -107,6 +113,30 @@ public class Truck
         db.Record("Truck", "Vin", vin);
         return DomainResult<Truck>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Truck", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Vin" && object.Equals(this.Vin, value))
+        {
+            return DomainResult.Success();
+        }
+        return Truck.CheckUnique(propertyName, value);
+    }
     public static System.Boolean ExistsWithVin(Poly.DomainModeling.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

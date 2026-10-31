@@ -4055,7 +4055,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
 
-        await Assert.That(cs).Contains("this.Value = value;");
+        await Assert.That(cs).Contains("this._value = value;");
         await Assert.That(cs).DoesNotContain("@value");
         await Assert.That(cs).DoesNotContain("using System;");
         await Assert.That(cs).DoesNotContain("using System.Collections.Generic;");

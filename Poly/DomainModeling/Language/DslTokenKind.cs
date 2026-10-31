@@ -51,7 +51,7 @@ public enum DslTokenKind {
     Text,
     NumberType,
     BooleanType,
-    Required,
+    Optional,
     Unique,
     Range,
     Length,

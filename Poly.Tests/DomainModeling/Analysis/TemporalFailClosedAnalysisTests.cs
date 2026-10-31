@@ -26,7 +26,7 @@ public class TemporalFailClosedAnalysisTests {
     private static EvolutionResult Evolve(string poly, DomainSession? parserInputs = null) {
         var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
-        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
     }
 
     private static List<string> Errors(EvolutionResult result) =>
@@ -325,13 +325,14 @@ public class TemporalFailClosedAnalysisTests {
 
     [Test]
     public async Task Now_WithoutTemporalPack_PolicyReference_ReportsUnknownProperty() {
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
         var result = Evolve("""
             domain T
             Item: entity {
               Expiry: Text
               IsExpired: policy { Expiry < Now }
             }
-            """);
+            """, raw);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(Errors(result).Any(e =>
@@ -341,7 +342,8 @@ public class TemporalFailClosedAnalysisTests {
 
     [Test]
     public async Task Now_WithoutTemporalPack_ExpressionLowersAsPropertyAccess_NotClock() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now");
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var expr = DslExpressionFragment.ParseExpressionFragment("Now", raw);
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
 
         var lowered = new DomainExpressionLoweringPass().Lower(expr, new ParameterReference());
@@ -353,7 +355,8 @@ public class TemporalFailClosedAnalysisTests {
 
     [Test]
     public async Task Duration_WithoutTemporalPack_ParseFailsClosed() {
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("5 Days"))
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("5 Days", raw))
             .Throws<FormatException>();
     }
 

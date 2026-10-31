@@ -61,14 +61,25 @@ public sealed class DomainSession {
     /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
     /// one <c>vm-analysis-report</c> for the interpretation analysis of the whole module
     /// (empty when the analyzer reported nothing) and each printed <c>.cs</c> file with
-    /// a reference to the entity or scaffolding tree it printed. After the catalog is
+    /// a reference to the entity or scaffolding tree it printed. Emit then runs each
+    /// <see cref="Artifacts"/> contributor once and registers what
+    /// <see cref="IArtifactContributor.Contribute"/> returns. After that catalog is
     /// complete, Lower and Emit each register one <c>catalog-reference-report</c>
-    /// (empty when every reference resolves). The compiler then
-    /// registers contributor trees and text files here and writes the text files from
-    /// this catalog. The next Lower or Emit drops anything registered after that,
-    /// including those files.
+    /// (empty when every reference resolves). The compiler may still register extra
+    /// contributors that are not on the session, after Emit returns. The next Lower
+    /// or Emit drops anything registered after that, including those files.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
+
+    /// <summary>
+    /// Times this session has run VM analysis of a lowered module.
+    /// <see cref="Compile"/> increments it. The same domain, domain analysis,
+    /// and module reference do not increment it again.
+    /// </summary>
+    internal int VmAnalysisCount { get; private set; }
+
+    private readonly object _vmAnalysisGate = new();
+    private CompiledDomain? _compiled;
 
     private const string ScaffoldingType = "scaffolding";
     private const string EntityType = "entity";
@@ -137,6 +148,8 @@ public sealed class DomainSession {
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!extensions.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in extensions) {
             if (string.IsNullOrWhiteSpace(id))
@@ -148,36 +161,33 @@ public sealed class DomainSession {
         return builder.Build();
     }
 
-    /// <summary>Peeks <c>uses</c> (or <paramref name="seed"/>) and loads those libraries. Unknown id throws.</summary>
-    public static DomainSession ForSource(
-        string poly,
+    /// <summary>Loads the document's <c>uses</c> ids (or <paramref name="seed"/> when it lists none). Unknown id throws.</summary>
+    public static DomainSession ForDocument(
+        DslSyntaxTree tree,
         IReadOnlyList<string> seed,
         ExtensionCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        var ids = DomainCompilation.PeekExtensions(poly);
-        if (ids.Count == 0)
-            ids = seed;
-        return ForExtensions(ids, catalog);
+        return ForExtensions(tree.Uses.Count > 0 ? tree.Uses : seed, catalog);
     }
 
     /// <summary>
-    /// <see cref="ForSource"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
+    /// <see cref="ForDocument"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
     /// The pack is not added to <see cref="Extensions"/> when the source <c>uses</c>
     /// list omitted it, so <see cref="WithDomain"/> keeps the handlers.
     /// </summary>
-    public static DomainSession ForAuthoringSource(
-        string poly,
+    public static DomainSession ForAuthoringDocument(
+        DslSyntaxTree tree,
         IReadOnlyList<string> seed,
         ExtensionCatalog? catalog = null) {
-        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        var ids = DomainCompilation.PeekExtensions(poly);
-        if (ids.Count == 0)
-            ids = seed;
+        var ids = tree.Uses.Count > 0 ? tree.Uses : seed;
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
+        if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))
@@ -188,6 +198,26 @@ public sealed class DomainSession {
         }
         StorageFacetLibrary.EnsureRegistered(builder);
         return builder.Build();
+    }
+
+    /// <summary>Parses <paramref name="poly"/> and loads its libraries. Unknown id throws.</summary>
+    public static DomainSession ForSource(
+        string poly,
+        IReadOnlyList<string> seed,
+        ExtensionCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(seed);
+        return ForDocument(DslSyntaxTree.Parse(poly), seed, catalog);
+    }
+
+    /// <summary>Parses <paramref name="poly"/> and loads it with the authoring pack.</summary>
+    public static DomainSession ForAuthoringSource(
+        string poly,
+        IReadOnlyList<string> seed,
+        ExtensionCatalog? catalog = null) {
+        ArgumentNullException.ThrowIfNull(poly);
+        ArgumentNullException.ThrowIfNull(seed);
+        return ForAuthoringDocument(DslSyntaxTree.Parse(poly), seed, catalog);
     }
 
     /// <summary>Keeps tables when <c>uses</c> is unchanged; reloads when it changes.</summary>
@@ -317,11 +347,12 @@ public sealed class DomainSession {
     }
 
     /// <summary>
-    /// Entity-module C# files from the lowered module. Persistence and HTTP host
-    /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
-    /// not this method. Registers the <c>vm-analysis-report</c>, then refuses
-    /// (throwing the first VM error) before printing when the interpretation
-    /// analysis of the lowered module reports an error.
+    /// Entity-module C# files from the lowered module, then each new
+    /// <see cref="ContributedFile"/> from <see cref="Artifacts"/>. The writer consumes
+    /// the <see cref="CompiledDomain"/> from <see cref="Compile"/>. VM analysis of the
+    /// module runs once for a domain, its domain analysis, and that module reference
+    /// on this session. Contributors run once per call, against that call's catalog,
+    /// so a second Emit of the same compilation lists each host file once.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -329,12 +360,12 @@ public sealed class DomainSession {
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
         // whole module, because the writer resolves types across entities from one analysis.
-        var (module, catalog) = LowerToCatalog(domain, analysis);
+        var (_, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
-        var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
-        RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
+        var compiled = Compile(domain, analysis);
+        RegisterVmAnalysisReport(catalog, domain, compiled.VmAnalysis);
         try {
-            ThrowIfVmHasErrors(interpAnalysis);
+            ThrowIfVmHasErrors(compiled.VmAnalysis);
         }
         catch {
             // A refused Emit leaves the new catalog on the session (and the VM report
@@ -343,7 +374,7 @@ public sealed class DomainSession {
             RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
             throw;
         }
-        var writer = new CSharpWriter(interpAnalysis);
+        var writer = new CSharpWriter(compiled.VmAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
         // Host top-level statements are global Program. An entity of that name stays
@@ -369,8 +400,69 @@ public sealed class DomainSession {
         if (nestProgram)
             scaffoldingSource = InGeneratedNamespace(scaffoldingSource);
         AddPrintedFile(catalog, domain, files, "Poly.Types.cs", scaffoldingSource, scaffolding);
+        RegisterContributedArtifacts(domain, analysis, catalog, files);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
+    }
+
+    /// <summary>
+    /// Runs each <see cref="Artifacts"/> contributor once and registers what it
+    /// returns. A contributed text file whose name is not already in
+    /// <paramref name="files"/> is appended. The artifact is stored as returned.
+    /// </summary>
+    private void RegisterContributedArtifacts(
+        Domain domain,
+        AnalysisResult analysis,
+        ArtifactCatalog catalog,
+        List<(string FileName, string Source)> files) {
+        var seen = new HashSet<string>(files.Select(f => f.FileName), StringComparer.Ordinal);
+        foreach (var contributor in Artifacts) {
+            foreach (var artifact in contributor.Contribute(domain, analysis, catalog)) {
+                catalog.Register(artifact);
+                if (artifact.Descriptor.Id.Type != ContributedFile.Type)
+                    continue;
+                var name = ContributedFile.FileName(artifact);
+                if (!seen.Add(name))
+                    continue;
+                files.Add((name, ContributedFile.Text(artifact)));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lowers <paramref name="domain"/> under <paramref name="analysis"/> and returns
+    /// the <see cref="CompiledDomain"/> for that pair. A second call with the same
+    /// domain, domain analysis, and module reference returns the cached object and
+    /// does not run VM analysis again.
+    /// </summary>
+    internal CompiledDomain Compile(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+        return VmAnalysisOf(domain, analysis, module);
+    }
+
+    /// <summary>
+    /// The VM analysis for this compilation. A hit reuses the stored
+    /// <see cref="CompiledDomain"/> and does not call
+    /// <see cref="Interpreter.Analyzer"/>. A miss analyzes the lowered module
+    /// and keeps that <see cref="CompiledDomain"/>.
+    /// </summary>
+    private CompiledDomain VmAnalysisOf(
+        Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
+        lock (_vmAnalysisGate) {
+            var cached = _compiled;
+            if (cached is not null
+                && ReferenceEquals(cached.Domain, domain)
+                && ReferenceEquals(cached.DomainAnalysis, analysis)
+                && ReferenceEquals(cached.Module, module))
+                return cached;
+
+            var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+            VmAnalysisCount++;
+            _compiled = new CompiledDomain(domain, analysis, module, vm);
+            return _compiled;
+        }
     }
 
     private static void AddPrintedFile(

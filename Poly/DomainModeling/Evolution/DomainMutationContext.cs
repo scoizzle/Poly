@@ -11,8 +11,9 @@ namespace Poly.DomainModeling.Evolution;
 /// Collects errors when changes target missing entities, stages, or actions
 /// — these are surfaced as structural failures in the evolution result.
 /// <para>
-/// <b>Resolve contract:</b> product evolution always supplies
-/// <see cref="MutationTargetIndexMetadata"/> from the catalog. Stage/action
+/// <b>Resolve contract:</b> product evolution supplies
+/// <see cref="MutationTargetIndexMetadata"/> from the catalog when the seed has
+/// types; an empty seed has no targets and uses live lists. Stage/action
 /// resolution is catalog-first; on index miss a single live-overlay scan of
 /// the mutable entity in this context covers targets added earlier in the
 /// same batch (prior analysis cannot know them). There is no ad-hoc multi-scan

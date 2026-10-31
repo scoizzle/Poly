@@ -47,7 +47,7 @@ public sealed class SampleRoslynGateTests {
         var poly = File.ReadAllText(Path.Combine(FindRepoRoot(), relativePath));
         var session = DomainSession.ForSource(poly, Seed, Catalog);
         var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), Seed);
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!outcome.Succeeded) {
             return new Row(relativePath, [$"domain has Errors: {string.Join("; ", outcome.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

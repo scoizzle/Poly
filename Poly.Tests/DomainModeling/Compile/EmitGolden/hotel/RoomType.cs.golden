@@ -1,7 +1,7 @@
 #nullable enable
 public class RoomType
 {
-    private RoomType(long maxOccupancy, string name, long nightlyRate)
+    private RoomType(long maxOccupancy, string name, decimal nightlyRate)
     {
         this.MaxOccupancy = maxOccupancy;
         this.Name = name;
@@ -9,8 +9,8 @@ public class RoomType
     }
     public long MaxOccupancy { get; private set; }
     public string Name { get; private set; } = default!;
-    public long NightlyRate { get; private set; }
-    public static DomainResult<RoomType> Create(long maxOccupancy, string name, long nightlyRate)
+    public decimal NightlyRate { get; private set; }
+    public static DomainResult<RoomType> Create(long maxOccupancy, string name, decimal nightlyRate)
     {
         if (maxOccupancy < 1L)
         {
@@ -32,11 +32,11 @@ public class RoomType
         {
             return DomainResult<RoomType>.Failure("'Name' must be at most 40 characters.");
         }
-        if (nightlyRate < 0L)
+        if (nightlyRate < 0m)
         {
             return DomainResult<RoomType>.Failure("'NightlyRate' must be >= 0.");
         }
-        if (nightlyRate > 10000L)
+        if (nightlyRate > 10000m)
         {
             return DomainResult<RoomType>.Failure("'NightlyRate' must be <= 10000.");
         }

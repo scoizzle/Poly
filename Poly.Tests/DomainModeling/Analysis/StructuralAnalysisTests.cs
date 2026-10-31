@@ -635,6 +635,40 @@ public class UnsatisfiedRequirementTests {
     }
 
     [Test]
+    public async Task EffectUnsatisfiedRequirement_CreateEntityMissingBareProperty_ReportsWarning() {
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var title = new Property("Title", new DomainTypeReference("Text"), []);
+        var target = new Entity("Order", [title], [], [], []);
+        var action = new Poly.DomainModeling.Ontology.Action("CreateOrder", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Order"))
+        ], []);
+        var entity = new Entity("Factory", [], [action], [], []);
+        var domain = DomainTestFactory.Create("Test", [text, target, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsTrue();
+    }
+
+    [Test]
+    public async Task EffectUnsatisfiedRequirement_CreateEntityMissingOptionalProperty_DoesNotWarn() {
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var note = new Property("Note", new DomainTypeReference("Text"), [new OptionalConstraint()]);
+        var target = new Entity("Order", [note], [], [], []);
+        var action = new Poly.DomainModeling.Ontology.Action("CreateOrder", InvocationResult.Void, [], [
+            new CreateEntityInstance(new DomainTypeReference("Order"))
+        ], []);
+        var entity = new Entity("Factory", [], [action], [], []);
+        var domain = DomainTestFactory.Create("Test", [text, target, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectUnsatisfiedRequirement)).IsFalse();
+    }
+
+    [Test]
     public async Task EffectUnsatisfiedRequirement_CreateEntityMissingRequiredProperty_ReportsWarning() {
         var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);

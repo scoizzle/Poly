@@ -26,7 +26,11 @@ public class Doctor
     }
     public static DomainResult<Doctor> Create(string licenseNo, string name, Poly.DomainModeling.Runtime.IStoragePort db, Schedule? schedule = null)
     {
-        if (!string.IsNullOrEmpty(licenseNo) && !System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}$"))
+        if (string.IsNullOrEmpty(licenseNo))
+        {
+            return DomainResult<Doctor>.Failure("'LicenseNo' is required.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}$"))
         {
             return DomainResult<Doctor>.Failure("'LicenseNo' does not match the required pattern.");
         }

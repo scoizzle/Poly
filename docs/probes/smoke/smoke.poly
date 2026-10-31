@@ -1,5 +1,5 @@
 domain smoke
 
 Placeholder: entity {
-  Name: Text required
+  Name: Text
 }

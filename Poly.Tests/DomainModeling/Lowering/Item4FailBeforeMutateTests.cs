@@ -21,7 +21,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -58,7 +58,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis, session) = EvolveWithSession("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -102,7 +102,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, _) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -130,7 +130,7 @@ public class Item4FailBeforeMutateTests {
         var (domain, analysis) = Evolve("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -172,7 +172,7 @@ public class Item4FailBeforeMutateTests {
             domain Yard
             Widget: entity {
               Active: Boolean default(false)
-              Label: Text required
+              Label: Text
             }
             Bin: entity {
               Active: Boolean default(false)
@@ -225,7 +225,7 @@ public class Item4FailBeforeMutateTests {
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -238,7 +238,7 @@ public class Item4FailBeforeMutateTests {
         string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

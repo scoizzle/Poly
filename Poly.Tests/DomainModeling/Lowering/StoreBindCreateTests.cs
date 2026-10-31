@@ -14,7 +14,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_Runtime_LowersToCreateNav() {
         var (domain, analysis) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text unique required }
+            Permit: entity { Plate: Text unique }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -67,7 +67,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_Export_UsesCreateNav() {
         var (domain, analysis) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -93,7 +93,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_EmitAndRuntime_ShareCreateInInvoke() {
         var (domain, analysis) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -126,7 +126,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_RegistersChildAndLink() {
         var (domain, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text unique required }
+            Permit: entity { Plate: Text unique }
             Lot: entity { permits: many Permit }
             """);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
@@ -147,7 +147,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_UniqueCollision_IsFailureWithoutRegistering() {
         var (domain, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text unique required }
+            Permit: entity { Plate: Text unique }
             Lot: entity { permits: many Permit }
             """);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
@@ -193,7 +193,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_OmittedRequiredDefault_SucceedsWithDefault() {
         var (domain, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required default("STD") }
+            Permit: entity { Plate: Text default("STD") }
             Lot: entity { permits: many Permit }
             """);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
@@ -212,7 +212,7 @@ public class StoreBindCreateTests {
     public async Task Create_WithoutStore_InitializerValueOnChild() {
         var (domain, _) = Evolve("""
             domain Shop
-            Order: entity { Code: Text required }
+            Order: entity { Code: Text }
             Customer: entity {
               Place: action (code: Text) {
                 create Order { Code: code }
@@ -241,7 +241,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_WithoutStore_InitializerValueOnChild() {
         var (domain, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -266,7 +266,7 @@ public class StoreBindCreateTests {
     public async Task CreateThenRelExists_SameAction_SeesChild() {
         var (domain, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               Occupied: Number default(0)
               permits: many Permit
@@ -293,7 +293,7 @@ public class StoreBindCreateTests {
     public async Task MixedIfCreateIn_Runtime_CompilesAsOneTree() {
         var (domain, analysis) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               Open: Boolean default(true)
               permits: many Permit
@@ -320,7 +320,7 @@ public class StoreBindCreateTests {
     public async Task RelExists_LowersToCollectionCountCheck() {
         var (domain, analysis) = Evolve("""
             domain Shop
-            Order: entity { Code: Text required }
+            Order: entity { Code: Text }
             Customer: entity {
               orders: many Order
               HasOrders: policy { orders exists }
@@ -347,7 +347,7 @@ public class StoreBindCreateTests {
     public async Task PathPrefix_LowersToNullForgivingNav() {
         var (domain, analysis) = Evolve("""
             domain Shop
-            Advisor: entity { Name: Text required }
+            Advisor: entity { Name: Text }
             Customer: entity {
               advisor: Advisor
               AdvisorNamed: policy { advisor Name is "Pat" }
@@ -398,7 +398,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_ScalarInitializer_Runtime_DoesNotCastToObject() {
         var (domain, analysis) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -421,7 +421,7 @@ public class StoreBindCreateTests {
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

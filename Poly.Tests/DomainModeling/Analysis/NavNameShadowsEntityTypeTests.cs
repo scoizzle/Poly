@@ -12,7 +12,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// </summary>
 public sealed class NavNameShadowsEntityTypeTests {
     private static AnalysisResult Analyze(string dsl) {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(dsl).Parse());
         return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
     }
@@ -30,14 +30,14 @@ public sealed class NavNameShadowsEntityTypeTests {
         var analysis = Analyze("""
             domain Col
             Claim: entity {
-              Kind: Text required
+              Kind: Text
               evidence: many Evidence
               Attach: action (kind: Text) -> Evidence {
                 create in evidence { Kind: kind }
               }
             }
             Evidence: entity {
-              Kind: Text required
+              Kind: Text
               claim: Claim
             }
             """);
@@ -88,7 +88,7 @@ public sealed class NavNameShadowsEntityTypeTests {
               }
             }
             Document: entity {
-              Kind: Text required
+              Kind: Text
             }
             """);
 
@@ -106,11 +106,11 @@ public sealed class NavNameShadowsEntityTypeTests {
         var analysis = Analyze("""
             domain Col
             Claim: entity {
-              Kind: Text required
+              Kind: Text
               evidence: many Evidence
             }
             Evidence: entity {
-              Kind: Text required
+              Kind: Text
               claim: Claim
             }
             """);

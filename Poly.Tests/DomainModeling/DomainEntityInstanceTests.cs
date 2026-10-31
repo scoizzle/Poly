@@ -22,8 +22,8 @@ public class DomainEntityInstanceTests {
 
     private static Entity CreatePersonEntity() {
         var age = new Property("Age", new DomainTypeReference("Number"), []);
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
-        var active = new Property("Active", new DomainTypeReference("Boolean"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
+        var active = new Property("Active", new DomainTypeReference("Boolean"), [new OptionalConstraint()]);
 
         var isAdult = new Policy("IsAdult",
             DomainExpression.GreaterThanOrEqual(
@@ -105,7 +105,7 @@ public class DomainEntityInstanceTests {
     private static Entity CreateDateComparisonEntity() {
         var start = new Property("Start", new DomainTypeReference("Date"), []);
         var end = new Property("End", new DomainTypeReference("Date"), []);
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
 
         var isCurrent = new Policy("IsCurrent",
             DomainExpression.GreaterThanOrEqual(
@@ -151,7 +151,9 @@ public class DomainEntityInstanceTests {
     public async Task EvaluatePolicy_StringRelationalComparison_UsesValuesNotHeapHandles() {
         var entity = CreateDateComparisonEntity();
         var instance = CreateWithDomain(entity, new Dictionary<string, object?> {
-            ["Name"] = "zebra"
+            ["Name"] = "zebra",
+            ["Start"] = new DateOnly(2024, 1, 1),
+            ["End"] = new DateOnly(2026, 1, 1)
         }, extensions: [ExtensionCatalog.TemporalId]);
 
         await Assert.That(instance.EvaluatePolicy(entity.Policies.First(p => p.Name == "NamePastB"))).IsTrue();
@@ -211,7 +213,9 @@ public class DomainEntityInstanceTests {
             Stages: []);
         var domain = ValidDomain.Create("T", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Due"] = new DateOnly(2020, 1, 1) },
+            domain: domain);
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
@@ -231,7 +235,9 @@ public class DomainEntityInstanceTests {
             Stages: []);
         var domain = ValidDomain.Create("Date", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Due"] = new DateOnly(2020, 1, 1) },
+            domain: domain);
         var result = instance.InvokeAction("Stamp");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
@@ -267,7 +273,8 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_UnknownAction_ReturnsNotFound() {
         var entity = CreatePersonEntity();
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Age"] = 30L });
 
         var result = instance.InvokeAction("NonExistent");
 
@@ -290,7 +297,7 @@ public class DomainEntityInstanceTests {
             Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var active = new Stage("Active", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
         var entity = new Entity("Order",
-            Properties: [new Property("Name", new DomainTypeReference("Text"), [])],
+            Properties: [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [entityAction], Policies: [], Stages: [draft, active]);
 
         var instance = DomainEntityInstance.Create(entity,
@@ -313,7 +320,7 @@ public class DomainEntityInstanceTests {
             [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [entityAction], Policies: [], Stages: [draft, active]);
         var domain = ValidDomain.Create("OrderDomain", [order], []);
 
@@ -337,7 +344,7 @@ public class DomainEntityInstanceTests {
             [], [], []);
         var active = new Stage("Active", [], [], [], []);
         var order = new Entity("Order",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [entityAction], Policies: [], Stages: [draft, active]);
         var domain = ValidDomain.Create("OrderDomain", [order], []);
 
@@ -353,7 +360,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeAction_DomainBound_UnknownAction_ReturnsMissing_WhenCatalogPresent() {
         var order = new Entity("Order",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [],
             Stages: [new Stage("Draft", [], [], [], [])]);
         var domain = ValidDomain.Create("OrderDomain", [order], []);
@@ -371,7 +378,7 @@ public class DomainEntityInstanceTests {
         var createIn = new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [],
             [new CreateEntityInRelationshipEffect("Owns", [])], []);
         var entity = new Entity("Parent",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [createIn], Policies: [], Stages: []);
         var instance = DomainEntityInstance.Create(entity);
 
@@ -394,7 +401,7 @@ public class DomainEntityInstanceTests {
         }
 
         var entity = new Entity("Loop",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: stages);
         var instance = DomainEntityInstance.Create(entity);
 
@@ -416,7 +423,7 @@ public class DomainEntityInstanceTests {
         }
 
         var entity = new Entity("Loop",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [], Stages: stages);
         var domain = ValidDomain.Create("LoopDomain", [entity], []);
         var instance = DomainEntityInstance.Create(entity, domain: domain);
@@ -429,7 +436,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task AnalyzeRequiringCatalog_ProducesCatalog_ForValidDomain() {
         var order = new Entity("Order",
-            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])],
             Actions: [], Policies: [],
             Stages: [new Stage("Draft", [], [], [], [])]);
         var domain = ValidDomain.Create("Orders", [order], []);
@@ -447,7 +454,7 @@ public class DomainEntityInstanceTests {
         // hosts still fail on unknown built-in type names without bootstrap.
         var domain = DomainFactory.Create("Orders", b =>
             b.AddEntity("Order")
-             .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), []))
+             .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]))
              .AddStage("Order", "Draft"));
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -495,7 +502,8 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task SetProperty_UpdatesValue() {
         var entity = CreatePersonEntity();
-        var instance = DomainEntityInstance.Create(entity);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["Age"] = 30L });
 
         instance.SetProperty("Age", 42L);
         await Assert.That(instance.GetProperty<object>("Age")).IsEqualTo(42L);
@@ -597,7 +605,8 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = CreateWithDomain(entity);
+        var instance = CreateWithDomain(entity,
+            new Dictionary<string, object?> { ["Age"] = 0L, ["Active"] = false });
         var result = instance.InvokeAction("Setup");
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -608,7 +617,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ConditionalEffect_WhenConditionTrue_ExecutesThenBranch() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
         var entity = new Entity("Order", [status, total], Actions: [
             new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [],
@@ -639,7 +648,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ConditionalEffect_WithoutElse_NoopsWhenFalse() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var total = new Property("Total", new DomainTypeReference("Number"), []);
         var entity = new Entity("Order", [status, total], Actions: [
             new Poly.DomainModeling.Ontology.Action("FlagLarge", InvocationResult.Void, [],
@@ -663,7 +672,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_CreatesChildInstance() {
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var age = new Property("Age", new DomainTypeReference("Number"), []);
         var entity = new Entity("Person", [name, age], Actions: [
             new Poly.DomainModeling.Ontology.Action("Spawn", InvocationResult.Void, [],
@@ -676,7 +685,8 @@ public class DomainEntityInstanceTests {
                 Policies: [])
         ], [], []);
 
-        var instance = CreateWithDomain(entity);
+        var instance = CreateWithDomain(entity,
+            new Dictionary<string, object?> { ["Age"] = 1L });
         var result = instance.InvokeAction("Spawn");
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -708,7 +718,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_SameType_WhenNoDomainReference() {
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var entity = new Entity("Person", [name], Actions: [
             new Poly.DomainModeling.Ontology.Action("Clone", InvocationResult.Void, [],
                 Effects: [new CreateEntityInstance(new DomainTypeReference("Person"),
@@ -725,7 +735,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task CreateEntityInstance_UsesDomainForCrossEntityLookup() {
-        var personName = new Property("PersonName", new DomainTypeReference("Text"), []);
+        var personName = new Property("PersonName", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var itemName = new Property("ItemName", new DomainTypeReference("Text"), []);
         var person = new Entity("Person", [personName], Actions: [
             new Poly.DomainModeling.Ontology.Action("CreateItem", InvocationResult.Void, [],
@@ -771,7 +781,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InvokeActionEffect_CrossEntity_InvokesOnRelatedInstance() {
         // E3b: invoke RelName.ActionName(args) — resolve target via store relationship
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
 
         // Target entity: Service has an action we invoke
@@ -856,7 +866,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ForEachInvoke_InvokesOnEveryTarget() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var target = new Entity("Target", [status], Actions: [
             new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"),
@@ -893,7 +903,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ForEachInvoke_PolicyPredicate_FiltersTargets() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var isSelected = new Policy("IsSelected",
             DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(42L)));
@@ -941,7 +951,7 @@ public class DomainEntityInstanceTests {
         // Zero records is a no-op, not a failure: an empty collection (here) and a
         // predicate that matched none (next test) both skip the loop and continue with
         // the effect after it.
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var target = new Entity("Target", [status], Actions: [
             new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"),
@@ -949,7 +959,7 @@ public class DomainEntityInstanceTests {
             ], [])
         ], [], []);
 
-        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var source = new Entity("Source", [sourceStatus], Actions: [
             new Poly.DomainModeling.Ontology.Action("RunAll", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item", null, "Process", []),
@@ -976,7 +986,7 @@ public class DomainEntityInstanceTests {
     public async Task ForEachInvoke_PredicateMatchingNothing_IsANoOpAndTheNextEffectRuns() {
         // The filtered case: targets exist but none satisfies the predicate. The loop
         // body never runs, the action succeeds, and the effect after the loop still runs.
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var isSelected = new Policy("IsSelected",
             DomainExpression.Equal(DomainExpression.Property("Count"), DomainExpression.Literal(42L)));
@@ -986,7 +996,7 @@ public class DomainEntityInstanceTests {
 
         var target = new Entity("Target", [status, count], [process], [isSelected], []);
 
-        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var sourceStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var source = new Entity("Source", [sourceStatus], Actions: [
             new Poly.DomainModeling.Ontology.Action("RunSelected", InvocationResult.Void, [], [
                 new ForEachInvokeEffect("Items", "item",
@@ -1123,7 +1133,9 @@ public class DomainEntityInstanceTests {
         var entity = new Entity("Item", [dueDate], [action], [], []);
         var domain = ValidDomain.Create("Test", [entity], extensions: [ExtensionCatalog.TemporalId]);
 
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var instance = DomainEntityInstance.Create(entity,
+            new Dictionary<string, object?> { ["DueDate"] = new DateOnly(2020, 1, 1) },
+            domain: domain);
         var result = instance.InvokeAction("Touch");
         await Assert.That(result.Succeeded).IsTrue();
 
@@ -1133,7 +1145,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task ActionWithMultipleEffects_ExecutesAllTypes() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var count = new Property("Count", new DomainTypeReference("Number"), []);
         var entity = new Entity("Worker", [status, count], Actions: [
             new Poly.DomainModeling.Ontology.Action("DoAll", InvocationResult.Void, [],
@@ -1160,7 +1172,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task SubscriptionEffect_PeerBinding_CopiesPeerProperty() {
         // when Tracks Active as order { assign Status to order Code }
-        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [trackerStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1179,7 +1191,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
 
-        var orderCode = new Property("Code", new DomainTypeReference("Text"), []);
+        var orderCode = new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var order = new Entity("Order", [orderCode], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1216,7 +1228,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task SubscriptionEffect_NotificationOnly_DoesNotRequirePeerBinding() {
-        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [trackerStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1230,7 +1242,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1262,7 +1274,7 @@ public class DomainEntityInstanceTests {
     public async Task ExecuteSubscriptionEffects_DomainBound_UsesAnalysisAwareLowering() {
         // Q5: domain-bound subscription effects must lower with analysis/domain context
         // (same path as TransitionStage OnEntry/OnExit). Assign still fires.
-        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [trackerStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1276,7 +1288,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1311,7 +1323,7 @@ public class DomainEntityInstanceTests {
         // instance still fires (F8 — retired event.* bag oracle).
         // The throw is a unique collision. An unknown property is an analysis error, and
         // Create refuses that domain before the subscription runs.
-        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var trackerStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var trackerToken = new Property("Token", new DomainTypeReference("Text"), [new UniqueConstraint()]);
         var tracker = new Entity("Tracker", [trackerStatus, trackerToken], [], [], [
             new Stage("Pending", [], [], [], []) {
@@ -1326,7 +1338,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1389,7 +1401,7 @@ public class DomainEntityInstanceTests {
     public async Task SubscriptionEffect_PathPrefixWithoutPeerBinding_AnalysisError() {
         // F1: unbound peer-like root without `as name` fails closed at analysis.
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1403,7 +1415,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -1423,7 +1435,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task SubscriptionEffect_LegacyEventRoot_AnalysisError() {
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1437,7 +1449,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -1456,7 +1468,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task RuntimeDispatchPlan_CarriesPeerBinding() {
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1475,7 +1487,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -1498,7 +1510,7 @@ public class DomainEntityInstanceTests {
     public async Task EntityLevelSubscription_AnalysisAccepts_WhenRelAndStagesValid() {
         // Entity-level: entity-level when is always-active; no dispatch warn / peer hard error.
         var entity = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Idle", [], [], [], [])
         ]) {
@@ -1528,7 +1540,7 @@ public class DomainEntityInstanceTests {
     public async Task EntityLevelSubscription_Fires_WhenSubscriberNotInStageWithWhen() {
         // Entity-level dispatch: entity-level when fires regardless of subscriber stage (Idle has no stage-local when).
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Idle", [], [], [], []),
             new Stage("Busy", [], [], [], [])
@@ -1543,7 +1555,7 @@ public class DomainEntityInstanceTests {
         };
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1579,7 +1591,7 @@ public class DomainEntityInstanceTests {
         // Compiled Notify{Stage}Subscribers calls entity-level When… then
         // stage-scoped When… (module collection order). Last writer wins.
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1601,7 +1613,7 @@ public class DomainEntityInstanceTests {
         };
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1636,7 +1648,7 @@ public class DomainEntityInstanceTests {
     public async Task StageLocalSubscription_StillFires_AlongsideEntityPath() {
         // Sibling: stage-local when still works (entity bag empty for this entity).
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1650,7 +1662,7 @@ public class DomainEntityInstanceTests {
         ]);
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1684,7 +1696,7 @@ public class DomainEntityInstanceTests {
     public async Task EntityLevelSubscription_WithPeerBinding_AnalysisAccepts() {
         // Entity-level: as name on entity-level is allowed under the same rules as stage.
         var entity = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Idle", [], [], [], [])
         ]) {
@@ -1703,7 +1715,7 @@ public class DomainEntityInstanceTests {
             ]
         };
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Active", [], [], [], [])
         ]);
@@ -1729,7 +1741,7 @@ public class DomainEntityInstanceTests {
     public async Task EntityLevelSubscription_PeerBinding_CopiesPeerProperty() {
         // Entity-level peer golden: entity-level when Tracks Active as order { assign Status to order Code }
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Idle", [], [], [], [])
         ]) {
@@ -1749,7 +1761,7 @@ public class DomainEntityInstanceTests {
         };
 
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1792,7 +1804,7 @@ public class DomainEntityInstanceTests {
     public async Task EntityLevelSubscription_UnboundPathPrefix_AnalysisError() {
         // F11: entity-level runs same binding fail-closed as stage.
         var entity = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], []) {
             Subscriptions = [
                 new StageSubscription("Tracks", ["Active"], StageSubscriptionQuantifier.Each, [
@@ -1804,7 +1816,7 @@ public class DomainEntityInstanceTests {
             ]
         };
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Active", [], [], [], [])
         ]);
@@ -1824,7 +1836,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task SubscriptionEffect_NestedPeerPath_AnalysisError() {
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1844,7 +1856,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -1864,7 +1876,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task SubscriptionEffect_PeerAsAssignTarget_AnalysisError() {
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1883,7 +1895,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -1905,7 +1917,7 @@ public class DomainEntityInstanceTests {
     public async Task SubscriptionEffect_AnyQuantifier_PeerBinding_CopiesPeerProperty() {
         // F14: Any/All store path passes PeerBinding (product DSL is Each-only).
         var tracker = new Entity("Tracker", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -1924,7 +1936,7 @@ public class DomainEntityInstanceTests {
             }
         ]);
         var order = new Entity("Order", [
-            new Property("Code", new DomainTypeReference("Text"), [])
+            new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [
             new Poly.DomainModeling.Ontology.Action("Activate", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1955,8 +1967,8 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task OnEntryEffect_RunsOnStageTransition() {
         // BR.3.1: OnEntry effects execute when entering a stage.
-        var entryTarget = new Property("EntryTarget", new DomainTypeReference("Text"), []);
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var entryTarget = new Property("EntryTarget", new DomainTypeReference("Text"), [new OptionalConstraint()]);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var entity = new Entity("TestEnt", [status, entryTarget], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -1990,7 +2002,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task OnExitEffect_RunsBeforeStageTransition() {
         // BR.3.1: OnExit effects execute before leaving a stage.
-        var exitNote = new Property("ExitNote", new DomainTypeReference("Text"), []);
+        var exitNote = new Property("ExitNote", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var entity = new Entity("TestEnt", [exitNote], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -2187,7 +2199,7 @@ public class DomainEntityInstanceTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var domain = DomainTestFactory.Create("_", [], []);
-        var evolveResult = new DomainEvolution(domain).Apply(changes);
+        var evolveResult = new DomainEvolution(domain).ApplyAndAnalyze(changes);
         await Assert.That(evolveResult.Succeeded).IsTrue();
 
         // Verify the domain has the relationship and create-in effect
@@ -2236,7 +2248,7 @@ public class DomainEntityInstanceTests {
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();
         var domain2 = DomainTestFactory.Create("_", [], []);
-        var evolveResult2 = new DomainEvolution(domain2).Apply(changes2);
+        var evolveResult2 = new DomainEvolution(domain2).ApplyAndAnalyze(changes2);
         await Assert.That(evolveResult2.Succeeded).IsTrue();
     }
 
@@ -2328,7 +2340,7 @@ public class DomainEntityInstanceTests {
     public async Task Subscription_OneHop_Cascade() {
         // BR.3.4: Subscription body transitions subscriber. A ──rel──► B.
         // When B goes to Active, A's subscription fires and transitions A to Done.
-        var aStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var aStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var a = new Entity("A", [aStatus], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -2481,7 +2493,7 @@ public class DomainEntityInstanceTests {
         // and transitions itself. No store depth cap; every hop fires.
         // Relationships go: Ei (Source) → Ei-1 (Target), so Ei is the subscriber.
 
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var allEntities = new List<Entity>();
         var relationships = new List<Relationship>();
 
@@ -2547,7 +2559,7 @@ public class DomainEntityInstanceTests {
         // A and B each `when` the other into Active and transition themselves.
         // Same-target confirms skip NoteAutomaticStage, so the cascade is a
         // notify ping-pong; the depth bound fails loud instead of overflowing.
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var a = new Entity("A", [status], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new StageTransitionEffect(new StageReference("Active"))
@@ -2597,7 +2609,7 @@ public class DomainEntityInstanceTests {
         // BR.3′.4: Child auto-added to store participates in subscription fan-out.
         // Parent creates Child; when Child transitions to Active, the subscription
         // on the Grandparent should fire.
-        var gpStatus = new Property("Status", new DomainTypeReference("Text"), []);
+        var gpStatus = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var gp = new Entity("Grandparent", [gpStatus], [], [], [
             new Stage("Waiting", [], [], [], []) {
                 Subscriptions = [
@@ -2615,7 +2627,7 @@ public class DomainEntityInstanceTests {
             new StageTransitionEffect(new StageReference("Active"))
         ], []);
         var child = new Entity("Child", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [childAction], [], [
             new Stage("Draft", [], [], [], []),
             new Stage("Active", [], [], [], [])
@@ -2641,7 +2653,8 @@ public class DomainEntityInstanceTests {
 
         var store = new DomainInstanceStore();
         var gpInstance = DomainEntityInstance.Create(gp, domain: domain);
-        var parentInstance = DomainEntityInstance.Create(parent, domain: domain);
+        var parentInstance = DomainEntityInstance.Create(parent,
+            new Dictionary<string, object?> { ["PName"] = "P" }, domain: domain);
         store.Add(gpInstance);
         store.Add(parentInstance);
 
@@ -2663,7 +2676,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task InstanceLinks_TwoByTwo_OnlyLinkedSubscriberFires() {
         // BR.4.4 / IG golden: 2 Trackers × 2 Orders — only the linked Tracker reacts.
-        var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
+        var statusProp = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [statusProp], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -2720,7 +2733,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task Store_Unlink_StopsSubscriptionFanOut() {
-        var statusProp = new Property("Status", new DomainTypeReference("Text"), []);
+        var statusProp = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tracker = new Entity("Tracker", [statusProp], [], [], [
             new Stage("Pending", [], [], [], []) {
                 Subscriptions = [
@@ -2793,8 +2806,8 @@ public class DomainEntityInstanceTests {
     public async Task CreateEntityInRelationship_WithoutStore_NoCrash() {
         // CreateIn with no store attached at construction: the job attaches the
         // C8d named twin, creates the child, and links it. No crash.
-        var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [])], [], [], []);
-        var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [])], [
+        var orderEntity = new Entity("Order", [new Property("Title", new DomainTypeReference("Text"), [new OptionalConstraint()])], [], [], []);
+        var customerEntity = new Entity("Customer", [new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])], [
             new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [
                 new CreateEntityInRelationshipEffect("orders", [])
             ], [])
@@ -3158,7 +3171,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task ForEachInvoke_WithoutStore_Throws() {
         var target = new Entity("Target", [
-            new Property("Status", new DomainTypeReference("Text"), [])
+            new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], Actions: [
             new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
                 new AssignEffect(DomainExpression.Property("Status"), DomainExpression.Literal("done"))
@@ -3237,7 +3250,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var source = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
                 DomainExpression.Equal(
@@ -3264,7 +3277,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var source = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
                 DomainExpression.Equal(
@@ -3291,7 +3304,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var source = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
                 DomainExpression.Equal(
@@ -3316,7 +3329,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var source = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("IsUrban", DomainExpression.RelationshipNav("profile",
                 DomainExpression.Equal(
@@ -3342,7 +3355,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
         ], []);
@@ -3369,7 +3382,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
         ], []);
@@ -3392,7 +3405,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("HasProfile", DomainExpression.Exists(DomainExpression.Property("profile")))
         ], []);
@@ -3410,11 +3423,11 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task EvaluatePolicy_UnlinkedToOneAdvisor_Comparisons_AreFalse() {
         var advisor = new Entity("Advisor", [
-            new Property("Name", new DomainTypeReference("Text"), []),
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]),
             new Property("Age", new DomainTypeReference("Number"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("NamedPat", DomainExpression.RelationshipNav("advisor",
                 DomainExpression.Equal(
@@ -3449,7 +3462,7 @@ public class DomainEntityInstanceTests {
             new Property("City", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var customer = new Entity("Customer", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("NoProfile", DomainExpression.NotExists(DomainExpression.Property("profile")))
         ], []);
@@ -3472,7 +3485,7 @@ public class DomainEntityInstanceTests {
             new Property("Sku", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var order = new Entity("Order", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("HasItems", DomainExpression.Exists(DomainExpression.Property("items")))
         ], []);
@@ -3590,7 +3603,7 @@ public class DomainEntityInstanceTests {
 
     [Test]
     public async Task InvokeAction_UnsetDate_AddDays_NamesTheProperty() {
-        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), []);
+        var dueDate = new Property("DueDate", new DomainTypeReference("Date"), [new OptionalConstraint()]);
         var extend = new Poly.DomainModeling.Ontology.Action("Extend", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("DueDate"),
@@ -3617,7 +3630,7 @@ public class DomainEntityInstanceTests {
             new Property("Sku", new DomainTypeReference("Text"), [])
         ], [], [], []);
         var order = new Entity("Order", [
-            new Property("Name", new DomainTypeReference("Text"), [])
+            new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [], [
             new Policy("HasSkuX", DomainExpression.RelationshipNav("items",
                 DomainExpression.Equal(
@@ -3652,7 +3665,7 @@ public class DomainEntityInstanceTests {
             [new AssignEffect(DomainExpression.Property("Trace"), DomainExpression.Literal("left_active"))]);
         var done = new Stage("Done", [], [], [], []);
         var entity = new Entity("Item",
-            [new Property("Trace", new DomainTypeReference("Text"), [])], [], [], [draft, active, done]);
+            [new Property("Trace", new DomainTypeReference("Text"), [new OptionalConstraint()])], [], [], [draft, active, done]);
         var domain = ValidDomain.Create("Test", [entity]);
         var store = new DomainInstanceStore();
         var instance = DomainEntityInstance.Create(entity, domain: domain);
@@ -3682,7 +3695,7 @@ public class DomainEntityInstanceTests {
         ], []);
         var source = new Entity("Source", [], [call], [], []);
         var target = new Entity("Target", [
-            new Property("LastMessage", new DomainTypeReference("Text"), [])
+            new Property("LastMessage", new DomainTypeReference("Text"), [new OptionalConstraint()])
         ], [process], [], []);
         var rel = new Relationship("service",
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
@@ -3849,7 +3862,7 @@ public class DomainEntityInstanceTests {
         var ex1 = Assert.Throws<InvalidOperationException>(() => boolInNumber.EvaluatePolicy(isPositive));
         await Assert.That(ex1!.Message).Contains("Cannot store a Boolean value in a numeric property");
 
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var hasName = new Policy("HasName",
             DomainExpression.NotEqual(DomainExpression.Property("Name"), DomainExpression.Literal("")));
         var text = new Entity("T", [name], [], [hasName], []);
@@ -3862,7 +3875,7 @@ public class DomainEntityInstanceTests {
     [Test]
     public async Task EvaluatePolicy_WrongTypedProgrammaticExpression_FailsLoudAtVmCompile() {
         // Domain analysis catches the wrong-typed policy; G1 refuses Create before VM compile.
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var name = new Property("Name", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var bad = new Policy("Bad",
             DomainExpression.Equal(DomainExpression.Property("Name"), DomainExpression.Literal(5)));
         var entity = new Entity("T", [name], [], [bad], []);
@@ -3889,7 +3902,7 @@ public class DomainEntityInstanceTests {
         // Round-2 C-F3: the export ctor applies the first stage's entry effects; the
         // runtime Create must too (status stamps, IsOpen flags, timestamps) — divergent
         // initial state otherwise.
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var entry = new Stage("Loaned",
             Actions: [],
             Policies: [],
@@ -3908,8 +3921,8 @@ public class DomainEntityInstanceTests {
     public async Task InvokeAction_StringConcat_Assign_Concatenates() {
         // Round-2 C-F1: `"S" + Status` in the runtime VM silently stored null (no
         // string-concat arm). Must produce the concatenated text like the export.
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
-        var code = new Property("Code", new DomainTypeReference("Text"), []);
+        var status = new Property("Status", new DomainTypeReference("Text"), [new OptionalConstraint()]);
+        var code = new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var tag = new Poly.DomainModeling.Ontology.Action("Tag", InvocationResult.Void, [], [
             new AssignEffect(
                 DomainExpression.Property("Code"),

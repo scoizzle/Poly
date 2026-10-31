@@ -16,29 +16,29 @@ public class SameNameRelationshipSourceScopingTests {
         domain Test
 
         Machine: entity {
-          Name: Text
+          Name: Text optional
           orders: many Order
           HasMachineOrders: policy { count orders > 0 }
         }
 
         Book: entity {
-          Title: Text
+          Title: Text optional
           orders: many Order2
           HasBookOrders: policy { count orders > 0 }
         }
 
         Order: entity {
-          Code: Text
+          Code: Text optional
         }
 
         Order2: entity {
-          Sku: Text
+          Sku: Text optional
         }
         """;
 
     private static Domain ParseAndBuild() {
         var changes = new PolyDslParser(Dsl).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded || result.Root is null)
             throw new InvalidOperationException($"Evolution failed: {result.FailureSummary}");
         return result.Root;
@@ -144,7 +144,7 @@ public class SameNameRelationshipSourceScopingTests {
             """;
 
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Relationships().Count).IsEqualTo(4);
         await Assert.That(result.Relationships().Count(r => r.Name == "order")).IsEqualTo(2);
@@ -152,7 +152,7 @@ public class SameNameRelationshipSourceScopingTests {
 
         // Round-trips: the printer emits the same-name navs per source entity.
         var printed = new DomainDslPrinter().Print(result.Root);
-        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(printed).Parse());
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(printed).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         await Assert.That(reparsed.Relationships().Count(r => r.Name == "order")).IsEqualTo(2);
     }
@@ -212,7 +212,7 @@ public class SameNameRelationshipSourceScopingTests {
         var source = domain.Types.OfType<Entity>().Single(e => e.Name == "Machine");
         var before = source.Navigations.Count;
 
-        var added = new DomainEvolution(domain).Apply([new AddRelationshipChange(
+        var added = new DomainEvolution(domain).ApplyAndAnalyze([new AddRelationshipChange(
             "extra", new DomainTypeReference("Machine"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, [])]);
         await Assert.That(added.Succeeded).IsTrue();
@@ -220,7 +220,7 @@ public class SameNameRelationshipSourceScopingTests {
         await Assert.That(addedEntity.Navigations.Count).IsEqualTo(before + 1);
         await Assert.That(added.Relationships().Any(r => r.Name == "extra")).IsTrue();
 
-        var removed = new DomainEvolution(added.Root).Apply([new RemoveRelationshipChange("Machine", "extra")]);
+        var removed = new DomainEvolution(added.Root).ApplyAndAnalyze([new RemoveRelationshipChange("Machine", "extra")]);
         await Assert.That(removed.Succeeded).IsTrue();
         var removedEntity = removed.Root!.Types.OfType<Entity>().Single(e => e.Name == "Machine");
         await Assert.That(removedEntity.Navigations.Count).IsEqualTo(before);

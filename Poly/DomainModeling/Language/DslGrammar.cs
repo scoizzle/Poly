@@ -6,7 +6,7 @@ namespace Poly.DomainModeling.Language;
 /// <summary>
 /// Product Poly DSL as a <see cref="Grammar{TToken,TTokenKind}"/> pattern table.
 /// Rule/pattern surface and element names are the engine's; handlers in
-/// PolyDslParser / DslExpressionParser fold matches into IR.
+/// DomainResolver / DslExpressionParser fold matches into IR.
 /// </summary>
 public static class DslGrammar {
     /// <summary>True when <paramref name="kind"/> is a primitive property type keyword.</summary>
@@ -81,7 +81,7 @@ public static class DslGrammar {
         DslTokenKind.Text => "Text",
         DslTokenKind.NumberType => "Number",
         DslTokenKind.BooleanType => "Boolean",
-        DslTokenKind.Required => "required",
+        DslTokenKind.Optional => "optional",
         DslTokenKind.Unique => "unique",
         DslTokenKind.Range => "range",
         DslTokenKind.Length => "length",

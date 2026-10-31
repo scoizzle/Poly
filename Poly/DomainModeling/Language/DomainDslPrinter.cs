@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
@@ -69,6 +70,8 @@ public sealed class DomainDslPrinter {
             "header",
             fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = domain.Name }));
         foreach (var extensionId in domain.Extensions) {
+            if (string.Equals(extensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+                continue;
             _sb.AppendLine(_printTable.Print(
                 "uses",
                 "id",
@@ -151,10 +154,7 @@ public sealed class DomainDslPrinter {
             _sb.Append(prop.Name);
             _sb.Append(": ");
             _sb.Append(prop.Type.TypeName);
-            foreach (var c in prop.Constraints) {
-                _sb.Append(' ');
-                _sb.Append(PrintConstraint(c));
-            }
+            AppendPrintedConstraints(prop.Constraints);
             _sb.AppendLine();
         }
         _sb.AppendLine("}");
@@ -179,10 +179,7 @@ public sealed class DomainDslPrinter {
                 _sb.Append(prop.Name);
                 _sb.Append(": ");
                 _sb.Append(prop.Type.TypeName);
-                foreach (var c in prop.Constraints) {
-                    _sb.Append(' ');
-                    _sb.Append(PrintConstraint(c));
-                }
+                AppendPrintedConstraints(prop.Constraints);
                 _sb.AppendLine();
             }
             _sb.AppendLine("  }");
@@ -237,10 +234,7 @@ public sealed class DomainDslPrinter {
             _sb.Append(": ");
             _sb.Append(prop.Type.TypeName);
 
-            foreach (var c in prop.Constraints) {
-                _sb.Append(' ');
-                _sb.Append(PrintConstraint(c));
-            }
+            AppendPrintedConstraints(prop.Constraints);
 
             foreach (var facet in prop.Facets) {
                 _sb.Append(' ');
@@ -823,6 +817,7 @@ public sealed class DomainDslPrinter {
         if (literal.Value is bool b) return b ? "true" : "false";
         if (literal.Value is string s) return $"\"{EscapeStringLiteral(s)}\"";
         if (literal.Value is long l) return l.ToString(CultureInfo.InvariantCulture);
+        if (literal.Value is decimal m) return m.ToString(CultureInfo.InvariantCulture);
         if (literal.Value is double d) return d.ToString("0.0###############", CultureInfo.InvariantCulture);
         return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? "null";
     }
@@ -850,8 +845,21 @@ public sealed class DomainDslPrinter {
         _ => "?",
     };
 
+    /// <summary>
+    /// <see cref="RequiredConstraint"/> is not a DSL word. A property is required
+    /// unless it is marked <c>optional</c>, so the printer omits that node.
+    /// </summary>
+    private void AppendPrintedConstraints(IEnumerable<Constraint> constraints) {
+        foreach (var c in constraints) {
+            if (c is RequiredConstraint)
+                continue;
+            _sb.Append(' ');
+            _sb.Append(PrintConstraint(c));
+        }
+    }
+
     private string PrintConstraint(Constraint constraint) => constraint switch {
-        RequiredConstraint => "required",
+        OptionalConstraint => "optional",
         UniqueConstraint => "unique",
         RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
         LengthConstraint l => l.MinLength == l.MaxLength

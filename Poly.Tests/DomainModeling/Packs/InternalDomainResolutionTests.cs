@@ -23,7 +23,7 @@ public sealed class InternalDomainResolutionTests {
 
     private static Domain ParseParent(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             throw new InvalidOperationException(
                 "Test parent DSL failed to apply: " +

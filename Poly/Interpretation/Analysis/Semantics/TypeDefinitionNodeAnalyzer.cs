@@ -679,7 +679,7 @@ internal static class DictionaryBackedValue {
                 // Number is long. Convert.ToInt64 would truncate 0.25 to 0.
                 if (target == PrimitiveType.Int64 && raw is double or float or decimal && !IsIntegralNumber(raw))
                     throw new InvalidOperationException(
-                        $"Number is integral; '{raw}' is not a valid Number.");
+                        $"Number is integral; '{raw}' is not a valid Number. Use Decimal.");
                 return raw;
             case PrimitiveType.Boolean:
                 if (raw is not bool)

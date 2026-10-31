@@ -18,7 +18,7 @@ public class ValidDomainTests {
     [Test]
     public async Task Create_WithEveryCanonicalType_AnalyzesWithoutErrors() {
         var names = CanonicalBuiltInTypeCatalog.Definitions.Select(d => d.Name).ToArray();
-        await Assert.That(names).IsEquivalentTo(["Boolean", "Number", "Text", "Uuid", "Binary"]);
+        await Assert.That(names).IsEquivalentTo(["Boolean", "Number", "Decimal", "Text", "Uuid", "Binary"]);
         await Assert.That(Errors(ValidDomain.Create("T", [EntityWith(names)]))).IsEmpty();
     }
 

@@ -17,7 +17,7 @@ public class PipelineMergeMetadataTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
                 string.Join("; ", result.Analysis.Diagnostics.Where(d =>
@@ -363,7 +363,7 @@ public class PipelineMergeMetadataTests {
             uses persistence
             Profile: entity { City: Text }
             Customer: entity {
-              Name: Text required
+              Name: Text
               Email: Text unique
               Status: Text default("Active")
               profile: owned Profile

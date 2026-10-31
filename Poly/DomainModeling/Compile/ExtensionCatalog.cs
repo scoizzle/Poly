@@ -12,11 +12,11 @@ public sealed class ExtensionCatalog {
     public const string TemporalId = "temporal";
     public const string StorageFacetsId = "storage";
 
-    /// <summary>SDK language default written onto new product units.</summary>
-    public static readonly IReadOnlyList<string> ProductLanguage = [TemporalId];
+    /// <summary>Authored language ids. Temporal is implicit at Load, not a product seed.</summary>
+    public static readonly IReadOnlyList<string> ProductLanguage = [];
 
-    /// <summary>MCP authoring seed: language plus <c>column</c>/<c>table</c>.</summary>
-    public static readonly IReadOnlyList<string> ProductAuthoring = [TemporalId, StorageFacetsId];
+    /// <summary>MCP authoring seed: <c>column</c>/<c>table</c>. Temporal stays implicit.</summary>
+    public static readonly IReadOnlyList<string> ProductAuthoring = [StorageFacetsId];
 
     /// <summary>Session for <see cref="ProductLanguage"/>.</summary>
     public DomainSession Language => DomainSession.ForExtensions(ProductLanguage, this);

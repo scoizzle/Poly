@@ -30,7 +30,7 @@ public class Property
         get => this._rooms;
     }
     public PropertyStage CurrentStage { get; private set; }
-    public DomainResult<Hall> CreateHalls(long capacity, long dayRate, string name, long busySections = 0L, bool occupied = false, bool offline = false)
+    public DomainResult<Hall> CreateHalls(long capacity, decimal dayRate, string name, long busySections = 0L, bool occupied = false, bool offline = false)
     {
         var hallResult = Hall.Create(capacity, dayRate, name, this, new List<Section>(), busySections, occupied, offline);
         if (!hallResult.IsSuccess)

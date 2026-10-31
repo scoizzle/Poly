@@ -21,7 +21,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -70,7 +70,7 @@ public class Item3LowerPopulateTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(ticket.CurrentStage).IsEqualTo("Draft");
         ticket.TransitionStage("Done");
         await Assert.That(ticket.CurrentStage).IsEqualTo("Done");
@@ -107,7 +107,7 @@ public class Item3LowerPopulateTests {
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         // Create applies first-stage OnEntry via ApplyInitialStageEntryEffects → EntryExitBodies.
         var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(ticket.GetProperty<string>("Note")).IsEqualTo("sentinel-entry");
 
         // TransitionStage binds Done OnEntry from EntryExitBodies (not action-inline).
@@ -166,7 +166,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -230,7 +230,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -245,7 +245,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Guards
             Gate: entity {
-              Age: Number required
+              Age: Number
               IsAdult: policy { Age >= 18 }
             }
             """);
@@ -259,7 +259,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 AssessByType: action { }
               }
@@ -277,7 +277,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
             }
             """);
         var fromAnalysis = RuntimeAnalysisCache.Analysis(domain);
@@ -290,7 +290,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
             }
             Fine: entity {
@@ -313,7 +313,7 @@ public class Item3LowerPopulateTests {
         var (domain, _, _) = Evolve("""
             domain Library
             Patron: entity {
-              Name: Text required
+              Name: Text
             }
             """);
         var first = RuntimeAnalysisCache.Index(domain);
@@ -374,7 +374,7 @@ public class Item3LowerPopulateTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

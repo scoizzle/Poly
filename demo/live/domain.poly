@@ -5,6 +5,6 @@ domain Live
 // Go live: scripts/serve-poly.sh demo/live/domain.poly
 
 Patron: entity {
-  Name: Text required length(2, 80)
+  Name: Text length(2, 80)
   Email: Text unique
 }

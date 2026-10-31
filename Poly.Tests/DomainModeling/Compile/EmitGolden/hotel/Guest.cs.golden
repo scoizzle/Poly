@@ -40,7 +40,7 @@ public class Guest
         get => this._reservations;
     }
     public GuestStage CurrentStage { get; private set; }
-    public DomainResult<EventHold> CreateEvents(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Hall? hall = null, Section? section = null)
+    public DomainResult<EventHold> CreateEvents(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Hall? hall = null, Section? section = null)
     {
         var eventHoldResult = EventHold.Create(capacity, dayRate, endDate, headcount, startDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
@@ -55,7 +55,7 @@ public class Guest
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
-    public DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, long nightlyRate, long nights, long partySize, Folio? folio = null, Room? room = null)
+    public DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Room? room = null)
     {
         var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, this, room);
         if (!reservationResult.IsSuccess)
@@ -155,16 +155,17 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Name' is required.");
         }
-        if (!string.IsNullOrEmpty(phone))
+        if (string.IsNullOrEmpty(phone))
         {
-            if (phone.Length < 7L)
-            {
-                return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");
-            }
-            if (phone.Length > 20L)
-            {
-                return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
-            }
+            return DomainResult<Guest>.Failure("'Phone' is required.");
+        }
+        if (phone.Length < 7L)
+        {
+            return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");
+        }
+        if (phone.Length > 20L)
+        {
+            return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
         var uniqueCheck = Guest.CheckUnique("Email", email);

@@ -18,12 +18,12 @@ public sealed class EmitFileReferenceTests {
         domain Parking
 
         Permit: entity {
-          Plate: Text required
+          Plate: Text
           Open: stage { }
         }
 
         Garage: entity {
-          Name: Text required
+          Name: Text
         }
         """;
 
@@ -35,7 +35,7 @@ public sealed class EmitFileReferenceTests {
         uses http
 
         Item: entity {
-          Name: Text required
+          Name: Text
           Qty: Number
         }
         """;

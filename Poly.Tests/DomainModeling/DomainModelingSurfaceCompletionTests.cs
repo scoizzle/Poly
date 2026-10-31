@@ -8,7 +8,7 @@ namespace Poly.Tests.DomainModeling;
 public class DomainModelingSurfaceCompletionTests {
     private static Domain Apply(string poly) {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(poly).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(poly).Parse());
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary ?? "evolution failed");
         return result.Root!;
@@ -16,10 +16,24 @@ public class DomainModelingSurfaceCompletionTests {
 
     [Test]
     public async Task Parse_DecimalLiteral_IsNumber() {
+        var rejected = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser("""
+                domain T
+                Item: entity {
+                  Total: Number
+                  Discounted: policy { Total * 0.9 > 0 }
+                }
+                """).Parse());
+        var messages = rejected.Analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.Message)
+            .ToArray();
+        await Assert.That(messages.Any(m => m.Contains("Decimal") && m.Contains(" (line "))).IsTrue();
+
         var domain = Apply("""
             domain T
             Item: entity {
-              Total: Number
+              Total: Decimal
               Discounted: policy { Total * 0.9 > 0 }
             }
             """);
@@ -28,7 +42,7 @@ public class DomainModelingSurfaceCompletionTests {
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
         var expr = domain.Types.OfType<Entity>().Single().Policies.Single().Expression;
         var mul = (Poly.DomainModeling.Ontology.Multiply)((Poly.DomainModeling.Ontology.Comparison)expr).Left;
-        await Assert.That(((Literal)mul.Right).Value).IsEqualTo(0.9);
+        await Assert.That(((Literal)mul.Right).Value).IsEqualTo(0.9m);
     }
 
     [Test]
@@ -58,7 +72,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task If_NonBoolean_AnalysisRejects() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Item: entity {
                   Qty: Number
@@ -77,7 +91,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task Assign_NowToNumber_AnalysisRejects() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 uses temporal
                 Item: entity {
@@ -176,7 +190,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task Contract_StoredPropertyOfContractValueType_AnalysisError() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Stripe: contract external stripe v1 {
                   ChargeRequest: value { Amount: Number }
@@ -193,7 +207,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task ContractBinding_UnknownAction_AnalysisError() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Item: entity { Name: Text }
                 Stripe: contract external stripe v1 {

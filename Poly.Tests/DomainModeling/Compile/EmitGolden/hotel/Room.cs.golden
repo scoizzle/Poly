@@ -10,7 +10,7 @@ public enum RoomStage
 public class Room
 {
     private List<Reservation> _stays = new List<Reservation>();
-    private Room(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    private Room(long floor, long maxOccupancy, decimal nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
     {
         this.Floor = floor;
         this.MaxOccupancy = maxOccupancy;
@@ -28,7 +28,7 @@ public class Room
     public bool Dirty { get; private set; }
     public long Floor { get; private set; }
     public long MaxOccupancy { get; private set; }
-    public long NightlyRate { get; private set; }
+    public decimal NightlyRate { get; private set; }
     public string Number { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public bool Offline { get; private set; }
@@ -103,7 +103,7 @@ public class Room
     {
         this.Dirty = true;
     }
-    public static DomainResult<Room> Create(long floor, long maxOccupancy, long nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    public static DomainResult<Room> Create(long floor, long maxOccupancy, decimal nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
     {
         if (floor < 0L)
         {
@@ -121,11 +121,11 @@ public class Room
         {
             return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
         }
-        if (nightlyRate < 0L)
+        if (nightlyRate < 0m)
         {
             return DomainResult<Room>.Failure("'NightlyRate' must be >= 0.");
         }
-        if (nightlyRate > 10000L)
+        if (nightlyRate > 10000m)
         {
             return DomainResult<Room>.Failure("'NightlyRate' must be <= 10000.");
         }

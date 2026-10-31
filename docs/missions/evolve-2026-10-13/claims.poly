@@ -2,7 +2,7 @@ domain Claims
 uses temporal
 
 Claimant: entity {
-  Name: Text required
+  Name: Text
   claims: many Claim
 
   FileClaim: action (amount: Number) -> Claim {
@@ -48,7 +48,7 @@ Claim: entity {
 }
 
 Assessor: entity {
-  Name: Text required
+  Name: Text
   notes: many Note
 
   LogReview: action (note: Text) {

@@ -16,6 +16,7 @@ public static class CanonicalBuiltInTypeCatalog {
     [
         ("Boolean",  TypeCategory.Boolean),
         ("Number",   TypeCategory.Primitive | TypeCategory.Numeric),
+        ("Decimal",  TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.HighPrecision | TypeCategory.Signed),
         ("Text",     TypeCategory.Primitive | TypeCategory.Text),
         ("Uuid",     TypeCategory.Primitive | TypeCategory.Identifier),
         ("Binary",   TypeCategory.Primitive | TypeCategory.Binary),
@@ -24,7 +25,7 @@ public static class CanonicalBuiltInTypeCatalog {
     /// <summary>
     /// Returns a list of <see cref="DomainChange"/>s that add each canonical built-in
     /// primitive type to a domain. These changes can be passed to
-    /// <c>new DomainEvolution(domain).Apply(changes)</c> or composed via
+    /// <c>new DomainEvolution(domain).ApplyAndAnalyze(changes)</c> or composed via
     /// <c>new DomainEvolution(domain).Evolve()</c>.
     /// </summary>
     public static IReadOnlyList<DomainChange> CreateChanges() {
@@ -39,7 +40,7 @@ public static class CanonicalBuiltInTypeCatalog {
     /// </summary>
     public static Domain ApplyTo(Domain domain) {
         var changes = CreateChanges();
-        var result = new DomainEvolution(domain).Apply(changes);
+        var result = new DomainEvolution(domain).ApplyAndAnalyze(changes);
         return result.Succeeded ? result.Root : domain;
     }
 

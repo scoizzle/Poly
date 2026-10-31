@@ -24,7 +24,7 @@ public class SliceCProducerLoopCatalogTests {
         domain Library
 
         Book: entity {
-          Title: Text required
+          Title: Text
           Pages: Number
         }
         """;
@@ -49,7 +49,7 @@ public class SliceCProducerLoopCatalogTests {
         uses http
 
         Item: entity {
-          Name: Text required
+          Name: Text
           Qty: Number
         }
         """;
@@ -58,7 +58,7 @@ public class SliceCProducerLoopCatalogTests {
     public async Task SliceC_AfterLower_SessionHasNonEmptyArtifactCatalog_WithTrees() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             """);
 
         await Assert.That(session.ArtifactCatalog.Artifacts.Count).IsEqualTo(0);
@@ -146,7 +146,7 @@ public class SliceCProducerLoopCatalogTests {
             uses http
 
             Book: entity {
-              Title: Text required
+              Title: Text
             }
             """;
         var result = new Compiler().Compile(httpOnly, CompileMode.Entities);
@@ -186,7 +186,7 @@ public class SliceCProducerLoopCatalogTests {
             uses persistence
 
             Item: entity {
-              Name: Text required
+              Name: Text
               Qty: Number
             }
             """;
@@ -239,7 +239,7 @@ public class SliceCProducerLoopCatalogTests {
     internal static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

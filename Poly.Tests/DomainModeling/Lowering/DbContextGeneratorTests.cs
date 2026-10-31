@@ -25,7 +25,7 @@ public class DbContextGeneratorTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
@@ -109,7 +109,7 @@ public class DbContextGeneratorTests {
         var domain = ParseDomain("""
             domain Test
             Item: entity {
-              Title: Text required
+              Title: Text
             }
             """);
         var omc = OnModelCreating(domain);
@@ -226,5 +226,42 @@ public class DbContextGeneratorTests {
         var omc = OnModelCreating(domain);
         await Assert.That(omc.FindInvocations("HasColumnName")
             .Any(i => i.Arguments[0] is Constant c && c.Value?.ToString() == "COL_\"X\"")).IsTrue();
+    }
+
+    [Test]
+    public async Task DefaultTable_EnglishPlural_NotNaiveS() {
+        var domain = ParseDomain("""
+            domain Crm
+            Opportunity: entity { Title: Text }
+            Activity: entity { Subject: Text }
+            """);
+        var omc = OnModelCreating(domain);
+        var tables = omc.FindInvocations("ToTable")
+            .Select(i => i.Arguments[0] is Constant c ? c.Value?.ToString() : null)
+            .ToList();
+        await Assert.That(tables).Contains("Opportunities");
+        await Assert.That(tables).Contains("Activities");
+        await Assert.That(tables.Contains("Opportunitys")).IsFalse();
+        await Assert.That(tables.Contains("Activitys")).IsFalse();
+    }
+
+    [Test]
+    public async Task EnumColumn_IntegerStorageWithConverter() {
+        var domain = ParseDomain("""
+            domain T
+            Kind: enum { A, B }
+            Item: entity { Kind: Kind }
+            """);
+        var omc = OnModelCreating(domain);
+        var columnTypes = omc.FindInvocations("HasColumnType")
+            .Select(i => i.Arguments[0] is Constant c ? c.Value?.ToString() : null)
+            .ToList();
+        await Assert.That(columnTypes.Contains("Kind")).IsFalse();
+        await Assert.That(columnTypes.Any(t => t is "integer" or "INTEGER" or "int")).IsTrue();
+        var conversion = omc.FindInvocations("HasConversion").Single();
+        var typeArg = conversion.TypeArguments.Single();
+        await Assert.That(typeArg).IsTypeOf<PrimitiveTypeReference>();
+        await Assert.That(((PrimitiveTypeReference)typeArg).PrimitiveId)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
     }
 }

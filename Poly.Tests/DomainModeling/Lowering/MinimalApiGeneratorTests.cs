@@ -29,7 +29,7 @@ public class MinimalApiGeneratorTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
     }
@@ -124,8 +124,8 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("""
             domain Col
             Address: entity {
-              Line1: Text required
-              City: Text required
+              Line1: Text
+              City: Text
             }
             """);
         var rendered = Render(d);
@@ -307,7 +307,7 @@ public class MinimalApiGeneratorTests {
         var rendered = Render(d with { Types = types });
 
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string value { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Value { get; init; }");
     }
 
     [Test]
@@ -328,7 +328,7 @@ public class MinimalApiGeneratorTests {
             """);
         var rendered = Render(d);
         await Assert.That(rendered).Contains("LoadDto dto");
-        await Assert.That(rendered).Contains("dto.weight");
+        await Assert.That(rendered).Contains("dto.Weight");
     }
 
     [Test]
@@ -570,7 +570,7 @@ public class MinimalApiGeneratorTests {
             domain Registration
             Program: entity {
               Code: Text unique
-              Name: Text required
+              Name: Text
             }
             Student: entity {
               Email: Text unique
@@ -596,6 +596,57 @@ public class MinimalApiGeneratorTests {
 
         var errors = CompileHost(http.Files!);
         await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task DomainFailure_BadRequestUnlessUniqueOrConflict() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Item: entity { Name: Text }
+            """));
+        await Assert.That(rendered).Contains("Results.BadRequest");
+        await Assert.That(rendered).Contains("Results.Conflict");
+        await Assert.That(rendered).Contains("Unique constraint");
+        await Assert.That(rendered).Contains("already has a target");
+    }
+
+    [Test]
+    public async Task ActionDto_PropertiesArePascalCase() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Lead: entity { Email: Text unique }
+            Account: entity {
+              Name: Text
+              PlaceHq: action (city: Text, region: Text) { }
+              ConvertLead: action (lead: Lead) { }
+            }
+            """));
+        await Assert.That(rendered).Contains("public string City");
+        await Assert.That(rendered).Contains("public string Region");
+        await Assert.That(rendered).Contains("public string LeadId");
+        await Assert.That(rendered).Contains("dto.City");
+        await Assert.That(rendered).Contains("dto.LeadId");
+        await Assert.That(rendered.Contains("public string city")).IsFalse();
+        await Assert.That(rendered.Contains("dto.leadId")).IsFalse();
+    }
+
+    [Test]
+    public async Task CreatedUri_DropsToStringOnStringKey() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Item: entity { Sku: Text unique }
+            """));
+        await Assert.That(rendered).Contains("Value.Sku");
+        await Assert.That(rendered.Contains("Sku.ToString()")).IsFalse();
+    }
+
+    [Test]
+    public async Task CreatedUri_KeepsToStringOnNonStringKey() {
+        var rendered = Render(ParseDomain("""
+            domain T
+            Item: entity { Code: Number unique }
+            """));
+        await Assert.That(rendered).Contains("Code.ToString()");
     }
 
     private static int CountOf(string text, string value) {

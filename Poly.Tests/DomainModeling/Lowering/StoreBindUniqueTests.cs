@@ -58,7 +58,26 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
-    public async Task NonUniqueAssign_Runtime_IsBareAssignment() {
+    public async Task NonUniqueAssign_Runtime_ChecksRequiredNotUnique() {
+        var name = new Property("Name", new DomainTypeReference("Text"), []);
+        var entity = new Entity("Person",
+            Properties: [name],
+            Actions: [], Policies: [], Stages: []);
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new Parameter("entity", new TypeReference(entity.Name))));
+
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property("Name"),
+            DomainExpression.Property("incoming")));
+
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs).Contains("IsNullOrEmpty");
+        await Assert.That(cs).DoesNotContain("EnsureUnique");
+    }
+
+    [Test]
+    public async Task NonUniqueAssign_SatisfiedConstant_SkipsTheGuard() {
+        // D14: a literal that provably satisfies required text is not re-checked.
         var name = new Property("Name", new DomainTypeReference("Text"), []);
         var entity = new Entity("Person",
             Properties: [name],
@@ -70,7 +89,9 @@ public class StoreBindUniqueTests {
             DomainExpression.Property("Name"),
             DomainExpression.Literal("Ada")));
 
-        await Assert.That(lowered).IsTypeOf<Assignment>();
+        var cs = new CSharpGenerator().Generate(lowered!);
+        await Assert.That(cs).DoesNotContain("IsNullOrEmpty");
+        await Assert.That(cs).DoesNotContain("EnsureUnique");
     }
 
     [Test]
@@ -78,7 +99,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 assign Plate to plate
               }
@@ -152,7 +173,7 @@ public class StoreBindUniqueTests {
         var (domain, analysis) = Evolve("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
               Relabel: action (plate: Text) {
                 if (plate != "") {
                   assign Plate to plate
@@ -231,7 +252,7 @@ public class StoreBindUniqueTests {
                 poly = poly[..(nl + 1)] + "uses persistence\n" + poly[(nl + 1)..];
         }
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

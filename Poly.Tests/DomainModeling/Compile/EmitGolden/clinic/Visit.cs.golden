@@ -41,16 +41,17 @@ public class Visit
     }
     public static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
-        if (!string.IsNullOrEmpty(reason))
+        if (string.IsNullOrEmpty(reason))
         {
-            if (reason.Length < 2L)
-            {
-                return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");
-            }
-            if (reason.Length > 200L)
-            {
-                return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
-            }
+            return DomainResult<Visit>.Failure("'Reason' is required.");
+        }
+        if (reason.Length < 2L)
+        {
+            return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");
+        }
+        if (reason.Length > 200L)
+        {
+            return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
         }
         if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
         {

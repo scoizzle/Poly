@@ -19,7 +19,7 @@ public class InvariantCultureTests {
     private const string Poly = """
         domain Shop
         Item: entity {
-          Price: Number range(0.01, 99.5)
+          Price: Decimal range(0.01, 99.5)
           Cheap: policy { Price < 0.5 }
           Draft: stage {
             Sell: action require Cheap { transition to Sold }
@@ -48,7 +48,10 @@ public class InvariantCultureTests {
 
         var cs = new CSharpGenerator().Generate(session.Lower(domain, analysis));
 
-        await Assert.That(cs).Contains("0.5");
+        await Assert.That(cs).Contains("0.01m");
+        await Assert.That(cs).Contains("0.5m");
+        await Assert.That(cs).DoesNotContain("0,01");
+        await Assert.That(cs).DoesNotContain("0,5");
         await Assert.That(cs).Contains("'Price' must be >= 0.01.");
         await Assert.That(cs).Contains("'Price' must be <= 99.5.");
         WhenAnySimulatePrintAgreeTests.CompileGenerated(cs, "InvariantCulturePrint");
@@ -57,7 +60,7 @@ public class InvariantCultureTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary);
         return (result.Root!, result.Analysis, session);

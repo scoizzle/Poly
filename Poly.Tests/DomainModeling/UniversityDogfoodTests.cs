@@ -25,7 +25,7 @@ public class UniversityDogfoodTests {
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve() {
         var changes = new PolyDslParser(PolyText()).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

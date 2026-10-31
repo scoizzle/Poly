@@ -10,7 +10,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// </summary>
 public sealed class ReservedGeneratedNameTests {
     private static AnalysisResult Analyze(string dsl) {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(dsl).Parse());
         return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
     }
@@ -45,7 +45,7 @@ public sealed class ReservedGeneratedNameTests {
         var analysis = Analyze("""
             domain Shop
             OrderStage: entity {
-              Name: Text required
+              Name: Text
             }
             Order: entity {
               Draft: stage {}
@@ -65,7 +65,7 @@ public sealed class ReservedGeneratedNameTests {
         var analysis = Analyze("""
             domain Clash
             DomainResult: entity {
-              Name: Text required
+              Name: Text
             }
             """);
 
@@ -141,7 +141,7 @@ public sealed class ReservedGeneratedNameTests {
             domain Clash
             Status: enum { A, B }
             Status: entity {
-              Name: Text required
+              Name: Text
             }
             """);
 

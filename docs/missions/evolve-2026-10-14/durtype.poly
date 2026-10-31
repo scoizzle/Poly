@@ -2,7 +2,7 @@ domain DurType
 uses temporal
 
 Job: entity {
-  Name: Text required
+  Name: Text
   Elapsed: Duration
   OpensAt: Time
 }

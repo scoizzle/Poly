@@ -13,15 +13,15 @@ public class DateDifferenceDurationTests {
         var parser = new PolyDslParser(dsl);
         var changes = parser.Parse();
         var empty = DomainTestFactory.Create("_", [], []);
-        return new DomainEvolution(empty).Apply(changes);
+        return new DomainEvolution(empty).ApplyAndAnalyze(changes);
     }
 
     /// <summary>Duration literals (<c>1 Days</c>) need the temporal pack at parse time.</summary>
     private static EvolutionResult ParseTemporal(string dsl) {
-        var session = DomainSession.ForExtensions(ExtensionCatalog.ProductLanguage);
+        var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(changes, session: session);
+            .ApplyAndAnalyze(changes, session: session);
     }
 
     private static string PrintTemporal(string dsl) {
@@ -48,7 +48,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -63,7 +63,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: Date
               Finished: Date
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -78,7 +78,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: Date
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -119,7 +119,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);
@@ -147,7 +147,7 @@ public class DateDifferenceDurationTests {
             Job: entity {
               Started: DateTime
               Finished: DateTime
-              Elapsed: Duration
+              Elapsed: Duration optional
               Close: action { assign Elapsed to Finished - Started }
             }
             """);

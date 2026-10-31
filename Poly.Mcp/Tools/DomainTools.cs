@@ -159,7 +159,7 @@ internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logg
     /// <summary>
     /// Creates a new domain session with the canonical built-in primitive types.
     /// The bootstrapped domain includes canonical primitives (Boolean, Number, Text, Uuid, Binary)
-    /// plus Temporal types (Date, Time, DateTime, Duration) from product <c>uses temporal</c>.
+    /// plus Temporal types (Date, Time, DateTime, Duration) loaded implicitly at Load.
     /// Returns a sessionId that must be passed to other tools.
     /// </summary>
     [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
@@ -1108,6 +1108,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
                 cfg?.TryGetValue("min", out var min) == true ? NormalizeJsonElement(min) : null,
                 cfg?.TryGetValue("max", out var max) == true ? NormalizeJsonElement(max) : null),
             "Required" => new RequiredConstraint(),
+            "Optional" => new OptionalConstraint(),
             "Length" => new LengthConstraint(
                 cfg?.TryGetValue("min", out var lmin) == true ? lmin.GetInt32() : 0,
                 cfg?.TryGetValue("max", out var lmax) == true ? lmax.GetInt32() : int.MaxValue),
@@ -1116,7 +1117,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
                     ? p.GetString()!
                     : throw new ArgumentException("Pattern requires 'pattern' config.")),
             "Unique" => new UniqueConstraint(),
-            _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Length, Pattern, Unique.")
+            _ => throw new ArgumentException($"Unknown constraint type '{type}'. Supported: Range, Required, Optional, Length, Pattern, Unique.")
         };
     }
 
@@ -1134,6 +1135,7 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
     private static string FormatConstraint(Constraint c) => c switch {
         RangeConstraint r => $"Range(min={r.Minimum}, max={r.Maximum})",
         RequiredConstraint => "Required",
+        OptionalConstraint => "Optional",
         LengthConstraint l => $"Length(min={l.MinLength}, max={l.MaxLength})",
         PatternConstraint p => $"Pattern({p.Pattern})",
         UniqueConstraint => "Unique",
@@ -1309,9 +1311,9 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
             var seed = parseState.Domain.Extensions.Count > 0
                 ? parseState.Domain.Extensions
                 : ExtensionCatalog.ProductAuthoring;
-            parseSession = DomainSession.ForAuthoringSource(polyText, seed, ProductCatalog.Catalog);
-            var parser = new PolyDslParser(polyText, parseSession);
-            changes = parser.Parse();
+            var tree = DslSyntaxTree.Parse(polyText);
+            parseSession = DomainSession.ForAuthoringDocument(tree, seed, ProductCatalog.Catalog);
+            changes = DomainCompilation.Resolve(tree, parseSession);
             changes = DomainCompilation.WithSeed(changes, seed).ToList();
         }
         catch (FormatException ex) {
@@ -1338,7 +1340,7 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
 
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes, session: parseSession);
+            outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: parseSession);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

@@ -158,11 +158,11 @@ public class McpSmokeTests {
             domain Demo
 
             Account: entity {
-              Name: Text required
+              Name: Text
             }
 
             Lead: entity {
-              Name: Text required
+              Name: Text
               account: Account
             }
             """);
@@ -230,7 +230,7 @@ public class McpSmokeTests {
               Name: Text
               loans: many Loan
               Active: stage {
-                CheckOut: action { create in loans { } }
+                CheckOut: action { create in loans { Status: "new" } }
               }
               when loans Overdue {
                 assign Name to "overdue"
@@ -686,17 +686,17 @@ public class McpSmokeTests {
         await Assert.That(r5.Success).IsTrue();
 
         var pass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":25}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":25,\"Active\":true}"));
         await Assert.That(pass.Success).IsTrue();
         await Assert.That(pass.Message).Contains("true");
 
         var edge = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":18}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":18,\"Active\":true}"));
         await Assert.That(edge.Success).IsTrue();
         await Assert.That(edge.Message).Contains("true");
 
         var fail = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Adult",
-            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":15,\"Active\":true}"));
         await Assert.That(fail.Success).IsTrue();
         await Assert.That(fail.Message).Contains("false");
 
@@ -721,12 +721,12 @@ public class McpSmokeTests {
         await Assert.That(andFail.Message).Contains("false");
 
         var notPass = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "NotAdult",
-            RequireInstance(sessionId, "Person", "{\"Age\":15}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":15,\"Active\":true}"));
         await Assert.That(notPass.Success).IsTrue();
         await Assert.That(notPass.Message).Contains("true");
 
         var always = McpTestTools.Policy.EvaluatePolicy(sessionId, "Person", "Always",
-            RequireInstance(sessionId, "Person", "{\"Age\":0}"));
+            RequireInstance(sessionId, "Person", "{\"Age\":0,\"Active\":true}"));
         await Assert.That(always.Success).IsTrue();
         await Assert.That(always.Message).Contains("true");
     }
@@ -878,8 +878,8 @@ public class McpSmokeTests {
             domain Orders
 
             Product: entity {
-              SKU: Text required unique
-              Name: Text required
+              SKU: Text unique
+              Name: Text
             }
             """);
 
@@ -913,7 +913,7 @@ public class McpSmokeTests {
             domain Orders
 
             Customer: entity {
-              Name: Text required
+              Name: Text
               Places: many Order
             }
 
@@ -978,8 +978,8 @@ public class McpSmokeTests {
             domain Test
 
             Item: entity {
-              SKU: Text required unique
-              Name: Text required
+              SKU: Text unique
+              Name: Text
             }
             """);
 
@@ -992,7 +992,7 @@ public class McpSmokeTests {
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!).Contains("domain Test");
         await Assert.That(poly).Contains("Item: entity");
-        await Assert.That(poly).Contains("SKU: Text required unique");
+        await Assert.That(poly).Contains("SKU: Text unique");
 
         // Round-trip it: re-apply and verify
         var response2 = McpTestTools.Dsl.ApplyDsl(sessionId, poly!);
@@ -1153,7 +1153,7 @@ public class McpSmokeTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Relationships().Count).IsEqualTo(1);
         await Assert.That(result.Relationships()[0].Name).IsEqualTo("Tracks");
@@ -1519,7 +1519,7 @@ public class McpSmokeTests {
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Support
             Agent: entity {
-              Handle: Text unique required
+              Handle: Text unique
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
@@ -1538,9 +1538,9 @@ public class McpSmokeTests {
         var (sessionId, _) = McpTestTools.Store.Create("Billing");
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Billing
-            Customer: entity { Name: Text required }
+            Customer: entity { Name: Text }
             Line: entity {
-              Sku: Text required
+              Sku: Text
               Open: stage {
                 Post: action { transition to Posted }
               }
@@ -1874,7 +1874,7 @@ public class McpSmokeTests {
         await Assert.That(r6.Success).IsTrue();
 
         // Verify via MCP: create instance and call action from Draft stage
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
@@ -1974,7 +1974,7 @@ public class McpSmokeTests {
         await Assert.That(evolveResult!.Succeeded).IsTrue();
 
         // Verify via MCP: create instance and call action — should transition
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
@@ -2032,7 +2032,7 @@ public class McpSmokeTests {
 
         // Runtime: InvokeAction must fall through to the entity action and transition,
         // not silently no-op on the params-carrying stage copy.
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task");
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Task", """{"Name":"task"}""");
         await Assert.That(create.Success).IsTrue();
         await Assert.That(create.Message).Contains("Draft");
 
@@ -2056,7 +2056,7 @@ public class McpSmokeTests {
     public async Task Parser_PathPrefix_RelBoolProp_CreatesRelationshipNav() {
         // Q1.2: `Rel BoolProp` should parse to RelationshipNavigation
         var poly = "domain Test\nItem: entity {\n  Flag: Boolean\n}\n";
-        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var domain = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(poly).Parse()).Root;
         // Build a policy expression via DSL that uses a hypothetical relationship
         // We test parser directly via PolyDslParser on a policy expression
@@ -2680,7 +2680,7 @@ E: entity {{
             domain Test
             Tier: enum { Basic, Plus, Elite }
             Member: entity {
-              Name: Text required
+              Name: Text
               Level: Tier
             }
             """);
@@ -2748,7 +2748,7 @@ E: entity {{
             domain Test
             Status: enum { Off, On }
             Rack: entity {
-              Name: Text required
+              Name: Text
               LastPing: Text default("none")
               Power: Number default(10)
               Status: Status default(On)
@@ -3398,7 +3398,7 @@ E: entity {{
             domain Test
             Item: entity {
               Code: Text unique column("C")
-              Name: Text column("N") required
+              Name: Text column("N")
               Qty: Number range(0,) column("Q")
               Flag: Boolean column("F") unique
             }
@@ -3410,7 +3410,7 @@ E: entity {{
         await Assert.That(export.Success).IsTrue();
         var poly = extractPolyFromExport(export);
         await Assert.That(poly).Contains("unique column(\"C\")");
-        await Assert.That(poly).Contains("required column(\"N\")");
+        await Assert.That(poly).Contains("column(\"N\")");
         await Assert.That(poly).Contains("range(0, ) column(\"Q\")");
         await Assert.That(poly).Contains("unique column(\"F\")");
 

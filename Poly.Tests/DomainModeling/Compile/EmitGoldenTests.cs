@@ -108,7 +108,7 @@ public sealed class EmitGoldenTests {
         AnalyzeSample(string poly) {
         var session = DomainSession.ForSource(poly, Seed, Catalog);
         var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), Seed);
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!outcome.Succeeded) {
             var errors = string.Join("; ", outcome.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)

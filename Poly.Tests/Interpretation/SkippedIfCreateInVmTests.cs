@@ -69,6 +69,7 @@ public class SkippedIfCreateInVmTests {
         var fraction = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":0.25}""");
         await Assert.That(fraction.Success).IsFalse();
         await Assert.That(fraction.Message).Contains("Number is integral");
+        await Assert.That(fraction.Message).Contains("Decimal");
         McpTestTools.Store.TryGet(sessionId, out var afterFraction);
         await Assert.That(afterFraction!.InstanceMap.Count).IsEqualTo(0);
 
@@ -90,6 +91,7 @@ public class SkippedIfCreateInVmTests {
         var fractional = Assert.Throws<InvalidOperationException>(
             () => DictionaryBackedValue.CoerceReadValue(0.25d, Poly.Introspection.PrimitiveType.Int64));
         await Assert.That(fractional!.Message).Contains("Number is integral");
+        await Assert.That(fractional.Message).Contains("Decimal");
     }
 
     private static long[] Rates(string sessionId) {
@@ -99,7 +101,7 @@ public class SkippedIfCreateInVmTests {
 
     private static (Domain Domain, Entity Reading) Evolve() {
         var changes = new PolyDslParser(Billing).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

@@ -12,7 +12,7 @@ public enum QuoteStage
 public class Quote
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
-    private Quote(long amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    private Quote(decimal amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
         this.Amount = amount;
         this.Title = title;
@@ -20,7 +20,7 @@ public class Quote
         this._lines = new List<QuoteLine>(lines ?? new List<QuoteLine>());
         this.CurrentStage = QuoteStage.Draft;
     }
-    public long Amount { get; private set; }
+    public decimal Amount { get; private set; }
     public string Title { get; private set; } = default!;
     public Opportunity? Opportunity { get; private set; }
     public IReadOnlyList<QuoteLine> Lines
@@ -28,7 +28,7 @@ public class Quote
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    public DomainResult<QuoteLine> CreateLines(long qty, long unitPrice, Product? product = null)
+    public DomainResult<QuoteLine> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)
@@ -49,11 +49,11 @@ public class Quote
             return DomainResult<QuoteLine>.Failure("'AddLine' requires stage 'Draft' on entity 'Quote'.");
         }
         var assignValue0 = this.Amount + qty * sku.ListPrice;
-        if (assignValue0 < 0L)
+        if (assignValue0 < 0m)
         {
             return DomainResult<QuoteLine>.Failure("'Amount' must be >= 0.");
         }
-        if (assignValue0 > 100000000L)
+        if (assignValue0 > 100000000m)
         {
             return DomainResult<QuoteLine>.Failure("'Amount' must be <= 100000000.");
         }
@@ -93,13 +93,13 @@ public class Quote
         this.CurrentStage = QuoteStage.Rejected;
         return DomainResult.Success();
     }
-    public static DomainResult<Quote> Create(long amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    public static DomainResult<Quote> Create(decimal amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
-        if (amount < 0L)
+        if (amount < 0m)
         {
             return DomainResult<Quote>.Failure("'Amount' must be >= 0.");
         }
-        if (amount > 100000000L)
+        if (amount > 100000000m)
         {
             return DomainResult<Quote>.Failure("'Amount' must be <= 100000000.");
         }

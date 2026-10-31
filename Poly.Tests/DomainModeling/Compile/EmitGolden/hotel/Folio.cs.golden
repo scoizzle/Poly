@@ -7,27 +7,27 @@ public enum FolioStage
 
 public class Folio
 {
-    private Folio(Reservation? reservation = null, long balance = 0L)
+    private Folio(Reservation? reservation = null, decimal balance = 0L)
     {
         this.Balance = balance;
         this.Reservation = reservation;
         this.CurrentStage = FolioStage.Open;
     }
-    public long Balance { get; private set; }
+    public decimal Balance { get; private set; }
     public Reservation? Reservation { get; private set; }
     public FolioStage CurrentStage { get; private set; }
-    public DomainResult PostRoomNight(long amount)
+    public DomainResult PostRoomNight(decimal amount)
     {
         if (this.CurrentStage != FolioStage.Open)
         {
             return DomainResult.Failure("'PostRoomNight' requires stage 'Open' on entity 'Folio'.");
         }
         var assignValue0 = this.Balance + amount;
-        if (assignValue0 < 0L)
+        if (assignValue0 < 0m)
         {
             return DomainResult.Failure("'Balance' must be >= 0.");
         }
-        if (assignValue0 > 1000000L)
+        if (assignValue0 > 1000000m)
         {
             return DomainResult.Failure("'Balance' must be <= 1000000.");
         }
@@ -41,11 +41,11 @@ public class Folio
             return DomainResult.Failure("'PostCharge' requires stage 'Open' on entity 'Folio'.");
         }
         var assignValue0 = this.Balance + amount;
-        if (assignValue0 < 0L)
+        if (assignValue0 < 0m)
         {
             return DomainResult.Failure("'Balance' must be >= 0.");
         }
-        if (assignValue0 > 1000000L)
+        if (assignValue0 > 1000000m)
         {
             return DomainResult.Failure("'Balance' must be <= 1000000.");
         }
@@ -81,13 +81,13 @@ public class Folio
     }
     public bool HasBalance() => this.Balance > 0L;
     public bool IsSettled() => this.Balance == 0L;
-    public static DomainResult<Folio> Create(Reservation? reservation = null, long balance = 0L)
+    public static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0L)
     {
-        if (balance < 0L)
+        if (balance < 0m)
         {
             return DomainResult<Folio>.Failure("'Balance' must be >= 0.");
         }
-        if (balance > 1000000L)
+        if (balance > 1000000m)
         {
             return DomainResult<Folio>.Failure("'Balance' must be <= 1000000.");
         }

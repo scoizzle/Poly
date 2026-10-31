@@ -2,7 +2,7 @@ domain Cart
 uses temporal
 
 Cart: entity {
-  Name: Text required
+  Name: Text
   Total: Number default(0)
   ItemCount: Number default(0)
   lines: many owned Line
@@ -20,7 +20,7 @@ Cart: entity {
 }
 
 Line: entity {
-  Sku: Text required
+  Sku: Text
   Price: Number range(0, )
   Qty: Number range(1, )
   New: stage { }

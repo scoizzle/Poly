@@ -14,11 +14,11 @@ public class CreateInstanceCoercionTests {
         uses temporal
 
         Job: entity {
-          Name: Text required
+          Name: Text
           ExpiresAt: DateTime
-          Due: Date
-          Window: Duration
-          OpensAt: Time
+          Due: Date optional
+          Window: Duration optional
+          OpensAt: Time optional
 
           IsExpired: policy { ExpiresAt < Now }
         }

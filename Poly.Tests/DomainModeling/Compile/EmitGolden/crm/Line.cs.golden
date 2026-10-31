@@ -1,7 +1,7 @@
 #nullable enable
 public class Line
 {
-    private Line(long qty, long unitPrice, Product? product = null, Opportunity? opportunity = null)
+    private Line(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
         this.Qty = qty;
         this.UnitPrice = unitPrice;
@@ -9,10 +9,10 @@ public class Line
         this.Opportunity = opportunity;
     }
     public long Qty { get; private set; }
-    public long UnitPrice { get; private set; }
+    public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Opportunity? Opportunity { get; private set; }
-    public static DomainResult<Line> Create(long qty, long unitPrice, Product? product = null, Opportunity? opportunity = null)
+    public static DomainResult<Line> Create(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
         if (qty < 1L)
         {
@@ -22,11 +22,11 @@ public class Line
         {
             return DomainResult<Line>.Failure("'Qty' must be <= 10000.");
         }
-        if (unitPrice < 0L)
+        if (unitPrice < 0m)
         {
             return DomainResult<Line>.Failure("'UnitPrice' must be >= 0.");
         }
-        if (unitPrice > 100000000L)
+        if (unitPrice > 100000000m)
         {
             return DomainResult<Line>.Failure("'UnitPrice' must be <= 100000000.");
         }

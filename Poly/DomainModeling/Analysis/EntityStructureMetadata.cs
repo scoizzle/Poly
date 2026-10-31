@@ -39,6 +39,14 @@ public sealed record EntityStructureMetadata(
     IReadOnlyList<ConstructorParameterOrder> ConstructorParameters,
 
     /// <summary>
+    /// Every entity property that is required at create — the property has no
+    /// <see cref="Ontology.Constraints.OptionalConstraint"/>. Required is the default and
+    /// <c>optional</c> is its opt-out, so this set is the single requiredness fact:
+    /// consumers do not re-scan constraints to decide whether a property may be omitted.
+    /// </summary>
+    IReadOnlySet<string> RequiredPropertyNames,
+
+    /// <summary>
     /// Map of entity property name → enum type name for properties whose type is
     /// an enum. Published so lowering consumers (exporter, expression pass) resolve
     /// enum-typed literals to qualified members without re-scanning the catalog.

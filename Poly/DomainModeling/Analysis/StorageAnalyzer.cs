@@ -265,6 +265,11 @@ public sealed class StorageAnalyzer {
         var columns = new List<StorageColumn>();
         var collections = new List<StorageNavigation>();
         var references = new List<StorageNavigation>();
+        // Requiredness is published once by EntityStructureAnalyzer; the tree scan is
+        // the analysis-absent fallback for standalone use.
+        var requiredPropertyNames = _context?.GetStructure(entity)?.RequiredPropertyNames
+            ?? _analysis?.GetStructure(entity)?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
 
         foreach (var prop in entity.Properties) {
             var isEntityRef = _entityLookup.ContainsKey(prop.Type.TypeName);
@@ -295,7 +300,7 @@ public sealed class StorageAnalyzer {
                 columnType,
                 baseClrType,
                 isEnum,
-                prop.Constraints.Any(c => c is RequiredConstraint),
+                requiredPropertyNames.Contains(prop.Name),
                 prop.Constraints.Any(c => c is DefaultValueConstraint),
                 prop.Constraints.Any(c => c is UniqueConstraint),
                 prop.Constraints.OfType<LengthConstraint>().FirstOrDefault()?.MaxLength,
@@ -447,7 +452,11 @@ public sealed class StorageAnalyzer {
     }
 
     private bool HasRequiredEntityRef(Entity entity) {
-        if (entity.Properties.Any(p => !p.Constraints.Any(c => c is DefaultValueConstraint)
+        var required = _context?.GetStructure(entity)?.RequiredPropertyNames
+            ?? _analysis?.GetStructure(entity)?.RequiredPropertyNames
+            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+        if (entity.Properties.Any(p => required.Contains(p.Name)
+            && !p.Constraints.Any(c => c is DefaultValueConstraint)
             && _entityLookup.ContainsKey(p.Type.TypeName)))
             return true;
         if (_relationships.Any(r =>

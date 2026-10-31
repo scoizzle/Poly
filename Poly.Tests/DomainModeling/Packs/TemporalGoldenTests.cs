@@ -28,7 +28,7 @@ public sealed class TemporalGoldenTests {
 
     private static Domain Apply(string poly, DomainSession inputs) {
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException($"Apply of temporal domain failed: {result.FailureSummary}");
         return result.Root!;
@@ -49,7 +49,7 @@ public sealed class TemporalGoldenTests {
         domain TemporalRenew
 
         Loan: entity {
-          DueDate: Date
+          DueDate: DateTime
           Renew: action {
             assign DueDate to Now - 12 Days
           }
@@ -102,7 +102,7 @@ public sealed class TemporalGoldenTests {
         domain TemporalExpiry
 
         Loan: entity {
-          ExpiryDate: Date
+          ExpiryDate: DateTime
           IsExpired: policy { ExpiryDate < Now }
         }
         """;
@@ -152,9 +152,9 @@ public sealed class TemporalGoldenTests {
 
     [Test]
     public async Task SessionWithoutTemporalPack_AssignNowMinusDays_RejectsAuthoring() {
-        // No parser inputs → default (pack-absent) inputs: the pack is the only
-        // way to register the Now/duration forms, so temporal authoring must fail.
-        await Assert.That(() => new PolyDslParser(PackAbsentDomain).Parse())
+        // Raw session never calls LoadTemporal, so Now/duration forms stay unregistered.
+        var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(() => new PolyDslParser(PackAbsentDomain, raw).Parse())
             .Throws<FormatException>();
     }
 }

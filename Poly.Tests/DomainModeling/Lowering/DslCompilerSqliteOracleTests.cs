@@ -28,6 +28,38 @@ public class DslCompilerSqliteOracleTests {
         new Compiler().Load(new HttpLibrary());
 
     [Test]
+    public async Task DslCompiler_OptionalProperty_IsNullableAndAbsentFromCreateDto() {
+        var compiler = CompilerWithHttpHost();
+        var result = compiler.Compile("""
+            domain OptionalHost
+            Item: entity {
+              Name: Text
+              Note: Text optional
+              Qty: Number optional
+            }
+            """, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue();
+
+        var item = result.Files!.Single(f => f.FileName == "Item.cs").Source;
+        await Assert.That(item).Contains("public string Name { get; private set; }");
+        await Assert.That(item).Contains("public string? Note { get; private set; }");
+        await Assert.That(item).Contains("public long? Qty { get; private set; }");
+        await Assert.That(item).Contains("string? note = null");
+
+        // Requiredness is one fact: the bare Name column is required, the optional
+        // Note/Qty columns are not.
+        var db = result.Files!.Single(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal)).Source;
+        await Assert.That(db).Contains("b.Property(x => x.Name).HasColumnName(\"name\").HasColumnType(\"TEXT\").IsRequired();");
+        await Assert.That(db).Contains("b.Property(x => x.Note).HasColumnName(\"note\").HasColumnType(\"TEXT\");");
+
+        // Every create-DTO member is a required ctor slot; optional members are absent.
+        var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(prog).Contains("[Required]\n    public string Name { get; init; }");
+        await Assert.That(prog).DoesNotContain("string? Note");
+        await Assert.That(prog).DoesNotContain("long? Qty");
+    }
+
+    [Test]
     public async Task DslCompiler_EntitiesMode_EmitsEntityTypesFromProjection() {
         // entity emit uses DomainProgramProjection.ToSyntax on finished AnalysisResult
         // (no mid-pipeline EntitySyntaxMetadata soft-skip).
@@ -282,7 +314,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("public record RestockDto");
-        await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long amount { get; init; }");
+        await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long Amount { get; init; }");
         // An action with no constrained target emits no [Range] on its params.
         var compiler2 = CompilerWithHttpHost();
         var result2 = compiler2.Compile("""
@@ -311,7 +343,7 @@ public class DslCompilerSqliteOracleTests {
         var result = compiler.Compile("""
             domain Demo
             Book: entity {
-              Title: Text required length(2, 50)
+              Title: Text length(2, 50)
               Code: Text pattern("^[A-Z]{2}-[0-9]{3}$")
               Pages: Number range(1, 10000)
 
@@ -327,14 +359,14 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        // Entity DTO: declared required + length.
+        // Entity DTO: declared + length.
         await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Title { get; init; }");
         // Entity DTO: declared pattern.
         await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Code { get; init; }");
         // Action DTO: required + length inherited from `assign Title to value`.
-        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string value { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Value { get; init; }");
         // Action DTO: pattern inherited from `assign Code to value`.
-        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string value { get; init; }");
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Value { get; init; }");
     }
 
     [Test]
@@ -356,7 +388,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("public record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre genre { get; init; }");
+        await Assert.That(prog).Contains("public record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
     }
 
     [Test]
@@ -423,7 +455,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("public record AdjustDto");
-        await Assert.That(prog).DoesNotContain("[Range(0, 10)]\n    public long amount");
+        await Assert.That(prog).DoesNotContain("[Range(0, 10)]\n    public long Amount");
     }
 
     [Test]
@@ -445,6 +477,6 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("[Range(1, 50)]\n    public long qty { get; init; }");
+        await Assert.That(prog).Contains("[Range(1, 50)]\n    public long Qty { get; init; }");
     }
 }

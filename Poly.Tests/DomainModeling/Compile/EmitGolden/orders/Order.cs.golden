@@ -14,20 +14,20 @@ public class Order
 {
     private List<OrderItem> _items = new List<OrderItem>();
     private Order() { }
-    private Order(long total, string cancelReason = "", long discount = 0L, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    private Order(decimal discount, decimal total, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
+        this.Discount = discount;
         this.Total = total;
         this.CancelReason = cancelReason;
-        this.Discount = discount;
         this.State = state;
         this.Customer = customer;
         this._items = new List<OrderItem>(items ?? new List<OrderItem>());
         this.CurrentStage = OrderStage.Pending;
     }
     public string CancelReason { get; private set; } = default!;
-    public long Discount { get; private set; }
+    public decimal Discount { get; private set; }
     public OrderState State { get; private set; }
-    public long Total { get; private set; }
+    public decimal Total { get; private set; }
     public Customer? Customer { get; private set; }
     public IReadOnlyList<OrderItem> Items
     {
@@ -41,12 +41,13 @@ public class Order
     public DomainResult Cancel(string reason)
     {
         var assignValue0 = reason;
-        if (!System.String.IsNullOrEmpty(assignValue0))
+        if (System.String.IsNullOrEmpty(assignValue0))
         {
-            if (assignValue0.Length > 200L)
-            {
-                return DomainResult.Failure("'CancelReason' must be at most 200 characters.");
-            }
+            return DomainResult.Failure("'CancelReason' is required.");
+        }
+        if (assignValue0.Length > 200L)
+        {
+            return DomainResult.Failure("'CancelReason' must be at most 200 characters.");
         }
         this.CancelReason = assignValue0;
         this.CurrentStage = OrderStage.Cancelled;
@@ -56,11 +57,11 @@ public class Order
     public DomainResult ApplyDiscount(long amount)
     {
         var assignValue0 = amount;
-        if (assignValue0 < 0L)
+        if (assignValue0 < 0m)
         {
             return DomainResult.Failure("'Discount' must be >= 0.");
         }
-        if (assignValue0 > 100L)
+        if (assignValue0 > 100m)
         {
             return DomainResult.Failure("'Discount' must be <= 100.");
         }
@@ -88,20 +89,21 @@ public class Order
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;
-    public static DomainResult<Order> Create(long total, string cancelReason = "", long discount = 0L, Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    public static DomainResult<Order> Create(decimal discount, decimal total, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
-        if (!string.IsNullOrEmpty(cancelReason))
+        if (string.IsNullOrEmpty(cancelReason))
         {
-            if (cancelReason.Length > 200L)
-            {
-                return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");
-            }
+            return DomainResult<Order>.Failure("'CancelReason' is required.");
         }
-        if (discount < 0L)
+        if (cancelReason.Length > 200L)
+        {
+            return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");
+        }
+        if (discount < 0m)
         {
             return DomainResult<Order>.Failure("'Discount' must be >= 0.");
         }
-        if (discount > 100L)
+        if (discount > 100m)
         {
             return DomainResult<Order>.Failure("'Discount' must be <= 100.");
         }
@@ -109,15 +111,15 @@ public class Order
         {
             return DomainResult<Order>.Failure(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."));
         }
-        if (total < 0L)
+        if (total < 0m)
         {
             return DomainResult<Order>.Failure("'Total' must be >= 0.");
         }
-        if (total > 100000L)
+        if (total > 100000m)
         {
             return DomainResult<Order>.Failure("'Total' must be <= 100000.");
         }
-        var created = new Order(total, cancelReason, discount, customer, items, state);
+        var created = new Order(discount, total, cancelReason, customer, items, state);
         if (customer != null)
         {
             customer.AttachOrders(created);

@@ -22,10 +22,10 @@ namespace Poly.Tests.DomainModeling.Compile;
 public class ContributedMethodTests {
     private const string Poly = """
         domain Lab
-        Widget: entity { Code: Text required unique }
+        Widget: entity { Code: Text unique }
         Lot: entity {
           widgets: many Widget
-          Note: Text
+          Note: Text optional
           Issue: action (code: Text) {
             create in widgets { Code: code }
           }
@@ -38,7 +38,7 @@ public class ContributedMethodTests {
     private const string PolyWithDefaults = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
           tags: many Tag
         }
         Tag: entity {
@@ -54,8 +54,8 @@ public class ContributedMethodTests {
     private const string PolyTwoUnique = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
-          Sku: Text unique
+          Code: Text unique
+          Sku: Text optional unique
         }
         Lot: entity {
           widgets: many Widget
@@ -67,14 +67,14 @@ public class ContributedMethodTests {
     private const string PolyRootUnique = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
         }
         """;
 
     private const string PolyRootUniqueWithNav = """
         domain Lab
         Widget: entity {
-          Code: Text required unique
+          Code: Text unique
           tags: many Tag
         }
         Tag: entity { Label: Text }
@@ -163,8 +163,8 @@ public class ContributedMethodTests {
                 catalog: new CatalogIndex(session.ArtifactCatalog))
             .Generate("LabDbContext");
 
-        await Assert.That(source.Contains("entity.Issue(dto.code, db)", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(source.Contains("entity.Touch(dto.label, db)", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(source.Contains("entity.Issue(dto.Code, db)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains("entity.Touch(dto.Label, db)", StringComparison.Ordinal)).IsFalse();
         // The action lambda now takes the port, so the host must register it.
         await Assert.That(source.Contains(
             "AddScoped<Poly.DomainModeling.Runtime.IStoragePort", StringComparison.Ordinal)).IsTrue();
@@ -400,7 +400,7 @@ public class ContributedMethodTests {
         builder.Load(library);
         var session = builder.Build();
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics

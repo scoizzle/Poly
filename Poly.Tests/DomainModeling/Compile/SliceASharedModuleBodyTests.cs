@@ -20,7 +20,7 @@ public class SliceASharedModuleBodyTests {
     public async Task SliceA_SharedModuleBody_InterpreterAndPrint_AgreeWithoutConsumerFlag() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -100,7 +100,7 @@ public class SliceASharedModuleBodyTests {
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
         var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "" }, domain);
+            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
         await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
         inst.TransitionStage("Done");
         await Assert.That(inst.CurrentStage).IsEqualTo("Done");
@@ -120,7 +120,7 @@ public class SliceASharedModuleBodyTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

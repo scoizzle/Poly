@@ -74,6 +74,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var assignOnlyPropertyNames = ComputeAssignOnlyPropertyNames(entity);
         var constructorParameters = ComputeConstructorParameterOrder(entity, lookup, assignOnlyPropertyNames);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
+        var requiredPropertyNames = ComputeRequiredPropertyNames(entity);
 
         // ── Lifecycle detection ────────────────────────────────
         // A property whose type is a domain enum whose member-name set is exactly
@@ -118,9 +119,27 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
-            enumPropertyNames, entryAssignedPropertyNames,
+            requiredPropertyNames, enumPropertyNames, entryAssignedPropertyNames,
             lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames
         );
+    }
+
+    /// <summary>
+    /// The one requiredness rule: a property is required at create unless it carries
+    /// <c>optional</c>. <c>default(...)</c> supplies a value when omitted, and the first
+    /// stage's entry effects initialize their targets — both are create exceptions, not
+    /// different requiredness.
+    /// </summary>
+    internal static bool IsRequired(Property property) =>
+        !property.Constraints.Any(static c => c is OptionalConstraint);
+
+    internal static IReadOnlySet<string> ComputeRequiredPropertyNames(Entity entity) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var prop in entity.Properties) {
+            if (IsRequired(prop))
+                names.Add(prop.Name);
+        }
+        return names;
     }
 
     /// <summary>
@@ -265,8 +284,12 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         // they are NOT ctor params. Shared rule published as
         // EntityStructureMetadata.EntryAssignedPropertyNames (single source of truth).
         var entryAssignedProps = ComputeEntryAssignedPropertyNames(entity);
+        var requiredProps = ComputeRequiredPropertyNames(entity);
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+            // Optional properties are trailing `T? = null` parameters, added after
+            // the required scalar and navigation parameters.
+            if (!requiredProps.Contains(prop.Name)) continue;
             if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
             if (entryAssignedProps.Contains(prop.Name)) continue;
             var isOptional = assignOnly.Contains(prop.Name)
@@ -298,7 +321,9 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     /// constructor params (either as a property or an outgoing singular nav).
     /// </summary>
     private static bool HasRequiredEntityRef(Entity entity, DomainTypeLookupMetadata lookup) {
+        var requiredProps = ComputeRequiredPropertyNames(entity);
         if (entity.Properties.Any(p =>
+            requiredProps.Contains(p.Name) &&
             !p.Constraints.Any(c => c is DefaultValueConstraint) &&
             lookup.Types.TryGetValue(p.Type.TypeName, out var type) && type is Entity))
             return true;

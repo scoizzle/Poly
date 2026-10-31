@@ -10,10 +10,10 @@ namespace Poly.Tests.Mcp;
 /// </summary>
 public class McpNameRuleTests {
     private const string PropertyTemplate =
-        "domain D\n\nOther: entity {\n  N: Text required\n}\n\nE: entity {\n  NAME: TYPE\n}\n";
+        "domain D\n\nOther: entity {\n  N: Text\n}\n\nE: entity {\n  NAME: TYPE\n}\n";
     private const string StageTemplate = "domain D\n\nE: entity {\n  NAME: stage { }\n}\n";
-    private const string EntityTemplate = "domain D\n\nNAME: entity {\n  N: Text required\n}\n";
-    private const string DomainTemplate = "domain NAME\n\nE: entity {\n  N: Text required\n}\n";
+    private const string EntityTemplate = "domain D\n\nNAME: entity {\n  N: Text\n}\n";
+    private const string DomainTemplate = "domain NAME\n\nE: entity {\n  N: Text\n}\n";
 
     // Valid and invalid under the DSL scanner: digits first, punctuation, spaces, and keywords.
     private static readonly string[] Names = [

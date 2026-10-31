@@ -2,7 +2,7 @@ domain SmartHome
 uses temporal
 
 Scene: entity {
-  Name: Text required
+  Name: Text
   IsActive: Boolean default(false)
   devices: many Device
 
@@ -27,7 +27,7 @@ Scene: entity {
 }
 
 Device: entity {
-  Name: Text required
+  Name: Text
   Power: Number range(0, 3000)
   MaxLevel: Number range(0, 100) default(100)
   Draw: Number

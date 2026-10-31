@@ -103,6 +103,7 @@ public sealed class DbContextGenerator {
             fields = [PendingKeysField()];
             methods.Add(ExistsMethod());
             methods.Add(RecordMethod());
+            methods.Add(ReleaseMethod());
             interfaces = [new ClrTypeReference(typeof(IStoragePort))];
         }
 
@@ -141,7 +142,8 @@ public sealed class DbContextGenerator {
     /// <summary>
     /// The context is the host half of <see cref="IStoragePort"/>: <c>Exists</c>
     /// queries the mapped <c>DbSet</c>; <c>Record</c> keeps the pending key a
-    /// nested create must see before the host saves.
+    /// nested create must see before the host saves; <c>Release</c> drops a
+    /// pending key this invocation replaced. A saved row is left for the host.
     /// </summary>
     private static FieldDefinitionNode PendingKeysField() =>
         new("_pendingKeys",
@@ -213,6 +215,21 @@ public sealed class DbContextGenerator {
             ]));
     }
 
+    private static MethodDefinitionNode ReleaseMethod() {
+        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
+        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
+        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        return new MethodDefinitionNode(
+            "Release",
+            new TypeReference("void"),
+            Parameters: [entityParam, propertyParam, valueParam],
+            Body: new Block([
+                new Invoke(
+                    new Member(new Member(new ThisReference(), "_pendingKeys"), "Remove"),
+                    PendingKey(entityParam, propertyParam, valueParam))
+            ]));
+    }
+
     private static Node PendingKey(Node entity, Node property, Node value) {
         Node key = new Poly.Ast.Nodes.Add(entity, new Constant("\u001f"));
         key = new Poly.Ast.Nodes.Add(key, property);
@@ -223,7 +240,7 @@ public sealed class DbContextGenerator {
     /// <summary>Builds Syntax IR for a single entity's OnModelCreating config block.</summary>
     private Node BuildEntityConfig(Entity entity) {
         var store = GetStorageEntity(entity);
-        var tableName = store.TableName;
+        var tableName = EmitTableName(entity, store);
 
         // Lambda parameter: b
         var bParam = new Parameter("b");
@@ -322,11 +339,21 @@ public sealed class DbContextGenerator {
             );
         }
 
-        // .HasColumnType("type")
+        // Enum columns store the int backing value. The CLR type name is not a SQL type.
+        var columnType = col.ColumnType;
+        if (col.IsEnum
+            && (string.Equals(columnType, col.ClrTypeName, StringComparison.Ordinal)
+                || string.Equals(columnType, col.DomainType, StringComparison.Ordinal)))
+            columnType = "INTEGER";
         chain = new Invoke(
             new Member(chain, "HasColumnType"),
-            new Constant(col.ColumnType)
+            new Constant(columnType)
         );
+        if (col.IsEnum) {
+            chain = new Invoke(new Member(chain, "HasConversion")) {
+                TypeArguments = [new PrimitiveTypeReference(ClrPrimitive.Int32)]
+            };
+        }
 
         // .IsRequired()
         if (col.IsRequired && !DomainTypeMapping.IsNonNullableClrValueType(col.ClrTypeName)) {
@@ -389,6 +416,15 @@ public sealed class DbContextGenerator {
     // ── Helpers ────────────────────────────────────────────────
 
     private static string Pluralize(string name) => Pluralizer.Pluralize(name);
+
+    /// <summary>
+    /// Default storage table is <c>Name + "s"</c> (<c>Opportunitys</c>). The host
+    /// emits the English plural unless <c>table("…")</c> overrode the name.
+    /// </summary>
+    private static string EmitTableName(Entity entity, StorageEntity store) =>
+        string.Equals(store.TableName, entity.Name + "s", StringComparison.Ordinal)
+            ? Pluralize(entity.Name)
+            : store.TableName;
 
     private static string ShadowKeyName(Entity entity, StorageEntity store) {
         var taken = entity.Properties.Any(p => p.Name == "Id")

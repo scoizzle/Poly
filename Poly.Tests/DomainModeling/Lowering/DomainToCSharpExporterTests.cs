@@ -27,21 +27,21 @@ public class DomainToCSharpExporterTests {
         PremiumTier: enum { Silver, Gold, Platinum }
 
         Book: entity {
-          Title: Text required
-          Author: Text required
+          Title: Text
+          Author: Text
           ISBN: Text unique length(10, 17)
           Pages: Number range(1, 10000)
           Genre: Genre
         }
 
         Patron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique pattern("^[^@]+@[^@]+$")
           MemberSince: Date default(Today)
           Status: PatronStatus default(Active)
-          MaxItems: Number range(0, 20) required
-          CurrentBorrowCount: Number
-          OutstandingFines: Number
+          MaxItems: Number range(0, 20)
+          CurrentBorrowCount: Number default(0)
+          OutstandingFines: Number default(0)
           loans: many Loan
           fines: many Fine
           GoodStanding: policy { Status is "Active" }
@@ -90,11 +90,11 @@ public class DomainToCSharpExporterTests {
         }
 
         Loan: entity {
-          Status: Text
+          Status: Text optional
           CheckedOutAt: DateTime
-          DueDate: DateTime
-          ReturnedAt: DateTime
-          TimesRenewed: Number
+          DueDate: DateTime default(Now)
+          ReturnedAt: DateTime optional
+          TimesRenewed: Number optional
           book: Book
           borrower: Patron
           Active: stage {
@@ -115,10 +115,10 @@ public class DomainToCSharpExporterTests {
         }
 
         Fine: entity {
-          Amount: Number required
+          Amount: Number
           Reason: Text
           DateIssued: DateTime default(Now)
-          Paid: Boolean
+          Paid: Boolean optional
           patron: Patron
           Unpaid: stage {
             Pay: action {
@@ -140,7 +140,7 @@ public class DomainToCSharpExporterTests {
         }
 
         PremiumPatron: entity {
-          Name: Text required
+          Name: Text
           Email: Text unique pattern("^[^@]+@[^@]+$")
           RewardPoints: Number
           Tier: PremiumTier default(Silver)
@@ -158,7 +158,7 @@ public class DomainToCSharpExporterTests {
         string poly, DomainSession? parserInputs) {
         var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
@@ -446,6 +446,8 @@ public class DomainToCSharpExporterTests {
             .Where(p => autoWireBackRef is null
                 || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
             .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
+            .Concat(DomainToCSharpExporter.TrailingOmittableProperties(loan, analysis)
+                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected);
     }
@@ -462,12 +464,12 @@ public class DomainToCSharpExporterTests {
               orders: many Order
 
               CheckOut: action {
-                create in orders { Title: "t" }
+                create in orders { Title: "t" Total: 0 }
               }
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               Total: Number range(0, )
               customer: Customer
               lines: many OrderLine
@@ -475,7 +477,7 @@ public class DomainToCSharpExporterTests {
             }
 
             OrderLine: entity {
-              Sku: Text required
+              Sku: Text
             }
 
             Note: entity {
@@ -513,7 +515,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               customer: Customer
             }
             """;
@@ -553,7 +555,7 @@ public class DomainToCSharpExporterTests {
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               customer: Customer
               primaryContact: Customer
             }
@@ -576,7 +578,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
@@ -601,7 +603,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -628,7 +630,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
               children: many Account
               Active: stage {
@@ -655,11 +657,11 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Order: entity {
-              Code: Text required
+              Code: Text
               items: many Item
             }
             Item: entity {
-              Name: Text required
+              Name: Text
               order: Order
               Active: stage {
                 Add: action { create in order { Code: "x" } }
@@ -684,7 +686,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               primary: many Account
               secondary: many Account
               Active: stage {
@@ -712,7 +714,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Account: entity {
-              Name: Text required
+              Name: Text
               primary: Account
               secondary: Account
               children: many Account
@@ -740,10 +742,10 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Test
             Child: entity {
-              Name: Text required
+              Name: Text
             }
             Parent: entity {
-              Name: Text required
+              Name: Text
               children: many Child
               Active: stage {
                 Add: action { create in children { Name: "x" } }
@@ -871,21 +873,21 @@ public class DomainToCSharpExporterTests {
             .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
 
-        var assignment = FindFirstAssignment(handler!.Body);
-        await Assert.That(assignment).IsNotNull();
-
-        // Destination: this.Status
-        await Assert.That(assignment!.Destination).IsTypeOf<Member>();
-        var target = (Member)assignment.Destination;
-        await Assert.That(target.MemberName).IsEqualTo("Status");
-        await Assert.That(target.Value).IsTypeOf<ThisReference>();
-
-        // Value: order.Code (Parameter "order", not this.order)
-        await Assert.That(assignment.Value).IsTypeOf<Member>();
-        var value = (Member)assignment.Value;
+        // The requiredness check copies order.Code into a local, then writes this.Status.
+        var seeded = FindFirstAssignment(handler!.Body);
+        await Assert.That(seeded).IsNotNull();
+        await Assert.That(seeded!.Value).IsTypeOf<Member>();
+        var value = (Member)seeded.Value;
         await Assert.That(value.MemberName).IsEqualTo("Code");
         await Assert.That(value.Value).IsTypeOf<Parameter>();
         await Assert.That(((Parameter)value.Value).Name).IsEqualTo("order");
+
+        var stored = FindAssignmentToMember(handler.Body, "Status");
+        await Assert.That(stored).IsNotNull();
+        await Assert.That(stored!.Destination).IsTypeOf<Member>();
+        var target = (Member)stored.Destination;
+        await Assert.That(target.MemberName).IsEqualTo("Status");
+        await Assert.That(target.Value).IsTypeOf<ThisReference>();
     }
 
     [Test]
@@ -933,17 +935,20 @@ public class DomainToCSharpExporterTests {
         await Assert.That(invoke!.Arguments.Length).IsEqualTo(1);
         await Assert.That(invoke.Arguments[0]).IsTypeOf<ThisReference>();
 
-        var assignment = FindFirstAssignment(handler.Body);
-        await Assert.That(assignment).IsNotNull();
-        await Assert.That(assignment!.Destination).IsTypeOf<Member>();
-        var dest = (Member)assignment.Destination;
-        await Assert.That(dest.MemberName).IsEqualTo("Status");
-        await Assert.That(dest.Value).IsTypeOf<ThisReference>();
-        await Assert.That(assignment.Value).IsTypeOf<Member>();
-        var value = (Member)assignment.Value;
+        var seeded = FindFirstAssignment(handler.Body);
+        await Assert.That(seeded).IsNotNull();
+        await Assert.That(seeded!.Value).IsTypeOf<Member>();
+        var value = (Member)seeded.Value;
         await Assert.That(value.MemberName).IsEqualTo("Code");
         await Assert.That(value.Value).IsTypeOf<Parameter>();
         await Assert.That(((Parameter)value.Value).Name).IsEqualTo("order");
+
+        var stored = FindAssignmentToMember(handler.Body, "Status");
+        await Assert.That(stored).IsNotNull();
+        await Assert.That(stored!.Destination).IsTypeOf<Member>();
+        var dest = (Member)stored.Destination;
+        await Assert.That(dest.MemberName).IsEqualTo("Status");
+        await Assert.That(dest.Value).IsTypeOf<ThisReference>();
     }
 
     [Test]
@@ -1170,7 +1175,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1199,7 +1204,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1225,7 +1230,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1254,7 +1259,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         var diagnostics = evolved.Analysis?.Diagnostics
             ?? DomainModelAnalyzer.Analyze(evolved.Root!).Diagnostics;
 
@@ -1456,6 +1461,20 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_Compiles_OptionalConstrainedProperties() {
+        // An optional parameter is T?; a value constraint guard must not compare it
+        // directly (CS0019/CS0266), and an omitted value must stay null.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain OptionalGuards
+            Person: entity {
+              Age: Number optional range(0, 150)
+              Note: Text optional length(2, 5)
+            }
+            """);
+        await AssertExportCompiles(domain, analysis);
+    }
+
+    [Test]
     public async Task Export_RuntimeKeywordDefaults_AdaptToTargetClrType() {
         // Discovery round5 F1–F3: `default(Guid)` on Text, `default(Now)` on Date,
         // `default(Today)` on DateTime, and `assign DateProp to now` must export
@@ -1550,12 +1569,12 @@ public class DomainToCSharpExporterTests {
             Customer: entity {
               orders: many Order
               CheckOut: action {
-                create in orders { Title: "t" }
+                create in orders { Title: "t" Total: 0 }
               }
             }
 
             Order: entity {
-              Title: Text required
+              Title: Text
               Total: Number range(0, )
               customer: Customer
               lines: many OrderLine
@@ -1563,7 +1582,7 @@ public class DomainToCSharpExporterTests {
             }
 
             OrderLine: entity {
-              Sku: Text required
+              Sku: Text
             }
 
             Note: entity {
@@ -1594,6 +1613,19 @@ public class DomainToCSharpExporterTests {
         return null;
     }
 
+    private static Assignment? FindAssignmentToMember(Node? node, string memberName) {
+        if (node is null) return null;
+        if (node is Assignment a
+            && a.Destination is Member member
+            && string.Equals(member.MemberName, memberName, StringComparison.Ordinal))
+            return a;
+        foreach (var child in node.Children) {
+            var found = FindAssignmentToMember(child, memberName);
+            if (found is not null) return found;
+        }
+        return null;
+    }
+
     [Test]
     public async Task Export_EnumMemberInCreateInInitializer_EmitsQualifiedMemberAccess() {
         // Regression: `create in tokens { Kind: Numeric }` (bare enum member) must
@@ -1606,7 +1638,7 @@ public class DomainToCSharpExporterTests {
             TokenKind: enum { Identifier, Numeric, Keyword }
 
             Token: entity {
-              Kind: TokenKind required
+              Kind: TokenKind
             }
 
             Box: entity {
@@ -1698,7 +1730,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Campus
             Advisor: entity {
-              Name: Text required
+              Name: Text
               Age: Number
             }
             Customer: entity {
@@ -1725,7 +1757,7 @@ public class DomainToCSharpExporterTests {
 
             Token: entity { Kind: Text }
             Compilation: entity {
-              Name: Text required
+              Name: Text
               tokens: many Token
               Build: action -> Token {
                 create in tokens { Kind: "k" }
@@ -1857,7 +1889,7 @@ public class DomainToCSharpExporterTests {
             domain Demo
             Severity: enum { Hint, Warning, Error }
             Diagnostic: entity {
-              Code: Text required
+              Code: Text
               Severity: Severity default(Warning)
             }
             Compilation: entity {
@@ -2071,13 +2103,13 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_CollectionNav_IsOptionalEmptyCtorParam() {
-        // Warehouse dogfood: Dock.Create required IEnumerable<Pallet> even though
+        // Warehouse dogfood: Dock.Create IEnumerable<Pallet> even though
         // receive uses create-in. Collection navs default to empty.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Pallet: entity { Qty: Number }
             Dock: entity {
-              Name: Text required
+              Name: Text
               pallets: many Pallet
             }
             """);
@@ -2094,7 +2126,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2143,9 +2175,9 @@ public class DomainToCSharpExporterTests {
     public async Task Export_SingularNav_IsOptionalCtorParam() {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Campus
-            Advisor: entity { Name: Text required }
+            Advisor: entity { Name: Text }
             Student: entity {
-              Name: Text required
+              Name: Text
               advisor: Advisor
             }
             """);
@@ -2191,7 +2223,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Gym
             Member: entity {
-              Email: Text required
+              Email: Text
               Visits: Number default(0)
               Active: stage {
                 entry { assign Visits to 0 }
@@ -2293,7 +2325,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Tier: enum { Basic, Plus }
             Product: entity {
-              SKU: Text required
+              SKU: Text
               Tier: Tier default(Basic)
               make: action { create Product { SKU: "P1" Tier: Plus } }
             }
@@ -2316,15 +2348,15 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
               AssessByType: action -> Fine {
                 create Fine { Amount: 5 Reason: "TypeCreate" }
               }
             }
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
               patron: Patron
             }
             """);
@@ -2351,18 +2383,18 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Clerk: entity {
-              Name: Text required
+              Name: Text
               Hire: action (name: Text) -> Patron {
                 create Patron { Name: name }
               }
             }
             Patron: entity {
-              Name: Text required
+              Name: Text
               fines: many Fine
             }
             Fine: entity {
-              Amount: Number required
-              Reason: Text required
+              Amount: Number
+              Reason: Text
             }
             """);
         var types = new DomainToCSharpExporter().Export(domain, analysis);
@@ -2381,7 +2413,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             TokenKind: enum { Keyword, Identifier }
             Token: entity {
-              Lexeme: Text required
+              Lexeme: Text
               Kind: TokenKind
             }
             Compilation: entity {
@@ -2496,14 +2528,12 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_RangeNegativeAndFractionalBounds_Parse() {
-        // Filed C-F6/B-F7: `range(-500, )` and `range(0.01, 1.0)` were unparseable
-        // (unsigned-integer-only tokenizer + grammar). Signed/fractional bounds are the
-        // natural overdraft/pricing surface.
+        // An integral bound on Number stays a long guard. A fractional bound on
+        // Number fails closed and names Decimal.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Account: entity {
               Balance: Number range(-500, )
-              Price: Number range(0.01, 1.0)
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
@@ -2512,8 +2542,15 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("'Balance' must be >= -500.");
-        await Assert.That(cs).Contains("'Price' must be >= 0.01.");
-        await Assert.That(cs).Contains("'Price' must be <= 1.");
+
+        var ex = Assert.Throws<FormatException>(() => new PolyDslParser("""
+            domain Test
+            Account: entity {
+              Price: Number range(0.01, 1.0)
+            }
+            """).Parse());
+        await Assert.That(ex!.Message).Contains("Decimal");
+        await Assert.That(ex.Message).Contains(" (line ");
     }
 
     [Test]
@@ -2524,7 +2561,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             File: entity {
-              Name: Text required
+              Name: Text
               Content: Text
               Mode: Number
             }
@@ -2575,7 +2612,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2606,7 +2643,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2635,7 +2672,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2667,7 +2704,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2699,7 +2736,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2734,7 +2771,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2770,7 +2807,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Parking
             Permit: entity {
-              Plate: Text unique required
+              Plate: Text unique
             }
             Lot: entity {
               Create: Boolean default(true)
@@ -2805,7 +2842,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2838,7 +2875,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Nights: Number range(1, 21) required
+              Nights: Number range(1, 21)
             }
             Guest: entity {
               OpenStays: Number default(0)
@@ -2870,7 +2907,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Hotel
             Stay: entity {
-              Code: Text pattern("^[A-Z]{3}$") required
+              Code: Text pattern("^[A-Z]{3}$")
             }
             Guest: entity {
               Flag: Number default(1)
@@ -2910,11 +2947,11 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain CrmTiny
             Account: entity {
-              Name: Text required
+              Name: Text
               parent: Account
             }
             Contact: entity {
-              Name: Text required
+              Name: Text
               account: owned Account
               OpenAccount: action (name: Text) {
                 create in account { Name: name }
@@ -3047,11 +3084,11 @@ public class DomainToCSharpExporterTests {
     private const string PublicCreateWireInversesDsl = """
         domain HotelStay
         Guest: entity {
-          Name: Text required
+          Name: Text
           reservations: many Reservation
         }
         Room: entity {
-          Number: Text required
+          Number: Text
           Occupied: Boolean default(false)
           stays: many Reservation
           when stays InHouse {
@@ -3669,7 +3706,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Ping: action { }
               }
@@ -3709,7 +3746,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Patron: entity {
-              Name: Text required
+              Name: Text
               Active: stage {
                 Ping: action { }
               }
@@ -3808,7 +3845,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 entry { assign Name to "x" }
               }
@@ -3837,7 +3874,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 Next: action { transition to B }
               }
@@ -3939,7 +3976,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Child: entity {
-              Name: Text required
+              Name: Text
             }
             Parent: entity {
               children: many Child
@@ -3967,7 +4004,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Child: entity {
-              Name: Text required
+              Name: Text
               A: stage {
                 Next: action { transition to B }
               }
@@ -3993,14 +4030,15 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Code: Text required pattern("^[A-Z]{2}$")
-              Zip: Text pattern("^\\d{5}$")
+              Code: Text pattern("^[A-Z]{2}$")
+              Zip: Text pattern("^\\d{5}$") optional
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Item> Create(");
-        await Assert.That(create).Contains("!string.IsNullOrEmpty(zip)");
+        // An optional slot is null when omitted, so an empty string still has to match.
+        await Assert.That(create).Contains("zip != null && !System.Text.RegularExpressions.Regex.IsMatch(zip");
         await Assert.That(create).Contains("Regex.IsMatch(zip");
         await Assert.That(create).DoesNotContain("!string.IsNullOrEmpty(code)");
     }
@@ -4049,7 +4087,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Name: Text required
+              Name: Text
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
@@ -4089,7 +4127,7 @@ public class DomainToCSharpExporterTests {
             domain Shop
             Order: entity {
               Total: Number range(0, 100)
-              CancelReason: Text length(0, 200)
+              CancelReason: Text length(0, 200) optional
               Cancel: action (reason: Text) {
                 assign CancelReason to reason
               }
@@ -4099,7 +4137,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
         var total = create.IndexOf("long total", StringComparison.Ordinal);
-        var reason = create.IndexOf("string cancelReason = \"\"", StringComparison.Ordinal);
+        var reason = create.IndexOf("cancelReason", StringComparison.Ordinal);
         await Assert.That(total).IsGreaterThanOrEqualTo(0);
         await Assert.That(reason).IsGreaterThan(total);
 
@@ -4156,7 +4194,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Shop
             Item: entity {
-              Name: Text required
+              Name: Text
               Qty: Number
             }
             """;

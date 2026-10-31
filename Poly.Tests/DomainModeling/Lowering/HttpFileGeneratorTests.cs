@@ -14,7 +14,7 @@ public class HttpFileGeneratorTests {
         }
         var parser = new PolyDslParser(poly, ExtensionCatalog.Core.Authoring);
         var changes = parser.Parse();
-        var result = new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
     }
@@ -47,7 +47,7 @@ public class HttpFileGeneratorTests {
             }
             """));
         await Assert.That(http).Contains(
-            "\"message\": { \"to\": \"sample\", \"subject\": \"sample\", \"body\": \"sample\" }");
+            "\"Message\": { \"to\": \"sample\", \"subject\": \"sample\", \"body\": \"sample\" }");
         await Assert.That(http.Contains("\"message\": 0")).IsFalse();
     }
 
@@ -57,8 +57,8 @@ public class HttpFileGeneratorTests {
         var http = Render(ParseDomain("""
             domain Col
             Address: entity {
-              Line1: Text required
-              City: Text required
+              Line1: Text
+              City: Text
             }
             """));
         await Assert.That(http).Contains("### ──────────── Addresses ────────────");
@@ -83,6 +83,20 @@ public class HttpFileGeneratorTests {
             """));
         await Assert.That(CountOf(http, "### Action: Return")).IsEqualTo(1);
         await Assert.That(CountOf(http, "/loans/1/return")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ActionBody_PascalizesPropertyNames() {
+        var http = Render(ParseDomain("""
+            domain T
+            Account: entity {
+              Name: Text unique
+              PlaceHq: action (city: Text, region: Text) { }
+            }
+            """));
+        await Assert.That(http).Contains("\"City\"");
+        await Assert.That(http).Contains("\"Region\"");
+        await Assert.That(http.Contains("\"city\"")).IsFalse();
     }
 
     private static int CountOf(string text, string value) {

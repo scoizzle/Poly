@@ -10,7 +10,7 @@ VisitState: enum {
 
 // One-to-one navigation + cross-entity invoke probe
 Doctor: entity {
-  Name: Text required length(3, 60)
+  Name: Text length(3, 60)
   LicenseNo: Text unique pattern("^MD-[0-9]{6}$")
   schedule: one Schedule
 
@@ -30,7 +30,7 @@ Schedule: entity {
 
 // Aggregate root with child under root, action DTO with entity-ref param
 Patient: entity {
-  Name: Text required
+  Name: Text
   visits: many Visit
   // for-invoke with a binder arg from child property
   CheckInAll: action {

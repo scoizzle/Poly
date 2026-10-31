@@ -22,7 +22,7 @@ public class C1aRootProgramParamsTests {
     public async Task C1a_ActionWithParams_ModuleBodyKeepsParameter_AndInvokeBindsPlate() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -64,7 +64,7 @@ public class C1aRootProgramParamsTests {
         session.Lower(domain, analysis);
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
         var item = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "", ["Flag"] = false },
+            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "item", ["Flag"] = false },
             domain);
 
         var exNum = Assert.Throws<InvalidOperationException>(() =>
@@ -181,7 +181,7 @@ public class C1aRootProgramParamsTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

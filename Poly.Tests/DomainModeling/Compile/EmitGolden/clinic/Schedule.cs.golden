@@ -16,6 +16,14 @@ public class Schedule
     }
     public static DomainResult<Schedule> Create(string day, string state = "")
     {
+        if (string.IsNullOrEmpty(day))
+        {
+            return DomainResult<Schedule>.Failure("'Day' is required.");
+        }
+        if (string.IsNullOrEmpty(state))
+        {
+            return DomainResult<Schedule>.Failure("'State' is required.");
+        }
         var created = new Schedule(day, state);
         return DomainResult<Schedule>.Success(created);
     }

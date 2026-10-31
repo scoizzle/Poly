@@ -2,12 +2,12 @@ domain Saas
 uses temporal
 
 Plan: entity {
-  Name: Text required
+  Name: Text
   Price: Number range(0, )
 }
 
 Account: entity {
-  Name: Text required
+  Name: Text
   subscription: Subscription
 }
 

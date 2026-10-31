@@ -17,9 +17,22 @@ internal static class ConstraintCompilation {
         AnalysisResult analysis,
         IReadOnlyList<IConstraintCompiler> compilers) {
         var contributions = Compile(module, domain, analysis, compilers);
-        if (contributions.Count == 0)
-            return new ContributedMethods.AppliedModule(module, []);
-        return ContributedMethods.Apply(module, contributions);
+        var applied = contributions.Count == 0
+            ? new ContributedMethods.AppliedModule(module, [])
+            : ContributedMethods.Apply(module, contributions);
+        var current = applied.Module;
+        List<(Node From, Node To)>? replaced = null;
+        foreach (var compiler in compilers) {
+            var rewrite = compiler.AfterApply(current);
+            if (rewrite.Replaced.Count == 0 && ReferenceEquals(rewrite.Module, current))
+                continue;
+            replaced ??= [.. applied.ReplacedBodies];
+            current = rewrite.Module;
+            replaced.AddRange(rewrite.Replaced);
+        }
+        return replaced is null
+            ? applied
+            : new ContributedMethods.AppliedModule(current, replaced);
     }
 
     private static List<MethodContribution> Compile(
@@ -44,10 +57,22 @@ internal static class ConstraintCompilation {
                     }
                     if (match is null)
                         continue;
-                    var compiled = match.Compile(Request(entity, property, constraint, type, storage)) with {
+                    // The builtin compiler's guards are already in the create factory
+                    // and in each assign block. Placing Compile's statements at the
+                    // first `new` would add a second guard, and that anchor cannot
+                    // interleave with the enum checks or reach an assign.
+                    if (match is BuiltinConstraintCompiler)
+                        continue;
+                    var request = Request(entity, property, constraint, type, storage);
+                    var compiled = match.Compile(request) with {
                         Provenance = $"{entity.Name}.{property.Name} ({constraint.GetType().Name})"
                     };
                     Absorb(pending, match.LibraryId, entity.Name, module, compiled);
+                    foreach (var obligation in match.AssignObligations(request, type)) {
+                        Absorb(pending, match.LibraryId, entity.Name, module, obligation with {
+                            Provenance = compiled.Provenance
+                        });
+                    }
                 }
             }
         }

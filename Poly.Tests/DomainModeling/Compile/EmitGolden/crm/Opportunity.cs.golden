@@ -20,7 +20,7 @@ public class Opportunity
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
     private int _notifyDepth;
-    private Opportunity(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    private Opportunity(decimal amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         this.Amount = amount;
         this.Title = title;
@@ -33,7 +33,7 @@ public class Opportunity
         this.CurrentStage = OpportunityStage.Qualify;
         this.Probability = 10L;
     }
-    public long Amount { get; private set; }
+    public decimal Amount { get; private set; }
     public DateOnly CloseBy { get; private set; }
     public long Probability { get; private set; }
     public string Title { get; private set; } = default!;
@@ -66,7 +66,7 @@ public class Opportunity
     {
         this._activities.Add(child);
     }
-    public DomainResult<Line> CreateLines(long qty, long unitPrice, Product? product = null)
+    public DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
@@ -80,7 +80,7 @@ public class Opportunity
     {
         this._lines.Add(child);
     }
-    public DomainResult<Quote> CreateQuotes(long amount, string title)
+    public DomainResult<Quote> CreateQuotes(decimal amount, string title)
     {
         var quoteResult = Quote.Create(amount, title, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
@@ -155,11 +155,11 @@ public class Opportunity
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
             var assignValue0 = this.Amount + qty * sku.ListPrice;
-            if (assignValue0 < 0L)
+            if (assignValue0 < 0m)
             {
                 return DomainResult<Line>.Failure("'Amount' must be >= 0.");
             }
-            if (assignValue0 > 100000000L)
+            if (assignValue0 > 100000000m)
             {
                 return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
             }
@@ -225,11 +225,11 @@ public class Opportunity
             return adapterResult;
         }
         var assignValue0 = this.Amount;
-        if (assignValue0 < 0L)
+        if (assignValue0 < 0m)
         {
             return DomainResult.Failure("'Amount' must be >= 0.");
         }
-        if (assignValue0 > 100000000L)
+        if (assignValue0 > 100000000m)
         {
             return DomainResult.Failure("'Amount' must be <= 100000000.");
         }
@@ -338,13 +338,13 @@ public class Opportunity
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Opportunity> Create(long amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    public static DomainResult<Opportunity> Create(decimal amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
-        if (amount < 0L)
+        if (amount < 0m)
         {
             return DomainResult<Opportunity>.Failure("'Amount' must be >= 0.");
         }
-        if (amount > 100000000L)
+        if (amount > 100000000m)
         {
             return DomainResult<Opportunity>.Failure("'Amount' must be <= 100000000.");
         }

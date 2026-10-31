@@ -5,7 +5,8 @@ using AnalysisResult = Poly.Analysis.AnalysisResult;
 namespace Poly.DomainModeling.Evolution;
 
 /// <summary>
-/// The result of an evolution operation (via Apply or the fluent Evolve() builder).
+/// The result of an analysis-gated evolution (<see cref="DomainEvolution.ApplyAndAnalyze"/>
+/// or the fluent Evolve builder's terminal Apply).
 /// Contains either a new successful root or the original root on analysis failure,
 /// plus the analysis diagnostics and a rich trace for agents / UI / debugging.
 /// 

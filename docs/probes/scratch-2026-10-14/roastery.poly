@@ -5,7 +5,7 @@ uses http
 RoastLevel: enum { Light, Medium, Dark }
 
 Bean: entity {
-  Name: Text unique required length(2, 40)
+  Name: Text unique length(2, 40)
   Roast: RoastLevel default(Medium)
   Stock: Number range(0, 100000) default(0)
   batches: many Batch
@@ -25,8 +25,8 @@ Bean: entity {
 }
 
 Batch: entity {
-  Code: Text unique required
-  Kg: Number range(1, 100) required
+  Code: Text unique
+  Kg: Number range(1, 100)
   bean: Bean
   Planned: stage {
     Roast: action { transition to Roasted }
@@ -37,7 +37,7 @@ Batch: entity {
 }
 
 Order: entity {
-  Reference: Text unique required
+  Reference: Text unique
   lines: many Line
   Open: stage {
     AddLine: action (bean: Bean, kg: Number) -> Line {
@@ -55,7 +55,7 @@ Order: entity {
 }
 
 Line: entity {
-  Kg: Number range(1, 1000) required
+  Kg: Number range(1, 1000)
   order: Order
   bean: Bean
   Added: stage { }

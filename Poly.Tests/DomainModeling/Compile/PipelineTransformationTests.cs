@@ -18,7 +18,7 @@ public class PipelineTransformationTests {
     public async Task SessionLower_IsTheModuleEmitPrints() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -38,7 +38,7 @@ public class PipelineTransformationTests {
     public async Task SessionLower_PopulatesNamedActionMethodBody() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -59,7 +59,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_UsesTheModuleMethodBody_NotAReloweredCopy() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -91,7 +91,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_RunsTheModuleMethodBody_NotAReloweredEffectWalk() {
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -131,7 +131,7 @@ public class PipelineTransformationTests {
         // Ontology residual stop: named invoke never falls back to LowerActionBody.
         var (domain, analysis, session) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -165,7 +165,7 @@ public class PipelineTransformationTests {
     public async Task InvokeAction_SecondCall_UsesCachedOperationBody() {
         var (domain, _, _) = Evolve("""
             domain Parking
-            Permit: entity { Plate: Text required }
+            Permit: entity { Plate: Text }
             Lot: entity {
               permits: many Permit
               Issue: action (plate: Text) {
@@ -194,7 +194,7 @@ public class PipelineTransformationTests {
             """;
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring, catalog);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         await Assert.That(result.Succeeded).IsTrue();
         var domain = result.Root!;
         var analysis = session.Analyze(domain);
@@ -281,7 +281,7 @@ public class PipelineTransformationTests {
     public async Task ConditionalCreateIn_DoesNotWarnDropped_AndRuns() {
         var (domain, analysis, session) = Evolve("""
             domain Box
-            Token: entity { Kind: Text required }
+            Token: entity { Kind: Text }
             Parser: entity {
               tokens: many Token
               Rush: Boolean default(false)
@@ -313,7 +313,7 @@ public class PipelineTransformationTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

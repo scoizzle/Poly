@@ -23,7 +23,7 @@ public class CreateInWatchedStageTests {
           Start: action { create in jobs { Title: "a" } }
         }
         Job: entity {
-          Title: Text required
+          Title: Text
           Open: stage { }
         }
         """;
@@ -37,7 +37,7 @@ public class CreateInWatchedStageTests {
           Start: action { create in jobs { Title: "a" } }
         }
         Job: entity {
-          Title: Text required
+          Title: Text
           New: stage { }
           Open: stage { }
         }
@@ -93,7 +93,7 @@ public class CreateInWatchedStageTests {
 
     private static (Domain Domain, AnalysisResult Analysis) Evolve(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)

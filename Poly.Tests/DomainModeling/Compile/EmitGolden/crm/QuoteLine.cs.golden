@@ -1,7 +1,7 @@
 #nullable enable
 public class QuoteLine
 {
-    private QuoteLine(long qty, long unitPrice, Product? product = null, Quote? quote = null)
+    private QuoteLine(long qty, decimal unitPrice, Product? product = null, Quote? quote = null)
     {
         this.Qty = qty;
         this.UnitPrice = unitPrice;
@@ -9,10 +9,10 @@ public class QuoteLine
         this.Quote = quote;
     }
     public long Qty { get; private set; }
-    public long UnitPrice { get; private set; }
+    public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Quote? Quote { get; private set; }
-    public static DomainResult<QuoteLine> Create(long qty, long unitPrice, Product? product = null, Quote? quote = null)
+    public static DomainResult<QuoteLine> Create(long qty, decimal unitPrice, Product? product = null, Quote? quote = null)
     {
         if (qty < 1L)
         {
@@ -22,11 +22,11 @@ public class QuoteLine
         {
             return DomainResult<QuoteLine>.Failure("'Qty' must be <= 10000.");
         }
-        if (unitPrice < 0L)
+        if (unitPrice < 0m)
         {
             return DomainResult<QuoteLine>.Failure("'UnitPrice' must be >= 0.");
         }
-        if (unitPrice > 100000000L)
+        if (unitPrice > 100000000m)
         {
             return DomainResult<QuoteLine>.Failure("'UnitPrice' must be <= 100000000.");
         }

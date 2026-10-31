@@ -10,7 +10,7 @@ public enum HallStage
 public class Hall
 {
     private List<Section> _sections = new List<Section>();
-    private Hall(long capacity, long dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
+    private Hall(long capacity, decimal dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
     {
         this.Capacity = capacity;
         this.DayRate = dayRate;
@@ -24,7 +24,7 @@ public class Hall
     }
     public long BusySections { get; private set; }
     public long Capacity { get; private set; }
-    public long DayRate { get; private set; }
+    public decimal DayRate { get; private set; }
     public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public bool Offline { get; private set; }
@@ -114,7 +114,7 @@ public class Hall
     public bool ChildrenFree() => this.BusySections == 0L;
     public bool CanBook() => !this.Occupied && !this.Offline && this.BusySections == 0L;
     public bool IsOccupied() => this.Occupied;
-    public static DomainResult<Hall> Create(long capacity, long dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
+    public static DomainResult<Hall> Create(long capacity, decimal dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
     {
         if (capacity < 1L)
         {
@@ -124,11 +124,11 @@ public class Hall
         {
             return DomainResult<Hall>.Failure("'Capacity' must be <= 5000.");
         }
-        if (dayRate < 0L)
+        if (dayRate < 0m)
         {
             return DomainResult<Hall>.Failure("'DayRate' must be >= 0.");
         }
-        if (dayRate > 100000L)
+        if (dayRate > 100000m)
         {
             return DomainResult<Hall>.Failure("'DayRate' must be <= 100000.");
         }

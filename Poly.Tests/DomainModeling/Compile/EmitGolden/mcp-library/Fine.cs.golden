@@ -36,6 +36,10 @@ public class Fine
         {
             return DomainResult<Fine>.Failure("'Amount' must be <= 500.");
         }
+        if (string.IsNullOrEmpty(reason))
+        {
+            return DomainResult<Fine>.Failure("'Reason' is required.");
+        }
         var created = new Fine(reason, amount);
         return DomainResult<Fine>.Success(created);
     }

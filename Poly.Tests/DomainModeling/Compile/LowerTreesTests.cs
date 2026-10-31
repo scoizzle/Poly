@@ -15,12 +15,12 @@ public sealed class LowerTreesTests {
         domain Parking
 
         Permit: entity {
-          Plate: Text required
+          Plate: Text
           Open: stage { }
         }
 
         Garage: entity {
-          Name: Text required
+          Name: Text
         }
         """;
 
@@ -156,18 +156,18 @@ public sealed class LowerTreesTests {
             domain Alpha
 
             Alpha: entity {
-              Name: Text required
+              Name: Text
             }
             """);
         var (domainB, analysisB, _) = SliceCProducerLoopCatalogTests.Evolve("""
             domain Beta
 
             Beta: entity {
-              Name: Text required
+              Name: Text
             }
 
             Gamma: entity {
-              Name: Text required
+              Name: Text
             }
             """);
 
@@ -193,12 +193,12 @@ public sealed class LowerTreesTests {
                 domain Clash
 
                 Permit: entity {
-                  Plate: Text required
+                  Plate: Text
                   Open: stage { }
                 }
 
                 PermitStage: entity {
-                  Name: Text required
+                  Name: Text
                 }
                 """));
 
@@ -211,11 +211,11 @@ public sealed class LowerTreesTests {
             domain Clash
 
             Permit: entity {
-              Plate: Text required
+              Plate: Text
             }
 
             PermitStage: entity {
-              Name: Text required
+              Name: Text
             }
             """);
 
@@ -232,7 +232,7 @@ public sealed class LowerTreesTests {
                 domain Clash
 
                 DomainResult: entity {
-                  Name: Text required
+                  Name: Text
                 }
                 """));
 

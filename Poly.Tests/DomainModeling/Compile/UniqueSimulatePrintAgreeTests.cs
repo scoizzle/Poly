@@ -95,6 +95,68 @@ public class UniqueSimulatePrintAgreeTests {
         await Assert.That(simulate.ErrorMessage).Contains("Unique constraint violated");
     }
 
+    [Test]
+    public async Task DuplicateAssign_FailsWithTheSameMessageInPrintAndSimulate() {
+        const string dsl = """
+            domain Lab
+            Widget: entity {
+              Code: Text unique
+              Relabel: action (code: Text) {
+                assign Code to code
+              }
+            }
+            Lot: entity {
+              widgets: many Widget
+              Issue: action (code: Text) {
+                create in widgets { Code: code }
+              }
+            }
+            """;
+        var (domain, analysis, session) = Evolve(dsl);
+        var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
+        var store = new DomainInstanceStore();
+        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
+        store.Add(lot);
+        var issuedA = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var issuedB = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "B" });
+        var first = lot.CreatedChildren[0];
+        var second = lot.CreatedChildren[1];
+
+        // C is introduced by assign. The later assign of C is the duplicate.
+        var moved = first.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var self = first.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var collide = second.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var freed = second.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "A" });
+
+        var module = session.Lower(domain, analysis);
+        var source = new CSharpGenerator().Generate(module);
+        var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "UniqueAssignParity");
+        var port = new TestPort();
+        var printedFirst = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Widget", ("code", "A"), ("db", port));
+        var printedSecond = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Widget", ("code", "B"), ("db", port));
+        var printedMoved = Invoke(printedFirst, "Relabel", ("code", "C"), ("db", port));
+        var printedSelf = Invoke(printedFirst, "Relabel", ("code", "C"), ("db", port));
+        var printedCollide = Invoke(printedSecond, "Relabel", ("code", "C"), ("db", port));
+        var printedFreed = Invoke(printedSecond, "Relabel", ("code", "A"), ("db", port));
+
+        await Assert.That(issuedA.Succeeded).IsTrue();
+        await Assert.That(issuedB.Succeeded).IsTrue();
+        await Assert.That(moved.Succeeded).IsTrue();
+        await Assert.That(self.Succeeded).IsTrue();
+        await Assert.That(collide.Succeeded).IsFalse();
+        await Assert.That(freed.Succeeded).IsTrue();
+        await Assert.That(first.GetProperty<string>("Code")).IsEqualTo("C");
+        await Assert.That(second.GetProperty<string>("Code")).IsEqualTo("A");
+        await Assert.That(Success(printedMoved)).IsTrue();
+        await Assert.That(Success(printedSelf)).IsTrue();
+        await Assert.That(Success(printedCollide)).IsFalse();
+        await Assert.That(Success(printedFreed)).IsTrue();
+        await Assert.That(Message(printedCollide)).IsEqualTo(collide.ErrorMessage);
+        await Assert.That(collide.ErrorMessage).Contains("Unique constraint violated");
+        await Assert.That(CodeOf(printedFirst)).IsEqualTo("C");
+        await Assert.That(CodeOf(printedSecond)).IsEqualTo("A");
+    }
+
     private static (Domain Domain, Poly.Analysis.AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
@@ -134,6 +196,9 @@ public class UniqueSimulatePrintAgreeTests {
     private static string? Message(object result) =>
         result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
 
+    private static string? CodeOf(object instance) =>
+        instance.GetType().GetProperty("Code")!.GetValue(instance) as string;
+
     private sealed class TestPort : IStoragePort {
         private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
 
@@ -142,5 +207,8 @@ public class UniqueSimulatePrintAgreeTests {
 
         public void Record(string entity, string property, string value) =>
             _keys.Add(entity + "\u001f" + property + "\u001f" + value);
+
+        public void Release(string entity, string property, string value) =>
+            _keys.Remove(entity + "\u001f" + property + "\u001f" + value);
     }
 }

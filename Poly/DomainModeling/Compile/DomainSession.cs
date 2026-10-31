@@ -70,6 +70,15 @@ public sealed class DomainSession {
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
+    /// <summary>
+    /// Times this session has run VM analysis of a lowered module during <see cref="Emit"/>.
+    /// The same domain, domain analysis, and module reference do not increment it again.
+    /// </summary>
+    internal int VmAnalysisCount { get; private set; }
+
+    private readonly object _vmAnalysisGate = new();
+    private CompiledDomain? _compiled;
+
     private const string ScaffoldingType = "scaffolding";
     private const string EntityType = "entity";
     private const string AnalysisReportType = "analysis-report";
@@ -338,7 +347,8 @@ public sealed class DomainSession {
     /// <summary>
     /// Entity-module C# files from the lowered module. Persistence and HTTP host
     /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
-    /// not this method.
+    /// not this method. VM analysis of the module runs once for a domain, its
+    /// domain analysis, and that module reference on this session.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -348,7 +358,7 @@ public sealed class DomainSession {
         // whole module, because the writer resolves types across entities from one analysis.
         var (module, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
-        var interpAnalysis = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+        var interpAnalysis = VmAnalysisOf(domain, analysis, module);
         RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
         var writer = new CSharpWriter(interpAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
@@ -378,6 +388,29 @@ public sealed class DomainSession {
         AddPrintedFile(catalog, domain, files, "Poly.Types.cs", scaffoldingSource, scaffolding);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
+    }
+
+    /// <summary>
+    /// The VM analysis for this emit. A hit reuses the stored
+    /// <see cref="AnalysisResult"/> and does not call
+    /// <see cref="Interpreter.Analyzer"/>. A miss analyzes the lowered module
+    /// and keeps that <see cref="CompiledDomain"/>.
+    /// </summary>
+    private AnalysisResult VmAnalysisOf(
+        Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
+        lock (_vmAnalysisGate) {
+            var cached = _compiled;
+            if (cached is not null
+                && ReferenceEquals(cached.Domain, domain)
+                && ReferenceEquals(cached.DomainAnalysis, analysis)
+                && ReferenceEquals(cached.Module, module))
+                return cached.VmAnalysis;
+
+            var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+            VmAnalysisCount++;
+            _compiled = new CompiledDomain(domain, analysis, module, vm);
+            return vm;
+        }
     }
 
     private static void AddPrintedFile(

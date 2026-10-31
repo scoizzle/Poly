@@ -21,6 +21,10 @@ public sealed class InMemoryStoragePort : IStoragePort {
     public void Record(string entity, string property, string value) =>
         _pending.Add(Key(entity, property, value));
 
+    /// <summary>Removes a pending key. The attached store reads the instance's current value.</summary>
+    public void Release(string entity, string property, string value) =>
+        _pending.Remove(Key(entity, property, value));
+
     private static string Key(string entity, string property, string value) =>
         entity + "\u001f" + property + "\u001f" + value;
 }

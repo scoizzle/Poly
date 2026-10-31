@@ -839,26 +839,36 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record struct: a typed result
+    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record: a typed result
     /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
-    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>.
+    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>. <c>Value</c> stays non-nullable
+    /// <c>T</c> and throws when the result failed. The getter is an expression over
+    /// a private method because <c>CSharpReader</c> accepts <c>get;</c> and
+    /// <c>get =&gt; expr</c>, not a block-bodied getter.
     /// </summary>
     internal static TypeDefinitionNode BuildDomainResultGenericTypeDef() {
-        // public readonly record struct DomainResult<T>
+        // public record DomainResult<T>
         // {
+        //     private T _value;
         //     public bool IsSuccess { get; }
-        //     public T Value { get; }
+        //     public T Value => this.GetValue();
         //     public string? ErrorMessage { get; }
         //
         //     private DomainResult(bool isSuccess, T value, string? errorMessage)
         //     {
         //         IsSuccess = isSuccess;
-        //         Value = value;
+        //         _value = value;
         //         ErrorMessage = errorMessage;
         //     }
         //
         //     public static DomainResult<T> Success(T value) => new(true, value, null);
         //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
+        //     private T GetValue()
+        //     {
+        //         if (!this.IsSuccess)
+        //             throw new System.InvalidOperationException("A failed DomainResult has no Value.");
+        //         return this._value;
+        //     }
         // }
 
         var tParam = new NamedTypeReference("T");
@@ -871,7 +881,8 @@ public sealed partial class DomainToCSharpExporter {
                 new PrimitiveTypeReference(PrimType.Boolean),
                 Getter: new PropertyGetterDefinitionNode()),
             new("Value", tParam,
-                Getter: new PropertyGetterDefinitionNode()),
+                Getter: new PropertyGetterDefinitionNode(
+                    new Invoke(new Member(new ThisReference(), "GetValue")))),
             new("ErrorMessage",
                 new OptionalTypeReference(
                     new PrimitiveTypeReference(PrimType.String)),
@@ -892,7 +903,7 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), "IsSuccess"),
                     new Parameter("isSuccess")),
                 new Assignment(
-                    new Member(new ThisReference(), "Value"),
+                    new Member(new ThisReference(), "_value"),
                     new Parameter("value")),
                 new Assignment(
                     new Member(new ThisReference(), "ErrorMessage"),
@@ -930,6 +941,17 @@ public sealed partial class DomainToCSharpExporter {
                 ]),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public),
+            new("GetValue", tParam,
+                Body: new Block([
+                    new IfStatement(
+                        new Syntactic.Not(new Member(new ThisReference(), "IsSuccess")),
+                        new ThrowStatement(
+                            new New(
+                                new NamedTypeReference("System.InvalidOperationException"),
+                                new Constant("A failed DomainResult has no Value.")))),
+                    new Return(new Member(new ThisReference(), "_value")),
+                ]),
+                AccessModifier: AccessModifier.Private),
         };
 
         return new TypeDefinitionNode(
@@ -938,6 +960,12 @@ public sealed partial class DomainToCSharpExporter {
             Properties: props,
             Constructors: [ctor],
             Methods: methods,
+            Fields: [
+                new FieldDefinitionNode(
+                    "_value",
+                    tParam,
+                    AccessModifier: AccessModifier.Private),
+            ],
             Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
         );
     }

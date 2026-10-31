@@ -62,6 +62,8 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 }
 
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
+    internal InMemoryStoragePort Port { get; } = new();
+
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {
             var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;
@@ -167,11 +169,13 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
         return array;
     }
 
-    // Printed methods return DomainResult or DomainResult<T>.
+    // Printed methods return DomainResult or DomainResult<T>. A failed DomainResult<T>
+    // throws on Value, so a failing row reads null instead.
     static StepResult Unpack(object result) {
         var type = result.GetType();
-        return ((bool)type.GetProperty("IsSuccess")!.GetValue(result)!,
+        var success = (bool)type.GetProperty("IsSuccess")!.GetValue(result)!;
+        return (success,
             type.GetProperty("ErrorMessage")!.GetValue(result) as string,
-            type.GetProperty("Value")?.GetValue(result));
+            success ? type.GetProperty("Value")?.GetValue(result) : null);
     }
 }

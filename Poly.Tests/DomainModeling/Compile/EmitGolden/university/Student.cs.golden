@@ -201,6 +201,12 @@ public class Student
             return DomainResult<Student>.Failure("'Name' is required.");
         }
         var created = new Student(email, name, enrollments, completions, holds, lastGrade, maxCredits, openCredits);
+        var uniqueCheck = Student.CheckUnique("Email", email);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Student>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Student", "Email", email);
         return DomainResult<Student>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -214,5 +220,29 @@ public class Student
             target.RegisterStudentEnrollmentsCompletedSubscriber(this);
         }
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Student", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return Student.CheckUnique(propertyName, value);
+    }
 }

@@ -2,6 +2,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -925,11 +926,14 @@ public sealed partial class DomainToCSharpExporter {
             var createSuccessNodes = new List<Node>();
             createSuccessNodes.AddRange(constraintChecks);
             var createdLocal = new Variable("created");
+            var createLocals = new List<Node> { createdLocal };
             createSuccessNodes.Add(new Assignment(
                 createdLocal,
                 new New(
                     new NamedTypeReference(entity.Name),
                     ctorParams.ToArray())));
+            AppendCreateUniqueChecks(
+                entity, ctorParams, createResultType, createSuccessNodes, createLocals);
 
             var lookup = metadata.GetTypeLookup(domain);
             foreach (var navParam in esm.ConstructorParameters
@@ -980,7 +984,7 @@ public sealed partial class DomainToCSharpExporter {
                 "Create",
                 createResultType,
                 Parameters: ctorParams,
-                Body: new Block(createSuccessNodes, [createdLocal]),
+                Body: new Block(createSuccessNodes, createLocals),
                 IsStatic: true,
                 AccessModifier: AccessModifier.Public
             ));
@@ -1004,8 +1008,10 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any()))
-            methods.Add(EnsureUniqueAssignMethod());
+        if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any())) {
+            methods.Add(CheckUniqueMethod(entity));
+            methods.Add(EnsureUniqueAssignMethod(entity));
+        }
 
         AddAutomaticTransitionLoopGuard(entity, fields, methods);
         if (targetSubs is { Count: > 0 })
@@ -1024,19 +1030,137 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The session
-    /// index replaces this method. It is not part of the factory.
+    /// After <c>created = new</c> (outside the VM create prefix): reject a duplicate
+    /// unique value, then record the keys on <see cref="DomainInstanceStore.PrintedPort"/>.
     /// </summary>
-    private static MethodDefinitionNode EnsureUniqueAssignMethod() =>
-        new(
+    private static void AppendCreateUniqueChecks(
+        Entity entity,
+        IReadOnlyList<Parameter> signature,
+        NamedTypeReference resultType,
+        List<Node> nodes,
+        List<Node> locals) {
+        var checks = UniqueConstructorArguments(entity, signature);
+        if (checks.Count == 0)
+            return;
+        var uniqueCheck = new Variable("uniqueCheck");
+        locals.Add(uniqueCheck);
+        var typeName = new NamedTypeReference(entity.Name);
+        foreach (var (prop, param) in checks) {
+            nodes.Add(new Assignment(uniqueCheck, new Invoke(
+                new Member(typeName, "CheckUnique"),
+                new Constant(prop.Name),
+                param)));
+            nodes.Add(new IfStatement(
+                new Syntactic.Not(new Member(uniqueCheck, "IsSuccess")),
+                new Block([
+                    new Return(new Invoke(
+                        new Member(resultType, "Failure"),
+                        new Syntactic.Coalesce(
+                            new Member(uniqueCheck, "ErrorMessage"),
+                            new Constant(""))))
+                ])));
+        }
+        foreach (var (prop, param) in checks) {
+            nodes.Add(new Invoke(
+                new Member(new ClrTypeReference(typeof(DomainInstanceStore)), "PrintedRecord"),
+                new Constant(entity.Name),
+                new Constant(prop.Name),
+                UniqueRecordArgument(prop, param)));
+        }
+    }
+
+    private static List<(Property Property, Parameter Parameter)> UniqueConstructorArguments(
+        Entity entity, IReadOnlyList<Parameter> signature) {
+        var checks = new List<(Property, Parameter)>();
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
+                continue;
+            var param = signature.FirstOrDefault(p =>
+                string.Equals(p.Name, ToCamelCase(prop.Name), StringComparison.Ordinal));
+            if (param is null)
+                continue;
+            checks.Add((prop, param));
+        }
+        return checks;
+    }
+
+    /// <summary>Text passes the parameter through. Other types stringify, matching <c>Exists</c>.</summary>
+    private static Node UniqueRecordArgument(Property prop, Parameter param) {
+        var isText = prop.Type.TypeName is "Text" or "String";
+        return isText ? param : new Invoke(new Member(param, "ToString"));
+    }
+
+    /// <summary>
+    /// Shared printed check. Reads <see cref="DomainInstanceStore.PrintedPort"/>;
+    /// a null port is Success (no peers).
+    /// </summary>
+    private static MethodDefinitionNode CheckUniqueMethod(Entity entity) {
+        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
+        var value = new Parameter("value", StoreJobObjectType());
+        var message = new Variable("message");
+        Node collision = new Invoke(
+            new Member(new ClrTypeReference(typeof(DomainInstanceStore)), "PrintedCollision"),
+            new Constant(entity.Name),
+            propertyName,
+            new Invoke(new Member(value, "ToString")));
+        return new MethodDefinitionNode(
+            "CheckUnique",
+            new NamedTypeReference("DomainResult"),
+            Parameters: [propertyName, value],
+            Body: new Block([
+                new IfStatement(
+                    new Equal(value, new Constant(null)),
+                    new Block([DomainResultSuccess()])),
+                new Assignment(message, collision),
+                new IfStatement(
+                    new NotEqual(message, new Constant(null)),
+                    new Block([
+                        new Return(new Invoke(
+                            new Member(new NamedTypeReference("DomainResult"), "Failure"),
+                            message))
+                    ])),
+                DomainResultSuccess()
+            ], [message]),
+            IsStatic: true,
+            AccessModifier: AccessModifier.Private);
+    }
+
+    /// <summary>
+    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The same value
+    /// already on this instance is Success. A different value uses <see cref="CheckUniqueMethod"/>.
+    /// </summary>
+    private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
+        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
+        var value = new Parameter("value", StoreJobObjectType());
+        var nodes = new List<Node> {
+            new IfStatement(
+                new Equal(value, new Constant(null)),
+                new Block([DomainResultSuccess()]))
+        };
+        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
+                continue;
+            nodes.Add(new IfStatement(
+                new Syntactic.And(
+                    new Equal(propertyName, new Constant(prop.Name)),
+                    new Invoke(
+                        new Member(new ClrTypeReference(typeof(object)), "Equals"),
+                        new Member(new ThisReference(), prop.Name),
+                        value)),
+                new Block([DomainResultSuccess()])));
+        }
+        nodes.Add(new Return(new Invoke(
+            new Member(new NamedTypeReference(entity.Name), "CheckUnique"),
+            propertyName,
+            value)));
+        return new MethodDefinitionNode(
             "EnsureUnique",
             new NamedTypeReference("DomainResult"),
-            Parameters: [
-                new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String)),
-                new Parameter("value", StoreJobObjectType())
-            ],
-            Body: new Block([
-                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
-            ]),
+            Parameters: [propertyName, value],
+            Body: new Block(nodes),
             AccessModifier: AccessModifier.Public);
+    }
+
+    private static Return DomainResultSuccess() =>
+        new(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")));
 }

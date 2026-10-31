@@ -55,6 +55,32 @@ public sealed class DomainInstanceStore {
     }
 
     /// <summary>
+    /// Port the printed module consults. Null means no peers (Success).
+    /// The parity harness binds one <see cref="InMemoryStoragePort"/> for the printed side.
+    /// </summary>
+    public static AsyncLocal<IStoragePort?> PrintedPort { get; } = new();
+
+    /// <summary>
+    /// Printed unique check against <see cref="PrintedPort"/>. Null when the value is free
+    /// or no port is bound. Same message as <see cref="EnsureUnique"/>.
+    /// </summary>
+    public static string? PrintedCollision(string entity, string propertyName, string? value) {
+        if (string.IsNullOrEmpty(propertyName) || value is null)
+            return null;
+        var port = PrintedPort.Value;
+        if (port is null || !port.Exists(entity, propertyName, value))
+            return null;
+        return UniqueConstraintMessage(propertyName, entity);
+    }
+
+    /// <summary>Records a key on <see cref="PrintedPort"/> after a successful printed create.</summary>
+    public static void PrintedRecord(string entity, string propertyName, string? value) {
+        if (string.IsNullOrEmpty(propertyName) || value is null)
+            return;
+        PrintedPort.Value?.Record(entity, propertyName, value);
+    }
+
+    /// <summary>
     /// Per-property unique check against registered instances. Lowering invokes
     /// this through <see cref="DomainEntityInstance.EnsureUnique"/> so a colliding
     /// assign returns <see cref="DomainResult.Failure"/> without mutating.
@@ -330,6 +356,9 @@ public sealed class DomainInstanceStore {
         return null;
     }
 
+    private static string UniqueConstraintMessage(string propertyName, string entity) =>
+        $"Unique constraint violated: '{propertyName}' value is already used on another '{entity}'.";
+
     private string? UniqueCollisionForProperty(
         Entity entity,
         string propertyName,
@@ -349,7 +378,7 @@ public sealed class DomainInstanceStore {
             if (!other.TryGetRaw(propertyName, out var otherValue))
                 continue;
             if (Equals(otherValue, value))
-                return $"Unique constraint violated: '{propertyName}' value is already used on another '{entity.Name}'.";
+                return UniqueConstraintMessage(propertyName, entity.Name);
         }
         return null;
     }

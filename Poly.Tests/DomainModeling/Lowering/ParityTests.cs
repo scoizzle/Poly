@@ -1035,23 +1035,25 @@ public class ParityTests {
         await Assert.That(outcomes[0].Message).IsEqualTo("'Code' does not match the required pattern.");
     }
 
-    // Unique after created = new is outside CreateFactoryCheckPrefix. Simulate TryAdd
-    // throws IOE; printed EnsureUnique is still the Success stub, so both Creates succeed.
+    // Unique is outside CreateFactoryCheckPrefix, so simulate still throws from the store.
+    // Printed Create fails with the same message instead of the EnsureUnique Success stub.
     [Test]
-    public async Task KnownGap_CreateDuplicateUnique_SimulateThrowsAndPrintedSucceeds() {
-        var (simulate, printed) = ParityScenario.FromDsl(UniqueDsl, "ParityGapCreateDuplicateUnique")
+    public async Task Create_WhenDuplicateUnique_FailsWithTheSameMessage() {
+        var (simulate, printed) = ParityScenario.FromDsl(UniqueDsl, "ParityCreateDuplicateUnique")
             .Run(side => {
                 side.Create("Widget", ("Code", "A"));
                 side.Create("Widget", ("Code", "A"));
+                side.Create("Widget", ("Code", "B"));
             });
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo([
-                "create Widget: success differs (simulate 'False', printed 'True')",
-                "create Widget: failure message differs (simulate 'Unique constraint violated: 'Code' value is already used on another 'Widget'.', printed '')",
-                "create Widget: exception type differs (simulate 'InvalidOperationException', printed '')",
-                "create Widget: 'Code' differs (simulate '(absent)', printed 'A')",
-                "create Widget: 'Stage' differs (simulate '(absent)', printed '')"
-            ]);
+        await Assert.That(simulate[0].Success).IsTrue();
+        await Assert.That(printed[0].Success).IsTrue();
+        await Assert.That(simulate[1].Success).IsFalse();
+        await Assert.That(printed[1].Success).IsFalse();
+        await Assert.That(printed[1].Message).IsEqualTo(simulate[1].Message);
+        await Assert.That(printed[1].Message).Contains("Unique constraint violated");
+        await Assert.That(printed[1].Message).Contains("'Code'");
+        await Assert.That(simulate[2].Success).IsTrue();
+        await Assert.That(printed[2].Success).IsTrue();
     }
 
     [Test]

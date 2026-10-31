@@ -34,11 +34,11 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     var productResult = Product.Create(dto.ListPrice, dto.Name, dto.Sku, db);
     if (!productResult.IsSuccess)
     {
-        return Results.Conflict(productResult.ErrorMessage);
+        return FailureStatus(productResult.ErrorMessage);
     }
     db.Products.Add(productResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/products/", productResult.Value.Sku.ToString()), productResult.Value);
+    return Results.Created(string.Concat("/api/products/", productResult.Value.Sku), productResult.Value);
 });
 
 app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
@@ -49,11 +49,11 @@ app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
     var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, db, null);
     if (!leadResult.IsSuccess)
     {
-        return Results.Conflict(leadResult.ErrorMessage);
+        return FailureStatus(leadResult.ErrorMessage);
     }
     db.Leads.Add(leadResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/leads/", leadResult.Value.Email.ToString()), leadResult.Value);
+    return Results.Created(string.Concat("/api/leads/", leadResult.Value.Email), leadResult.Value);
 });
 
 app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());
@@ -64,7 +64,7 @@ app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
     var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (!accountResult.IsSuccess)
     {
-        return Results.Conflict(accountResult.ErrorMessage);
+        return FailureStatus(accountResult.ErrorMessage);
     }
     db.Accounts.Add(accountResult.Value);
     await db.SaveChangesAsync();
@@ -79,7 +79,7 @@ app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
     var campaignResult = Campaign.Create(dto.Name, Enumerable.Empty<CampaignMember>());
     if (!campaignResult.IsSuccess)
     {
-        return Results.Conflict(campaignResult.ErrorMessage);
+        return FailureStatus(campaignResult.ErrorMessage);
     }
     db.Campaigns.Add(campaignResult.Value);
     await db.SaveChangesAsync();
@@ -312,7 +312,7 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -337,7 +337,7 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -357,7 +357,7 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var result = entity.PlaceHq(dto.city, dto.region);
+        var result = entity.PlaceHq(dto.City, dto.Region);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -365,7 +365,7 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -385,7 +385,7 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var result = entity.AddContact(dto.name, dto.email, db);
+        var result = entity.AddContact(dto.Name, dto.Email, db);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -393,7 +393,7 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -413,7 +413,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.leadId);
+        var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
         if (lead == null)
         {
             return Results.NotFound("Lead not found");
@@ -426,7 +426,7 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -446,7 +446,7 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var result = entity.OpenDeal(dto.title, dto.amount);
+        var result = entity.OpenDeal(dto.Title, dto.Amount);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -454,7 +454,7 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -482,7 +482,7 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -502,7 +502,7 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
     try
     {
-        var result = entity.OpenTicket(dto.subject);
+        var result = entity.OpenTicket(dto.Subject);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -510,7 +510,7 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -538,7 +538,7 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -573,7 +573,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -608,7 +608,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -646,7 +646,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -684,7 +684,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -722,7 +722,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -752,7 +752,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     try
     {
-        var result = entity.Log(dto.subject);
+        var result = entity.Log(dto.Subject);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -760,7 +760,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -790,12 +790,12 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.skuId);
+        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
         if (product == null)
         {
             return Results.NotFound("Product not found");
         }
-        var result = entity.AddLine(product, dto.qty);
+        var result = entity.AddLine(product, dto.Qty);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -803,7 +803,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -841,7 +841,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -879,7 +879,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -917,7 +917,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -947,7 +947,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
     try
     {
-        var result = entity.Capture(dto.request);
+        var result = entity.Capture(dto.Request);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -955,7 +955,7 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -990,7 +990,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1025,7 +1025,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1053,12 +1053,12 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     try
     {
-        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.skuId);
+        var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
         if (product == null)
         {
             return Results.NotFound("Product not found");
         }
-        var result = entity.AddLine(product, dto.qty);
+        var result = entity.AddLine(product, dto.Qty);
         await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
@@ -1066,7 +1066,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1102,7 +1102,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1138,7 +1138,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1174,7 +1174,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1192,7 +1192,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
     await db.Entry(entity).Collection(e => e.Members).LoadAsync();
     try
     {
-        var contact = await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.whoId);
+        var contact = await db.Contacts.FirstOrDefaultAsync(e => e.Email == dto.WhoId);
         if (contact == null)
         {
             return Results.NotFound("Contact not found");
@@ -1205,7 +1205,7 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1231,7 +1231,7 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1266,7 +1266,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1301,7 +1301,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         }
         else
         {
-            return Results.Conflict(result.ErrorMessage);
+            return FailureStatus(result.ErrorMessage);
         }
     }
     catch (Exception)
@@ -1309,6 +1309,12 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
         return Results.StatusCode(500);
     }
 });
+
+static IResult FailureStatus(string? message)
+{
+    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+}
+
 
 static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
 {
@@ -1386,55 +1392,55 @@ public record CampaignDto
 
 public record PlaceHqDto
 {
-    public string city { get; init; } = default!;
-    public string region { get; init; } = default!;
+    public string City { get; init; } = default!;
+    public string Region { get; init; } = default!;
 }
 
 public record AddContactDto
 {
-    public string name { get; init; } = default!;
-    public string email { get; init; } = default!;
+    public string Name { get; init; } = default!;
+    public string Email { get; init; } = default!;
 }
 
 public record ConvertLeadDto
 {
-    public string leadId { get; init; } = default!;
+    public string LeadId { get; init; } = default!;
 }
 
 public record OpenDealDto
 {
-    public string title { get; init; } = default!;
-    public long amount { get; init; }
+    public string Title { get; init; } = default!;
+    public long Amount { get; init; }
 }
 
 public record OpenTicketDto
 {
-    public string subject { get; init; } = default!;
+    public string Subject { get; init; } = default!;
 }
 
 public record OpportunityLogDto
 {
-    public string subject { get; init; } = default!;
+    public string Subject { get; init; } = default!;
 }
 
 public record OpportunityAddLineDto
 {
-    public string skuId { get; init; } = default!;
-    public long qty { get; init; }
+    public string SkuId { get; init; } = default!;
+    public long Qty { get; init; }
 }
 
 public record CaptureDto
 {
-    public ChargeRequest request { get; init; } = default!;
+    public ChargeRequest Request { get; init; } = default!;
 }
 
 public record QuoteAddLineDto
 {
-    public string skuId { get; init; } = default!;
-    public long qty { get; init; }
+    public string SkuId { get; init; } = default!;
+    public long Qty { get; init; }
 }
 
 public record EnrollDto
 {
-    public string whoId { get; init; } = default!;
+    public string WhoId { get; init; } = default!;
 }

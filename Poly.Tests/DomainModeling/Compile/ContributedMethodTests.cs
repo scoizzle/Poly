@@ -163,8 +163,8 @@ public class ContributedMethodTests {
                 catalog: new CatalogIndex(session.ArtifactCatalog))
             .Generate("LabDbContext");
 
-        await Assert.That(source.Contains("entity.Issue(dto.code, db)", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(source.Contains("entity.Touch(dto.label, db)", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(source.Contains("entity.Issue(dto.Code, db)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(source.Contains("entity.Touch(dto.Label, db)", StringComparison.Ordinal)).IsFalse();
         // The action lambda now takes the port, so the host must register it.
         await Assert.That(source.Contains(
             "AddScoped<Poly.DomainModeling.Runtime.IStoragePort", StringComparison.Ordinal)).IsTrue();

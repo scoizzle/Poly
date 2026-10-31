@@ -79,8 +79,8 @@ POST http://localhost:5201/api/accounts/1/placeHq
 Content-Type: application/json
 
 {
-    "city": "sample",
-    "region": "sample"
+    "City": "sample",
+    "Region": "sample"
 }
 
 ### Action: AddContact
@@ -88,8 +88,8 @@ POST http://localhost:5201/api/accounts/1/addContact
 Content-Type: application/json
 
 {
-    "name": "sample",
-    "email": "sample"
+    "Name": "sample",
+    "Email": "sample"
 }
 
 ### Action: ConvertLead
@@ -97,7 +97,7 @@ POST http://localhost:5201/api/accounts/1/convertLead
 Content-Type: application/json
 
 {
-    "leadId": "example-lead-id"
+    "LeadId": "example-lead-id"
 }
 
 ### Action: OpenDeal
@@ -105,8 +105,8 @@ POST http://localhost:5201/api/accounts/1/openDeal
 Content-Type: application/json
 
 {
-    "title": "sample",
-    "amount": 0
+    "Title": "sample",
+    "Amount": 0
 }
 
 ### Action: Archive
@@ -117,7 +117,7 @@ POST http://localhost:5201/api/accounts/1/openTicket
 Content-Type: application/json
 
 {
-    "subject": "sample"
+    "Subject": "sample"
 }
 
 ### Action: Restore
@@ -159,7 +159,7 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/log
 Content-Type: application/json
 
 {
-    "subject": "sample"
+    "Subject": "sample"
 }
 
 ### Action: AddLine
@@ -167,8 +167,8 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/addLine
 Content-Type: application/json
 
 {
-    "skuId": "example-product-id",
-    "qty": 0
+    "SkuId": "example-product-id",
+    "Qty": 0
 }
 
 ### Action: QuoteDeal
@@ -185,7 +185,7 @@ POST http://localhost:5201/api/accounts/1/opportunities/1/capture
 Content-Type: application/json
 
 {
-    "request": { "amount": 0, "currency": "sample" }
+    "Request": { "amount": 0, "currency": "sample" }
 }
 
 ### ──────────── Activities ────────────
@@ -215,8 +215,8 @@ POST http://localhost:5201/api/opportunities/1/quotes/1/addLine
 Content-Type: application/json
 
 {
-    "skuId": "example-product-id",
-    "qty": 0
+    "SkuId": "example-product-id",
+    "Qty": 0
 }
 
 ### Action: Present
@@ -249,7 +249,7 @@ POST http://localhost:5201/api/campaigns/1/enroll
 Content-Type: application/json
 
 {
-    "whoId": "example-contact-id"
+    "WhoId": "example-contact-id"
 }
 
 ### Action: End

@@ -163,10 +163,11 @@ public sealed class HttpFileGenerator {
             for (int i = 0; i < ia.Parameters.Count; i++) {
                 var param = ia.Parameters[i];
                 var comma = i < ia.Parameters.Count - 1 ? "," : "";
+                var property = ActionDtoPropertyName(param);
                 if (param.IsEntityRef)
-                    sb.AppendLine($"    \"{param.Name}Id\": \"example-{ToCamelCase(param.DomainType)}-id\"{comma}");
+                    sb.AppendLine($"    \"{property}\": \"example-{ToCamelCase(param.DomainType)}-id\"{comma}");
                 else
-                    sb.AppendLine($"    \"{param.Name}\": {GetExampleJsonValueForTransportParam(param)}{comma}");
+                    sb.AppendLine($"    \"{property}\": {GetExampleJsonValueForTransportParam(param)}{comma}");
             }
             sb.AppendLine("}");
         }
@@ -175,6 +176,11 @@ public sealed class HttpFileGenerator {
 
     private static string Pluralize(string name) => Pluralizer.Pluralize(name);
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
+    private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
+
+    /// <summary>JSON key for an action body: the PascalCase DTO property.</summary>
+    private static string ActionDtoPropertyName(BehaviorParameter param) =>
+        param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
 
     private static string GetKeyExample(StorageEntity store) {
         if (store.KeyProperty is null) return "1";

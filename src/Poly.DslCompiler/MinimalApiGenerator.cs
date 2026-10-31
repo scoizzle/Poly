@@ -210,6 +210,10 @@ public sealed class MinimalApiGenerator {
     private static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
     private static string Pascalize(string name) => DomainTypeMapping.ToPascalCase(name);
 
+    /// <summary>Action DTO member: PascalCase, like an entity DTO. An entity ref is the id string.</summary>
+    private static string ActionDtoPropertyName(BehaviorParameter param) =>
+        param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
+
     /// <summary>
     /// When parent and child share a key token (both shadow <c>id</c>), the child
     /// route/param becomes <c>{entity}{Key}</c> so ASP.NET does not see two <c>{id}</c>.
@@ -453,14 +457,10 @@ public sealed class MinimalApiGenerator {
         bodyNodes.Add(Init(resultVarName,
             new Invoke(new Member(new TypeReference(VisibleType(entity.Name)), "Create"), [.. createArgs])));
 
-        // if (!result.IsSuccess) return Results.Conflict(new { error = result.ErrorMessage });
+        // Constraint and stage failures are 400. Unique and link conflicts are 409.
         bodyNodes.Add(new IfStatement(
             new Ast.Nodes.Not(new Member(new Variable(resultVarName), "IsSuccess")),
-            new Block(
-                new Return(
-                    new Invoke(
-                        new Member(new TypeReference("Results"), "Conflict"),
-                        new Member(new Variable(resultVarName), "ErrorMessage"))))));
+            new Block(DomainFailureReturn(new Member(new Variable(resultVarName), "ErrorMessage")))));
 
         // db.Set.Add(result.Value)
         bodyNodes.Add(new Invoke(
@@ -475,13 +475,12 @@ public sealed class MinimalApiGenerator {
 
         // return Results.Ok(result.Value) or Results.Created(uri, result.Value)
         if (uniqueProp is not null) {
-            // Build URI: route + "/" + result.Value.KeyProp.ToString()
-            var keyAccess = new Invoke(
-                new Member(
-                    new Member(
-                        new Member(new Variable(resultVarName), "Value"),
-                        uniqueProp.Name),
-                    "ToString"));
+            // A string key is already a string. Other keys need ToString for the URI.
+            Node keyAccess = new Member(
+                new Member(new Variable(resultVarName), "Value"),
+                uniqueProp.Name);
+            if (!string.Equals(GetClrTypeName(uniqueProp.Type.TypeName), "string", StringComparison.Ordinal))
+                keyAccess = new Invoke(new Member(keyAccess, "ToString"));
             var uri = new Invoke(
                 new Member(new TypeReference("string"), "Concat"),
                 new Constant(route + "/"),
@@ -731,12 +730,12 @@ public sealed class MinimalApiGenerator {
                     tryBody.Add(Init(lv, LoadByRouteKey(
                         Pluralize(param.DomainType),
                         _storageLookup[param.DomainType],
-                        new Member(new Variable("dto"), $"{param.Name}Id"))));
+                        new Member(new Variable("dto"), ActionDtoPropertyName(param)))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
                         new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{param.DomainType} not found"))))));
                     invokeArgs.Add(new Variable(lv));
                 }
-                else invokeArgs.Add(new Member(new Variable("dto"), param.Name));
+                else invokeArgs.Add(new Member(new Variable("dto"), ActionDtoPropertyName(param)));
             }
             AppendContributedArguments(entity, ia, actionParams, invokeArgs);
             tryBody.Add(Init("result",
@@ -745,18 +744,19 @@ public sealed class MinimalApiGenerator {
                     : new Invoke(new Member(new Variable("entity"), ia.Name))));
             tryBody.Add(new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync"))));
 
-            // Result switch: IsSuccess → Ok, else → Conflict
+            // IsSuccess → Ok. Constraint and stage failures are 400; unique and link conflicts are 409.
+            var failure = new Block(DomainFailureReturn(new Member(new Variable("result"), "ErrorMessage")));
             if (ia.IsVoid) {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Constant("ok")))),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Conflict"), new Member(new Variable("result"), "ErrorMessage"))))));
+                    failure));
             }
             else {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
                     new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Member(new Variable("result"), "Value")))),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Conflict"), new Member(new Variable("result"), "ErrorMessage"))))));
+                    failure));
             }
 
             // Catch: returns Results.StatusCode(500). No variable — the exception is
@@ -889,7 +889,7 @@ public sealed class MinimalApiGenerator {
             foreach (var param in ia.Parameters) {
                 if (param.IsEntityRef) {
                     props.Add(new PropertyDefinitionNode(
-                        $"{param.Name}Id",
+                        ActionDtoPropertyName(param),
                         ClrTypeNode("string"),
                         Getter: new PropertyGetterDefinitionNode(),
                         Initializer: new PropertyInitializerDefinitionNode(new NullForgiving(new Default()))));
@@ -897,7 +897,7 @@ public sealed class MinimalApiGenerator {
                 }
                 var clrType = GetClrTypeName(param.DomainType);
                 var prop = new PropertyDefinitionNode(
-                    param.Name,
+                    ActionDtoPropertyName(param),
                     ClrTypeNode(clrType),
                     Getter: new PropertyGetterDefinitionNode(),
                     Initializer: IsPrimitiveValueTypeClr(param.DomainType, clrType)
@@ -1153,8 +1153,35 @@ public sealed class MinimalApiGenerator {
         ));
     }
 
+    /// <summary>400 unless the message is a unique or link conflict, which is 409.</summary>
+    private static Return DomainFailureReturn(Node errorMessage) =>
+        new(new Invoke(new Variable("FailureStatus"), errorMessage));
+
+    private static MethodDefinitionNode FailureStatusMethod() {
+        var message = new Parameter("message",
+            new OptionalTypeReference(new PrimitiveTypeReference(ClrPrimitive.String)));
+        var messageVar = new Variable("message");
+        Node Contains(string text) => new Invoke(new Member(messageVar, "Contains"), new Constant(text));
+        var conflict = new Ast.Nodes.And(
+            new Ast.Nodes.NotEqual(messageVar, new Constant(null!)),
+            new Ast.Nodes.Or(
+                Contains("Unique constraint"),
+                Contains("already has a target")));
+        return new MethodDefinitionNode(
+            "FailureStatus",
+            new TypeReference("IResult"),
+            Parameters: [message],
+            Body: new Block(
+                new Return(new Ast.Nodes.Conditional(
+                    conflict,
+                    new Invoke(new Member(new TypeReference("Results"), "Conflict"), messageVar),
+                    new Invoke(new Member(new TypeReference("Results"), "BadRequest"), messageVar)))),
+            IsStatic: true);
+    }
+
     /// <summary>Appends the SeedAsync local function (Issue 11b).</summary>
     private void AppendSeedMethodStatements(List<Node> statements, string dbContextName) {
+        statements.Add(FailureStatusMethod());
         var seedableEntities = _entities.Where(e => GetStorageEntity(e).IsRoot).ToList();
         var bodyNodes = new List<Node>();
 

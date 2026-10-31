@@ -67,11 +67,18 @@ public sealed class ExpressionFoldTable {
             : throw new InvalidOperationException($"Fold '{match.PatternName}' matched no tokens.");
 
     private static DomainExpression FoldNumber(MatchResult<DslToken, DslTokenKind> match) {
-        var numText = Text(match);
+        if (match.Tokens.Count == 0)
+            throw new InvalidOperationException($"Fold '{match.PatternName}' matched no tokens.");
+        var token = match.Tokens[0];
+        var numText = token.Text;
         if (long.TryParse(numText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal))
-            return DomainExpression.Literal(longVal);
-        if (double.TryParse(numText, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleVal))
-            return DomainExpression.Literal(doubleVal);
-        return DomainExpression.Literal(numText);
+            return DomainExpression.Literal(longVal, line: token.Line, col: token.Col);
+        if (decimal.TryParse(numText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)) {
+            // 1.0 is integral. A fraction is decimal. Never a double.
+            if (dec == decimal.Truncate(dec) && dec >= long.MinValue && dec <= long.MaxValue)
+                return DomainExpression.Literal((long)dec, line: token.Line, col: token.Col);
+            return DomainExpression.Literal(dec, line: token.Line, col: token.Col);
+        }
+        return DomainExpression.Literal(numText, line: token.Line, col: token.Col);
     }
 }

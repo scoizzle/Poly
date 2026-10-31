@@ -19,7 +19,7 @@ Site: entity {
 Product: entity {
   Sku: Text unique length(3, 32)
   Name: Text
-  ListPrice: Number range(0, 100000000)
+  ListPrice: Decimal range(0, 100000000)
 }
 
 Lead: entity {
@@ -45,7 +45,7 @@ Account: entity {
   Industry: Industry
   parent: Account
   WonCount: Number default(0)
-  OpenPipeline: Number default(0)
+  OpenPipeline: Decimal default(0)
   hq: owned Site
   contacts: many Contact
   opportunities: many Opportunity
@@ -105,7 +105,7 @@ Contact: entity {
 
 Opportunity: entity {
   Title: Text
-  Amount: Number range(0, 100000000)
+  Amount: Decimal range(0, 100000000)
   CloseBy: Date default(Today)
   Probability: Number range(0, 100) default(10)
   account: Account
@@ -192,7 +192,7 @@ Activity: entity {
 
 Quote: entity {
   Title: Text
-  Amount: Number range(0, 100000000)
+  Amount: Decimal range(0, 100000000)
   opportunity: Opportunity
   lines: many QuoteLine
   Draft: stage {
@@ -242,14 +242,14 @@ Ticket: entity {
 
 Line: entity {
   Qty: Number range(1, 10000)
-  UnitPrice: Number range(0, 100000000)
+  UnitPrice: Decimal range(0, 100000000)
   product: Product
   opportunity: Opportunity
 }
 
 QuoteLine: entity {
   Qty: Number range(1, 10000)
-  UnitPrice: Number range(0, 100000000)
+  UnitPrice: Decimal range(0, 100000000)
   product: Product
   quote: Quote
 }

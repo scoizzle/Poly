@@ -3,7 +3,7 @@ uses temporal
 
 RoomType: entity {
   Name: Text length(1, 40)
-  NightlyRate: Number range(0, 10000)
+  NightlyRate: Decimal range(0, 10000)
   MaxOccupancy: Number range(1, 8)
 }
 
@@ -27,7 +27,7 @@ Property: entity {
 Room: entity {
   Number: Text unique length(1, 8)
   Floor: Number range(0, 50)
-  NightlyRate: Number range(0, 10000)
+  NightlyRate: Decimal range(0, 10000)
   MaxOccupancy: Number range(1, 8)
   Occupied: Boolean default(false)
   Dirty: Boolean default(false)
@@ -69,7 +69,7 @@ Room: entity {
 Hall: entity {
   Name: Text length(1, 80)
   Capacity: Number range(1, 5000)
-  DayRate: Number range(0, 100000)
+  DayRate: Decimal range(0, 100000)
   Occupied: Boolean default(false)
   Offline: Boolean default(false)
   BusySections: Number default(0)
@@ -115,7 +115,7 @@ Hall: entity {
 Section: entity {
   Name: Text length(1, 80)
   Capacity: Number range(1, 2000)
-  DayRate: Number range(0, 100000)
+  DayRate: Decimal range(0, 100000)
   Occupied: Boolean default(false)
   hall: Hall
   IsVacant: policy { Occupied is false }
@@ -200,7 +200,7 @@ Guest: entity {
 Reservation: entity {
   PartySize: Number range(1, 8)
   Nights: Number range(1, 60)
-  NightlyRate: Number range(0, 10000)
+  NightlyRate: Decimal range(0, 10000)
   MaxOccupancy: Number range(1, 8)
   CheckInDate: Date
   CheckOutDate: Date
@@ -254,12 +254,12 @@ Reservation: entity {
 }
 
 Folio: entity {
-  Balance: Number range(0, 1000000) default(0)
+  Balance: Decimal range(0, 1000000) default(0)
   reservation: Reservation
   HasBalance: policy { Balance > 0 }
   IsSettled: policy { Balance is 0 }
   Open: stage {
-    PostRoomNight: action (amount: Number) {
+    PostRoomNight: action (amount: Decimal) {
       assign Balance to Balance + amount
     }
     PostCharge: action (amount: Number) {
@@ -283,7 +283,7 @@ Folio: entity {
 EventHold: entity {
   Headcount: Number range(1, 5000)
   Capacity: Number range(1, 5000)
-  DayRate: Number range(0, 100000)
+  DayRate: Decimal range(0, 100000)
   StartDate: Date
   EndDate: Date
   guest: Guest

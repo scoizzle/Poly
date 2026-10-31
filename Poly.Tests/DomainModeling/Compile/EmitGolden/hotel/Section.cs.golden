@@ -11,7 +11,7 @@ public class Section
 {
     private Section()
     { }
-    private Section(long capacity, long dayRate, string name, Hall? hall = null, bool occupied = false)
+    private Section(long capacity, decimal dayRate, string name, Hall? hall = null, bool occupied = false)
     {
         this.Capacity = capacity;
         this.DayRate = dayRate;
@@ -21,7 +21,7 @@ public class Section
         this.CurrentStage = SectionStage.InService;
     }
     public long Capacity { get; private set; }
-    public long DayRate { get; private set; }
+    public decimal DayRate { get; private set; }
     public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
@@ -82,7 +82,7 @@ public class Section
     public bool IsOccupied() => this.Occupied;
     public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
-    public static DomainResult<Section> Create(long capacity, long dayRate, string name, Hall? hall = null, bool occupied = false)
+    public static DomainResult<Section> Create(long capacity, decimal dayRate, string name, Hall? hall = null, bool occupied = false)
     {
         if (capacity < 1L)
         {
@@ -92,11 +92,11 @@ public class Section
         {
             return DomainResult<Section>.Failure("'Capacity' must be <= 2000.");
         }
-        if (dayRate < 0L)
+        if (dayRate < 0m)
         {
             return DomainResult<Section>.Failure("'DayRate' must be >= 0.");
         }
-        if (dayRate > 100000L)
+        if (dayRate > 100000m)
         {
             return DomainResult<Section>.Failure("'DayRate' must be <= 100000.");
         }

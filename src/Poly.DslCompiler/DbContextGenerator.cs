@@ -223,7 +223,7 @@ public sealed class DbContextGenerator {
     /// <summary>Builds Syntax IR for a single entity's OnModelCreating config block.</summary>
     private Node BuildEntityConfig(Entity entity) {
         var store = GetStorageEntity(entity);
-        var tableName = store.TableName;
+        var tableName = EmitTableName(entity, store);
 
         // Lambda parameter: b
         var bParam = new Parameter("b");
@@ -322,11 +322,21 @@ public sealed class DbContextGenerator {
             );
         }
 
-        // .HasColumnType("type")
+        // Enum columns store the int backing value. The CLR type name is not a SQL type.
+        var columnType = col.ColumnType;
+        if (col.IsEnum
+            && (string.Equals(columnType, col.ClrTypeName, StringComparison.Ordinal)
+                || string.Equals(columnType, col.DomainType, StringComparison.Ordinal)))
+            columnType = "INTEGER";
         chain = new Invoke(
             new Member(chain, "HasColumnType"),
-            new Constant(col.ColumnType)
+            new Constant(columnType)
         );
+        if (col.IsEnum) {
+            chain = new Invoke(new Member(chain, "HasConversion")) {
+                TypeArguments = [new PrimitiveTypeReference(ClrPrimitive.Int32)]
+            };
+        }
 
         // .IsRequired()
         if (col.IsRequired && !DomainTypeMapping.IsNonNullableClrValueType(col.ClrTypeName)) {
@@ -389,6 +399,15 @@ public sealed class DbContextGenerator {
     // ── Helpers ────────────────────────────────────────────────
 
     private static string Pluralize(string name) => Pluralizer.Pluralize(name);
+
+    /// <summary>
+    /// Default storage table is <c>Name + "s"</c> (<c>Opportunitys</c>). The host
+    /// emits the English plural unless <c>table("…")</c> overrode the name.
+    /// </summary>
+    private static string EmitTableName(Entity entity, StorageEntity store) =>
+        string.Equals(store.TableName, entity.Name + "s", StringComparison.Ordinal)
+            ? Pluralize(entity.Name)
+            : store.TableName;
 
     private static string ShadowKeyName(Entity entity, StorageEntity store) {
         var taken = entity.Properties.Any(p => p.Name == "Id")

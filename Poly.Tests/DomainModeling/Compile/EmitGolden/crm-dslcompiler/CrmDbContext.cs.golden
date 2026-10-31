@@ -79,7 +79,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Sku).HasColumnName("sku").HasColumnType("TEXT").IsRequired().HasMaxLength(32);
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.ListPrice).HasColumnName("listPrice").HasColumnType("INTEGER");
+    b.Property(x => x.ListPrice).HasColumnName("listPrice").HasColumnType("TEXT");
     b.HasIndex(x => x.Sku).IsUnique();
 });
         modelBuilder.Entity<Lead>(b => {
@@ -96,9 +96,9 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Name).HasColumnName("name").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("INTEGER").IsRequired();
+    b.Property(x => x.Industry).HasColumnName("industry").HasColumnType("INTEGER").HasConversion<int>().IsRequired();
     b.Property(x => x.WonCount).HasColumnName("wonCount").HasColumnType("INTEGER");
-    b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("INTEGER");
+    b.Property(x => x.OpenPipeline).HasColumnName("openPipeline").HasColumnType("TEXT");
     b.Property(x => x.ClosedTickets).HasColumnName("closedTickets").HasColumnType("INTEGER");
     b.Metadata.FindNavigation(nameof(Account.Contacts))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Account.Opportunities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -113,14 +113,14 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.HasIndex(x => x.Email).IsUnique();
 });
         modelBuilder.Entity<Opportunity>(b => {
-    b.ToTable("Opportunitys", t => {
+    b.ToTable("Opportunities", t => {
     t.HasCheckConstraint("CK_amount", "amount >= 0 AND amount <= 100000000");
     t.HasCheckConstraint("CK_probability", "probability >= 0 AND probability <= 100");
 });
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
+    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
     b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER");
     b.Metadata.FindNavigation(nameof(Opportunity.Activities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -128,7 +128,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Metadata.FindNavigation(nameof(Opportunity.Quotes))!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Activity>(b => {
-    b.ToTable("Activitys");
+    b.ToTable("Activities");
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
@@ -141,7 +141,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("INTEGER");
+    b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
     b.Metadata.FindNavigation(nameof(Quote.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
 });
         modelBuilder.Entity<Campaign>(b => {
@@ -170,7 +170,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
-    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("INTEGER");
+    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
         modelBuilder.Entity<QuoteLine>(b => {
     b.ToTable("QuoteLines", t => {
@@ -180,7 +180,7 @@ public class CrmDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Qty).HasColumnName("qty").HasColumnType("INTEGER");
-    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("INTEGER");
+    b.Property(x => x.UnitPrice).HasColumnName("unitPrice").HasColumnType("TEXT");
 });
     }
     public bool Exists(string entity, string property, string @value)

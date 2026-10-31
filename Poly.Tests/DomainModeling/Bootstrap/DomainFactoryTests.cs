@@ -86,13 +86,14 @@ public class DomainFactoryTests {
     public async Task CanonicalBuiltInTypeCatalog_CreateChanges_ReturnsCoreFive() {
         var changes = CanonicalBuiltInTypeCatalog.CreateChanges();
 
-        await Assert.That(changes.Count).IsEqualTo(5);
+        await Assert.That(changes.Count).IsEqualTo(6);
         await Assert.That(changes.All(c => c is DomainChange)).IsTrue();
 
         var names = changes.OfType<AddPrimitiveTypeChange>().Select(c => c.Name).ToHashSet();
-        await Assert.That(names.Count).IsEqualTo(5);
+        await Assert.That(names.Count).IsEqualTo(6);
         await Assert.That(names).Contains("Boolean");
         await Assert.That(names).Contains("Number");
+        await Assert.That(names).Contains("Decimal");
         await Assert.That(names).Contains("Text");
         await Assert.That(names).Contains("Uuid");
         await Assert.That(names).Contains("Binary");
@@ -106,7 +107,7 @@ public class DomainFactoryTests {
         var seeded = CanonicalBuiltInTypeCatalog.ApplyTo(empty);
 
         await Assert.That(seeded).IsNotSameReferenceAs(empty);
-        await Assert.That(seeded.Types.OfType<PrimitiveType>().Count()).IsEqualTo(5);
+        await Assert.That(seeded.Types.OfType<PrimitiveType>().Count()).IsEqualTo(6);
         var names = seeded.Types.OfType<PrimitiveType>().Select(p => p.Name).ToHashSet();
         await Assert.That(names).DoesNotContain("Date");
         await Assert.That(names).DoesNotContain("DateTime");

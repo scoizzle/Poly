@@ -47,7 +47,7 @@ public class HttpFileGeneratorTests {
             }
             """));
         await Assert.That(http).Contains(
-            "\"message\": { \"to\": \"sample\", \"subject\": \"sample\", \"body\": \"sample\" }");
+            "\"Message\": { \"to\": \"sample\", \"subject\": \"sample\", \"body\": \"sample\" }");
         await Assert.That(http.Contains("\"message\": 0")).IsFalse();
     }
 
@@ -83,6 +83,20 @@ public class HttpFileGeneratorTests {
             """));
         await Assert.That(CountOf(http, "### Action: Return")).IsEqualTo(1);
         await Assert.That(CountOf(http, "/loans/1/return")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ActionBody_PascalizesPropertyNames() {
+        var http = Render(ParseDomain("""
+            domain T
+            Account: entity {
+              Name: Text unique
+              PlaceHq: action (city: Text, region: Text) { }
+            }
+            """));
+        await Assert.That(http).Contains("\"City\"");
+        await Assert.That(http).Contains("\"Region\"");
+        await Assert.That(http.Contains("\"city\"")).IsFalse();
     }
 
     private static int CountOf(string text, string value) {

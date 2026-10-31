@@ -61,12 +61,13 @@ public sealed class DomainSession {
     /// Lower declares <c>file</c> and <c>tree</c> and registers neither. Emit registers
     /// one <c>vm-analysis-report</c> for the interpretation analysis of the whole module
     /// (empty when the analyzer reported nothing) and each printed <c>.cs</c> file with
-    /// a reference to the entity or scaffolding tree it printed. After the catalog is
+    /// a reference to the entity or scaffolding tree it printed. Emit then runs each
+    /// <see cref="Artifacts"/> contributor once and registers what
+    /// <see cref="IArtifactContributor.Contribute"/> returns. After that catalog is
     /// complete, Lower and Emit each register one <c>catalog-reference-report</c>
-    /// (empty when every reference resolves). The compiler then
-    /// registers contributor trees and text files here and writes the text files from
-    /// this catalog. The next Lower or Emit drops anything registered after that,
-    /// including those files.
+    /// (empty when every reference resolves). The compiler may still register extra
+    /// contributors that are not on the session, after Emit returns. The next Lower
+    /// or Emit drops anything registered after that, including those files.
     /// </summary>
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
@@ -346,11 +347,12 @@ public sealed class DomainSession {
     }
 
     /// <summary>
-    /// Entity-module C# files from the lowered module. Persistence and HTTP host
-    /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
-    /// not this method. The writer consumes the <see cref="CompiledDomain"/> from
-    /// <see cref="Compile"/>. VM analysis of the module runs once for a domain, its
-    /// domain analysis, and that module reference on this session.
+    /// Entity-module C# files from the lowered module, then each new
+    /// <see cref="ContributedFile"/> from <see cref="Artifacts"/>. The writer consumes
+    /// the <see cref="CompiledDomain"/> from <see cref="Compile"/>. VM analysis of the
+    /// module runs once for a domain, its domain analysis, and that module reference
+    /// on this session. Contributors run once per call, against that call's catalog,
+    /// so a second Emit of the same compilation lists each host file once.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
@@ -388,8 +390,33 @@ public sealed class DomainSession {
         if (nestProgram)
             scaffoldingSource = InGeneratedNamespace(scaffoldingSource);
         AddPrintedFile(catalog, domain, files, "Poly.Types.cs", scaffoldingSource, scaffolding);
+        RegisterContributedArtifacts(domain, analysis, catalog, files);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
         return files;
+    }
+
+    /// <summary>
+    /// Runs each <see cref="Artifacts"/> contributor once and registers what it
+    /// returns. A contributed text file whose name is not already in
+    /// <paramref name="files"/> is appended. The artifact is stored as returned.
+    /// </summary>
+    private void RegisterContributedArtifacts(
+        Domain domain,
+        AnalysisResult analysis,
+        ArtifactCatalog catalog,
+        List<(string FileName, string Source)> files) {
+        var seen = new HashSet<string>(files.Select(f => f.FileName), StringComparer.Ordinal);
+        foreach (var contributor in Artifacts) {
+            foreach (var artifact in contributor.Contribute(domain, analysis, catalog)) {
+                catalog.Register(artifact);
+                if (artifact.Descriptor.Id.Type != ContributedFile.Type)
+                    continue;
+                var name = ContributedFile.FileName(artifact);
+                if (!seen.Add(name))
+                    continue;
+                files.Add((name, ContributedFile.Text(artifact)));
+            }
+        }
     }
 
     /// <summary>

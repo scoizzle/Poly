@@ -37,7 +37,37 @@ public class Product
             return DomainResult<Product>.Failure("'Sku' must be at most 32 characters.");
         }
         var created = new Product(listPrice, name, sku);
+        var uniqueCheck = Product.CheckUnique("Sku", sku);
+        if (!uniqueCheck.IsSuccess)
+        {
+            return DomainResult<Product>.Failure(uniqueCheck.ErrorMessage ?? "");
+        }
+        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Product", "Sku", sku);
         return DomainResult<Product>.Success(created);
     }
-    public DomainResult EnsureUnique(string propertyName, object value) => DomainResult.Success();
+    private static DomainResult CheckUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Product", propertyName, value.ToString());
+        if (message != null)
+        {
+            return DomainResult.Failure(message);
+        }
+        return DomainResult.Success();
+    }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Sku" && object.Equals(this.Sku, value))
+        {
+            return DomainResult.Success();
+        }
+        return Product.CheckUnique(propertyName, value);
+    }
 }

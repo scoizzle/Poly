@@ -62,6 +62,8 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
 }
 
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
+    internal InMemoryStoragePort Port { get; } = new();
+
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {
             var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;

@@ -176,7 +176,11 @@ public sealed class DslCompiler {
         try {
             var files = session.Emit(domain, outcome.Analysis).ToList();
             var catalog = session.ArtifactCatalog;
-            foreach (var contributor in session.Artifacts.Concat(_extraArtifacts)) {
+            // Emit already ran session.Artifacts. An extra that is that same instance
+            // is skipped. Running it again would register the same artifact id.
+            foreach (var contributor in _extraArtifacts) {
+                if (session.Artifacts.Contains(contributor))
+                    continue;
                 foreach (var artifact in contributor.Contribute(domain, outcome.Analysis, catalog))
                     catalog.Register(FromContributor(contributor, artifact));
             }

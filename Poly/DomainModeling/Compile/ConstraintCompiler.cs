@@ -36,7 +36,9 @@ public abstract record ConstraintAnchor {
 /// as <c>unique</c>, joins the same produced method and names what it needs.
 /// Core places the statements at the anchor, adds the supporting methods, and
 /// threads the parameters marked for callers. The compiler does not walk
-/// callers.
+/// callers. <see cref="AssignObligations"/> names parameters an assign needs,
+/// and <see cref="AfterApply"/> rewrites that assign once those parameters
+/// are on the method.
 /// </summary>
 public interface IConstraintCompiler {
     string LibraryId { get; }
@@ -45,7 +47,30 @@ public interface IConstraintCompiler {
     bool Applies(Constraint constraint);
 
     ConstraintContribution Compile(ConstraintCompileRequest request);
+
+    /// <summary>
+    /// Parameters an assign of this constraint needs. Empty when the constraint
+    /// has no assign-time obligation. Core installs them before
+    /// <see cref="AfterApply"/>.
+    /// </summary>
+    IReadOnlyList<ConstraintContribution> AssignObligations(
+        ConstraintCompileRequest request, TypeDefinitionNode type) => [];
+
+    /// <summary>
+    /// Rewrites the module after contributions are installed. The default
+    /// returns <paramref name="module"/> unchanged.
+    /// </summary>
+    ModuleRewrite AfterApply(IReadOnlyList<TypeDefinitionNode> module) =>
+        new(module, []);
 }
+
+/// <summary>
+/// A module after <see cref="IConstraintCompiler.AfterApply"/>.
+/// <see cref="Replaced"/> are bodies caches still hold by reference.
+/// </summary>
+public readonly record struct ModuleRewrite(
+    IReadOnlyList<TypeDefinitionNode> Module,
+    IReadOnlyList<(Node From, Node To)> Replaced);
 
 /// <summary>
 /// One property constraint on one entity, plus the produced parameters that

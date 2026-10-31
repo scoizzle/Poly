@@ -103,6 +103,7 @@ public sealed class DbContextGenerator {
             fields = [PendingKeysField()];
             methods.Add(ExistsMethod());
             methods.Add(RecordMethod());
+            methods.Add(ReleaseMethod());
             interfaces = [new ClrTypeReference(typeof(IStoragePort))];
         }
 
@@ -141,7 +142,8 @@ public sealed class DbContextGenerator {
     /// <summary>
     /// The context is the host half of <see cref="IStoragePort"/>: <c>Exists</c>
     /// queries the mapped <c>DbSet</c>; <c>Record</c> keeps the pending key a
-    /// nested create must see before the host saves.
+    /// nested create must see before the host saves; <c>Release</c> drops a
+    /// pending key this invocation replaced. A saved row is left for the host.
     /// </summary>
     private static FieldDefinitionNode PendingKeysField() =>
         new("_pendingKeys",
@@ -209,6 +211,21 @@ public sealed class DbContextGenerator {
             Body: new Block([
                 new Invoke(
                     new Member(new Member(new ThisReference(), "_pendingKeys"), "Add"),
+                    PendingKey(entityParam, propertyParam, valueParam))
+            ]));
+    }
+
+    private static MethodDefinitionNode ReleaseMethod() {
+        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
+        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
+        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        return new MethodDefinitionNode(
+            "Release",
+            new TypeReference("void"),
+            Parameters: [entityParam, propertyParam, valueParam],
+            Body: new Block([
+                new Invoke(
+                    new Member(new Member(new ThisReference(), "_pendingKeys"), "Remove"),
                     PendingKey(entityParam, propertyParam, valueParam))
             ]));
     }

@@ -16,10 +16,24 @@ public class DomainModelingSurfaceCompletionTests {
 
     [Test]
     public async Task Parse_DecimalLiteral_IsNumber() {
+        var rejected = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser("""
+                domain T
+                Item: entity {
+                  Total: Number
+                  Discounted: policy { Total * 0.9 > 0 }
+                }
+                """).Parse());
+        var messages = rejected.Analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.Message)
+            .ToArray();
+        await Assert.That(messages.Any(m => m.Contains("Decimal") && m.Contains(" (line "))).IsTrue();
+
         var domain = Apply("""
             domain T
             Item: entity {
-              Total: Number
+              Total: Decimal
               Discounted: policy { Total * 0.9 > 0 }
             }
             """);
@@ -28,7 +42,7 @@ public class DomainModelingSurfaceCompletionTests {
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
         var expr = domain.Types.OfType<Entity>().Single().Policies.Single().Expression;
         var mul = (Poly.DomainModeling.Ontology.Multiply)((Poly.DomainModeling.Ontology.Comparison)expr).Left;
-        await Assert.That(((Literal)mul.Right).Value).IsEqualTo(0.9);
+        await Assert.That(((Literal)mul.Right).Value).IsEqualTo(0.9m);
     }
 
     [Test]

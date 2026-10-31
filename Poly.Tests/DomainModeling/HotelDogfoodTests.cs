@@ -90,14 +90,14 @@ public class HotelDogfoodTests {
         var roomType = DomainEntityInstance.Create(E("RoomType"),
             new Dictionary<string, object?> {
                 ["Name"] = "Deluxe",
-                ["NightlyRate"] = 220L,
+                ["NightlyRate"] = 220m,
                 ["MaxOccupancy"] = 3L
             }, domain);
         var room = DomainEntityInstance.Create(E("Room"),
             new Dictionary<string, object?> {
                 ["Number"] = "101",
                 ["Floor"] = 1L,
-                ["NightlyRate"] = 220L,
+                ["NightlyRate"] = 220m,
                 ["MaxOccupancy"] = 3L
             }, domain);
         var guest = DomainEntityInstance.Create(E("Guest"),
@@ -125,7 +125,7 @@ public class HotelDogfoodTests {
         await Assert.That(stay.Succeeded).IsTrue();
         var reservation = stay.ResultInstance!;
         await Assert.That(reservation.CurrentStage).IsEqualTo("Requested");
-        await Assert.That(reservation.GetProperty<object>("NightlyRate")).IsEqualTo(220L);
+        await Assert.That(reservation.GetProperty<object>("NightlyRate")).IsEqualTo(220m);
         await Assert.That(guest.EvaluatePolicy(E("Guest").Policies.First(p => p.Name == "HasStays"))).IsTrue();
 
         var oversized = guest.InvokeAction("BookStay",
@@ -154,7 +154,7 @@ public class HotelDogfoodTests {
 
         await Assert.That(reservation.InvokeAction("PostStayCharge").Succeeded).IsTrue();
         var folio = store.GetRelatedInstances("folio", reservation).Single();
-        await Assert.That(folio.GetProperty<object>("Balance")).IsEqualTo(220L);
+        await Assert.That(folio.GetProperty<object>("Balance")).IsEqualTo(220m);
 
         var unpaid = reservation.InvokeAction("CheckOut");
         await Assert.That(unpaid.Succeeded).IsFalse();
@@ -209,19 +209,19 @@ public class HotelDogfoodTests {
             new Dictionary<string, object?> {
                 ["Name"] = "Salon A",
                 ["Capacity"] = 100L,
-                ["DayRate"] = 1500L
+                ["DayRate"] = 1500m,
             }, domain);
         var salonB = DomainEntityInstance.Create(E("Section"),
             new Dictionary<string, object?> {
                 ["Name"] = "Salon B",
                 ["Capacity"] = 100L,
-                ["DayRate"] = 1500L
+                ["DayRate"] = 1500m,
             }, domain);
         var salonC = DomainEntityInstance.Create(E("Section"),
             new Dictionary<string, object?> {
                 ["Name"] = "Salon C",
                 ["Capacity"] = 100L,
-                ["DayRate"] = 1500L
+                ["DayRate"] = 1500m,
             }, domain);
         store.Add(salonA);
         store.Add(salonB);

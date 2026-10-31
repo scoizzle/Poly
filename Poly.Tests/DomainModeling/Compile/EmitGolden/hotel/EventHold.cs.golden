@@ -17,7 +17,7 @@ public class EventHold
     private int _notifyDepth;
     private EventHold()
     { }
-    private EventHold(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    private EventHold(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         this.Capacity = capacity;
         this.DayRate = dayRate;
@@ -30,7 +30,7 @@ public class EventHold
         this.CurrentStage = EventHoldStage.Requested;
     }
     public long Capacity { get; private set; }
-    public long DayRate { get; private set; }
+    public decimal DayRate { get; private set; }
     public DateOnly EndDate { get; private set; }
     public long Headcount { get; private set; }
     public DateOnly StartDate { get; private set; }
@@ -211,7 +211,7 @@ public class EventHold
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<EventHold> Create(long capacity, long dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    public static DomainResult<EventHold> Create(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         if (capacity < 1L)
         {
@@ -221,11 +221,11 @@ public class EventHold
         {
             return DomainResult<EventHold>.Failure("'Capacity' must be <= 5000.");
         }
-        if (dayRate < 0L)
+        if (dayRate < 0m)
         {
             return DomainResult<EventHold>.Failure("'DayRate' must be >= 0.");
         }
-        if (dayRate > 100000L)
+        if (dayRate > 100000m)
         {
             return DomainResult<EventHold>.Failure("'DayRate' must be <= 100000.");
         }

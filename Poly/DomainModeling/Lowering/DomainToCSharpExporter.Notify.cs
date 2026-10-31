@@ -447,7 +447,8 @@ public sealed partial class DomainToCSharpExporter {
             var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
                       || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
             var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
-                        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+                        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal)
+                        || string.Equals(prop.Type.TypeName, "Decimal", StringComparison.Ordinal);
 
             Node Failure(string msg) => FailureNode(new Constant(msg));
             Node FailureNode(Node msg) => new Return(
@@ -612,7 +613,7 @@ public sealed partial class DomainToCSharpExporter {
         if (value is double d) return d == Math.Floor(d)
             ? new Constant((long)d)
             : new Constant(d);
-        if (value is decimal m) return new Constant((double)m);
+        if (value is decimal m) return new Constant(m);
         if (value is string s) return new Constant(s);
         if (value is bool b) return new Constant(b);
         return new Constant(value?.ToString());

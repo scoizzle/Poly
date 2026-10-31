@@ -2331,14 +2331,12 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Export_RangeNegativeAndFractionalBounds_Parse() {
-        // Filed C-F6/B-F7: `range(-500, )` and `range(0.01, 1.0)` were unparseable
-        // (unsigned-integer-only tokenizer + grammar). Signed/fractional bounds are the
-        // natural overdraft/pricing surface.
+        // An integral bound on Number stays a long guard. A fractional bound on
+        // Number fails closed and names Decimal.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Account: entity {
               Balance: Number range(-500, )
-              Price: Number range(0.01, 1.0)
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
@@ -2347,8 +2345,15 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("'Balance' must be >= -500.");
-        await Assert.That(cs).Contains("'Price' must be >= 0.01.");
-        await Assert.That(cs).Contains("'Price' must be <= 1.");
+
+        var ex = Assert.Throws<FormatException>(() => new PolyDslParser("""
+            domain Test
+            Account: entity {
+              Price: Number range(0.01, 1.0)
+            }
+            """).Parse());
+        await Assert.That(ex!.Message).Contains("Decimal");
+        await Assert.That(ex.Message).Contains(" (line ");
     }
 
     [Test]

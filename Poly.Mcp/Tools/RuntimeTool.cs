@@ -85,7 +85,7 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
-        JsonValueKind.Number => JsonNumberToLong(je),
+        JsonValueKind.Number => JsonNumber(je),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.String => je.GetString(),
@@ -94,16 +94,17 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     };
 
     /// <summary>
-    /// Number is a long. Integral JSON (1, 1.0) is kept; a fraction is rejected
-    /// instead of truncating to 0. Values outside long still fail.
+    /// A JSON number stays a <c>long</c> when it is integral, including <c>1.0</c>.
+    /// A fraction stays a <c>decimal</c> so the property type can accept or reject it.
+    /// Values outside both ranges still fail.
     /// </summary>
-    private static long JsonNumberToLong(JsonElement je) {
+    private static object JsonNumber(JsonElement je) {
         if (je.TryGetInt64(out var integral))
             return integral;
-        if (je.TryGetDecimal(out var dec) && dec != decimal.Truncate(dec))
-            throw new InvalidOperationException(
-                $"Number is integral; '{je.GetRawText()}' is not a valid Number.");
-        return (long)je.GetDecimal();
+        if (je.TryGetDecimal(out var dec))
+            return dec;
+        throw new InvalidOperationException(
+            $"Number is integral; '{je.GetRawText()}' is not a valid Number. Use Decimal.");
     }
 
     /// <summary>
@@ -158,10 +159,12 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
                 _ => throw new InvalidOperationException(
                     $"Property '{propertyName}' expects Guid; got '{raw}'.")
             },
-            "Number" or "Int" or "Int64" or "Int32" => raw switch {
-                long or int => raw,
+            "Number" or "Int" or "Int64" or "Int32" => CoerceIntegral(propertyName, raw),
+            "Decimal" => raw switch {
+                decimal => raw,
+                long or int => Convert.ToDecimal(raw, CultureInfo.InvariantCulture),
                 _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Number; got '{raw}'.")
+                    $"Property '{propertyName}' expects Decimal; got '{raw}'.")
             },
             "Boolean" or "Bool" => raw switch {
                 bool => raw,
@@ -172,6 +175,18 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
             },
             _ => raw
         };
+
+    private static object CoerceIntegral(string propertyName, object raw) {
+        switch (raw) {
+            case long or int:
+                return raw;
+            case decimal m when m == decimal.Truncate(m) && m >= long.MinValue && m <= long.MaxValue:
+                return (long)m;
+            default:
+                throw new InvalidOperationException(
+                    $"Number is integral; property '{propertyName}' got '{raw}', which is not a valid Number. Use Decimal.");
+        }
+    }
 
     /// <summary>
     /// One property value for an MCP snapshot. Scalars render as their string form.

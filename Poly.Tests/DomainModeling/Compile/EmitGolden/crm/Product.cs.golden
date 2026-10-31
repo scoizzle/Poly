@@ -6,22 +6,22 @@ public class Product
 {
     private Product()
     { }
-    private Product(long listPrice, string name, string sku)
+    private Product(decimal listPrice, string name, string sku)
     {
         this.ListPrice = listPrice;
         this.Name = name;
         this.Sku = sku;
     }
-    public long ListPrice { get; private set; }
+    public decimal ListPrice { get; private set; }
     public string Name { get; private set; } = default!;
     public string Sku { get; private set; } = default!;
-    public static DomainResult<Product> Create(long listPrice, string name, string sku)
+    public static DomainResult<Product> Create(decimal listPrice, string name, string sku)
     {
-        if (listPrice < 0L)
+        if (listPrice < 0m)
         {
             return DomainResult<Product>.Failure("'ListPrice' must be >= 0.");
         }
-        if (listPrice > 100000000L)
+        if (listPrice > 100000000m)
         {
             return DomainResult<Product>.Failure("'ListPrice' must be <= 100000000.");
         }

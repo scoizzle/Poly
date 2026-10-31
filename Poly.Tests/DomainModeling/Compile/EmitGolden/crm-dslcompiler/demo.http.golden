@@ -28,7 +28,7 @@ POST http://localhost:5201/api/products
 Content-Type: application/json
 
 {
-    "ListPrice": 0,
+    "ListPrice": 0.0,
     "Name": "sample",
     "Sku": "example-sku"
 }

@@ -8,8 +8,8 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Parameter(string name) =>
         new ParameterAccess(Guard.ThrowIfNullOrEmpty(name));
 
-    public static DomainExpression Literal(object? value, DomainTypeReference? typeHint = null) =>
-        new Literal(value, typeHint);
+    public static DomainExpression Literal(object? value, DomainTypeReference? typeHint = null, int line = 0, int col = 0) =>
+        new Literal(value, typeHint, line, col);
 
     public static DomainExpression Owned(string ownedName, DomainExpression inner) =>
         new OwnedAccess(Guard.ThrowIfNullOrEmpty(ownedName), inner);
@@ -126,7 +126,9 @@ public sealed record ParameterAccess(string Name) : DomainExpression {
 /// </summary>
 public sealed record Literal(
     object? Value,
-    DomainTypeReference? TypeHint = null
+    DomainTypeReference? TypeHint = null,
+    int Line = 0,
+    int Col = 0
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => TypeHint is not null ? [TypeHint] : [];
 }

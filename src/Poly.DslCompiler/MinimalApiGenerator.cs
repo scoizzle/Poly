@@ -1059,8 +1059,8 @@ public sealed class MinimalApiGenerator {
                     // representable range — the DTO member can never exceed it — instead
                     // of emitting a raw double.MaxValue literal. The integral-vs-double
                     // constructor choice lives in RangeAttributeArguments.
-                    var (rangeMin, rangeMax) = RangeAttributeArguments.Build(clrType, r.Minimum, r.Maximum);
-                    attrs.Add(new AttributeNode("Range", [rangeMin, rangeMax]));
+                    var rangeArgs = RangeAttributeArguments.Build(clrType, r.Minimum, r.Maximum);
+                    attrs.Add(new AttributeNode("Range", rangeArgs));
                     break;
                 case LengthConstraint l when clrType == "string":
                     attrs.Add(new AttributeNode("MinLength", [new Constant(l.MinLength)]));

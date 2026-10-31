@@ -509,8 +509,8 @@ public class PolyDslRoundTripTests {
         await Assert.That(result.Succeeded).IsTrue();
 
         var primitives = result.Root!.Types.OfType<Poly.DomainModeling.Ontology.PrimitiveType>().ToList();
-        await Assert.That(primitives.Count).IsEqualTo(9);
-        await Assert.That(primitives.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count()).IsEqualTo(9);
+        await Assert.That(primitives.Count).IsEqualTo(10);
+        await Assert.That(primitives.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count()).IsEqualTo(10);
         var entities = result.Root.Types.OfType<Entity>().ToList();
         await Assert.That(entities.Count).IsEqualTo(2);
     }
@@ -1033,12 +1033,12 @@ public class PolyDslRoundTripTests {
         await Assert.That(level.ExpectedValue).IsEqualTo(5L);
         var rate = item.Properties.Single(p => p.Name == "Rate")
             .Constraints.OfType<EqualityConstraint>().Single();
-        await Assert.That(rate.ExpectedValue).IsEqualTo(5.0);
+        await Assert.That(rate.ExpectedValue).IsEqualTo(5L);
 
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains("equals(\"Active\")")).IsTrue();
         await Assert.That(printed.Contains("equals(5)")).IsTrue();
-        await Assert.That(printed.Contains("equals(5.0)")).IsTrue();
+        await Assert.That(printed.Contains("equals(5.0)")).IsFalse();
         var second = Apply(printed);
         var again = second.Types.OfType<Entity>().Single();
         await Assert.That(again.Properties.Single(p => p.Name == "Status")
@@ -1046,7 +1046,7 @@ public class PolyDslRoundTripTests {
         await Assert.That(again.Properties.Single(p => p.Name == "Level")
             .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5L);
         await Assert.That(again.Properties.Single(p => p.Name == "Rate")
-            .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5.0);
+            .Constraints.OfType<EqualityConstraint>().Single().ExpectedValue).IsEqualTo(5L);
     }
 
     [Test]

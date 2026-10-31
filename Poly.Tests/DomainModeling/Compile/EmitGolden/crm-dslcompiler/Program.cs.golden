@@ -1349,8 +1349,8 @@ app.Run();
 
 public record ProductDto
 {
-    [Range(0, 100000000)]
-    public long ListPrice { get; init; }
+    [Range(typeof(decimal), "0", "100000000")]
+    public decimal ListPrice { get; init; }
     [Required]
     public string Name { get; init; } = default!;
     [Required]

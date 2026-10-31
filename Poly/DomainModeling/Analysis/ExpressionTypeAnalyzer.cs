@@ -422,6 +422,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         bool allowTextConcat = false) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
+        ReportFractionalLiteral(context, left, leftType, right, rightType);
         // numeric + numeric, text + text (concatenation; `+` only), date + number (AddDays
         // lowering), or date + duration
         // (a parsed `N days` offset with a temporal left operand); Unknown operands
@@ -445,6 +446,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
+        ReportFractionalLiteral(context, left, leftType, right, rightType);
         if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
             && (!IsNumeric(leftType.Category) || !IsNumeric(rightType.Category)))
             Report(context, left,
@@ -493,6 +495,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         // Date (DateOnly) and DateTime do not compare. Now is DateTime; Today is Date.
         // Assign still widens Date onto DateTime; this rejection is comparison only.
+        // A fractional literal against Number / Int / Int64 is rejected here. Both
+        // sides are category Number, so Compatible would allow the pair.
+        ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
         if (MixedDateGranularity(context, left, right) || !Compatible(context, left, right))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
@@ -518,6 +523,10 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (value is PropertyAccess { Name: "Guid" } kw)
             CheckDefault(context, kw, targetTypeName, enumTypes);
 
+        if (value is Literal { Value: decimal } fractional && IsIntegralTypeName(targetTypeName)) {
+            Report(context, value, FractionalLiteralMessage(fractional, targetTypeName));
+            return;
+        }
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
         var targetCategory = CategoryOf(context, targetTypeName, enumTypes);
         // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
@@ -562,6 +571,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         switch (expr) {
             case Literal { Value: string s } when targetCategory is TypeCategory.Enum:
                 CheckEnumMember(context, expr, propTypeName, s, enumTypes);
+                return;
+            case Literal { Value: decimal } fractional when IsIntegralTypeName(propTypeName):
+                Report(context, expr, FractionalLiteralMessage(fractional, propTypeName));
                 return;
             case Literal lit:
                 var inferred = InferType(context, expr, null, null, enumTypes);
@@ -657,7 +669,8 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: null } => new(TypeCategory.Null),
             Literal { Value: string } => new(TypeCategory.Text),
             Literal { Value: bool } => new(TypeCategory.Boolean),
-            Literal { Value: long or int or double or float or decimal or short or byte } => new(TypeCategory.Number),
+            Literal { Value: decimal } => new(TypeCategory.Number, "Decimal"),
+            Literal { Value: long or int or double or float or short or byte } => new(TypeCategory.Number),
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => new(TypeCategory.Boolean),
             CountExpr => new(TypeCategory.Number),
             SumExpr => new(TypeCategory.Number),
@@ -753,6 +766,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return false;
             if (left.Category != right.Category)
                 return false;
+            // Number, Int, and Int64 widen onto Decimal at the assign site only.
+            if (right.TypeName is "Decimal" && IsIntegralTypeName(left.TypeName))
+                return true;
             if (left.TypeName is { } ln && right.TypeName is { } rn)
                 return string.Equals(CanonicalName(ln), CanonicalName(rn), StringComparison.Ordinal);
             return true;
@@ -761,6 +777,35 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         return left.Category == right.Category
             || string.Equals(CanonicalName(left.TypeName), CanonicalName(right.TypeName), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A <c>decimal</c> literal combined with <c>Number</c>, <c>Int</c>, or <c>Int64</c>.
+    /// A <c>Decimal</c> property combined with a <c>Number</c> property stays legal.
+    /// </summary>
+    private bool ReportFractionalLiteral(
+        AnalysisContext context,
+        DomainExpression left, TypeInfo leftType,
+        DomainExpression right, TypeInfo rightType) {
+        if (left is Literal { Value: decimal } leftLit && IsIntegralTypeName(rightType.TypeName)) {
+            Report(context, leftLit, FractionalLiteralMessage(leftLit, rightType.TypeName!));
+            return true;
+        }
+        if (right is Literal { Value: decimal } rightLit && IsIntegralTypeName(leftType.TypeName)) {
+            Report(context, rightLit, FractionalLiteralMessage(rightLit, leftType.TypeName!));
+            return true;
+        }
+        return false;
+    }
+
+    private static string FractionalLiteralMessage(Literal literal, string typeName) {
+        var message = $"Fractional literal is not legal on {typeName}. Use Decimal.";
+        if (literal.Line > 0)
+            message += $" (line {literal.Line}, col {literal.Col})";
+        return message;
+    }
+
+    private static bool IsIntegralTypeName(string? typeName) =>
+        typeName is "Number" or "Int" or "Int64";
 
     private static string? CanonicalName(string? typeName) => typeName switch {
         "String" => "Text",

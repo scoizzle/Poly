@@ -100,7 +100,7 @@ public class UniqueSimulatePrintAgreeTests {
         const string dsl = """
             domain Lab
             Widget: entity {
-              Code: Text required unique
+              Code: Text unique
               Relabel: action (code: Text) {
                 assign Code to code
               }

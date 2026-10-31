@@ -167,11 +167,13 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
         return array;
     }
 
-    // Printed methods return DomainResult or DomainResult<T>.
+    // Printed methods return DomainResult or DomainResult<T>. A failed DomainResult<T>
+    // throws on Value, so a failing row reads null instead.
     static StepResult Unpack(object result) {
         var type = result.GetType();
-        return ((bool)type.GetProperty("IsSuccess")!.GetValue(result)!,
+        var success = (bool)type.GetProperty("IsSuccess")!.GetValue(result)!;
+        return (success,
             type.GetProperty("ErrorMessage")!.GetValue(result) as string,
-            type.GetProperty("Value")?.GetValue(result));
+            success ? type.GetProperty("Value")?.GetValue(result) : null);
     }
 }

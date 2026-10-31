@@ -349,7 +349,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             lengthGroup = null;
         }
 
-        foreach (var check in ConstraintCheckWriter.ChecksFor(
+        foreach (var check in BuiltinConstraintCompiler.Checks(
                      _entity, prop, _domain, _analysis,
                      ConstraintCheckWriter.ConstraintCheckStyle.Assign,
                      valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {

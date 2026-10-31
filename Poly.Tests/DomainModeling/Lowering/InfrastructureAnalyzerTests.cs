@@ -25,7 +25,7 @@ public class InfrastructureAnalyzerTests {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -462,7 +462,7 @@ public class InfrastructureAnalyzerTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -760,7 +760,7 @@ public class InfrastructurePipelineTests {
     private static Domain ParseDomain(string poly) {
         var parser = new PolyDslParser(poly);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;
     }

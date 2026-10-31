@@ -6,6 +6,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+
 using Prim = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -18,7 +19,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class OptionalPropertyLoweringTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

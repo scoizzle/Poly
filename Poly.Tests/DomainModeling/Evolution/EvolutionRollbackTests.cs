@@ -79,7 +79,7 @@ public class EvolutionRollbackTests {
         var original = DomainFactory.Create("Test", builder =>
             builder.AddEntity("Order"));
 
-        var result = new DomainEvolution(original).Apply([
+        var result = new DomainEvolution(original).ApplyAndAnalyze([
             new AddEntityChange("Customer", []),               // valid
             new AddEntityChange("Order", []),                  // duplicate → error
             new AddPropertyToEntityChange("Customer",
@@ -183,7 +183,7 @@ public class EvolutionRollbackTests {
     [Test]
     public async Task Apply_EmptyChangeList_ReturnsIdentityResult() {
         var domain = DomainFactory.Create("Test");
-        var result = new DomainEvolution(domain).Apply([]);
+        var result = new DomainEvolution(domain).ApplyAndAnalyze([]);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root).IsSameReferenceAs(domain);
@@ -283,7 +283,7 @@ public class EvolutionRollbackTests {
 
         // Now target a non-existent stage for removal
         var result = new DomainEvolution(withStage.Root)
-            .Apply([new RemovePolicyFromStageChange("Order", "NonExistentStage", "G")]);
+            .ApplyAndAnalyze([new RemovePolicyFromStageChange("Order", "NonExistentStage", "G")]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();
@@ -311,7 +311,7 @@ public class EvolutionRollbackTests {
         // ChangePropertyTypeChange goes through UpdateProperty which now fails
         // when the property name doesn't exist on the entity.
         var result = new DomainEvolution(original)
-            .Apply([new ChangePropertyTypeChange("Order", "NonExistentProp",
+            .ApplyAndAnalyze([new ChangePropertyTypeChange("Order", "NonExistentProp",
                 new DomainTypeReference("Number"))]);
 
         await Assert.That(result.Succeeded).IsFalse();
@@ -324,7 +324,7 @@ public class EvolutionRollbackTests {
             builder.AddEntity("Order"));
 
         var result = new DomainEvolution(original)
-            .Apply([new AddConstraintToPropertyChange("Order", "NonExistent",
+            .ApplyAndAnalyze([new AddConstraintToPropertyChange("Order", "NonExistent",
                 new RequiredConstraint())]);
 
         await Assert.That(result.Succeeded).IsFalse();
@@ -383,7 +383,7 @@ public class EvolutionRollbackTests {
                 .AddPropertyToEntity("Order", new Property("Name", new DomainTypeReference("Text"), [])));
 
         var result = new DomainEvolution(original)
-            .Apply([new ChangePropertyTypeChange("Order", "Name",
+            .ApplyAndAnalyze([new ChangePropertyTypeChange("Order", "Name",
                 new DomainTypeReference("Text"))]);
 
         await Assert.That(result.Succeeded).IsTrue();
@@ -400,7 +400,7 @@ public class EvolutionRollbackTests {
                 .AddPolicyToAction("Order", "Submit", guard));
 
         var result = new DomainEvolution(original)
-            .Apply([new RemovePolicyFromActionChange("Order", "Submit", "Guard")]);
+            .ApplyAndAnalyze([new RemovePolicyFromActionChange("Order", "Submit", "Guard")]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();
@@ -416,7 +416,7 @@ public class EvolutionRollbackTests {
                 .AddActionToStage("Order", "Active", "Submit"));
 
         var result = new DomainEvolution(original)
-            .Apply([new AddPolicyToActionChange("Order", "Submit", guard)]);
+            .ApplyAndAnalyze([new AddPolicyToActionChange("Order", "Submit", guard)]);
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.WasRolledBack).IsTrue();

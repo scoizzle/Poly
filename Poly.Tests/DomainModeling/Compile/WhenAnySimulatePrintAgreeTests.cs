@@ -189,7 +189,7 @@ public class WhenAnySimulatePrintAgreeTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
         var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

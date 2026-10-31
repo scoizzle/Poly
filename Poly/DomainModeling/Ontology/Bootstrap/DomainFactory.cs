@@ -40,7 +40,7 @@ public static class DomainFactory {
             return withBuiltins;
 
         // Apply only the additional changes on top of the builtins-bearing root
-        var result = new DomainEvolution(withBuiltins).Apply(additionalChanges);
+        var result = new DomainEvolution(withBuiltins).ApplyAndAnalyze(additionalChanges);
         return result.Succeeded ? result.Root : withBuiltins;
     }
 
@@ -73,7 +73,7 @@ public static class DomainFactory {
         var session = DomainSession.ForExtensions(empty.Extensions);
         foreach (var (_, name, category) in session.PrimitiveSeeds)
             changes.Add(new AddPrimitiveTypeChange(name, category, []));
-        var result = new DomainEvolution(empty).Apply(changes);
+        var result = new DomainEvolution(empty).ApplyAndAnalyze(changes);
         return result.Succeeded
             ? result.Root
             : empty; // Fallthrough: builtins should never fail, but be safe

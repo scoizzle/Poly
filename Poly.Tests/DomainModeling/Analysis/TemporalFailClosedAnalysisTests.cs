@@ -26,7 +26,7 @@ public class TemporalFailClosedAnalysisTests {
     private static EvolutionResult Evolve(string poly, DomainSession? parserInputs = null) {
         var parser = parserInputs is null ? new PolyDslParser(poly) : new PolyDslParser(poly, parserInputs);
         var changes = parser.Parse();
-        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
     }
 
     private static List<string> Errors(EvolutionResult result) =>

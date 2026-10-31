@@ -73,7 +73,7 @@ public sealed class EmitSessionContractTests {
     private static (DomainSession Session, Domain Domain, AnalysisResult Analysis) AnalyzePoly(string poly) {
         var session = DomainSession.ForSource(poly, seed: [], catalog: Catalog);
         var changes = new PolyDslParser(poly, session).Parse();
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!outcome.Succeeded) {
             var errors = string.Join("; ", outcome.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -307,7 +307,7 @@ public sealed class EmitSessionContractTests {
         await Assert.That(((PropertyAccess)((Comparison)addPolicy.Policy.Expression).Right).Name)
             .IsEqualTo("Now");
 
-        var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         var domain = outcome.Root;
         var analysis = session.WithDomain(domain).Analyze(domain);
         await Assert.That(analysis.GetMetadata<TemporalVocabularyMetadata>(domain)).IsNull();

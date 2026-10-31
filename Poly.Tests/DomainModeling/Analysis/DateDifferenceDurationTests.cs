@@ -13,7 +13,7 @@ public class DateDifferenceDurationTests {
         var parser = new PolyDslParser(dsl);
         var changes = parser.Parse();
         var empty = DomainTestFactory.Create("_", [], []);
-        return new DomainEvolution(empty).Apply(changes);
+        return new DomainEvolution(empty).ApplyAndAnalyze(changes);
     }
 
     /// <summary>Duration literals (<c>1 Days</c>) need the temporal pack at parse time.</summary>
@@ -21,7 +21,7 @@ public class DateDifferenceDurationTests {
         var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(changes, session: session);
+            .ApplyAndAnalyze(changes, session: session);
     }
 
     private static string PrintTemporal(string dsl) {

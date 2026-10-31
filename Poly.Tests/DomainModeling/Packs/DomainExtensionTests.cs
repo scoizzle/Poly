@@ -14,7 +14,7 @@ public sealed class DomainExtensionTests {
             """;
         var host = DomainSession.ForSource(poly, ExtensionCatalog.ProductLanguage);
         var changes = new PolyDslParser(poly, host).Parse();
-        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+        var result = new DomainEvolution(new Domain("T", [])).ApplyAndAnalyze(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Extensions).IsEquivalentTo(new[] { "temporal" });
@@ -56,7 +56,7 @@ public sealed class DomainExtensionTests {
         var changes = DomainCompilation.WithSeed(
             new PolyDslParser(poly, host).Parse(),
             ExtensionCatalog.ProductAuthoring);
-        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+        var result = new DomainEvolution(new Domain("T", [])).ApplyAndAnalyze(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Extensions).IsEquivalentTo(new[] { "storage" });
@@ -66,7 +66,7 @@ public sealed class DomainExtensionTests {
     [Test]
     public async Task AddDomainExtension_Duplicate_FailsEvolution() {
         var start = new Domain("T", []) { Extensions = ["temporal"] };
-        var result = new DomainEvolution(start).Apply([new AddDomainExtensionChange("temporal")]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new AddDomainExtensionChange("temporal")]);
 
         await Assert.That(result.Succeeded).IsFalse();
     }
@@ -75,7 +75,7 @@ public sealed class DomainExtensionTests {
     public async Task AddDomainExtension_SessionHasNotLoadedId_Throws() {
         var session = DomainSession.ForExtensions(["temporal"]);
         var start = new Domain("T", []) { Extensions = ["temporal"] };
-        await Assert.That(() => new DomainEvolution(start).Apply(
+        await Assert.That(() => new DomainEvolution(start).ApplyAndAnalyze(
                 [new AddDomainExtensionChange("storage")], session: session))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("storage");
@@ -106,7 +106,7 @@ public sealed class DomainExtensionTests {
 
     [Test]
     public async Task AddDomainExtension_Temporal_SeedsTemporalPrimitives() {
-        var result = new DomainEvolution(new Domain("T", [])).Apply([new AddDomainExtensionChange("temporal")]);
+        var result = new DomainEvolution(new Domain("T", [])).ApplyAndAnalyze([new AddDomainExtensionChange("temporal")]);
 
         await Assert.That(result.Succeeded).IsTrue();
         var names = result.Root!.Types.OfType<PrimitiveType>().Select(p => p.Name).ToHashSet();
@@ -119,7 +119,7 @@ public sealed class DomainExtensionTests {
     [Test]
     public async Task AddDomainExtension_Temporal_AfterCanonicalBuiltins_SeedsOneDate() {
         var seeded = CanonicalBuiltInTypeCatalog.ApplyTo(new Domain("T", []));
-        var result = new DomainEvolution(seeded).Apply([new AddDomainExtensionChange("temporal")]);
+        var result = new DomainEvolution(seeded).ApplyAndAnalyze([new AddDomainExtensionChange("temporal")]);
 
         await Assert.That(result.Succeeded).IsTrue();
         var dates = result.Root!.Types.OfType<PrimitiveType>().Where(p => p.Name == "Date").ToList();
@@ -152,7 +152,7 @@ public sealed class DomainExtensionTests {
             Item: entity { Due: Date }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+        var result = new DomainEvolution(new Domain("T", [])).ApplyAndAnalyze(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root!.Extensions.Contains("temporal")).IsFalse();
@@ -167,7 +167,7 @@ public sealed class DomainExtensionTests {
             Item: entity { Due: Date }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(new Domain("T", [])).Apply(changes);
+        var result = new DomainEvolution(new Domain("T", [])).ApplyAndAnalyze(changes);
 
         await Assert.That(result.Succeeded).IsTrue();
         var names = result.Root!.Types.OfType<PrimitiveType>().Select(p => p.Name).ToHashSet();

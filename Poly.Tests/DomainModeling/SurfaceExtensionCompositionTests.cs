@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling;
 public class SurfaceExtensionCompositionTests {
     private static (Domain Domain, AnalysisResult Analysis) ParseAndAnalyze(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded) {
             var errors = string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -291,7 +291,7 @@ public class SurfaceExtensionCompositionTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsFalse();
         var messages = string.Join(" ", result.Analysis.Diagnostics.Select(d => d.Message));
         await Assert.That(messages).Contains("many");
@@ -431,7 +431,7 @@ public class SurfaceExtensionCompositionTests {
             }
             """;
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsFalse();
         var messages = string.Join(" ", result.Analysis.Diagnostics.Select(d => d.Message));
         await Assert.That(

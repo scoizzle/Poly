@@ -8,7 +8,7 @@ namespace Poly.Tests.DomainModeling;
 public class DomainModelingSurfaceCompletionTests {
     private static Domain Apply(string poly) {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(poly).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(poly).Parse());
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary ?? "evolution failed");
         return result.Root!;
@@ -58,7 +58,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task If_NonBoolean_AnalysisRejects() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Item: entity {
                   Qty: Number
@@ -77,7 +77,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task Assign_NowToNumber_AnalysisRejects() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 uses temporal
                 Item: entity {
@@ -176,7 +176,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task Contract_StoredPropertyOfContractValueType_AnalysisError() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Stripe: contract external stripe v1 {
                   ChargeRequest: value { Amount: Number }
@@ -193,7 +193,7 @@ public class DomainModelingSurfaceCompletionTests {
     [Test]
     public async Task ContractBinding_UnknownAction_AnalysisError() {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser("""
+            .ApplyAndAnalyze(new PolyDslParser("""
                 domain T
                 Item: entity { Name: Text }
                 Stripe: contract external stripe v1 {

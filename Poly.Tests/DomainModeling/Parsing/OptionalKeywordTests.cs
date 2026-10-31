@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public sealed class OptionalKeywordTests {
     private static Domain Parse(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)

@@ -1340,7 +1340,7 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
 
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes, session: parseSession);
+            outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: parseSession);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

@@ -9,7 +9,7 @@ public class ExpressionTypeAnalysisTests {
         var parser = new PolyDslParser(dsl);
         var changes = parser.Parse();
         var empty = DomainTestFactory.Create("_", [], []);
-        return new DomainEvolution(empty).Apply(changes);
+        return new DomainEvolution(empty).ApplyAndAnalyze(changes);
     }
 
     private static bool HasError(EvolutionResult result, string messageContains) =>
@@ -363,7 +363,7 @@ public class ExpressionTypeAnalysisTests {
         var session = DomainSession.ForExtensions([ExtensionCatalog.TemporalId]);
         var changes = new PolyDslParser(dsl, session).Parse();
         return new DomainEvolution(Poly.DomainModeling.DomainTestFactory.Create("_", [], []))
-            .Apply(changes, session: session);
+            .ApplyAndAnalyze(changes, session: session);
     }
 
     [Test]

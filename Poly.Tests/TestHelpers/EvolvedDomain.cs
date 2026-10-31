@@ -10,7 +10,7 @@ public static class EvolvedDomain {
     /// <summary>Parses and analyzes <paramref name="poly"/>, throwing on any error diagnostic.</summary>
     public static (Domain Domain, AnalysisResult Analysis) FromDsl(string poly) {
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics

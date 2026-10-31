@@ -10,7 +10,7 @@ public class ConstraintPropagationEffectTests {
         var parser = new PolyDslParser(dsl);
         var changes = parser.Parse();
         var empty = DomainTestFactory.Create("_", [], []);
-        return new DomainEvolution(empty).Apply(changes);
+        return new DomainEvolution(empty).ApplyAndAnalyze(changes);
     }
 
     private static IEnumerable<string> Messages(EvolutionResult result, bool errors = true) =>

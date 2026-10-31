@@ -7,7 +7,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 public class EnumStageNameCollisionTests {
     [Test]
     public async Task DomainEnumNamedLikeStageEnum_IsRejectedWithClearMessage() {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser("""
                 domain Shop
                 OrderStage: enum { Low, High }

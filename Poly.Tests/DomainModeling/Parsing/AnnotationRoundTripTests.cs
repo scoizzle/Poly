@@ -29,7 +29,7 @@ public class AnnotationRoundTripTests {
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var item = result.Root!.Types.OfType<Entity>().Single();
@@ -47,7 +47,7 @@ public class AnnotationRoundTripTests {
 
         var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
-        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes2);
+        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
         var item2 = result2.Root!.Types.OfType<Entity>().Single();
         await Assert.That(item2.Properties.All(p => p.Facets.Count == 1)).IsTrue();
@@ -66,7 +66,7 @@ public class AnnotationRoundTripTests {
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var order = result.Root!.Types.OfType<Entity>().Single();
@@ -81,7 +81,7 @@ public class AnnotationRoundTripTests {
 
         var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
-        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes2);
+        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
         await Assert.That(result2.Root!.Types.OfType<Entity>().Single().Facets.Count).IsEqualTo(1);
     }
@@ -100,7 +100,7 @@ public class AnnotationRoundTripTests {
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var printer = new DomainDslPrinter(PrintAnnotations);
@@ -110,7 +110,7 @@ public class AnnotationRoundTripTests {
 
         var parser2 = new PolyDslParser(printed, ctx);
         var changes2 = parser2.Parse();
-        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes2);
+        var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
     }
 
@@ -129,7 +129,7 @@ public class AnnotationRoundTripTests {
 
         var session = DomainSession.ForAuthoringSource(poly, ExtensionCatalog.ProductLanguage);
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         await Assert.That(result.Succeeded).IsTrue();
         var kept = session.WithDomain(result.Root!);
         await Assert.That(kept.Annotations.CanAccept("table")).IsTrue();
@@ -168,7 +168,7 @@ public class AnnotationRoundTripTests {
 
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(parser.Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
         var printerNoFacets = new DomainDslPrinter();
@@ -208,7 +208,7 @@ public class AnnotationRoundTripTests {
 
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(parser.Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
         var ticket = result.Root!.Types.OfType<Entity>().Single();
@@ -248,7 +248,7 @@ public class AnnotationRoundTripTests {
 
         var ctx = CreateTestContext();
         var parser = new PolyDslParser(poly, ctx);
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(parser.Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
         var note = result.Root!.Types.OfType<Entity>().Single().Properties.Single();
@@ -259,7 +259,7 @@ public class AnnotationRoundTripTests {
         await Assert.That(printed.Contains("column(\"COL_\\\"X\\\"\")")).IsTrue();
 
         var result2 = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(printed, ctx).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(printed, ctx).Parse());
         await Assert.That(result2.Succeeded).IsTrue();
         var note2 = result2.Root!.Types.OfType<Entity>().Single().Properties.Single();
         await Assert.That(((AnnotationString)((Annotation)note2.Facets[0]).Arguments["0"]).Value)
@@ -280,7 +280,7 @@ public class AnnotationRoundTripTests {
             """;
 
         var changes = new PolyDslParser(poly).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
         var book = result.Root!.Types.OfType<Entity>().Single();
         await Assert.That(book.Actions.Count).IsEqualTo(1);
@@ -331,10 +331,10 @@ public class AnnotationRoundTripTests {
             domain Test
             Item: entity { Code: Text }
             """, ctx);
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(parser.Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
-        var facetResult = new DomainEvolution(result.Root!).Apply([
+        var facetResult = new DomainEvolution(result.Root!).ApplyAndAnalyze([
             new AddFacetToPropertyChange("Item", "Code",
                 new Annotation("column", new Dictionary<string, AnnotationValue> {
                     ["0"] = new AnnotationString("CODE")
@@ -352,10 +352,10 @@ public class AnnotationRoundTripTests {
             domain Test
             Order: entity { Total: Number }
             """, ctx);
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(parser.Parse());
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(parser.Parse());
         await Assert.That(result.Succeeded).IsTrue();
 
-        var facetResult = new DomainEvolution(result.Root!).Apply([
+        var facetResult = new DomainEvolution(result.Root!).ApplyAndAnalyze([
             new AddFacetToDomainTypeChange("Order",
                 new Annotation("table", new Dictionary<string, AnnotationValue> {
                     ["0"] = new AnnotationString("ORDERS")

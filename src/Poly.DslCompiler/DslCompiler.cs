@@ -150,7 +150,7 @@ public sealed class DslCompiler {
         }
         EvolutionResult outcome;
         try {
-            outcome = new DomainEvolution(emptyDomain).Apply(changes, session: session);
+            outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: session);
         }
         catch (Exception ex) {
             return Fail($"Evolution failed: {ex.Message}");

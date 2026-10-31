@@ -25,7 +25,7 @@ public class DbContextGeneratorTests {
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
         var emptyDomain = DomainTestFactory.Create("_", [], []);
-        var result = new DomainEvolution(emptyDomain).Apply(changes);
+        var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed");
         return result.Root!;

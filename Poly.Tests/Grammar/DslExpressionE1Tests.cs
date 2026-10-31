@@ -103,7 +103,7 @@ public class DslExpressionE1Tests {
             """;
 
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var cmp = (Comparison)result.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
@@ -114,7 +114,7 @@ public class DslExpressionE1Tests {
         await Assert.That(printed.Contains("MAGIC is 42", StringComparison.Ordinal)).IsTrue();
 
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(printed, inputs).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var cmp2 = (Comparison)reparsed.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp2.Left).IsTypeOf<MagicLiteral>();
@@ -133,7 +133,7 @@ public class DslExpressionE1Tests {
             """;
 
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
         var cmp = (Comparison)result.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
@@ -145,7 +145,7 @@ public class DslExpressionE1Tests {
         await Assert.That(printed.Contains("12 Days is 12 Days", StringComparison.Ordinal)).IsTrue();
 
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .Apply(new PolyDslParser(printed, inputs).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse());
         await Assert.That(reparsed.Succeeded).IsTrue();
         var cmp2 = (Comparison)reparsed.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp2.Left).IsTypeOf<DurationLiteral>();

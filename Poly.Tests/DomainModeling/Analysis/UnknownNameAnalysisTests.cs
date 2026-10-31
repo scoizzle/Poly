@@ -12,7 +12,7 @@ public class UnknownNameAnalysisTests {
         var parser = new PolyDslParser(dsl);
         var changes = parser.Parse();
         var empty = DomainTestFactory.Create("_", [], []);
-        return new DomainEvolution(empty).Apply(changes);
+        return new DomainEvolution(empty).ApplyAndAnalyze(changes);
     }
 
     private static AnalysisResult Analyze(EvolutionResult result) =>

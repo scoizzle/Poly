@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// </summary>
 public sealed class StoredValueTypePropertyTests {
     private static AnalysisResult Analyze(string dsl) {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser(dsl).Parse());
         return result.Succeeded ? DomainModelAnalyzer.Analyze(result.Root!) : result.Analysis;
     }
@@ -48,7 +48,7 @@ public sealed class StoredValueTypePropertyTests {
 
     [Test]
     public async Task ValueTypeProperty_OnEntity_FailsEvolutionClosed() {
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser("""
                 domain Shop
                 Money: value { Amount: Number }

@@ -130,7 +130,7 @@ public sealed class CascadingErrorReportTests {
         try {
             var session = DomainSession.ForSource(broken.Value.Text, Seed, Catalog);
             var changes = DomainCompilation.WithSeed(new PolyDslParser(broken.Value.Text, session).Parse(), Seed);
-            var outcome = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+            var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
             var errors = outcome.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
             var named = errors.Count(d => Mentions(d.Message, broken.Value.Victim));
             return new Measurement("measured", errors.Count, named);

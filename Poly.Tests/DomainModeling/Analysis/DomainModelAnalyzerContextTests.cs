@@ -10,7 +10,7 @@ public class DomainModelAnalyzerContextTests {
         var ctx = ExtensionCatalog.Core.Authoring;
         var parser = new PolyDslParser(poly, ctx);
         var changes = parser.Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
         if (!result.Succeeded)
             throw new InvalidOperationException("Domain evolution failed: " +
                 string.Join("; ", result.Analysis.Diagnostics.Where(d =>

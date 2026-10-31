@@ -21,6 +21,12 @@ public sealed partial record DomainEntityInstance {
     private readonly ITypeDefinitionProvider _typeDefAnalyzer;
     private readonly List<DomainEntityInstance> _createdChildren = [];
     private int _invokeDepth;
+    // Across instances, on this thread. The outermost InvokeAction turns a
+    // subscription failure into ConstraintFailureException. An inner invoke
+    // leaves the private exception in place so the outer action does not
+    // treat it as its own constraint failure and roll back.
+    [ThreadStatic]
+    private static int _openActionInvokes;
     private int _transitionDepth;
     private int _notifyDepth;
     private HashSet<string>? _automaticStageChain;
@@ -630,10 +636,15 @@ public sealed partial record DomainEntityInstance {
             ClearAutomaticStageChain();
         var injectedKeys = new List<string>();
         _invokeDepth++;
+        _openActionInvokes++;
         try {
             return InvokeActionInternal(actionName, args, injectedKeys);
         }
+        catch (SubscriptionDispatchException ex) when (_openActionInvokes == 1) {
+            throw new ConstraintFailureException(ex.Message);
+        }
         finally {
+            _openActionInvokes--;
             _invokeDepth--;
             foreach (var key in injectedKeys)
                 _values.Remove(key);
@@ -814,7 +825,8 @@ public sealed partial record DomainEntityInstance {
     }
 
     // InvokeAction catches ConstraintFailureException and rolls the action back.
-    // A subscriber's failure has to keep escaping so the next notify still runs.
+    // A subscriber failure stays this type so that rollback does not see it.
+    // The outermost InvokeAction rethrows ConstraintFailureException.
     private static void ThrowIfSubscriptionFailed(DomainResult? failed, string context) {
         if (failed is { IsSuccess: false })
             throw new SubscriptionDispatchException(

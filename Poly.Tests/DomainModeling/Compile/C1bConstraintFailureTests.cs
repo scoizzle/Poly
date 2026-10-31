@@ -71,9 +71,41 @@ public class C1bConstraintFailureTests {
         var handler = module.First(t => t.Name == "Patron").Methods!
             .First(m => m.Name.StartsWith("WhenEach", StringComparison.Ordinal));
         await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsTrue();
+        await Assert.That(HasCreatedLocal(handler.Body!)).IsFalse();
         var printed = new CSharpGenerator().Generate(handler.Body!);
         await Assert.That(printed).Contains("throw new ConstraintFailureException");
         await Assert.That(printed.Contains("throw new InvalidOperationException", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(printed.Contains("created", StringComparison.Ordinal)).IsFalse();
+    }
+
+    [Test]
+    public async Task VoidCreateIn_FailClosed_ThrowsAndDropsCreatedLocal() {
+        var (domain, analysis, session) = Evolve("""
+            domain Lib
+            Loan: entity {
+              Amount: Number
+              Active: stage { Overdue: action { transition to Overdue } }
+              Overdue: stage { }
+            }
+            Fine: entity {
+              Amount: Number
+              Reason: Text
+            }
+            Patron: entity {
+              loans: many Loan
+              fines: many Fine
+              when loans Overdue as loan {
+                create in fines { Amount: (loan Amount) Reason: "Overdue" }
+              }
+            }
+            """);
+        var module = session.Lower(domain, analysis);
+        var handler = module.First(t => t.Name == "Patron").Methods!
+            .First(m => m.Name.StartsWith("WhenEach", StringComparison.Ordinal));
+        await Assert.That(handler.ReturnType is TypeReference { TypeName: "void" }).IsTrue();
+        await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsTrue();
+        await Assert.That(HasCreatedLocal(handler.Body!)).IsFalse();
+        await Assert.That(HasDomainResultFailureReturn(handler.Body!)).IsFalse();
     }
 
     [Test]
@@ -112,6 +144,10 @@ public class C1bConstraintFailureTests {
         await Assert.That(HasDomainResultFailureReturn(lowered!)).IsTrue();
         await Assert.That(HasConstraintFailureThrow(lowered!)).IsFalse();
     }
+
+    private static bool HasCreatedLocal(Node node) => Flatten(node).Any(n =>
+        n is Variable { Name: { } name }
+        && name.StartsWith("created", StringComparison.Ordinal));
 
     private static bool HasConstraintFailureThrow(Node node) => Flatten(node).Any(n =>
         n is ThrowStatement {

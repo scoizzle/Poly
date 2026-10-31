@@ -1141,6 +1141,90 @@ public class ParityTests {
         await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("R");
     }
 
+    // A failing create inside a void when-handler throws. The transition that
+    // fired it stays; the action is not a DomainResult failure and is not rolled back.
+    [Test]
+    public async Task Invoke_WhenSubscriptionCreateFails_Agrees() {
+        const string dsl = """
+            domain Library
+            Patron: entity {
+              Name: Text required
+              loans: many Loan
+              fines: many Fine
+              when loans Overdue as loan {
+                create in fines { Amount: (loan Amount) Reason: "Overdue" }
+              }
+            }
+            Loan: entity {
+              Amount: Number range(0, 500) default(1)
+              Active: stage {
+                MarkOverdue: action { transition to Overdue }
+              }
+              Overdue: stage { }
+            }
+            Fine: entity {
+              Amount: Number range(0, 10) default(0)
+              Reason: Text required
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "ParitySubscriptionCreateFail")
+            .AssertAgree(side => {
+                var loan = side.Create("Loan", ("Amount", 50L));
+                var patron = side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
+                side.Use(loan);
+                side.Invoke("MarkOverdue");
+                side.Use(loan);
+                side.Use(patron);
+            });
+        await Assert.That(outcomes[3].Success).IsFalse();
+        await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
+        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Overdue");
+        await Assert.That(outcomes[4].State["Amount"]).IsEqualTo("50");
+        await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Invoke_WhenNestedActionSubscriptionCreateFails_Agrees() {
+        const string dsl = """
+            domain Library
+            Patron: entity {
+              Name: Text required
+              loans: many Loan
+              fines: many Fine
+              when loans Overdue as loan {
+                create in fines { Amount: (loan Amount) Reason: "Overdue" }
+              }
+            }
+            Loan: entity {
+              Amount: Number range(0, 500) default(1)
+              Active: stage {
+                Go: action { invoke MarkOverdue }
+                MarkOverdue: action { transition to Overdue }
+              }
+              Overdue: stage { }
+            }
+            Fine: entity {
+              Amount: Number range(0, 10) default(0)
+              Reason: Text required
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "ParityNestedSubscriptionCreateFail")
+            .AssertAgree(side => {
+                var loan = side.Create("Loan", ("Amount", 50L));
+                var patron = side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
+                side.Use(loan);
+                side.Invoke("Go");
+                side.Use(loan);
+                side.Use(patron);
+            });
+        await Assert.That(outcomes[3].Success).IsFalse();
+        await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
+        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Overdue");
+        await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");
+    }
+
     // Each Differences row differs from the baseline in exactly one field, so deleting that field's compare turns it red.
     static ParityOutcome Step(bool success = true, string? message = null, string? exceptionType = null, string? stage = "Open") =>
         new("invoke Close", success, message, exceptionType, new Dictionary<string, string?> { ["Stage"] = stage });

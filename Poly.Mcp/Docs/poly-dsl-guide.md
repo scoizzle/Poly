@@ -779,6 +779,15 @@ The relationship name (`orders` above) is the correlation edge. The binder
 (`order`) is a local name for the transitioned peer and need not match the
 relationship name.
 
+### Failure
+
+A `when` body is void. When a `create` or `create in` inside it fails a
+constraint, the handler throws `ConstraintFailureException` with that failure
+message and drops the failed create's value. The stage change that fired the
+subscription stays assigned. Interpreter and printed C# both surface that
+exception from the action that caused the transition. An action's own failed
+effect still returns `DomainResult.Failure`.
+
 ## 8. Policies
 
 Policies are named boolean guard expressions attached to an entity.

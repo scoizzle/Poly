@@ -4,7 +4,6 @@ using Poly.DomainModeling.Ontology.Contract;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
-using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
@@ -428,9 +427,9 @@ public sealed partial class DomainToCSharpExporter {
         var entityTypeRef = new NamedTypeReference(entity.Name);
         var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
-        var enumProps = GetEnumPropertyNames(entity, domain, analysis);
-        var requiredProps = analysis.GetStructure(entity)?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+
+        Node Failure(Node msg) => new Return(
+            new Invoke(new Member(resultType, "Failure"), msg));
 
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
@@ -444,192 +443,27 @@ public sealed partial class DomainToCSharpExporter {
                 string.Equals(p.Name, paramName, StringComparison.Ordinal));
             if (paramRef is null)
                 continue;
-            var isText = string.Equals(prop.Type.TypeName, "Text", StringComparison.Ordinal)
-                      || string.Equals(prop.Type.TypeName, "String", StringComparison.Ordinal);
-            var isNumber = string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
-                        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
-
-            Node Failure(string msg) => FailureNode(new Constant(msg));
-            Node FailureNode(Node msg) => new Return(
-                new Invoke(
-                    new Member(resultType, "Failure"),
-                    msg));
 
             // An optional parameter is nullable, so a value constraint only applies
             // when the caller supplied a value. The printed `&&` lets flow analysis see
             // a non-null value inside the comparison (and skips an omitted null).
             var nullableParam = paramRef.TypeReference is OptionalTypeReference;
-            Node WhenPresent(Node condition) => nullableParam
-                ? new Syntactic.And(new NotEqual(paramRef, new Constant(null)), condition)
-                : condition;
+            // Required-by-default: a defaulted prop's own default supplies the value,
+            // so the factory does not ask the caller for one (assign always does).
+            var includeRequired = !prop.Constraints.Any(c => c is DefaultValueConstraint);
+            var valueHasDefault = paramRef.DefaultValue is not null;
 
-            // Required-by-default: the ctor parameter must carry a value, except when
-            // default(...) supplies one. Value types can never be null at runtime, so
-            // only Text/String and nullable reference types need a guard.
-            if (requiredProps.Contains(prop.Name)
-                && !prop.Constraints.Any(c => c is DefaultValueConstraint)) {
-                if (isText) {
-                    checks.Add(new IfStatement(
-                        new Invoke(
-                            new Member(
-                                new PrimitiveTypeReference(PrimType.String),
-                                "IsNullOrEmpty"),
-                            [paramRef]),
-                        new Block([Failure(
-                            $"'{prop.Name}' is required.")])));
-                }
-                else if (IsNullableDomainType(prop.Type.TypeName, domain)) {
-                    checks.Add(new IfStatement(
-                        new Equal(paramRef, new Constant(null)),
-                        new Block([Failure(
-                            $"'{prop.Name}' is required.")])));
-                }
-            }
-
-            foreach (var constraint in prop.Constraints) {
-                switch (constraint) {
-                    case RangeConstraint r:
-                        if (isNumber && r.Minimum is not null) {
-                            var minVal = ConvertToConstant(r.Minimum);
-                            if (minVal is not null) {
-                                checks.Add(new IfStatement(
-                                    WhenPresent(new LessThan(paramRef, minVal)),
-                                    new Block([Failure(
-                                        $"'{prop.Name}' must be >= {EffectLoweringPass.FormatConstraintValue(r.Minimum)}.")])));
-                            }
-                        }
-                        if (isNumber && r.Maximum is not null) {
-                            var maxVal = ConvertToConstant(r.Maximum);
-                            if (maxVal is not null) {
-                                checks.Add(new IfStatement(
-                                    WhenPresent(new GreaterThan(paramRef, maxVal)),
-                                    new Block([Failure(
-                                        $"'{prop.Name}' must be <= {EffectLoweringPass.FormatConstraintValue(r.Maximum)}.")])));
-                            }
-                        }
-                        break;
-
-                    case LengthConstraint l:
-                        if (isText) {
-                            var lenAccess = new Member(paramRef, "Length");
-                            if (l.MinLength > 0) {
-                                checks.Add(new IfStatement(
-                                    WhenPresent(new LessThan(lenAccess,
-                                        new Constant((long)l.MinLength))),
-                                    new Block([Failure(
-                                        $"'{prop.Name}' must be at least {l.MinLength} characters.")])));
-                            }
-                            if (l.MaxLength < int.MaxValue) {
-                                checks.Add(new IfStatement(
-                                    WhenPresent(new GreaterThan(lenAccess,
-                                        new Constant((long)l.MaxLength))),
-                                    new Block([Failure(
-                                        $"'{prop.Name}' must be at most {l.MaxLength} characters.")])));
-                            }
-                        }
-                        break;
-
-                    case PatternConstraint p:
-                        if (isText) {
-                            checks.Add(new IfStatement(
-                                WhenPresent(new Syntactic.Not(
-                                    new Invoke(
-                                        new Member(
-                                            new NamedTypeReference(
-                                                "System.Text.RegularExpressions.Regex"),
-                                            "IsMatch"),
-                                        [paramRef,
-                                         new Constant(p.Pattern)]))),
-                                new Block([Failure(
-                                    $"'{prop.Name}' does not match the required pattern.")])));
-                        }
-                        break;
-
-                    case EqualityConstraint eq:
-                        if (eq.ExpectedValue is not null) {
-                            checks.Add(new IfStatement(
-                                WhenPresent(new NotEqual(paramRef,
-                                    new Constant(eq.ExpectedValue))),
-                                new Block([Failure(
-                                    $"'{prop.Name}' must equal {eq.ExpectedValue}.")])));
-                        }
-                        break;
-
-                        // DefaultValueConstraint is not a factory If:
-                        // defaulted props are optional params; the ctor applies the default.
-                }
-            }
-
-            if (enumProps is not null
-                && enumProps.TryGetValue(prop.Name, out var enumTypeName)
-                && TryResolveEnumType(domain, analysis, enumTypeName, out var enumType)
-                && enumType is { MemberNames.Count: > 0 }) {
-                // No default(...) — the property is required at create (guide §3). The
-                // VM factory slot is null when the caller omits it; ReferenceEquals
-                // prints for a value-type param (boxing) and is true only for that slot.
-                if (paramRef.DefaultValue is null) {
-                    checks.Add(new IfStatement(
-                        new Invoke(
-                            new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                            [paramRef, new Constant(null)]),
-                        new Block([Failure($"'{prop.Name}' is required.")])));
-                }
-                Node? notMember = null;
-                var enumTypeRef = new NamedTypeReference(enumType.Name);
-                foreach (var member in enumType.MemberNames) {
-                    var ne = new NotEqual(paramRef, new Member(enumTypeRef, member));
-                    notMember = notMember is null ? ne : new Syntactic.And(notMember, ne);
-                }
+            foreach (var check in ConstraintCheckWriter.ChecksFor(
+                         entity, prop, domain, analysis,
+                         ConstraintCheckWriter.ConstraintCheckStyle.Create,
+                         paramRef, nullableParam, valueHasDefault, includeRequired)) {
                 checks.Add(new IfStatement(
-                    WhenPresent(notMember!),
-                    new Block([FailureNode(
-                        InvalidEnumMemberMessage(paramRef, enumType.Name, prop.Name))])));
+                    check.GuardedCondition,
+                    new Block([Failure(check.Message)])));
             }
         }
 
         return checks;
     }
 
-    /// <summary>
-    /// <c>'Gold' is not a valid member of Tier for property 'Level'.</c> — a runtime
-    /// <c>string.Concat</c> so the offending value is named, in the same lowered
-    /// tree the C# factory prints and the VM create path executes.
-    /// </summary>
-    private static Node InvalidEnumMemberMessage(Node value, string enumName, string propName) =>
-        new Invoke(
-            new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
-            [
-                new Constant("'"),
-                value,
-                new Constant($"' is not a valid member of {enumName} for property '{propName}'.")
-            ]);
-
-    /// <summary>Converts a constraint value object to a Syntax Constant.</summary>
-    private static Constant? ConvertToConstant(object? value) {
-        if (value is null) return null;
-        if (value is long l) return new Constant(l);
-        if (value is int i) return new Constant((long)i);
-        if (value is double d) return d == Math.Floor(d)
-            ? new Constant((long)d)
-            : new Constant(d);
-        if (value is decimal m) return new Constant((double)m);
-        if (value is string s) return new Constant(s);
-        if (value is bool b) return new Constant(b);
-        return new Constant(value?.ToString());
-    }
-
-    /// <summary>
-    /// Returns true if the domain type name maps to a nullable CLR type
-    /// (string or reference type), meaning null-check validation applies.
-    /// Value types (Number, Boolean, DateTime, etc.) always have a value
-    /// and cannot be null at runtime.
-    /// </summary>
-    private static bool IsNullableDomainType(string typeName, Domain? domain = null) {
-        // Enum types are C# value types — never null at runtime.
-        if (domain is not null
-            && domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)))
-            return false;
-        return !DomainTypeMapping.IsNonNullableClrValueType(
-            RuntimeAnalysisCache.ClrTypeName(domain, typeName));
-    }
 }

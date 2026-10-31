@@ -99,7 +99,7 @@ public class CrmDogfoodTests {
         var proposeUnlinked = DomainEntityInstance.Create(E("Opportunity"),
             new Dictionary<string, object?> {
                 ["Title"] = "Orphan",
-                ["Amount"] = 1000L
+                ["Amount"] = 1000m,
             }, domain);
         store.Add(proposeUnlinked);
         var blocked = proposeUnlinked.InvokeAction("Propose");
@@ -127,7 +127,7 @@ public class CrmDogfoodTests {
             new Dictionary<string, object?> {
                 ["Sku"] = "PLT-1",
                 ["Name"] = "Platform",
-                ["ListPrice"] = 25000L
+                ["ListPrice"] = 25000m,
             }, domain);
         store.Add(product);
 
@@ -147,7 +147,7 @@ public class CrmDogfoodTests {
                 ["qty"] = 1L
             });
         await Assert.That(line.Succeeded).IsTrue();
-        await Assert.That(opp.GetProperty<object>("Amount")).IsEqualTo(25000L);
+        await Assert.That(opp.GetProperty<object>("Amount")).IsEqualTo(25000m);
 
         var emptyDeal = account.InvokeAction("OpenDeal",
             new Dictionary<string, object?> {
@@ -179,7 +179,7 @@ public class CrmDogfoodTests {
                 ["qty"] = 1L
             });
         await Assert.That(qline.Succeeded).IsTrue();
-        await Assert.That(quoted.GetProperty<object>("Amount")).IsEqualTo(25000L);
+        await Assert.That(quoted.GetProperty<object>("Amount")).IsEqualTo(25000m);
         await Assert.That(quoted.InvokeAction("Present").Succeeded).IsTrue();
         await Assert.That(quote.ResultInstance!.InvokeAction("Accept").Succeeded).IsTrue();
         await Assert.That(quote.ResultInstance!.CurrentStage).IsEqualTo("Accepted");
@@ -204,13 +204,13 @@ public class CrmDogfoodTests {
         await Assert.That(opp.InvokeAction("Propose").Succeeded).IsTrue();
         await Assert.That(opp.CurrentStage).IsEqualTo("Propose");
         await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(40L);
-        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(25000L);
+        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(25000m);
         await Assert.That(opp.InvokeAction("Commit").Succeeded).IsTrue();
         await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(80L);
         var capture = opp.InvokeAction("Capture",
             new Dictionary<string, object?> {
                 ["request"] = new Dictionary<string, object?> {
-                    ["Amount"] = 25000L,
+                    ["Amount"] = 25000m,
                     ["Currency"] = "USD"
                 }
             });
@@ -227,7 +227,7 @@ public class CrmDogfoodTests {
         await Assert.That(opp.CurrentStage).IsEqualTo("Won");
         await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(100L);
         await Assert.That(account.GetProperty<object>("WonCount")).IsEqualTo(1L);
-        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(0L);
+        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(0m);
 
         var lostDeal = account.InvokeAction("OpenDeal",
             new Dictionary<string, object?> {

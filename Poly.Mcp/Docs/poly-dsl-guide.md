@@ -301,7 +301,7 @@ entity-name ":" "entity" "{" property* stage* action* policy* "}"
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
 
-`Number` is a 64-bit integer. A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted.
+`Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:

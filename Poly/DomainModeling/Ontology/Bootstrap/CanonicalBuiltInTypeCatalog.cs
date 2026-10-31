@@ -16,6 +16,7 @@ public static class CanonicalBuiltInTypeCatalog {
     [
         ("Boolean",  TypeCategory.Boolean),
         ("Number",   TypeCategory.Primitive | TypeCategory.Numeric),
+        ("Decimal",  TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.HighPrecision | TypeCategory.Signed),
         ("Text",     TypeCategory.Primitive | TypeCategory.Text),
         ("Uuid",     TypeCategory.Primitive | TypeCategory.Identifier),
         ("Binary",   TypeCategory.Primitive | TypeCategory.Binary),

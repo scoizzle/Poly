@@ -98,7 +98,7 @@ public sealed class ArtifactContributorCallerTests {
         var catalog = ExtensionCatalog.Core.With(new HostLibrary(contributor));
         var seed = ExtensionCatalog.ProductAuthoring.Append("host-file").ToArray();
         var session = DomainSession.ForSource(poly, seed, catalog);
-        var result = new DomainEvolution(new Domain("_", [])).Apply(
+        var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(
             new PolyDslParser(poly, session).Parse(), session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary ?? "evolution rejected the domain");

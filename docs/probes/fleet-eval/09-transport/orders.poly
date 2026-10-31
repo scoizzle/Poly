@@ -29,8 +29,8 @@ Customer: entity {
 }
 
 Order: entity {
-  Total: Number range(0, 100000)
-  Discount: Number range(0, 100)
+  Total: Decimal range(0, 100000)
+  Discount: Decimal range(0, 100)
   State: OrderState default(Pending)
   customer: Customer
   items: many OrderItem

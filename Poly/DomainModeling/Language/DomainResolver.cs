@@ -368,7 +368,7 @@ public sealed class DomainResolver : DslCursor {
         TrackPropertyName(_currentEntityName, name);
         changes.Add(new AddPropertyToEntityChange(_currentEntityName,
             new Property(name, new DomainTypeReference(typeName), [])));
-        ParsePropertyTail(name, changes);
+        ParsePropertyTail(name, typeName, changes);
     }
 
     private void TrackPropertyName(string entityName, string propertyName) {
@@ -386,11 +386,11 @@ public sealed class DomainResolver : DslCursor {
     /// <c>keyword(literal…)</c> forms fail closed. Legacy <c>Name(params): action</c>
     /// (identifier args / trailing <c>:</c>) is left for the entity body loop.
     /// </summary>
-    private void ParsePropertyTail(string propertyName, List<DomainChange> changes) {
+    private void ParsePropertyTail(string propertyName, string typeName, List<DomainChange> changes) {
         while (IsConstraint(Current.Kind)
                || (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen))) {
             if (IsConstraint(Current.Kind)) {
-                var constraint = ParseConstraint();
+                var constraint = ParseConstraint(typeName);
                 if (constraint is not null) {
                     changes.Add(new AddConstraintToPropertyChange(
                         _currentEntityName, propertyName, constraint));
@@ -1113,7 +1113,7 @@ public sealed class DomainResolver : DslCursor {
                         "'optional' applies to entity properties; " +
                         "value-type members are contract payload fields and are always required.");
                 }
-                var c = ParseConstraint();
+                var c = ParseConstraint(typeName);
                 if (c is not null)
                     constraints.Add(c);
             }
@@ -1423,7 +1423,7 @@ public sealed class DomainResolver : DslCursor {
 
     // ── Constraint parser ─────────────────────────────────────
 
-    private Constraint? ParseConstraint() {
+    private Constraint? ParseConstraint(string? typeName = null) {
         switch (Current.Kind) {
             case TokenKind.Optional:
                 Advance();
@@ -1460,13 +1460,13 @@ public sealed class DomainResolver : DslCursor {
                 // Signed/fractional bounds: range(-500, ) / range(0.01, 1.0) — the
                 // natural overdraft/pricing surface was previously unparseable.
                 if (Current.Kind == TokenKind.Number || Current.Kind == TokenKind.Minus) {
-                    min = ParseNumberBound();
+                    min = ParseNumberBound(typeName);
                 }
                 if (Current.Kind == TokenKind.Comma) {
                     Advance();
                 }
                 if (Current.Kind == TokenKind.Number || Current.Kind == TokenKind.Minus) {
-                    max = ParseNumberBound();
+                    max = ParseNumberBound(typeName);
                 }
                 Expect(TokenKind.RParen);
                 return new RangeConstraint(min, max);
@@ -1511,14 +1511,32 @@ public sealed class DomainResolver : DslCursor {
     // ── Helpers ───────────────────────────────────────────────
 
     /// <summary>Parses a signed numeric bound for `range(min, max)` — e.g. `-500` or `0.01`.</summary>
-    private double ParseNumberBound() {
+    private object ParseNumberBound(string? typeName) {
         var negative = Current.Kind == TokenKind.Minus;
         if (negative) Advance();
         if (Current.Kind != TokenKind.Number)
             throw Error($"Expected a number in range bound, got '{Current.Text}'.");
-        var value = double.Parse(Current.Text, CultureInfo.InvariantCulture);
+        var text = Current.Text;
+        if (IsIntegralRangeType(typeName) && !IsIntegralNumberText(text))
+            throw Error($"Fractional bound '{text}' is not legal on {typeName}. Use Decimal.");
+        if (typeName is "Decimal") {
+            var dec = decimal.Parse(text, CultureInfo.InvariantCulture);
+            Advance();
+            return negative ? -dec : dec;
+        }
+        var value = double.Parse(text, CultureInfo.InvariantCulture);
         Advance();
         return negative ? -value : value;
+    }
+
+    private static bool IsIntegralRangeType(string? typeName) =>
+        typeName is "Number" or "Int" or "Int64";
+
+    private static bool IsIntegralNumberText(string text) {
+        if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            return true;
+        return decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)
+            && dec == decimal.Truncate(dec);
     }
 
     private string ParseTypeName() {

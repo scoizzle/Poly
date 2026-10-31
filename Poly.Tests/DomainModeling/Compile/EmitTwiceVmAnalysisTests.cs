@@ -73,7 +73,7 @@ public sealed class EmitTwiceVmAnalysisTests {
     }
 
     private static EvolutionResult Apply(DomainSession session, string poly) {
-        var result = new DomainEvolution(new Domain("_", [])).Apply(
+        var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(
             new PolyDslParser(poly, session).Parse(), session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(result.FailureSummary ?? "evolution rejected the domain");

@@ -20,11 +20,17 @@ public class RangeAttributeArgumentsTests {
         return result.Files!.Single(f => f.FileName == "Program.cs").Source;
     }
 
+    private static (Constant Minimum, Constant Maximum) Bounds(
+        string clrType, object? minimum, object? maximum) {
+        var args = Poly.DslCompiler.RangeAttributeArguments.Build(clrType, minimum, maximum);
+        return ((Constant)args[0], (Constant)args[1]);
+    }
+
     // ── The rule: one decision for every CLR numeric type ─────────────
 
     [Test]
     public async Task IntegralLongRange_EmitsIntegralConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("long", 0.0, 100_000_000.0);
+        var (minimum, maximum) = Bounds("long", 0.0, 100_000_000.0);
         await Assert.That(minimum.Value).IsTypeOf<int>();
         await Assert.That(maximum.Value).IsTypeOf<int>();
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
@@ -33,14 +39,14 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task IntegralIntRange_EmitsIntegralConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("int", 0.0, 100.0);
+        var (minimum, maximum) = Bounds("int", 0.0, 100.0);
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
         await Assert.That((int)maximum.Value!).IsEqualTo(100);
     }
 
     [Test]
     public async Task IntegralShortRange_EmitsIntegralConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("short", -10.0, 20.0);
+        var (minimum, maximum) = Bounds("short", -10.0, 20.0);
         await Assert.That(minimum.Value).IsTypeOf<int>();
         await Assert.That((int)minimum.Value!).IsEqualTo(-10);
         await Assert.That((int)maximum.Value!).IsEqualTo(20);
@@ -48,7 +54,7 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task IntegralByteRange_EmitsIntegralConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("byte", 0.0, 255.0);
+        var (minimum, maximum) = Bounds("byte", 0.0, 255.0);
         await Assert.That(minimum.Value).IsTypeOf<int>();
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
         await Assert.That((int)maximum.Value!).IsEqualTo(255);
@@ -56,7 +62,7 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task OpenMaximumOnByte_CapsAtByteMaxIntegrally() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("byte", 0.0, null);
+        var (minimum, maximum) = Bounds("byte", 0.0, null);
         await Assert.That(minimum.Value).IsTypeOf<int>();
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
         await Assert.That((int)maximum.Value!).IsEqualTo(255);
@@ -64,14 +70,14 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task OpenMaximumOnShort_CapsAtShortMaxIntegrally() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("short", 0.0, null);
+        var (minimum, maximum) = Bounds("short", 0.0, null);
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
         await Assert.That((int)maximum.Value!).IsEqualTo(short.MaxValue);
     }
 
     [Test]
     public async Task OpenMaximumOnInt_CapsAtIntMaxIntegrally() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("int", 0.0, null);
+        var (minimum, maximum) = Bounds("int", 0.0, null);
         await Assert.That((int)minimum.Value!).IsEqualTo(0);
         await Assert.That((int)maximum.Value!).IsEqualTo(int.MaxValue);
     }
@@ -81,7 +87,7 @@ public class RangeAttributeArgumentsTests {
         // Deliberately the double constructor: long.MaxValue is beyond int, and RangeAttribute
         // has no (long, long). The bound is still the CLR type's real max — never double.MaxValue,
         // which would claim a reachable range the member does not have.
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("long", 0.0, null);
+        var (minimum, maximum) = Bounds("long", 0.0, null);
         await Assert.That(minimum.Value).IsTypeOf<double>();
         await Assert.That((double)minimum.Value!).IsEqualTo(0.0);
         await Assert.That(maximum.Value).IsTypeOf<double>();
@@ -91,7 +97,7 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task FractionalBounds_OnIntegralTarget_EmitsDoubleConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("long", 0.5, 2.5);
+        var (minimum, maximum) = Bounds("long", 0.5, 2.5);
         await Assert.That(minimum.Value).IsTypeOf<double>();
         await Assert.That((double)minimum.Value!).IsEqualTo(0.5);
         await Assert.That((double)maximum.Value!).IsEqualTo(2.5);
@@ -102,7 +108,7 @@ public class RangeAttributeArgumentsTests {
         // Deliberately double: RangeAttribute has no (long, long), so an integral but beyond-int
         // bound can only be carried by the double constructor. Truncating the constraint to int
         // would falsely reject valid values, which is worse than the double's sub-2^53 precision.
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("long", 0.0, 5_000_000_000.0);
+        var (minimum, maximum) = Bounds("long", 0.0, 5_000_000_000.0);
         await Assert.That(minimum.Value).IsTypeOf<double>();
         await Assert.That((double)minimum.Value!).IsEqualTo(0.0);
         await Assert.That(maximum.Value).IsTypeOf<double>();
@@ -113,33 +119,43 @@ public class RangeAttributeArgumentsTests {
     public async Task DoubleTarget_StaysDoubleConstructor() {
         // A double member's range is genuinely fractional-capable: doubling down on the integral
         // constructor would narrow validation to whole numbers the member accepts.
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("double", 0.0, 100.0);
+        var (minimum, maximum) = Bounds("double", 0.0, 100.0);
         await Assert.That(minimum.Value).IsTypeOf<double>();
         await Assert.That(maximum.Value).IsTypeOf<double>();
         await Assert.That((double)maximum.Value!).IsEqualTo(100.0);
     }
 
     [Test]
-    public async Task DecimalTarget_StaysDoubleConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", 0.0, 100.0);
-        await Assert.That(minimum.Value).IsTypeOf<double>();
-        await Assert.That(maximum.Value).IsTypeOf<double>();
-        await Assert.That((double)maximum.Value!).IsEqualTo(100.0);
+    public async Task DecimalTarget_UsesTypeofDecimalAndInvariantStrings() {
+        var args = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", 0.0, 100.0);
+        await Assert.That(args.Count).IsEqualTo(3);
+        var printed = string.Concat(args.Select(a => new CSharpWriter().Write(a)));
+        await Assert.That(printed).Contains("typeof(decimal)");
+        await Assert.That(printed).DoesNotContain("System.Decimal");
+        await Assert.That(((Constant)args[1]).Value).IsEqualTo("0");
+        await Assert.That(((Constant)args[2]).Value).IsEqualTo("100");
+        await Assert.That(printed).DoesNotContain("0.0");
     }
 
     [Test]
     public async Task FloatTarget_StaysDoubleConstructor() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("float", 0.0, 100.0);
+        var (minimum, maximum) = Bounds("float", 0.0, 100.0);
         await Assert.That(minimum.Value).IsTypeOf<double>();
         await Assert.That(maximum.Value).IsTypeOf<double>();
         await Assert.That((double)maximum.Value!).IsEqualTo(100.0);
     }
 
     [Test]
-    public async Task OpenDecimalRange_CapsAtDecimalBoundsAsDouble() {
-        var (minimum, maximum) = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", null, null);
-        await Assert.That((double)minimum.Value!).IsEqualTo((double)decimal.MinValue);
-        await Assert.That((double)maximum.Value!).IsEqualTo((double)decimal.MaxValue);
+    public async Task OpenDecimalRange_CapsAtDecimalBoundsAsStrings() {
+        var args = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", null, null);
+        var minText = decimal.MinValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var maxText = decimal.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(((Constant)args[1]).Value).IsEqualTo(minText);
+        await Assert.That(((Constant)args[2]).Value).IsEqualTo(maxText);
+        var printed = string.Concat(args.Select(a => new CSharpWriter().Write(a)));
+        await Assert.That(printed).Contains("typeof(decimal)");
+        await Assert.That(printed).DoesNotContain("System.Decimal");
+        await Assert.That(printed).DoesNotContain("(double)");
     }
 
     // ── End to end: the emitted attribute ────────────────────────────
@@ -149,12 +165,13 @@ public class RangeAttributeArgumentsTests {
         var prog = await ProgramFor("""
             domain Demo
             Product: entity {
-              ListPrice: Number range(0, 100000000)
+              ListPrice: Decimal range(0, 100000000)
             }
             """);
 
-        await Assert.That(prog).Contains("[Range(0, 100000000)]\n    public long ListPrice { get; init; }");
+        await Assert.That(prog).Contains("[Range(typeof(decimal), \"0\", \"100000000\")]\n    public decimal ListPrice { get; init; }");
         await Assert.That(prog).DoesNotContain("[Range(0.0, 100000000.0)]");
+        await Assert.That(prog).DoesNotContain("System.Decimal");
     }
 
     [Test]
@@ -169,13 +186,14 @@ public class RangeAttributeArgumentsTests {
     }
 
     [Test]
-    public async Task NumberFractionalRange_EmitsDoubleRangeAttribute() {
-        var prog = await ProgramFor("""
+    public async Task NumberFractionalRange_FailsClosedAndNamesDecimal() {
+        var result = CompilerWithHttpHost().Compile("""
             domain Demo
             Item: entity { Price: Number range(0.5, 2.5) }
-            """);
+            """, CompileMode.All, DbmsPack.Generic);
 
-        await Assert.That(prog).Contains("[Range(0.5, 2.5)]\n    public long Price { get; init; }");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(string.Join(" ", result.Errors ?? [])).Contains("Decimal");
     }
 
     [Test]

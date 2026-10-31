@@ -19,7 +19,7 @@ public class Account
         this._opportunities = new List<Opportunity>();
         this._tickets = new List<Ticket>();
     }
-    private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
+    private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
     {
         this.ClosedTickets = closedTickets;
         this.Industry = industry;
@@ -37,7 +37,7 @@ public class Account
     public long ClosedTickets { get; private set; }
     public Industry Industry { get; private set; }
     public string Name { get; private set; } = default!;
-    public long OpenPipeline { get; private set; }
+    public decimal OpenPipeline { get; private set; }
     public long WonCount { get; private set; }
     public Account? Parent { get; private set; }
     public Site? Hq { get; private set; }
@@ -79,7 +79,7 @@ public class Account
     {
         this._contacts.Add(child);
     }
-    private DomainResult<Opportunity> CreateOpportunities(long amount, string title, Contact? contact = null, DateOnly? closeBy = null)
+    private DomainResult<Opportunity> CreateOpportunities(decimal amount, string title, Contact? contact = null, DateOnly? closeBy = null)
     {
         var opportunityResult = Opportunity.Create(amount, title, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
@@ -225,7 +225,7 @@ public class Account
     {
         this.ClosedTickets = this.ClosedTickets + 1L;
     }
-    public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, long openPipeline = 0L, long wonCount = 0L)
+    public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
     {
         if (object.ReferenceEquals(industry, null))
         {

@@ -673,6 +673,18 @@ public static partial class AbiEmitter {
             return factory(
                 RingCodec.AsRepresentation(leftVal, IntegerWidthOf(left, ctx)),
                 RingCodec.AsRepresentation(rightVal, typeof(int)));
+        // decimal wins over an integral operand. decimal with float or double has no
+        // operator. Do not convert the decimal to double, and do not ask the integer
+        // width: a decimal is not a 32-bit or 64-bit integer, so that width is long
+        // and Expression.Multiply(decimal, long) is not defined.
+        if (leftUnderlying == typeof(decimal) || rightUnderlying == typeof(decimal)) {
+            if (RingCodec.IsIeee(leftUnderlying) || RingCodec.IsIeee(rightUnderlying)
+                || !ConvertsToDecimal(leftUnderlying) || !ConvertsToDecimal(rightUnderlying))
+                throw RejectBinary(leftUnderlying, rightUnderlying);
+            return factory(
+                DecimalArithmeticOperand(leftVal, leftUnderlying, ctx),
+                DecimalArithmeticOperand(rightVal, rightUnderlying, ctx));
+        }
         // Every other integer operator — bitwise included — runs at the width analysis
         // resolved for its operands, so `Expression.Add(int, int)` wraps at 32 bits because
         // the CLR does, and an all-int expression needs no conversion between operations.
@@ -735,6 +747,14 @@ public static partial class AbiEmitter {
     private static InvalidOperationException RejectBinary(Type? left, Type? right) =>
         new($"VM compile rejected: no operator for '{left?.Name ?? "unresolved"}' and '{right?.Name ?? "unresolved"}'.");
 
+    /// <summary>A decimal already in hand stays a decimal. A word converts at the
+    /// operator, the same conversion an integral-to-decimal comparison uses.</summary>
+    private static Expression DecimalArithmeticOperand(Expression value, Type source, Context ctx) {
+        if (value.Type == typeof(decimal))
+            return value;
+        return RingCodec.FromFrame(value, source, typeof(decimal), ctx.HeapLocal);
+    }
+
     private static bool ConvertsToDecimal(Type? type) =>
         type == typeof(decimal) || IsBinaryIntegral(type);
 
@@ -749,15 +769,33 @@ public static partial class AbiEmitter {
         || type == typeof(uint) || type == typeof(ulong);
 
     /// <summary>The operand's CLR type with <c>Nullable&lt;T&gt;</c> removed.
-    /// A null constant has no numeric type.</summary>
+    /// A null constant has no numeric type. A parameter use is a different node
+    /// from its declaration: the use has no type reference, and the word is the
+    /// handle. The declaration's CLR type is what the word means.</summary>
     private static Type? UnderlyingOf(Node node, Expression value, Context ctx) {
         if (node is Constant { Value: null })
             return null;
         var clr = ctx.ClrTypeOf(node)
             ?? ctx.TryClrType(node)
+            ?? BoundParameterClr(node, ctx)
             ?? (node is Constant constant ? constant.Value?.GetType() : null)
             ?? value.Type;
         return Nullable.GetUnderlyingType(clr) ?? clr;
+    }
+
+    /// <summary>CLR type of the declaration a parameter use is bound to.
+    /// The use itself carries no type reference, so analysis resolves the
+    /// declaration. Emit does not peel the type-reference node.</summary>
+    private static Type? BoundParameterClr(Node node, Context ctx) {
+        if (node is not Parameter parameter)
+            return null;
+        var declaration = ctx.BoundDeclaredParameter(parameter);
+        if (declaration is null || ReferenceEquals(declaration, parameter))
+            return null;
+        var clr = ctx.TryClrType(declaration);
+        if (clr is null && declaration.TypeReference is not null)
+            clr = ctx.TryClrType(declaration.TypeReference);
+        return clr;
     }
 
     /// <summary>A shift's left operand promotes like the non-nullable shift, then

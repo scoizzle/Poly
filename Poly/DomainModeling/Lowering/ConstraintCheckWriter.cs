@@ -259,7 +259,7 @@ internal static class ConstraintCheckWriter {
         if (value is long l) return new Constant(l);
         if (value is int i) return new Constant((long)i);
         if (value is double d) return d == Math.Floor(d) ? new Constant((long)d) : new Constant(d);
-        if (value is decimal m) return new Constant((double)m);
+        if (value is decimal m) return new Constant(m);
         if (value is string s) return new Constant(s);
         if (value is bool b) return new Constant(b);
         return new Constant(value.ToString());
@@ -279,7 +279,8 @@ internal static class ConstraintCheckWriter {
 
     private static bool IsNumber(Property prop) =>
         string.Equals(prop.Type.TypeName, "Number", StringComparison.Ordinal)
-        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal);
+        || string.Equals(prop.Type.TypeName, "Int", StringComparison.Ordinal)
+        || string.Equals(prop.Type.TypeName, "Decimal", StringComparison.Ordinal);
 
     /// <summary>True when the domain type maps to a nullable CLR type (string or reference type).</summary>
     private static bool IsNullableDomainType(string typeName, Domain? domain) {

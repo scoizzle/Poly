@@ -44,6 +44,12 @@ internal static class ConstraintCompilation {
                     }
                     if (match is null)
                         continue;
+                    // The builtin compiler's guards are already in the create factory
+                    // and in each assign block. Placing Compile's statements at the
+                    // first `new` would add a second guard, and that anchor cannot
+                    // interleave with the enum checks or reach an assign.
+                    if (match is BuiltinConstraintCompiler)
+                        continue;
                     var compiled = match.Compile(Request(entity, property, constraint, type, storage)) with {
                         Provenance = $"{entity.Name}.{property.Name} ({constraint.GetType().Name})"
                     };

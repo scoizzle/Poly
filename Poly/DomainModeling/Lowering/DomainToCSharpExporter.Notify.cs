@@ -453,13 +453,15 @@ public sealed partial class DomainToCSharpExporter {
             var includeRequired = !prop.Constraints.Any(c => c is DefaultValueConstraint);
             var valueHasDefault = paramRef.DefaultValue is not null;
 
-            foreach (var check in ConstraintCheckWriter.ChecksFor(
+            foreach (var check in BuiltinConstraintCompiler.Checks(
                          entity, prop, domain, analysis,
                          ConstraintCheckWriter.ConstraintCheckStyle.Create,
                          paramRef, nullableParam, valueHasDefault, includeRequired)) {
-                checks.Add(new IfStatement(
-                    check.GuardedCondition,
-                    new Block([Failure(check.Message)])));
+                checks.Add(BuiltinConstraintCompiler.Claims(check.Kind)
+                    ? BuiltinConstraintCompiler.CreateGuard(entity.Name, check)
+                    : new IfStatement(
+                        check.GuardedCondition,
+                        new Block([Failure(check.Message)])));
             }
         }
 

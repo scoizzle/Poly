@@ -71,8 +71,9 @@ public sealed class DomainSession {
     public ArtifactCatalog ArtifactCatalog { get; private set; } = new();
 
     /// <summary>
-    /// Times this session has run VM analysis of a lowered module during <see cref="Emit"/>.
-    /// The same domain, domain analysis, and module reference do not increment it again.
+    /// Times this session has run VM analysis of a lowered module.
+    /// <see cref="Compile"/> increments it. The same domain, domain analysis,
+    /// and module reference do not increment it again.
     /// </summary>
     internal int VmAnalysisCount { get; private set; }
 
@@ -347,7 +348,8 @@ public sealed class DomainSession {
     /// <summary>
     /// Entity-module C# files from the lowered module. Persistence and HTTP host
     /// call-sites come from Load-registered <see cref="IArtifactContributor"/>s,
-    /// not this method. VM analysis of the module runs once for a domain, its
+    /// not this method. The writer consumes the <see cref="CompiledDomain"/> from
+    /// <see cref="Compile"/>. VM analysis of the module runs once for a domain, its
     /// domain analysis, and that module reference on this session.
     /// </summary>
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
@@ -356,11 +358,11 @@ public sealed class DomainSession {
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
         // whole module, because the writer resolves types across entities from one analysis.
-        var (module, catalog) = LowerToCatalog(domain, analysis);
+        var (_, catalog) = LowerToCatalog(domain, analysis);
         ArtifactCatalog = catalog;
-        var interpAnalysis = VmAnalysisOf(domain, analysis, module);
-        RegisterVmAnalysisReport(catalog, domain, interpAnalysis);
-        var writer = new CSharpWriter(interpAnalysis);
+        var compiled = Compile(domain, analysis);
+        RegisterVmAnalysisReport(catalog, domain, compiled.VmAnalysis);
+        var writer = new CSharpWriter(compiled.VmAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
         // Host top-level statements are global Program. An entity of that name stays
@@ -391,12 +393,25 @@ public sealed class DomainSession {
     }
 
     /// <summary>
-    /// The VM analysis for this emit. A hit reuses the stored
-    /// <see cref="AnalysisResult"/> and does not call
+    /// Lowers <paramref name="domain"/> under <paramref name="analysis"/> and returns
+    /// the <see cref="CompiledDomain"/> for that pair. A second call with the same
+    /// domain, domain analysis, and module reference returns the cached object and
+    /// does not run VM analysis again.
+    /// </summary>
+    internal CompiledDomain Compile(Domain domain, AnalysisResult analysis) {
+        ArgumentNullException.ThrowIfNull(domain);
+        ArgumentNullException.ThrowIfNull(analysis);
+        var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
+        return VmAnalysisOf(domain, analysis, module);
+    }
+
+    /// <summary>
+    /// The VM analysis for this compilation. A hit reuses the stored
+    /// <see cref="CompiledDomain"/> and does not call
     /// <see cref="Interpreter.Analyzer"/>. A miss analyzes the lowered module
     /// and keeps that <see cref="CompiledDomain"/>.
     /// </summary>
-    private AnalysisResult VmAnalysisOf(
+    private CompiledDomain VmAnalysisOf(
         Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
         lock (_vmAnalysisGate) {
             var cached = _compiled;
@@ -404,12 +419,12 @@ public sealed class DomainSession {
                 && ReferenceEquals(cached.Domain, domain)
                 && ReferenceEquals(cached.DomainAnalysis, analysis)
                 && ReferenceEquals(cached.Module, module))
-                return cached.VmAnalysis;
+                return cached;
 
             var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
             VmAnalysisCount++;
             _compiled = new CompiledDomain(domain, analysis, module, vm);
-            return vm;
+            return _compiled;
         }
     }
 

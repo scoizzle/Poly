@@ -38,6 +38,23 @@ public class ProgramBenchmarks {
         new NQueens().Run(9);
         """;
 
+    [Benchmark]
+    public long NQueens_Native() {
+        static long Place(long row, long n, long cols, long diag, long anti, long full) {
+            if (row == n) { return 1; }
+            var count = 0L;
+            var avail = full & ~(cols | diag | anti);
+            while (avail != 0) {
+                var bit = avail & (0 - avail);
+                avail = avail - bit;
+                count = count + Place(row + 1, n, cols | bit, (diag | bit) << 1, (anti | bit) >> 1, full);
+            }
+            return count;
+        }
+
+        return Place(0, 9, 0, 0, 0, (1L << 9) - 1);
+    }
+
     private const string SieveSource = """
         class Sieve {
             Sieve() { }
@@ -64,6 +81,32 @@ public class ProgramBenchmarks {
         }
         new Sieve().Run(20000);
         """;
+
+    [Benchmark]
+    public long Sieve_Native() {
+        static long Sieve(long limit) {
+            var words = limit / 64 + 1;
+            var bits = new long[words];
+            for (var i = 2; i * i <= limit; i = i + 1) {
+                if (((bits[i >> 6] >> (i & 63)) & 1L) == 0) {
+                    for (var j = i * i; j <= limit; j = j + i) {
+                        bits[j >> 6] = bits[j >> 6] | (1L << (j & 63));
+                    }
+                }
+            }
+            var composite = 0L;
+            for (var w = 0; w < words; w = w + 1) {
+                var v = bits[w];
+                for (var b = 0; b < 64; b = b + 1) {
+                    composite = composite + (v & 1L);
+                    v = v >> 1;
+                }
+            }
+            return limit - 1 - composite;
+        }
+
+        return Sieve(20000);
+    }
 
     private const string MandelbrotSource = """
         class Mandelbrot {
@@ -94,6 +137,33 @@ public class ProgramBenchmarks {
         new Mandelbrot().Run(40, 50);
         """;
 
+    [Benchmark]
+    public long Mandelbrot_Native() {
+        static long Mandelbrot(long side, long maxIter) {
+            var total = 0L;
+            for (var y = 0; y < side; y = y + 1) {
+                for (var x = 0; x < side; x = x + 1) {
+                    var cr = (double)x / (double)side * 2.5 - 2.0;
+                    var ci = (double)y / (double)side * 2.0 - 1.0;
+                    var zr = 0.0;
+                    var zi = 0.0;
+                    var iter = 0L;
+                    while (iter < maxIter) {
+                        var zr2 = zr * zr;
+                        var zi2 = zi * zi;
+                        if (zr2 + zi2 > 4.0) { break; }
+                        zi = 2.0 * zr * zi + ci;
+                        zr = zr2 - zi2 + cr;
+                        iter = iter + 1;
+                    }
+                    total = total + iter;
+                }
+            }
+            return total;
+        }
+        return Mandelbrot(40, 50);
+    }
+
     private const string CollatzSource = """
         class Collatz {
             Collatz() { }
@@ -111,6 +181,22 @@ public class ProgramBenchmarks {
         }
         new Collatz().Run(3000);
         """;
+
+    [Benchmark]
+    public long Collatz_Native() {
+        static long Collatz(long limit) {
+            var total = 0L;
+            for (var i = 1; i <= limit; i = i + 1) {
+                var m = i;
+                while (m != 1) {
+                    if (m % 2 == 0) { m = m / 2; } else { m = 3 * m + 1; }
+                    total = total + 1;
+                }
+            }
+            return total;
+        }
+        return Collatz(3000);
+    }
 
     private VmProgram _nQueens = null!;
     private VmProgram _sieve = null!;

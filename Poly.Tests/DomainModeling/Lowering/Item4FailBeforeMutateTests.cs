@@ -70,6 +70,7 @@ public class Item4FailBeforeMutateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Guest", "Book", out var book)).IsTrue();
@@ -86,15 +87,12 @@ public class Item4FailBeforeMutateTests {
 
         // Runtime fail-before-mutate (not order-only): Nights Failure, bag unchanged.
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -114,15 +112,14 @@ public class Item4FailBeforeMutateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        await Assert.That(guest.Store).IsNull();
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L });
+        var guest = exec.Create(guestEntity.Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]

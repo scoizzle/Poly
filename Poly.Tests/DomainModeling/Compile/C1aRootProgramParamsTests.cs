@@ -30,6 +30,7 @@ public class C1aRootProgramParamsTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var issue = module.First(t => t.Name == "Lot").Methods!.First(m => m.Name == "Issue");
         await Assert.That(ContainsNode<Parameter>(issue.Body!, "plate")).IsTrue();
@@ -39,13 +40,11 @@ public class C1aRootProgramParamsTests {
         await Assert.That(printed.Contains("this.plate", StringComparison.Ordinal)).IsFalse();
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA-1" });
-        await Assert.That(result.Succeeded).IsTrue().Because(result.ErrorMessage ?? "");
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(lot.CreatedChildren[0].GetProperty<object>("Plate")).IsEqualTo("AAA-1");
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA-1" });
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(result.CreatedChildren[0].Bag["Plate"]).IsEqualTo("AAA-1");
     }
 
     [Test]
@@ -61,26 +60,25 @@ public class C1aRootProgramParamsTests {
               SetFlag: action (flag: Boolean) { assign Flag to flag }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var item = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "item", ["Flag"] = false },
-            domain);
+        var item = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Qty"] = 0L, ["Name"] = "item", ["Flag"] = false }).Instance!;
 
         var exNum = Assert.Throws<InvalidOperationException>(() =>
-            item.InvokeAction("SetQty", new Dictionary<string, object?> { ["n"] = "not-a-number" }));
+            exec.Invoke(item, "SetQty", new Dictionary<string, object?> { ["n"] = "not-a-number" }));
         await Assert.That(exNum!.Message).Contains("Cannot store a value of type 'String' in a numeric property");
 
         var exBool = Assert.Throws<InvalidOperationException>(() =>
-            item.InvokeAction("SetQty", new Dictionary<string, object?> { ["n"] = true }));
+            exec.Invoke(item, "SetQty", new Dictionary<string, object?> { ["n"] = true }));
         await Assert.That(exBool!.Message).Contains("Cannot store a Boolean value in a numeric property");
 
         var exText = Assert.Throws<InvalidOperationException>(() =>
-            item.InvokeAction("SetName", new Dictionary<string, object?> { ["name"] = 7L }));
+            exec.Invoke(item, "SetName", new Dictionary<string, object?> { ["name"] = 7L }));
         await Assert.That(exText!.Message).Contains("Cannot store a value of type 'Int64' in a Text property");
 
         var exYes = Assert.Throws<InvalidOperationException>(() =>
-            item.InvokeAction("SetFlag", new Dictionary<string, object?> { ["flag"] = "yes" }));
+            exec.Invoke(item, "SetFlag", new Dictionary<string, object?> { ["flag"] = "yes" }));
         await Assert.That(exYes!.Message).Contains("Cannot store a value of type 'String' in a Boolean property");
     }
 
@@ -107,26 +105,22 @@ public class C1aRootProgramParamsTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "WorkItem");
         var boardE = domain.Types.OfType<Entity>().First(e => e.Name == "Board");
-        var store = new DomainInstanceStore();
-        var item1 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T1" }, domain);
-        var item2 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T2" }, domain);
-        var board = DomainEntityInstance.Create(boardE,
-            new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
-        store.Add(item1); store.Add(item2); store.Add(board);
-        store.Link("items", board, item1);
-        store.Link("items", board, item2);
+        var item1 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T1" }).Instance!;
+        var item2 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T2" }).Instance!;
+        var board = exec.Create((boardE).Name, new Dictionary<string, object?> { ["Fires"] = 0L }).Instance!;
+        exec.Link("items", board, item1);
+        exec.Link("items", board, item2);
 
-        await Assert.That(item1.InvokeAction("Prep").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(0L);
-        await Assert.That(item2.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
-        await Assert.That(item1.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Prep").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(0L);
+        await Assert.That(exec.Invoke(item2, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
     }
 
     [Test]

@@ -67,21 +67,20 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var lotType = module.First(t => t.Name == "Lot");
         var before = lotType.Methods?.First(m => m.Name == "Issue").Body;
         await Assert.That(before).IsNotNull();
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
         var cs = new CSharpGenerator().Generate(before!);
-        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
         if (!result.Succeeded)
-            throw new InvalidOperationException((result.ErrorMessage ?? "Issue failed") + " BODY:\n" + cs);
+            throw new InvalidOperationException((result.Error ?? "Issue failed") + " BODY:\n" + cs);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out var afterMethod)).IsTrue();
         await Assert.That(ReferenceEquals(before, afterMethod!.Body)).IsTrue();
@@ -99,6 +98,7 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var lotType = module.First(t => t.Name == "Lot");
         if (lotType.Methods is not IList<MethodDefinitionNode> methods)
@@ -118,12 +118,10 @@ public class PipelineTransformationTests {
         };
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(0);
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(0);
     }
 
     [Test]
@@ -139,6 +137,7 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var lotType = module.First(t => t.Name == "Lot");
         if (lotType.Methods is not IList<MethodDefinitionNode> methods)
@@ -151,14 +150,12 @@ public class PipelineTransformationTests {
             .IsFalse();
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
         await Assert.That(() =>
-                lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" }))
+                exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA" }))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("Module method 'Issue' is missing");
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(0);
+        await Assert.That(exec.Instances.Count(i => i.EntityName == "Permit")).IsEqualTo(0);
     }
 
     [Test]
@@ -173,15 +170,14 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-        var first = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
-        var second = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "BBB" });
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var first = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA" });
+        var second = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "BBB" });
         await Assert.That(first.Succeeded).IsTrue();
         await Assert.That(second.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(2);
+        await Assert.That(exec.LinkedTargets("permits", lot).Count).IsEqualTo(2);
     }
 
     [Test]
@@ -226,14 +222,12 @@ public class PipelineTransformationTests {
 
             ChargeOrder: bind Stripe Charge to Pay request
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE, domain: domain);
-        store.Add(order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?>()).Instance!;
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
-        var result = order.InvokeAction("Pay",
-            new Dictionary<string, object?> { ["request"] = request });
+        var result = exec.Invoke(order, "Pay", new Dictionary<string, object?> { ["request"] = request });
         await Assert.That(result.Succeeded).IsTrue();
     }
 
@@ -249,6 +243,7 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.NestedDirectEffectDropped)).IsFalse();
 
@@ -264,17 +259,13 @@ public class PipelineTransformationTests {
         await Assert.That(cs).Contains("this.Inc()");
 
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var store = new DomainInstanceStore();
-        var zero = DomainEntityInstance.Create(itemE, domain: domain);
-        store.Add(zero);
-        await Assert.That(zero.InvokeAction("Maybe").Succeeded).IsTrue();
-        await Assert.That(zero.GetProperty<object>("Qty")).IsEqualTo(1L);
+        var zero = exec.Create((itemE).Name, new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(zero, "Maybe").Succeeded).IsTrue();
+        await Assert.That(zero.Bag["Qty"]).IsEqualTo(1L);
 
-        var already = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Qty"] = 1L }, domain);
-        store.Add(already);
-        await Assert.That(already.InvokeAction("Maybe").Succeeded).IsTrue();
-        await Assert.That(already.GetProperty<object>("Qty")).IsEqualTo(1L);
+        var already = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Qty"] = 1L }).Instance!;
+        await Assert.That(exec.Invoke(already, "Maybe").Succeeded).IsTrue();
+        await Assert.That(already.Bag["Qty"]).IsEqualTo(1L);
     }
 
     [Test]
@@ -292,22 +283,21 @@ public class PipelineTransformationTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.NestedDirectEffectDropped)).IsFalse();
         session.Lower(domain, analysis);
 
         var parserE = domain.Types.OfType<Entity>().First(e => e.Name == "Parser");
-        var store = new DomainInstanceStore();
-        var quiet = DomainEntityInstance.Create(parserE, domain: domain);
-        store.Add(quiet);
-        await Assert.That(quiet.InvokeAction("Lex").Succeeded).IsTrue();
-        await Assert.That(quiet.CreatedChildren).IsEmpty();
+        var quiet = exec.Create(parserE.Name, new Dictionary<string, object?>()).Instance!;
+        var quietLex = exec.Invoke(quiet, "Lex");
+        await Assert.That(quietLex.Succeeded).IsTrue();
+        await Assert.That(quietLex.CreatedChildren).IsEmpty();
 
-        var rush = DomainEntityInstance.Create(parserE,
-            new Dictionary<string, object?> { ["Rush"] = true }, domain);
-        store.Add(rush);
-        await Assert.That(rush.InvokeAction("Lex").Succeeded).IsTrue();
-        await Assert.That(rush.CreatedChildren.Count).IsEqualTo(1);
+        var rush = exec.Create(parserE.Name, new Dictionary<string, object?> { ["Rush"] = true }).Instance!;
+        var rushLex = exec.Invoke(rush, "Lex");
+        await Assert.That(rushLex.Succeeded).IsTrue();
+        await Assert.That(rushLex.CreatedChildren.Count).IsEqualTo(1);
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {

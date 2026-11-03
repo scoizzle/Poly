@@ -1041,6 +1041,7 @@ public class McpSmokeTests {
 
         // Get the entity from the session domain
         var exists = McpTestTools.Store.TryGet(sessionId, out var state);
+        var exec = ModuleExec.For(state!.Domain);
         await Assert.That(exists).IsTrue();
         var entity = state!.Domain.Types.OfType<Entity>().First(e => e.Name == "Item");
 
@@ -1051,20 +1052,18 @@ public class McpSmokeTests {
         await Assert.That(submitAction.Policies[0].Name).IsEqualTo("HighScore");
 
         // Instance with Score=5 (fails: Score > 10) → blocked
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Score"] = 5L }, domain: state.Domain);
-        var result = instance.InvokeAction("Submit");
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Score"] = 5L }).Instance!;
+        var result = exec.Invoke(instance, "Submit");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.FailedGuards.Count).IsGreaterThan(0);
-        await Assert.That(result.FailedGuards).Contains("HighScore");
-        await Assert.That(instance.CurrentStage).IsEqualTo("Draft");
+        await Assert.That(result.Error).IsNotNull().And.IsNotEmpty();
+        await Assert.That(result.Error).Contains("HighScore");
+        await Assert.That(ModuleReads.Stage(instance)).IsEqualTo("Draft");
 
         // Instance with Score=15 (passes: Score > 10) → succeeds
-        var instance2 = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Score"] = 15L }, domain: state.Domain);
-        var result2 = instance2.InvokeAction("Submit");
+        var instance2 = exec.Create((entity).Name, new Dictionary<string, object?> { ["Score"] = 15L }).Instance!;
+        var result2 = exec.Invoke(instance2, "Submit");
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(instance2.CurrentStage).IsEqualTo("Active");
+        await Assert.That(ModuleReads.Stage(instance2)).IsEqualTo("Active");
     }
 
     [Test]

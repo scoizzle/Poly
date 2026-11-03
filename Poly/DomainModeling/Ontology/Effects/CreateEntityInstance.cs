@@ -1,13 +1,10 @@
-using Poly.DomainModeling.Runtime;
-
 namespace Poly.DomainModeling.Ontology.Effects;
 
 /// <summary>
 /// Effect that creates a new instance of an entity (or owned structure).
-/// When <paramref name="RelationshipName"/> is set, the created instance is
-/// automatically linked to the creator via <see cref="DomainInstanceStore.Link"/>,
-/// with the creator as the relationship source and the child as the target.
-/// This enables subscription fan-out without manual <c>store.Link</c> calls.
+/// When <paramref name="RelationshipName"/> is set, the lowered module links
+/// the created instance to the creator, with the creator as the relationship
+/// source and the child as the target.
 /// </summary>
 public sealed record CreateEntityInstance(
     DomainTypeReference Type,

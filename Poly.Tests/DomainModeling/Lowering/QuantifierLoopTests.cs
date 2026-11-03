@@ -52,39 +52,32 @@ public class QuantifierLoopTests {
     [Test]
     public async Task Simulate_All_EmptyCollection_IsFalse() {
         var (domain, _) = Evolve(BasketDsl);
+        var exec = ModuleExec.For(domain);
         var order = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
-        var store = new DomainInstanceStore();
-        var inst = DomainEntityInstance.Create(order,
-            new Dictionary<string, object?> { ["Ready"] = true }, domain);
-        store.Add(inst);
-        await Assert.That(inst.EvaluatePolicy(order.Policies.First(p => p.Name == "AllOpen"))).IsFalse();
-        await Assert.That(inst.EvaluatePolicy(order.Policies.First(p => p.Name == "AnyOpen"))).IsFalse();
-        await Assert.That(inst.EvaluatePolicy(order.Policies.First(p => p.Name == "NoneOpen"))).IsTrue();
+        var inst = exec.Create((order).Name, new Dictionary<string, object?> { ["Ready"] = true }).Instance!;
+        await Assert.That(exec.EvaluatePolicy(inst, (order.Policies.First(p => p.Name == "AllOpen")).Name)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(inst, (order.Policies.First(p => p.Name == "AnyOpen")).Name)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(inst, (order.Policies.First(p => p.Name == "NoneOpen")).Name)).IsTrue();
     }
 
     [Test]
     public async Task Simulate_None_And_CountWhere_MatchLinkedLines() {
         var (domain, _) = Evolve(BasketDsl);
+        var exec = ModuleExec.For(domain);
         var orderEnt = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var lineEnt = domain.Types.OfType<Entity>().First(e => e.Name == "Line");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderEnt,
-            new Dictionary<string, object?> { ["Ready"] = true }, domain);
-        var openA = DomainEntityInstance.Create(lineEnt,
-            new Dictionary<string, object?> { ["Qty"] = 1L, ["Open"] = true }, domain);
-        var openB = DomainEntityInstance.Create(lineEnt,
-            new Dictionary<string, object?> { ["Qty"] = 2L, ["Open"] = true }, domain);
-        var closed = DomainEntityInstance.Create(lineEnt,
-            new Dictionary<string, object?> { ["Qty"] = 3L, ["Open"] = false }, domain);
-        store.Add(order); store.Add(openA); store.Add(openB); store.Add(closed);
-        store.Link("lines", order, openA);
-        store.Link("lines", order, openB);
-        store.Link("lines", order, closed);
+        var order = exec.Create((orderEnt).Name, new Dictionary<string, object?> { ["Ready"] = true }).Instance!;
+        var openA = exec.Create((lineEnt).Name, new Dictionary<string, object?> { ["Qty"] = 1L, ["Open"] = true }).Instance!;
+        var openB = exec.Create((lineEnt).Name, new Dictionary<string, object?> { ["Qty"] = 2L, ["Open"] = true }).Instance!;
+        var closed = exec.Create((lineEnt).Name, new Dictionary<string, object?> { ["Qty"] = 3L, ["Open"] = false }).Instance!;
+        exec.Link("lines", order, openA);
+        exec.Link("lines", order, openB);
+        exec.Link("lines", order, closed);
 
-        await Assert.That(order.EvaluatePolicy(orderEnt.Policies.First(p => p.Name == "AnyOpen"))).IsTrue();
-        await Assert.That(order.EvaluatePolicy(orderEnt.Policies.First(p => p.Name == "AllOpen"))).IsFalse();
-        await Assert.That(order.EvaluatePolicy(orderEnt.Policies.First(p => p.Name == "NoneOpen"))).IsFalse();
-        await Assert.That(order.EvaluatePolicy(orderEnt.Policies.First(p => p.Name == "OpenCount"))).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(order, (orderEnt.Policies.First(p => p.Name == "AnyOpen")).Name)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(order, (orderEnt.Policies.First(p => p.Name == "AllOpen")).Name)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(order, (orderEnt.Policies.First(p => p.Name == "NoneOpen")).Name)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(order, (orderEnt.Policies.First(p => p.Name == "OpenCount")).Name)).IsTrue();
     }
 
     [Test]
@@ -127,28 +120,23 @@ public class QuantifierLoopTests {
     [Test]
     public async Task Quantifiers_GiveSameAnswers_SimulatedAndInExportedCSharp() {
         var (domain, analysis) = Evolve(BasketDsl);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var policyNames = E("Order").Policies.Select(p => p.Name).ToArray();
 
         // Simulated: instances linked through a store.
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimPart(long qty) {
-            var part = DomainEntityInstance.Create(E("Part"), new Dictionary<string, object?> { ["Qty"] = qty }, domain);
-            store.Add(part);
+        ModuleInstance SimPart(long qty) {
+            var part = exec.Create("Part", new Dictionary<string, object?> { ["Qty"] = qty }).Instance!;
             return part;
         }
-        DomainEntityInstance SimLine(bool open, params DomainEntityInstance[] parts) {
-            var line = DomainEntityInstance.Create(E("Line"),
-                new Dictionary<string, object?> { ["Qty"] = 1L, ["Open"] = open }, domain);
-            store.Add(line);
-            foreach (var part in parts) store.Link("parts", line, part);
+        ModuleInstance SimLine(bool open, params ModuleInstance[] parts) {
+            var line = exec.Create("Line", new Dictionary<string, object?> { ["Qty"] = 1L, ["Open"] = open }).Instance!;
+            foreach (var part in parts) exec.Link("parts", line, part);
             return line;
         }
-        DomainEntityInstance SimOrder(bool ready, params DomainEntityInstance[] lines) {
-            var order = DomainEntityInstance.Create(E("Order"),
-                new Dictionary<string, object?> { ["Ready"] = ready }, domain);
-            store.Add(order);
-            foreach (var line in lines) store.Link("lines", order, line);
+        ModuleInstance SimOrder(bool ready, params ModuleInstance[] lines) {
+            var order = exec.Create("Order", new Dictionary<string, object?> { ["Ready"] = ready }).Instance!;
+            foreach (var line in lines) exec.Link("lines", order, line);
             return order;
         }
 
@@ -168,7 +156,7 @@ public class QuantifierLoopTests {
         object PrintOrder(bool ready, params object[] lines) =>
             Make("Order", ("ready", ready), ("lines", ListOf("Line", lines)));
 
-        var cases = new (string Name, DomainEntityInstance Simulated, object Printed)[] {
+        var cases = new (string Name, ModuleInstance Simulated, object Printed)[] {
             ("no lines", SimOrder(true), PrintOrder(true)),
             ("mixed lines", SimOrder(true, SimLine(true, SimPart(9)), SimLine(true), SimLine(false)),
                 PrintOrder(true, PrintLine(true, PrintPart(9)), PrintLine(true), PrintLine(false))),
@@ -176,12 +164,12 @@ public class QuantifierLoopTests {
                 PrintOrder(false, PrintLine(true, PrintPart(1)), PrintLine(true))),
         };
         var bigPart = E("Order").Policies.First(p => p.Name == "AnyOpenLineWithBigPart");
-        await Assert.That(cases[1].Simulated.EvaluatePolicy(bigPart)).IsTrue();
-        await Assert.That(cases[2].Simulated.EvaluatePolicy(bigPart)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(cases[1].Simulated, bigPart.Name)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(cases[2].Simulated, bigPart.Name)).IsFalse();
 
         foreach (var (name, simulated, printed) in cases) {
             foreach (var policyName in policyNames) {
-                var sim = simulated.EvaluatePolicy(E("Order").Policies.First(p => p.Name == policyName));
+                var sim = exec.EvaluatePolicy(simulated, (E("Order").Policies.First(p => p.Name == policyName)).Name);
                 var print = (bool)printed.GetType().GetMethod(policyName)!.Invoke(printed, null)!;
                 await Assert.That(print).IsEqualTo(sim).Because($"{policyName} on {name}");
             }
@@ -223,18 +211,14 @@ public class QuantifierLoopTests {
     [Test]
     public async Task ActionIfAny_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(BinDsl);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }, domain);
-        var active = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true }, domain);
-        store.Add(bin); store.Add(active);
-        store.Link("widgets", bin, active);
-        var sim = bin.InvokeAction("Mark");
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }).Instance!;
+        var active = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+        exec.Link("widgets", bin, active);
+        var sim = exec.Invoke(bin, "Mark");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(bin.GetProperty<bool>("Active")).IsTrue();
+        await Assert.That((bool)bin.Bag["Active"]!).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -267,7 +251,7 @@ public class QuantifierLoopTests {
     [Test]
     public async Task StageDispatchedActionWithAny_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(StagedBinDsl);
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var exec = ModuleExec.For(domain);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -276,15 +260,12 @@ public class QuantifierLoopTests {
 
         // Runs Go in Open, or in Closed (the entity-level body) after Close; returns N from both sides.
         async Task<(long Simulated, long Exported)> RunGo(bool closeFirst) {
-            var store = new DomainInstanceStore();
-            var bin = DomainEntityInstance.Create(E("Bin"), new Dictionary<string, object?>(), domain);
-            var widget = DomainEntityInstance.Create(E("Widget"),
-                new Dictionary<string, object?> { ["Active"] = true }, domain);
-            store.Add(bin); store.Add(widget);
-            store.Link("widgets", bin, widget);
+            var bin = exec.Create("Bin", new Dictionary<string, object?>()).Instance!;
+            var widget = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+            exec.Link("widgets", bin, widget);
             if (closeFirst)
-                await Assert.That(bin.InvokeAction("Close").Succeeded).IsTrue();
-            await Assert.That(bin.InvokeAction("Go").Succeeded).IsTrue();
+                await Assert.That(exec.Invoke(bin, "Close").Succeeded).IsTrue();
+            await Assert.That(exec.Invoke(bin, "Go").Succeeded).IsTrue();
 
             var widgets = Array.CreateInstance(widgetType, 1);
             widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
@@ -294,7 +275,7 @@ public class QuantifierLoopTests {
             var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
             await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
 
-            return (Convert.ToInt64(bin.GetProperty<object>("N")),
+            return (Convert.ToInt64(bin.Bag["N"]),
                 Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed)));
         }
 
@@ -329,7 +310,7 @@ public class QuantifierLoopTests {
     [Test]
     public async Task ForEachRelationshipExistsPredicate_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(ExistsPredicateDsl);
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
+        var exec = ModuleExec.For(domain);
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
@@ -338,20 +319,16 @@ public class QuantifierLoopTests {
         // Two widgets: "bare" has no links; "linked" has an owner and one part.
         // Returns each widget's Flag after the action, per side.
         async Task<(bool[] Simulated, bool[] Exported)> Run(string actionName) {
-            var store = new DomainInstanceStore();
-            var bin = DomainEntityInstance.Create(E("Bin"), new Dictionary<string, object?>(), domain);
-            var bare = DomainEntityInstance.Create(E("Widget"), new Dictionary<string, object?>(), domain);
-            var linked = DomainEntityInstance.Create(E("Widget"), new Dictionary<string, object?>(), domain);
-            var owner = DomainEntityInstance.Create(E("Owner"),
-                new Dictionary<string, object?> { ["Label"] = "o" }, domain);
-            var part = DomainEntityInstance.Create(E("Part"),
-                new Dictionary<string, object?> { ["Qty"] = 1L }, domain);
-            store.Add(bin); store.Add(bare); store.Add(linked); store.Add(owner); store.Add(part);
-            store.Link("widgets", bin, bare);
-            store.Link("widgets", bin, linked);
-            store.Link("owner", linked, owner);
-            store.Link("parts", linked, part);
-            await Assert.That(bin.InvokeAction(actionName).Succeeded).IsTrue();
+            var bin = exec.Create("Bin", new Dictionary<string, object?>()).Instance!;
+            var bare = exec.Create("Widget", new Dictionary<string, object?>()).Instance!;
+            var linked = exec.Create("Widget", new Dictionary<string, object?>()).Instance!;
+            var owner = exec.Create("Owner", new Dictionary<string, object?> { ["Label"] = "o" }).Instance!;
+            var part = exec.Create("Part", new Dictionary<string, object?> { ["Qty"] = 1L }).Instance!;
+            exec.Link("widgets", bin, bare);
+            exec.Link("widgets", bin, linked);
+            exec.Link("owner", linked, owner);
+            exec.Link("parts", linked, part);
+            await Assert.That(exec.Invoke(bin, actionName).Succeeded).IsTrue();
 
             var printedParts = Array.CreateInstance(asm.GetType("Part")!, 1);
             printedParts.SetValue(ExportedCSharp.CreateEntity(asm, "Part", ("qty", 1L)), 0);
@@ -366,7 +343,7 @@ public class QuantifierLoopTests {
             await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
 
             bool Flag(object w) => (bool)widgetType.GetProperty("Flag")!.GetValue(w)!;
-            return ([bare.GetProperty<bool>("Flag"), linked.GetProperty<bool>("Flag")],
+            return ([(bool)bare.Bag["Flag"]!, (bool)linked.Bag["Flag"]!],
                 [Flag(printedBare), Flag(printedLinked)]);
         }
 
@@ -387,10 +364,10 @@ public class QuantifierLoopTests {
             domain Yard
             Bin: entity { N: Number default(0)  P: policy { N } }
             """);
-        var bin = DomainEntityInstance.Create(domain.Types.OfType<Entity>().First(e => e.Name == "Bin"),
-            new Dictionary<string, object?> { ["N"] = 2L }, domain);
-        var policy = bin.Entity.Policies.First(p => p.Name == "P");
-        await Assert.That(bin.EvaluatePolicy(policy)).IsTrue();
+        var exec = ModuleExec.For(domain);
+        var bin = exec.Create((domain.Types.OfType<Entity>().First(e => e.Name == "Bin")).Name, new Dictionary<string, object?> { ["N"] = 2L }).Instance!;
+        var policy = domain.Types.OfType<Entity>().First(e => e.Name == "Bin").Policies.First(p => p.Name == "P");
+        await Assert.That(exec.EvaluatePolicy(bin, (policy).Name)).IsTrue();
 
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(() => ExportedCSharp.CompileAndLoad(cs)).Throws<InvalidOperationException>()
@@ -400,21 +377,16 @@ public class QuantifierLoopTests {
     [Test]
     public async Task ActionAssignCountWhere_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(BinDsl);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }, domain);
-        var w1 = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true }, domain);
-        var w2 = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = false }, domain);
-        store.Add(bin); store.Add(w1); store.Add(w2);
-        store.Link("widgets", bin, w1);
-        store.Link("widgets", bin, w2);
-        var sim = bin.InvokeAction("Tally");
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }).Instance!;
+        var w1 = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+        var w2 = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = false }).Instance!;
+        exec.Link("widgets", bin, w1);
+        exec.Link("widgets", bin, w2);
+        var sim = exec.Invoke(bin, "Tally");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
+        await Assert.That(Convert.ToInt64(bin.Bag["N"])).IsEqualTo(1L);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -441,17 +413,13 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["Active"] = false }, domain);
-        var active = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true }, domain);
-        store.Add(bin); store.Add(active);
-        store.Link("widgets", bin, active);
-        var sim = bin.InvokeAction("Spawn");
+        var exec = ModuleExec.For(domain);
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["Active"] = false }).Instance!;
+        var active = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+        exec.Link("widgets", bin, active);
+        var sim = exec.Invoke(bin, "Spawn");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(store.GetLinkedTargets("widgets", bin).Count).IsEqualTo(2);
+        await Assert.That(exec.LinkedTargets("widgets", bin).Count).IsEqualTo(2);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -475,18 +443,15 @@ public class QuantifierLoopTests {
     [Test]
     public async Task ActionShortCircuitAnd_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = Evolve(BinDsl);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }, domain);
-        var active = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true }, domain);
-        store.Add(bin); store.Add(active);
-        store.Link("widgets", bin, active);
-        var sim = bin.InvokeAction("Guarded");
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["Active"] = false, ["N"] = 0L }).Instance!;
+        var active = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+        exec.Link("widgets", bin, active);
+        var sim = exec.Invoke(bin, "Guarded");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(0L);
+        await Assert.That(Convert.ToInt64(bin.Bag["N"])).IsEqualTo(0L);
 
         var lowered = new EffectLoweringPass(E("Bin"), new LoweringContext(
             new ThisReference(),
@@ -527,23 +492,18 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["N"] = 0L }, domain);
-        var active = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true, ["Flag"] = false }, domain);
-        var idle = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = false, ["Flag"] = false }, domain);
-        store.Add(bin); store.Add(active); store.Add(idle);
-        store.Link("widgets", bin, active);
-        store.Link("widgets", bin, idle);
-        var sim = bin.InvokeAction("Go");
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["N"] = 0L }).Instance!;
+        var active = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true, ["Flag"] = false }).Instance!;
+        var idle = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = false, ["Flag"] = false }).Instance!;
+        exec.Link("widgets", bin, active);
+        exec.Link("widgets", bin, idle);
+        var sim = exec.Invoke(bin, "Go");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
-        await Assert.That(active.GetProperty<bool>("Flag")).IsTrue();
-        await Assert.That(idle.GetProperty<bool>("Flag")).IsTrue();
+        await Assert.That(Convert.ToInt64(bin.Bag["N"])).IsEqualTo(1L);
+        await Assert.That((bool)active.Bag["Flag"]!).IsTrue();
+        await Assert.That((bool)idle.Bag["Flag"]!).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -572,18 +532,15 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"), domain: domain);
-        var active = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Active"] = true }, domain);
-        store.Add(bin); store.Add(active);
-        store.Link("widgets", bin, active);
-        var sim = bin.InvokeAction("Spawn");
+        var bin = exec.Create("Bin", new Dictionary<string, object?>()).Instance!;
+        var active = exec.Create("Widget", new Dictionary<string, object?> { ["Active"] = true }).Instance!;
+        exec.Link("widgets", bin, active);
+        var sim = exec.Invoke(bin, "Spawn");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(sim.ResultInstance).IsNotNull();
-        var simActive = sim.ResultInstance!.GetProperty<bool>("Active");
+        await Assert.That(sim.Instance).IsNotNull();
+        var simActive = (bool)sim.Instance!.Bag["Active"]!;
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -614,23 +571,20 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimDept(bool teamActive, bool workerActive) {
-            var worker = DomainEntityInstance.Create(E("Worker"),
-                new Dictionary<string, object?> { ["Active"] = workerActive }, domain);
-            var team = DomainEntityInstance.Create(E("Team"),
-                new Dictionary<string, object?> { ["Active"] = teamActive }, domain);
-            var dept = DomainEntityInstance.Create(E("Dept"), domain: domain);
-            store.Add(worker); store.Add(team); store.Add(dept);
-            store.Link("workers", team, worker);
-            store.Link("team", dept, team);
+        ModuleInstance SimDept(bool teamActive, bool workerActive) {
+            var worker = exec.Create("Worker", new Dictionary<string, object?> { ["Active"] = workerActive }).Instance!;
+            var team = exec.Create("Team", new Dictionary<string, object?> { ["Active"] = teamActive }).Instance!;
+            var dept = exec.Create("Dept", new Dictionary<string, object?>()).Instance!;
+            exec.Link("workers", team, worker);
+            exec.Link("team", dept, team);
             return dept;
         }
         var policy = E("Dept").Policies.First(p => p.Name == "P");
-        var simTrue = SimDept(true, true).EvaluatePolicy(policy);
-        var simFalse = SimDept(true, false).EvaluatePolicy(policy);
+        var simTrue = exec.EvaluatePolicy(SimDept(true, true), policy.Name);
+        var simFalse = exec.EvaluatePolicy(SimDept(true, false), policy.Name);
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 
@@ -649,9 +603,8 @@ public class QuantifierLoopTests {
         await Assert.That(PrintedP(PrintDept(true, true))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept(true, false))).IsEqualTo(simFalse);
 
-        var unlinked = DomainEntityInstance.Create(E("Dept"), domain: domain);
-        store.Add(unlinked);
-        await Assert.That(unlinked.EvaluatePolicy(policy)).IsFalse();
+        var unlinked = exec.Create("Dept", new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.EvaluatePolicy(unlinked, (policy).Name)).IsFalse();
         var printedUnlinked = ExportedCSharp.CreateEntity(deptType);
         await Assert.That(PrintedP(printedUnlinked)).IsFalse();
     }
@@ -677,23 +630,20 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimDept(bool teamActive, string workerState) {
-            var worker = DomainEntityInstance.Create(E("Worker"),
-                new Dictionary<string, object?> { ["State"] = workerState }, domain);
-            var team = DomainEntityInstance.Create(E("Team"),
-                new Dictionary<string, object?> { ["Active"] = teamActive, ["State"] = "Done" }, domain);
-            var dept = DomainEntityInstance.Create(E("Dept"), domain: domain);
-            store.Add(worker); store.Add(team); store.Add(dept);
-            store.Link("workers", team, worker);
-            store.Link("team", dept, team);
+        ModuleInstance SimDept(bool teamActive, string workerState) {
+            var worker = exec.Create("Worker", new Dictionary<string, object?> { ["State"] = workerState }).Instance!;
+            var team = exec.Create("Team", new Dictionary<string, object?> { ["Active"] = teamActive, ["State"] = "Done" }).Instance!;
+            var dept = exec.Create("Dept", new Dictionary<string, object?>()).Instance!;
+            exec.Link("workers", team, worker);
+            exec.Link("team", dept, team);
             return dept;
         }
         var policy = E("Dept").Policies.First(p => p.Name == "P");
-        var simTrue = SimDept(true, "Busy").EvaluatePolicy(policy);
-        var simFalse = SimDept(true, "Idle").EvaluatePolicy(policy);
+        var simTrue = exec.EvaluatePolicy(SimDept(true, "Busy"), policy.Name);
+        var simFalse = exec.EvaluatePolicy(SimDept(true, "Idle"), policy.Name);
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 
@@ -744,25 +694,22 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimDept(string workerState) {
-            var worker = DomainEntityInstance.Create(E("Worker"),
-                new Dictionary<string, object?> { ["State"] = workerState }, domain);
-            var team = DomainEntityInstance.Create(E("Team"),
-                new Dictionary<string, object?> { ["Active"] = true, ["State"] = "Done" }, domain);
-            var org = DomainEntityInstance.Create(E("Org"), domain: domain);
-            var dept = DomainEntityInstance.Create(E("Dept"), domain: domain);
-            store.Add(worker); store.Add(team); store.Add(org); store.Add(dept);
-            store.Link("workers", team, worker);
-            store.Link("team", org, team);
-            store.Link("org", dept, org);
+        ModuleInstance SimDept(string workerState) {
+            var worker = exec.Create("Worker", new Dictionary<string, object?> { ["State"] = workerState }).Instance!;
+            var team = exec.Create("Team", new Dictionary<string, object?> { ["Active"] = true, ["State"] = "Done" }).Instance!;
+            var org = exec.Create("Org", new Dictionary<string, object?>()).Instance!;
+            var dept = exec.Create("Dept", new Dictionary<string, object?>()).Instance!;
+            exec.Link("workers", team, worker);
+            exec.Link("team", org, team);
+            exec.Link("org", dept, org);
             return dept;
         }
         var policy = E("Dept").Policies.First(p => p.Name == "P");
-        var simTrue = SimDept("Busy").EvaluatePolicy(policy);
-        var simFalse = SimDept("Idle").EvaluatePolicy(policy);
+        var simTrue = exec.EvaluatePolicy(SimDept("Busy"), policy.Name);
+        var simFalse = exec.EvaluatePolicy(SimDept("Idle"), policy.Name);
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 
@@ -789,9 +736,8 @@ public class QuantifierLoopTests {
         await Assert.That(PrintedP(PrintDept("Busy"))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept("Idle"))).IsEqualTo(simFalse);
 
-        var unlinked = DomainEntityInstance.Create(E("Dept"), domain: domain);
-        store.Add(unlinked);
-        await Assert.That(unlinked.EvaluatePolicy(policy)).IsFalse();
+        var unlinked = exec.Create("Dept", new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.EvaluatePolicy(unlinked, (policy).Name)).IsFalse();
         await Assert.That(PrintedP(ExportedCSharp.CreateEntity(deptType))).IsFalse();
     }
 
@@ -809,21 +755,18 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimDept(string teamState) {
-            var team = DomainEntityInstance.Create(E("Team"),
-                new Dictionary<string, object?> { ["State"] = teamState }, domain);
-            var dept = DomainEntityInstance.Create(E("Dept"),
-                new Dictionary<string, object?> { ["State"] = "Open" }, domain);
-            store.Add(team); store.Add(dept);
-            store.Link("team", dept, team);
+        ModuleInstance SimDept(string teamState) {
+            var team = exec.Create("Team", new Dictionary<string, object?> { ["State"] = teamState }).Instance!;
+            var dept = exec.Create("Dept", new Dictionary<string, object?> { ["State"] = "Open" }).Instance!;
+            exec.Link("team", dept, team);
             return dept;
         }
         var policy = E("Dept").Policies.First(p => p.Name == "P");
-        var simTrue = SimDept("Done").EvaluatePolicy(policy);
-        var simFalse = SimDept("Busy").EvaluatePolicy(policy);
+        var simTrue = exec.EvaluatePolicy(SimDept("Done"), policy.Name);
+        var simFalse = exec.EvaluatePolicy(SimDept("Busy"), policy.Name);
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 
@@ -858,25 +801,21 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
         var due = new DateOnly(2026, 1, 1);
-        var store = new DomainInstanceStore();
-        DomainEntityInstance SimTicket(bool openLine) {
-            var ticket = DomainEntityInstance.Create(E("Ticket"),
-                new Dictionary<string, object?> { ["Due"] = due }, domain);
-            store.Add(ticket);
+        ModuleInstance SimTicket(bool openLine) {
+            var ticket = exec.Create("Ticket", new Dictionary<string, object?> { ["Due"] = due }).Instance!;
             if (openLine) {
-                var line = DomainEntityInstance.Create(E("Line"),
-                    new Dictionary<string, object?> { ["Open"] = true }, domain);
-                store.Add(line);
-                store.Link("lines", ticket, line);
+                var line = exec.Create("Line", new Dictionary<string, object?> { ["Open"] = true }).Instance!;
+                exec.Link("lines", ticket, line);
             }
             return ticket;
         }
         var policy = E("Ticket").Policies.First(p => p.Name == "P");
-        var simOpen = SimTicket(true).EvaluatePolicy(policy);
-        var simClosed = SimTicket(false).EvaluatePolicy(policy);
+        var simOpen = exec.EvaluatePolicy(SimTicket(true), policy.Name);
+        var simClosed = exec.EvaluatePolicy(SimTicket(false), policy.Name);
         await Assert.That(simOpen).IsTrue();
         await Assert.That(simClosed).IsFalse();
 
@@ -914,28 +853,21 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var bin = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["N"] = 0L }, domain);
-        var widget = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Level"] = 0L }, domain);
-        store.Add(bin); store.Add(widget);
-        store.Link("widgets", bin, widget);
-        var simHigh = bin.InvokeAction("Close", new Dictionary<string, object?> { ["Level"] = 10L });
+        var bin = exec.Create("Bin", new Dictionary<string, object?> { ["N"] = 0L }).Instance!;
+        var widget = exec.Create("Widget", new Dictionary<string, object?> { ["Level"] = 0L }).Instance!;
+        exec.Link("widgets", bin, widget);
+        var simHigh = exec.Invoke(bin, "Close", new Dictionary<string, object?> { ["Level"] = 10L });
         await Assert.That(simHigh.Succeeded).IsTrue();
-        await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
+        await Assert.That(Convert.ToInt64(bin.Bag["N"])).IsEqualTo(1L);
 
-        var binLow = DomainEntityInstance.Create(E("Bin"),
-            new Dictionary<string, object?> { ["N"] = 0L }, domain);
-        var widgetLow = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Level"] = 0L }, domain);
-        store.Add(binLow); store.Add(widgetLow);
-        store.Link("widgets", binLow, widgetLow);
-        var simLow = binLow.InvokeAction("Close", new Dictionary<string, object?> { ["Level"] = 2L });
+        var binLow = exec.Create("Bin", new Dictionary<string, object?> { ["N"] = 0L }).Instance!;
+        var widgetLow = exec.Create("Widget", new Dictionary<string, object?> { ["Level"] = 0L }).Instance!;
+        exec.Link("widgets", binLow, widgetLow);
+        var simLow = exec.Invoke(binLow, "Close", new Dictionary<string, object?> { ["Level"] = 2L });
         await Assert.That(simLow.Succeeded).IsTrue();
-        await Assert.That(Convert.ToInt64(binLow.GetProperty<object>("N"))).IsEqualTo(0L);
+        await Assert.That(Convert.ToInt64(binLow.Bag["N"])).IsEqualTo(0L);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -976,27 +908,21 @@ public class QuantifierLoopTests {
             }
             """;
         var (domain, analysis) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
-        Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var openPart = DomainEntityInstance.Create(E("Part"),
-            new Dictionary<string, object?> { ["Open"] = true }, domain);
-        var closedPart = DomainEntityInstance.Create(E("Part"),
-            new Dictionary<string, object?> { ["Open"] = false }, domain);
-        var withOpen = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Flag"] = false }, domain);
-        var withoutOpen = DomainEntityInstance.Create(E("Widget"),
-            new Dictionary<string, object?> { ["Flag"] = false }, domain);
-        var bin = DomainEntityInstance.Create(E("Bin"), domain: domain);
-        store.Add(openPart); store.Add(closedPart); store.Add(withOpen); store.Add(withoutOpen); store.Add(bin);
-        store.Link("parts", withOpen, openPart);
-        store.Link("parts", withoutOpen, closedPart);
-        store.Link("widgets", bin, withOpen);
-        store.Link("widgets", bin, withoutOpen);
-        var sim = bin.InvokeAction("Go");
+        var openPart = exec.Create("Part", new Dictionary<string, object?> { ["Open"] = true }).Instance!;
+        var closedPart = exec.Create("Part", new Dictionary<string, object?> { ["Open"] = false }).Instance!;
+        var withOpen = exec.Create("Widget", new Dictionary<string, object?> { ["Flag"] = false }).Instance!;
+        var withoutOpen = exec.Create("Widget", new Dictionary<string, object?> { ["Flag"] = false }).Instance!;
+        var bin = exec.Create("Bin", new Dictionary<string, object?>()).Instance!;
+        exec.Link("parts", withOpen, openPart);
+        exec.Link("parts", withoutOpen, closedPart);
+        exec.Link("widgets", bin, withOpen);
+        exec.Link("widgets", bin, withoutOpen);
+        var sim = exec.Invoke(bin, "Go");
         await Assert.That(sim.Succeeded).IsTrue();
-        await Assert.That(withOpen.GetProperty<bool>("Flag")).IsTrue();
-        await Assert.That(withoutOpen.GetProperty<bool>("Flag")).IsFalse();
+        await Assert.That((bool)withOpen.Bag["Flag"]!).IsTrue();
+        await Assert.That((bool)withoutOpen.Bag["Flag"]!).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));

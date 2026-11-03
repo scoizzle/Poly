@@ -127,20 +127,17 @@ public class StoreBindCreateTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text unique }
-            Lot: entity { permits: many Permit }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) { create in permits { Plate: plate } }
+            }
             """);
-        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-
-        var result = store.CreateIn(lot, "permits",
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" });
-        await Assert.That(result.IsSuccess).IsTrue();
-        var child = result.Value as DomainEntityInstance;
-        await Assert.That(child).IsNotNull();
-        await Assert.That(store.GetRelatedInstances("permits", lot)).Contains(child!);
-        await Assert.That(lot.CreatedChildren).Contains(child!);
+        var exec = ModuleExec.For(domain);
+        var lot = exec.Create("Lot", new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsTrue();
+        var child = result.CreatedChildren.Single();
+        await Assert.That(exec.IsLinked("permits", lot, child)).IsTrue();
     }
 
     [Test]
@@ -148,23 +145,19 @@ public class StoreBindCreateTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text unique }
-            Lot: entity { permits: many Permit }
+            Lot: entity {
+              permits: many Permit
+              Issue: action (plate: Text) { create in permits { Plate: plate } }
+            }
             """);
-        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        store.Add(lot);
-        store.Add(existing);
-
-        var result = store.CreateIn(lot, "permits",
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" });
-        await Assert.That(result.IsSuccess).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.CreatedChildren).IsEmpty();
-        await Assert.That(store.GetRelatedInstances("permits", lot)).IsEmpty();
+        var exec = ModuleExec.For(domain);
+        var lot = exec.Create("Lot", new Dictionary<string, object?>()).Instance!;
+        exec.Create("Permit", new Dictionary<string, object?> { ["Plate"] = "ABC123" });
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(result.CreatedChildren).IsEmpty();
+        await Assert.That(exec.LinkedTargets("permits", lot)).IsEmpty();
     }
 
     [Test]
@@ -172,21 +165,19 @@ public class StoreBindCreateTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text unique default("STD") }
-            Lot: entity { permits: many Permit }
+            Lot: entity {
+              permits: many Permit
+              Issue: action { create in permits { } }
+            }
             """);
-        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        var existing = DomainEntityInstance.Create(permitE, domain: domain);
-        store.Add(lot);
-        store.Add(existing);
-
-        var result = store.CreateIn(lot, "permits", new Dictionary<string, object?>());
-        await Assert.That(result.IsSuccess).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.CreatedChildren).IsEmpty();
-        await Assert.That(store.GetRelatedInstances("permits", lot)).IsEmpty();
+        var exec = ModuleExec.For(domain);
+        var lot = exec.Create("Lot", new Dictionary<string, object?>()).Instance!;
+        exec.Create("Permit", new Dictionary<string, object?>());
+        var result = exec.Invoke(lot, "Issue");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(result.CreatedChildren).IsEmpty();
+        await Assert.That(exec.LinkedTargets("permits", lot)).IsEmpty();
     }
 
     [Test]
@@ -194,18 +185,17 @@ public class StoreBindCreateTests {
         var (domain, _) = Evolve("""
             domain Parking
             Permit: entity { Plate: Text default("STD") }
-            Lot: entity { permits: many Permit }
+            Lot: entity {
+              permits: many Permit
+              Issue: action { create in permits { } }
+            }
             """);
-        var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-
-        var result = store.CreateIn(lot, "permits", new Dictionary<string, object?>());
-        await Assert.That(result.IsSuccess).IsTrue();
-        var child = result.Value as DomainEntityInstance;
-        await Assert.That(child).IsNotNull();
-        await Assert.That(child!.GetProperty<string>("Plate")).IsEqualTo("STD");
+        var exec = ModuleExec.For(domain);
+        var lot = exec.Create("Lot", new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue");
+        await Assert.That(result.Succeeded).IsTrue();
+        var child = result.CreatedChildren.Single();
+        await Assert.That((string)child.Bag["Plate"]!).IsEqualTo("STD");
     }
 
     [Test]
@@ -219,22 +209,16 @@ public class StoreBindCreateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var customerE = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
-        var customer = DomainEntityInstance.Create(customerE, domain: domain);
-        await Assert.That(customer.Store).IsNull();
+        var customer = exec.Create(customerE.Name, new Dictionary<string, object?>()).Instance!;
 
-        var result = customer.InvokeAction("Place",
-            new Dictionary<string, object?> { ["code"] = "A1" });
+        var result = exec.Invoke(customer, "Place", new Dictionary<string, object?> { ["code"] = "A1" });
         await Assert.That(result.Succeeded).IsTrue();
-        var child = customer.CreatedChildren.Single();
-        await Assert.That(child.GetProperty<string>("Code")).IsEqualTo("A1");
-        await Assert.That(customer.Store).IsTypeOf<DomainInstanceStore>();
-        await Assert.That(child.Store).IsSameReferenceAs(customer.Store);
-
-        var storeProp = typeof(DomainEntityInstance).GetProperty(nameof(DomainEntityInstance.Store))!;
-        await Assert.That(storeProp.GetMethod!.IsPublic).IsTrue();
-        await Assert.That(storeProp.SetMethod!.IsPublic).IsFalse();
-        await Assert.That(storeProp.SetMethod.IsAssembly).IsTrue();
+        var child = result.CreatedChildren.Single();
+        await Assert.That((string)child.Bag["Code"]!).IsEqualTo("A1");
+        await Assert.That(exec.TryGet(child.Id, out var found)).IsTrue();
+        await Assert.That(ReferenceEquals(found, child)).IsTrue();
     }
 
     [Test]
@@ -249,17 +233,15 @@ public class StoreBindCreateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        await Assert.That(lot.Store).IsNull();
+        var lot = exec.Create(lotE.Name, new Dictionary<string, object?>()).Instance!;
 
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        var child = lot.CreatedChildren.Single();
-        await Assert.That(child.GetProperty<string>("Plate")).IsEqualTo("ABC123");
-        await Assert.That(lot.Store).IsTypeOf<DomainInstanceStore>();
-        await Assert.That(lot.Store!.GetRelatedInstances("permits", lot)).Contains(child);
+        var child = result.CreatedChildren.Single();
+        await Assert.That((string)child.Bag["Plate"]!).IsEqualTo("ABC123");
+        await Assert.That(exec.IsLinked("permits", lot, child)).IsTrue();
     }
 
     [Test]
@@ -278,15 +260,13 @@ public class StoreBindCreateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(1L);
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(1L);
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
     }
 
     [Test]

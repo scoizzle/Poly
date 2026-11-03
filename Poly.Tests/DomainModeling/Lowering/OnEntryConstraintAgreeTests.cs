@@ -25,9 +25,10 @@ public class OnEntryConstraintAgreeTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
 
-        await Assert.That(() => DomainEntityInstance.Create(entity, domain: domain))
+        await Assert.That(() => exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!)
             .Throws<ConstraintFailureException>()
             .WithMessageContaining("must be <= 10");
 

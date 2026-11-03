@@ -40,6 +40,7 @@ public class WhenAllSimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var boardType = module.First(t => t.Name == "Board");
         var handler = boardType.Methods?.FirstOrDefault(m => m.Name == "WhenAllWorkItemReady");
@@ -58,25 +59,18 @@ public class WhenAllSimulatePrintAgreeTests {
 
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "WorkItem");
         var boardE = domain.Types.OfType<Entity>().First(e => e.Name == "Board");
-        var store = new DomainInstanceStore();
-        var item1 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T1" }, domain);
-        var item2 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T2" }, domain);
-        var board = DomainEntityInstance.Create(boardE,
-            new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
-        store.Add(item1);
-        store.Add(item2);
-        store.Add(board);
-        store.Link("items", board, item1);
-        store.Link("items", board, item2);
+        var item1 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T1" }).Instance!;
+        var item2 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T2" }).Instance!;
+        var board = exec.Create((boardE).Name, new Dictionary<string, object?> { ["Fires"] = 0L }).Instance!;
+        exec.Link("items", board, item1);
+        exec.Link("items", board, item2);
 
-        await Assert.That(item1.InvokeAction("Prep").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(0L);
-        await Assert.That(item2.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
-        await Assert.That(item1.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Prep").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(0L);
+        await Assert.That(exec.Invoke(item2, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
 
         var printedFires = RunPrintedAllScenario(session, domain, analysis);
         await Assert.That(printedFires[0]).IsEqualTo(0L);
@@ -107,6 +101,7 @@ public class WhenAllSimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         var files = session.Emit(domain, analysis);
         var itemCs = files.First(f => f.FileName == "WorkItem.cs").Source;
         await Assert.That(itemCs.Contains("previousStage0", StringComparison.Ordinal)).IsTrue();
@@ -115,23 +110,16 @@ public class WhenAllSimulatePrintAgreeTests {
 
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "WorkItem");
         var boardE = domain.Types.OfType<Entity>().First(e => e.Name == "Board");
-        var store = new DomainInstanceStore();
-        var item1 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T1" }, domain);
-        var item2 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T2" }, domain);
-        var board = DomainEntityInstance.Create(boardE,
-            new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
-        store.Add(item1);
-        store.Add(item2);
-        store.Add(board);
-        store.Link("items", board, item1);
-        store.Link("items", board, item2);
+        var item1 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T1" }).Instance!;
+        var item2 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T2" }).Instance!;
+        var board = exec.Create((boardE).Name, new Dictionary<string, object?> { ["Fires"] = 0L }).Instance!;
+        exec.Link("items", board, item1);
+        exec.Link("items", board, item2);
 
-        await Assert.That(item1.InvokeAction("Prep").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(0L);
-        await Assert.That(item2.InvokeAction("Prep").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Prep").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(0L);
+        await Assert.That(exec.Invoke(item2, "Prep").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
 
         var printedFires = RunPrintedOnEntryChain(session, domain, analysis);
         await Assert.That(printedFires[0]).IsEqualTo(0L);
@@ -160,6 +148,7 @@ public class WhenAllSimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         var files = session.Emit(domain, analysis);
         var itemCs = files.First(f => f.FileName == "WorkItem.cs").Source;
         await Assert.That(itemCs.Contains("previousStage0", StringComparison.Ordinal)).IsTrue();
@@ -168,23 +157,16 @@ public class WhenAllSimulatePrintAgreeTests {
 
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "WorkItem");
         var boardE = domain.Types.OfType<Entity>().First(e => e.Name == "Board");
-        var store = new DomainInstanceStore();
-        var item1 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T1" }, domain);
-        var item2 = DomainEntityInstance.Create(itemE,
-            new Dictionary<string, object?> { ["Code"] = "T2" }, domain);
-        var board = DomainEntityInstance.Create(boardE,
-            new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
-        store.Add(item1);
-        store.Add(item2);
-        store.Add(board);
-        store.Link("items", board, item1);
-        store.Link("items", board, item2);
+        var item1 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T1" }).Instance!;
+        var item2 = exec.Create((itemE).Name, new Dictionary<string, object?> { ["Code"] = "T2" }).Instance!;
+        var board = exec.Create((boardE).Name, new Dictionary<string, object?> { ["Fires"] = 0L }).Instance!;
+        exec.Link("items", board, item1);
+        exec.Link("items", board, item2);
 
-        await Assert.That(item1.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(0L);
-        await Assert.That(item2.InvokeAction("Finish").Succeeded).IsTrue();
-        await Assert.That(board.GetProperty<object>("Fires")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(item1, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(0L);
+        await Assert.That(exec.Invoke(item2, "Finish").Succeeded).IsTrue();
+        await Assert.That(board.Bag["Fires"]).IsEqualTo(1L);
 
         var printedFires = RunPrintedStageAndEntityAction(session, domain, analysis);
         await Assert.That(printedFires[0]).IsEqualTo(0L);

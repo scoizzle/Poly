@@ -28,6 +28,7 @@ public class SliceASharedModuleBodyTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
 
         // 1) Lower once via session.Lower / GetOrLower.
         var module = session.Lower(domain, analysis);
@@ -46,12 +47,10 @@ public class SliceASharedModuleBodyTests {
 
         // 2) Interpreter executes the shipped action from that module body.
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(lot);
-        var result = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["plate"] = "AAA-1" });
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "AAA-1" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
 
         // Same module method object after execute — no re-lower with opposite flag.
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out var cached)).IsTrue();
@@ -83,6 +82,7 @@ public class SliceASharedModuleBodyTests {
               Done: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var ticket = module.First(t => t.Name == "Ticket");
         // D10: the body stays in the runtime cache; the printed type no longer
@@ -98,13 +98,7 @@ public class SliceASharedModuleBodyTests {
         var printed = new CSharpGenerator().Generate(exitBody!);
         await Assert.That(printed.Length).IsGreaterThan(0);
 
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
-        await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
-        inst.TransitionStage("Done");
-        await Assert.That(inst.CurrentStage).IsEqualTo("Done");
-        await Assert.That(inst.GetProperty<string>("Note")).IsEqualTo("left-draft");
+        // Host TransitionStage is gone with DEI. The cached exit body above is what this test can still prove.
     }
 
     private static bool ContainsNode<T>(Node node) where T : Node {

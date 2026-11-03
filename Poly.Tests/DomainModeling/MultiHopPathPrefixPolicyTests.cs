@@ -46,28 +46,22 @@ public class MultiHopPathPrefixPolicyTests {
     [Test]
     public async Task EvaluatePolicy_TwoHop_ToOne_MatchesTitle() {
         var (domain, _) = Evolve(MultiHopDomain);
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var patronE = domain.Types.OfType<Entity>().Single(e => e.Name == "Patron");
         var loanE = domain.Types.OfType<Entity>().Single(e => e.Name == "Loan");
         var bookE = domain.Types.OfType<Entity>().Single(e => e.Name == "Book");
 
-        var patron = DomainEntityInstance.Create(patronE,
-            new Dictionary<string, object?> { ["Name"] = "P" }, domain);
-        var loan = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L1" }, domain);
-        var book = DomainEntityInstance.Create(bookE,
-            new Dictionary<string, object?> { ["Title"] = "Classic" }, domain);
-        store.Add(patron);
-        store.Add(loan);
-        store.Add(book);
-        store.Link("loan", patron, loan);
-        store.Link("book", loan, book);
+        var patron = exec.Create((patronE).Name, new Dictionary<string, object?> { ["Name"] = "P" }).Instance!;
+        var loan = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
+        var book = exec.Create((bookE).Name, new Dictionary<string, object?> { ["Title"] = "Classic" }).Instance!;
+        exec.Link("loan", patron, loan);
+        exec.Link("book", loan, book);
 
         var policy = patronE.Policies.Single(p => p.Name == "HasClassic");
-        await Assert.That(patron.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(patron, (policy).Name)).IsTrue();
 
-        book.SetProperty("Title", "Other");
-        await Assert.That(patron.EvaluatePolicy(policy)).IsFalse();
+        book.Bag["Title"] = "Other";
+        await Assert.That(exec.EvaluatePolicy(patron, (policy).Name)).IsFalse();
     }
 
     [Test]
@@ -87,23 +81,20 @@ public class MultiHopPathPrefixPolicyTests {
               Registered: stage {}
             }
             """);
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var sectionE = domain.Types.OfType<Entity>().Single(e => e.Name == "Section");
         var enrollE = domain.Types.OfType<Entity>().Single(e => e.Name == "Enrollment");
-        var section = DomainEntityInstance.Create(sectionE, new Dictionary<string, object?>(), domain);
-        var enrollment = DomainEntityInstance.Create(enrollE, new Dictionary<string, object?>(), domain);
-        store.Add(section);
-        store.Add(enrollment);
-        store.Link("section", enrollment, section);
+        var section = exec.Create((sectionE).Name, new Dictionary<string, object?>()).Instance!;
+        var enrollment = exec.Create((enrollE).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("section", enrollment, section);
 
-        var ok = enrollment.InvokeAction("Confirm");
+        var ok = exec.Invoke(enrollment, "Confirm");
         await Assert.That(ok.Succeeded).IsTrue();
 
-        var full = DomainEntityInstance.Create(enrollE, new Dictionary<string, object?>(), domain);
-        store.Add(full);
-        store.Link("section", full, section);
-        section.SetProperty("SeatsTaken", 1L);
-        var blocked = full.InvokeAction("Confirm");
+        var full = exec.Create((enrollE).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("section", full, section);
+        section.Bag["SeatsTaken"] = 1L;
+        var blocked = exec.Invoke(full, "Confirm");
         await Assert.That(blocked.Succeeded).IsFalse();
         await Assert.That(blocked.FailedGuards).Contains("not_SectionFull");
     }

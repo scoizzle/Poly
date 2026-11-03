@@ -42,8 +42,8 @@ When simulate and emit disagree, **fix lowering** (one tree). Do not special-cas
 
 - Always-on: [`AGENTS.md`](../../AGENTS.md) **Agent target**. CORE hard line: lowered module is domain meaning.
 - Pipeline transformation P1–P6 landed a one-tree named-action path. This ADR forbids treating the residual harness as the product path.
-- University / CRM / Hotel DEI dogfood stays valid **harness smoke** until module-execute / generated-type tests exist. Do not delete them in this decision; do not extend them as if they were the C# API.
-- Deleting `DomainEntityInstance` is **not** this change (frozen ADR non-goal). Replacing it is a planned slice through frozen seams after the module is complete.
+- **Superseded 2026-11-02:** the DEI dogfood suites were retired with the type (S13.4b, #368). Their live behaviours are covered by `ModuleInstanceExecutorTests`, the MCP namespace, `ParityTests`, and the retargeted dogfood walks.
+- **Superseded 2026-11-02:** `DomainEntityInstance` is deleted, with no replacement runtime type. Simulation is the interpreter host on the module dictionary. The sentence this line used to carry — deletion is a frozen non-goal — is wrong.
 
 ## Non-goals
 

@@ -3342,39 +3342,36 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
         Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
         var policy = E("Patron").Policies.First(p => p.Name == "HasOverdueLoans");
-        var store = new DomainInstanceStore();
-
-        DomainEntityInstance NewPatron(string email) {
-            var p = DomainEntityInstance.Create(E("Patron"), new Dictionary<string, object?> {
+        ModuleInstance NewPatron(string email) {
+            var p = exec.Create("Patron", new Dictionary<string, object?> {
                 ["Name"] = "Ada",
                 ["Email"] = email,
                 ["MaxItems"] = 5L
-            }, domain);
-            store.Add(p);
+            }).Instance!;
             return p;
         }
 
-        DomainEntityInstance NewLoan(string status) {
-            var loan = DomainEntityInstance.Create(E("Loan"), new Dictionary<string, object?> {
+        ModuleInstance NewLoan(string status) {
+            var loan = exec.Create("Loan", new Dictionary<string, object?> {
                 ["Status"] = status
-            }, domain);
-            store.Add(loan);
+            }).Instance!;
             return loan;
         }
 
         var withOverdue = NewPatron("ada-overdue@lib.test");
-        store.Link("loans", withOverdue, NewLoan("Active"));
-        store.Link("loans", withOverdue, NewLoan("Overdue"));
+        exec.Link("loans", withOverdue, NewLoan("Active"));
+        exec.Link("loans", withOverdue, NewLoan("Overdue"));
         var withoutOverdue = NewPatron("ada-clear@lib.test");
-        store.Link("loans", withoutOverdue, NewLoan("Active"));
-        store.Link("loans", withoutOverdue, NewLoan("Returned"));
+        exec.Link("loans", withoutOverdue, NewLoan("Active"));
+        exec.Link("loans", withoutOverdue, NewLoan("Returned"));
 
-        var simTrue = withOverdue.EvaluatePolicy(policy);
-        var simFalse = withoutOverdue.EvaluatePolicy(policy);
+        var simTrue = exec.EvaluatePolicy(withOverdue, (policy).Name);
+        var simFalse = exec.EvaluatePolicy(withoutOverdue, (policy).Name);
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 

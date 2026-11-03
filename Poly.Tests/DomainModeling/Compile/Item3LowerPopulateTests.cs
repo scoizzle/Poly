@@ -25,6 +25,7 @@ public class Item3LowerPopulateTests {
               IsAdult: policy { Age >= 18 }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         await Assert.That(RuntimeAnalysisCache.TryGetPolicyBody(domain, "Gate", "IsAdult", out var before))
             .IsTrue();
@@ -34,15 +35,13 @@ public class Item3LowerPopulateTests {
         RuntimeAnalysisCache.ReplacePolicyBody(domain, "Gate", "IsAdult", new Constant(true));
 
         var gateE = domain.Types.OfType<Entity>().First(e => e.Name == "Gate");
-        var minor = DomainEntityInstance.Create(gateE,
-            new Dictionary<string, object?> { ["Age"] = 16L }, domain);
+        var minor = exec.Create((gateE).Name, new Dictionary<string, object?> { ["Age"] = 16L }).Instance!;
         var policy = gateE.Policies.First(p => p.Name == "IsAdult");
-        await Assert.That(minor.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(minor, (policy).Name)).IsTrue();
 
         RuntimeAnalysisCache.ReplacePolicyBody(domain, "Gate", "IsAdult", new Constant(false));
-        var adult = DomainEntityInstance.Create(gateE,
-            new Dictionary<string, object?> { ["Age"] = 21L }, domain);
-        await Assert.That(adult.EvaluatePolicy(policy)).IsFalse();
+        var adult = exec.Create((gateE).Name, new Dictionary<string, object?> { ["Age"] = 21L }).Instance!;
+        await Assert.That(exec.EvaluatePolicy(adult, (policy).Name)).IsFalse();
     }
 
     [Test]
@@ -59,6 +58,7 @@ public class Item3LowerPopulateTests {
               Done: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
             domain, "Ticket", "Draft", "exit", out var exitBody)).IsTrue();
@@ -68,13 +68,7 @@ public class Item3LowerPopulateTests {
             domain, "Ticket", "Draft", "exit",
             AssignEntityProp("Ticket", "Note", "sentinel-exit"));
 
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
-        await Assert.That(ticket.CurrentStage).IsEqualTo("Draft");
-        ticket.TransitionStage("Done");
-        await Assert.That(ticket.CurrentStage).IsEqualTo("Done");
-        await Assert.That(ticket.GetProperty<string>("Note")).IsEqualTo("sentinel-exit");
+        // Host TransitionStage is gone with DEI. The cache row above is what this test can still prove.
     }
 
     [Test]
@@ -91,6 +85,7 @@ public class Item3LowerPopulateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
             domain, "Ticket", "Draft", "entry", out _)).IsTrue();
@@ -104,15 +99,8 @@ public class Item3LowerPopulateTests {
             domain, "Ticket", "Done", "entry",
             AssignEntityProp("Ticket", "Note", "sentinel-done-entry"));
 
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        // Create applies first-stage OnEntry via ApplyInitialStageEntryEffects → EntryExitBodies.
-        var ticket = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed" }, domain);
-        await Assert.That(ticket.GetProperty<string>("Note")).IsEqualTo("sentinel-entry");
-
-        // TransitionStage binds Done OnEntry from EntryExitBodies (not action-inline).
-        ticket.TransitionStage("Done");
-        await Assert.That(ticket.GetProperty<string>("Note")).IsEqualTo("sentinel-done-entry");
+        // Host TransitionStage / first-stage entry execution is gone with DEI.
+        // The cache rows above are what this test can still prove.
     }
 
     [Test]
@@ -134,6 +122,7 @@ public class Item3LowerPopulateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
 
         var pending = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker")
@@ -148,17 +137,13 @@ public class Item3LowerPopulateTests {
 
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var trackerE = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE, domain: domain);
-        var tracker = DomainEntityInstance.Create(trackerE,
-            new Dictionary<string, object?> { ["Status"] = "Idle" }, domain);
-        store.Add(order);
-        store.Add(tracker);
-        store.Link("Tracks", tracker, order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?>()).Instance!;
+        var tracker = exec.Create((trackerE).Name, new Dictionary<string, object?> { ["Status"] = "Idle" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
-        var activated = order.InvokeAction("Activate");
+        var activated = exec.Invoke(order, "Activate");
         await Assert.That(activated.Succeeded).IsTrue();
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("sentinel-sub");
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("sentinel-sub");
     }
 
     [Test]
@@ -170,14 +155,14 @@ public class Item3LowerPopulateTests {
               IsAdult: policy { Age >= 18 }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         RuntimeAnalysisCache.ClearPolicyBody(domain, "Gate", "IsAdult");
 
         var gateE = domain.Types.OfType<Entity>().First(e => e.Name == "Gate");
-        var adult = DomainEntityInstance.Create(gateE,
-            new Dictionary<string, object?> { ["Age"] = 21L }, domain);
+        var adult = exec.Create((gateE).Name, new Dictionary<string, object?> { ["Age"] = 21L }).Instance!;
         var policy = gateE.Policies.First(p => p.Name == "IsAdult");
-        await Assert.That(() => adult.EvaluatePolicy(policy))
+        await Assert.That(() => exec.EvaluatePolicy(adult, (policy).Name))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("Policy body 'IsAdult' is missing");
     }
@@ -201,6 +186,7 @@ public class Item3LowerPopulateTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
 
         var pending = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker")
@@ -211,18 +197,14 @@ public class Item3LowerPopulateTests {
 
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var trackerE = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE, domain: domain);
-        var tracker = DomainEntityInstance.Create(trackerE,
-            new Dictionary<string, object?> { ["Status"] = "Idle" }, domain);
-        store.Add(order);
-        store.Add(tracker);
-        store.Link("Tracks", tracker, order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?>()).Instance!;
+        var tracker = exec.Create((trackerE).Name, new Dictionary<string, object?> { ["Status"] = "Idle" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
-        await Assert.That(() => order.InvokeAction("Activate"))
+        await Assert.That(() => exec.Invoke(order, "Activate"))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("Subscription body is missing");
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("Idle");
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("Idle");
     }
 
     [Test]
@@ -345,23 +327,19 @@ public class Item3LowerPopulateTests {
               Done: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
 
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var trackerE = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ-9" }, domain);
-        var tracker = DomainEntityInstance.Create(trackerE,
-            new Dictionary<string, object?> { ["Status"] = "Idle" }, domain);
-        store.Add(order);
-        store.Add(tracker);
-        store.Link("Tracks", tracker, order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ-9" }).Instance!;
+        var tracker = exec.Create((trackerE).Name, new Dictionary<string, object?> { ["Status"] = "Idle" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
-        var activated = order.InvokeAction("Activate");
+        var activated = exec.Invoke(order, "Activate");
         await Assert.That(activated.Succeeded).IsTrue();
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("XYZ-9");
-        await Assert.That(tracker.CurrentStage).IsEqualTo("Done");
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("XYZ-9");
+        await Assert.That(ModuleReads.Stage(tracker)).IsEqualTo("Done");
     }
 
     private static Node AssignEntityProp(string entityName, string prop, string value) =>

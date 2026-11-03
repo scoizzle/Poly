@@ -1133,9 +1133,8 @@ public sealed partial class DomainToCSharpExporter {
 
 
     /// <summary>
-    /// Printed twin of <c>DomainEntityInstance.NoteAutomaticStage</c>: each stage entered at
-    /// most once per trigger (action or subscription); a second entry throws instead of
-    /// recursing. Same message as the simulator.
+    /// Each stage entered at most once per trigger (action or subscription); a second
+    /// entry throws instead of recursing.
     /// </summary>
     private static void AddAutomaticTransitionLoopGuard(
         Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
@@ -1192,10 +1191,12 @@ public sealed partial class DomainToCSharpExporter {
             AccessModifier: AccessModifier.Private));
     }
 
+    /// <summary>Printed notify-cascade bound. Nested calls past this throw instead of overflowing the stack.</summary>
+    private const int MaxNotifyDepth = 16;
+
     /// <summary>
-    /// Printed twin of the simulator notify-depth bound: nested
-    /// <c>Notify{Stage}Subscribers</c> calls past <see cref="DomainEntityInstance.MaxNotifyDepth"/>
-    /// throw instead of overflowing the stack. Same message as the simulator.
+    /// Nested <c>Notify{Stage}Subscribers</c> calls past <see cref="MaxNotifyDepth"/>
+    /// throw instead of overflowing the stack.
     /// </summary>
     private static void AddNotifyCascadeDepthGuard(
         Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
@@ -1211,12 +1212,12 @@ public sealed partial class DomainToCSharpExporter {
                 new IfStatement(
                     new GreaterThanOrEqual(
                         new Member(new ThisReference(), "_notifyDepth"),
-                        new Constant(DomainEntityInstance.MaxNotifyDepth)),
+                        new Constant(MaxNotifyDepth)),
                     new ThrowStatement(new New(
                         new NamedTypeReference("System.InvalidOperationException"),
                         new Invoke(
                             new Member(new PrimitiveTypeReference(PrimType.String), "Concat"),
-                            new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({DomainEntityInstance.MaxNotifyDepth}) while notifying '"),
+                            new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({MaxNotifyDepth}) while notifying '"),
                             new Parameter("stageName"),
                             new Constant("'."))))),
                 new Assignment(

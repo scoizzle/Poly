@@ -124,19 +124,17 @@ public class DateDifferenceDurationTests {
             }
             """);
         var domain = result.Root!;
+        var exec = ModuleExec.For(domain);
         var started = new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
-        var job = DomainEntityInstance.Create(
-            domain.Types.OfType<Entity>().Single(e => e.Name == "Job"),
-            new Dictionary<string, object?> {
-                ["Started"] = started,
-                ["Finished"] = started.AddHours(1)
-            },
-            domain);
+        var job = exec.Create((domain.Types.OfType<Entity>().Single(e => e.Name == "Job")).Name, new Dictionary<string, object?> {
+            ["Started"] = started,
+            ["Finished"] = started.AddHours(1)
+        }).Instance!;
 
-        var close = job.InvokeAction("Close");
+        var close = exec.Invoke(job, "Close");
 
         await Assert.That(close.Succeeded).IsTrue();
-        await Assert.That(job.GetProperty<object>("Elapsed")).IsEqualTo(TimeSpan.FromHours(1));
+        await Assert.That(job.Bag["Elapsed"]).IsEqualTo(TimeSpan.FromHours(1));
     }
 
     [Test]

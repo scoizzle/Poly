@@ -119,12 +119,12 @@ public class C1bConstraintFailureTests {
               C: stage { entry { if (Ready is true) { transition to B } } }
             }
             """);
+        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Z");
-        var inst = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Ready"] = true }, domain);
+        var inst = exec.Create((entity).Name, new Dictionary<string, object?> { ["Ready"] = true }).Instance!;
 
-        var ex = Assert.Throws<InvalidOperationException>(() => inst.InvokeAction("Go"));
+        var ex = Assert.Throws<InvalidOperationException>(() => exec.Invoke(inst, "Go"));
         await Assert.That(ex!.Message).Contains("Automatic stage transition loop on entity 'Z'");
     }
 

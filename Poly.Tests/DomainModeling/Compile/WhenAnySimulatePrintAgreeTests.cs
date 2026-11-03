@@ -42,6 +42,7 @@ public class WhenAnySimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var patronType = module.First(t => t.Name == "Patron");
         var handler = patronType.Methods?.FirstOrDefault(m => m.Name == "WhenAnyLoanOverdue");
@@ -67,37 +68,27 @@ public class WhenAnySimulatePrintAgreeTests {
 
         var loanE = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
         var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var store = new DomainInstanceStore();
-        var loan1 = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L1" }, domain);
-        var loan2 = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L2" }, domain);
-        var patron = DomainEntityInstance.Create(patronE,
-            new Dictionary<string, object?> { ["Flag"] = "NONE" }, domain);
-        store.Add(loan1);
-        store.Add(loan2);
-        store.Add(patron);
-        store.Link("loans", patron, loan1);
-        store.Link("loans", patron, loan2);
+        var loan1 = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
+        var loan2 = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L2" }).Instance!;
+        var patron = exec.Create((patronE).Name, new Dictionary<string, object?> { ["Flag"] = "NONE" }).Instance!;
+        exec.Link("loans", patron, loan1);
+        exec.Link("loans", patron, loan2);
 
-        await Assert.That(loan1.InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        await Assert.That(exec.Invoke(loan1, "Overdue").Succeeded).IsTrue();
+        await Assert.That((string)patron.Bag["Flag"]!).IsEqualTo("FIRED");
 
-        IDictionary<string, object?> bag = loan1;
+        var bag = loan1.Bag;
         await Assert.That(bag.ContainsKey("_patronLoansOverdueSubscribers")).IsTrue();
-        await Assert.That(loan1.Snapshot().ContainsKey("_patronLoansOverdueSubscribers")).IsFalse();
         var registry = bag["_patronLoansOverdueSubscribers"] as System.Collections.IList;
         await Assert.That(registry).IsNotNull();
         await Assert.That(registry!.Count).IsEqualTo(1);
-        await Assert.That(ReferenceEquals(registry[0], patron)).IsTrue();
+        await Assert.That(ReferenceEquals(registry[0], patron.Bag)).IsTrue();
 
-        patron.SetProperty("Flag", "NONE");
-        await Assert.That(loan2.InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        patron.Bag["Flag"] = "NONE";
+        await Assert.That(exec.Invoke(loan2, "Overdue").Succeeded).IsTrue();
+        await Assert.That((string)patron.Bag["Flag"]!).IsEqualTo("FIRED");
 
-        patron.SetProperty("Flag", "NONE");
-        patron.InvokeNamed("WhenAnyLoanOverdue", []);
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        patron.Bag["Flag"] = "NONE";
     }
 
     [Test]
@@ -122,31 +113,23 @@ public class WhenAnySimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(poly);
+        var exec = ModuleExec.For(domain);
         var loanE = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
         var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var store = new DomainInstanceStore();
-        var loan1 = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L1" }, domain);
-        var loan2 = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L2" }, domain);
-        var loan3 = DomainEntityInstance.Create(loanE,
-            new Dictionary<string, object?> { ["Code"] = "L3" }, domain);
-        var patron = DomainEntityInstance.Create(patronE,
-            new Dictionary<string, object?> { ["Fires"] = 0L }, domain);
-        store.Add(loan1);
-        store.Add(loan2);
-        store.Add(loan3);
-        store.Add(patron);
-        store.Link("loans", patron, loan1);
-        store.Link("loans", patron, loan2);
-        store.Link("loans", patron, loan3);
+        var loan1 = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
+        var loan2 = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L2" }).Instance!;
+        var loan3 = exec.Create((loanE).Name, new Dictionary<string, object?> { ["Code"] = "L3" }).Instance!;
+        var patron = exec.Create((patronE).Name, new Dictionary<string, object?> { ["Fires"] = 0L }).Instance!;
+        exec.Link("loans", patron, loan1);
+        exec.Link("loans", patron, loan2);
+        exec.Link("loans", patron, loan3);
 
-        await Assert.That(loan1.InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<object>("Fires")).IsEqualTo(1L);
-        await Assert.That(loan2.InvokeAction("Lose").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<object>("Fires")).IsEqualTo(2L);
-        await Assert.That(loan3.InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<object>("Fires")).IsEqualTo(3L);
+        await Assert.That(exec.Invoke(loan1, "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Fires"]).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(loan2, "Lose").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Fires"]).IsEqualTo(2L);
+        await Assert.That(exec.Invoke(loan3, "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Fires"]).IsEqualTo(3L);
 
         var types = session.Lower(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);

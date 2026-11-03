@@ -18,10 +18,12 @@ public sealed record ModuleOutcome(
     bool Succeeded,
     string? Error,
     ModuleInstance? Instance,
-    IReadOnlyList<ModuleInstance> CreatedChildren) {
+    IReadOnlyList<ModuleInstance> CreatedChildren,
+    IReadOnlyList<string> FailedGuards = null!) {
     internal static ModuleOutcome Ok(
         ModuleInstance? instance = null, IReadOnlyList<ModuleInstance>? created = null) =>
-        new(true, null, instance, created ?? []);
+        new(true, null, instance, created ?? [], []);
 
-    internal static ModuleOutcome Fail(string error) => new(false, error, null, []);
+    internal static ModuleOutcome Fail(string error, IReadOnlyList<string>? guards = null) =>
+        new(false, error, null, [], guards ?? []);
 }

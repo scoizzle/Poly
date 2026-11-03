@@ -173,8 +173,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     /// <summary>
     /// Lowers <paramref name="effect"/> to a Syntax AST node suitable for VM
-    /// compilation, or returns <c>null</c> when the effect must be executed
-    /// directly on a <see cref="DomainEntityInstance"/>.
+    /// compilation, or returns <c>null</c> when the effect has no lowered form.
     /// </summary>
     public Node? TryLowerVmNode(Effect effect) => Route(effect);
 

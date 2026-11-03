@@ -11,8 +11,7 @@ namespace Poly.Tests.DomainModeling.Runtime;
 
 /// <summary>
 /// S13.2a (#368): the host seam that runs the lowered module on dictionary
-/// instances. Nothing here constructs a <see cref="DomainEntityInstance"/> or a
-/// <see cref="DomainInstanceStore"/>.
+/// instances. Nothing here constructs an instance wrapper or an instance store.
 /// </summary>
 public sealed class ModuleInstanceExecutorTests {
     [Test]
@@ -426,6 +425,164 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(other.Bag["_watcherItemsActiveSubscribers"]).IsNull();
     }
 
+    // ── behaviours ported off the retired DEI suites (S13.4b) ──────────────
+
+    [Test]
+    public async Task Invoke_FailingRequire_ReturnsTheGuardNameInFailedGuards() {
+        var executor = ExecutorFor("""
+            domain Shop
+            Person: entity {
+              Age: Number
+              IsAdult: policy { Age >= 18 }
+              Draft: stage { }
+              Active: stage { }
+              Activate: action require IsAdult { transition to Active }
+            }
+            """);
+        var minor = executor.Create("Person", Values(("Age", 10L))).Instance!;
+
+        var blocked = executor.Invoke(minor, "Activate");
+
+        await Assert.That(blocked.Succeeded).IsFalse();
+        await Assert.That(blocked.FailedGuards).Contains("IsAdult");
+        await Assert.That(blocked.Error).Contains("blocked by policy 'IsAdult'");
+        await Assert.That(Stage(minor)).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task Invoke_AutomaticStageReentry_ThrowsAlreadyEnteredInThisChain() {
+        // The module bounds automatic transitions with a per-trigger set, not
+        // DomainEntityInstance.MaxTransitionDepth or its depth message.
+        var executor = ExecutorFor("""
+            domain Loop
+            Item: entity {
+              Flag: Boolean default(true)
+              Draft: stage {
+                Go: action { transition to A }
+              }
+              A: stage {
+                entry { if (Flag is true) { transition to B } }
+              }
+              B: stage {
+                entry { if (Flag is true) { transition to A } }
+              }
+            }
+            """);
+        var item = executor.Create("Item", Values()).Instance!;
+
+        var thrown = await Assert.That(() => executor.Invoke(item, "Go"))
+            .Throws<InvalidOperationException>();
+
+        await Assert.That(thrown!.Message).Contains("already entered in this chain");
+        await Assert.That(thrown.Message).Contains("A");
+        await Assert.That(Stage(item)).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task Invoke_NotifyCascade_ExceedsMaxDepth_ThrowsTheModuleMessage() {
+        var executor = ExecutorFor("""
+            domain Cycle
+            A: entity {
+              Draft: stage { }
+              Active: stage { }
+              Go: action { transition to Active }
+              seesB: one B
+              when seesB Active { transition to Active }
+            }
+            B: entity {
+              Draft: stage { }
+              Active: stage { }
+              seesA: one A
+              when seesA Active { transition to Active }
+            }
+            """);
+        var a = executor.Create("A", Values()).Instance!;
+        var b = executor.Create("B", Values()).Instance!;
+        executor.Link("seesB", a, b);
+        executor.Link("seesA", b, a);
+
+        var thrown = await Assert.That(() => executor.Invoke(a, "Go"))
+            .Throws<InvalidOperationException>();
+
+        await Assert.That(thrown!.Message).Contains("Subscription cascade");
+        await Assert.That(thrown.Message).Contains("16");
+        await Assert.That(Stage(a)).IsEqualTo("Draft");
+        await Assert.That(Stage(b)).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task Invoke_ForEachFailure_RollsBackEarlierTargets() {
+        var executor = ExecutorFor("""
+            domain Shop
+            Line: entity {
+              Qty: Number
+              IsPositive: policy { Qty > 0 }
+              Mark: action (amount: Number) require IsPositive {
+                assign Qty to amount
+              }
+            }
+            Order: entity {
+              Note: Text optional
+              lines: many Line
+              Run: action {
+                for lines as item invoke item.Mark(amount: 100)
+                assign Note to "done"
+              }
+            }
+            """);
+        var order = executor.Create("Order", Values()).Instance!;
+        var good = executor.Create("Line", Values(("Qty", 5L))).Instance!;
+        var bad = executor.Create("Line", Values(("Qty", 0L))).Instance!;
+        executor.Link("lines", order, good);
+        executor.Link("lines", order, bad);
+
+        var outcome = executor.Invoke(order, "Run");
+
+        await Assert.That(ReferenceEquals(((System.Collections.IList)order.Bag["_lines"]!)[0], good.Bag)).IsTrue();
+        await Assert.That(outcome.Succeeded).IsFalse();
+        await Assert.That(outcome.Error).Contains("blocked by policy 'IsPositive'");
+        await Assert.That(good.Bag["Qty"]).IsEqualTo(5L);
+        await Assert.That(bad.Bag["Qty"]).IsEqualTo(0L);
+        await Assert.That(order.Bag["Note"]).IsNull();
+    }
+
+    [Test]
+    public async Task Invoke_OnEntryConstraintThrow_RollsBackStageAndSkipsNotify() {
+        var executor = ExecutorFor("""
+            domain Lab
+            Widget: entity {
+              Score: Number range(1, 10) default(5)
+              Bump: Number default(100)
+              Draft: stage {
+                Go: action { transition to Active }
+              }
+              Active: stage {
+                entry { assign Score to Bump }
+              }
+            }
+            Watcher: entity {
+              Hits: Number default(0)
+              widgets: many Widget
+              when widgets Active {
+                assign Hits to Hits + 1
+              }
+            }
+            """);
+        var widget = executor.Create("Widget", Values()).Instance!;
+        var watcher = executor.Create("Watcher", Values()).Instance!;
+        executor.Link("widgets", watcher, widget);
+
+        // Inlined into an action, the range check is a DomainResult failure, not a
+        // throw. The executor rolls the transition back; the subscriber never runs.
+        var outcome = executor.Invoke(widget, "Go");
+
+        await Assert.That(outcome.Succeeded).IsFalse();
+        await Assert.That(outcome.Error).Contains("must be <= 10");
+        await Assert.That(Stage(widget)).IsEqualTo("Draft");
+        await Assert.That(widget.Bag["Score"]).IsEqualTo(5L);
+        await Assert.That(watcher.Bag["Hits"]).IsEqualTo(0L);
+    }
+
     [Test]
     public async Task Create_WithEntityIdCollection_ResolvesIdsToBagsAndRegistersSubscribers() {
         var executor = ExecutorFor(Watch);
@@ -447,6 +604,11 @@ public sealed class ModuleInstanceExecutorTests {
 
     private static Dictionary<string, object?> Values(params (string Name, object? Value)[] values) =>
         values.ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
+
+    private static string? Stage(ModuleInstance instance) =>
+        instance.Bag.TryGetValue("CurrentStage", out var stage) && stage is not null
+            ? Convert.ToString(stage, System.Globalization.CultureInfo.InvariantCulture)
+            : null;
 
     /// <summary>Analyzed domain with the storage library loaded and the module cached.</summary>
     private static Domain Lower(string poly) {

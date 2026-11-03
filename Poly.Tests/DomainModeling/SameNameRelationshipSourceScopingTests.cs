@@ -85,38 +85,35 @@ public class SameNameRelationshipSourceScopingTests {
     [Test]
     public async Task Runtime_LinkAndQuantifierPolicy_AreSourceScoped() {
         var domain = ParseAndBuild();
+        var exec = ModuleExec.For(domain);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var store = new DomainInstanceStore();
-
         var machineEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Machine");
         var bookEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Book");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
         var order2Entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order2");
 
-        var machine = DomainEntityInstance.Create(machineEntity, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity, domain: domain);
-        var book = DomainEntityInstance.Create(bookEntity, domain: domain);
-        var order2 = DomainEntityInstance.Create(order2Entity, domain: domain);
-        store.Add(machine); store.Add(order); store.Add(book); store.Add(order2);
-
+        var machine = exec.Create((machineEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var book = exec.Create((bookEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var order2 = exec.Create((order2Entity).Name, new Dictionary<string, object?>()).Instance!;
         // Each source links its own target via the SAME relationship name.
-        store.Link("orders", machine, order);
-        store.Link("orders", book, order2);
+        exec.Link("orders", machine, order);
+        exec.Link("orders", book, order2);
 
         var machinePolicy = machineEntity.Policies.Single(p => p.Name == "HasMachineOrders");
         var bookPolicy = bookEntity.Policies.Single(p => p.Name == "HasBookOrders");
-        await Assert.That(machine.EvaluatePolicy(machinePolicy)).IsTrue();
-        await Assert.That(book.EvaluatePolicy(bookPolicy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(machine, (machinePolicy).Name)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(book, (bookPolicy).Name)).IsTrue();
 
         // Discriminating: if the lookup were name-global, Book's 'orders' would resolve
         // to Machine→Order and its Order2 link would fail the target-type filter → false.
-        var machineTargets = store.GetRelatedInstances("orders", machine);
+        var machineTargets = ModuleReads.Related(exec, "orders", machine);
         await Assert.That(machineTargets.Count).IsEqualTo(1);
-        await Assert.That(machineTargets[0].Entity.Name).IsEqualTo("Order");
+        await Assert.That(machineTargets[0].EntityName).IsEqualTo("Order");
 
-        var bookTargets = store.GetRelatedInstances("orders", book);
+        var bookTargets = ModuleReads.Related(exec, "orders", book);
         await Assert.That(bookTargets.Count).IsEqualTo(1);
-        await Assert.That(bookTargets[0].Entity.Name).IsEqualTo("Order2");
+        await Assert.That(bookTargets[0].EntityName).IsEqualTo("Order2");
     }
 
     [Test]

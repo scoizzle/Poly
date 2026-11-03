@@ -20,9 +20,8 @@ namespace Poly.Tests.DomainModeling.Compile;
 ///
 /// Each test takes the module <see cref="RuntimeAnalysisCache.GetOrLower"/> produced,
 /// compiles one of its own method bodies, and executes it on a plain
-/// dictionary-backed instance. Nothing here constructs a
-/// <see cref="DomainEntityInstance"/>, a <see cref="DomainInstanceStore"/>, or any
-/// <see cref="DomainInstanceHostJobs"/> entry point. The only runtime scaffolding is
+/// dictionary-backed instance. Nothing here constructs an instance wrapper, an
+/// instance store, or a host-job entry point. The only runtime scaffolding is
 /// the CLR <see cref="DomainResult"/> the runtime already binds for every module body.
 /// </summary>
 public sealed class ModuleWithoutDeiSpikeTests {

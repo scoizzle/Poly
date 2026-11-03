@@ -199,7 +199,7 @@ public class CrossEntityMutationAnalysisTests {
         var invoice = domain.Types.OfType<Entity>().Single(e => e.Name == "Invoice");
 
         await Assert.That(NotAPropertyErrors(domain).Count()).IsEqualTo(1);
-        await Assert.That(() => DomainEntityInstance.Create(invoice, domain: domain))
+        await Assert.That(() => ModuleExec.For(domain).Create(invoice.Name, new Dictionary<string, object?>()))
             .Throws<InvalidOperationException>();
     }
 

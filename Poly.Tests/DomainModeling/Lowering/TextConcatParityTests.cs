@@ -67,7 +67,7 @@ public class TextConcatParityTests {
 
         var entityForCreate = domain.Types.OfType<Entity>().Single();
         var createEx = Assert.Throws<InvalidOperationException>(
-            () => DomainEntityInstance.Create(entityForCreate, null, domain));
+            () => ModuleExec.For(domain).Create(entityForCreate.Name, new Dictionary<string, object?>()));
         await Assert.That(createEx!.Message).IsEqualTo(first);
     }
 }

@@ -5,9 +5,8 @@ namespace Poly.DomainModeling.Meaning;
 /// <summary>
 /// Resolves a pack-owned default expression (<c>Now</c>/<c>today</c> from the temporal pack)
 /// to its CLR runtime value and export node, adapted to the target property's CLR type when
-/// known. The pack registers one resolver per expression type so the core runtime
-/// (<c>DomainEntityInstance.EvaluateDefaultValue</c>) and export
-/// (<c>EffectLoweringPass.LowerDefaultExpression</c>) never name pack IR.
+/// known. The pack registers one resolver per expression type so export
+/// (<c>EffectLoweringPass.LowerDefaultExpression</c>) never names pack IR.
 /// </summary>
 public interface IExpressionDefaultResolver {
     /// <summary>The concrete expression type this resolver owns.</summary>

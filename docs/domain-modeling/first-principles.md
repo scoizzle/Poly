@@ -205,7 +205,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Observation:** Cached policy, subscription, and action bodies are the export-shaped trees (`this`). Simulate compiles those nodes; it does not lower a parameter-rooted twin at execute time.
 
-**Observation:** Named-action execute is written to bind `MethodDefinitionNode.Body` from the cached module and not to call `LowerActionBody` at invoke time (`DomainEntityInstance.ExecuteEffectList` in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`). `LowerActionBody` still exists on `EffectLoweringPass` and is used *while* `GetOrLower` builds those cached trees. Execute-time re-lower of named actions is what the runtime comments refuse; the authoring effect list is still the input to that compile step.
+**Observation:** Named-action execute binds `MethodDefinitionNode.Body` from the cached module and does not call `LowerActionBody` at invoke time (`ModuleInstanceExecutor.Invoke`). `LowerActionBody` still exists on `EffectLoweringPass` and is used *while* `GetOrLower` builds those cached trees. Execute-time re-lower of named actions is what the host refuses; the authoring effect list is still the input to that compile step.
 
 **Observation:** Simulate compiles the same module body print emits (`ThisReference` stays). Root-program analysis does not type `this`; execute annotates those nodes as the entity type before emit. A small simulate-only bind (`BindForSimulate`) remains for dictionary-This gaps the VM cannot run as printed: action parameters and subscription `previousStage` (root-program slot 0 is This), unbound contract adapters fail closed, void fail-closed throw becomes `return DomainResult.Failure` under a trailing success return so the VM surfaces the result. Mapping back to the author’s `.poly` snippet is therefore: `.poly` → domain facts → lowered syntax → (simulate-only bind) → debug hook node.
 
@@ -219,16 +219,16 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Where it lives in code.**
 
-- Interpret: `Interpreter.Compile` then `Interpreter.Execute` (`Poly/Interpretation/Interpreter.cs`). Domain-bound simulate of a named action or policy: `DomainEntityInstance.InvokeAction` / `EvaluatePolicy` in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`, which compile cached trees with a type-definition provider and pass the instance as `This` (`SetArgs`). Named calls that have no CLR `MethodInfo` (actions, store jobs) go through `InvokeNamed` (`DomainEntityInstance.InvokeNamed.cs`). The instance is also `IDictionary<string, object?>` so reading or writing a member on `This` reads or writes that dictionary of property values (`DomainEntityInstance.Dictionary.cs`).
-- Scratch directory bound into those trees: `Poly/DomainModeling/Runtime/DomainInstanceStore.cs` (`Create`, `CreateIn`, `EnsureUnique`, `Link`, subscription fan-out on `NotifyTransition`). Success/failure object the trees return: `Poly/DomainModeling/Runtime/DomainResult.cs`. The runtime type-def bodies for `Notify`, `EnsureUnique`, `LinkRelated`, `Create`, `CreateIn`, and `ProbeCreate` are AST calls to `DomainInstanceHostJobs` (`DomainEntityInstance.Runtime.cs`). That type forwards to `DomainEntityInstance.HostAbi.cs` and throws on any receiver that is not a `DomainEntityInstance`. Actions and policies on that type-def stay empty so `InvokeNamed` owns them.
+- Interpret: `Interpreter.Compile` then `Interpreter.Execute` (`Poly/Interpretation/Interpreter.cs`). Domain-bound simulate of a named action or policy: `ModuleInstanceExecutor.Invoke` / `EvaluatePolicy` in `Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs`, which compile cached trees with a type-definition provider and pass the instance dictionary as `This` (`SetArgs`). The instance is that dictionary. Host metadata (id, entity name) stays on `ModuleInstance`, beside the bag.
+- There is no scratch instance store and no instance runtime type. Link, unlink, and the owned-child count are host mutations of the relationship fields the module owns (`ModuleInstanceExecutor.Links.cs`). Unique checks are the module's `IStoragePort` calls. Success/failure object the trees return: `Poly/DomainModeling/Runtime/DomainResult.cs`. Subscription fan-out is the module's `Notify{Stage}Subscribers` body walking the registry the host maintains on link and unlink.
 - Print of the lowered types: `DomainSession.Emit` runs `Lower`, optionally runs interpreter analysis on a `CompilationUnitNode` of those types, then `Poly/Interpretation/CSharp/CSharpGenerator.cs` per entity (`Entity.cs`, `Poly.Types.cs`).
 - MCP harness tools that ask interpret to run a named operation on a store instance: `Poly.Mcp/Tools/RuntimeTool.cs` (`invoke_action`, `create_instance`, `link_instances`), `Poly.Mcp/Tools/DomainTools.cs` (`evaluate_policy`). A DSL-fragment probe that is *not* named-policy simulate: `Poly.Mcp/Tools/OracleTool.cs`.
 
 **Roadmap phase.** **Earning its place for phase 1.** Simulation is how you verify business behavior before you sell the printed C#. Print is how that behavior becomes working software.
 
-**Observation:** `DomainEntityInstance` plus `DomainInstanceStore` is a scratch bind: dictionary `This`, string `CurrentStage`, and store links. It is the path MCP uses. It is not the generated CLR type a customer would construct. Default-value evaluation for `Create` can resolve clocks and literals through session meaning *without* going through `Interpreter` (`EvaluateDefaultValue` in `DomainEntityInstance.cs`). That path is not steppable as a syntax snippet.
+**Observation:** Simulation is the interpreter host on the module dictionary. It is the path MCP uses. It is not the generated CLR type a customer would construct. There is no instance runtime type. Create, including defaults, is the cached module factory, so it is the same tree print emits.
 
-**Observation:** C# store-job methods the exporter adds include `EnsureUnique` as a body that always returns `DomainResult.Success` (`DomainToCSharpExporter.StoreBind.cs`). Simulate’s `EnsureUnique` talks to `DomainInstanceStore`. Unique indexes on the printed side are treated as a persistence-schema concern. Create factories on the printed side may still call `Stay.Create` as the host bind of a job the tree names. Simulate and print therefore do not always execute the same host implementation of a named job.
+**Observation:** Unique assign, on simulate and on print, is the module's storage-port check (`IStoragePort`) when the persistence library is loaded. The port is session-scoped on the interpreter host and a `{Domain}DbContext` in generated C#. Create-in is the module writing the relationship field; the host registers the new dictionary.
 
 **Observation:** Policy evaluate compiles the cached `this`-shaped body (`TryGetPolicyBody`) that print emits as a bool method on the type definition. Same rule, one tree.
 
@@ -276,12 +276,12 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 **Where it lives in code.**
 
 - Compile session: `Poly/DomainModeling/Compile/DomainSession.cs` — `Language`, `Meaning`, `TypeMaps`, `Artifacts`, `Analyze`, `Lower`, `Emit`, `WithDomain` (reload if `uses` changed).
-- Conversation session: `Poly.Mcp/Sessions/McpSessionStore.cs` — `Domain`, latest analysis, revision, the `DomainSession` named `Modeling`, plus `InstanceStore` / `InstanceMap` created on first `create_instance`. Evolve holds a lock, runs `DomainEvolution`, and on success rebinds `Modeling.WithDomain`.
+- Conversation session: `Poly.Mcp/Sessions/McpSessionStore.cs` — `Domain`, latest analysis, revision, the `DomainSession` named `Modeling`, plus the module executor created on first `create_instance`. Evolve holds a lock, runs `DomainEvolution`, and on success rebinds `Modeling.WithDomain`.
 - Tools: `Poly.Mcp/Tools/DomainTools.cs` (authoring: `apply_dsl`, overview, export), `RuntimeTool.cs` (instances and invoke), `OracleTool.cs` (read-only probes).
 
 **Roadmap phase.** The compile session is **earning its place for phase 1**. The MCP conversation session is **earning its place for phase 1** as the authoring and simulation harness, not as the sold product. Agent-review loops that feed outcomes back into the product automatically are **only justified by phase 2** and are not a coded product loop today.
 
-**Observation:** MCP simulate is `DomainEntityInstance` on the scratch store, which compiles lowered bodies in-process. That *is* the interpreter, with a dictionary `This`. It is also extra machinery (instance map, JSON args, entity-typed args rebound from instance ids in `RuntimeTool.BindEntityTypedActionArgs`) between the agent and the syntax tree.
+**Observation:** MCP simulate is `ModuleInstanceExecutor` on the module dictionary, which runs lowered bodies in-process. That *is* the interpreter, with a dictionary `This`. It is also extra machinery (instance ids, JSON args, entity-typed args resolved from instance ids in `RuntimeTool`) between the agent and the syntax tree.
 
 ---
 
@@ -319,13 +319,13 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 - Flags: `PersistenceSurfacePass` / `PersistenceSurfaceMetadata`, `HttpSurfacePass` / `HttpSurfaceMetadata`. Storage structure: `StoragePass` producing `StorageMappingMetadata`.
 - `DslCompiler.CompileCore`: if persistence metadata is present, require storage mapping and add `{Domain}DbContext.cs`. If HTTP metadata is present, require storage, behavior, and aggregate metadata, require module methods, then add `Program.cs` and `demo.http`. `CompileMode` seeds language and optionally a vendor id; it does not seed `http`.
 - HTTP library: `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`. Minimal API generator: `src/Poly.DslCompiler/MinimalApiGenerator.cs`.
-- Runtime persistence of *instances* during simulate is the in-memory `DomainInstanceStore`, not Entity Framework. Unique collision and create-in go through that store when the interpreter invokes the named jobs.
+- Runtime persistence of *instances* during simulate is the executor's in-memory dictionaries and relationship fields, not Entity Framework. Unique collision goes through the session `IStoragePort`. Create-in is the module body writing the relationship field; the executor registers the new dictionary.
 
 **Roadmap phase.** **Earning its place for phase 1.** This is the sellable web-API shape. Other process shapes (CLI, gRPC, OpenAPI as further libraries) are not implemented; they would be phase 2 expansion.
 
 **Observation:** The HTTP and DbContext generators are opaque relative to Principle 0.1. You can step `Program.cs` only after print, as C#. You cannot `VmDebugger.StepOver` a generated route. The operations those routes *call* are steppable in the interpreter when you simulate the named action on a bound instance.
 
-**Observation:** On simulate, the instance’s `Notify` calls `DomainInstanceStore.NotifyTransition`, which fans out by walking links and dispatch plans (`RuntimeContractAnalyzer` metadata). Generated C# emits subscriber lists and `When…` handlers from the same dispatch plan (`DomainToCSharpExporter`). The plan is shared; the bind (in-memory links vs EF navigations) is not the same object.
+**Observation:** On simulate, a stage transition runs the module's `Notify{Stage}Subscribers` body, which walks the subscriber registry the executor maintains on link and unlink (`RuntimeContractAnalyzer` metadata). Generated C# emits the same subscriber lists and `When…` handlers from the same dispatch plan (`DomainToCSharpExporter`). The plan is shared; the bind (in-memory bags vs EF navigations) is not the same object.
 
 ---
 

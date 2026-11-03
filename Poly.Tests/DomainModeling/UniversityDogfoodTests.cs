@@ -90,157 +90,139 @@ public class UniversityDogfoodTests {
     [Test]
     public async Task University_Runtime_WalksEnrollConfirmDropAndGuards() {
         var (domain, _) = Evolve();
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
 
-        var instructor = DomainEntityInstance.Create(E("Instructor"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Kim",
-                ["Email"] = "kim@uni.test"
-            }, domain);
-        var course = DomainEntityInstance.Create(E("Course"),
-            new Dictionary<string, object?> {
-                ["Code"] = "CS101",
-                ["Title"] = "Intro"
-            }, domain);
-        var section = DomainEntityInstance.Create(E("Section"),
-            new Dictionary<string, object?> {
-                ["Cap"] = 1L,
-                ["OfferingTerm"] = "Fall"
-            }, domain);
-        var student = DomainEntityInstance.Create(E("Student"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Alex",
-                ["Email"] = "alex@uni.test"
-            }, domain);
-        store.Add(instructor);
-        store.Add(course);
-        store.Add(section);
-        store.Add(student);
-        store.Link("course", section, course);
+        var instructor = exec.Create("Instructor", new Dictionary<string, object?> {
+            ["Name"] = "Kim",
+            ["Email"] = "kim@uni.test"
+        }).Instance!;
+        var course = exec.Create("Course", new Dictionary<string, object?> {
+            ["Code"] = "CS101",
+            ["Title"] = "Intro"
+        }).Instance!;
+        var section = exec.Create("Section", new Dictionary<string, object?> {
+            ["Cap"] = 1L,
+            ["OfferingTerm"] = "Fall"
+        }).Instance!;
+        var student = exec.Create("Student", new Dictionary<string, object?> {
+            ["Name"] = "Alex",
+            ["Email"] = "alex@uni.test"
+        }).Instance!;
+        exec.Link("course", section, course);
 
-        var closeUnlinked = section.InvokeAction("Close");
+        var closeUnlinked = exec.Invoke(section, "Close");
         await Assert.That(closeUnlinked.Succeeded).IsFalse();
-        await Assert.That(closeUnlinked.FailedGuards).Contains("HasInstructor");
-        store.Link("instructor", section, instructor);
+        await Assert.That(closeUnlinked.Error).Contains("HasInstructor");
+        exec.Link("instructor", section, instructor);
 
-        var noSeat = student.InvokeAction("Enroll");
+        var noSeat = exec.Invoke(student, "Enroll");
         await Assert.That(noSeat.Succeeded).IsFalse();
 
-        var dup = DomainEntityInstance.Create(E("Student"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Other",
-                ["Email"] = "alex@uni.test"
-            }, domain);
-        var dupAdd = Assert.Throws<InvalidOperationException>(() => store.Add(dup));
-        await Assert.That(dupAdd!.Message).Contains("Email");
+        var dup = exec.Create("Student", new Dictionary<string, object?> {
+            ["Name"] = "Other",
+            ["Email"] = "alex@uni.test"
+        });
+        await Assert.That(dup.Succeeded).IsFalse();
+        await Assert.That(dup.Error).Contains("Email");
 
-        var enroll = student.InvokeAction("Enroll",
-            new Dictionary<string, object?> { ["offering"] = section });
+        var enroll = exec.Invoke(student, "Enroll", new Dictionary<string, object?> { ["offering"] = section });
         await Assert.That(enroll.Succeeded).IsTrue();
-        await Assert.That(enroll.ResultInstance).IsNotNull();
-        var enrollment = enroll.ResultInstance!;
-        await Assert.That(enrollment.CurrentStage).IsEqualTo("Pending");
-        await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(3L);
-        await Assert.That(enrollment.GetProperty<object>("EnrolledOn")).IsNotNull();
+        await Assert.That(enroll.Instance).IsNotNull();
+        var enrollment = enroll.Instance!;
+        await Assert.That(ModuleReads.Stage(enrollment)).IsEqualTo("Pending");
+        await Assert.That(student.Bag["OpenCredits"]).IsEqualTo(3L);
+        await Assert.That(enrollment.Bag["EnrolledOn"]).IsNotNull();
 
-        var closeOk = section.InvokeAction("Close");
+        var closeOk = exec.Invoke(section, "Close");
         await Assert.That(closeOk.Succeeded).IsTrue();
 
-        var confirm = enrollment.InvokeAction("Confirm");
+        var confirm = exec.Invoke(enrollment, "Confirm");
         await Assert.That(confirm.Succeeded).IsTrue();
-        await Assert.That(enrollment.CurrentStage).IsEqualTo("Registered");
-        await Assert.That(section.GetProperty<object>("SeatsTaken")).IsEqualTo(1L);
-        var enrolledOn = (DateOnly)enrollment.GetProperty<object>("EnrolledOn")!;
-        var dueDate = (DateOnly)enrollment.GetProperty<object>("DueDate")!;
+        await Assert.That(ModuleReads.Stage(enrollment)).IsEqualTo("Registered");
+        await Assert.That(section.Bag["SeatsTaken"]).IsEqualTo(1L);
+        var enrolledOn = (DateOnly)enrollment.Bag["EnrolledOn"]!;
+        var dueDate = (DateOnly)enrollment.Bag["DueDate"]!;
         await Assert.That(dueDate).IsEqualTo(enrolledOn.AddDays(14));
 
-        var student2 = DomainEntityInstance.Create(E("Student"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Blake",
-                ["Email"] = "blake@uni.test"
-            }, domain);
-        store.Add(student2);
-        var enroll2 = student2.InvokeAction("Enroll",
-            new Dictionary<string, object?> { ["offering"] = section });
+        var student2 = exec.Create("Student", new Dictionary<string, object?> {
+            ["Name"] = "Blake",
+            ["Email"] = "blake@uni.test"
+        }).Instance!;
+        var enroll2 = exec.Invoke(student2, "Enroll", new Dictionary<string, object?> { ["offering"] = section });
         await Assert.That(enroll2.Succeeded).IsTrue();
-        var enrollment2 = enroll2.ResultInstance!;
-        var confirmFull = enrollment2.InvokeAction("Confirm");
+        var enrollment2 = enroll2.Instance!;
+        var confirmFull = exec.Invoke(enrollment2, "Confirm");
         await Assert.That(confirmFull.Succeeded).IsFalse();
         await Assert.That(confirmFull.FailedGuards).Contains("not_SectionFull");
 
-        var drop = enrollment.InvokeAction("Drop");
+        var drop = exec.Invoke(enrollment, "Drop");
         await Assert.That(drop.Succeeded).IsTrue();
-        await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(0L);
-        await Assert.That(section.GetProperty<object>("SeatsTaken")).IsEqualTo(0L);
+        await Assert.That(student.Bag["OpenCredits"]).IsEqualTo(0L);
+        await Assert.That(section.Bag["SeatsTaken"]).IsEqualTo(0L);
 
         // No registered enrollments left: the filtered `for` iterates zero records, which
         // is a no-op (2026-10-17) — the action succeeds and changes nothing.
-        var dropEmpty = student.InvokeAction("DropAllRegistered");
+        var dropEmpty = exec.Invoke(student, "DropAllRegistered");
         await Assert.That(dropEmpty.Succeeded).IsTrue();
-        await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(0L);
+        await Assert.That(student.Bag["OpenCredits"]).IsEqualTo(0L);
 
-        await Assert.That(section.InvokeAction("Reopen").Succeeded).IsTrue();
-        var staffLeave = section.InvokeAction("StaffLeave");
+        await Assert.That(exec.Invoke(section, "Reopen").Succeeded).IsTrue();
+        var staffLeave = exec.Invoke(section, "StaffLeave");
         await Assert.That(staffLeave.Succeeded).IsTrue();
-        await Assert.That(instructor.CurrentStage).IsEqualTo("Leave");
-        var leaveAgain = section.InvokeAction("StaffLeave");
+        await Assert.That(ModuleReads.Stage(instructor)).IsEqualTo("Leave");
+        var leaveAgain = exec.Invoke(section, "StaffLeave");
         await Assert.That(leaveAgain.Succeeded).IsFalse();
 
-        await Assert.That(instructor.InvokeAction("Return").Succeeded).IsTrue();
-        var queue = section.InvokeAction("Queue",
-            new Dictionary<string, object?> { ["who"] = student });
+        await Assert.That(exec.Invoke(instructor, "Return").Succeeded).IsTrue();
+        var queue = exec.Invoke(section, "Queue", new Dictionary<string, object?> { ["who"] = student });
         await Assert.That(queue.Succeeded).IsTrue();
-        var offer = queue.ResultInstance!;
-        await Assert.That(offer.CurrentStage).IsEqualTo("Queued");
+        var offer = queue.Instance!;
+        await Assert.That(ModuleReads.Stage(offer)).IsEqualTo("Queued");
         await Assert.That(E("Section").Policies.First(p => p.Name == "HasWaiters")).IsNotNull();
-        await Assert.That(section.EvaluatePolicy(E("Section").Policies.First(p => p.Name == "HasWaiters"))).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(section, (E("Section").Policies.First(p => p.Name == "HasWaiters")).Name)).IsTrue();
 
-        await Assert.That(offer.InvokeAction("Seat").Succeeded).IsTrue();
-        await Assert.That(section.GetProperty<object>("OfferedSeats")).IsEqualTo(1L);
-        var queue2 = section.InvokeAction("Queue",
-            new Dictionary<string, object?> { ["who"] = student2 });
+        await Assert.That(exec.Invoke(offer, "Seat").Succeeded).IsTrue();
+        await Assert.That(section.Bag["OfferedSeats"]).IsEqualTo(1L);
+        var queue2 = exec.Invoke(section, "Queue", new Dictionary<string, object?> { ["who"] = student2 });
         await Assert.That(queue2.Succeeded).IsTrue();
-        await Assert.That(queue2.ResultInstance!.InvokeAction("Seat").Succeeded).IsTrue();
-        await Assert.That(section.GetProperty<object>("OfferedSeats")).IsEqualTo(2L);
+        await Assert.That(exec.Invoke(queue2.Instance!, "Seat").Succeeded).IsTrue();
+        await Assert.That(section.Bag["OfferedSeats"]).IsEqualTo(2L);
 
-        await Assert.That(offer.InvokeAction("Cancel").Succeeded).IsTrue();
-        await Assert.That(offer.CurrentStage).IsEqualTo("Cancelled");
-        await Assert.That(section.GetProperty<object>("WaitCleared")).IsEqualTo(0L);
-        await Assert.That(queue2.ResultInstance!.InvokeAction("Cancel").Succeeded).IsTrue();
-        await Assert.That(section.GetProperty<object>("WaitCleared")).IsEqualTo(1L);
-        var cancelAgain = offer.InvokeAction("Cancel");
+        await Assert.That(exec.Invoke(offer, "Cancel").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(offer)).IsEqualTo("Cancelled");
+        await Assert.That(section.Bag["WaitCleared"]).IsEqualTo(0L);
+        await Assert.That(exec.Invoke(queue2.Instance!, "Cancel").Succeeded).IsTrue();
+        await Assert.That(section.Bag["WaitCleared"]).IsEqualTo(1L);
+        var cancelAgain = exec.Invoke(offer, "Cancel");
         await Assert.That(cancelAgain.Succeeded).IsFalse();
 
-        var enroll3 = student.InvokeAction("Enroll",
-            new Dictionary<string, object?> { ["offering"] = section });
+        var enroll3 = exec.Invoke(student, "Enroll", new Dictionary<string, object?> { ["offering"] = section });
         await Assert.That(enroll3.Succeeded).IsTrue();
-        var e3 = enroll3.ResultInstance!;
-        await Assert.That(e3.InvokeAction("Confirm").Succeeded).IsTrue();
-        var failGrade = e3.InvokeAction("RecordGrade",
-            new Dictionary<string, object?> { ["score"] = 50L });
+        var e3 = enroll3.Instance!;
+        await Assert.That(exec.Invoke(e3, "Confirm").Succeeded).IsTrue();
+        var failGrade = exec.Invoke(e3, "RecordGrade", new Dictionary<string, object?> { ["score"] = 50L });
         await Assert.That(failGrade.Succeeded).IsTrue();
-        await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
+        await Assert.That(e3.Bag["Grade"]).IsEqualTo(0L);
         // No enrollment passes the predicate yet (Grade 50 < 70): the filtered `for` is a
         // no-op, so the action succeeds and nothing is completed.
-        var noPass = student.InvokeAction("CompletePassing");
+        var noPass = exec.Invoke(student, "CompletePassing");
         await Assert.That(noPass.Succeeded).IsTrue();
-        await Assert.That(e3.CurrentStage).IsEqualTo("Registered");
-        await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(0L);
+        await Assert.That(ModuleReads.Stage(e3)).IsEqualTo("Registered");
+        await Assert.That(e3.Bag["Grade"]).IsEqualTo(0L);
 
-        var passGrade = e3.InvokeAction("RecordGrade",
-            new Dictionary<string, object?> { ["score"] = 90L });
+        var passGrade = exec.Invoke(e3, "RecordGrade", new Dictionary<string, object?> { ["score"] = 90L });
         await Assert.That(passGrade.Succeeded).IsTrue();
-        await Assert.That(e3.GetProperty<object>("Grade")).IsEqualTo(90L);
-        var completePass = student.InvokeAction("CompletePassing");
+        await Assert.That(e3.Bag["Grade"]).IsEqualTo(90L);
+        var completePass = exec.Invoke(student, "CompletePassing");
         await Assert.That(completePass.Succeeded).IsTrue();
-        await Assert.That(e3.CurrentStage).IsEqualTo("Completed");
-        await Assert.That(student.GetProperty<object>("OpenCredits")).IsEqualTo(0L);
-        await Assert.That(student.GetProperty<object>("Completions")).IsEqualTo(1L);
-        await Assert.That(student.GetProperty<object>("LastGrade")).IsEqualTo(90L);
+        await Assert.That(ModuleReads.Stage(e3)).IsEqualTo("Completed");
+        await Assert.That(student.Bag["OpenCredits"]).IsEqualTo(0L);
+        await Assert.That(student.Bag["Completions"]).IsEqualTo(1L);
+        await Assert.That(student.Bag["LastGrade"]).IsEqualTo(90L);
 
-        await Assert.That(student.InvokeAction("Suspend").Succeeded).IsTrue();
-        await Assert.That(student.CurrentStage).IsEqualTo("Suspended");
-        await Assert.That(student.GetProperty<object>("Holds")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(student, "Suspend").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(student)).IsEqualTo("Suspended");
+        await Assert.That(student.Bag["Holds"]).IsEqualTo(1L);
     }
 }

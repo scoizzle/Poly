@@ -106,20 +106,17 @@ public class ActionEntityReturnTests {
               Draft: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var customerEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
-        var customer = DomainEntityInstance.Create(customerEntity,
-            new Dictionary<string, object?> { ["Name"] = "A" }, domain);
-        store.Add(customer);
-
-        var result = customer.InvokeAction("PlaceOrder");
+        var customer = exec.Create((customerEntity).Name, new Dictionary<string, object?> { ["Name"] = "A" }).Instance!;
+        var result = exec.Invoke(customer, "PlaceOrder");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.ResultTypeName).IsEqualTo("Order");
-        await Assert.That(result.ResultInstance).IsNotNull();
-        await Assert.That(result.ResultInstance!.Entity.Name).IsEqualTo("Order");
-        await Assert.That(result.ResultInstance.GetProperty<string>("Code")).IsEqualTo("O1");
+        await Assert.That(result.Instance?.EntityName).IsEqualTo("Order");
+        await Assert.That(result.Instance).IsNotNull();
+        await Assert.That(result.Instance!.EntityName).IsEqualTo("Order");
+        await Assert.That((string)result.Instance.Bag["Code"]!).IsEqualTo("O1");
     }
 
     [Test]
@@ -379,20 +376,15 @@ public class ActionEntityReturnTests {
               borrower: Patron
             }
             """);
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var bookEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
         var patronEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var book = DomainEntityInstance.Create(bookEntity,
-            new Dictionary<string, object?> { ["Title"] = "Dune" }, domain);
-        var patron = DomainEntityInstance.Create(patronEntity, domain: domain);
-        store.Add(book);
-        store.Add(patron);
-
-        var result = patron.InvokeAction("CheckOut",
-            new Dictionary<string, object?> { ["book"] = book });
+        var book = exec.Create((bookEntity).Name, new Dictionary<string, object?> { ["Title"] = "Dune" }).Instance!;
+        var patron = exec.Create((patronEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(patron, "CheckOut", new Dictionary<string, object?> { ["book"] = book });
         await Assert.That(result.Succeeded).IsTrue();
-        var loan = patron.CreatedChildren.Single();
-        await Assert.That(store.GetRelatedInstances("book", loan).Single()).IsEqualTo(book);
+        var loan = result.CreatedChildren.Single();
+        await Assert.That(ModuleReads.Related(exec, "book", loan).Single()).IsEqualTo(book);
     }
 
     [Test]
@@ -408,20 +400,19 @@ public class ActionEntityReturnTests {
             }
             Loan: entity { book: Book }
             """);
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var bookE = domain.Types.OfType<Entity>().First(e => e.Name == "Book");
         var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var inStore = DomainEntityInstance.Create(bookE,
-            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
-        var duplicate = DomainEntityInstance.Create(bookE,
-            new Dictionary<string, object?> { ["ISBN"] = "978-1" }, domain);
-        var patron = DomainEntityInstance.Create(patronE, domain: domain);
-        store.Add(inStore);
-        store.Add(patron);
-        var result = patron.InvokeAction("CheckOut",
-            new Dictionary<string, object?> { ["book"] = duplicate });
+        exec.Create((bookE).Name, new Dictionary<string, object?> { ["ISBN"] = "978-1" });
+        // Create fails and registers nothing. The deleted store left this book
+        // unregistered; create-in adopted it and failed unique. Pass that bag.
+        _ = exec.Create((bookE).Name, new Dictionary<string, object?> { ["ISBN"] = "978-1" });
+        var duplicate = new ModuleInstance(
+            "duplicate", bookE.Name, new Dictionary<string, object?> { ["ISBN"] = "978-1" });
+        var patron = exec.Create((patronE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(patron, "CheckOut", new Dictionary<string, object?> { ["book"] = duplicate });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
+        await Assert.That(result.Error).Contains("Unique");
     }
 
     [Test]
@@ -440,17 +431,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "x" });
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "x" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("pattern");
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("pattern");
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -469,21 +457,16 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(existing);
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -502,19 +485,16 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE, domain: domain);
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(existing);
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue");
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?>()).Instance!;
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -528,20 +508,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var other = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
-        store.Add(existing);
-        store.Add(other);
-
-        var result = other.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
@@ -562,21 +536,16 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(existing);
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -587,25 +556,20 @@ public class ActionEntityReturnTests {
               Plate: Text unique
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var other = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
-        store.Add(existing);
-        store.Add(other);
-
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
         var thrown = false;
         try {
-            other.SetProperty("Plate", "ABC123");
+            exec.SetProperty(other, "Plate", "ABC123");
         }
         catch (InvalidOperationException ex) {
             thrown = true;
             await Assert.That(ex.Message).Contains("Unique");
         }
         await Assert.That(thrown).IsTrue();
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
@@ -621,20 +585,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var other = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
-        store.Add(existing);
-        store.Add(other);
-
-        var result = other.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
@@ -651,20 +609,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var other = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
-        store.Add(existing);
-        store.Add(other);
-
-        var result = other.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
@@ -682,20 +634,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var other = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain);
-        store.Add(existing);
-        store.Add(other);
-
-        var result = other.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
@@ -718,22 +664,17 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(existing);
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.GetProperty<bool>("Create")).IsFalse();
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That((bool)lot.Bag["Create"]!).IsFalse();
+        await Assert.That(result.CreatedChildren).IsEmpty();
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Lot", "Issue", out var issue)).IsTrue();
@@ -769,21 +710,16 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain);
-        var lot = DomainEntityInstance.Create(lotE, domain: domain);
-        store.Add(existing);
-        store.Add(lot);
-
-        var result = lot.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var existing = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.GetProperty<bool>("Create")).IsFalse();
-        await Assert.That(lot.GetProperty<object>("Occupied")).IsEqualTo(0L);
-        await Assert.That(lot.CreatedChildren).IsEmpty();
+        await Assert.That((bool)lot.Bag["Create"]!).IsFalse();
+        await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -805,16 +741,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var studentEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Student");
-        var student = DomainEntityInstance.Create(studentEntity,
-            new Dictionary<string, object?> { ["Name"] = "Alex" }, domain);
-        var store = new DomainInstanceStore();
-        store.Add(student);
-
-        var result = student.InvokeAction("Meet");
+        var student = exec.Create((studentEntity).Name, new Dictionary<string, object?> { ["Name"] = "Alex" }).Instance!;
+        var result = exec.Invoke(student, "Meet");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.FailedGuards).Contains("HasAdvisor");
-        await Assert.That(student.GetProperty<object>("Meetings")).IsEqualTo(0L);
+        await Assert.That(result.Error).Contains("HasAdvisor");
+        await Assert.That(student.Bag["Meetings"]).IsEqualTo(0L);
     }
 
     [Test]
@@ -846,14 +779,12 @@ public class ActionEntityReturnTests {
               Posted: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var invoiceEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Invoice");
-        var invoice = DomainEntityInstance.Create(invoiceEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(invoice);
-
-        var result = invoice.InvokeAction("Submit");
+        var invoice = exec.Create((invoiceEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(invoice, "Submit");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.FailedGuards).Contains("HasCustomer");
+        await Assert.That(result.Error).Contains("HasCustomer");
     }
 
     [Test]
@@ -881,23 +812,19 @@ public class ActionEntityReturnTests {
               Cooking: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var stationEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Station");
         var ticketEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var store = new DomainInstanceStore();
-        var station = DomainEntityInstance.Create(stationEntity,
-            new Dictionary<string, object?> { ["Name"] = "Grill" }, domain);
-        var ticket = DomainEntityInstance.Create(ticketEntity,
-            new Dictionary<string, object?> { ["TableNo"] = "12" }, domain);
-        store.Add(station);
-        store.Add(ticket);
-        store.Link("station", ticket, station);
+        var station = exec.Create((stationEntity).Name, new Dictionary<string, object?> { ["Name"] = "Grill" }).Instance!;
+        var ticket = exec.Create((ticketEntity).Name, new Dictionary<string, object?> { ["TableNo"] = "12" }).Instance!;
+        exec.Link("station", ticket, station);
 
-        await Assert.That(station.InvokeAction("Fire").Succeeded).IsTrue();
-        var send = ticket.InvokeAction("Send");
+        await Assert.That(exec.Invoke(station, "Fire").Succeeded).IsTrue();
+        var send = exec.Invoke(ticket, "Send");
         await Assert.That(send.Succeeded).IsFalse();
-        await Assert.That(send.ErrorMessage).Contains("requires stage 'Ready'");
-        await Assert.That(ticket.CurrentStage).IsEqualTo("Queued");
-        await Assert.That(station.CurrentStage).IsEqualTo("Busy");
+        await Assert.That(send.Error).Contains("requires stage 'Ready'");
+        await Assert.That(ModuleReads.Stage(ticket)).IsEqualTo("Queued");
+        await Assert.That(ModuleReads.Stage(station)).IsEqualTo("Busy");
     }
 
     [Test]
@@ -937,16 +864,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(1L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -964,16 +888,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -993,16 +914,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(1L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1022,18 +940,15 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
         // Failure, not throw-after-mutate (EffectExecutor catch path).
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1054,16 +969,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["rate"] = 0L, ["confirm"] = false });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["rate"] = 0L, ["confirm"] = false });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(1L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(1L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1084,17 +996,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["rate"] = 0L, ["confirm"] = true });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["rate"] = 0L, ["confirm"] = true });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).IsNotNull();
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).IsNotNull();
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1116,22 +1025,19 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> {
-                ["a"] = 0L,
-                ["b"] = 0L,
-                ["c"] = 0L,
-                ["d"] = 0L,
-                ["e"] = 0L,
-                ["confirm"] = false
-            });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> {
+            ["a"] = 0L,
+            ["b"] = 0L,
+            ["c"] = 0L,
+            ["d"] = 0L,
+            ["e"] = 0L,
+            ["confirm"] = false
+        });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1153,23 +1059,20 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> {
-                ["a"] = 0L,
-                ["b"] = 0L,
-                ["c"] = 0L,
-                ["d"] = 0L,
-                ["e"] = 0L,
-                ["confirm"] = true
-            });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> {
+            ["a"] = 0L,
+            ["b"] = 0L,
+            ["c"] = 0L,
+            ["d"] = 0L,
+            ["e"] = 0L,
+            ["confirm"] = true
+        });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).IsNotNull();
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).IsNotNull();
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1190,17 +1093,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false, ["wait"] = true });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false, ["wait"] = true });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1221,17 +1121,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Guest", "Book", out var book)).IsTrue();
@@ -1267,17 +1164,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = true });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Guest", "Book", out var book)).IsTrue();
@@ -1312,17 +1206,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-
-        var result = guest.InvokeAction("Book",
-            new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "Book", new Dictionary<string, object?> { ["nights"] = 0L, ["confirm"] = false });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Nights");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Nights");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
             domain, "Guest", "Book", out var book)).IsTrue();
@@ -1357,10 +1248,12 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        await Assert.That(guest.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(guest.CreatedChildren[0].Entity.Name).IsEqualTo("Stay");
+        var created = exec.Create(guestEntity.Name, new Dictionary<string, object?>());
+        await Assert.That(created.Succeeded).IsTrue();
+        await Assert.That(created.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(created.CreatedChildren[0].EntityName).IsEqualTo("Stay");
     }
 
     [Test]
@@ -1382,16 +1275,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var thrown = false;
-        try {
-            DomainEntityInstance.Create(guestEntity, domain: domain);
-        }
-        catch (ConstraintFailureException ex) {
-            thrown = true;
-            await Assert.That(ex.Message).Contains("Code");
-        }
-        await Assert.That(thrown).IsTrue();
+        // DomainEntityInstance.Create threw ConstraintFailureException. The module
+        // factory still throws from the void entry effect; a result would diverge.
+        await Assert.That(() => exec.Create(guestEntity.Name, new Dictionary<string, object?>()))
+            .Throws<ConstraintFailureException>()
+            .WithMessageContaining("Code");
     }
 
     [Test]
@@ -1415,14 +1305,13 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-        var result = guest.InvokeAction("OpenIt");
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "OpenIt");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(guest.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(guest.CreatedChildren[0].Entity.Name).IsEqualTo("Stay");
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(result.CreatedChildren[0].EntityName).IsEqualTo("Stay");
     }
 
     [Test]
@@ -1447,15 +1336,14 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-        var result = guest.InvokeAction("OpenIt");
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "OpenIt");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Code");
-        await Assert.That(guest.CurrentStage).IsEqualTo("Draft");
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Code");
+        await Assert.That(ModuleReads.Stage(guest)).IsEqualTo("Draft");
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1482,16 +1370,15 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        var guest = DomainEntityInstance.Create(guestEntity, domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(guest);
-        var result = guest.InvokeAction("OpenIt");
+        var guest = exec.Create((guestEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(guest, "OpenIt");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Code");
-        await Assert.That(guest.GetProperty<object>("OpenStays")).IsEqualTo(0L);
-        await Assert.That(guest.CurrentStage).IsEqualTo("Draft");
-        await Assert.That(guest.CreatedChildren).IsEmpty();
+        await Assert.That(result.Error).Contains("Code");
+        await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
+        await Assert.That(ModuleReads.Stage(guest)).IsEqualTo("Draft");
+        await Assert.That(result.CreatedChildren).IsEmpty();
     }
 
     [Test]
@@ -1521,22 +1408,18 @@ public class ActionEntityReturnTests {
               Overdue: stage { }
             }
             """);
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var patronEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
         var loanEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
-        var patron = DomainEntityInstance.Create(patronEntity,
-            new Dictionary<string, object?> { ["Flag"] = "NONE" }, domain: domain);
-        var loan = DomainEntityInstance.Create(loanEntity,
-            new Dictionary<string, object?> { ["Code"] = "L1" }, domain: domain);
-        store.Add(patron);
-        store.Add(loan);
-        store.Link("loans", patron, loan);
+        var patron = exec.Create((patronEntity).Name, new Dictionary<string, object?> { ["Flag"] = "NONE" }).Instance!;
+        var loan = exec.Create((loanEntity).Name, new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
+        exec.Link("loans", patron, loan);
 
-        var result = loan.InvokeAction("Overdue");
+        var result = exec.Invoke(loan, "Overdue");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
-        await Assert.That(patron.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(patron.CreatedChildren[0].Entity.Name).IsEqualTo("Stay");
+        await Assert.That((string)patron.Bag["Flag"]!).IsEqualTo("FIRED");
+        await Assert.That(result.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(result.CreatedChildren[0].EntityName).IsEqualTo("Stay");
     }
 
     [Test]
@@ -1556,22 +1439,19 @@ public class ActionEntityReturnTests {
               Abort: action { invoke Cancel }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var ticketEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var store = new DomainInstanceStore();
-
-        var draftTicket = DomainEntityInstance.Create(ticketEntity, domain: domain);
-        store.Add(draftTicket);
-        var draftAbort = draftTicket.InvokeAction("Abort");
+        var draftTicket = exec.Create((ticketEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var draftAbort = exec.Invoke(draftTicket, "Abort");
         await Assert.That(draftAbort.Succeeded).IsTrue();
-        await Assert.That(draftTicket.GetProperty<object>("Flag")).IsEqualTo(1L);
+        await Assert.That(draftTicket.Bag["Flag"]).IsEqualTo(1L);
 
-        var openTicket = DomainEntityInstance.Create(ticketEntity, domain: domain);
-        store.Add(openTicket);
-        var opened = openTicket.InvokeAction("OpenIt");
+        var openTicket = exec.Create((ticketEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var opened = exec.Invoke(openTicket, "OpenIt");
         await Assert.That(opened.Succeeded).IsTrue();
-        var openAbort = openTicket.InvokeAction("Abort");
+        var openAbort = exec.Invoke(openTicket, "Abort");
         await Assert.That(openAbort.Succeeded).IsTrue();
-        await Assert.That(openTicket.GetProperty<object>("Flag")).IsEqualTo(2L);
+        await Assert.That(openTicket.Bag["Flag"]).IsEqualTo(2L);
     }
 
     [Test]
@@ -1594,18 +1474,16 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
-        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
-        store.Add(cart);
-
-        var result = cart.InvokeAction("Place");
+        var cart = exec.Create((cartEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(cart, "Place");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(0L);
-        await Assert.That(cart.CreatedChildren).IsEmpty();
-        await Assert.That(result.ResultInstance).IsNull();
+        await Assert.That(cart.Bag["Flag"]).IsEqualTo(0L);
+        await Assert.That(result.CreatedChildren).IsEmpty();
+        await Assert.That(result.Instance).IsNull();
     }
 
     [Test]
@@ -1627,20 +1505,18 @@ public class ActionEntityReturnTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var cartEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Cart");
-        var cart = DomainEntityInstance.Create(cartEntity, domain: domain);
-        store.Add(cart);
-
-        var result = cart.InvokeAction("Place");
+        var cart = exec.Create((cartEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(cart, "Place");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(cart.GetProperty<object>("Flag")).IsEqualTo(2L);
-        await Assert.That(result.ResultTypeName).IsEqualTo("Item");
-        await Assert.That(result.ResultInstance).IsNotNull();
-        await Assert.That(result.ResultInstance!.Entity.Name).IsEqualTo("Item");
-        await Assert.That(result.ResultInstance.GetProperty<string>("Name")).IsEqualTo("x");
+        await Assert.That(cart.Bag["Flag"]).IsEqualTo(2L);
+        await Assert.That(result.Instance?.EntityName).IsEqualTo("Item");
+        await Assert.That(result.Instance).IsNotNull();
+        await Assert.That(result.Instance!.EntityName).IsEqualTo("Item");
+        await Assert.That((string)result.Instance.Bag["Name"]!).IsEqualTo("x");
     }
 
     [Test]

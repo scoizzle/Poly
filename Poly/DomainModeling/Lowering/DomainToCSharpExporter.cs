@@ -987,7 +987,6 @@ public sealed partial class DomainToCSharpExporter {
             ));
         }
 
-        // Store fan-out is DomainEntityInstance.Notify on the runtime path.
         // Generated C# fans out via Notify{Stage}Subscribers; do not emit a
         // no-op Notify(string) (Fleet dogfood).
 

@@ -50,23 +50,20 @@ public class SurfaceExtensionCompositionTests {
               Active: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var customer = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
-        var cust = DomainEntityInstance.Create(customer,
-            new Dictionary<string, object?> { ["LastOrderCode"] = "NONE" }, domain: domain);
-        store.Add(cust);
-
-        var place = cust.InvokeAction("PlaceOrder");
+        var cust = exec.Create((customer).Name, new Dictionary<string, object?> { ["LastOrderCode"] = "NONE" }).Instance!;
+        var place = exec.Invoke(cust, "PlaceOrder");
         await Assert.That(place.Succeeded).IsTrue();
-        await Assert.That(cust.CreatedChildren.Count).IsEqualTo(1);
-        var order = cust.CreatedChildren[0];
-        await Assert.That(store.IsLinked("orders", cust, order)).IsTrue();
-        await Assert.That(order.GetProperty<string>("Code")).IsEqualTo("FROM-CREATE");
+        await Assert.That(place.CreatedChildren.Count).IsEqualTo(1);
+        var order = place.CreatedChildren[0];
+        await Assert.That(exec.IsLinked("orders", cust, order)).IsTrue();
+        await Assert.That((string)order.Bag["Code"]!).IsEqualTo("FROM-CREATE");
 
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
-        await Assert.That(cust.GetProperty<string>("LastOrderCode")).IsEqualTo("FROM-CREATE");
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
+        await Assert.That((string)cust.Bag["LastOrderCode"]!).IsEqualTo("FROM-CREATE");
     }
 
     // ── unlink honesty ─────────────────────────────────────────
@@ -95,33 +92,29 @@ public class SurfaceExtensionCompositionTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var trackerEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var tracker = DomainEntityInstance.Create(trackerEntity,
-            new Dictionary<string, object?> { ["Status"] = "UNSET" }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "ORD-1" }, domain: domain);
-        store.Add(tracker);
-        store.Add(order);
-        store.Link("Tracks", tracker, order);
+        var tracker = exec.Create((trackerEntity).Name, new Dictionary<string, object?> { ["Status"] = "UNSET" }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "ORD-1" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
         var hasOrder = trackerEntity.Policies.Single(p => p.Name == "HasOrder");
-        await Assert.That(tracker.EvaluatePolicy(hasOrder)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(tracker, (hasOrder).Name)).IsTrue();
 
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("ORD-1");
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("ORD-1");
 
-        store.Unlink("Tracks", tracker, order);
-        await Assert.That(tracker.EvaluatePolicy(hasOrder)).IsFalse();
+        exec.Unlink("Tracks", tracker, order);
+        await Assert.That(exec.EvaluatePolicy(tracker, (hasOrder).Name)).IsFalse();
 
-        await Assert.That(order.InvokeAction("Reset").Succeeded).IsTrue();
-        tracker.SetProperty("Status", "AFTER-UNLINK");
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(order, "Reset").Succeeded).IsTrue();
+        tracker.Bag["Status"] = "AFTER-UNLINK";
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
         // Unlinked: peer when must not fire
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("AFTER-UNLINK");
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("AFTER-UNLINK");
     }
 
     // ── multi-subscriber fan-out ───────────────────────────────
@@ -146,26 +139,20 @@ public class SurfaceExtensionCompositionTests {
               Active: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var trackerEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var t1 = DomainEntityInstance.Create(trackerEntity,
-            new Dictionary<string, object?> { ["LastCode"] = "NONE" }, domain: domain);
-        var t2 = DomainEntityInstance.Create(trackerEntity,
-            new Dictionary<string, object?> { ["LastCode"] = "NONE" }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "SHARED-99" }, domain: domain);
-        store.Add(t1);
-        store.Add(t2);
-        store.Add(order);
-        store.Link("Tracks", t1, order);
-        store.Link("Tracks", t2, order);
+        var t1 = exec.Create((trackerEntity).Name, new Dictionary<string, object?> { ["LastCode"] = "NONE" }).Instance!;
+        var t2 = exec.Create((trackerEntity).Name, new Dictionary<string, object?> { ["LastCode"] = "NONE" }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "SHARED-99" }).Instance!;
+        exec.Link("Tracks", t1, order);
+        exec.Link("Tracks", t2, order);
 
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
-        await Assert.That(t1.GetProperty<string>("LastCode")).IsEqualTo("SHARED-99");
-        await Assert.That(t2.GetProperty<string>("LastCode")).IsEqualTo("SHARED-99");
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
+        await Assert.That((string)t1.Bag["LastCode"]!).IsEqualTo("SHARED-99");
+        await Assert.That((string)t2.Bag["LastCode"]!).IsEqualTo("SHARED-99");
     }
 
     // ── multi-stage when list ──────────────────────────────────
@@ -193,26 +180,22 @@ public class SurfaceExtensionCompositionTests {
               Completed: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var trackerEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var tracker = DomainEntityInstance.Create(trackerEntity,
-            new Dictionary<string, object?> { ["Status"] = "UNSET" }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "MS-1" }, domain: domain);
-        store.Add(tracker);
-        store.Add(order);
-        store.Link("Tracks", tracker, order);
+        var tracker = exec.Create((trackerEntity).Name, new Dictionary<string, object?> { ["Status"] = "UNSET" }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "MS-1" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("MS-1");
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("MS-1");
 
-        tracker.SetProperty("Status", "CLEARED");
-        order.SetProperty("Code", "MS-2");
-        await Assert.That(order.InvokeAction("Complete").Succeeded).IsTrue();
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("MS-2");
+        tracker.Bag["Status"] = "CLEARED";
+        order.Bag["Code"] = "MS-2";
+        await Assert.That(exec.Invoke(order, "Complete").Succeeded).IsTrue();
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("MS-2");
     }
 
     // ── stage peer + entity peer same notify ───────────────────
@@ -248,29 +231,25 @@ public class SurfaceExtensionCompositionTests {
               Active: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var trackerEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var tracker = DomainEntityInstance.Create(trackerEntity,
-            new Dictionary<string, object?> {
-                ["Status"] = "UNSET",
-                ["StageNote"] = "NONE",
-                ["LastCode"] = "NONE"
-            }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "BOTH-7" }, domain: domain);
-        store.Add(tracker);
-        store.Add(order);
-        store.Link("Tracks", tracker, order);
+        var tracker = exec.Create((trackerEntity).Name, new Dictionary<string, object?> {
+            ["Status"] = "UNSET",
+            ["StageNote"] = "NONE",
+            ["LastCode"] = "NONE"
+        }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "BOTH-7" }).Instance!;
+        exec.Link("Tracks", tracker, order);
 
-        await Assert.That(tracker.CurrentStage).IsEqualTo("Watching");
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(tracker)).IsEqualTo("Watching");
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
 
-        await Assert.That(tracker.GetProperty<string>("StageNote")).IsEqualTo("BOTH-7");
-        await Assert.That(tracker.GetProperty<string>("LastCode")).IsEqualTo("BOTH-7");
-        await Assert.That(tracker.GetProperty<string>("Status")).IsEqualTo("STAGE");
+        await Assert.That((string)tracker.Bag["StageNote"]!).IsEqualTo("BOTH-7");
+        await Assert.That((string)tracker.Bag["LastCode"]!).IsEqualTo("BOTH-7");
+        await Assert.That((string)tracker.Bag["Status"]!).IsEqualTo("STAGE");
     }
 
     // ── multi-link path-prefix (also unit-tested elsewhere; DSL path) ──
@@ -321,26 +300,21 @@ public class SurfaceExtensionCompositionTests {
               Code: Text
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var customer = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var cust = DomainEntityInstance.Create(customer,
-            new Dictionary<string, object?> { ["Status"] = "open" }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "1" }, domain: domain);
-        store.Add(cust);
-        store.Add(order);
-
-        var blocked = cust.InvokeAction("Ship");
+        var cust = exec.Create((customer).Name, new Dictionary<string, object?> { ["Status"] = "open" }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "1" }).Instance!;
+        var blocked = exec.Invoke(cust, "Ship");
         await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(cust.GetProperty<string>("Status")).IsEqualTo("open");
+        await Assert.That((string)cust.Bag["Status"]!).IsEqualTo("open");
 
-        store.Link("orders", cust, order);
-        var ok = cust.InvokeAction("Ship");
+        exec.Link("orders", cust, order);
+        var ok = exec.Invoke(cust, "Ship");
         await Assert.That(ok.Succeeded).IsTrue();
-        await Assert.That(cust.GetProperty<string>("Status")).IsEqualTo("shipped");
+        await Assert.That((string)cust.Bag["Status"]!).IsEqualTo("shipped");
     }
 
     // ── if (Rel exists) in action ──────────────────────────────
@@ -364,24 +338,19 @@ public class SurfaceExtensionCompositionTests {
               Code: Text
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var customer = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var orderEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Order");
-        var cust = DomainEntityInstance.Create(customer,
-            new Dictionary<string, object?> { ["Status"] = "?" }, domain: domain);
-        var order = DomainEntityInstance.Create(orderEntity,
-            new Dictionary<string, object?> { ["Code"] = "1" }, domain: domain);
-        store.Add(cust);
-        store.Add(order);
+        var cust = exec.Create((customer).Name, new Dictionary<string, object?> { ["Status"] = "?" }).Instance!;
+        var order = exec.Create((orderEntity).Name, new Dictionary<string, object?> { ["Code"] = "1" }).Instance!;
+        await Assert.That(exec.Invoke(cust, "Mark").Succeeded).IsTrue();
+        await Assert.That((string)cust.Bag["Status"]!).IsEqualTo("none");
 
-        await Assert.That(cust.InvokeAction("Mark").Succeeded).IsTrue();
-        await Assert.That(cust.GetProperty<string>("Status")).IsEqualTo("none");
-
-        store.Link("orders", cust, order);
-        await Assert.That(cust.InvokeAction("Mark").Succeeded).IsTrue();
-        await Assert.That(cust.GetProperty<string>("Status")).IsEqualTo("has");
+        exec.Link("orders", cust, order);
+        await Assert.That(exec.Invoke(cust, "Mark").Succeeded).IsTrue();
+        await Assert.That((string)cust.Bag["Status"]!).IsEqualTo("has");
     }
 
     // ── analysis: unused binder OK; wrong root fails ───────────
@@ -458,21 +427,18 @@ public class SurfaceExtensionCompositionTests {
               Total: Number
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var store = new DomainInstanceStore();
         var customer = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
-        var cust = DomainEntityInstance.Create(customer,
-            new Dictionary<string, object?> { ["Name"] = "A" }, domain: domain);
-        store.Add(cust);
-
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.Single(p => p.Name == "AnyBig")))
+        var cust = exec.Create((customer).Name, new Dictionary<string, object?> { ["Name"] = "A" }).Instance!;
+        await Assert.That(exec.EvaluatePolicy(cust, (customer.Policies.Single(p => p.Name == "AnyBig")).Name))
             .IsFalse();
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.Single(p => p.Name == "AllBig")))
+        await Assert.That(exec.EvaluatePolicy(cust, (customer.Policies.Single(p => p.Name == "AllBig")).Name))
             .IsFalse(); // no vacuous true
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.Single(p => p.Name == "NoneBig")))
+        await Assert.That(exec.EvaluatePolicy(cust, (customer.Policies.Single(p => p.Name == "NoneBig")).Name))
             .IsTrue();
-        await Assert.That(cust.EvaluatePolicy(customer.Policies.Single(p => p.Name == "OrderCount")))
+        await Assert.That(exec.EvaluatePolicy(cust, (customer.Policies.Single(p => p.Name == "OrderCount")).Name))
             .IsTrue();
     }
 }

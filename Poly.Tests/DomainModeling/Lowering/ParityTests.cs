@@ -907,11 +907,7 @@ public class ParityTests {
             () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(exportEx!.Message).IsEqualTo(first);
 
-        var createEx = Assert.Throws<InvalidOperationException>(
-            () => DomainEntityInstance.Create(entity, new Dictionary<string, object?> {
-                ["Status"] = "s",
-                ["Level"] = 1L
-            }, domain));
+        var createEx = Assert.Throws<InvalidOperationException>(() => ModuleExec.For(domain));
         await Assert.That(createEx!.Message).IsEqualTo(first);
     }
 
@@ -957,8 +953,8 @@ public class ParityTests {
         await Assert.That(outcomes[1].Success).IsTrue();
     }
 
-    // Both sides fail. Simulate ErrorMessage is empty (ActionInvocationResult.Blocked);
-    // printed returns the Failure string — same C8d split as KnownGap_RequireBlocksAction.
+    // Guard blocks are the module Failure string on both sides. The old simulate
+    // path dropped that string into FailedGuards; that split left with DEI.
     [Test]
     public async Task Invoke_WhenStagePolicyIsFalse_BothSidesFail() {
         var domain = StagePolicyDomain(false);
@@ -966,15 +962,13 @@ public class ParityTests {
         await Assert.That(source).Contains("bool Ready(");
         await Assert.That(source).Contains("blocked by policy 'Ready'");
 
-        var (simulate, printed) = ParityScenario.FromDomain(domain, "ParityStagePolicyFalse")
-            .Run(side => {
+        var outcomes = await ParityScenario.FromDomain(domain, "ParityStagePolicyFalse")
+            .AssertAgree(side => {
                 side.Create("Item");
                 side.Invoke("Go");
             });
-        await Assert.That(simulate[1].Success).IsFalse();
-        await Assert.That(printed[1].Success).IsFalse();
-        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed)))
-            .IsEqualTo("invoke Go: failure message differs (simulate '', printed ''Go' blocked by policy 'Ready'.')");
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).Contains("blocked by policy 'Ready'");
     }
 
     [Test]
@@ -989,15 +983,13 @@ public class ParityTests {
         await Assert.That(source).Contains("bool Ok(");
         await Assert.That(source).Contains("blocked by policy 'Ok'");
 
-        var (simulate, printed) = ParityScenario.FromDomain(domain, "ParityActionLocalPolicyFalse")
-            .Run(side => {
+        var outcomes = await ParityScenario.FromDomain(domain, "ParityActionLocalPolicyFalse")
+            .AssertAgree(side => {
                 side.Create("Item");
                 side.Invoke("Go");
             });
-        await Assert.That(simulate[1].Success).IsFalse();
-        await Assert.That(printed[1].Success).IsFalse();
-        await Assert.That(string.Join("\n", ParityScenario.Differences(simulate, printed)))
-            .IsEqualTo("invoke Go: failure message differs (simulate '', printed ''Go' blocked by policy 'Ok'.')");
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).Contains("blocked by policy 'Ok'");
     }
 
     // Known gaps: the sides differ today. Each row pins the exact differences so a fix turns it red;
@@ -1064,14 +1056,13 @@ public class ParityTests {
         await Assert.That(outcomes[0].State["Score"]).IsEqualTo("5");
     }
 
-    // Owner: none in the plan; the simulator's guard mapping (MapModuleRequireFailure) goes with C8d (delete DEI).
-    // Simulate leaves ErrorMessage empty and reports the guard in FailedGuards; the printed method returns the message.
+    // The simulator's guard mapping left with DEI. Both sides now report the module Failure.
     [Test]
-    public async Task KnownGap_RequireBlocksAction_SimulateHasNoFailureMessage() {
-        var (simulate, printed) = ParityScenario.FromDsl(GuardDsl, "ParityGapGuard")
-            .Run(side => { side.Create("Task"); side.Invoke("Promote"); });
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(["invoke Promote: failure message differs (simulate '', printed ''Promote' blocked by policy 'CanPromote'.')"]);
+    public async Task Invoke_WhenRequireBlocks_BothSidesNameThePolicy() {
+        var outcomes = await ParityScenario.FromDsl(GuardDsl, "ParityGapGuard")
+            .AssertAgree(side => { side.Create("Task"); side.Invoke("Promote"); });
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).Contains("blocked by policy 'CanPromote'");
     }
 
     [Test]

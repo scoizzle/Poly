@@ -49,13 +49,10 @@ public class UnlinkedComparisonAgreeTests {
               NotYounger: policy { not (Age < advisor Age) }
             }
             """);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var customerE = E("Customer");
-        var store = new DomainInstanceStore();
-        var customer = DomainEntityInstance.Create(customerE,
-            new Dictionary<string, object?> { ["Name"] = "Pat", ["Age"] = 20L }, domain);
-        store.Add(customer);
-
+        var customer = exec.Create((customerE).Name, new Dictionary<string, object?> { ["Name"] = "Pat", ["Age"] = 20L }).Instance!;
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer", ("name", "Pat"), ("age", 20L));
@@ -66,13 +63,13 @@ public class UnlinkedComparisonAgreeTests {
             "YoungerThanAdvisor", "AtMostAdvisor", "OlderThanAdvisor", "AtLeastAdvisor",
             "AdvisorUnderThirty", "NamedPat", "NotPat", "SameName", "ArithmeticYounger"
         }) {
-            var sim = customer.EvaluatePolicy(customerE.Policies.First(p => p.Name == policyName));
+            var sim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == policyName)).Name);
             var print = (bool)printed.GetType().GetMethod(policyName)!.Invoke(printed, null)!;
             await Assert.That(sim).IsFalse().Because($"simulate {policyName}");
             await Assert.That(print).IsEqualTo(sim).Because($"print {policyName}");
         }
 
-        var notSim = customer.EvaluatePolicy(customerE.Policies.First(p => p.Name == "NotYounger"));
+        var notSim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == "NotYounger")).Name);
         var notPrint = (bool)printed.GetType().GetMethod("NotYounger")!.Invoke(printed, null)!;
         await Assert.That(notSim).IsTrue();
         await Assert.That(notPrint).IsTrue();
@@ -81,19 +78,16 @@ public class UnlinkedComparisonAgreeTests {
     [Test]
     public async Task UnlinkedAdvisorGuard_BlocksAction_OnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl(AdvisorDsl);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
-        var store = new DomainInstanceStore();
-        var customer = DomainEntityInstance.Create(E("Customer"),
-            new Dictionary<string, object?> { ["Age"] = 20L, ["Ready"] = false }, domain);
-        store.Add(customer);
-
+        var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Age"] = 20L, ["Ready"] = false }).Instance!;
         var policy = E("Customer").Policies.First(p => p.Name == "YoungerThanAdvisor");
-        var simPolicy = customer.EvaluatePolicy(policy);
+        var simPolicy = exec.EvaluatePolicy(customer, (policy).Name);
         await Assert.That(simPolicy).IsFalse();
 
-        var sim = customer.InvokeAction("Promote");
+        var sim = exec.Invoke(customer, "Promote");
         await Assert.That(sim.Succeeded).IsFalse();
-        await Assert.That(customer.GetProperty<bool>("Ready")).IsFalse();
+        await Assert.That((bool)customer.Bag["Ready"]!).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -126,30 +120,23 @@ public class UnlinkedComparisonAgreeTests {
     [Test]
     public async Task MultiHopValuePath_UnlinkedInnerHop_IsFalse_OnSimulateAndPrintedCsharp() {
         var (domain, analysis) = EvolvedDomain.FromDsl(MultiHopDsl);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
 
-        var store = new DomainInstanceStore();
-        var mentor = DomainEntityInstance.Create(E("Mentor"),
-            new Dictionary<string, object?> { ["Age"] = 30L }, domain);
-        var advisor = DomainEntityInstance.Create(E("Advisor"),
-            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
-        var customer = DomainEntityInstance.Create(E("Customer"),
-            new Dictionary<string, object?> { ["Age"] = 20L }, domain);
-        store.Add(mentor);
-        store.Add(advisor);
-        store.Add(customer);
-
+        var mentor = exec.Create("Mentor", new Dictionary<string, object?> { ["Age"] = 30L }).Instance!;
+        var advisor = exec.Create("Advisor", new Dictionary<string, object?> { ["Age"] = 25L }).Instance!;
+        var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Age"] = 20L }).Instance!;
         var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 30L));
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
         void WireAdvisor() {
-            store.Link("advisor", customer, advisor);
+            exec.Link("advisor", customer, advisor);
             printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
         }
         void WireMentor() {
-            store.Link("mentor", advisor, mentor);
+            exec.Link("mentor", advisor, mentor);
             printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
         }
 
@@ -175,7 +162,7 @@ public class UnlinkedComparisonAgreeTests {
 
         async Task AssertPolicy(string name, bool expected) {
             var policy = E("Customer").Policies.First(p => p.Name == name);
-            var sim = customer.EvaluatePolicy(policy);
+            var sim = exec.EvaluatePolicy(customer, (policy).Name);
             var print = (bool)printedCustomer.GetType().GetMethod(name)!.Invoke(printedCustomer, null)!;
             await Assert.That(sim).IsEqualTo(expected).Because($"simulate {name}");
             await Assert.That(print).IsEqualTo(expected).Because($"print {name}");
@@ -199,26 +186,22 @@ public class UnlinkedComparisonAgreeTests {
               YoungerThanBoth: policy { Age < advisor Age + advisor mentor Age }
             }
             """);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var source = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var policyLine = source.Split('\n').First(l => l.Contains("bool YoungerThanBoth()"));
         await Assert.That(policyLine.Split("this.Advisor != null").Length - 1).IsEqualTo(1);
 
-        var store = new DomainInstanceStore();
-        var advisor = DomainEntityInstance.Create(E("Advisor"),
-            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
-        var customer = DomainEntityInstance.Create(E("Customer"),
-            new Dictionary<string, object?> { ["Age"] = 20L }, domain);
-        store.Add(advisor);
-        store.Add(customer);
-        store.Link("advisor", customer, advisor);
+        var advisor = exec.Create("Advisor", new Dictionary<string, object?> { ["Age"] = 25L }).Instance!;
+        var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Age"] = 20L }).Instance!;
+        exec.Link("advisor", customer, advisor);
 
         var asm = ExportedCSharp.CompileAndLoad(source);
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
         printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
 
-        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "YoungerThanBoth"));
+        var sim = exec.EvaluatePolicy(customer, (E("Customer").Policies.First(p => p.Name == "YoungerThanBoth")).Name);
         var print = (bool)printedCustomer.GetType().GetMethod("YoungerThanBoth")!.Invoke(printedCustomer, null)!;
         await Assert.That(sim).IsFalse();
         await Assert.That(print).IsFalse();
@@ -240,11 +223,10 @@ public class UnlinkedComparisonAgreeTests {
               P: policy { {{condition}} }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var customerE = domain.Types.OfType<Entity>().First(e => e.Name == "Customer");
-        var store = new DomainInstanceStore();
-        var customer = DomainEntityInstance.Create(customerE, domain: domain);
-        store.Add(customer);
-        var sim = customer.EvaluatePolicy(customerE.Policies.First(p => p.Name == "P"));
+        var customer = exec.Create((customerE).Name, new Dictionary<string, object?>()).Instance!;
+        var sim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == "P")).Name);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -281,33 +263,26 @@ public class UnlinkedComparisonAgreeTests {
               P: policy { {{condition}} }
             }
             """);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
-        var store = new DomainInstanceStore();
-        var mentor = DomainEntityInstance.Create(E("Mentor"),
-            new Dictionary<string, object?> { ["Age"] = 30L }, domain);
-        var advisor = DomainEntityInstance.Create(E("Advisor"),
-            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
-        var customer = DomainEntityInstance.Create(E("Customer"),
-            new Dictionary<string, object?> { ["Age"] = 20L }, domain);
-        store.Add(mentor);
-        store.Add(advisor);
-        store.Add(customer);
-
+        var mentor = exec.Create("Mentor", new Dictionary<string, object?> { ["Age"] = 30L }).Instance!;
+        var advisor = exec.Create("Advisor", new Dictionary<string, object?> { ["Age"] = 25L }).Instance!;
+        var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Age"] = 20L }).Instance!;
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 30L));
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
         if (linkAdvisor) {
-            store.Link("advisor", customer, advisor);
+            exec.Link("advisor", customer, advisor);
             printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
         }
         if (linkMentor) {
-            store.Link("mentor", advisor, mentor);
+            exec.Link("mentor", advisor, mentor);
             printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
         }
 
-        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "P"));
+        var sim = exec.EvaluatePolicy(customer, (E("Customer").Policies.First(p => p.Name == "P")).Name);
         var print = (bool)printedCustomer.GetType().GetMethod("P")!.Invoke(printedCustomer, null)!;
         await Assert.That(sim).IsEqualTo(expected);
         await Assert.That(print).IsEqualTo(expected);

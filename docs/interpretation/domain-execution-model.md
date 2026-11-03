@@ -2,7 +2,7 @@
 
 **Audience:** Developers extending the DomainModeling module or adding new effect/expression types.  
 **Prerequisites:** [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md), [`docs/CORE.md`](../CORE.md).  
-**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Runtime dispatch lives in `Poly/DomainModeling/Runtime/DomainEntityInstance.cs`. Policy evaluation runs through `DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`; the CLR-subject wrapper `PolicyEvaluator` is test-only (`Poly.Tests/TestHelpers/`).
+**Corpus:** Lowering passes live under `Poly/DomainModeling/Lowering/`. Simulation is the interpreter host in `Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs` (the instance is the module dictionary). Policy evaluation runs through `ModuleInstanceExecutor.EvaluatePolicy` on the cached policy body → `Interpreter`; the CLR-subject wrapper `PolicyEvaluator` is test-only (`Poly.Tests/TestHelpers/`).
 
 This document describes the execution model that bridges **domain concepts** (effects, policies, expressions) to **executable results** through the Syntax AST and VM pipeline. It is the missing layer between `Poly.DomainModeling` and the Interpretation system documented in this directory.
 
@@ -49,7 +49,7 @@ When a domain concept cannot be expressed in the current Syntax AST (e.g. a coll
 ┌──────────────────────────────────────────────────────────────────┐
 │                      Domain Model Layer                          │
 │                                                                  │
-│  Policy   Effect   DomainExpression   DomainEntityInstance        │
+│  Policy   Effect   DomainExpression   module dictionary           │
 │     │        │           │                    │                  │
 │     ▼        ▼           ▼                    ▼                  │
 │  ┌──────────────────────────────────────────────────────────┐    │
@@ -124,7 +124,7 @@ if (exec.Result.Value is DomainResult { IsSuccess: false } failed)
 No Effect-IR walk at simulate. `CreateChildInstance` exists only as the body of `Store.Create` / instance `Create` when no Store is bound.
 
 > **Removed 2026-08-10:** `DeleteEntityInstance`, `LinkRelationshipEffect`, `UnlinkRelationshipEffect`,
-> and `TransitionRelationshipEffect`. Linking existing instances is `DomainInstanceStore.Link` /
+> and `TransitionRelationshipEffect`. Linking existing instances is the interpreter host's `Link` /
 > `Unlink` (MCP `link_instances` / `unlink_instances`).
 >
 > **Removed 2026-09-03:** `ExecuteStructured`, `RequiresDirectExecution`, `HasEffectDependentConditionalCreate`,
@@ -324,24 +324,19 @@ The outer `Member(entityParam, "customer")` resolves the relationship name. At t
 
 ---
 
-## 8. InstanceStore Subscription Fan-Out
+## 8. Subscription Fan-Out
 
-`DomainInstanceStore.NotifyTransition` fires stage-subscription effects when an instance transitions to a new stage. This is **not** an effect execution path — it's a store-level mechanism.
+A stage transition runs the module's `Notify{Stage}Subscribers` body. That body walks the subscriber registry the interpreter host maintains when it links or unlinks. This is **not** a separate effect interpreter — the notify body is the same tree print emits.
 
 ```
 Instance transitions to stage
-  → Store.NotifyTransition(instance, targetStage, depth)
-    → Find relationships where the instance is the Target
-    → For each subscriber instance
-      → Find current-stage subscriptions matching the relationship + stage
-      → For each quantifier:
-        - Each: fire per matching instance
-        - Any: fire once if at least one matching
-        - All: fire once if all match
-      → Execute subscription effects (recursive InvokeAction, depth-limited to 10)
+  → module Notify{Stage}Subscribers
+    → walk the subscriber registry on the watched target
+    → for each subscriber, run the cached When… handler
+      (quantifier loop is the lowered ForEach / early-exit the module already contains)
 ```
 
-This is the runtime counterpart of `StageSubscription` declarations in the DSL.
+The registry is host bookkeeping beside the bag. The effects are the module.
 
 ---
 
@@ -362,7 +357,7 @@ This is the runtime counterpart of `StageSubscription` declarations in the DSL.
 | [`Poly/Interpretation/README.md`](../../Poly/Interpretation/README.md) | Interpretation system overview (below this layer) |
 | [`vm-abi-reference.md`](vm-abi-reference.md) | VM ABI, frame layout, register model (below this layer) |
 | [`docs/CORE.md`](../CORE.md) | Module boundaries and pipeline ownership |
-| `Poly/DomainModeling/Runtime/DomainEntityInstance.cs` | Runtime dispatch; Store jobs; named invoke looks up `session.Lower` |
+| `Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs` | Interpreter host; named invoke runs the cached module on the dictionary |
 | `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` | Expression → Syntax AST lowering |
 | `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` | Effect → Syntax AST lowering |
 | `Poly/DomainModeling/EffectDispatch.cs` | Effect dispatch base class |

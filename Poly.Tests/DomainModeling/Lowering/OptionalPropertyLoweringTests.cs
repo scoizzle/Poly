@@ -41,9 +41,13 @@ public class OptionalPropertyLoweringTests {
     private static Parameter CtorParameter(TypeDefinitionNode type, string name) =>
         type.Constructors!.SelectMany(c => c.Parameters ?? []).Single(p => p.Name == name);
 
-    private static DomainEntityInstance Create(Domain domain, Entity entity, params (string Name, object? Value)[] values) {
+    private static ModuleInstance Create(Domain domain, Entity entity, params (string Name, object? Value)[] values) {
+        var exec = ModuleExec.For(domain);
         var dict = values.ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
-        return DomainEntityInstance.Create(entity, dict, domain: domain);
+        var outcome = exec.Create(entity.Name, dict);
+        if (!outcome.Succeeded)
+            throw new ConstraintFailureException(outcome.Error ?? "Create failed.");
+        return outcome.Instance!;
     }
 
     private static Entity EntityOf(Domain domain, string name) =>
@@ -109,7 +113,7 @@ public class OptionalPropertyLoweringTests {
             Token: entity { Note: Text optional }
             """);
         var instance = Create(domain, EntityOf(domain, "Token"));
-        await Assert.That(instance.GetProperty<object?>("Note")).IsNull();
+        await Assert.That(instance.Bag["Note"]).IsNull();
     }
 
     [Test]
@@ -122,14 +126,12 @@ public class OptionalPropertyLoweringTests {
               Add: action { create in items { } }
             }
             """);
-        var box = DomainEntityInstance.Create(EntityOf(domain, "Box"), domain: domain);
-        var store = new DomainInstanceStore();
-        store.Add(box);
-
-        var result = box.InvokeAction("Add");
+        var exec = ModuleExec.For(domain);
+        var box = exec.Create((EntityOf(domain, "Box")).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(box, "Add");
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(box.CreatedChildren.Single().GetProperty<object?>("Name")).IsNull();
+        await Assert.That(result.CreatedChildren.Single().Bag["Name"]).IsNull();
     }
 
     [Test]
@@ -139,7 +141,7 @@ public class OptionalPropertyLoweringTests {
             Counter: entity { Limit: Number optional }
             """);
         var instance = Create(domain, EntityOf(domain, "Counter"));
-        await Assert.That(instance.GetProperty<object?>("Limit")).IsNull();
+        await Assert.That(instance.Bag["Limit"]).IsNull();
     }
 
     [Test]
@@ -162,10 +164,10 @@ public class OptionalPropertyLoweringTests {
         var person = EntityOf(domain, "Person");
 
         var omitted = Create(domain, person);
-        await Assert.That(omitted.GetProperty<object?>("Age")).IsNull();
+        await Assert.That(omitted.Bag["Age"]).IsNull();
 
         var zero = Create(domain, person, ("Age", 0L));
-        await Assert.That(zero.GetProperty<object?>("Age")).IsEqualTo(0L);
+        await Assert.That(zero.Bag["Age"]).IsEqualTo(0L);
 
         var thrown = Assert.Throws<ConstraintFailureException>(() =>
             Create(domain, person, ("Age", 151L)));

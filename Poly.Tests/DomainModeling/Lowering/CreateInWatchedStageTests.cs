@@ -46,12 +46,10 @@ public class CreateInWatchedStageTests {
     [Test]
     public async Task Create_IntoWatchedFirstStage_NotifiesOnce() {
         var (domain, analysis) = Evolve(Positive);
-        var store = new DomainInstanceStore();
-        var user = CreateUser(domain);
-        store.Add(user);
-
-        await Assert.That(user.InvokeAction("Start").Succeeded).IsTrue();
-        await Assert.That(user.GetProperty<object>("OpenCount")).IsEqualTo(1L);
+        var exec = ModuleExec.For(domain);
+        var user = CreateUser(exec, domain);
+        await Assert.That(exec.Invoke(user, "Start").Succeeded).IsTrue();
+        await Assert.That(user.Bag["OpenCount"]).IsEqualTo(1L);
 
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
@@ -61,12 +59,10 @@ public class CreateInWatchedStageTests {
     [Test]
     public async Task Create_IntoUnwatchedFirstStage_StaysZero() {
         var (domain, analysis) = Evolve(Negative);
-        var store = new DomainInstanceStore();
-        var user = CreateUser(domain);
-        store.Add(user);
-
-        await Assert.That(user.InvokeAction("Start").Succeeded).IsTrue();
-        await Assert.That(user.GetProperty<object>("OpenCount")).IsEqualTo(0L);
+        var exec = ModuleExec.For(domain);
+        var user = CreateUser(exec, domain);
+        await Assert.That(exec.Invoke(user, "Start").Succeeded).IsTrue();
+        await Assert.That(user.Bag["OpenCount"]).IsEqualTo(0L);
 
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
@@ -83,9 +79,9 @@ public class CreateInWatchedStageTests {
         await Assert.That(cs).DoesNotContain("NotifyOpenSubscribers(JobStage?");
     }
 
-    private static DomainEntityInstance CreateUser(Domain domain) {
+    private static ModuleInstance CreateUser(ModuleInstanceExecutor exec, Domain domain) {
         var userEntity = domain.Types.OfType<Entity>().First(e => e.Name == "User");
-        return DomainEntityInstance.Create(userEntity, domain: domain);
+        return exec.Create((userEntity).Name, new Dictionary<string, object?>()).Instance!;
     }
 
     private static int CountOccurrences(string text, string value) =>

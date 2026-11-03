@@ -38,16 +38,15 @@ public class UniqueSimulatePrintAgreeTests {
     [Test]
     public async Task DuplicateCreate_FailsWithTheSameMessageInPrintAndSimulate() {
         var (domain, analysis, session) = Evolve(Dsl);
+        var exec = ModuleExec.For(domain);
 
         // Simulate: the module guard runs inside the action; the store gate is
         // still live until 3b, but both produce the same domain message.
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        store.Add(lot);
-        var first = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
-        var second = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
-        var third = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "B" });
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var first = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var second = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var third = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "B" });
 
         // Print: compile the same lowered module and invoke the action with a
         // real IStoragePort implementation.
@@ -66,19 +65,18 @@ public class UniqueSimulatePrintAgreeTests {
         await Assert.That(Success(printedFirst)).IsTrue();
         await Assert.That(Success(printedSecond)).IsFalse();
         await Assert.That(Success(printedThird)).IsTrue();
-        await Assert.That(Message(printedSecond)).IsEqualTo(second.ErrorMessage);
-        await Assert.That(second.ErrorMessage).Contains("Unique constraint violated");
+        await Assert.That(Message(printedSecond)).IsEqualTo(second.Error);
+        await Assert.That(second.Error).Contains("Unique constraint violated");
     }
 
     [Test]
     public async Task NestedSecondCreate_FailsBeforeSaveInPrintAndSimulate() {
         var (domain, analysis, session) = Evolve(Dsl);
+        var exec = ModuleExec.For(domain);
 
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        store.Add(lot);
-        var simulate = lot.InvokeAction("Double", new Dictionary<string, object?> { ["code"] = "A" });
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var simulate = exec.Invoke(lot, "Double", new Dictionary<string, object?> { ["code"] = "A" });
 
         var module = session.Lower(domain, analysis);
         var source = new CSharpGenerator().Generate(module);
@@ -91,8 +89,8 @@ public class UniqueSimulatePrintAgreeTests {
         // same action fails before any host save.
         await Assert.That(simulate.Succeeded).IsFalse();
         await Assert.That(Success(printed)).IsFalse();
-        await Assert.That(Message(printed)).IsEqualTo(simulate.ErrorMessage);
-        await Assert.That(simulate.ErrorMessage).Contains("Unique constraint violated");
+        await Assert.That(Message(printed)).IsEqualTo(simulate.Error);
+        await Assert.That(simulate.Error).Contains("Unique constraint violated");
     }
 
     [Test]
@@ -113,20 +111,20 @@ public class UniqueSimulatePrintAgreeTests {
             }
             """;
         var (domain, analysis, session) = Evolve(dsl);
+        var exec = ModuleExec.For(domain);
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        store.Add(lot);
-        var issuedA = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
-        var issuedB = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "B" });
-        var first = lot.CreatedChildren[0];
-        var second = lot.CreatedChildren[1];
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var issuedA = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var issuedB = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "B" });
+        var widgets = exec.LinkedTargets("widgets", lot);
+        var first = widgets[0];
+        var second = widgets[1];
 
         // C is introduced by assign. The later assign of C is the duplicate.
-        var moved = first.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
-        var self = first.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
-        var collide = second.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "C" });
-        var freed = second.InvokeAction("Relabel", new Dictionary<string, object?> { ["code"] = "A" });
+        var moved = exec.Invoke(first, "Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var self = exec.Invoke(first, "Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var collide = exec.Invoke(second, "Relabel", new Dictionary<string, object?> { ["code"] = "C" });
+        var freed = exec.Invoke(second, "Relabel", new Dictionary<string, object?> { ["code"] = "A" });
 
         var module = session.Lower(domain, analysis);
         var source = new CSharpGenerator().Generate(module);
@@ -145,14 +143,14 @@ public class UniqueSimulatePrintAgreeTests {
         await Assert.That(self.Succeeded).IsTrue();
         await Assert.That(collide.Succeeded).IsFalse();
         await Assert.That(freed.Succeeded).IsTrue();
-        await Assert.That(first.GetProperty<string>("Code")).IsEqualTo("C");
-        await Assert.That(second.GetProperty<string>("Code")).IsEqualTo("A");
+        await Assert.That((string)first.Bag["Code"]!).IsEqualTo("C");
+        await Assert.That((string)second.Bag["Code"]!).IsEqualTo("A");
         await Assert.That(Success(printedMoved)).IsTrue();
         await Assert.That(Success(printedSelf)).IsTrue();
         await Assert.That(Success(printedCollide)).IsFalse();
         await Assert.That(Success(printedFreed)).IsTrue();
-        await Assert.That(Message(printedCollide)).IsEqualTo(collide.ErrorMessage);
-        await Assert.That(collide.ErrorMessage).Contains("Unique constraint violated");
+        await Assert.That(Message(printedCollide)).IsEqualTo(collide.Error);
+        await Assert.That(collide.Error).Contains("Unique constraint violated");
         await Assert.That(CodeOf(printedFirst)).IsEqualTo("C");
         await Assert.That(CodeOf(printedSecond)).IsEqualTo("A");
     }

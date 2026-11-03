@@ -6,7 +6,7 @@ user-invocable: true
 argument-hint: "Describe the business domain or the modeling change."
 ---
 
-Follow [`AGENTS.md`](../../AGENTS.md). Poly.MCP is the harness. `DomainEntityInstance` is scratch bind, not product proof.
+Follow [`AGENTS.md`](../../AGENTS.md). Poly.MCP is the harness. Simulation is the interpreter host on the module dictionary, not a product proof.
 
 ## Before authoring
 

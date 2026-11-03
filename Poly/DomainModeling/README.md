@@ -89,7 +89,7 @@ Layout matches [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](.
 | `Meaning/` | Folds, forms, print maps, `ExpressionMeaning`, annotations, type maps |
 | `Analysis/` | Domain analyzers on the shared Analysis substrate |
 | `Lowering/` | DomainExpression → AST, C# export |
-| `Runtime/` | `DomainEntityInstance`, `DomainInstanceStore` |
+| `Runtime/` | `ModuleInstanceExecutor` — interpreter host over the module dictionary |
 | `Evolution/` | `DomainEvolution`, `DomainChange` |
 | `Queries/` | MCP/query projections |
 | `Libraries/` | In-assembly seeds (`Temporal/`, `Storage/`) |

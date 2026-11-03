@@ -36,20 +36,15 @@ public class ForeignRootedHopAgreeTests {
               HasShortItem: policy { (count items where Qty < product Stock) > 0 }
             }
             """);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
 
-        var store = new DomainInstanceStore();
-        var product = DomainEntityInstance.Create(E("Product"),
-            new Dictionary<string, object?> { ["Stock"] = 10L }, domain);
-        var item = DomainEntityInstance.Create(E("Item"),
-            new Dictionary<string, object?> { ["Qty"] = 1L }, domain);
-        var order = DomainEntityInstance.Create(E("Order"), domain: domain);
-        store.Add(product);
-        store.Add(item);
-        store.Add(order);
-        store.Link("product", item, product);
-        store.Link("items", order, item);
-        var sim = order.EvaluatePolicy(E("Order").Policies.First(p => p.Name == "HasShortItem"));
+        var product = exec.Create("Product", new Dictionary<string, object?> { ["Stock"] = 10L }).Instance!;
+        var item = exec.Create("Item", new Dictionary<string, object?> { ["Qty"] = 1L }).Instance!;
+        var order = exec.Create("Order", new Dictionary<string, object?>()).Instance!;
+        exec.Link("product", item, product);
+        exec.Link("items", order, item);
+        var sim = exec.EvaluatePolicy(order, (E("Order").Policies.First(p => p.Name == "HasShortItem")).Name);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -89,18 +84,13 @@ public class ForeignRootedHopAgreeTests {
               }
             }
             """);
-        Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
+        var exec = ModuleExec.For(domain);
 
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(E("Order"),
-            new Dictionary<string, object?> { ["Total"] = 10L }, domain);
-        var customer = DomainEntityInstance.Create(E("Customer"),
-            new Dictionary<string, object?> { ["Balance"] = 5L }, domain);
-        store.Add(order);
-        store.Add(customer);
-        store.Link("orders", customer, order);
-        await Assert.That(order.InvokeAction("Activate").Succeeded).IsTrue();
-        await Assert.That(customer.GetProperty<bool>("Flag")).IsTrue();
+        var order = exec.Create("Order", new Dictionary<string, object?> { ["Total"] = 10L }).Instance!;
+        var customer = exec.Create("Customer", new Dictionary<string, object?> { ["Balance"] = 5L }).Instance!;
+        exec.Link("orders", customer, order);
+        await Assert.That(exec.Invoke(order, "Activate").Succeeded).IsTrue();
+        await Assert.That((bool)customer.Bag["Flag"]!).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -134,20 +124,15 @@ public class ForeignRootedHopAgreeTests {
               ReadyMatchesAdvisor: policy { Ready is (advisor where Age < mentor Age) }
             }
             """);
+        var exec = ModuleExec.For(domain);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
 
-        var store = new DomainInstanceStore();
-        var mentor = DomainEntityInstance.Create(E("Mentor"),
-            new Dictionary<string, object?> { ["Age"] = 50L }, domain);
-        var advisor = DomainEntityInstance.Create(E("Advisor"),
-            new Dictionary<string, object?> { ["Age"] = 40L }, domain);
-        var customer = DomainEntityInstance.Create(E("Customer"), domain: domain);
-        store.Add(mentor);
-        store.Add(advisor);
-        store.Add(customer);
-        store.Link("mentor", advisor, mentor);
-        store.Link("advisor", customer, advisor);
-        var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "ReadyMatchesAdvisor"));
+        var mentor = exec.Create("Mentor", new Dictionary<string, object?> { ["Age"] = 50L }).Instance!;
+        var advisor = exec.Create("Advisor", new Dictionary<string, object?> { ["Age"] = 40L }).Instance!;
+        var customer = exec.Create("Customer", new Dictionary<string, object?>()).Instance!;
+        exec.Link("mentor", advisor, mentor);
+        exec.Link("advisor", customer, advisor);
+        var sim = exec.EvaluatePolicy(customer, (E("Customer").Policies.First(p => p.Name == "ReadyMatchesAdvisor")).Name);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));

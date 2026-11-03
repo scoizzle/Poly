@@ -43,36 +43,32 @@ public class PolicyNegativeOffsetTests {
         return (result.Root!, analysis);
     }
 
-    private static (DomainEntityInstance Instance, Policy Recent, Policy Ahead) Clock(DateTime seenAt) {
+    private static (ModuleInstanceExecutor Exec, ModuleInstance Instance) Clock(DateTime seenAt) {
         var (domain, _) = Evolve();
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Event");
-        var instance = DomainEntityInstance.Create(
-            entity,
-            new Dictionary<string, object?> { ["SeenAt"] = seenAt },
-            domain: domain);
-        return (instance,
-            entity.Policies.First(p => p.Name == "Recent"),
-            entity.Policies.First(p => p.Name == "Ahead"));
+        var instance = exec.Create(entity.Name, new Dictionary<string, object?> { ["SeenAt"] = seenAt }).Instance!;
+        return (exec, instance);
     }
 
     [Test]
     public async Task Recent_UtcNow_IsTrue() {
-        var (instance, recent, _) = Clock(DateTime.UtcNow);
+        var (exec, instance) = Clock(DateTime.UtcNow);
 
-        await Assert.That(instance.EvaluatePolicy(recent)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(instance, "Recent")).IsTrue();
     }
 
     [Test]
     public async Task Recent_TwoHoursAgo_IsFalse() {
-        var (instance, recent, _) = Clock(DateTime.UtcNow.AddHours(-2));
+        var (exec, instance) = Clock(DateTime.UtcNow.AddHours(-2));
 
-        await Assert.That(instance.EvaluatePolicy(recent)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(instance, "Recent")).IsFalse();
     }
 
     [Test]
     public async Task Ahead_UtcNow_IsFalse() {
-        var (instance, _, ahead) = Clock(DateTime.UtcNow);
+        var (exec, instance) = Clock(DateTime.UtcNow);
 
-        await Assert.That(instance.EvaluatePolicy(ahead)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(instance, "Ahead")).IsFalse();
     }
 }

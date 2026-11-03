@@ -73,7 +73,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
             if (printed is not null)
                 value = Materialize(value, printed);
             return (v.Name, value);
-        });
+        }).Append(("db", (object?)Port));
         try {
             return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
         }
@@ -85,15 +85,20 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
     }
 
     protected override StepResult InvokeCore(string action, (string Name, object? Value)[] args) {
-        if (args.Length == 0)
-            return Unpack(Method(action).Invoke(Current, null)!);
+        // The storage port is threaded into an action that touches a unique key; it is
+        // the harness's, not a scenario argument.
+        static bool IsPort(ParameterInfo p) => p.ParameterType == typeof(IStoragePort);
         var method = Current.GetType().GetMethods()
-            .FirstOrDefault(m => m.Name == action && m.GetParameters().Length == args.Length)
+            .FirstOrDefault(m => m.Name == action && m.GetParameters().Count(p => !IsPort(p)) == args.Length)
             ?? throw new ArgumentException(
                 $"Printed type '{Current.GetType().Name}' has no public '{action}' with {args.Length} parameter(s).");
         var parameters = method.GetParameters();
         var callArgs = new object?[parameters.Length];
         for (var i = 0; i < parameters.Length; i++) {
+            if (IsPort(parameters[i])) {
+                callArgs[i] = Port;
+                continue;
+            }
             var match = args.FirstOrDefault(a =>
                 string.Equals(a.Name, parameters[i].Name, StringComparison.OrdinalIgnoreCase));
             if (match.Name is null)

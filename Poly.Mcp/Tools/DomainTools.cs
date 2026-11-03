@@ -1237,21 +1237,22 @@ internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger
 
         bool result;
         try {
-            if (!state.InstanceMap.TryGetValue(instanceId, out var existingInstance))
+            if (state.ExecutorIfCreated is not { } executor
+                || !executor.TryGet(instanceId, out var existingInstance) || existingInstance is null)
                 return new DomainToolResponse(
                     Success: false,
                     Message: $"Instance '{instanceId}' not found in session. Create it first via create_instance.",
                     SessionId: sessionId,
                     Affordances: ["create_instance", "list_instances"]);
 
-            if (!string.Equals(existingInstance.Entity.Name, entityName, StringComparison.Ordinal))
+            if (!string.Equals(existingInstance.EntityName, entityName, StringComparison.Ordinal))
                 return new DomainToolResponse(
                     Success: false,
-                    Message: $"Instance '{instanceId}' is for entity '{existingInstance.Entity.Name}', not '{entityName}'.",
+                    Message: $"Instance '{instanceId}' is for entity '{existingInstance.EntityName}', not '{entityName}'.",
                     SessionId: sessionId,
                     Affordances: ["get_entity_detail", "list_instances"]);
 
-            result = existingInstance.EvaluatePolicy(policy);
+            result = executor.EvaluatePolicy(existingInstance, policy.Name);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

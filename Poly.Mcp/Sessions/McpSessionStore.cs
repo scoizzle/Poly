@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using Poly.Analysis;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Runtime;
 using Poly.Packs.Product;
 
 namespace Poly.Mcp.Sessions;
@@ -21,17 +23,51 @@ internal sealed record McpSessionState(
     long Revision,
     DomainSession Modeling
 ) {
-    /// <summary>
-    /// Runtime instance store for executing action/lifecycle behavior.
-    /// Created fresh per session; null until first <c>create_instance</c>.
-    /// </summary>
-    public DomainInstanceStore? InstanceStore { get; set; }
+    private readonly Lock _executorGate = new();
+    private ModuleInstanceExecutor? _executor;
 
     /// <summary>
-    /// Maps instance IDs (GUID strings) to <see cref="DomainEntityInstance"/>
-    /// objects for MCP tool access.
+    /// The session's module executor: runs the lowered operation module on dictionary
+    /// instances. Created on first use, so a session that never creates an instance never
+    /// lowers. A state replaced by <c>apply_dsl</c> or evolve starts with a fresh one.
     /// </summary>
-    public ConcurrentDictionary<string, DomainEntityInstance> InstanceMap { get; init; } = new(StringComparer.Ordinal);
+    public ModuleInstanceExecutor Executor {
+        get {
+            lock (_executorGate)
+                return _executor ??= CreateExecutor();
+        }
+    }
+
+    /// <summary>
+    /// Binds the domain to a lowering session that also carries the persistence library,
+    /// so a <c>unique</c> property is the storage-port check in the module's own bodies
+    /// whether or not the source says <c>uses persistence</c>. The executor then runs
+    /// the cached module. A domain that already loads a persistence overlay keeps its session.
+    /// </summary>
+    private ModuleInstanceExecutor CreateExecutor() {
+        var ids = Domain.Extensions.ToList();
+        var hasOverlay = ids.Any(id => id is "persistence" or "sqlite" or "sqlserver");
+        var session = hasOverlay
+            ? Modeling
+            : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Catalog);
+        var analysis = session.Analyze(Domain);
+        RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
+        return new ModuleInstanceExecutor(Domain);
+    }
+
+    /// <summary>The executor if one exists; read-only paths use it so they never lower.</summary>
+    public ModuleInstanceExecutor? ExecutorIfCreated {
+        get { lock (_executorGate) return _executor; }
+    }
+
+    /// <summary>
+    /// Instance ids (GUID strings) to the dictionary that is each instance, in creation
+    /// order. A view over the executor, not a second store.
+    /// </summary>
+    public IReadOnlyDictionary<string, IDictionary<string, object?>> InstanceMap =>
+        ExecutorIfCreated is { } executor
+            ? executor.Instances.ToDictionary(i => i.Id, i => i.Bag, StringComparer.Ordinal)
+            : new Dictionary<string, IDictionary<string, object?>>(StringComparer.Ordinal);
 }
 
 /// <summary>

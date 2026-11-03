@@ -904,7 +904,7 @@ public class ParityTests {
         await Assert.That(first).Contains("Code");
 
         var exportEx = Assert.Throws<InvalidOperationException>(
-            () => new DomainToCSharpExporter().Export(domain, analysis));
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(exportEx!.Message).IsEqualTo(first);
 
         var createEx = Assert.Throws<InvalidOperationException>(
@@ -944,7 +944,7 @@ public class ParityTests {
 
     static string PrintedCSharp(Domain domain) {
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        return new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        return new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
     }
 
     [Test]
@@ -1304,7 +1304,7 @@ public class ParityTests {
     static async Task<System.Reflection.Assembly> Print(string relativePath, string assemblyName) {
         var poly = await File.ReadAllTextAsync(Path.Combine(FindRepoRoot(), relativePath));
         var (domain, analysis) = LoadProbe(poly);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         return ExportedCSharp.CompileAndLoad(cs, assemblyName);
     }
 

@@ -168,12 +168,6 @@ public class Guest
             return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
         var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
-        var uniqueCheck = Guest.CheckUnique("Email", email);
-        if (!uniqueCheck.IsSuccess)
-        {
-            return DomainResult<Guest>.Failure(uniqueCheck.ErrorMessage ?? "");
-        }
-        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -187,19 +181,6 @@ public class Guest
             target.RegisterGuestEventsReleasedSubscriber(this);
         }
     }
-    private static DomainResult CheckUnique(string propertyName, object value)
-    {
-        if (value == null)
-        {
-            return DomainResult.Success();
-        }
-        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Guest", propertyName, value.ToString());
-        if (message != null)
-        {
-            return DomainResult.Failure(message);
-        }
-        return DomainResult.Success();
-    }
     public DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
@@ -210,6 +191,6 @@ public class Guest
         {
             return DomainResult.Success();
         }
-        return Guest.CheckUnique(propertyName, value);
+        return DomainResult.Failure("A unique assign needs the storage port.");
     }
 }

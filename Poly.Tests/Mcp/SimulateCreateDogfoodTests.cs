@@ -68,15 +68,22 @@ public class SimulateCreateDogfoodTests {
         return doc.RootElement.GetProperty("count").GetInt32();
     }
 
-    private static (DomainEntityInstance Patron, DomainEntityInstance? Fine, DomainInstanceStore Store)
+    /// <summary>Links either direction by relationship name, read from the executor's bags.</summary>
+    private sealed class LinkView(ModuleInstanceExecutor executor) {
+        public IReadOnlyList<ModuleInstance> GetRelatedInstances(string relationship, ModuleInstance instance) =>
+            [.. executor.LinkedTargets(relationship, instance), .. executor.LinkedSources(relationship, instance)];
+    }
+
+    private static ModuleInstance Find(McpSessionState state, string id) =>
+        state.Executor.Instances.Single(i => i.Id == id);
+
+    private static (ModuleInstance Patron, ModuleInstance? Fine, LinkView Store)
         ResolvePatronFine(string sessionId, string patronId, string? fineId) {
         if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
-        if (state.InstanceStore is null)
-            throw new InvalidOperationException("store missing");
-        var patron = state.InstanceMap[patronId];
-        DomainEntityInstance? fine = fineId is null ? null : state.InstanceMap[fineId];
-        return (patron, fine, state.InstanceStore);
+        var patron = Find(state, patronId);
+        ModuleInstance? fine = fineId is null ? null : Find(state, fineId);
+        return (patron, fine, new LinkView(state.Executor));
     }
 
     private static async Task AssertPolicies(
@@ -166,16 +173,17 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(2);
         await AssertPolicies(sessionId, patronId, hasFines: true, noFines: false);
 
-        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
-            throw new InvalidOperationException("session/store missing");
-        var patron = state.InstanceMap[patronId];
-        var fineType = state.InstanceMap[fineTypeId!];
-        var fineRel = state.InstanceMap[fineRelId!];
-        await Assert.That(state.InstanceStore.GetRelatedInstances("fines", patron).Count)
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
+            throw new InvalidOperationException("session missing");
+        var links = new LinkView(state.Executor);
+        var patron = Find(state, patronId);
+        var fineType = Find(state, fineTypeId!);
+        var fineRel = Find(state, fineRelId!);
+        await Assert.That(links.GetRelatedInstances("fines", patron).Count)
             .IsEqualTo(1);
-        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineType).Count)
+        await Assert.That(links.GetRelatedInstances("patron", fineType).Count)
             .IsEqualTo(0);
-        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fineRel).Count)
+        await Assert.That(links.GetRelatedInstances("patron", fineRel).Count)
             .IsEqualTo(1);
     }
 
@@ -257,11 +265,11 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(invoke.Success).IsTrue();
         var patronId = ExtractReturnInstanceId(invoke);
         await Assert.That(patronId).IsNotNull();
-        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
-            throw new InvalidOperationException("session/store missing");
-        var patron = state.InstanceMap[patronId!];
-        await Assert.That(patron.GetProperty<string>("Name")).IsEqualTo("Ada");
-        await Assert.That(state.InstanceStore.GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
+            throw new InvalidOperationException("session missing");
+        var patron = Find(state, patronId!);
+        await Assert.That(patron.Bag["Name"]).IsEqualTo("Ada");
+        await Assert.That(new LinkView(state.Executor).GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
     }
 
     [Test]
@@ -296,11 +304,11 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(invoke.Success).IsTrue();
         var fineId = ExtractReturnInstanceId(invoke);
         await Assert.That(fineId).IsNotNull();
-        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state?.InstanceStore is null)
-            throw new InvalidOperationException("session/store missing");
-        var fine = state.InstanceMap[fineId!];
-        await Assert.That(fine.GetProperty<string>("Reason")).IsEqualTo("Overdue");
-        await Assert.That(state.InstanceStore.GetRelatedInstances("patron", fine).Count).IsEqualTo(0);
+        if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
+            throw new InvalidOperationException("session missing");
+        var fine = Find(state, fineId!);
+        await Assert.That(fine.Bag["Reason"]).IsEqualTo("Overdue");
+        await Assert.That(new LinkView(state.Executor).GetRelatedInstances("patron", fine).Count).IsEqualTo(0);
     }
 
     [Test]
@@ -334,7 +342,7 @@ public class SimulateCreateDogfoodTests {
         if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
         var account = state.InstanceMap[accountId!];
-        await Assert.That(account.GetProperty<DateOnly>("Opened"))
+        await Assert.That((DateOnly)account["Opened"]!)
             .IsEqualTo(DateOnly.FromDateTime(DateTime.UtcNow));
     }
 }

@@ -33,7 +33,7 @@ public class OptionalPropertyLoweringTests {
     }
 
     private static TypeDefinitionNode EntityType(Domain domain, AnalysisResult analysis, string name) =>
-        new DomainToCSharpExporter().Export(domain, analysis).Single(t => t.Name == name);
+        DomainProgramProjection.ToSyntax(domain, analysis).Single(t => t.Name == name);
 
     private static PropertyDefinitionNode Property(TypeDefinitionNode type, string name) =>
         type.Properties!.Single(p => p.Name == name);

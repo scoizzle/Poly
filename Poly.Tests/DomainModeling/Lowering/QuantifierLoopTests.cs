@@ -102,7 +102,7 @@ public class QuantifierLoopTests {
               HasOverdue: policy { any loans where Status is "Overdue" }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
         var method = ExportedCSharp.ExtractMethod(cs, "bool HasOverdue(");
         await Assert.That(method).Contains("LoanStatus.Overdue");
@@ -154,7 +154,7 @@ public class QuantifierLoopTests {
 
         // Printed: the same shapes built from the exported, compiled types.
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         object Make(string type, params (string Name, object? Value)[] args) =>
             ExportedCSharp.CreateEntity(asm, type, args);
         Array ListOf(string type, object[] items) {
@@ -237,7 +237,7 @@ public class QuantifierLoopTests {
         await Assert.That(bin.GetProperty<bool>("Active")).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var widget = ExportedCSharp.CreateEntity(widgetType, ("active", true));
@@ -270,7 +270,7 @@ public class QuantifierLoopTests {
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
 
@@ -331,7 +331,7 @@ public class QuantifierLoopTests {
         var (domain, analysis) = Evolve(ExistsPredicateDsl);
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
 
@@ -392,7 +392,7 @@ public class QuantifierLoopTests {
         var policy = bin.Entity.Policies.First(p => p.Name == "P");
         await Assert.That(bin.EvaluatePolicy(policy)).IsTrue();
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(() => ExportedCSharp.CompileAndLoad(cs)).Throws<InvalidOperationException>()
             .WithMessageContaining("CS0029");
     }
@@ -417,7 +417,7 @@ public class QuantifierLoopTests {
         await Assert.That(Convert.ToInt64(bin.GetProperty<object>("N"))).IsEqualTo(1L);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var printedWidgets = Array.CreateInstance(widgetType, 2);
@@ -454,7 +454,7 @@ public class QuantifierLoopTests {
         await Assert.That(store.GetLinkedTargets("widgets", bin).Count).IsEqualTo(2);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var widgets = Array.CreateInstance(widgetType, 1);
@@ -497,7 +497,7 @@ public class QuantifierLoopTests {
         await Assert.That(Flatten(ifs.Condition).OfType<ForEachLoop>().Any()).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var widgets = Array.CreateInstance(widgetType, 1);
@@ -546,7 +546,7 @@ public class QuantifierLoopTests {
         await Assert.That(idle.GetProperty<bool>("Flag")).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var printedWidgets = Array.CreateInstance(widgetType, 2);
@@ -586,7 +586,7 @@ public class QuantifierLoopTests {
         var simActive = sim.ResultInstance!.GetProperty<bool>("Active");
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         var widgets = Array.CreateInstance(widgetType, 1);
@@ -635,7 +635,7 @@ public class QuantifierLoopTests {
         await Assert.That(simFalse).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var workerType = asm.GetType("Worker")!;
         var teamType = asm.GetType("Team")!;
         var deptType = asm.GetType("Dept")!;
@@ -698,7 +698,7 @@ public class QuantifierLoopTests {
         await Assert.That(simFalse).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var workerType = asm.GetType("Worker")!;
         var teamType = asm.GetType("Team")!;
         var deptType = asm.GetType("Dept")!;
@@ -767,7 +767,7 @@ public class QuantifierLoopTests {
         await Assert.That(simFalse).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var workerType = asm.GetType("Worker")!;
         var teamType = asm.GetType("Team")!;
         var orgType = asm.GetType("Org")!;
@@ -828,7 +828,7 @@ public class QuantifierLoopTests {
         await Assert.That(simFalse).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var teamType = asm.GetType("Team")!;
         var deptType = asm.GetType("Dept")!;
         var teamStateType = asm.GetType("TeamState")!;
@@ -880,7 +880,7 @@ public class QuantifierLoopTests {
         await Assert.That(simOpen).IsTrue();
         await Assert.That(simClosed).IsFalse();
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var asm = ExportedCSharp.CompileAndLoad(cs);
         var lineType = asm.GetType("Line")!;
         var ticketType = asm.GetType("Ticket")!;
@@ -938,7 +938,7 @@ public class QuantifierLoopTests {
         await Assert.That(Convert.ToInt64(binLow.GetProperty<object>("N"))).IsEqualTo(0L);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;
         object PrintBin() {
@@ -999,7 +999,7 @@ public class QuantifierLoopTests {
         await Assert.That(withoutOpen.GetProperty<bool>("Flag")).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var partType = asm.GetType("Part")!;
         var widgetType = asm.GetType("Widget")!;
         var binType = asm.GetType("Bin")!;

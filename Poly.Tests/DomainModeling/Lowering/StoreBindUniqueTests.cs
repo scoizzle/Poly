@@ -44,16 +44,19 @@ public class StoreBindUniqueTests {
     }
 
     [Test]
-    public async Task Export_CreateFactory_InvokesEnsureUnique() {
+    public async Task Export_CreateFactory_NamesNoDeiRuntime() {
         var entity = PermitEntity();
         var domain = ValidDomain.Create("Parking", [entity]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
         await Assert.That(create).Contains("var created = new Permit(");
-        await Assert.That(create).Contains("CheckUnique");
-        await Assert.That(create).Contains("PrintedRecord");
-        await Assert.That(cs).Contains("PrintedCollision");
+        // The unique check on Create is the storage library's guard on the IStoragePort;
+        // the bare export holds none and never names the DEI runtime.
+        await Assert.That(create).DoesNotContain("CheckUnique");
+        await Assert.That(cs).DoesNotContain("DomainInstanceStore");
+        await Assert.That(cs).DoesNotContain("PrintedCollision");
+        await Assert.That(cs).DoesNotContain("PrintedRecord");
         await Assert.That(cs).Contains("EnsureUnique(string propertyName");
     }
 

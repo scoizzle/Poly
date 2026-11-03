@@ -1070,9 +1070,13 @@ public static partial class AbiEmitter {
         var leftVal = ValueOf(n.LeftHandValue, ctx);
         if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
             var rightArm = ValueOf(n.RightHandValue, ctx);
+            // A temporal arm is its word, not a number: decode it, do not convert it.
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm
-                : Convert(rightArm, underlying);
+                : rightArm.Type == typeof(long)
+                    && LocalType.Of(underlying) is LocalType.TemporalLocal { IsWord: true }
+                    ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
+                    : Convert(rightArm, underlying);
             using var coal = ctx.LeaseHelper(leftVal.Type, "_coal");
             var leftLocal = coal.Local;
             return Block(Assign(leftLocal, leftVal), Coalesce(leftLocal, right));

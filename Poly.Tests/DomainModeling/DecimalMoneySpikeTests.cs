@@ -53,7 +53,7 @@ public class DecimalMoneySpikeTests {
         await Assert.That(created.Success).IsTrue();
         McpTestTools.Store.TryGet(sessionId, out var state);
         var stored = state!.InstanceMap.Values.Single();
-        await Assert.That(stored.GetProperty<decimal>("NightlyRate")).IsEqualTo(199.50m);
+        await Assert.That((decimal)stored["NightlyRate"]!).IsEqualTo(199.50m);
 
         var (rejectId, _) = McpTestTools.Store.Create("Stay");
         await Assert.That(McpTestTools.Dsl.ApplyDsl(rejectId, Stay).Success).IsTrue();

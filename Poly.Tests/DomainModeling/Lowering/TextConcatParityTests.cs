@@ -62,7 +62,7 @@ public class TextConcatParityTests {
         var first = analysis.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message;
 
         var exportEx = Assert.Throws<InvalidOperationException>(
-            () => new DomainToCSharpExporter().Export(domain, analysis));
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(exportEx!.Message).IsEqualTo(first);
 
         var entityForCreate = domain.Types.OfType<Entity>().Single();

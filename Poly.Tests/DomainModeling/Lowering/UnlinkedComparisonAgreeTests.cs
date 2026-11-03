@@ -57,7 +57,7 @@ public class UnlinkedComparisonAgreeTests {
         store.Add(customer);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer", ("name", "Pat"), ("age", 20L));
 
         // Every value-hop operator guards the unlinked advisor, so the comparison
@@ -96,7 +96,7 @@ public class UnlinkedComparisonAgreeTests {
         await Assert.That(customer.GetProperty<bool>("Ready")).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L), ("ready", false));
         var printPolicy = (bool)printed.GetType().GetMethod("YoungerThanAdvisor")!.Invoke(printed, null)!;
         await Assert.That(printPolicy).IsFalse();
@@ -128,7 +128,7 @@ public class UnlinkedComparisonAgreeTests {
         var (domain, analysis) = EvolvedDomain.FromDsl(MultiHopDsl);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
 
         var store = new DomainInstanceStore();
         var mentor = DomainEntityInstance.Create(E("Mentor"),
@@ -200,7 +200,7 @@ public class UnlinkedComparisonAgreeTests {
             }
             """);
         Entity E(string name) => domain.Types.OfType<Entity>().First(e => e.Name == name);
-        var source = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var source = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var policyLine = source.Split('\n').First(l => l.Contains("bool YoungerThanBoth()"));
         await Assert.That(policyLine.Split("this.Advisor != null").Length - 1).IsEqualTo(1);
 
@@ -247,7 +247,7 @@ public class UnlinkedComparisonAgreeTests {
         var sim = customer.EvaluatePolicy(customerE.Policies.First(p => p.Name == "P"));
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer");
         var print = (bool)printed.GetType().GetMethod("P")!.Invoke(printed, null)!;
 
@@ -294,7 +294,7 @@ public class UnlinkedComparisonAgreeTests {
         store.Add(customer);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 30L));
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));

@@ -38,7 +38,7 @@ public class StageNotifyDispatchTests {
         await Assert.That(widget.GetProperty<long>("Count")).IsEqualTo(1L);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedBin = ExportedCSharp.CreateEntity(asm, "Bin");
         var printedWidget = ExportedCSharp.CreateEntity(asm, "Widget");
         var widgets = printedBin.GetType()

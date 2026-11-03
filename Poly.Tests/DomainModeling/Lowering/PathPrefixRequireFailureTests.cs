@@ -70,7 +70,7 @@ public class PathPrefixRequireFailureTests {
               InHouse: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 

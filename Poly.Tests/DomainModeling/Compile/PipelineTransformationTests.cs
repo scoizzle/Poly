@@ -259,7 +259,7 @@ public class PipelineTransformationTests {
         var bodyCs = new CSharpGenerator().Generate(maybe!.Body!);
         await Assert.That(bodyCs).Contains("Inc()");
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         await Assert.That(cs).Contains("this.Inc()");
 

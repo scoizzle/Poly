@@ -72,7 +72,7 @@ public class SubscriptionSingleFireTests {
 
     private static long Counter(string sessionId, string instanceId, string property) {
         McpTestTools.Store.TryGet(sessionId, out var state);
-        return state!.InstanceMap[instanceId].GetProperty<long>(property);
+        return (long)state!.InstanceMap[instanceId][property]!;
     }
 
     private static bool Invoke(string sessionId, string instanceId, string action, string? args = null) {
@@ -90,8 +90,8 @@ public class SubscriptionSingleFireTests {
         var queueId = CreateAndId(sessionId, "Queue", """{"Name":"Q"}""");
         Invoke(sessionId, queueId, "Enqueue", """{"title":"build"}""");
         McpTestTools.Store.TryGet(sessionId, out var state);
-        var jobId = state!.InstanceMap
-            .First(pair => pair.Value.Entity.Name == "Job").Key;
+        var jobId = state!.Executor.Instances
+            .First(i => i.EntityName == "Job").Id;
 
         Invoke(sessionId, jobId, "Start");
         Invoke(sessionId, jobId, "Fail");
@@ -108,8 +108,8 @@ public class SubscriptionSingleFireTests {
         var queueId = CreateAndId(sessionId, "Queue", """{"Name":"Q"}""");
         Invoke(sessionId, queueId, "Enqueue", """{"title":"build"}""");
         McpTestTools.Store.TryGet(sessionId, out var state);
-        var jobId = state!.InstanceMap
-            .First(pair => pair.Value.Entity.Name == "Job").Key;
+        var jobId = state!.Executor.Instances
+            .First(i => i.EntityName == "Job").Id;
 
         Invoke(sessionId, jobId, "Start");
         for (var i = 0; i < 3; i++) {

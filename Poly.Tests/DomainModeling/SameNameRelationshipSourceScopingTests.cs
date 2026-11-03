@@ -231,7 +231,7 @@ public class SameNameRelationshipSourceScopingTests {
     public async Task Export_EachSourceEmitsOwnCreateNavMethod() {
         var domain = ParseAndBuild();
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         var machine = types.Single(t => t.Name == "Machine");
         var book = types.Single(t => t.Name == "Book");

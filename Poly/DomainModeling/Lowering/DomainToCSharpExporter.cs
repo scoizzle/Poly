@@ -44,24 +44,15 @@ public sealed partial class DomainToCSharpExporter {
     );
 
     private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
-        $"_{ToCamelCase(info.SourceEntity.Name)}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscribers";
+        SubscriberRegistryFieldName(info.SourceEntity.Name, info.Relationship.Name, info.StageName);
+
+    /// <summary>Registry field on the watched target that lists subscribers of one stage.</summary>
+    internal static string SubscriberRegistryFieldName(
+        string sourceEntityName, string relationshipName, string stageName) =>
+        $"_{ToCamelCase(sourceEntityName)}{ToPascalCase(relationshipName)}{stageName}Subscribers";
 
     private static string SubscriberRegisterMethodName(SubscriptionInfo info) =>
         $"Register{info.SourceEntity.Name}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscriber";
-
-    /// <summary>
-    /// Builds Syntax AST type definitions for all entities and their stage enums
-    /// in the given domain. Reads entity members directly from the domain model.
-    /// </summary>
-    /// <param name="domain">The domain model to export.</param>
-    /// <param name="analysis">
-    /// The analysis result (required).
-    /// </param>
-    public IReadOnlyList<TypeDefinitionNode> Export(Domain domain,
-        AnalysisResult analysis) {
-        ArgumentNullException.ThrowIfNull(analysis);
-        return DomainProgramProjection.ToSyntax(domain, analysis);
-    }
 
     /// <summary>
     /// Collects the subscription facts for one node's dispatch plan (an entity for
@@ -596,7 +587,10 @@ public sealed partial class DomainToCSharpExporter {
                 // Idempotent registration: a create-in child is already linked by
                 // the store under simulate, and printed hosts may attach twice.
                 // ReferenceEquals keeps distinct-but-equal records from deduping.
+                // The body must use this parameter, not a same-named copy: a copy
+                // has no type, so the VM cannot place the argument.
                 var existing = new Variable("existing");
+                var subscriber = new Parameter(paramName, srcType);
                 var registerBody = new Block([
                     new IfStatement(
                         new Equal(fieldAcc, new Constant(null)),
@@ -611,17 +605,17 @@ public sealed partial class DomainToCSharpExporter {
                         fieldAcc,
                         new IfStatement(
                             new Invoke(
-                                new Member(new NamedTypeReference("object"), "ReferenceEquals"),
-                                [existing, new Parameter(paramName)]),
+                                new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                                [existing, subscriber]),
                             new Block([new Return(null)]))),
                     new Invoke(
                         new Member(fieldAcc, "Add"),
-                        [new Parameter(paramName)])
+                        [subscriber])
                 ]);
                 methods.Add(new MethodDefinitionNode(
                     SubscriberRegisterMethodName(infos[0]),
                     new TypeReference("void"),
-                    Parameters: [new Parameter(paramName, srcType)],
+                    Parameters: [subscriber],
                     Body: registerBody,
                     AccessModifier: AccessModifier.Internal
                 ));
@@ -938,9 +932,6 @@ public sealed partial class DomainToCSharpExporter {
                 new New(
                     new NamedTypeReference(entity.Name),
                     ctorParams.ToArray())));
-            AppendCreateUniqueChecks(
-                entity, ctorParams, createResultType, createSuccessNodes, createLocals);
-
             var lookup = metadata.GetTypeLookup(domain);
             foreach (var navParam in esm.ConstructorParameters
                 .Where(p => p.IsNavigation && !p.IsCollection)) {
@@ -1015,7 +1006,6 @@ public sealed partial class DomainToCSharpExporter {
         }
 
         if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any())) {
-            methods.Add(CheckUniqueMethod(entity));
             methods.Add(EnsureUniqueAssignMethod(entity));
         }
 
@@ -1036,104 +1026,11 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// After <c>created = new</c> (outside the VM create prefix): reject a duplicate
-    /// unique value, then record the keys on <see cref="DomainInstanceStore.PrintedPort"/>.
-    /// </summary>
-    private static void AppendCreateUniqueChecks(
-        Entity entity,
-        IReadOnlyList<Parameter> signature,
-        NamedTypeReference resultType,
-        List<Node> nodes,
-        List<Node> locals) {
-        var checks = UniqueConstructorArguments(entity, signature);
-        if (checks.Count == 0)
-            return;
-        var uniqueCheck = new Variable("uniqueCheck");
-        locals.Add(uniqueCheck);
-        var typeName = new NamedTypeReference(entity.Name);
-        foreach (var (prop, param) in checks) {
-            nodes.Add(new Assignment(uniqueCheck, new Invoke(
-                new Member(typeName, "CheckUnique"),
-                new Constant(prop.Name),
-                param)));
-            nodes.Add(new IfStatement(
-                new Syntactic.Not(new Member(uniqueCheck, "IsSuccess")),
-                new Block([
-                    new Return(new Invoke(
-                        new Member(resultType, "Failure"),
-                        new Syntactic.Coalesce(
-                            new Member(uniqueCheck, "ErrorMessage"),
-                            new Constant(""))))
-                ])));
-        }
-        foreach (var (prop, param) in checks) {
-            nodes.Add(new Invoke(
-                new Member(new ClrTypeReference(typeof(DomainInstanceStore)), "PrintedRecord"),
-                new Constant(entity.Name),
-                new Constant(prop.Name),
-                UniqueRecordArgument(prop, param)));
-        }
-    }
-
-    private static List<(Property Property, Parameter Parameter)> UniqueConstructorArguments(
-        Entity entity, IReadOnlyList<Parameter> signature) {
-        var checks = new List<(Property, Parameter)>();
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
-                continue;
-            var param = signature.FirstOrDefault(p =>
-                string.Equals(p.Name, ToCamelCase(prop.Name), StringComparison.Ordinal));
-            if (param is null)
-                continue;
-            checks.Add((prop, param));
-        }
-        return checks;
-    }
-
-    /// <summary>Text passes the parameter through. Other types stringify, matching <c>Exists</c>.</summary>
-    private static Node UniqueRecordArgument(Property prop, Parameter param) {
-        var isText = prop.Type.TypeName is "Text" or "String";
-        return isText ? param : new Invoke(new Member(param, "ToString"));
-    }
-
-    /// <summary>
-    /// Shared printed check. Reads <see cref="DomainInstanceStore.PrintedPort"/>;
-    /// a null port is Success (no peers).
-    /// </summary>
-    private static MethodDefinitionNode CheckUniqueMethod(Entity entity) {
-        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
-        var value = new Parameter("value", StoreJobObjectType());
-        var message = new Variable("message");
-        Node collision = new Invoke(
-            new Member(new ClrTypeReference(typeof(DomainInstanceStore)), "PrintedCollision"),
-            new Constant(entity.Name),
-            propertyName,
-            new Invoke(new Member(value, "ToString")));
-        return new MethodDefinitionNode(
-            "CheckUnique",
-            new NamedTypeReference("DomainResult"),
-            Parameters: [propertyName, value],
-            Body: new Block([
-                new IfStatement(
-                    new Equal(value, new Constant(null)),
-                    new Block([DomainResultSuccess()])),
-                new Assignment(message, collision),
-                new IfStatement(
-                    new NotEqual(message, new Constant(null)),
-                    new Block([
-                        new Return(new Invoke(
-                            new Member(new NamedTypeReference("DomainResult"), "Failure"),
-                            message))
-                    ])),
-                DomainResultSuccess()
-            ], [message]),
-            IsStatic: true,
-            AccessModifier: AccessModifier.Private);
-    }
-
-    /// <summary>
     /// Assign of a unique property calls <c>this.EnsureUnique</c>. The same value
-    /// already on this instance is Success. A different value uses <see cref="CheckUniqueMethod"/>.
+    /// already on this instance is Success. A different value fails closed: this method holds
+    /// no storage port. The storage library rewrites every EnsureUnique-then-assign into
+    /// <c>db.Exists</c>/<c>Release</c>/<c>Record</c> on the <c>IStoragePort</c> the action receives,
+    /// so a module compiled with storage never reaches this failure.
     /// </summary>
     private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
         var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
@@ -1156,9 +1053,8 @@ public sealed partial class DomainToCSharpExporter {
                 new Block([DomainResultSuccess()])));
         }
         nodes.Add(new Return(new Invoke(
-            new Member(new NamedTypeReference(entity.Name), "CheckUnique"),
-            propertyName,
-            value)));
+            new Member(new NamedTypeReference("DomainResult"), "Failure"),
+            new Constant("A unique assign needs the storage port."))));
         return new MethodDefinitionNode(
             "EnsureUnique",
             new NamedTypeReference("DomainResult"),

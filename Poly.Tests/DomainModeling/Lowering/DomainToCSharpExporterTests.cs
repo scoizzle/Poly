@@ -172,9 +172,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_Produces_CoreInfrastructureTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         await Assert.That(types.Any(t => t.Name == "DomainResult")).IsTrue();
         await Assert.That(types.Any(t => t.Name is "DomainResult" && t.GenericParameters?.Count > 0)).IsTrue();
@@ -183,9 +181,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_Produces_EnumTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         await Assert.That(types.Any(t => t.Name == "Genre")).IsTrue();
         await Assert.That(types.Any(t => t.Name == "PatronStatus")).IsTrue();
@@ -208,9 +204,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_Produces_EntityTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         var book = types.FirstOrDefault(t => t.Name == "Book");
         await Assert.That(book).IsNotNull();
@@ -347,9 +341,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_BookEntity_HasExpectedProperties() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var book = types.First(t => t.Name == "Book");
         var propNames = book.Properties?.Select(p => p.Name).ToArray() ?? [];
 
@@ -363,9 +355,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_PatronEntity_HasPoliciesAsMethods() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
         var methodNames = patron.Methods?.Select(m => m.Name).ToArray() ?? [];
 
@@ -378,9 +368,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_PatronEntity_HasNavigationBackingFields() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
         var fieldNames = patron.Fields?.Select(f => f.Name).ToArray() ?? [];
 
@@ -391,9 +379,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_PatronEntity_HasStageEnum() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var exporter = new DomainToCSharpExporter();
-
-        var types = exporter.Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         var patronStage = types.Single(t => t.Name == "PatronStage");
         await Assert.That(patronStage.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Enumeration);
@@ -413,7 +399,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         await Assert.That(analysis.GetMetadata<RelationshipLookupMetadata>(default)).IsNotNull();
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
         var loan = types.First(t => t.Name == "Loan");
         var patronMethods = patron.Methods?.Select(m => m.Name).ToHashSet(StringComparer.Ordinal) ?? [];
@@ -434,7 +420,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(esm).IsNotNull();
         await Assert.That(esm!.ConstructorParameters.Count).IsGreaterThan(0);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
         var createLoans = patron.Methods?.FirstOrDefault(m => m.Name == "CreateLoans");
         await Assert.That(createLoans).IsNotNull();
@@ -488,7 +474,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var customer = types.First(t => t.Name == "Customer");
         var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
         await Assert.That(createOrders).IsNotNull();
@@ -523,7 +509,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var customer = types.First(t => t.Name == "Customer");
         var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
         await Assert.That(createOrders).IsNotNull();
@@ -564,7 +550,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var customer = types.First(t => t.Name == "Customer");
         var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
         await Assert.That(createOrders).IsNotNull();
@@ -587,7 +573,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createParent = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateParent(");
@@ -613,7 +599,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createParent = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateParent(");
@@ -640,7 +626,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateChildren(");
@@ -670,7 +656,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createOrder = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> CreateOrder(");
@@ -696,7 +682,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreatePrimary(");
@@ -725,7 +711,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateChildren(");
@@ -754,7 +740,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         await Assert.That(cs).Contains("public DomainResult<Child> CreateChildren(");
@@ -812,7 +798,7 @@ public class DomainToCSharpExporterTests {
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var trackerType = types.First(t => t.Name == "Tracker");
         var orderType = types.First(t => t.Name == "Order");
 
@@ -868,7 +854,7 @@ public class DomainToCSharpExporterTests {
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var handler = types.First(t => t.Name == "Tracker").Methods?
             .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
@@ -915,7 +901,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var trackerType = types.First(t => t.Name == "Tracker");
         var orderType = types.First(t => t.Name == "Order");
 
@@ -988,7 +974,7 @@ public class DomainToCSharpExporterTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => new DomainToCSharpExporter().Export(domain, analysis));
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(ex!.Message).Contains("Nested path-prefix");
     }
 
@@ -1024,7 +1010,7 @@ public class DomainToCSharpExporterTests {
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var handler = types.First(t => t.Name == "Tracker").Methods?
             .FirstOrDefault(m => m.Name == "WhenEachOrderActive");
         await Assert.That(handler).IsNotNull();
@@ -1062,7 +1048,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         var order = types.First(t => t.Name == "Order");
         var handlerNames = order.Methods!.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
@@ -1105,7 +1091,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var ticket = types.First(t => t.Name == "Ticket");
         var methods = ticket.Methods!.Select(m => m.Name).ToList();
         await Assert.That(methods.Count(n => n == "NotifyClosedSubscribers")).IsEqualTo(1);
@@ -1142,7 +1128,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1283,7 +1269,7 @@ public class DomainToCSharpExporterTests {
               when all tasks Done { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1315,7 +1301,7 @@ public class DomainToCSharpExporterTests {
     // ── R6: in-suite compile oracle (Roslyn) ─────────────────────
 
     private static async Task AssertExportCompiles(Domain domain, AnalysisResult analysis) {
-        var typeDefs = new DomainToCSharpExporter().Export(domain, analysis);
+        var typeDefs = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(typeDefs);
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + csharp);
 
@@ -1355,7 +1341,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await AssertExportCompiles(domain, analysis);
         var csharp = new CSharpGenerator().Generate(
-            new DomainToCSharpExporter().Export(domain, analysis));
+            DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(csharp).Contains("public string @base");
         await Assert.That(csharp).DoesNotContain("public string base");
     }
@@ -1373,7 +1359,7 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await AssertExportCompiles(domain, analysis);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("ToDateTime");
     }
@@ -1394,7 +1380,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
         await Assert.That(analysis.HasErrors).IsFalse();
         await AssertExportCompiles(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var csharp = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(csharp).Contains("AddDays((int)14L)");
         await Assert.That(csharp).Contains("AddYears((int)1L)");
     }
@@ -1413,7 +1399,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
         await Assert.That(analysis.HasErrors).IsFalse();
         await AssertExportCompiles(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var csharp = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(csharp).Contains("AddMonths((int)3L)");
         await Assert.That(csharp).Contains("AddHours(2L)");
     }
@@ -1432,7 +1418,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
         await Assert.That(analysis.HasErrors).IsFalse();
         await AssertExportCompiles(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var csharp = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(csharp).Contains("ToDateTime");
     }
 
@@ -1449,7 +1435,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await Assert.That(analysis.HasErrors).IsFalse();
         await AssertExportCompiles(domain, analysis);
-        var csharp = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var csharp = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(csharp).Contains("ToDateTime");
     }
 
@@ -1496,7 +1482,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await AssertExportCompiles(domain, analysis);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("Guid.NewGuid().ToString()");
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
@@ -1521,7 +1507,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl, ExtensionCatalog.Core.Language);
         await AssertExportCompiles(domain, analysis);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.UtcNow");
@@ -1554,7 +1540,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         await AssertExportCompiles(domain, analysis);
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
         await Assert.That(csharp).Contains("linkedTarget.CurrentStage != WorkItemStage.Done");
         await Assert.That(csharp).Contains("if (!linkedMatched)");
@@ -1649,7 +1635,7 @@ public class DomainToCSharpExporterTests {
               Done: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1673,7 +1659,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1696,7 +1682,7 @@ public class DomainToCSharpExporterTests {
               HasSource: policy { source exists }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1717,7 +1703,7 @@ public class DomainToCSharpExporterTests {
               HasPath: policy { source Path is "main.tiny" }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1738,7 +1724,7 @@ public class DomainToCSharpExporterTests {
               NamedPat: policy { advisor Name is "Pat" }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1770,7 +1756,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1796,7 +1782,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         await Assert.That(cs).Contains("CreateNotes(");
@@ -1871,7 +1857,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1899,7 +1885,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1934,7 +1920,7 @@ public class DomainToCSharpExporterTests {
               Complete: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1962,7 +1948,7 @@ public class DomainToCSharpExporterTests {
               Complete: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -1980,7 +1966,7 @@ public class DomainToCSharpExporterTests {
               Qty: Number range(1, 999) default(1)
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2007,7 +1993,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2038,7 +2024,7 @@ public class DomainToCSharpExporterTests {
               InHouse: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2063,7 +2049,7 @@ public class DomainToCSharpExporterTests {
               Active: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2086,7 +2072,7 @@ public class DomainToCSharpExporterTests {
               Closed: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2113,7 +2099,7 @@ public class DomainToCSharpExporterTests {
               pallets: many Pallet
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2137,7 +2123,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2162,7 +2148,7 @@ public class DomainToCSharpExporterTests {
               Retired: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2181,7 +2167,7 @@ public class DomainToCSharpExporterTests {
               advisor: Advisor
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2209,7 +2195,7 @@ public class DomainToCSharpExporterTests {
               Cooking: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2230,7 +2216,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2255,7 +2241,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2279,7 +2265,7 @@ public class DomainToCSharpExporterTests {
               Closed: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2307,7 +2293,7 @@ public class DomainToCSharpExporterTests {
             OrderLine: entity { order: Order }
             Customer: entity { orders: many Order }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2330,7 +2316,7 @@ public class DomainToCSharpExporterTests {
               make: action { create Product { SKU: "P1" Tier: Plus } }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2360,7 +2346,7 @@ public class DomainToCSharpExporterTests {
               patron: Patron
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         await Assert.That(cs).Contains("Fine.Create(");
 
@@ -2397,7 +2383,7 @@ public class DomainToCSharpExporterTests {
               Reason: Text
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         var hire = ExportedCSharp.ExtractMethod(cs, "DomainResult<Patron> Hire(");
         await Assert.That(hire).Contains("Patron.Create(name)");
@@ -2423,7 +2409,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2454,7 +2440,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Item: entity { Code: Text length(3, ) }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2492,7 +2478,7 @@ public class DomainToCSharpExporterTests {
               Done: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2518,7 +2504,7 @@ public class DomainToCSharpExporterTests {
               IsDueSoon: policy { DueDate - 7 <= ReferenceDate }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2537,7 +2523,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2573,7 +2559,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2603,7 +2589,7 @@ public class DomainToCSharpExporterTests {
         analysis = analysis.WithoutMetadata<SubscriptionDispatchPlanMetadata>(order);
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => new DomainToCSharpExporter().Export(domain, analysis));
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(ex!.Message).Contains("Subscription dispatch plan metadata is missing");
     }
 
@@ -2625,7 +2611,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2653,7 +2639,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2684,7 +2670,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2716,7 +2702,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2749,7 +2735,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2783,7 +2769,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2822,7 +2808,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2856,7 +2842,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2888,7 +2874,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2926,7 +2912,7 @@ public class DomainToCSharpExporterTests {
               }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2959,7 +2945,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -2990,7 +2976,7 @@ public class DomainToCSharpExporterTests {
               Abort: action { invoke Cancel }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -3033,7 +3019,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -3068,7 +3054,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
@@ -3109,7 +3095,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_PublicCreate_WiresInverseAttachCalls() {
         var (domain, analysis) = ParseAndAnalyze(PublicCreateWireInversesDsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Reservation> Create(");
@@ -3127,7 +3113,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_PublicCreate_CheckIn_SetsRoomOccupied_ViaGeneratedTypes() {
         var (domain, analysis) = ParseAndAnalyze(PublicCreateWireInversesDsl);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
@@ -3242,7 +3228,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
         var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
         await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
@@ -3271,7 +3257,7 @@ public class DomainToCSharpExporterTests {
             }
             """);
         await Assert.That(analysis.HasErrors).IsFalse();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
         var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreatePrimary(");
@@ -3345,7 +3331,7 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_HasOverdueLoans_PrintsForeachOverLoans() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var method = ExportedCSharp.ExtractMethod(cs, "bool HasOverdueLoans(");
@@ -3392,7 +3378,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(simTrue).IsTrue();
         await Assert.That(simFalse).IsFalse();
 
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
         var asm = ExportedCSharp.CompileAndLoad(cs, "HasOverdueLoansPrint");
         var patronType = asm.GetType("Patron")!;
@@ -3452,7 +3438,7 @@ public class DomainToCSharpExporterTests {
         // R1: a `when` subscription through a singular navigation registers `this` on the
         // target from the constructor. An unlinked (null) nav must not be dereferenced.
         var (domain, analysis) = ParseAndAnalyze(SingularSubscriptionDsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var init = ExportedCSharp.ExtractMethod(cs, "void InitializeSubscriptions(");
@@ -3468,7 +3454,7 @@ public class DomainToCSharpExporterTests {
         // R1 runtime: constructing Tr without linking a Paper must not NRE in
         // InitializeSubscriptions (this.Tracks is null).
         var (domain, analysis) = ParseAndAnalyze(SingularSubscriptionDsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var asm = ExportedCSharp.CompileAndLoad(cs, "WithoutPaper");
@@ -3496,7 +3482,7 @@ public class DomainToCSharpExporterTests {
               Q: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Paper> CreateTracks(");
@@ -3518,7 +3504,7 @@ public class DomainToCSharpExporterTests {
               B: stage { }
             }
             """);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).Contains("HashSet<string>? _automaticStageChain");
@@ -3542,7 +3528,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var pay = ExportedCSharp.ExtractMethod(cs, "DomainResult Pay(");
@@ -3564,7 +3550,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
@@ -3604,7 +3590,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var log = ExportedCSharp.ExtractMethod(cs, "DomainResult Log(");
@@ -3630,7 +3616,7 @@ public class DomainToCSharpExporterTests {
             throw new InvalidOperationException(domain.FailureSummary);
 
         var analysis = DomainModelAnalyzer.Analyze(domain.Root!);
-        var types = new DomainToCSharpExporter().Export(domain.Root!, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain.Root!, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var log = ExportedCSharp.ExtractMethod(cs, "DomainResult Log(");
@@ -3658,7 +3644,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var ctor = cs[cs.IndexOf("private Truck(", StringComparison.Ordinal)..];
@@ -3691,7 +3677,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var ship = ExportedCSharp.ExtractMethod(cs, "DomainResult Ship(");
@@ -3713,7 +3699,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("enum PatronStage");
@@ -3734,7 +3720,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).Contains("enum WidgetStage");
@@ -3760,7 +3746,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        await Assert.That(() => new DomainToCSharpExporter().Export(domain, analysis))
+        await Assert.That(() => DomainProgramProjection.ToSyntax(domain, analysis))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("implicit stage");
     }
@@ -3783,7 +3769,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("OnEntryA");
@@ -3810,7 +3796,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).Contains("void NotifyBSubscribers()");
@@ -3834,7 +3820,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).Contains("void NotifyBSubscribers(ItemStage? previousStage)");
@@ -3861,7 +3847,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var add = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreateChildren(");
@@ -3895,7 +3881,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreateChildren(");
@@ -3919,7 +3905,7 @@ public class DomainToCSharpExporterTests {
         var patron = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
         var stagePing = patron.Stages.Single().Actions.Single(a => a.Name == "Ping");
         await Assert.That(stagePing.Effects.Count).IsGreaterThan(0);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         // The stage action carries the stage assignment; it must not be dropped.
@@ -3939,7 +3925,7 @@ public class DomainToCSharpExporterTests {
             throw new InvalidOperationException(domain.FailureSummary);
 
         var analysis = DomainModelAnalyzer.Analyze(domain.Root!);
-        var types = new DomainToCSharpExporter().Export(domain.Root!, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain.Root!, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).Contains("enum WidgetStage");
@@ -3962,7 +3948,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var checkIn = ExportedCSharp.ExtractMethod(cs, "DomainResult CheckIn(");
@@ -3989,7 +3975,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var ctor = cs[cs.IndexOf("private Parent(", StringComparison.Ordinal)..];
@@ -4018,7 +4004,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreateChildren(");
@@ -4035,7 +4021,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Item> Create(");
         // An optional slot is null when omitted, so an empty string still has to match.
         await Assert.That(create).Contains("zip != null && !System.Text.RegularExpressions.Regex.IsMatch(zip");
@@ -4055,7 +4041,7 @@ public class DomainToCSharpExporterTests {
             Enrollment: entity { Name: Text }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("this.Enrollments.Count > 0");
         await Assert.That(cs).Contains("this.Enrollments.Count == 0");
         await Assert.That(cs).DoesNotContain("Count > 0L");
@@ -4076,7 +4062,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
         await Assert.That(dispatch).Contains("this.Status = TruckStatus.EnRoute");
         await Assert.That(dispatch).DoesNotContain("is not a valid member of TruckStatus");
@@ -4091,7 +4077,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
 
         await Assert.That(cs).Contains("this._value = value;");
         await Assert.That(cs).DoesNotContain("@value");
@@ -4115,7 +4101,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("WhenEachStayDeparted_SetOccupied");
         await Assert.That(cs).Contains("WhenEachStayDeparted_SetDirty");
         await Assert.That(cs).DoesNotContain("WhenEachStayDeparted_2");
@@ -4134,7 +4120,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
         var total = create.IndexOf("long total", StringComparison.Ordinal);
         var reason = create.IndexOf("cancelReason", StringComparison.Ordinal);
@@ -4150,7 +4136,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_PersistenceSeeded_EmptyParameterlessCtorAndFieldInitializer() {
         var (_, domain, analysis) = Poly.Tests.DomainModeling.Compile.EmitGoldenTests.AnalyzeSampleFile(
             "docs/probes/fleet-eval/09-transport/orders.poly");
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("private OrderItem() { }");
         await Assert.That(cs).Contains("_items = new List<OrderItem>()");
     }
@@ -4178,7 +4164,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Visit> Create(");
         await Assert.That(create).Contains("string reason");
         await Assert.That(create).DoesNotContain("string reason = \"\"");
@@ -4199,7 +4185,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).DoesNotContain("private Item()");
     }
 

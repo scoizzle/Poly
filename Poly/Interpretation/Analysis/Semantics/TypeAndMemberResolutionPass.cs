@@ -822,6 +822,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             return ResolveNodeType(context, parameter.TypeReference);
         }
 
+        // A use in a body carries no type reference; the bind pass linked it to the
+        // declaration that does.
+        if (context.GetMetadata<ParameterBindingMetadata>(parameter)?.Declaration is { TypeReference: { } declared })
+            return ResolveNodeType(context, declared);
+
         return null;
     }
 

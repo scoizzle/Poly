@@ -480,8 +480,7 @@ public class SurfaceExtensionDogfoodTests {
             .IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var orderKvp = st!.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order");
-        var orderId = orderKvp.Key;
+        var orderId = st!.Executor.Instances.First(i => i.EntityName == "Order").Id;
 
         await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
@@ -541,7 +540,7 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Reset").Success).IsTrue();
         // Direct prop write via store instance for isolation
         McpTestTools.Store.TryGet(sessionId, out var st);
-        st!.InstanceMap[trackerId].SetProperty("Status", "AFTER-UNLINK");
+        st!.InstanceMap[trackerId]["Status"] = "AFTER-UNLINK";
         await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Activate").Success)
             .IsTrue();
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("AFTER-UNLINK");
@@ -817,8 +816,8 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(GetProp(sessionId, trackerId, "Status")).IsEqualTo("A");
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        st!.InstanceMap[orderId].SetProperty("Code", "B");
-        st.InstanceMap[trackerId].SetProperty("Status", "CLEARED");
+        st!.InstanceMap[orderId]["Code"] = "B";
+        st.InstanceMap[trackerId]["Status"] = "CLEARED";
 
         await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, orderId, "Complete").Success)
             .IsTrue();
@@ -921,12 +920,12 @@ public class SurfaceExtensionDogfoodTests {
     private static string GetProp(string sessionId, string instanceId, string name) {
         McpTestTools.Store.TryGet(sessionId, out var st);
         var instance = st!.InstanceMap[instanceId];
-        return instance.Snapshot().TryGetValue(name, out var v) ? v?.ToString() ?? "(null)" : "(missing)";
+        return instance.TryGetValue(name, out var v) ? v?.ToString() ?? "(null)" : "(missing)";
     }
 
     private static string? GetStage(string sessionId, string instanceId) {
         McpTestTools.Store.TryGet(sessionId, out var st);
-        return st!.InstanceMap[instanceId].CurrentStage;
+        return st!.InstanceMap[instanceId].TryGetValue("CurrentStage", out var stage) ? stage as string : null;
     }
 
     private static string ExtractPoly(DomainToolResponse export) {

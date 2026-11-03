@@ -16,11 +16,10 @@ namespace Poly.Mcp.Tools;
 
 /// <summary>
 /// Runtime MCP tools: instance creation, inspection, and action execution.
-/// These wrap existing <see cref="DomainEntityInstance"/> and
-/// <see cref="DomainInstanceStore"/> machinery — not new domain IR.
-/// Session-scoped instances live on <see cref="McpSessionState.InstanceMap"/>
-/// and are registered in <see cref="McpSessionState.InstanceStore"/> for
-/// relationship/subscription support.
+/// They run the lowered operation module through the session's
+/// <see cref="ModuleInstanceExecutor"/> — not new domain IR. An instance is the
+/// module's dictionary, tracked by executor id; the tool layer only converts JSON
+/// and renders snapshots.
 /// </summary>
 [McpServerToolType]
 internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logger) {
@@ -38,51 +37,6 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         new(Success: false,
             Message: $"Session '{sessionId}' not found.",
             Affordances: ["create_domain_session", "list_sessions"]);
-
-    private static string NewInstanceId() => Guid.NewGuid().ToString("N");
-
-    /// <summary>
-    /// Binds entity-typed action args from MCP instance ids. Missing id is fail-closed
-    /// (does not leave a string for InvokeAction). Action resolution is
-    /// <see cref="DomainSemanticLookupExtensions.TryResolveAction"/> (stage-first + SA),
-    /// not FirstOrDefault.
-    /// </summary>
-    /// <returns>Error message, or null when bind succeeded (args may be mutated).</returns>
-    private static string? BindEntityTypedActionArgs(
-        McpSessionState state,
-        DomainEntityInstance instance,
-        string actionName,
-        Dictionary<string, object?>? args) {
-        if (args is null || args.Count == 0)
-            return null;
-
-        var analysis = state.LatestAnalysis;
-        if (analysis is null
-            || !analysis.TryResolveAction(state.Domain, instance.Entity, instance.CurrentStage, actionName, out var action)
-            || action is null)
-            return null;
-
-        var entityNames = state.Domain.Types.OfType<Entity>()
-            .Select(e => e.Name)
-            .ToHashSet(StringComparer.Ordinal);
-
-        foreach (var param in action.Parameters) {
-            if (!entityNames.Contains(param.Type.TypeName))
-                continue;
-            if (!args.TryGetValue(param.Name, out var raw) || raw is null)
-                continue;
-            if (raw is DomainEntityInstance)
-                continue;
-            if (raw is not string id) {
-                return $"Parameter '{param.Name}' must be an instance id.";
-            }
-            if (!state.InstanceMap.TryGetValue(id, out var linked))
-                return $"Instance '{id}' not found.";
-            args[param.Name] = linked;
-        }
-
-        return null;
-    }
 
     private static object? JsonElementToValue(JsonElement je) => je.ValueKind switch {
         JsonValueKind.Number => JsonNumber(je),
@@ -108,129 +62,71 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     }
 
     /// <summary>
-    /// JSON values become the declared property types before the instance is built.
-    /// DateTime offsets are stored as UTC so they match <c>Now</c>.
-    /// </summary>
-    private static Dictionary<string, object?> CoerceCreateValues(
-        Entity entity, Dictionary<string, object?> values) {
-        var coerced = new Dictionary<string, object?>(values, StringComparer.Ordinal);
-        foreach (var property in entity.Properties) {
-            if (!coerced.TryGetValue(property.Name, out var raw) || raw is null)
-                continue;
-            coerced[property.Name] = CoercePropertyValue(property.Name, property.Type.TypeName, raw);
-        }
-        return coerced;
-    }
-
-    private static object CoercePropertyValue(string propertyName, string typeName, object raw) =>
-        typeName switch {
-            "DateTime" or "Timestamp" => raw switch {
-                DateTime => raw,
-                string s when DateTime.TryParse(s, CultureInfo.InvariantCulture,
-                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal,
-                    out var parsed) => parsed,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects DateTime; got '{raw}'.")
-            },
-            "Date" or "DateOnly" => raw switch {
-                DateOnly => raw,
-                DateTime dateTime => DateOnly.FromDateTime(dateTime),
-                string s when DateOnly.TryParse(s, CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out var parsed) => parsed,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Date; got '{raw}'.")
-            },
-            "Time" or "TimeOnly" => raw switch {
-                TimeOnly => raw,
-                string s when TimeOnly.TryParse(s, CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out var parsed) => parsed,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Time; got '{raw}'.")
-            },
-            "Duration" or "TimeSpan" => raw switch {
-                TimeSpan => raw,
-                string s when TimeSpan.TryParse(s, CultureInfo.InvariantCulture, out var parsed) => parsed,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Duration; got '{raw}'.")
-            },
-            "Guid" or "Uuid" => raw switch {
-                Guid => raw,
-                string s when Guid.TryParse(s, out var parsed) => parsed,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Guid; got '{raw}'.")
-            },
-            "Number" or "Int" or "Int64" or "Int32" => CoerceIntegral(propertyName, raw),
-            "Decimal" => raw switch {
-                decimal => raw,
-                long or int => Convert.ToDecimal(raw, CultureInfo.InvariantCulture),
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Decimal; got '{raw}'.")
-            },
-            "Boolean" or "Bool" => raw switch {
-                bool => raw,
-                0L => false,
-                1L => true,
-                _ => throw new InvalidOperationException(
-                    $"Property '{propertyName}' expects Boolean; got '{raw}'.")
-            },
-            _ => raw
-        };
-
-    private static object CoerceIntegral(string propertyName, object raw) {
-        switch (raw) {
-            case long or int:
-                return raw;
-            case decimal m when m == decimal.Truncate(m) && m >= long.MinValue && m <= long.MaxValue:
-                return (long)m;
-            default:
-                throw new InvalidOperationException(
-                    $"Number is integral; property '{propertyName}' got '{raw}', which is not a valid Number. Use Decimal.");
-        }
-    }
-
-    /// <summary>
     /// One property value for an MCP snapshot. Scalars render as their string form.
     /// A navigation renders as <c>#instanceId</c> — the handle the instance tools
     /// take — or <c>#linked</c> when the peer is not reachable by id in this session;
     /// a collection nav is <c>#linked</c> (its ids stay in navigationLinks). No
     /// runtime type ever reaches the answer.
     /// </summary>
-    private static string RenderPropertyValue(
-        object? value, IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap) =>
+    private static string RenderPropertyValue(object? value, ModuleInstanceExecutor executor) =>
         value switch {
-            DomainEntityInstance navigation => RenderLinkedInstance(navigation, instanceMap),
-            IEnumerable<DomainEntityInstance> => LinkedMarker,
+            IDictionary<string, object?> navigation =>
+                executor.TryFind(navigation, out var peer) && peer is not null ? $"#{peer.Id}" : LinkedMarker,
+            string text => text,
+            System.Collections.IEnumerable => LinkedMarker,
             _ => value?.ToString() ?? "(null)"
         };
 
-    private static string RenderLinkedInstance(
-        DomainEntityInstance target, IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap) {
-        if (instanceMap is not null && FindInstanceId(instanceMap, target) is { } id)
-            return $"#{id}";
-        return LinkedMarker;
-    }
+    private const string CurrentStageKey = "CurrentStage";
 
-    private static string? FindInstanceId(
-        IReadOnlyDictionary<string, DomainEntityInstance> instanceMap, DomainEntityInstance target) {
-        foreach (var (id, instance) in instanceMap) {
-            if (ReferenceEquals(instance, target))
-                return id;
+    /// <summary>
+    /// The stage the instance is in. The module leaves the key unset until the first
+    /// transition, so an unset key on a staged entity is its first stage.
+    /// </summary>
+    private static string? StageOf(McpSessionState state, ModuleInstance instance) =>
+        instance.Bag.TryGetValue(CurrentStageKey, out var stage) && stage is not null
+            ? Convert.ToString(stage, CultureInfo.InvariantCulture)
+            : EntityOf(state, instance)?.Stages.FirstOrDefault()?.Name;
+
+    private static Entity? EntityOf(McpSessionState state, ModuleInstance instance) =>
+        state.Domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, instance.EntityName, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The properties an MCP snapshot reports: the entity's declared properties, then
+    /// each to-one navigation the bag holds. The stage key, collection fields and the
+    /// subscriber registry stay in the bag for the module and are not properties.
+    /// </summary>
+    private static List<KeyValuePair<string, object?>> SnapshotEntries(
+        McpSessionState state, ModuleInstance instance) {
+        var entries = new List<KeyValuePair<string, object?>>();
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        if (EntityOf(state, instance) is { } entity) {
+            foreach (var property in entity.Properties) {
+                declared.Add(property.Name);
+                if (instance.Bag.TryGetValue(property.Name, out var value))
+                    entries.Add(new(property.Name, value));
+            }
         }
-        return null;
+        foreach (var (key, value) in instance.Bag) {
+            if (!declared.Contains(key) && value is IDictionary<string, object?>)
+                entries.Add(new(key, value));
+        }
+        return entries;
     }
 
     private static InstanceSnapshotData BuildSnapshot(
-        DomainEntityInstance instance,
-        IReadOnlyDictionary<string, DomainEntityInstance>? instanceMap = null) {
+        McpSessionState state, ModuleInstance instance, int createdChildCount = 0) {
+        var executor = state.Executor;
         var props = new List<PropertyValueData>();
-        foreach (var (key, value) in instance.Snapshot())
-            props.Add(new PropertyValueData(key, RenderPropertyValue(value, instanceMap)));
+        foreach (var (key, value) in SnapshotEntries(state, instance))
+            props.Add(new PropertyValueData(key, RenderPropertyValue(value, executor)));
         return new InstanceSnapshotData(
-            InstanceId: "",
-            EntityName: instance.Entity.Name,
-            CurrentStage: RenderStage(instance.CurrentStage),
+            InstanceId: instance.Id,
+            EntityName: instance.EntityName,
+            CurrentStage: RenderStage(StageOf(state, instance)),
             Properties: props,
-            CreatedChildCount: instance.CreatedChildren.Count,
+            CreatedChildCount: createdChildCount,
             NavigationLinks: []
         );
     }
@@ -320,7 +216,6 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
                     propertyValues = new Dictionary<string, object?>(StringComparer.Ordinal);
                     foreach (var (key, je) in parsed)
                         propertyValues[key] = JsonElementToValue(je);
-                    propertyValues = CoerceCreateValues(entity, propertyValues);
                 }
             }
             catch (Exception ex) {
@@ -332,11 +227,22 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
             }
         }
 
-        // Create instance and register in store
-        var instanceId = NewInstanceId();
-        DomainEntityInstance instance;
+        var unknown = propertyValues?.Keys.FirstOrDefault(key =>
+            !entity.Properties.Any(p => string.Equals(p.Name, key, StringComparison.Ordinal)));
+        if (unknown is not null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to create instance: Property '{unknown}' does not exist on entity '{entity.Name}'. " +
+                    $"Available: {string.Join(", ", entity.Properties.Select(p => p.Name))}.",
+                SessionId: sessionId,
+                Affordances: ["get_entity_detail"]);
+
+        // The executor runs the cached static Create on a dictionary, coerces the
+        // JSON-ish values to the declared types, and registers the instance by id.
+        ModuleOutcome outcome;
         try {
-            instance = DomainEntityInstance.Create(entity, propertyValues, state.Domain);
+            outcome = state.Executor.Create(
+                entityName, propertyValues ?? new Dictionary<string, object?>(StringComparer.Ordinal));
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -345,32 +251,17 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
                 SessionId: sessionId,
                 Affordances: ["get_entity_detail"]);
         }
-
-        // Register under lock. Unique collisions throw from the store — return a
-        // tool failure (Support dogfood: duplicate Handle crashed the MCP call).
-        bool registered;
-        try {
-            registered = store.TryModifyInstances(sessionId, st => {
-                st.InstanceStore ??= new DomainInstanceStore();
-                st.InstanceStore.Add(instance);
-                st.InstanceMap[instanceId] = instance;
-            });
-        }
-        catch (Exception ex) {
+        if (!outcome.Succeeded || outcome.Instance is not { } instance)
             return new DomainToolResponse(
                 Success: false,
-                Message: $"Failed to create instance: {ex.Message}",
+                Message: $"Failed to create instance: {outcome.Error}",
                 SessionId: sessionId,
-                Affordances: ["get_instance", "list_instances"]);
-        }
+                Affordances: ["get_entity_detail"]);
 
-        if (!registered)
-            return Failure_NotFound(sessionId);
-
-        var snapshot = BuildSnapshot(instance, state.InstanceMap) with { InstanceId = instanceId };
+        var snapshot = BuildSnapshot(state, instance, outcome.CreatedChildren.Count);
         return new DomainToolResponse(
             Success: true,
-            Message: $"Instance '{instanceId}' of entity '{entityName}' created. Stage: '{RenderStage(instance.CurrentStage)}'.",
+            Message: $"Instance '{instance.Id}' of entity '{entityName}' created. Stage: '{RenderStage(StageOf(state, instance))}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
             Affordances: ["get_instance", "invoke_action", "evaluate_policy", "link_instances", "list_instances"]);
@@ -415,34 +306,27 @@ Use case — Collection quantifiers:
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
+        if (state.ExecutorIfCreated is not { } executor || !executor.TryGet(sourceInstanceId, out var source) || source is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Source instance '{sourceInstanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        if (!state.InstanceMap.TryGetValue(targetInstanceId, out var target))
+        if (!executor.TryGet(targetInstanceId, out var target) || target is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Target instance '{targetInstanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        if (state.InstanceStore is null)
-            return new DomainToolResponse(
-                Success: false,
-                Message: "No instance store available. Create at least one instance first.",
-                SessionId: sessionId,
-                Affordances: ["create_instance"]);
-
         // Validate relationship exists in domain model and entity ends match.
         // Relationship identity is (source entity, name); the instances disambiguate
         // a name declared on multiple source entities.
         var relationship = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
             .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
-                && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
-                    || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
+                && (string.Equals(r.Source.TypeName, source.EntityName, StringComparison.Ordinal)
+                    || string.Equals(r.Target.TypeName, source.EntityName, StringComparison.Ordinal)));
         if (relationship is null)
             return new DomainToolResponse(
                 Success: false,
@@ -451,8 +335,8 @@ Use case — Collection quantifiers:
                 SessionId: sessionId,
                 Affordances: ["get_relationships"]);
 
-        var sourceEntityName = source.Entity.Name;
-        var targetEntityName = target.Entity.Name;
+        var sourceEntityName = source.EntityName;
+        var targetEntityName = target.EntityName;
         var sourceMatch = string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal);
         var targetMatch = string.Equals(relationship.Target.TypeName, targetEntityName, StringComparison.Ordinal);
         if (!sourceMatch || !targetMatch) {
@@ -476,11 +360,9 @@ Use case — Collection quantifiers:
                 Affordances: ["get_relationships", "get_entity_detail"]);
         }
 
+        ModuleOutcome linked;
         try {
-            if (!store.TryModifyInstances(sessionId, st => {
-                st.InstanceStore!.Link(relationshipName, source, target);
-            }))
-                return Failure_NotFound(sessionId);
+            linked = executor.Link(relationshipName, source, target);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -489,6 +371,12 @@ Use case — Collection quantifiers:
                 SessionId: sessionId,
                 Affordances: ["get_relationships", "get_entity_detail"]);
         }
+        if (!linked.Succeeded)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to link instances: {linked.Error}",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
 
         return new DomainToolResponse(
             Success: true,
@@ -525,34 +413,27 @@ Use case — reassign a child from one parent to another:
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        if (!state.InstanceMap.TryGetValue(sourceInstanceId, out var source))
+        if (state.ExecutorIfCreated is not { } executor || !executor.TryGet(sourceInstanceId, out var source) || source is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Source instance '{sourceInstanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        if (!state.InstanceMap.TryGetValue(targetInstanceId, out var target))
+        if (!executor.TryGet(targetInstanceId, out var target) || target is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Target instance '{targetInstanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        if (state.InstanceStore is null)
-            return new DomainToolResponse(
-                Success: false,
-                Message: "No instance store available. Create at least one instance first.",
-                SessionId: sessionId,
-                Affordances: ["create_instance"]);
-
         // Validate relationship exists in domain model and entity ends match.
         // Relationship identity is (source entity, name); the instances disambiguate
         // a name declared on multiple source entities.
         var relationship = (state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? [])
             .FirstOrDefault(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)
-                && (string.Equals(r.Source.TypeName, source.Entity.Name, StringComparison.Ordinal)
-                    || string.Equals(r.Target.TypeName, source.Entity.Name, StringComparison.Ordinal)));
+                && (string.Equals(r.Source.TypeName, source.EntityName, StringComparison.Ordinal)
+                    || string.Equals(r.Target.TypeName, source.EntityName, StringComparison.Ordinal)));
         if (relationship is null)
             return new DomainToolResponse(
                 Success: false,
@@ -561,8 +442,8 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["get_relationships"]);
 
-        var sourceEntityName = source.Entity.Name;
-        var targetEntityName = target.Entity.Name;
+        var sourceEntityName = source.EntityName;
+        var targetEntityName = target.EntityName;
         var sourceMatch = string.Equals(relationship.Source.TypeName, sourceEntityName, StringComparison.Ordinal);
         var targetMatch = string.Equals(relationship.Target.TypeName, targetEntityName, StringComparison.Ordinal);
         if (!sourceMatch || !targetMatch) {
@@ -586,7 +467,7 @@ Use case — reassign a child from one parent to another:
         }
 
         // Fail-closed: link must exist to unlink
-        if (!state.InstanceStore.IsLinked(relationshipName, source, target))
+        if (!executor.IsLinked(relationshipName, source, target))
             return new DomainToolResponse(
                 Success: false,
                 Message: $"No link found between '{sourceInstanceId}' and '{targetInstanceId}' via '{relationshipName}'. " +
@@ -594,11 +475,9 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["link_instances", "get_relationships"]);
 
+        ModuleOutcome unlinked;
         try {
-            if (!store.TryModifyInstances(sessionId, st => {
-                st.InstanceStore!.Unlink(relationshipName, source, target);
-            }))
-                return Failure_NotFound(sessionId);
+            unlinked = executor.Unlink(relationshipName, source, target);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -607,6 +486,12 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["get_relationships", "get_entity_detail"]);
         }
+        if (!unlinked.Succeeded)
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Failed to unlink instances: {unlinked.Error}",
+                SessionId: sessionId,
+                Affordances: ["get_relationships", "get_entity_detail"]);
 
         return new DomainToolResponse(
             Success: true,
@@ -629,53 +514,42 @@ Use case — reassign a child from one parent to another:
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
+        if (state.ExecutorIfCreated is not { } executor
+            || !executor.TryGet(instanceId, out var instance) || instance is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Instance '{instanceId}' not found.",
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        var snapshot = BuildSnapshot(instance, state.InstanceMap) with { InstanceId = instanceId };
+        var snapshot = BuildSnapshot(state, instance);
 
-        // Populate navigation links from the instance store (link-3)
+        // Navigation links come from the bag's relationship fields, per relationship.
         var navs = new List<NavigationLinkData>();
-        if (state.InstanceStore is not null) {
-            var entityName = instance.Entity.Name;
-            foreach (var rel in state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? []) {
-                var isSource = string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal);
-                var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
-                if (!isSource && !isTarget) continue;
+        var entityName = instance.EntityName;
+        foreach (var rel in state.LatestAnalysis?.GetAllRelationships(state.Domain) ?? []) {
+            var isSource = string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal);
+            var isTarget = string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal);
+            if (!isSource && !isTarget) continue;
 
-                // Same relationship name can exist on two sources (Enrollment.section
-                // and WaitOffer.section). Scope peers to this relationship's types.
-                var linked = state.InstanceStore.GetRelatedInstances(rel.Name, instance)
-                    .Where(peer => isSource
-                        ? string.Equals(peer.Entity.Name, rel.Target.TypeName, StringComparison.Ordinal)
-                        : string.Equals(peer.Entity.Name, rel.Source.TypeName, StringComparison.Ordinal))
-                    .ToList();
-                if (linked.Count == 0) continue;
-
-                var ids = new List<string>(linked.Count);
-                foreach (var linkedInstance in linked) {
-                    var kvp = state.InstanceMap.FirstOrDefault(
-                        kv => ReferenceEquals(kv.Value, linkedInstance));
-                    if (kvp.Value is not null)
-                        ids.Add(kvp.Key);
-                }
-
-                if (ids.Count > 0) {
-                    var direction = isSource ? "source→target" : "target→source";
-                    navs.Add(new NavigationLinkData(rel.Name, direction, ids));
-                }
-            }
+            // Same relationship name can exist on two sources (Enrollment.section
+            // and WaitOffer.section). Scope peers to this relationship's types.
+            var ids = (isSource
+                    ? executor.LinkedTargets(rel.Name, instance)
+                        .Where(peer => string.Equals(peer.EntityName, rel.Target.TypeName, StringComparison.Ordinal))
+                    : executor.LinkedSources(rel.Name, instance)
+                        .Where(peer => string.Equals(peer.EntityName, rel.Source.TypeName, StringComparison.Ordinal)))
+                .Select(peer => peer.Id)
+                .ToList();
+            if (ids.Count == 0) continue;
+            navs.Add(new NavigationLinkData(rel.Name, isSource ? "source→target" : "target→source", ids));
         }
 
         snapshot = snapshot with { NavigationLinks = navs };
 
         return new DomainToolResponse(
             Success: true,
-            Message: $"Instance '{instanceId}' of '{instance.Entity.Name}', stage: '{RenderStage(instance.CurrentStage)}'.",
+            Message: $"Instance '{instanceId}' of '{instance.EntityName}', stage: '{RenderStage(StageOf(state, instance))}'.",
             SessionId: sessionId,
             Data: new { instance = snapshot },
             Affordances: ["invoke_action", "list_instances", "create_instance"]);
@@ -695,12 +569,12 @@ Use case — reassign a child from one parent to another:
             return Failure_NotFound(sessionId);
 
         var summaries = new List<InstanceSummaryData>();
-        foreach (var (id, instance) in state.InstanceMap) {
+        foreach (var instance in state.ExecutorIfCreated?.Instances ?? []) {
             if (entityName is not null &&
-                !string.Equals(instance.Entity.Name, entityName, StringComparison.Ordinal))
+                !string.Equals(instance.EntityName, entityName, StringComparison.Ordinal))
                 continue;
-            summaries.Add(new InstanceSummaryData(id, instance.Entity.Name,
-                RenderStage(instance.CurrentStage), instance.Snapshot().Count));
+            summaries.Add(new InstanceSummaryData(instance.Id, instance.EntityName,
+                RenderStage(StageOf(state, instance)), SnapshotEntries(state, instance).Count));
         }
 
         return new DomainToolResponse(
@@ -748,7 +622,8 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
         if (!store.TryGet(sessionId, out var state))
             return Failure_NotFound(sessionId);
 
-        if (!state.InstanceMap.TryGetValue(instanceId, out var instance))
+        if (state.ExecutorIfCreated is not { } executor
+            || !executor.TryGet(instanceId, out var instance) || instance is null)
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Instance '{instanceId}' not found.",
@@ -776,16 +651,11 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
             }
         }
 
-        if (BindEntityTypedActionArgs(state, instance, actionName, args) is { } bindError)
-            return new DomainToolResponse(
-                Success: false,
-                Message: bindError,
-                SessionId: sessionId,
-                Affordances: ["create_instance", "list_instances"]);
-
-        ActionInvocationResult result;
+        // Entity-typed arguments are instance ids; the executor resolves them to the
+        // registered dictionaries, and the module body owns guards, stage and effects.
+        ModuleOutcome outcome;
         try {
-            result = instance.InvokeAction(actionName, args);
+            outcome = executor.Invoke(instance, actionName, args);
         }
         catch (Exception ex) {
             return new DomainToolResponse(
@@ -796,78 +666,79 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        // Register newly created children in InstanceMap (the invoked instance
-        // and any subscriber that ran create-in, e.g. Patron when a Loan goes Overdue).
-        string? returnInstanceId = null;
-        if (result.Succeeded) {
-            var newChildren = new List<DomainEntityInstance>();
-            foreach (var owner in state.InstanceMap.Values) {
-                foreach (var child in owner.CreatedChildren) {
-                    if (state.InstanceMap.Values.Any(v => ReferenceEquals(v, child)))
-                        continue;
-                    if (newChildren.Any(c => ReferenceEquals(c, child)))
-                        continue;
-                    newChildren.Add(child);
-                }
-            }
-
-            if (newChildren.Count > 0) {
-                store.TryModifyInstances(sessionId, st => {
-                    foreach (var child in newChildren) {
-                        var childId = NewInstanceId();
-                        st.InstanceStore ??= new DomainInstanceStore();
-                        if (child.Store is null)
-                            st.InstanceStore.Add(child);
-                        st.InstanceMap[childId] = child;
-                        if (result.ResultInstance is not null
-                            && ReferenceEquals(child, result.ResultInstance))
-                            returnInstanceId = childId;
-                    }
-                });
-            }
-            else if (result.ResultInstance is not null) {
-                // Already registered earlier — find id by reference.
-                foreach (var (id, inst) in state.InstanceMap) {
-                    if (ReferenceEquals(inst, result.ResultInstance)) {
-                        returnInstanceId = id;
-                        break;
-                    }
-                }
-            }
+        var action = FindAction(state, instance, actionName);
+        var returnedType = action?.Result.Members.Count > 0 ? action.Result.Members[0].Type.TypeName : null;
+        var errorMessage = outcome.Error;
+        IReadOnlyList<string>? failedGuards = null;
+        var succeeded = outcome.Succeeded;
+        if (succeeded && returnedType is not null && outcome.Instance is null) {
+            succeeded = false;
+            errorMessage = $"Action '{actionName}' declared return type '{returnedType}' but no create/create-in " +
+                "produced an instance of that type during this invoke.";
+        }
+        if (!succeeded && action is not null && MapGuardFailure(actionName, action, errorMessage) is { } mapped) {
+            failedGuards = mapped.Guards;
+            errorMessage = mapped.Message;
         }
 
-        // Re-read map if modify succeeded but local returnInstanceId missed (modify is sync).
-        if (returnInstanceId is null && result.ResultInstance is not null
-            && store.TryGet(sessionId, out var stateAfter)) {
-            foreach (var (id, inst) in stateAfter.InstanceMap) {
-                if (ReferenceEquals(inst, result.ResultInstance)) {
-                    returnInstanceId = id;
-                    break;
-                }
-            }
-        }
-
+        var returnInstanceId = succeeded ? outcome.Instance?.Id : null;
+        var returnTypeName = succeeded ? outcome.Instance?.EntityName ?? returnedType : returnedType;
+        var newStage = succeeded ? StageOf(state, instance) : null;
         var resultData = new InvokeActionResultData(
-            ActionName: result.ActionName,
-            Succeeded: result.Succeeded,
-            NewStage: result.NewStage,
-            FailedGuards: result.FailedGuards.Count > 0 ? result.FailedGuards : null,
-            ErrorMessage: result.ErrorMessage,
-            ReturnTypeName: result.ResultTypeName,
+            ActionName: actionName,
+            Succeeded: succeeded,
+            NewStage: newStage,
+            FailedGuards: failedGuards is { Count: > 0 } ? failedGuards : null,
+            ErrorMessage: errorMessage,
+            ReturnTypeName: returnTypeName,
             ReturnInstanceId: returnInstanceId
         );
 
-        var successMessage = result.Succeeded
+        var successMessage = succeeded
             ? returnInstanceId is not null
-                ? $"Action '{actionName}' succeeded. Returned '{result.ResultTypeName}' as instance '{returnInstanceId}'. New stage: '{result.NewStage ?? "(unchanged)"}'."
-                : $"Action '{actionName}' succeeded. New stage: '{result.NewStage ?? "(unchanged)"}'."
-            : (result.ErrorMessage ?? $"Action '{actionName}' blocked by guards: {string.Join(", ", result.FailedGuards)}");
+                ? $"Action '{actionName}' succeeded. Returned '{returnTypeName}' as instance '{returnInstanceId}'. New stage: '{newStage ?? "(unchanged)"}'."
+                : $"Action '{actionName}' succeeded. New stage: '{newStage ?? "(unchanged)"}'."
+            : (errorMessage ?? $"Action '{actionName}' blocked by guards: {string.Join(", ", failedGuards ?? [])}");
 
         return new DomainToolResponse(
-            Success: result.Succeeded,
+            Success: succeeded,
             Message: successMessage,
             SessionId: sessionId,
             Data: new { invokeActionResult = resultData },
             Affordances: ["get_instance", "list_instances", "create_instance"]);
+    }
+
+    private static Poly.DomainModeling.Ontology.Action? FindAction(
+        McpSessionState state, ModuleInstance instance, string actionName) =>
+        EntityOf(state, instance) is { } entity
+            ? entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
+                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))
+            : null;
+
+    /// <summary>
+    /// The module reports a blocked guard as a Failure message. A policy block names the
+    /// guard (mapped to the action's own policy name); a failed path-prefix require
+    /// keeps its message and lists every guard on the action.
+    /// </summary>
+    private static (IReadOnlyList<string> Guards, string? Message)? MapGuardFailure(
+        string actionName, Poly.DomainModeling.Ontology.Action action, string? message) {
+        if (message is null)
+            return null;
+        const string blockedPrefix = "blocked by policy '";
+        var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
+        if (blockedIdx >= 0 && message.StartsWith($"'{actionName}'", StringComparison.Ordinal)) {
+            var start = blockedIdx + blockedPrefix.Length;
+            var end = message.IndexOf('\'', start);
+            if (end > start) {
+                var leaf = message[start..end];
+                var guard = action.Policies.Select(p => p.Name).FirstOrDefault(n =>
+                    string.Equals(n, leaf, StringComparison.Ordinal)
+                    || string.Equals(n, "not_" + leaf, StringComparison.Ordinal)) ?? leaf;
+                return ([guard], null);
+            }
+        }
+        if (message.Contains("requires a linked", StringComparison.Ordinal))
+            return ([.. action.Policies.Select(p => p.Name)], message);
+        return null;
     }
 }

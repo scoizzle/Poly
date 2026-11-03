@@ -423,8 +423,11 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
             var analysis = RuntimeAnalysisCache.Analysis(domain);
             if (analysis.HasErrors)
                 return new DomainToolResponse(Success: false, Message: "Expression has analysis errors.", Diagnostics: ErrorMessages(analysis), Affordances: []);
-            var instance = DomainEntityInstance.Create(entity, subjectValues, domain);
-            var result = instance.EvaluatePolicy(policy);
+            var executor = new ModuleInstanceExecutor(domain);
+            var created = executor.Create(entity.Name, subjectValues);
+            if (!created.Succeeded || created.Instance is not { } instance)
+                return new DomainToolResponse(Success: false, Message: $"Oracle failed: {created.Error}", Data: new { error = created.Error }, Affordances: []);
+            var result = executor.EvaluatePolicy(instance, policy.Name);
 
             var data = new { result };
             return new DomainToolResponse(Success: true, Message: result ? "Expression passed (true)." : "Expression failed (false).", Data: data, Affordances: ["add", "create_instance", "evaluate_policy"]);

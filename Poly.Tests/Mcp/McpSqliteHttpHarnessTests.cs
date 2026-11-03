@@ -42,7 +42,7 @@ public sealed class McpSqliteHttpHarnessTests {
         var created = McpTestTools.Runtime.CreateInstance(sessionId, "Item", """{"Name":"Widget","Qty":1}""");
         await Assert.That(created.Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out state)).IsTrue();
-        var instanceId = state.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Item").Key;
+        var instanceId = state.Executor.Instances.First(i => i.EntityName == "Item").Id;
         var bumped = McpTestTools.Runtime.InvokeAction(sessionId, instanceId, "Bump");
         await Assert.That(bumped.Success).IsTrue();
 

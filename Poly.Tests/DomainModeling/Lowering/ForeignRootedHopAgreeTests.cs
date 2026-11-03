@@ -52,7 +52,7 @@ public class ForeignRootedHopAgreeTests {
         var sim = order.EvaluatePolicy(E("Order").Policies.First(p => p.Name == "HasShortItem"));
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedProduct = ExportedCSharp.CreateEntity(asm, "Product", ("stock", 10L));
         var printedItem = ExportedCSharp.CreateEntity(asm, "Item", ("qty", 1L));
         printedItem.GetType().GetProperty("Product")!.SetValue(printedItem, printedProduct);
@@ -103,7 +103,7 @@ public class ForeignRootedHopAgreeTests {
         await Assert.That(customer.GetProperty<bool>("Flag")).IsTrue();
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedOrder = ExportedCSharp.CreateEntity(asm, "Order", ("total", 10L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("balance", 5L));
         printedCustomer.GetType().GetMethod("AttachOrders", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
@@ -150,7 +150,7 @@ public class ForeignRootedHopAgreeTests {
         var sim = customer.EvaluatePolicy(E("Customer").Policies.First(p => p.Name == "ReadyMatchesAdvisor"));
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 50L));
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 40L));
         printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);

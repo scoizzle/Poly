@@ -32,7 +32,7 @@ public class OnEntryConstraintAgreeTests {
             .WithMessageContaining("must be <= 10");
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var thrown = await Assert.That(() => ExportedCSharp.CreateEntity(asm, "Widget"))
             .Throws<TargetInvocationException>();
         // Printed assembly emits its own ConstraintFailureException type, so match by name.

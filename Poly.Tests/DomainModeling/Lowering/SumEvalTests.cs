@@ -70,7 +70,7 @@ public class SumEvalTests {
     [Test]
     public async Task Sum_PrintsAddition() {
         var (domain, analysis) = Evolve(BasketDsl);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var method = ExportedCSharp.ExtractMethod(cs, "bool Total(");
         await Assert.That(method).Contains("foreach");
         await Assert.That(method).Contains("Price");

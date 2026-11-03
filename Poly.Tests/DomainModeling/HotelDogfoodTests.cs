@@ -55,7 +55,7 @@ public class HotelDogfoodTests {
     [Test]
     public async Task Hotel_Export_Compiles() {
         var (domain, analysis) = Evolve();
-        var types = new DomainToCSharpExporter().Export(domain, analysis);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("void Notify(string stageName)");

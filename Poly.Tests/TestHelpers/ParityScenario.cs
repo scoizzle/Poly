@@ -1,6 +1,11 @@
 using System.Reflection;
 
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
@@ -27,13 +32,34 @@ public sealed class ParityScenario {
         _assembly = assembly;
     }
 
-    public static ParityScenario FromDsl(string dsl, string assemblyName) =>
-        FromDomain(EvolvedDomain.FromDsl(dsl).Domain, assemblyName);
+    /// <summary>
+    /// The simulate side runs the DSL's own domain. The printed side is the module a storage-enabled
+    /// session lowers from a second, separate domain: lowering registers its session against the
+    /// domain it was given, and the simulator must not inherit that session. The storage library is
+    /// what threads an <see cref="IStoragePort"/> into Create and the actions.
+    /// </summary>
+    public static ParityScenario FromDsl(string dsl, string assemblyName) {
+        var simulate = EvolvedDomain.FromDsl(dsl).Domain;
+        var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
+        foreach (var id in ExtensionCatalog.ProductAuthoring)
+            builder.Load(ExtensionCatalog.Core.Resolve(id));
+        builder.Load(new PersistenceEmitLibrary());
+        var session = builder.Build();
+        var changes = new PolyDslParser(dsl, session).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        if (!evolved.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", evolved.Analysis.Diagnostics
+                .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+                .Select(d => d.Message)));
+        var cs = new CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+        return new(simulate, ExportedCSharp.CompileAndLoad(cs, assemblyName));
+    }
 
-    /// <summary>For domains built or edited through the API, which the DSL cannot always express.</summary>
+    /// <summary>For domains built or edited through the API, which the DSL cannot always express. No storage library: such a domain holds no unique key.</summary>
     public static ParityScenario FromDomain(Domain domain, string assemblyName) {
         var analysis = DomainModelAnalyzer.Analyze(domain);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         return new(domain, ExportedCSharp.CompileAndLoad(cs, assemblyName));
     }
 
@@ -41,14 +67,7 @@ public sealed class ParityScenario {
         var simulate = new SimulateSide(_domain);
         var printed = new PrintedSide(_domain, _assembly);
         steps(simulate);
-        var previous = DomainInstanceStore.PrintedPort.Value;
-        DomainInstanceStore.PrintedPort.Value = printed.Port;
-        try {
-            steps(printed);
-        }
-        finally {
-            DomainInstanceStore.PrintedPort.Value = previous;
-        }
+        steps(printed);
         return (simulate.Outcomes, printed.Outcomes);
     }
 

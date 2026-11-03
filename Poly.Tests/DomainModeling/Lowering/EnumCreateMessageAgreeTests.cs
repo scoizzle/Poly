@@ -26,7 +26,7 @@ public class EnumCreateMessageAgreeTests {
 
     private static string PrintMember() {
         var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
-        return new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        return new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
     }
 
     /// <summary>The printed factory must compile warning-free (hosts use TreatWarningsAsErrors).</summary>

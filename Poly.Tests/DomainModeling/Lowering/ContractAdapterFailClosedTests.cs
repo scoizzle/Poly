@@ -39,7 +39,7 @@ public class ContractAdapterFailClosedTests {
             new Dictionary<string, object?> { ["request"] = request });
         await Assert.That(sim.Succeeded).IsTrue();
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("System.Diagnostics.Debug.WriteLine");
         await Assert.That(cs).DoesNotContain("has no in-process adapter");
         var asm = ExportedCSharp.CompileAndLoad(cs);
@@ -90,7 +90,7 @@ public class ContractAdapterFailClosedTests {
             new Dictionary<string, object?> { ["request"] = request });
         await Assert.That(sim.Succeeded).IsTrue();
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("System.Diagnostics.Debug.WriteLine");
         await Assert.That(cs).Contains(
             "return DomainResult<Line>.Failure(adapterResult.ErrorMessage ?? \"\")");

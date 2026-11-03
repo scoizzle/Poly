@@ -96,7 +96,7 @@ public class SkippedIfCreateInVmTests {
 
     private static long[] Rates(string sessionId) {
         McpTestTools.Store.TryGet(sessionId, out var state);
-        return state!.InstanceMap.Values.Select(meter => meter.GetProperty<long>("Rate")).ToArray();
+        return state!.InstanceMap.Values.Select(meter => (long)meter["Rate"]!).ToArray();
     }
 
     private static (Domain Domain, Entity Reading) Evolve() {

@@ -27,26 +27,7 @@ public class Course
             return DomainResult<Course>.Failure("'Title' is required.");
         }
         var created = new Course(code, title);
-        var uniqueCheck = Course.CheckUnique("Code", code);
-        if (!uniqueCheck.IsSuccess)
-        {
-            return DomainResult<Course>.Failure(uniqueCheck.ErrorMessage ?? "");
-        }
-        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Course", "Code", code);
         return DomainResult<Course>.Success(created);
-    }
-    private static DomainResult CheckUnique(string propertyName, object value)
-    {
-        if (value == null)
-        {
-            return DomainResult.Success();
-        }
-        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Course", propertyName, value.ToString());
-        if (message != null)
-        {
-            return DomainResult.Failure(message);
-        }
-        return DomainResult.Success();
     }
     public DomainResult EnsureUnique(string propertyName, object value)
     {
@@ -58,6 +39,6 @@ public class Course
         {
             return DomainResult.Success();
         }
-        return Course.CheckUnique(propertyName, value);
+        return DomainResult.Failure("A unique assign needs the storage port.");
     }
 }

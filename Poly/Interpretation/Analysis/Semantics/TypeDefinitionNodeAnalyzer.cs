@@ -473,22 +473,49 @@ internal sealed class AstPropertyDefinition(PropertyDefinitionNode node, AstType
     public Mutability Mutability => _node.Mutability;
 
     /// <summary>
-    /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>
-    /// using the indexer. Coerces the stored value to the property's target type.
-    /// Returns the property's <c>DefaultValue</c> when the key is not present.
+    /// Emits an expression that reads this property from an <c>IDictionary&lt;string, object?&gt;</c>.
+    /// An auto-property indexes by property name. A getter whose body is
+    /// <c>this.&lt;field&gt;</c> reads that field when the property key is absent.
+    /// An answered property key wins: a store-backed dictionary synthesizes the
+    /// property name and exposes the field name as a non-enumerable write view.
+    /// Coerces the stored value to the member's target type.
+    /// Returns the member's <c>DefaultValue</c> when the key is not present.
     /// A value-type member with no default reads as that type's zero value.
     /// A reference member with no default reads as <see cref="System.Reflection.Missing.Value"/>.
     /// </summary>
     public Expression? EmitRead(Expression? instance) {
         if (instance is null) return null;
+        var stored = ReadKey(instance, Name, MemberTypeDefinition, _node.DefaultValue);
+        if (GetterField() is not { } field || field.EmitRead(instance) is not Expression fieldRead)
+            return stored;
         var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
-        var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
-        var fallback = _node.DefaultValue is Constant c
+        var hasProperty = Expression.Call(
+            typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name));
+        return Expression.Condition(hasProperty, stored, fieldRead);
+    }
+
+    /// <summary>The field a <c>get =&gt; this.field</c> body reads, when that field exists.</summary>
+    private AstFieldDefinition? GetterField() {
+        if (_node.Getter?.Body is not Member { Value: ThisReference, MemberName: var name })
+            return null;
+        foreach (var field in _declaring.Fields) {
+            if (field is AstFieldDefinition ast
+                && string.Equals(ast.Name, name, StringComparison.Ordinal))
+                return ast;
+        }
+        return null;
+    }
+
+    private static Expression ReadKey(
+        Expression instance, string key, ITypeDefinition target, Node? defaultValue) {
+        var typed = Expression.Convert(instance, typeof(IDictionary<string, object?>));
+        var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(key));
+        var fallback = defaultValue is Constant c
             ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
-            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
-        var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
+            : DictionaryBackedValue.MissingKeyFallback(target);
+        var value = DictionaryBackedValue.CoerceRead(rawValue, target);
         return Expression.Condition(
-            Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),
+            Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(key)),
             value,
             fallback);
     }
@@ -549,7 +576,10 @@ internal sealed class AstFieldDefinition(FieldDefinitionNode node, AstTypeDefini
         var rawValue = Expression.Call(typed, DictionaryBackedValue.DictGetItem, Expression.Constant(Name));
         var fallback = _node.DefaultValue is Constant c
             ? Expression.Convert(Expression.Constant(c.Value), typeof(object))
-            : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
+            // An unset T? is null. Missing is not null, so `== null` would skip init.
+            : _node.FieldType is OptionalTypeReference
+                ? Expression.Constant(null, typeof(object))
+                : DictionaryBackedValue.MissingKeyFallback(MemberTypeDefinition);
         var value = DictionaryBackedValue.CoerceRead(rawValue, MemberTypeDefinition);
         return Expression.Condition(
             Expression.Call(typed, DictionaryBackedValue.DictContainsKey, Expression.Constant(Name)),

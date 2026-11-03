@@ -51,30 +51,11 @@ public class Contact
             return DomainResult<Contact>.Failure("'Name' is required.");
         }
         var created = new Contact(email, name, account);
-        var uniqueCheck = Contact.CheckUnique("Email", email);
-        if (!uniqueCheck.IsSuccess)
-        {
-            return DomainResult<Contact>.Failure(uniqueCheck.ErrorMessage ?? "");
-        }
-        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Contact", "Email", email);
         if (account != null)
         {
             account.AttachContacts(created);
         }
         return DomainResult<Contact>.Success(created);
-    }
-    private static DomainResult CheckUnique(string propertyName, object value)
-    {
-        if (value == null)
-        {
-            return DomainResult.Success();
-        }
-        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Contact", propertyName, value.ToString());
-        if (message != null)
-        {
-            return DomainResult.Failure(message);
-        }
-        return DomainResult.Success();
     }
     public DomainResult EnsureUnique(string propertyName, object value)
     {
@@ -86,6 +67,6 @@ public class Contact
         {
             return DomainResult.Success();
         }
-        return Contact.CheckUnique(propertyName, value);
+        return DomainResult.Failure("A unique assign needs the storage port.");
     }
 }

@@ -27,7 +27,7 @@ public class DateDifferenceDurationTests {
     private static string PrintTemporal(string dsl) {
         var result = ParseTemporal(dsl);
         var analysis = DomainModelAnalyzer.Analyze(result.Root!);
-        var types = new DomainToCSharpExporter().Export(result.Root!, analysis);
+        var types = DomainProgramProjection.ToSyntax(result.Root!, analysis);
         return new CSharpGenerator().Generate(types);
     }
 

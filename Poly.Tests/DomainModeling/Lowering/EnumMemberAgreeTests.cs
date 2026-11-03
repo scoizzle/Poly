@@ -29,7 +29,7 @@ public class EnumMemberAgreeTests {
         store.Add(suspended);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedActive = ExportedCSharp.CreateEntity(asm, "Patron");
         var printedSuspended = ExportedCSharp.CreateEntity(asm, "Patron",
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
@@ -62,7 +62,7 @@ public class EnumMemberAgreeTests {
         store.Add(suspended);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedActive = ExportedCSharp.CreateEntity(asm, "Patron");
         var printedSuspended = ExportedCSharp.CreateEntity(asm, "Patron",
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
@@ -97,7 +97,7 @@ public class EnumMemberAgreeTests {
         await Assert.That(patron.GetProperty<string>("Status")).IsEqualTo("Suspended");
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Patron");
         var statusType = asm.GetType("PatronStatus")!;
         var result = printed.GetType().GetMethod("SetStatus")!
@@ -126,7 +126,7 @@ public class EnumMemberAgreeTests {
         await Assert.That(patron.GetProperty<string>("Status")).IsEqualTo("Suspended");
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Patron");
         var result = printed.GetType().GetMethod("Suspend")!.Invoke(printed, null)!;
         await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
@@ -156,7 +156,7 @@ public class EnumMemberAgreeTests {
         await Assert.That(item.GetProperty<long>("Count")).IsEqualTo(1L);
 
         var asm = ExportedCSharp.CompileAndLoad(
-            new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis)));
+            new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Item");
         var result = printed.GetType().GetMethod("Submit")!.Invoke(printed, null)!;
         await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();

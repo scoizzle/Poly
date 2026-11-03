@@ -1760,7 +1760,7 @@ public class McpSmokeTests {
         var patron = McpTestTools.Runtime.CreateInstance(sessionId, "Patron");
         await Assert.That(patron.Success).IsTrue();
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+        var patronId = st.Executor.Instances.First(i => i.EntityName == "Patron").Id;
 
         var call = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "CheckOut",
             """{"book":"missing-id"}""");
@@ -1790,8 +1790,8 @@ public class McpSmokeTests {
         var patron = McpTestTools.Runtime.CreateInstance(sessionId, "Patron");
         await Assert.That(patron.Success).IsTrue();
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var bookId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Book").Key;
-        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+        var bookId = st.Executor.Instances.First(i => i.EntityName == "Book").Id;
+        var patronId = st.Executor.Instances.First(i => i.EntityName == "Patron").Id;
 
         var call = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "CheckOut",
             $$"""{"book":"{{bookId}}"}""");
@@ -3018,12 +3018,11 @@ E: entity {{
         var orchId = ExtractInstanceId(
             System.Text.Json.JsonSerializer.Serialize(createOrch.Data));
 
-        // Link orchestrator → service via the InstanceStore
+        // Link orchestrator → service via the session executor
         McpTestTools.Store.TryModifyInstances(sessionId, state => {
-            if (state.InstanceMap.TryGetValue(orchId!, out var orch)
-                && state.InstanceMap.TryGetValue(svcId!, out var svc)
-                && state.InstanceStore is not null) {
-                state.InstanceStore.Link("service", orch, svc);
+            if (state.Executor.TryGet(orchId!, out var orch)
+                && state.Executor.TryGet(svcId!, out var svc)) {
+                state.Executor.Link("service", orch!, svc!);
             }
         });
 
@@ -3072,12 +3071,12 @@ E: entity {{
         var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
 
         McpTestTools.Store.TryModifyInstances(sessionId, state => {
-            DomainEntityInstance? src = null;
-            foreach (var (id, inst) in state.InstanceMap)
-                if (id == sid) src = inst;
-            if (src is not null && state.InstanceStore is not null)
-                foreach (var (id, inst) in state.InstanceMap)
-                    if (id != sid) state.InstanceStore.Link("items", src, inst);
+            ModuleInstance? src = null;
+            foreach (var inst in state.Executor.Instances)
+                if (inst.Id == sid) src = inst;
+            if (src is not null)
+                foreach (var inst in state.Executor.Instances)
+                    if (inst.Id != sid) state.Executor.Link("items", src, inst);
         });
 
         var call = McpTestTools.Runtime.InvokeAction(sessionId, sid!, "RunAll");
@@ -3127,12 +3126,12 @@ E: entity {{
         var t2id = ExtractInstanceId(System.Text.Json.JsonSerializer.Serialize(createT2.Data));
 
         McpTestTools.Store.TryModifyInstances(sessionId, state => {
-            DomainEntityInstance? src = null;
-            foreach (var (id, inst) in state.InstanceMap)
-                if (id == sid) src = inst;
-            if (src is not null && state.InstanceStore is not null)
-                foreach (var (id, inst) in state.InstanceMap)
-                    if (id != sid) state.InstanceStore.Link("items", src, inst);
+            ModuleInstance? src = null;
+            foreach (var inst in state.Executor.Instances)
+                if (inst.Id == sid) src = inst;
+            if (src is not null)
+                foreach (var inst in state.Executor.Instances)
+                    if (inst.Id != sid) state.Executor.Link("items", src, inst);
         });
 
         var call = McpTestTools.Runtime.InvokeAction(sessionId, sid!, "RunTag");
@@ -3461,16 +3460,16 @@ E: entity {{
 
         // 3. Resolve instance IDs and link via the public MCP tool
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var custInstance = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Customer");
-        var order1 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv) && tv?.Equals(50L) == true);
-        var order2 = st.InstanceMap.Values.FirstOrDefault(i => i.Entity.Name == "Order" && i.Snapshot().TryGetValue("Total", out var tv2) && tv2?.Equals(200L) == true);
+        var custInstance = st.Executor.Instances.FirstOrDefault(i => i.EntityName == "Customer");
+        var order1 = st.Executor.Instances.FirstOrDefault(i => i.EntityName == "Order" && i.Bag.TryGetValue("Total", out var tv) && tv?.Equals(50L) == true);
+        var order2 = st.Executor.Instances.FirstOrDefault(i => i.EntityName == "Order" && i.Bag.TryGetValue("Total", out var tv2) && tv2?.Equals(200L) == true);
         await Assert.That(custInstance).IsNotNull();
         await Assert.That(order1).IsNotNull();
         await Assert.That(order2).IsNotNull();
 
-        var custId = st.InstanceMap.First(kvp => kvp.Value == custInstance).Key;
-        var order1Id = st.InstanceMap.First(kvp => kvp.Value == order1!).Key;
-        var order2Id = st.InstanceMap.First(kvp => kvp.Value == order2!).Key;
+        var custId = custInstance!.Id;
+        var order1Id = order1!.Id;
+        var order2Id = order2!.Id;
 
         var link1 = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", order1Id);
         await Assert.That(link1.Success).IsTrue();
@@ -3521,22 +3520,22 @@ E: entity {{
         await Assert.That(ruralProfile.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aliceId = st.InstanceMap.First(kvp =>
-            kvp.Value.Entity.Name == "Customer"
-            && kvp.Value.Snapshot().TryGetValue("Name", out var n)
-            && n?.Equals("Alice") == true).Key;
-        var bobId = st.InstanceMap.First(kvp =>
-            kvp.Value.Entity.Name == "Customer"
-            && kvp.Value.Snapshot().TryGetValue("Name", out var n2)
-            && n2?.Equals("Bob") == true).Key;
-        var urbanId = st.InstanceMap.First(kvp =>
-            kvp.Value.Entity.Name == "Profile"
-            && kvp.Value.Snapshot().TryGetValue("City", out var c)
-            && c?.Equals("Metropolis") == true).Key;
-        var ruralId = st.InstanceMap.First(kvp =>
-            kvp.Value.Entity.Name == "Profile"
-            && kvp.Value.Snapshot().TryGetValue("City", out var c2)
-            && c2?.Equals("Gotham") == true).Key;
+        var aliceId = st.Executor.Instances.First(i =>
+            i.EntityName == "Customer"
+            && i.Bag.TryGetValue("Name", out var n)
+            && n?.Equals("Alice") == true).Id;
+        var bobId = st.Executor.Instances.First(i =>
+            i.EntityName == "Customer"
+            && i.Bag.TryGetValue("Name", out var n2)
+            && n2?.Equals("Bob") == true).Id;
+        var urbanId = st.Executor.Instances.First(i =>
+            i.EntityName == "Profile"
+            && i.Bag.TryGetValue("City", out var c)
+            && c?.Equals("Metropolis") == true).Id;
+        var ruralId = st.Executor.Instances.First(i =>
+            i.EntityName == "Profile"
+            && i.Bag.TryGetValue("City", out var c2)
+            && c2?.Equals("Gotham") == true).Id;
 
         var linkUrban = McpTestTools.Runtime.LinkInstances(sessionId, aliceId, "profile", urbanId);
         await Assert.That(linkUrban.Success).IsTrue();
@@ -3568,8 +3567,8 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var aId = st.Executor.Instances.First(i => i.EntityName == "A").Id;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         var link = McpTestTools.Runtime.LinkInstances(sessionId, aId, "nonexistent_rel", bId);
         await Assert.That(link.Success).IsFalse();
@@ -3593,8 +3592,8 @@ E: entity {{
         await Assert.That(invResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
-        var invId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Invoice").Key;
+        var custId = st.Executor.Instances.First(i => i.EntityName == "Customer").Id;
+        var invId = st.Executor.Instances.First(i => i.EntityName == "Invoice").Id;
 
         // Customer → Invoice via "orders" (Invoice is not Order)
         var link = McpTestTools.Runtime.LinkInstances(sessionId, custId, "orders", invId);
@@ -3618,8 +3617,8 @@ E: entity {{
         await Assert.That(orderResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var custId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Customer").Key;
-        var orderId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Order").Key;
+        var custId = st.Executor.Instances.First(i => i.EntityName == "Customer").Id;
+        var orderId = st.Executor.Instances.First(i => i.EntityName == "Order").Id;
 
         // Pass order as source, customer as target — reversed for directed "orders" link
         var link = McpTestTools.Runtime.LinkInstances(sessionId, orderId, "orders", custId);
@@ -3635,7 +3634,7 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         var link = McpTestTools.Runtime.LinkInstances(sessionId, "nonexistent-id", "bs", bId);
         await Assert.That(link.Success).IsFalse();
@@ -3655,8 +3654,8 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var aId = st.Executor.Instances.First(i => i.EntityName == "A").Id;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         // Link first
         var link = McpTestTools.Runtime.LinkInstances(sessionId, aId, "bs", bId);
@@ -3668,7 +3667,7 @@ E: entity {{
         await Assert.That(unlink.Message).Contains("Unlinked");
 
         // Verify link is gone — IsLinked should return false
-        await Assert.That(st.InstanceStore!.IsLinked("bs", st.InstanceMap[aId], st.InstanceMap[bId])).IsFalse();
+        await Assert.That(st.Executor.IsLinked("bs", st.Executor.Instances.Single(i => i.Id == aId), st.Executor.Instances.Single(i => i.Id == bId))).IsFalse();
     }
 
     [Test]
@@ -3686,8 +3685,8 @@ E: entity {{
         await Assert.That(childResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var parentId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Parent").Key;
-        var childId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Child").Key;
+        var parentId = st.Executor.Instances.First(i => i.EntityName == "Parent").Id;
+        var childId = st.Executor.Instances.First(i => i.EntityName == "Child").Id;
 
         var link = McpTestTools.Runtime.LinkInstances(sessionId, parentId, "kid", childId);
         await Assert.That(link.Success).IsTrue();
@@ -3695,7 +3694,7 @@ E: entity {{
         var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, parentId, "kid", childId);
         await Assert.That(unlink.Success).IsFalse();
         await Assert.That(unlink.Message).Contains(Relationship.UnlinkViolationMessage("kid"));
-        await Assert.That(st.InstanceStore!.IsLinked("kid", st.InstanceMap[parentId], st.InstanceMap[childId])).IsTrue();
+        await Assert.That(st.Executor.IsLinked("kid", st.Executor.Instances.Single(i => i.Id == parentId), st.Executor.Instances.Single(i => i.Id == childId))).IsTrue();
     }
 
     [Test]
@@ -3709,8 +3708,8 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var aId = st.Executor.Instances.First(i => i.EntityName == "A").Id;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         // Unlink without linking first — should fail
         var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, aId, "bs", bId);
@@ -3728,8 +3727,8 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var aId = st.Executor.Instances.First(i => i.EntityName == "A").Id;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, aId, "nonexistent_rel", bId);
         await Assert.That(unlink.Success).IsFalse();
@@ -3744,7 +3743,7 @@ E: entity {{
         await Assert.That(bResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var bId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "B").Key;
+        var bId = st.Executor.Instances.First(i => i.EntityName == "B").Id;
 
         var unlink = McpTestTools.Runtime.UnlinkInstances(sessionId, "nonexistent-id", "bs", bId);
         await Assert.That(unlink.Success).IsFalse();
@@ -3780,7 +3779,7 @@ E: entity {{
         await Assert.That(createResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+        var patronId = st.Executor.Instances.First(i => i.EntityName == "Patron").Id;
 
         // Before invoke, list_instances for Loan should be empty
         var before = McpTestTools.Runtime.ListInstances(sessionId, "Loan");
@@ -3823,18 +3822,18 @@ E: entity {{
         await Assert.That(createResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
+        var patronId = st.Executor.Instances.First(i => i.EntityName == "Patron").Id;
 
         // Invoke AssignTask to create child via create in
         var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssignTask", """{"desc":"Write report"}""");
         await Assert.That(invoke.Success).IsTrue();
 
         // Find the child in the InstanceMap by entity name
-        var childEntry = st.InstanceMap.FirstOrDefault(kvp => kvp.Value.Entity.Name == "Task");
-        await Assert.That(childEntry.Value).IsNotNull();
+        var childEntry = st.Executor.Instances.FirstOrDefault(i => i.EntityName == "Task");
+        await Assert.That(childEntry).IsNotNull();
 
         // Verify get_instance works for the child
-        var getChild = McpTestTools.Runtime.GetInstance(sessionId, childEntry.Key);
+        var getChild = McpTestTools.Runtime.GetInstance(sessionId, childEntry!.Id);
         await Assert.That(getChild.Success).IsTrue();
         var getJson = System.Text.Json.JsonSerializer.Serialize(getChild.Data);
         await Assert.That(getJson).Contains("Task");
@@ -3864,8 +3863,8 @@ E: entity {{
         await Assert.That(loanResult.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var patronId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Patron").Key;
-        var loanId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Loan").Key;
+        var patronId = st.Executor.Instances.First(i => i.EntityName == "Patron").Id;
+        var loanId = st.Executor.Instances.First(i => i.EntityName == "Loan").Id;
 
         // Link and verify
         var link = McpTestTools.Runtime.LinkInstances(sessionId, patronId, "loans", loanId);
@@ -3896,7 +3895,7 @@ E: entity {{
         await Assert.That(result.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var aId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "A").Key;
+        var aId = st.Executor.Instances.First(i => i.EntityName == "A").Id;
 
         var get = McpTestTools.Runtime.GetInstance(sessionId, aId);
         await Assert.That(get.Success).IsTrue();
@@ -3933,7 +3932,7 @@ E: entity {{
         await Assert.That(create.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
+        var counterId = st.Executor.Instances.First(i => i.EntityName == "Counter").Id;
 
         // require not AtLimit should succeed — AtLimit is false
         var invoke = McpTestTools.Runtime.InvokeAction(sessionId, counterId, "Increment");
@@ -3971,7 +3970,7 @@ E: entity {{
         await Assert.That(create.Success).IsTrue();
 
         McpTestTools.Store.TryGet(sessionId, out var st);
-        var counterId = st.InstanceMap.First(kvp => kvp.Value.Entity.Name == "Counter").Key;
+        var counterId = st.Executor.Instances.First(i => i.EntityName == "Counter").Id;
 
         // require not AtLimit should fail — AtLimit is true, so not AtLimit is false
         var invoke = McpTestTools.Runtime.InvokeAction(sessionId, counterId, "Increment");

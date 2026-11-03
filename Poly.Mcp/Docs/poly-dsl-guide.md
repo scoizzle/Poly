@@ -946,9 +946,9 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - `Rel exists` on `many` is allowed (non-empty outbound-link intent). **Runtime is store-link presence** when domain-bound with a store — see dual paths below.
 - Cross-entity reads (path-prefix, exists, where) are legal in policies, require, assign RHS, and **`if` conditions** (same preprocess as policy eval).
 - Cross-entity writes (nav path as assign target) are banned.
-- **Path-prefix / owned / quantifier / Rel exists** require a store + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
+- **Path-prefix / owned / quantifier / Rel exists** require session instances + links when the name is an outbound relationship. Ownership (`SourceOwnsTarget`) is a modeling flag; evaluation uses the same outbound links as path-prefix / many.
 
-  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same store-attached instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against store outbound links. **Fail closed:** missing `instanceId`, store, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
+  **Product evaluation path:** `create_instance` → `link_instances` (when the policy reads related data) → `evaluate_policy(entity, policy, instanceId)`. Same session instances as `invoke_action`. Resolves **singular path-prefix** (including **to-one multi-hop** e.g. `loan book Title is "Classic"`), **Q3′ quantifiers**, and **`Rel exists` / `not Rel exists`** against the linked instances. **Fail closed:** missing `instanceId`, instance, or domain metadata. Empty links: path-prefix throws; `Rel exists` → **false**; `not Rel exists` → **true**. Bare path-prefix on `many` is analysis-rejected (use `any`/`all`); multi-link at any hop throws at eval. `oracle_expression` is a fragment probe on a synthetic bag — not named-policy evaluate.
 
 **Shipped in the current product surface:**
 - Arithmetic (`+`, `-`, `*`, `/`) in expressions
@@ -956,7 +956,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` constraints and enum-typed properties
-- Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; store + `link_instances` required)
+- Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; instances + `link_instances` required)
 - Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, `export_dsl` round-trip, and VM execution (`DateTime.UtcNow` / `DateOnly.FromDateTime`)
 
 **Not yet shipped** (planned for future phases / residual gaps):
@@ -968,13 +968,14 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 Decisions that narrow the shipped claim so authoring fails loud instead of silently
 diverging:
 
-- **`unique` is enforced at the runtime instance store** (`DomainInstanceStore.Add` /
-  property write) and projected to storage. The C# export's `Create` factory emits a
+- **`unique` is enforced by the session's storage port** (the compiled module's own
+  check, run on every create and on every assign to the property) and projected to
+  storage. The C# export's `Create` factory emits a
   stub `EnsureUnique` call that still returns Success — export uniqueness is the
   generated unique index, not a constructor guard and not the primary key. The EF model
   uses a synthetic integer `Id` key. Every `unique` property, including a second one on
-  the same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the
-  in-memory store and at the database.
+  the same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session storage port
+  and at the database.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
@@ -1057,18 +1058,18 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 
 | Capability | IR exists | DSL status | Notes |
 |------------|-----------|------------|-------|
-| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, multi-hop `loan book Title is "X"` (to-one hops only); **store + link** at `evaluate_policy` |
+| Relationship navigation | ✅ | ✅ **shipped** (path-prefix) | `customer Tier`, multi-hop `loan book Title is "X"` (to-one hops only); **instances + link** at `evaluate_policy` |
 | Existence check | ✅ | ✅ **shipped** (postfix `Rel exists`) | Store outbound-link presence for relationship names; fail-closed without store; empty → false |
 | Scoped filter (`where`) | ✅ | ✅ **shipped** (`rel where and-chain`) | `customer where Status is "Active"` |
-| Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires store + link** at `evaluate_policy` |
+| Owned / related single-hop | ✅ | ✅ **shipped** (path-prefix) | `profile City is "Metropolis"` — same space-delimited syntax as to-one nav; **requires instances + link** at `evaluate_policy` |
 | Nested multi-hop path-prefix | ✅ | ✅ **shipped** (to-one hops) | `loan book Title is "Classic"`; many-middle requires `any`/`all` quantifiers |
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
-Named-policy evaluate is store-only (`create_instance` + `evaluate_policy`). `oracle_expression`
-is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without a store.
+Named-policy evaluate runs on a session instance (`create_instance` + `evaluate_policy`). `oracle_expression`
+is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without session instances.
 
 ## 9. Supported Effect Summary
 
@@ -1082,7 +1083,7 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the runtime links in the store. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools expose `DomainInstanceStore.Link` / `DomainInstanceStore.Unlink` with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a store/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

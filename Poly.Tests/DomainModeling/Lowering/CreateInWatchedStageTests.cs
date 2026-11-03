@@ -53,7 +53,7 @@ public class CreateInWatchedStageTests {
         await Assert.That(user.InvokeAction("Start").Succeeded).IsTrue();
         await Assert.That(user.GetProperty<object>("OpenCount")).IsEqualTo(1L);
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
         await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers()")).IsEqualTo(1);
     }
@@ -68,7 +68,7 @@ public class CreateInWatchedStageTests {
         await Assert.That(user.InvokeAction("Start").Succeeded).IsTrue();
         await Assert.That(user.GetProperty<object>("OpenCount")).IsEqualTo(0L);
 
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var createJobs = ExportedCSharp.ExtractMethod(cs, "DomainResult<Job> CreateJobs(");
         await Assert.That(CountOccurrences(createJobs, "job.NotifyOpenSubscribers()")).IsEqualTo(0);
     }
@@ -78,7 +78,7 @@ public class CreateInWatchedStageTests {
         // A when-each notifier has no previous-stage parameter; create-in passes no
         // argument (D12). The when-all path keeps the nullable parameter.
         var (domain, analysis) = Evolve(Positive);
-        var cs = new CSharpGenerator().Generate(new DomainToCSharpExporter().Export(domain, analysis));
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).Contains("NotifyOpenSubscribers()");
         await Assert.That(cs).DoesNotContain("NotifyOpenSubscribers(JobStage?");
     }

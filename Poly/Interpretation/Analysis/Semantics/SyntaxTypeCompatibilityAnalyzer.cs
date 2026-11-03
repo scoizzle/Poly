@@ -371,6 +371,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true;
         if (paramType.IsNumericWideningFrom(argType))
             return true;
+        if (paramType.TypeCategory == TypeCategory.Enumeration && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
+            return true; // projected enums are string-valued consts (BuildEnumTypeDef)
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
         if (NullableValueAccepts(paramType, argType))

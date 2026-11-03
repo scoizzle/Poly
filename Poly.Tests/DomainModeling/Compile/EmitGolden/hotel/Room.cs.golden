@@ -142,12 +142,6 @@ public class Room
             return DomainResult<Room>.Failure("'Number' must be at most 8 characters.");
         }
         var created = new Room(floor, maxOccupancy, nightlyRate, number, property, roomType, stays, dirty, occupied, offline);
-        var uniqueCheck = Room.CheckUnique("Number", number);
-        if (!uniqueCheck.IsSuccess)
-        {
-            return DomainResult<Room>.Failure(uniqueCheck.ErrorMessage ?? "");
-        }
-        Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedRecord("Room", "Number", number);
         if (property != null)
         {
             property.AttachRooms(created);
@@ -173,19 +167,6 @@ public class Room
             target.RegisterRoomStaysNoShowSubscriber(this);
         }
     }
-    private static DomainResult CheckUnique(string propertyName, object value)
-    {
-        if (value == null)
-        {
-            return DomainResult.Success();
-        }
-        var message = Poly.DomainModeling.Runtime.DomainInstanceStore.PrintedCollision("Room", propertyName, value.ToString());
-        if (message != null)
-        {
-            return DomainResult.Failure(message);
-        }
-        return DomainResult.Success();
-    }
     public DomainResult EnsureUnique(string propertyName, object value)
     {
         if (value == null)
@@ -196,6 +177,6 @@ public class Room
         {
             return DomainResult.Success();
         }
-        return Room.CheckUnique(propertyName, value);
+        return DomainResult.Failure("A unique assign needs the storage port.");
     }
 }

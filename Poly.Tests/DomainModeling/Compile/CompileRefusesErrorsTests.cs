@@ -97,7 +97,7 @@ public class CompileRefusesErrorsTests {
         var (domain, analysis, first) = DomainWithUnknownType();
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => new DomainToCSharpExporter().Export(domain, analysis));
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(ex!.Message).IsEqualTo(first);
     }
 }

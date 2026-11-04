@@ -30,7 +30,8 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
         expr = null!;
         try {
             // Product authoring tables (temporal + storage) — same folds as add(kind: policy).
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, ExtensionCatalog.Core.Authoring);
+            expr = DslExpressionFragment.Resolve(
+                DslExpressionFragment.ParseExpressionFragment(expressionDsl), ExtensionCatalog.Core.Authoring);
             return null;
         }
         catch (Exception ex) {

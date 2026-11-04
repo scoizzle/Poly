@@ -14,12 +14,15 @@ public class NowExpressionFormTests {
     private static DomainSession NowFormInputs() =>
         ExtensionCatalog.Core.Language;
 
+    private static DomainExpression Resolve(string text, DomainSession session) =>
+        DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment(text), session);
+
     private readonly DomainExpressionLoweringPass Pass = new(
         new LoweringContext(new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
 
     [Test]
     public async Task Now_Form_ParsesAndLowers() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", NowFormInputs());
+        var expr = Resolve("Now", NowFormInputs());
 
         await Assert.That(expr).IsTypeOf<Now>();
 
@@ -34,7 +37,7 @@ public class NowExpressionFormTests {
     [Test]
     public async Task Now_WithoutForm_IsPropertyAccess() {
         var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", raw);
+        var expr = Resolve("Now", raw);
 
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)expr).Name).IsEqualTo("Now");
@@ -42,7 +45,7 @@ public class NowExpressionFormTests {
 
     [Test]
     public async Task Today_Form_ParsesAndLowers() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Today", NowFormInputs());
+        var expr = Resolve("Today", NowFormInputs());
 
         await Assert.That(expr).IsTypeOf<Today>();
 
@@ -53,7 +56,7 @@ public class NowExpressionFormTests {
     [Test]
     public async Task Today_WithoutForm_IsPropertyAccess() {
         var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
-        var expr = DslExpressionFragment.ParseExpressionFragment("Today", raw);
+        var expr = Resolve("Today", raw);
 
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)expr).Name).IsEqualTo("Today");
@@ -61,7 +64,7 @@ public class NowExpressionFormTests {
 
     [Test]
     public async Task Today_Lowercase_IsNotClock() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("today", NowFormInputs());
+        var expr = Resolve("today", NowFormInputs());
 
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
         await Assert.That(((PropertyAccess)expr).Name).IsEqualTo("today");

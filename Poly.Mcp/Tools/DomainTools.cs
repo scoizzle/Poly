@@ -743,7 +743,8 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
 
         DomainExpression expr;
         try {
-            expr = DslExpressionFragment.ParseExpressionFragment(expressionDsl, state.Modeling);
+            expr = DslExpressionFragment.Resolve(
+                DslExpressionFragment.ParseExpressionFragment(expressionDsl), state.Modeling);
         }
         catch (Exception ex) {
             return new DomainToolResponse(

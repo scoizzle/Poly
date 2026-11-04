@@ -7,9 +7,12 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// parses without ad-hoc test-only <c>RegisterExpressionForm</c>.
 /// </summary>
 public sealed class TemporalPackTests {
+    private static DomainExpression Resolved(string text, DomainSession session) =>
+        DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment(text), session);
+
     [Test]
     public async Task DomainInputDefaults_NowMinus1Days_ParsesAsDateOperation() {
-        var expr = DslExpressionFragment.ParseExpressionFragment(
+        var expr = Resolved(
             "Now - 1 Days",
             ExtensionCatalog.Core.Language);
 
@@ -25,7 +28,7 @@ public sealed class TemporalPackTests {
     public async Task CreateWithTemporalPack_NowMinus1Days_ParsesAsDateOperation() {
         var inputs = ExtensionCatalog.Core.Language;
 
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 1 Days", inputs);
+        var expr = Resolved("Now - 1 Days", inputs);
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -36,7 +39,7 @@ public sealed class TemporalPackTests {
 
     [Test]
     public async Task SqlParser_NowMinus1Days_ParsesAsDateOperation() {
-        var expr = DslExpressionFragment.ParseExpressionFragment(
+        var expr = Resolved(
             "Now - 1 Days",
             ExtensionCatalog.Core.Authoring);
 

@@ -21,6 +21,13 @@ public static class TemporalExpressionPrintBinders {
         forms.RegisterIdent("Now", static () => new Now());
         forms.RegisterIdent("Today", static () => new Today());
         forms.RegisterFold("duration", FoldDuration);
+        forms.RegisterDurationClaim(ClaimDuration);
+    }
+
+    private static DomainExpression ClaimDuration(long amount, string unit) {
+        if (!DurationForm.TryGetUnit(unit, out var parsed))
+            throw new FormatException($"Unknown duration unit '{unit}'.");
+        return new Duration(amount, parsed);
     }
 
     private static DomainExpression FoldDuration(MatchResult<DslToken, DslTokenKind> match) {

@@ -19,6 +19,8 @@ public static class AnalyzerBuilderExtensions {
             .UseJumpTargetResolution()
             .UseConstantFolding()
             .UseControlFlowAnalysis()
+            .UseAvailableExpressions()
+            .UseLoopInvariantMotion()
             .UseDefiniteAssignmentAnalysis()
             .UseLambdaReturnTypeResolution()
                 .UseCallSiteCatalog()

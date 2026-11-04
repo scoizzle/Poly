@@ -26,7 +26,7 @@ public static class ValidDomain {
             .SelectMany(id => ExtensionCatalog.Core.Resolve(id).PrimitiveSeeds);
         var primitives = CanonicalBuiltInTypeCatalog.Definitions.Concat(extensionPrimitives)
             .DistinctBy(p => p.Name)
-            .Select(p => new PrimitiveType(p.Name, p.Category, []));
+            .Select(p => new PrimitiveType(p.Name, p.Semantics, []));
         return DomainTestFactory.Create(name, [.. primitives, .. types], relationships ?? []) with { Extensions = [.. extensions] };
     }
 }

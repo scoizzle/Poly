@@ -52,39 +52,12 @@ public enum PrimitiveType {
 /// </summary>
 public static class PrimitiveTypeExtensions {
     /// <summary>
-    /// Gets the type categories that apply to this primitive type.
+    /// Returns true for the integral primitives — the exact set that supports
+    /// integer-only folding. Floating point and decimal are excluded.
     /// </summary>
-    public static TypeCategory GetCategory(this PrimitiveType id) => id switch {
-        PrimitiveType.Boolean => TypeCategory.Primitive,
-
-        PrimitiveType.Int8 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed,
-        PrimitiveType.Int16 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed,
-        PrimitiveType.Int32 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed,
-        PrimitiveType.Int64 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed,
-
-        PrimitiveType.UInt8 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Unsigned,
-        PrimitiveType.UInt16 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Unsigned,
-        PrimitiveType.UInt32 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Unsigned,
-        PrimitiveType.UInt64 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Unsigned,
-
-        PrimitiveType.Float32 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.FloatingPoint | TypeCategory.Signed,
-        PrimitiveType.Float64 => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.FloatingPoint | TypeCategory.Signed,
-        PrimitiveType.Decimal => TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.HighPrecision | TypeCategory.Signed,
-
-        PrimitiveType.String => TypeCategory.Primitive | TypeCategory.Text,
-        PrimitiveType.Char => TypeCategory.Primitive | TypeCategory.Text,
-
-        PrimitiveType.DateTime => TypeCategory.Primitive | TypeCategory.DateTime,
-        PrimitiveType.DateOnly => TypeCategory.Primitive | TypeCategory.DateOnly,
-        PrimitiveType.TimeOnly => TypeCategory.Primitive | TypeCategory.TimeOfDay,
-        PrimitiveType.TimeSpan => TypeCategory.Primitive | TypeCategory.Duration,
-
-        PrimitiveType.Guid => TypeCategory.Primitive | TypeCategory.Identifier,
-        PrimitiveType.ByteArray => TypeCategory.Primitive | TypeCategory.Binary,
-        PrimitiveType.Structure => TypeCategory.Primitive | TypeCategory.Structured,
-
-        _ => TypeCategory.Primitive
-    };
+    public static bool IsInteger(this PrimitiveType id) => id is
+        PrimitiveType.Int8 or PrimitiveType.Int16 or PrimitiveType.Int32 or PrimitiveType.Int64
+        or PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32 or PrimitiveType.UInt64;
 
     /// <summary>
     /// Gets a human-readable display name for this primitive type.
@@ -182,6 +155,7 @@ public static class PrimitiveTypeExtensions {
         Type t when t == typeof(TimeSpan) => PrimitiveType.TimeSpan,
         Type t when t == typeof(Guid) => PrimitiveType.Guid,
         Type t when t == typeof(byte[]) => PrimitiveType.ByteArray,
+        Type t when t == typeof(object) => PrimitiveType.Structure,
         _ => null
     };
 

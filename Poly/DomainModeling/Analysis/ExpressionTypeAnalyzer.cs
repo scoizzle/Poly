@@ -690,7 +690,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         var lookup = context.GetTypeLookup();
         if (lookup?.Domain.Types.OfType<Ontology.PrimitiveType>().FirstOrDefault(p =>
                 string.Equals(p.Name, typeName, StringComparison.Ordinal)) is { } primitive)
-            return FromCatalogFlags(primitive.TypeCategory);
+            return FromSemantics(primitive.Semantics);
         return typeName switch {
             "Text" or "String" => TypeCategory.Text,
             "Number" or "Int" or "Int64" or "Int32" or "Decimal" or "Float" or "Double" => TypeCategory.Number,
@@ -700,24 +700,20 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         };
     }
 
-    private static TypeCategory FromCatalogFlags(Introspection.TypeCategory flags) {
-        const Introspection.TypeCategory dateTime = Introspection.TypeCategory.DateTime;
-        const Introspection.TypeCategory dateOnly = Introspection.TypeCategory.DateOnly;
-        const Introspection.TypeCategory timeOfDay = Introspection.TypeCategory.TimeOfDay;
-        const Introspection.TypeCategory duration = Introspection.TypeCategory.Duration;
-        const Introspection.TypeCategory numeric = Introspection.TypeCategory.Numeric;
-        const Introspection.TypeCategory boolean = Introspection.TypeCategory.Boolean;
-        const Introspection.TypeCategory text = Introspection.TypeCategory.Text;
-        const Introspection.TypeCategory identifier = Introspection.TypeCategory.Identifier;
-        if ((flags & dateTime) == dateTime || (flags & dateOnly) == dateOnly) return TypeCategory.Date;
-        if ((flags & timeOfDay) == timeOfDay) return TypeCategory.Time;
-        if ((flags & duration) == duration) return TypeCategory.Duration;
-        if ((flags & numeric) == numeric) return TypeCategory.Number;
-        if ((flags & boolean) == boolean) return TypeCategory.Boolean;
-        if ((flags & text) == text) return TypeCategory.Text;
-        if ((flags & identifier) == identifier) return TypeCategory.Guid;
-        return TypeCategory.Unknown;
-    }
+    private static TypeCategory FromSemantics(PrimitiveSemantics semantics) => semantics switch {
+        PrimitiveSemantics.Boolean => TypeCategory.Boolean,
+        PrimitiveSemantics.Number => TypeCategory.Number,
+        PrimitiveSemantics.Decimal => TypeCategory.Number,
+        PrimitiveSemantics.Text => TypeCategory.Text,
+        PrimitiveSemantics.Uuid => TypeCategory.Guid,
+        PrimitiveSemantics.Binary => TypeCategory.Unknown,
+        PrimitiveSemantics.Date => TypeCategory.Date,
+        // DateTime keeps the Date category; granularity is compared through SemanticsOf.
+        PrimitiveSemantics.DateTime => TypeCategory.Date,
+        PrimitiveSemantics.Time => TypeCategory.Time,
+        PrimitiveSemantics.Duration => TypeCategory.Duration,
+        _ => throw new InvalidOperationException($"Unmapped primitive semantics '{semantics}'."),
+    };
 
     private static bool IsNumeric(TypeCategory c) => c is TypeCategory.Number;
 
@@ -739,7 +735,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <param name="assigning">
     /// When true, <paramref name="left"/> is the source and <paramref name="right"/> is the
-    /// target. Catalog flags: DateOnly onto DateTime is a widen; DateTime onto DateOnly is not.
+    /// target. Catalog semantics: Date onto DateTime is a widen; DateTime onto Date is not.
     /// </param>
     private static bool Compatible(AnalysisContext context, TypeInfo left, TypeInfo right, bool assigning = false) {
         if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
@@ -756,13 +752,11 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             return true;
 
         if (assigning) {
-            var leftFlags = FlagsOf(context, left.TypeName);
-            var rightFlags = FlagsOf(context, right.TypeName);
-            if (HasFlag(leftFlags, Introspection.TypeCategory.DateOnly)
-                && HasFlag(rightFlags, Introspection.TypeCategory.DateTime))
+            var leftSemantics = SemanticsOf(context, left.TypeName);
+            var rightSemantics = SemanticsOf(context, right.TypeName);
+            if (leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime)
                 return true;
-            if (HasFlag(leftFlags, Introspection.TypeCategory.DateTime)
-                && HasFlag(rightFlags, Introspection.TypeCategory.DateOnly))
+            if (leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date)
                 return false;
             if (left.Category != right.Category)
                 return false;
@@ -815,31 +809,19 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         _ => typeName
     };
 
-    private static Introspection.TypeCategory FlagsOf(AnalysisContext context, string? typeName) {
-        if (typeName is null) return 0;
+    private static PrimitiveSemantics? SemanticsOf(AnalysisContext context, string? typeName) {
+        if (typeName is null) return null;
         var lookup = context.GetTypeLookup();
         var primitive = lookup?.Domain.Types.OfType<Ontology.PrimitiveType>().FirstOrDefault(p =>
             string.Equals(p.Name, typeName, StringComparison.Ordinal));
-        return primitive?.TypeCategory ?? 0;
+        return primitive?.Semantics;
     }
 
-    private static bool HasFlag(Introspection.TypeCategory flags, Introspection.TypeCategory flag) =>
-        (flags & flag) == flag;
-
-    private static bool MixedDateGranularity(AnalysisContext context, TypeInfo left, TypeInfo right) =>
-        IsDateOnlyOnly(context, left) && IsDateTimeOnly(context, right)
-        || IsDateTimeOnly(context, left) && IsDateOnlyOnly(context, right);
-
-    private static bool IsDateOnlyOnly(AnalysisContext context, TypeInfo type) {
-        var flags = FlagsOf(context, type.TypeName);
-        return HasFlag(flags, Introspection.TypeCategory.DateOnly)
-            && !HasFlag(flags, Introspection.TypeCategory.DateTime);
-    }
-
-    private static bool IsDateTimeOnly(AnalysisContext context, TypeInfo type) {
-        var flags = FlagsOf(context, type.TypeName);
-        return HasFlag(flags, Introspection.TypeCategory.DateTime)
-            && !HasFlag(flags, Introspection.TypeCategory.DateOnly);
+    private static bool MixedDateGranularity(AnalysisContext context, TypeInfo left, TypeInfo right) {
+        var leftSemantics = SemanticsOf(context, left.TypeName);
+        var rightSemantics = SemanticsOf(context, right.TypeName);
+        return leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime
+            || leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date;
     }
 
     private static void Report(AnalysisContext context, Node where, string message) =>

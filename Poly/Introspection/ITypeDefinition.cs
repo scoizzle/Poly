@@ -82,8 +82,9 @@ public interface ITypeDefinition {
     PrimitiveType? PrimitiveType { get; }
 
     /// <summary>
-    /// Gets the type categories that apply to this type.
-    /// Multiple categories can be combined using bitwise operations.
+    /// Gets the shape of this type. Exactly one kind, so a type cannot be in two
+    /// shapes at once. A <see cref="TypeKind.Primitive"/> always carries a
+    /// <see cref="PrimitiveType"/> and every other kind reports null.
     /// </summary>
-    TypeCategory TypeCategory { get; }
+    TypeKind Kind { get; }
 }

@@ -16,8 +16,7 @@ namespace Poly.Ast.Nodes;
 /// <param name="GenericParameters">Generic type parameters for generic types.</param>
 /// <param name="PrimaryConstructorParameters">Optional primary-constructor parameters for positional type declarations.</param>
 /// <param name="PrimitiveTypeId">Primitive type identifier if this is a primitive type.</param>
-/// <param name="TypeCategory">Category flags describing the type's nature.</param>
-/// <param name="IsInterface">Whether this definition should be emitted as an interface.</param>
+/// <param name="Kind">The type's shape. <c>PrimitiveTypeId</c> wins over this when set.</param>
 /// <param name="Semantics">The intended mutability and equality semantics for the type.</param>
 public sealed record TypeDefinitionNode(
     string Name,
@@ -31,8 +30,7 @@ public sealed record TypeDefinitionNode(
     IReadOnlyList<Parameter>? GenericParameters = null,
     IReadOnlyList<Parameter>? PrimaryConstructorParameters = null,
     PrimitiveType? PrimitiveTypeId = null,
-    TypeCategory TypeCategory = TypeCategory.None,
-    bool IsInterface = false,
+    TypeKind Kind = TypeKind.Class,
     AccessModifier AccessModifier = AccessModifier.Public,
     TypeDefinitionSemantics? Semantics = null
 ) : Node {
@@ -41,6 +39,21 @@ public sealed record TypeDefinitionNode(
     /// Gets the fully qualified name combining Namespace and Name.
     /// </summary>
     public string FullName => Namespace != null ? $"{Namespace}.{Name}" : Name;
+
+    /// <summary>
+    /// Gets the shape this definition reports, single-sourced so a primitive can
+    /// never also claim another kind. Declaring <see cref="TypeKind.Primitive"/>
+    /// without a <see cref="PrimitiveTypeId"/> is unrepresentable and throws.
+    /// </summary>
+    public TypeKind EffectiveKind {
+        get {
+            if (PrimitiveTypeId is not null)
+                return TypeKind.Primitive;
+            if (Kind is TypeKind.Primitive)
+                throw new InvalidOperationException($"Type '{Name}' declares kind Primitive without a PrimitiveTypeId.");
+            return Kind;
+        }
+    }
 
     /// <summary>
     /// Attributes applied to this type (e.g. <c>[Serializable]</c>, <c>[Key]</c>).

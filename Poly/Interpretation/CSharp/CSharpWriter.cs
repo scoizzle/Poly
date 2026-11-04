@@ -668,11 +668,15 @@ public sealed class CSharpWriter {
     // ── type definitions ─────────────────────────────────────────────────────
 
     private void WriteTypeDefinition(StringBuilder sb, TypeDefinitionNode typeDef, int indent) {
+        var kind = typeDef.EffectiveKind;
+        if (kind is not (TypeKind.Enum or TypeKind.Interface or TypeKind.Class))
+            throw new InvalidOperationException($"Cannot print type '{typeDef.Name}' of kind {kind}.");
+
         var attrs = AttributesText(typeDef.Attributes, indent);
         var mods = AccessModifierText(typeDef.AccessModifier).Trim();
         sb.Append(attrs);
 
-        if (typeDef.TypeCategory.Is(TypeCategory.Enumeration)) {
+        if (kind is TypeKind.Enum) {
             var members = new StringBuilder();
             if (typeDef.Fields != null) {
                 for (var i = 0; i < typeDef.Fields.Count; i++) {
@@ -695,7 +699,7 @@ public sealed class CSharpWriter {
             return;
         }
 
-        if (typeDef.IsInterface) {
+        if (kind is TypeKind.Interface) {
             var body = new StringBuilder();
             if (typeDef.Properties != null) {
                 foreach (var property in typeDef.Properties) {

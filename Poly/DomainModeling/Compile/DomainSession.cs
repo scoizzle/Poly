@@ -38,7 +38,7 @@ public sealed class DomainSession {
     public ExpressionMeaning Meaning { get; }
 
     /// <summary>Primitive types loaded libraries seed, keyed by library id.</summary>
-    public IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)> PrimitiveSeeds { get; }
+    public IReadOnlyList<(string LibraryId, string Name, PrimitiveSemantics Semantics)> PrimitiveSeeds { get; }
 
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
@@ -116,7 +116,7 @@ public sealed class DomainSession {
         IReadOnlyList<IArtifactContributor>? artifacts = null,
         IReadOnlyList<INodeAnalyzer>? analyzers = null,
         IReadOnlyList<StageContribution>? contributions = null,
-        IReadOnlyList<(string LibraryId, string Name, TypeCategory Category)>? primitiveSeeds = null,
+        IReadOnlyList<(string LibraryId, string Name, PrimitiveSemantics Semantics)>? primitiveSeeds = null,
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null) {
         Domain = domain;
         Extensions = extensions;

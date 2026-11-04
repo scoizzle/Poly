@@ -8,7 +8,7 @@ using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
-using TypeCategory = Poly.Introspection.TypeCategory;
+using TypeKind = Poly.Introspection.TypeKind;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
@@ -219,7 +219,7 @@ public sealed partial class DomainToCSharpExporter {
         return new TypeDefinitionNode(
             name,
             Fields: fields,
-            TypeCategory: TypeCategory.Enumeration,
+            Kind: TypeKind.Enum,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         );
     }

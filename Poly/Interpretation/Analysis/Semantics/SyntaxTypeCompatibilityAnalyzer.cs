@@ -371,7 +371,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true;
         if (paramType.IsNumericWideningFrom(argType))
             return true;
-        if (paramType.TypeCategory == TypeCategory.Enumeration && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
+        if (paramType.Kind == TypeKind.Enum && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
             return true; // projected enums are string-valued consts (BuildEnumTypeDef)
         if (arg is Constant { Value: null })
             return AcceptsNull(paramType);
@@ -417,7 +417,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return collection.ElementType;
         if (type.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(string))
             return null;
-        if (!type.TypeCategory.IsCollection)
+        if (!TypeDefinitionExtensions.IsCollectionShape(type))
             return null;
         var element = type.GetElementType();
         return element is not null && !IsUniversalObject(element) ? element : null;

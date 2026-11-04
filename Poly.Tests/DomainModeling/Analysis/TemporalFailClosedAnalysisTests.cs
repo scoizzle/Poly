@@ -36,7 +36,7 @@ public class TemporalFailClosedAnalysisTests {
             .ToList();
 
     private static DomainType[] TemporalPrimitives() =>
-        [.. TemporalTypeCatalog.Definitions.Select(static d => new PrimitiveType(d.Name, d.Category, []))];
+        [.. TemporalTypeCatalog.Definitions.Select(static d => new PrimitiveType(d.Name, d.Semantics, []))];
 
     private static AnalysisResult AnalyzeAssign(string targetType, string sourceType) {
         var item = new Entity("Item",
@@ -316,7 +316,7 @@ public class TemporalFailClosedAnalysisTests {
             []);
         var analysis = DomainModelAnalyzer.Analyze(
             DomainTestFactory.Create("T", [
-                new PrimitiveType("Time", Poly.Introspection.TypeCategory.Primitive | Poly.Introspection.TypeCategory.TimeOfDay, []),
+                new PrimitiveType("Time", PrimitiveSemantics.Time, []),
                 item,
             ], []) with { Extensions = [ExtensionCatalog.TemporalId] });
 

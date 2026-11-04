@@ -6,7 +6,7 @@ namespace Poly.Tests.Mcp;
 
 /// <summary>
 /// S13 (#368): the MCP runtime executes the compiled module. The stored instance is
-/// the dictionary the cached static <c>Create</c> built, not a <see cref="DomainEntityInstance"/>.
+/// the dictionary the cached static <c>Create</c> built.
 /// </summary>
 public class McpModuleRuntimeTests {
     [Test]
@@ -26,7 +26,7 @@ public class McpModuleRuntimeTests {
         await Assert.That(createMethod!.IsStatic).IsTrue();
 
         object stored = state.InstanceMap.Values.Single();
-        await Assert.That(stored is DomainEntityInstance).IsFalse();
+        await Assert.That(stored is ModuleInstance).IsFalse();
         await Assert.That(stored is IDictionary<string, object?>).IsTrue();
         await Assert.That(((IDictionary<string, object?>)stored)["Memo"]).IsEqualTo("first");
     }

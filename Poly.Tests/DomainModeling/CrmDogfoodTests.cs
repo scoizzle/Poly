@@ -86,185 +86,160 @@ public class CrmDogfoodTests {
     [Test]
     public async Task Crm_Runtime_WalksAccountContactOpportunityPipeline() {
         var (domain, _) = Evolve();
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
 
-        var account = DomainEntityInstance.Create(E("Account"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Acme",
-                ["Industry"] = "Technology"
-            }, domain);
-        store.Add(account);
-
-        var proposeUnlinked = DomainEntityInstance.Create(E("Opportunity"),
-            new Dictionary<string, object?> {
-                ["Title"] = "Orphan",
-                ["Amount"] = 1000m,
-            }, domain);
-        store.Add(proposeUnlinked);
-        var blocked = proposeUnlinked.InvokeAction("Propose");
+        var account = exec.Create("Account", new Dictionary<string, object?> {
+            ["Name"] = "Acme",
+            ["Industry"] = "Technology"
+        }).Instance!;
+        var proposeUnlinked = exec.Create("Opportunity", new Dictionary<string, object?> {
+            ["Title"] = "Orphan",
+            ["Amount"] = 1000m,
+        }).Instance!;
+        var blocked = exec.Invoke(proposeUnlinked, "Propose");
         await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(blocked.FailedGuards).Contains("HasAccount");
+        await Assert.That(blocked.Error).Contains("HasAccount");
 
-        var contact = account.InvokeAction("AddContact",
-            new Dictionary<string, object?> {
-                ["name"] = "Ada",
-                ["email"] = "ada@acme.test"
-            });
+        var contact = exec.Invoke(account, "AddContact", new Dictionary<string, object?> {
+            ["name"] = "Ada",
+            ["email"] = "ada@acme.test"
+        });
         await Assert.That(contact.Succeeded).IsTrue();
-        var ada = contact.ResultInstance!;
-        await Assert.That(ada.CurrentStage).IsEqualTo("Active");
+        var ada = contact.Instance!;
+        await Assert.That(ModuleReads.Stage(ada)).IsEqualTo("Active");
 
-        var dup = account.InvokeAction("AddContact",
-            new Dictionary<string, object?> {
-                ["name"] = "Other",
-                ["email"] = "ada@acme.test"
-            });
+        var dup = exec.Invoke(account, "AddContact", new Dictionary<string, object?> {
+            ["name"] = "Other",
+            ["email"] = "ada@acme.test"
+        });
         await Assert.That(dup.Succeeded).IsFalse();
-        await Assert.That(dup.ErrorMessage).Contains("Unique");
+        await Assert.That(dup.Error).Contains("Unique");
 
-        var product = DomainEntityInstance.Create(E("Product"),
-            new Dictionary<string, object?> {
-                ["Sku"] = "PLT-1",
-                ["Name"] = "Platform",
-                ["ListPrice"] = 25000m,
-            }, domain);
-        store.Add(product);
-
-        var deal = account.InvokeAction("OpenDeal",
-            new Dictionary<string, object?> {
-                ["title"] = "Platform",
-                ["amount"] = 0L
-            });
+        var product = exec.Create("Product", new Dictionary<string, object?> {
+            ["Sku"] = "PLT-1",
+            ["Name"] = "Platform",
+            ["ListPrice"] = 25000m,
+        }).Instance!;
+        var deal = exec.Invoke(account, "OpenDeal", new Dictionary<string, object?> {
+            ["title"] = "Platform",
+            ["amount"] = 0L
+        });
         await Assert.That(deal.Succeeded).IsTrue();
-        var opp = deal.ResultInstance!;
-        await Assert.That(opp.CurrentStage).IsEqualTo("Qualify");
-        store.Link("contact", opp, ada);
+        var opp = deal.Instance!;
+        await Assert.That(ModuleReads.Stage(opp)).IsEqualTo("Qualify");
+        exec.Link("contact", opp, ada);
 
-        var line = opp.InvokeAction("AddLine",
-            new Dictionary<string, object?> {
-                ["sku"] = product,
-                ["qty"] = 1L
-            });
+        var line = exec.Invoke(opp, "AddLine", new Dictionary<string, object?> {
+            ["sku"] = product,
+            ["qty"] = 1L
+        });
         await Assert.That(line.Succeeded).IsTrue();
-        await Assert.That(opp.GetProperty<object>("Amount")).IsEqualTo(25000m);
+        await Assert.That(opp.Bag["Amount"]).IsEqualTo(25000m);
 
-        var emptyDeal = account.InvokeAction("OpenDeal",
-            new Dictionary<string, object?> {
-                ["title"] = "No SKUs",
-                ["amount"] = 0L
-            });
+        var emptyDeal = exec.Invoke(account, "OpenDeal", new Dictionary<string, object?> {
+            ["title"] = "No SKUs",
+            ["amount"] = 0L
+        });
         await Assert.That(emptyDeal.Succeeded).IsTrue();
-        await Assert.That(emptyDeal.ResultInstance!.InvokeAction("Propose").Succeeded).IsTrue();
-        var commitEmpty = emptyDeal.ResultInstance!.InvokeAction("Commit");
+        await Assert.That(exec.Invoke(emptyDeal.Instance!, "Propose").Succeeded).IsTrue();
+        var commitEmpty = exec.Invoke(emptyDeal.Instance!, "Commit");
         await Assert.That(commitEmpty.Succeeded).IsFalse();
-        await Assert.That(commitEmpty.FailedGuards).Contains("HasLines");
-        await Assert.That(emptyDeal.ResultInstance!.InvokeAction("Lose").Succeeded).IsTrue();
+        await Assert.That(commitEmpty.Error).Contains("HasLines");
+        await Assert.That(exec.Invoke(emptyDeal.Instance!, "Lose").Succeeded).IsTrue();
 
-        var note = opp.InvokeAction("Log",
-            new Dictionary<string, object?> { ["subject"] = "Discovery call" });
+        var note = exec.Invoke(opp, "Log", new Dictionary<string, object?> { ["subject"] = "Discovery call" });
         await Assert.That(note.Succeeded).IsTrue();
-        await Assert.That(note.ResultInstance!.CurrentStage).IsEqualTo("Open");
-        var dueBefore = (DateOnly)note.ResultInstance!.GetProperty<object>("DueOn")!;
-        await Assert.That(note.ResultInstance!.InvokeAction("Snooze").Succeeded).IsTrue();
-        var dueAfter = (DateOnly)note.ResultInstance!.GetProperty<object>("DueOn")!;
+        await Assert.That(ModuleReads.Stage(note.Instance!)).IsEqualTo("Open");
+        var dueBefore = (DateOnly)note.Instance!.Bag["DueOn"]!;
+        await Assert.That(exec.Invoke(note.Instance!, "Snooze").Succeeded).IsTrue();
+        var dueAfter = (DateOnly)note.Instance!.Bag["DueOn"]!;
         await Assert.That(dueAfter).IsEqualTo(dueBefore.AddDays(7));
 
-        var quote = opp.InvokeAction("QuoteDeal");
+        var quote = exec.Invoke(opp, "QuoteDeal");
         await Assert.That(quote.Succeeded).IsTrue();
-        var quoted = quote.ResultInstance!;
-        var qline = quoted.InvokeAction("AddLine",
-            new Dictionary<string, object?> {
-                ["sku"] = product,
-                ["qty"] = 1L
-            });
+        var quoted = quote.Instance!;
+        var qline = exec.Invoke(quoted, "AddLine", new Dictionary<string, object?> {
+            ["sku"] = product,
+            ["qty"] = 1L
+        });
         await Assert.That(qline.Succeeded).IsTrue();
-        await Assert.That(quoted.GetProperty<object>("Amount")).IsEqualTo(25000m);
-        await Assert.That(quoted.InvokeAction("Present").Succeeded).IsTrue();
-        await Assert.That(quote.ResultInstance!.InvokeAction("Accept").Succeeded).IsTrue();
-        await Assert.That(quote.ResultInstance!.CurrentStage).IsEqualTo("Accepted");
+        await Assert.That(quoted.Bag["Amount"]).IsEqualTo(25000m);
+        await Assert.That(exec.Invoke(quoted, "Present").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(quote.Instance!, "Accept").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(quote.Instance!)).IsEqualTo("Accepted");
 
-        var campaign = DomainEntityInstance.Create(E("Campaign"),
-            new Dictionary<string, object?> { ["Name"] = "Q3 Push" }, domain);
-        store.Add(campaign);
-        var member = campaign.InvokeAction("Enroll",
-            new Dictionary<string, object?> { ["who"] = ada });
+        var campaign = exec.Create("Campaign", new Dictionary<string, object?> { ["Name"] = "Q3 Push" }).Instance!;
+        var member = exec.Invoke(campaign, "Enroll", new Dictionary<string, object?> { ["who"] = ada });
         await Assert.That(member.Succeeded).IsTrue();
-        await Assert.That(member.ResultInstance!.Entity.Name).IsEqualTo("CampaignMember");
+        await Assert.That(member.Instance!.EntityName).IsEqualTo("CampaignMember");
 
-        var hqPlace = account.InvokeAction("PlaceHq",
-            new Dictionary<string, object?> {
-                ["city"] = "Metropolis",
-                ["region"] = "NY"
-            });
+        var hqPlace = exec.Invoke(account, "PlaceHq", new Dictionary<string, object?> {
+            ["city"] = "Metropolis",
+            ["region"] = "NY"
+        });
         await Assert.That(hqPlace.Succeeded).IsTrue();
-        await Assert.That(account.EvaluatePolicy(E("Account").Policies.First(p => p.Name == "HasHq"))).IsTrue();
-        await Assert.That(account.EvaluatePolicy(E("Account").Policies.First(p => p.Name == "IsUrban"))).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(account, (E("Account").Policies.First(p => p.Name == "HasHq")).Name)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(account, (E("Account").Policies.First(p => p.Name == "IsUrban")).Name)).IsTrue();
 
-        await Assert.That(opp.InvokeAction("Propose").Succeeded).IsTrue();
-        await Assert.That(opp.CurrentStage).IsEqualTo("Propose");
-        await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(40L);
-        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(25000m);
-        await Assert.That(opp.InvokeAction("Commit").Succeeded).IsTrue();
-        await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(80L);
-        var capture = opp.InvokeAction("Capture",
-            new Dictionary<string, object?> {
-                ["request"] = new Dictionary<string, object?> {
-                    ["Amount"] = 25000m,
-                    ["Currency"] = "USD"
-                }
-            });
+        await Assert.That(exec.Invoke(opp, "Propose").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(opp)).IsEqualTo("Propose");
+        await Assert.That(opp.Bag["Probability"]).IsEqualTo(40L);
+        await Assert.That(account.Bag["OpenPipeline"]).IsEqualTo(25000m);
+        await Assert.That(exec.Invoke(opp, "Commit").Succeeded).IsTrue();
+        await Assert.That(opp.Bag["Probability"]).IsEqualTo(80L);
+        var capture = exec.Invoke(opp, "Capture", new Dictionary<string, object?> {
+            ["request"] = new Dictionary<string, object?> {
+                ["Amount"] = 25000m,
+                ["Currency"] = "USD"
+            }
+        });
         // Capture binds Billing.Charge; the printed adapter traces and succeeds.
         await Assert.That(capture.Succeeded).IsTrue();
 
-        var wrap = opp.InvokeAction("CompleteOpenWork");
+        var wrap = exec.Invoke(opp, "CompleteOpenWork");
         await Assert.That(wrap.Succeeded).IsTrue();
-        await Assert.That(note.ResultInstance!.CurrentStage).IsEqualTo("Done");
+        await Assert.That(ModuleReads.Stage(note.Instance!)).IsEqualTo("Done");
 
-        await Assert.That(opp.InvokeAction("Win").Succeeded).IsTrue();
-        await Assert.That(opp.CurrentStage).IsEqualTo("Won");
-        await Assert.That(opp.GetProperty<object>("Probability")).IsEqualTo(100L);
-        await Assert.That(account.GetProperty<object>("WonCount")).IsEqualTo(1L);
-        await Assert.That(account.GetProperty<object>("OpenPipeline")).IsEqualTo(0m);
+        await Assert.That(exec.Invoke(opp, "Win").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(opp)).IsEqualTo("Won");
+        await Assert.That(opp.Bag["Probability"]).IsEqualTo(100L);
+        await Assert.That(account.Bag["WonCount"]).IsEqualTo(1L);
+        await Assert.That(account.Bag["OpenPipeline"]).IsEqualTo(0m);
 
-        var lostDeal = account.InvokeAction("OpenDeal",
-            new Dictionary<string, object?> {
-                ["title"] = "Side quest",
-                ["amount"] = 500L
-            });
+        var lostDeal = exec.Invoke(account, "OpenDeal", new Dictionary<string, object?> {
+            ["title"] = "Side quest",
+            ["amount"] = 500L
+        });
         await Assert.That(lostDeal.Succeeded).IsTrue();
-        await Assert.That(lostDeal.ResultInstance!.InvokeAction("Lose").Succeeded).IsTrue();
-        await Assert.That(lostDeal.ResultInstance!.CurrentStage).IsEqualTo("Lost");
+        await Assert.That(exec.Invoke(lostDeal.Instance!, "Lose").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(lostDeal.Instance!)).IsEqualTo("Lost");
 
-        var lead = DomainEntityInstance.Create(E("Lead"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Grace",
-                ["Email"] = "grace@acme.test",
-                ["Company"] = "Acme"
-            }, domain);
-        store.Add(lead);
-        var convertUnlinked = lead.InvokeAction("Convert");
+        var lead = exec.Create("Lead", new Dictionary<string, object?> {
+            ["Name"] = "Grace",
+            ["Email"] = "grace@acme.test",
+            ["Company"] = "Acme"
+        }).Instance!;
+        var convertUnlinked = exec.Invoke(lead, "Convert");
         await Assert.That(convertUnlinked.Succeeded).IsFalse();
-        await Assert.That(convertUnlinked.FailedGuards).Contains("HasAccount");
-        store.Link("account", lead, account);
-        var fromLead = account.InvokeAction("ConvertLead",
-            new Dictionary<string, object?> { ["lead"] = lead });
+        await Assert.That(convertUnlinked.Error).Contains("HasAccount");
+        exec.Link("account", lead, account);
+        var fromLead = exec.Invoke(account, "ConvertLead", new Dictionary<string, object?> { ["lead"] = lead });
         await Assert.That(fromLead.Succeeded).IsTrue();
-        await Assert.That(fromLead.ResultInstance!.Entity.Name).IsEqualTo("Contact");
-        var converted = lead.InvokeAction("Convert");
+        await Assert.That(fromLead.Instance!.EntityName).IsEqualTo("Contact");
+        var converted = exec.Invoke(lead, "Convert");
         await Assert.That(converted.Succeeded).IsTrue();
-        await Assert.That(lead.CurrentStage).IsEqualTo("Converted");
-        await Assert.That(store.GetRelatedInstances("contacts", account).Count).IsEqualTo(2);
+        await Assert.That(ModuleReads.Stage(lead)).IsEqualTo("Converted");
+        await Assert.That(ModuleReads.Related(exec, "contacts", account).Count).IsEqualTo(2);
 
-        var support = account.InvokeAction("OpenTicket",
-            new Dictionary<string, object?> { ["subject"] = "Can't log in" });
+        var support = exec.Invoke(account, "OpenTicket", new Dictionary<string, object?> { ["subject"] = "Can't log in" });
         await Assert.That(support.Succeeded).IsTrue();
-        var ticket = support.ResultInstance!;
-        await Assert.That(ticket.CurrentStage).IsEqualTo("New");
-        await Assert.That(ticket.InvokeAction("Work").Succeeded).IsTrue();
-        await Assert.That(ticket.InvokeAction("Close").Succeeded).IsTrue();
-        await Assert.That(ticket.CurrentStage).IsEqualTo("Closed");
-        await Assert.That(account.GetProperty<object>("ClosedTickets")).IsEqualTo(1L);
-        await Assert.That(ticket.InvokeAction("Close").Succeeded).IsFalse();
+        var ticket = support.Instance!;
+        await Assert.That(ModuleReads.Stage(ticket)).IsEqualTo("New");
+        await Assert.That(exec.Invoke(ticket, "Work").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(ticket, "Close").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(ticket)).IsEqualTo("Closed");
+        await Assert.That(account.Bag["ClosedTickets"]).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(ticket, "Close").Succeeded).IsFalse();
     }
 }

@@ -76,18 +76,16 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         _ = analysis;
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Score"] = 5.0 },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Score"] = 5.0 }).Instance!;
 
-        var result = instance.InvokeAction("SetScore",
-            new Dictionary<string, object?> { ["n"] = 99.0 });
+        var result = exec.Invoke(instance, "SetScore", new Dictionary<string, object?> { ["n"] = 99.0 });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("must be");
-        await Assert.That(instance.GetProperty<double>("Score")).IsEqualTo(5.0);
+        await Assert.That(result.Error).Contains("must be");
+        await Assert.That(Convert.ToDouble(instance.Bag["Score"])).IsEqualTo(5.0);
     }
 
     [Test]
@@ -101,18 +99,16 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Code"] = "ABC" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Code"] = "ABC" }).Instance!;
 
-        var result = instance.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["code"] = "nope" });
+        var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["code"] = "nope" });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage)
+        await Assert.That(result.Error)
             .Contains("does not match the required pattern");
-        await Assert.That(instance.GetProperty<string>("Code")).IsEqualTo("ABC");
+        await Assert.That((string)instance.Bag["Code"]!).IsEqualTo("ABC");
     }
 
     [Test]
@@ -126,10 +122,9 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Code"] = "OK" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Code"] = "OK" }).Instance!;
 
         // Lowered tree must null-guard IsMatch (export: bare IsMatch(null) throws).
         var pass = new EffectLoweringPass(entity, new LoweringContext(
@@ -143,12 +138,11 @@ public class ConstraintAssignLoweringTests {
 
         // A bare Text property is required, so null fails that check before
         // the pattern guard. The prior value stays.
-        var result = instance.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["code"] = null });
+        var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["code"] = null });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("'Code' is required.");
-        await Assert.That(instance.GetProperty<string>("Code")).IsEqualTo("OK");
+        await Assert.That(result.Error).Contains("'Code' is required.");
+        await Assert.That((string)instance.Bag["Code"]!).IsEqualTo("OK");
     }
 
     [Test]
@@ -162,17 +156,15 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Label");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "abcdefg" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "abcdefg" }).Instance!;
 
-        var result = instance.InvokeAction("Rename",
-            new Dictionary<string, object?> { ["name"] = "" });
+        var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("is required");
-        await Assert.That(instance.GetProperty<string>("Name")).IsEqualTo("abcdefg");
+        await Assert.That(result.Error).Contains("is required");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("abcdefg");
     }
 
     [Test]
@@ -186,24 +178,19 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
-        var emptyFail = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Body"] = "abcdefg" },
-            domain: domain);
-        var emptyResult = emptyFail.InvokeAction("Edit",
-            new Dictionary<string, object?> { ["body"] = "" });
+        var emptyFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
+        var emptyResult = exec.Invoke(emptyFail, "Edit", new Dictionary<string, object?> { ["body"] = "" });
         await Assert.That(emptyResult.Succeeded).IsFalse();
-        await Assert.That(emptyResult.ErrorMessage).Contains("is required");
-        await Assert.That(emptyFail.GetProperty<string>("Body")).IsEqualTo("abcdefg");
+        await Assert.That(emptyResult.Error).Contains("is required");
+        await Assert.That((string)emptyFail.Bag["Body"]!).IsEqualTo("abcdefg");
 
-        var shortFail = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Body"] = "abcdefg" },
-            domain: domain);
-        var shortResult = shortFail.InvokeAction("Edit",
-            new Dictionary<string, object?> { ["body"] = "abc" });
+        var shortFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
+        var shortResult = exec.Invoke(shortFail, "Edit", new Dictionary<string, object?> { ["body"] = "abc" });
         await Assert.That(shortResult.Succeeded).IsFalse();
-        await Assert.That(shortResult.ErrorMessage).Contains("at least");
-        await Assert.That(shortFail.GetProperty<string>("Body")).IsEqualTo("abcdefg");
+        await Assert.That(shortResult.Error).Contains("at least");
+        await Assert.That((string)shortFail.Bag["Body"]!).IsEqualTo("abcdefg");
     }
 
     [Test]
@@ -260,13 +247,12 @@ public class ConstraintAssignLoweringTests {
     public async Task UniqueAssign_InvokeAction_StillWorks() {
         var entity = PermitWithRelabel();
         var domain = ValidDomain.Create("Parking", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
 
-        var result = instance.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<string>("Plate")).IsEqualTo("ABC123");
+        await Assert.That((string)instance.Bag["Plate"]!).IsEqualTo("ABC123");
     }
 
     [Test]
@@ -281,16 +267,16 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
 
-        var result = instance.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = "Bogus" });
+        var result = exec.Invoke(instance, "SetStatus", new Dictionary<string, object?> { ["status"] = "Bogus" });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage)
+        await Assert.That(result.Error)
             .IsEqualTo("'Status' is not a valid member of PatronStatus.");
-        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+        await Assert.That((string)instance.Bag["Status"]!).IsEqualTo("Active");
     }
 
     [Test]
@@ -302,13 +288,12 @@ public class ConstraintAssignLoweringTests {
               Status: PatronStatus default(Active)
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
 
-        var thrown = Assert.Throws<ConstraintFailureException>(() =>
-            DomainEntityInstance.Create(entity,
-                new Dictionary<string, object?> { ["Status"] = "Bogus" },
-                domain: domain));
-        await Assert.That(thrown!.Message)
+        var thrown = exec.Create(entity.Name, new Dictionary<string, object?> { ["Status"] = "Bogus" });
+        await Assert.That(thrown.Succeeded).IsFalse();
+        await Assert.That(thrown.Error)
             .IsEqualTo("'Bogus' is not a valid member of PatronStatus for property 'Status'.");
     }
 
@@ -330,31 +315,29 @@ public class ConstraintAssignLoweringTests {
               SetTag: action { assign Tag to "OK" }
             }
             """);
+        var exec = ModuleExec.For(domain);
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation &&
             d.Severity == DiagnosticSeverity.Error)).IsFalse();
 
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> {
-                ["Name"] = "Ada",
-                ["Code"] = "xy",
-                ["Tag"] = "A"
-            },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> {
+            ["Name"] = "Ada",
+            ["Code"] = "xy",
+            ["Tag"] = "A"
+        }).Instance!;
 
-        var setScore = instance.InvokeAction("SetScore");
+        var setScore = exec.Invoke(instance, "SetScore");
         await Assert.That(setScore.Succeeded).IsTrue();
-        var setStatus = instance.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = "Suspended" });
+        var setStatus = exec.Invoke(instance, "SetStatus", new Dictionary<string, object?> { ["status"] = "Suspended" });
         await Assert.That(setStatus.Succeeded).IsTrue();
-        var rename = instance.InvokeAction("Rename");
+        var rename = exec.Invoke(instance, "Rename");
         await Assert.That(rename.Succeeded).IsTrue();
-        var setCode = instance.InvokeAction("SetCode");
+        var setCode = exec.Invoke(instance, "SetCode");
         await Assert.That(setCode.Succeeded).IsTrue();
-        var setTag = instance.InvokeAction("SetTag");
+        var setTag = exec.Invoke(instance, "SetTag");
         await Assert.That(setTag.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Suspended");
+        await Assert.That((string)instance.Bag["Status"]!).IsEqualTo("Suspended");
     }
 
     [Test]
@@ -368,16 +351,14 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Ada" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
-        var result = instance.InvokeAction("Rename",
-            new Dictionary<string, object?> { ["name"] = "" });
+        var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("'Name' is required.");
-        await Assert.That(instance.GetProperty<string>("Name")).IsEqualTo("Ada");
+        await Assert.That(result.Error).Contains("'Name' is required.");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
     }
 
     [Test]
@@ -391,16 +372,14 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Ada" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
-        var result = instance.InvokeAction("Rename",
-            new Dictionary<string, object?> { ["name"] = "" });
+        var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("'Name' is required.");
-        await Assert.That(instance.GetProperty<string>("Name")).IsEqualTo("Ada");
+        await Assert.That(result.Error).Contains("'Name' is required.");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
     }
 
     [Test]
@@ -414,12 +393,12 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
-        var result = instance.InvokeAction("Edit",
-            new Dictionary<string, object?> { ["body"] = "" });
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(instance, "Edit", new Dictionary<string, object?> { ["body"] = "" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<string>("Body")).IsEqualTo("");
+        await Assert.That((string)instance.Bag["Body"]!).IsEqualTo("");
     }
 
     [Test]
@@ -433,17 +412,15 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "Active" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "Active" }).Instance!;
 
-        var result = instance.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = "Inactive" });
+        var result = exec.Invoke(instance, "SetStatus", new Dictionary<string, object?> { ["status"] = "Inactive" });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("must equal");
-        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+        await Assert.That(result.Error).Contains("must equal");
+        await Assert.That((string)instance.Bag["Status"]!).IsEqualTo("Active");
     }
 
     [Test]
@@ -477,17 +454,15 @@ public class ConstraintAssignLoweringTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "Active" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "Active" }).Instance!;
 
-        var result = instance.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = null });
+        var result = exec.Invoke(instance, "SetStatus", new Dictionary<string, object?> { ["status"] = null });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("must equal");
-        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+        await Assert.That(result.Error).Contains("must equal");
+        await Assert.That((string)instance.Bag["Status"]!).IsEqualTo("Active");
     }
 
     [Test]
@@ -499,16 +474,14 @@ public class ConstraintAssignLoweringTests {
               SetStatus: action (status: Text) { assign Status to status }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "Active" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "Active" }).Instance!;
 
-        var result = instance.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = "Active" });
+        var result = exec.Invoke(instance, "SetStatus", new Dictionary<string, object?> { ["status"] = "Active" });
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<string>("Status")).IsEqualTo("Active");
+        await Assert.That((string)instance.Bag["Status"]!).IsEqualTo("Active");
     }
 
     [Test]
@@ -520,16 +493,14 @@ public class ConstraintAssignLoweringTests {
               Relabel: action (code: Text) { assign Code to code }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Tag");
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Code"] = "ABC" },
-            domain: domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Code"] = "ABC" }).Instance!;
 
-        var result = instance.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["code"] = "ab" });
+        var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["code"] = "ab" });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("must be at least 3");
+        await Assert.That(result.Error).Contains("must be at least 3");
     }
 
     private static Entity PermitEntity() {

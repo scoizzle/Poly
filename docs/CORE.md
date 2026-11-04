@@ -44,7 +44,7 @@ Always-on summary: [`AGENTS.md`](../AGENTS.md) Frozen core · Agent target.
 
 Neurosymbolic platform: author structured domain → lower to symbolic AST → analyze → VM (canonical). Domain = library of legal operations (no required `Main`). Goal: shipped correct end-to-end behavior, not framework completeness.
 
-**Current consumers:** lower → Interpreter (scratch Store bound) | `session.Emit` (C# module) + bag-gated host files. MCP: `create_instance` → `evaluate_policy` / `invoke_action`.
+**Current consumers:** lower → Interpreter (module dictionary, host `ModuleInstanceExecutor`) | `session.Emit` (C# module) + bag-gated host files. MCP: `create_instance` → `evaluate_policy` / `invoke_action`.
 
 **Emit gate:** `session.Emit` registers the `vm-analysis-report`, then refuses (throws the first VM error) when the interpretation analysis of the lowered module reports an error; the report and the catalog stay on the session.
 
@@ -125,11 +125,11 @@ No intermediate primitive IR. Keep the emitter a generic compiler of known nodes
 | Expressions | `DomainExpressionLoweringPass` (+ session `ExpressionMeaning` for libraries) |
 | Effects | `EffectLoweringPass` — real nodes, not `null` |
 | Module | `DomainProgramProjection.ToSyntax` — types + ops; no `Main` |
-| Policy eval | `DomainEntityInstance.EvaluatePolicy` → lower → `Interpreter` |
+| Policy eval | `ModuleInstanceExecutor.EvaluatePolicy` → cached body → `Interpreter` |
 
 Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke / cross-entity / for-invoke / create / unique / clocks — shapes and residual debt: [`docs/interpretation/domain-execution-model.md`](interpretation/domain-execution-model.md). ADR: [`docs/decisions/2026-06-08-domain-lowering-boundary.md`](decisions/2026-06-08-domain-lowering-boundary.md). Named invoke runs module method bodies from `session.Lower` (same tree print uses). Do not add consumer-specific lowering flags or a second effect interpreter.
 
-**Constraint contributions.** A library may register an `IConstraintCompiler`; core places its AST at a semantic anchor (`ConstraintAnchor`), inserts contributed parameters before the method's first optional parameter, and threads them along the lowered call set. The storage libraries own `unique`: the guard calls the in-process `IStoragePort` (`Exists` = pending key or database), and the post-construction call records the pending key. The port is read-only — no writes and no `SaveChanges` — and is implemented by the generated `{Domain}DbContext` and by the simulator. The module never names a host context type, and there is no second persistence runtime.
+**Constraint contributions.** A library may register an `IConstraintCompiler`; core places its AST at a semantic anchor (`ConstraintAnchor`), inserts contributed parameters before the method's first optional parameter, and threads them along the lowered call set. The storage libraries own `unique`: the guard calls the in-process `IStoragePort` (`Exists` = pending key or database), and the post-construction call records the pending key. The port is read-only — no writes and no `SaveChanges` — and is implemented by the generated `{Domain}DbContext` and by the interpreter host's session port. The module never names a host context type, and there is no second persistence runtime.
 
 ### 3.5 Introspection
 

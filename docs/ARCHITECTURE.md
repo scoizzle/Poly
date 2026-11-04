@@ -262,7 +262,7 @@ Before the emitter runs, domain-level expressions (policies, rules, conditions) 
 DomainExpression ──→ Ast nodes ──→ Analysis ──→ AbiEmitter ──→ VM
 ```
 
-Policy compilation/eval (`DomainEntityInstance.EvaluatePolicy` → `DomainExpressionLoweringPass` → `Interpreter`) uses this path, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference (`PolicyEvaluator` is the test-only CLR-subject wrapper in `Poly.Tests/TestHelpers/`).
+Policy eval runs the cached policy body through `ModuleInstanceExecutor.EvaluatePolicy` → `Interpreter`, with the VM as the primary execution engine and LINQ expressions as a dual-oracle reference (`PolicyEvaluator` is the test-only CLR-subject wrapper in `Poly.Tests/TestHelpers/`).
 
 **StageTransition** is Assignment of `CurrentStage` plus `Invoke(Member(This, "Notify"))` — not a VM opcode. Full lowering contract: [`docs/CORE.md`](CORE.md) §3.4.
 

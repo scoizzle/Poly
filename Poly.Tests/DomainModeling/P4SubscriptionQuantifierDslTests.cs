@@ -25,23 +25,17 @@ public class P4SubscriptionQuantifierDslTests {
         return (result.Root!, analysis);
     }
 
-    private static (DomainEntityInstance Patron, DomainEntityInstance[] Loans, DomainInstanceStore Store)
+    private static (ModuleInstance Patron, ModuleInstance[] Loans, ModuleInstanceExecutor Store)
         BuildPatronLoanHarness(Domain domain, string patronFlag) {
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         var patronEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Patron");
         var loanEntity = domain.Types.OfType<Entity>().Single(e => e.Name == "Loan");
-        var patron = DomainEntityInstance.Create(patronEntity,
-            new Dictionary<string, object?> { ["Flag"] = patronFlag }, domain: domain);
-        var loan1 = DomainEntityInstance.Create(loanEntity,
-            new Dictionary<string, object?> { ["Code"] = "L1" }, domain: domain);
-        var loan2 = DomainEntityInstance.Create(loanEntity,
-            new Dictionary<string, object?> { ["Code"] = "L2" }, domain: domain);
-        store.Add(patron);
-        store.Add(loan1);
-        store.Add(loan2);
-        store.Link("loans", patron, loan1);
-        store.Link("loans", patron, loan2);
-        return (patron, [loan1, loan2], store);
+        var patron = exec.Create((patronEntity).Name, new Dictionary<string, object?> { ["Flag"] = patronFlag }).Instance!;
+        var loan1 = exec.Create((loanEntity).Name, new Dictionary<string, object?> { ["Code"] = "L1" }).Instance!;
+        var loan2 = exec.Create((loanEntity).Name, new Dictionary<string, object?> { ["Code"] = "L2" }).Instance!;
+        exec.Link("loans", patron, loan1);
+        exec.Link("loans", patron, loan2);
+        return (patron, [loan1, loan2], exec);
     }
 
     private static Domain ParseOnly(string poly) {
@@ -75,14 +69,14 @@ public class P4SubscriptionQuantifierDslTests {
         var (patron, loans, store) = BuildPatronLoanHarness(domain, "NONE");
 
         // First loan overdue → Any fires once.
-        await Assert.That(loans[0].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        await Assert.That(store.Invoke(loans[0], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("FIRED");
 
         // Second loan overdue (set state still matches) → Any fires again on this
         // notify, but once per transition (never per-linked-target).
-        patron.SetProperty("Flag", "NONE");
-        await Assert.That(loans[1].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("FIRED");
+        patron.Bag["Flag"] = "NONE";
+        await Assert.That(store.Invoke(loans[1], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("FIRED");
     }
 
     // ── All golden: fires once when EVERY linked target in matching stage ──
@@ -109,12 +103,12 @@ public class P4SubscriptionQuantifierDslTests {
         var (patron, loans, store) = BuildPatronLoanHarness(domain, "NONE");
 
         // Only one of two loans overdue → All must NOT fire.
-        await Assert.That(loans[0].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("NONE");
+        await Assert.That(store.Invoke(loans[0], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("NONE");
 
         // Second loan overdue → every linked target now matches → All fires once.
-        await Assert.That(loans[1].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("ALL-FIRED");
+        await Assert.That(store.Invoke(loans[1], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("ALL-FIRED");
     }
 
     // ── Each regression: no keyword stays per-element with peer ──
@@ -141,10 +135,10 @@ public class P4SubscriptionQuantifierDslTests {
         var (patron, loans, store) = BuildPatronLoanHarness(domain, "NONE");
 
         // Each: fires per transition; peer = transitioned instance.
-        await Assert.That(loans[0].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("L1");
+        await Assert.That(store.Invoke(loans[0], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("L1");
 
-        await Assert.That(loans[1].InvokeAction("Overdue").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Flag")).IsEqualTo("L2");
+        await Assert.That(store.Invoke(loans[1], "Overdue").Succeeded).IsTrue();
+        await Assert.That(patron.Bag["Flag"]).IsEqualTo("L2");
     }
 }

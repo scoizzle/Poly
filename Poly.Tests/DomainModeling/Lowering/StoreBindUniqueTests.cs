@@ -126,49 +126,49 @@ public class StoreBindUniqueTests {
 
     [Test]
     public async Task Store_EnsureUnique_Collision_IsFailureWithoutMutatingCaller() {
-        var entity = PermitEntity();
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" });
-        var other = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" });
-        store.Add(existing);
-        store.Add(other);
-
-        var result = store.EnsureUnique(other, "Plate", "ABC123");
-        await Assert.That(result.IsSuccess).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        var exec = ModuleExec.For(Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique
+              Relabel: action (plate: Text) { assign Plate to plate }
+            }
+            """).Domain);
+        exec.Create("Permit", new Dictionary<string, object?> { ["Plate"] = "ABC123" });
+        var other = exec.Create("Permit", new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
     public async Task Store_EnsureUnique_SelfValue_IsSuccess() {
-        var entity = PermitEntity();
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" });
-        store.Add(existing);
-
-        var result = store.EnsureUnique(existing, "Plate", "ABC123");
-        await Assert.That(result.IsSuccess).IsTrue();
+        var exec = ModuleExec.For(Evolve("""
+            domain Parking
+            Permit: entity {
+              Plate: Text unique
+              Relabel: action (plate: Text) { assign Plate to plate }
+            }
+            """).Domain);
+        var existing = exec.Create("Permit", new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var result = exec.Invoke(existing, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     [Test]
     public async Task Store_EnsureUnique_NonUniqueProperty_IsSuccess() {
-        var name = new Property("Name", new DomainTypeReference("Text"), []);
-        var entity = new Entity("Person",
-            Properties: [name],
-            Actions: [], Policies: [], Stages: []);
-        var store = new DomainInstanceStore();
-        var a = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Ada" });
-        var b = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Grace" });
-        store.Add(a);
-        store.Add(b);
-
-        var result = store.EnsureUnique(b, "Name", "Ada");
-        await Assert.That(result.IsSuccess).IsTrue();
+        var exec = ModuleExec.For(Evolve("""
+            domain People
+            Person: entity {
+              Name: Text
+              Rename: action (name: Text) { assign Name to name }
+            }
+            """).Domain);
+        exec.Create("Person", new Dictionary<string, object?> { ["Name"] = "Ada" });
+        var b = exec.Create("Person", new Dictionary<string, object?> { ["Name"] = "Grace" }).Instance!;
+        var result = exec.Invoke(b, "Rename", new Dictionary<string, object?> { ["name"] = "Ada" });
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That((string)b.Bag["Name"]!).IsEqualTo("Ada");
     }
 
     [Test]
@@ -200,32 +200,25 @@ public class StoreBindUniqueTests {
     public async Task UniqueAssign_WithStore_Collision_IsFailureWithoutMutating() {
         var entity = PermitWithRelabel();
         var domain = ValidDomain.Create("Parking", [entity]);
-        var store = new DomainInstanceStore();
-        var existing = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "ABC123" }, domain: domain);
-        var other = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
-        store.Add(existing);
-        store.Add(other);
-
-        var result = other.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var exec = ModuleExec.For(domain);
+        var existing = exec.Create((entity).Name, new Dictionary<string, object?> { ["Plate"] = "ABC123" }).Instance!;
+        var other = exec.Create((entity).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
+        var result = exec.Invoke(other, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unique");
-        await Assert.That(other.GetProperty<string>("Plate")).IsEqualTo("XYZ999");
+        await Assert.That(result.Error).Contains("Unique");
+        await Assert.That((string)other.Bag["Plate"]!).IsEqualTo("XYZ999");
     }
 
     [Test]
     public async Task UniqueAssign_WithoutStore_SucceedsWhenNoPeers() {
         var entity = PermitWithRelabel();
         var domain = ValidDomain.Create("Parking", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Plate"] = "XYZ999" }, domain: domain);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Plate"] = "XYZ999" }).Instance!;
 
-        var result = instance.InvokeAction("Relabel",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<string>("Plate")).IsEqualTo("ABC123");
+        await Assert.That((string)instance.Bag["Plate"]!).IsEqualTo("ABC123");
     }
 
     private static Entity PermitEntity() {

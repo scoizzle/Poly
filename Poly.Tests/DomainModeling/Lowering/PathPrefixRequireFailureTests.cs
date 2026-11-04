@@ -31,15 +31,13 @@ public class PathPrefixRequireFailureTests {
               InHouse: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var reservation = domain.Types.OfType<Entity>().First(e => e.Name == "Reservation");
-        var store = new DomainInstanceStore();
-        var res = DomainEntityInstance.Create(reservation, domain: domain);
-        store.Add(res);
-
-        ActionInvocationResult? result = null;
+        var res = exec.Create((reservation).Name, new Dictionary<string, object?>()).Instance!;
+        ModuleOutcome? result = null;
         var threw = false;
         try {
-            result = res.InvokeAction("CheckIn");
+            result = exec.Invoke(res, "CheckIn");
         }
         catch (Exception) {
             threw = true;
@@ -48,7 +46,7 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'room'");
+        await Assert.That(result.Error).Contains("requires a linked 'room'");
         await Assert.That(result.FailedGuards).Contains("RoomFree");
     }
 
@@ -100,15 +98,13 @@ public class PathPrefixRequireFailureTests {
               Confirmed: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var enrollment = domain.Types.OfType<Entity>().First(e => e.Name == "Enrollment");
-        var store = new DomainInstanceStore();
-        var en = DomainEntityInstance.Create(enrollment, domain: domain);
-        store.Add(en);
-
-        ActionInvocationResult? result = null;
+        var en = exec.Create((enrollment).Name, new Dictionary<string, object?>()).Instance!;
+        ModuleOutcome? result = null;
         var threw = false;
         try {
-            result = en.InvokeAction("Confirm");
+            result = exec.Invoke(en, "Confirm");
         }
         catch (Exception) {
             threw = true;
@@ -117,7 +113,7 @@ public class PathPrefixRequireFailureTests {
         await Assert.That(threw).IsFalse();
         await Assert.That(result).IsNotNull();
         await Assert.That(result!.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'section'");
+        await Assert.That(result.Error).Contains("requires a linked 'section'");
         await Assert.That(result.FailedGuards).Contains("not_SectionFull");
     }
 
@@ -137,14 +133,12 @@ public class PathPrefixRequireFailureTests {
               Closed: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var issueE = domain.Types.OfType<Entity>().First(e => e.Name == "Issue");
-        var store = new DomainInstanceStore();
-        var issue = DomainEntityInstance.Create(issueE, domain: domain);
-        store.Add(issue);
-
-        var result = issue.InvokeAction("Escalate");
+        var issue = exec.Create((issueE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(issue, "Escalate");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'reporter'");
+        await Assert.That(result.Error).Contains("requires a linked 'reporter'");
         await Assert.That(result.FailedGuards).Contains("FromBlueTeam");
     }
 
@@ -160,15 +154,12 @@ public class PathPrefixRequireFailureTests {
               Submit: action require IsActive { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var deviceE = domain.Types.OfType<Entity>().First(e => e.Name == "Device");
-        var store = new DomainInstanceStore();
-        var device = DomainEntityInstance.Create(deviceE,
-            new Dictionary<string, object?> { ["Active"] = false }, domain: domain);
-        store.Add(device);
-
-        var result = device.InvokeAction("Submit");
+        var device = exec.Create((deviceE).Name, new Dictionary<string, object?> { ["Active"] = false }).Instance!;
+        var result = exec.Invoke(device, "Submit");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.FailedGuards).Contains("IsActive");
+        await Assert.That(result.Error).Contains("IsActive");
     }
 
     [Test]
@@ -185,14 +176,12 @@ public class PathPrefixRequireFailureTests {
               Confirm: action require not SectionFull { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var enrollE = domain.Types.OfType<Entity>().First(e => e.Name == "Enrollment");
-        var store = new DomainInstanceStore();
-        var en = DomainEntityInstance.Create(enrollE, domain: domain);
-        store.Add(en);
-
-        var result = en.InvokeAction("Confirm");
+        var en = exec.Create((enrollE).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(en, "Confirm");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'section'");
+        await Assert.That(result.Error).Contains("requires a linked 'section'");
         await Assert.That(result.FailedGuards).Contains("not_SectionFull");
     }
 

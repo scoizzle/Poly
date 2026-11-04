@@ -25,42 +25,6 @@ public class ForEachInvokeHostAbiTests {
     }
 
     [Test]
-    public async Task VmForEach_DomainInstance_CallsNotify() {
-        var entity = new Entity("E",
-            [new Property("S", new DomainTypeReference("Text"), [])],
-            [], [], []);
-        var inst = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["S"] = "a" });
-        var item = new Variable("item");
-        var node = new ForEachLoop(
-            item,
-            new Constant(new[] { inst }),
-            new Invoke(new Member(item, "Notify"), new Constant("Draft")));
-        var program = Interpreter.Compile(node);
-        using var exec = Interpreter.Execute(program);
-        await Assert.That(exec).IsNotNull();
-    }
-
-    [Test]
-    public async Task VmForEach_DomainInstance_InvokeNamedProcess() {
-        var status = new Property("Status", new DomainTypeReference("Text"), []);
-        var target = new Entity("Target", [status], Actions: [
-            new Poly.DomainModeling.Ontology.Action("Process", InvocationResult.Void, [], [
-                new AssignEffect(DomainExpression.Property("Status"),
-                    DomainExpression.Literal("done"))
-            ], [])
-        ], [], []);
-        var inst = DomainEntityInstance.Create(target,
-            new Dictionary<string, object?> { ["Status"] = "a" });
-        var item = new Variable("item");
-        var node = new ForEachLoop(
-            item,
-            new Constant(new[] { inst }),
-            new Invoke(new Member(item, "Process")));
-        await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
-    }
-
-    [Test]
     public async Task ForEachInvoke_Lowers_NotGatedOnFlag() {
         var source = new Entity("Source", [], Actions: [
             new Poly.DomainModeling.Ontology.Action("Run", InvocationResult.Void, [], [
@@ -93,20 +57,17 @@ public class ForEachInvokeHostAbiTests {
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Test", [source, target], [rel]);
-        var store = new DomainInstanceStore();
-        var tgt1 = DomainEntityInstance.Create(target,
-            new Dictionary<string, object?> { ["Status"] = "a" }, domain: domain);
-        var tgt2 = DomainEntityInstance.Create(target,
-            new Dictionary<string, object?> { ["Status"] = "b" }, domain: domain);
-        var src = DomainEntityInstance.Create(source, domain: domain);
-        store.Add(tgt1); store.Add(tgt2); store.Add(src);
-        store.Link("Items", src, tgt1);
-        store.Link("Items", src, tgt2);
+        var exec = ModuleExec.For(domain);
+        var tgt1 = exec.Create((target).Name, new Dictionary<string, object?> { ["Status"] = "a" }).Instance!;
+        var tgt2 = exec.Create((target).Name, new Dictionary<string, object?> { ["Status"] = "b" }).Instance!;
+        var src = exec.Create((source).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("Items", src, tgt1);
+        exec.Link("Items", src, tgt2);
 
-        var result = src.InvokeAction("RunAll");
+        var result = exec.Invoke(src, "RunAll");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(tgt1.GetProperty<object>("Status")).IsEqualTo("done");
-        await Assert.That(tgt2.GetProperty<object>("Status")).IsEqualTo("done");
+        await Assert.That(tgt1.Bag["Status"]).IsEqualTo("done");
+        await Assert.That(tgt2.Bag["Status"]).IsEqualTo("done");
     }
 
     [Test]
@@ -117,16 +78,12 @@ public class ForEachInvokeHostAbiTests {
             new DomainTypeReference("Source"), new DomainTypeReference("Target"),
             RelationshipCardinality.ManyToMany, []);
         var domain = ValidDomain.Create("Test", [source, target], [rel]);
-        var store = new DomainInstanceStore();
-        var tgt = DomainEntityInstance.Create(target, domain: domain);
-        var src = DomainEntityInstance.Create(source, domain: domain);
-        store.Add(tgt); store.Add(src);
-        store.Link("Peers", src, tgt);
+        var exec = ModuleExec.For(domain);
+        var tgt = exec.Create((target).Name, new Dictionary<string, object?>()).Instance!;
+        var src = exec.Create((source).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("Peers", src, tgt);
 
-        IDictionary<string, object?> bag = src;
-        var col = bag["Peers"] as System.Collections.IList;
-        await Assert.That(col).IsNotNull();
-        await Assert.That(col!.Count).IsEqualTo(1);
-        await Assert.That(col[0]).IsSameReferenceAs(tgt);
+        await Assert.That(exec.IsLinked("Peers", src, tgt)).IsTrue();
+        await Assert.That(exec.LinkedTargets("Peers", src).Single().Id).IsEqualTo(tgt.Id);
     }
 }

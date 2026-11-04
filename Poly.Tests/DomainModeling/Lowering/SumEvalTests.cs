@@ -40,31 +40,26 @@ public class SumEvalTests {
     [Test]
     public async Task Sum_TwoLines_Is150() {
         var (domain, _) = Evolve(BasketDsl);
+        var exec = ModuleExec.For(domain);
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(E("Order"), domain: domain);
-        var first = DomainEntityInstance.Create(E("Line"),
-            new Dictionary<string, object?> { ["Price"] = 100L }, domain);
-        var second = DomainEntityInstance.Create(E("Line"),
-            new Dictionary<string, object?> { ["Price"] = 50L }, domain);
-        store.Add(order); store.Add(first); store.Add(second);
-        store.Link("lines", order, first);
-        store.Link("lines", order, second);
+        var order = exec.Create("Order", new Dictionary<string, object?>()).Instance!;
+        var first = exec.Create("Line", new Dictionary<string, object?> { ["Price"] = 100L }).Instance!;
+        var second = exec.Create("Line", new Dictionary<string, object?> { ["Price"] = 50L }).Instance!;
+        exec.Link("lines", order, first);
+        exec.Link("lines", order, second);
 
         var policy = E("Order").Policies.First(p => p.Name == "Total");
-        await Assert.That(order.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(order, (policy).Name)).IsTrue();
     }
 
     [Test]
     public async Task Sum_Empty_IsZero() {
         var (domain, _) = Evolve(BasketDsl);
+        var exec = ModuleExec.For(domain);
         Entity E(string n) => domain.Types.OfType<Entity>().First(e => e.Name == n);
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(E("Order"), domain: domain);
-        store.Add(order);
-
+        var order = exec.Create("Order", new Dictionary<string, object?>()).Instance!;
         var policy = E("Order").Policies.First(p => p.Name == "Empty");
-        await Assert.That(order.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(order, (policy).Name)).IsTrue();
     }
 
     [Test]

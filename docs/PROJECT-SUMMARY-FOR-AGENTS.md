@@ -10,4 +10,4 @@ This is an index. It is not a second architecture or a status snapshot.
 
 Open a file under `agent/reviews/` only when a task names it. Open contract residuals: [`agent/reviews/2026-10-01-platform-contract-followups.md`](agent/reviews/2026-10-01-platform-contract-followups.md).
 
-Poly.MCP is the harness. `DomainEntityInstance` is scratch bind, not product proof.
+Poly.MCP is the harness. Simulation is the interpreter host on the module dictionary, not a product proof.

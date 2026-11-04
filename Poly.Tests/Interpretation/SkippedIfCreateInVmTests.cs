@@ -36,22 +36,25 @@ public class SkippedIfCreateInVmTests {
     [Test]
     public async Task FlagHigh_UsageAround256_SkipDoesNotCrashAndTakeCreatesNote() {
         var (domain, reading) = Evolve();
-        var low = Instance(domain, reading, 255);
-        var edge = Instance(domain, reading, 256);
-        var high = Instance(domain, reading, 901);
+        var exec = ModuleExec.For(domain);
+        ModuleInstance Make(long usage) =>
+            exec.Create(reading.Name, new Dictionary<string, object?> { ["Usage"] = usage }).Instance!;
+        var low = Make(255);
+        var edge = Make(256);
+        var high = Make(901);
 
-        var skipped = low.InvokeAction("FlagHigh");
+        var skipped = exec.Invoke(low, "FlagHigh");
         await Assert.That(skipped.Succeeded).IsTrue();
-        await Assert.That(low.CreatedChildren.Count).IsEqualTo(0);
+        await Assert.That(skipped.CreatedChildren.Count).IsEqualTo(0);
 
-        var edgeResult = edge.InvokeAction("FlagHigh");
+        var edgeResult = exec.Invoke(edge, "FlagHigh");
         await Assert.That(edgeResult.Succeeded).IsTrue();
-        await Assert.That(edge.CreatedChildren.Count).IsEqualTo(0);
+        await Assert.That(edgeResult.CreatedChildren.Count).IsEqualTo(0);
 
-        var taken = high.InvokeAction("FlagHigh");
+        var taken = exec.Invoke(high, "FlagHigh");
         await Assert.That(taken.Succeeded).IsTrue();
-        await Assert.That(high.CreatedChildren.Count).IsEqualTo(1);
-        await Assert.That(high.CreatedChildren[0].GetProperty<string>("Body")).IsEqualTo("high usage");
+        await Assert.That(taken.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(taken.CreatedChildren[0].Bag["Body"]).IsEqualTo("high usage");
     }
 
     [Test]
@@ -110,8 +113,8 @@ public class SkippedIfCreateInVmTests {
         return (result.Root, reading);
     }
 
-    private static DomainEntityInstance Instance(Domain domain, Entity reading, long usage) =>
-        DomainEntityInstance.Create(reading,
-            new Dictionary<string, object?> { ["Usage"] = usage },
-            domain);
+    private static ModuleInstance Instance(Domain domain, Entity reading, long usage) {
+        var exec = ModuleExec.For(domain);
+        return exec.Create(reading.Name, new Dictionary<string, object?> { ["Usage"] = usage }).Instance!;
+    }
 }

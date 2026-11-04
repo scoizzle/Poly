@@ -30,13 +30,11 @@ public class ContractAdapterFailClosedTests {
 
             ChargeOrder: bind Stripe Charge to Pay request
             """);
+        var exec = ModuleExec.For(domain);
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE, domain: domain);
-        store.Add(order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?>()).Instance!;
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
-        var sim = order.InvokeAction("Pay",
-            new Dictionary<string, object?> { ["request"] = request });
+        var sim = exec.Invoke(order, "Pay", new Dictionary<string, object?> { ["request"] = request });
         await Assert.That(sim.Succeeded).IsTrue();
 
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
@@ -81,13 +79,11 @@ public class ContractAdapterFailClosedTests {
 
             ChargeOrder: bind Stripe Charge to Pay request
             """);
+        var exec = ModuleExec.For(domain);
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
-        var store = new DomainInstanceStore();
-        var order = DomainEntityInstance.Create(orderE, domain: domain);
-        store.Add(order);
+        var order = exec.Create((orderE).Name, new Dictionary<string, object?>()).Instance!;
         var request = new Dictionary<string, object?> { ["Amount"] = 10L, ["Currency"] = "USD" };
-        var sim = order.InvokeAction("Pay",
-            new Dictionary<string, object?> { ["request"] = request });
+        var sim = exec.Invoke(order, "Pay", new Dictionary<string, object?> { ["request"] = request });
         await Assert.That(sim.Succeeded).IsTrue();
 
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));

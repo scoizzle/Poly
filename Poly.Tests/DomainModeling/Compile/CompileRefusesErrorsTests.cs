@@ -66,10 +66,8 @@ public class CompileRefusesErrorsTests {
     [Test]
     public async Task Create_OnDomainWithErrors_Throws() {
         var (domain, _, first) = DomainWithUnknownType();
-        var entity = domain.Types.OfType<Entity>().Single();
 
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => DomainEntityInstance.Create(entity, null, domain));
+        var ex = Assert.Throws<InvalidOperationException>(() => ModuleExec.For(domain));
         await Assert.That(ex!.Message).IsEqualTo(first);
     }
 

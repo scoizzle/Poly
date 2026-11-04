@@ -118,38 +118,37 @@ public class ContributedMethodTests {
     [Test]
     public async Task Issue_DuplicateCode_FailsInsideTheContributedBody() {
         var (domain, _, _) = Compile(Poly, new ProbeLibrary());
+        var exec = ModuleExec.For(domain);
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        store.Add(lot);
-        var seen = new InMemoryStoragePort();
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var seen = new RecordingStoragePort();
 
-        var first = lot.InvokeAction("Issue", new Dictionary<string, object?> {
+        var first = exec.Invoke(lot, "Issue", new Dictionary<string, object?> {
             ["code"] = "A",
             ["db"] = seen
         });
         await Assert.That(first.Succeeded).IsTrue();
         await Assert.That(seen.Exists("Widget", "Code", "A")).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(first.CreatedChildren.Count).IsEqualTo(1);
 
-        var duplicate = lot.InvokeAction("Issue", new Dictionary<string, object?> {
+        var duplicate = exec.Invoke(lot, "Issue", new Dictionary<string, object?> {
             ["code"] = "A",
             ["db"] = seen
         });
         await Assert.That(duplicate.Succeeded).IsFalse();
-        await Assert.That(duplicate.ErrorMessage ?? "").Contains("Unique constraint violated: 'Code'");
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(duplicate.Error ?? "").Contains("Unique constraint violated: 'Code'");
+        await Assert.That(exec.LinkedTargets("widgets", lot).Count).IsEqualTo(1);
 
-        var second = lot.InvokeAction("Issue", new Dictionary<string, object?> {
+        var second = exec.Invoke(lot, "Issue", new Dictionary<string, object?> {
             ["code"] = "B",
             ["db"] = seen
         });
         await Assert.That(second.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(2);
+        await Assert.That(exec.LinkedTargets("widgets", lot).Count).IsEqualTo(2);
 
-        var touch = lot.InvokeAction("Touch", new Dictionary<string, object?> { ["label"] = "floor" });
+        var touch = exec.Invoke(lot, "Touch", new Dictionary<string, object?> { ["label"] = "floor" });
         await Assert.That(touch.Succeeded).IsTrue();
-        await Assert.That(lot.GetProperty<string>("Note")).IsEqualTo("floor");
+        await Assert.That((string)lot.Bag["Note"]!).IsEqualTo("floor");
     }
 
     [Test]
@@ -213,19 +212,17 @@ public class ContributedMethodTests {
     [Test]
     public async Task Simulate_SuppliesStoragePort_WhenActionDoesNotNameIt() {
         var (domain, _, _) = Compile(Poly, new ProbeLibrary());
+        var exec = ModuleExec.For(domain);
         var lotEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var store = new DomainInstanceStore();
-        var lot = DomainEntityInstance.Create(lotEntity, domain: domain);
-        store.Add(lot);
-
-        var first = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var lot = exec.Create((lotEntity).Name, new Dictionary<string, object?>()).Instance!;
+        var first = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "A" });
         await Assert.That(first.Succeeded).IsTrue();
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(first.CreatedChildren.Count).IsEqualTo(1);
 
-        var duplicate = lot.InvokeAction("Issue", new Dictionary<string, object?> { ["code"] = "A" });
+        var duplicate = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["code"] = "A" });
         await Assert.That(duplicate.Succeeded).IsFalse();
-        await Assert.That(duplicate.ErrorMessage ?? "").Contains("Unique constraint violated: 'Code'");
-        await Assert.That(lot.CreatedChildren.Count).IsEqualTo(1);
+        await Assert.That(duplicate.Error ?? "").Contains("Unique constraint violated: 'Code'");
+        await Assert.That(exec.LinkedTargets("widgets", lot).Count).IsEqualTo(1);
     }
 
     [Test]

@@ -18,12 +18,15 @@ public sealed partial class ModuleInstanceExecutor {
     /// the value the way a bag read would.
     /// </summary>
     private object? CoerceValue(
-        Parameter parameter, string? domainTypeName, object? raw, string label) {
+        Parameter parameter, string? domainTypeName, object? raw, string label, bool namedTypeFailure = false) {
         if (EntityTypeOf(parameter.TypeReference) is { } entityType)
             return ResolveEntityValue(entityType.Name, entityType.IsCollection, raw, label);
 
         if (raw is not null && domainTypeName is not null)
             raw = CoerceJsonValue(label, domainTypeName, raw);
+        if (namedTypeFailure && raw is not null && domainTypeName is not null
+            && IsWrongTypedCreateScalar(domainTypeName, raw))
+            throw new HostException($"{label} expects {domainTypeName}; got '{raw}'.");
 
         // An optional parameter (default null) keeps its null: coercing it would turn an
         // absent Date/Time/Duration into a zero of the underlying primitive.
@@ -38,9 +41,15 @@ public sealed partial class ModuleInstanceExecutor {
                 int i and (0 or 1) => i == 1,
                 _ => raw
             };
-        return PrimitiveForParameter(parameter) is { } primitive
-            ? DictionaryBackedValue.CoerceReadValue(raw, primitive)
-            : raw;
+        if (PrimitiveForParameter(parameter) is not { } primitive)
+            return raw;
+        try {
+            return DictionaryBackedValue.CoerceReadValue(raw, primitive);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Number is integral", StringComparison.Ordinal)) {
+            // A non-integral Number is a host failure, not the bag-read throw a wrong type is.
+            throw new HostException(ex.Message);
+        }
     }
 
     private (string Name, bool IsCollection)? EntityTypeOf(Node? typeReference) {
@@ -82,13 +91,48 @@ public sealed partial class ModuleInstanceExecutor {
             not null => _byBag.TryGetValue(raw, out instance),
             _ => false
         };
-        if (!found || instance is null)
+        if (!found || instance is null) {
+            // A failed Create registers nothing. create-in used to adopt that
+            // unregistered bag and fail unique against the port. Reject it here
+            // so the action fails instead of linking a null.
+            if (BagOf(raw) is { } bag && UniqueCollision(entityName, bag) is { } collision)
+                throw new HostException(collision);
             throw new HostException($"{label}: instance '{raw}' of '{entityName}' not found.");
+        }
         if (!string.Equals(instance.EntityName, entityName, StringComparison.Ordinal))
             throw new HostException(
                 $"{label}: instance '{instance.Id}' is a '{instance.EntityName}', expected '{entityName}'.");
         return instance.Bag;
     }
+
+    private static IDictionary<string, object?>? BagOf(object? raw) => raw switch {
+        ModuleInstance instance => instance.Bag,
+        IDictionary<string, object?> bag => bag,
+        _ => null
+    };
+
+    private string? UniqueCollision(string entityName, IDictionary<string, object?> bag) {
+        var entity = _domain.Types.OfType<Poly.DomainModeling.Ontology.Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, entityName, StringComparison.Ordinal));
+        if (entity is null)
+            return null;
+        foreach (var property in entity.Properties) {
+            if (!property.Constraints.OfType<Poly.DomainModeling.Ontology.Constraints.UniqueConstraint>().Any())
+                continue;
+            if (!bag.TryGetValue(property.Name, out var value) || value is null)
+                continue;
+            var text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
+            if (_port.Exists(entityName, property.Name, text))
+                return $"Unique constraint violated: '{property.Name}' value is already used on another '{entityName}'.";
+        }
+        return null;
+    }
+
+    private static bool IsWrongTypedCreateScalar(string typeName, object raw) => typeName switch {
+        "Number" or "Int" or "Int64" or "Int32" => raw is not (long or int or decimal or double or float),
+        "Boolean" or "Bool" => raw is not (bool or long or int),
+        _ => false
+    };
 
     private static object CoerceJsonValue(string label, string typeName, object raw) =>
         typeName switch {
@@ -125,8 +169,12 @@ public sealed partial class ModuleInstanceExecutor {
             "Number" or "Int" or "Int64" or "Int32" => raw switch {
                 long or int => raw,
                 decimal m when m == decimal.Truncate(m) && m >= long.MinValue && m <= long.MaxValue => (long)m,
-                _ => throw new HostException(
-                    $"Number is integral; {label} got '{raw}', which is not a valid Number. Use Decimal.")
+                double d when d == Math.Truncate(d) && !double.IsNaN(d) && !double.IsInfinity(d)
+                    && d >= long.MinValue && d <= long.MaxValue => (long)d,
+                float f when f == Math.Truncate(f) && !float.IsNaN(f) && !float.IsInfinity(f)
+                    && f >= long.MinValue && f <= long.MaxValue => (long)f,
+                // Wrong-typed values fail loud in GuardCompatible, the same message a bag read throws.
+                _ => raw
             },
             "Decimal" => raw switch {
                 decimal => raw,
@@ -138,7 +186,8 @@ public sealed partial class ModuleInstanceExecutor {
                 bool => raw,
                 0L => false,
                 1L => true,
-                _ => throw new HostException($"{label} expects Boolean; got '{raw}'.")
+                // A non-boolean fails in GuardCompatible, not as a swallowed host failure.
+                _ => raw
             },
             _ => raw
         };

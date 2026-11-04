@@ -8,22 +8,40 @@ using StepResult = (bool Success, string? Message, object? Value);
 namespace Poly.Tests.TestHelpers;
 
 sealed class SimulateSide(Domain domain) : ParitySide(domain) {
-    readonly DomainInstanceStore _store = new();
+    readonly ModuleInstanceExecutor _exec = ModuleExec.For(domain);
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        var properties = values.Where(v => v.Value is not (IEnumerable<object> or DomainEntityInstance))
+        var properties = values.Where(v => LinksOf(v.Value) is null)
             .ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
-        DomainEntityInstance instance;
+        ModuleOutcome outcome;
         try {
-            instance = DomainEntityInstance.Create(model, properties, Domain);
+            outcome = _exec.Create(model.Name, properties);
         }
         catch (ConstraintFailureException ex) {
+            // Printed CreateCore records the same throw as a failed step, not an
+            // exception type. Void entry effects throw on both sides.
             return (false, ex.Message, null);
         }
-        _store.Add(instance);
-        foreach (var (name, value) in values.Where(v => v.Value is IEnumerable<object> or DomainEntityInstance))
-            foreach (var target in value is DomainEntityInstance one ? [one] : (IEnumerable<object>)value!)
-                _store.Link(name, instance, (DomainEntityInstance)target);
+        // The factory only takes parameters it declares. A scenario may still pass a
+        // property the entry effects own; the printed constructor accepts it, the
+        // module factory does not. Drop those keys and create again.
+        while (!outcome.Succeeded && outcome.Error is { } err) {
+            var unknown = System.Text.RegularExpressions.Regex.Match(
+                err, "Unknown property '([^']+)'");
+            if (!unknown.Success || !properties.Remove(unknown.Groups[1].Value))
+                break;
+            outcome = _exec.Create(model.Name, properties);
+        }
+        if (!outcome.Succeeded || outcome.Instance is null)
+            return (false, outcome.Error, null);
+        var instance = outcome.Instance;
+        foreach (var (name, value) in values) {
+            var links = LinksOf(value);
+            if (links is null)
+                continue;
+            foreach (var target in links)
+                _exec.Link(name, instance, target);
+        }
         return (true, null, instance);
     }
 
@@ -31,20 +49,17 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
         IReadOnlyDictionary<string, object?>? dict = args.Length == 0
             ? null
             : args.ToDictionary(a => a.Name, a => a.Value, StringComparer.Ordinal);
-        var result = ((DomainEntityInstance)Current).InvokeAction(action, dict);
-        return (result.Succeeded, result.ErrorMessage, null);
+        var result = _exec.Invoke((ModuleInstance)Current, action, dict);
+        return (result.Succeeded, result.Error, null);
     }
 
-    protected override object? EvaluateCore(string policy) {
-        var instance = (DomainEntityInstance)Current;
-        return instance.EvaluatePolicy(instance.Entity.Policies.FirstOrDefault(p => p.Name == policy)
-            ?? throw new ArgumentException($"Entity '{instance.Entity.Name}' has no policy '{policy}'."));
-    }
+    protected override object? EvaluateCore(string policy) =>
+        _exec.EvaluatePolicy((ModuleInstance)Current, policy);
 
-    protected override string TypeName(object entity) => ((DomainEntityInstance)entity).Entity.Name;
+    protected override string TypeName(object entity) => ((ModuleInstance)entity).EntityName;
 
     protected override object LinkedTarget(string relationship, int index) {
-        var targets = _store.GetLinkedTargets(relationship, (DomainEntityInstance)Current);
+        var targets = _exec.LinkedTargets(relationship, (ModuleInstance)Current);
         if (index < 0 || index >= targets.Count)
             throw new ArgumentException(
                 $"'{relationship}' has {targets.Count} linked target(s); cannot use index {index}.");
@@ -52,17 +67,27 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
     }
 
     protected override Dictionary<string, string?> StateOf(object entity, Entity model) {
-        var instance = (DomainEntityInstance)entity;
-        var state = model.Properties.ToDictionary(p => p.Name, p => instance.GetProperty<object>(p.Name)?.ToString());
+        var instance = (ModuleInstance)entity;
+        var state = model.Properties.ToDictionary(
+            p => p.Name, p => instance.Bag.TryGetValue(p.Name, out var value) ? value?.ToString() : null);
         foreach (var nav in model.Navigations)
-            state[nav.Name] = _store.GetLinkedTargets(nav.Name, instance).Count.ToString();
-        state["Stage"] = instance.CurrentStage;
+            state[nav.Name] = _exec.LinkedTargets(nav.Name, instance).Count.ToString();
+        state["Stage"] = ModuleReads.Stage(instance)
+            ?? (model.Stages.Count == 1 ? model.Stages[0].Name : null);
         return state;
+    }
+
+    static IReadOnlyList<ModuleInstance>? LinksOf(object? value) {
+        if (value is ModuleInstance one)
+            return [one];
+        if (value is IEnumerable<object> many && many.All(item => item is ModuleInstance))
+            return [.. many.Cast<ModuleInstance>()];
+        return null;
     }
 }
 
 sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
-    internal InMemoryStoragePort Port { get; } = new();
+    internal RecordingStoragePort Port { get; } = new();
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {

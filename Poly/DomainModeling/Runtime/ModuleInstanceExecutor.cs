@@ -3,7 +3,9 @@ using System.Collections;
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
@@ -31,35 +33,39 @@ public sealed partial class ModuleInstanceExecutor {
     private readonly object _gate = new();
     private readonly Domain _domain;
     private readonly AnalysisResult _analysis;
-    private readonly IReadOnlyList<TypeDefinitionNode> _module;
-    private readonly ITypeDefinitionProvider _types;
+    private IReadOnlyList<TypeDefinitionNode> _module;
+    private ITypeDefinitionProvider _types;
     private readonly ModuleStoragePort _port = new();
     private readonly Dictionary<string, ModuleInstance> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<object, ModuleInstance> _byBag = new(System.Collections.Generic.ReferenceEqualityComparer.Instance);
     private readonly List<ModuleInstance> _order = [];
     private readonly Dictionary<(string Entity, string Name), CompiledBody> _compiled = new();
+    private readonly List<IDictionary<string, object?>> _born = [];
 
-    private sealed record CompiledBody(VmProgram Program, IReadOnlyList<Parameter> Parameters);
+    private sealed record CompiledBody(Node Body, VmProgram Program, IReadOnlyList<Parameter> Parameters);
 
     public ModuleInstanceExecutor(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         _domain = domain;
         _module = [.. RuntimeAnalysisCache.GetOrLower(domain).Select(BindParameterBodies)];
         _analysis = RuntimeAnalysisCache.Analysis(domain);
+        _types = BuildTypes(_module);
+    }
 
+    private static ITypeDefinitionProvider BuildTypes(IReadOnlyList<TypeDefinitionNode> module) {
         // The AST definitions capture this context's provider at construction, so the
         // CLR DomainResult pair must be in the context before the module types are
         // registered.
         var ctx = new AnalysisContext(
             DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
         var analyzer = new TypeDefinitionNodeAnalyzer();
-        foreach (var type in _module) {
+        foreach (var type in module) {
             if (string.Equals(type.Name, "DomainResult", StringComparison.Ordinal)
                 || string.Equals(type.Name, "ConstraintFailureException", StringComparison.Ordinal))
                 continue;
             analyzer.Analyze(ctx, type);
         }
-        _types = ctx.TypeDefinitions;
+        return ctx.TypeDefinitions;
     }
 
     /// <summary>
@@ -116,6 +122,8 @@ public sealed partial class ModuleInstanceExecutor {
         ArgumentNullException.ThrowIfNull(values);
         lock (_gate) {
             return Transact(() => {
+                SyncSubscriptionBodies();
+                _born.Clear();
                 var entity = RequireEntity(entityName);
                 var create = FindMethod(entityName, "Create", isStatic: true)
                     ?? throw new HostException($"Entity '{entityName}' has no Create factory.");
@@ -134,7 +142,7 @@ public sealed partial class ModuleInstanceExecutor {
                     var supplied = TryValue(values, parameter.Name, out var raw);
                     var label = $"Property '{property?.Name ?? parameter.Name}'";
                     args[i] = supplied
-                        ? CoerceValue(parameter, property?.Type.TypeName, raw, label)
+                        ? CoerceValue(parameter, property?.Type.TypeName, raw, label, namedTypeFailure: true)
                         : CoerceValue(parameter, null, DefaultOf(parameter), label);
                 }
                 foreach (var key in values.Keys) {
@@ -151,7 +159,7 @@ public sealed partial class ModuleInstanceExecutor {
 
                 var instance = Register(entityName, bag);
                 return ModuleOutcome.Ok(instance, AdoptCreatedChildren());
-            });
+            }, constraintThrows: true);
         }
     }
 
@@ -166,9 +174,14 @@ public sealed partial class ModuleInstanceExecutor {
         ArgumentException.ThrowIfNullOrEmpty(actionName);
         lock (_gate) {
             return Transact(() => {
+                SyncSubscriptionBodies();
+                _born.Clear();
                 RequireRegistered(target);
                 var action = FindAction(target.EntityName, actionName);
                 var method = action is null ? null : FindMethod(target.EntityName, actionName, isStatic: false);
+                if (action is not null && method is null)
+                    throw new InvalidOperationException(
+                        $"Module method '{actionName}' is missing on entity '{target.EntityName}'.");
                 if (action is null || method is null)
                     return ModuleOutcome.Fail($"Action '{actionName}' not found on entity '{target.EntityName}'.");
 
@@ -179,7 +192,10 @@ public sealed partial class ModuleInstanceExecutor {
                 for (var i = 0; i < parameters.Count; i++) {
                     var parameter = parameters[i];
                     if (IsStoragePort(parameter)) {
-                        callArgs[i] = _port;
+                        known.Add(parameter.Name);
+                        callArgs[i] = TryValue(supplied, parameter.Name, out var given) && given is IStoragePort port
+                            ? port
+                            : _port;
                         continue;
                     }
                     known.Add(parameter.Name);
@@ -208,7 +224,7 @@ public sealed partial class ModuleInstanceExecutor {
                     throw new InvalidOperationException(
                         $"Action '{actionName}' on '{target.EntityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
-                    return ModuleOutcome.Fail(result.ErrorMessage ?? $"invoke '{actionName}' failed.");
+                    return MapFailure(action, result.ErrorMessage);
 
                 var created = AdoptCreatedChildren();
                 ModuleInstance? returned = null;
@@ -222,7 +238,7 @@ public sealed partial class ModuleInstanceExecutor {
                     created.AddRange(AdoptCreatedChildren());
                 }
                 return ModuleOutcome.Ok(returned, created);
-            });
+            }, constraintThrows: true, keepConstraintMutations: true);
         }
     }
 
@@ -253,11 +269,51 @@ public sealed partial class ModuleInstanceExecutor {
         }
     }
 
+    /// <summary>
+    /// Host write that enforces <c>unique</c> before the bag changes. The module's
+    /// assign path checks the port itself; a direct write has no body to do it.
+    /// </summary>
+    public void SetProperty(ModuleInstance instance, string name, object? value) {
+        ArgumentNullException.ThrowIfNull(instance);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        lock (_gate) {
+            RequireRegistered(instance);
+            var entity = RequireEntity(instance.EntityName);
+            var property = entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, name, StringComparison.Ordinal));
+            if (property is null)
+                throw new ArgumentException(
+                    $"Property '{name}' does not exist on entity '{instance.EntityName}'.");
+            if (property.Constraints.Any(c => c is UniqueConstraint)) {
+                var text = Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                if (instance.Bag.TryGetValue(name, out var current)
+                    && string.Equals(Convert.ToString(current, System.Globalization.CultureInfo.InvariantCulture), text, StringComparison.Ordinal)) {
+                    instance.Bag[name] = value;
+                    return;
+                }
+                if (_port.Exists(instance.EntityName, name, text))
+                    throw new InvalidOperationException(
+                        $"Unique constraint violated: '{name}' value is already used on another '{instance.EntityName}'.");
+                if (current is not null)
+                    _port.Release(instance.EntityName, name,
+                        Convert.ToString(current, System.Globalization.CultureInfo.InvariantCulture) ?? "");
+                _port.Record(instance.EntityName, name, text);
+            }
+            instance.Bag[name] = value;
+        }
+    }
+
     // ── transactions ──────────────────────────────────────────────────────────
 
     private sealed class HostException(string message) : Exception(message);
 
-    private ModuleOutcome Transact(Func<ModuleOutcome> operation) {
+    /// <param name="constraintThrows">
+    /// Void contexts throw <see cref="ConstraintFailureException"/> instead of returning
+    /// a failed <see cref="DomainResult"/>. Create rolls the partial factory back and
+    /// rethrows. Invoke from a subscription keeps the transition that fired it.
+    /// </param>
+    private ModuleOutcome Transact(
+        Func<ModuleOutcome> operation, bool constraintThrows = false, bool keepConstraintMutations = false) {
         var state = Capture();
         try {
             var outcome = operation();
@@ -268,6 +324,11 @@ public sealed partial class ModuleInstanceExecutor {
         catch (HostException ex) {
             Restore(state);
             return ModuleOutcome.Fail(ex.Message);
+        }
+        catch (ConstraintFailureException) when (constraintThrows) {
+            if (!keepConstraintMutations)
+                Restore(state);
+            throw;
         }
         catch (ConstraintFailureException ex) {
             Restore(state);
@@ -359,7 +420,179 @@ public sealed partial class ModuleInstanceExecutor {
                 }
             }
         }
+        foreach (var bag in _born) {
+            if (_byBag.ContainsKey(bag))
+                continue;
+            var entityName = InferEntity(bag);
+            if (entityName is null)
+                continue;
+            adopted.Add(Register(entityName, bag));
+        }
         return adopted;
+    }
+
+    private string? InferEntity(IDictionary<string, object?> bag) {
+        string? best = null;
+        var bestHits = 0;
+        var tied = false;
+        foreach (var entity in _domain.Types.OfType<Entity>()) {
+            var hits = 0;
+            var foreign = false;
+            foreach (var key in bag.Keys) {
+                if (string.Equals(key, "CurrentStage", StringComparison.Ordinal) || key.StartsWith('_'))
+                    continue;
+                if (entity.Properties.Any(p => string.Equals(p.Name, key, StringComparison.Ordinal))
+                    || entity.Navigations.Any(n => string.Equals(n.Name, key, StringComparison.Ordinal)))
+                    hits++;
+                else
+                    foreign = true;
+            }
+            if (foreign || hits == 0)
+                continue;
+            if (hits > bestHits) {
+                best = entity.Name;
+                bestHits = hits;
+                tied = false;
+            }
+            else if (hits == bestHits) {
+                tied = true;
+            }
+        }
+        return tied ? null : best;
+    }
+
+    private void CaptureBorn(Poly.Interpretation.Vm.VmManagedObjectHeap heap) {
+        for (var i = 1; i < heap.Count; i++) {
+            switch (heap.Get(i)) {
+                case DomainResult { IsSuccess: true, Value: IDictionary<string, object?> bag }:
+                    _born.Add(bag);
+                    break;
+                case IDictionary<string, object?> dict:
+                    _born.Add(dict);
+                    break;
+            }
+        }
+    }
+
+    private ModuleOutcome MapFailure(Action action, string? message) {
+        message ??= $"invoke '{action.Name}' failed.";
+        const string blockedPrefix = "blocked by policy '";
+        var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
+        if (blockedIdx >= 0 && message.StartsWith($"'{action.Name}'", StringComparison.Ordinal)) {
+            var start = blockedIdx + blockedPrefix.Length;
+            var end = message.IndexOf('\'', start);
+            if (end > start) {
+                var leaf = message[start..end];
+                var guard = action.Policies.Select(p => p.Name).FirstOrDefault(n =>
+                    string.Equals(n, leaf, StringComparison.Ordinal)
+                    || string.Equals(n, "not_" + leaf, StringComparison.Ordinal)) ?? leaf;
+                return ModuleOutcome.Fail(message, [guard]);
+            }
+        }
+        if (message.Contains("requires a linked", StringComparison.Ordinal))
+            return ModuleOutcome.Fail(message, [.. action.Policies.Select(p => p.Name)]);
+        return ModuleOutcome.Fail(message);
+    }
+
+    /// <summary>
+    /// The When handler the module runs is the body cached at lower. A test that
+    /// replaces or clears that cache must be what the next invoke executes.
+    /// </summary>
+    private void SyncSubscriptionBodies() {
+        var module = RuntimeAnalysisCache.GetOrLower(_domain);
+        var names = HandlerNames();
+        if (names.Count == 0)
+            return;
+        var changed = false;
+        foreach (var (info, handlerName) in names) {
+            var type = module.FirstOrDefault(t =>
+                string.Equals(t.Name, info.SourceEntity.Name, StringComparison.Ordinal));
+            if (type?.Methods is not IList<MethodDefinitionNode> methods)
+                continue;
+            var index = -1;
+            for (var i = 0; i < methods.Count; i++) {
+                if (string.Equals(methods[i].Name, handlerName, StringComparison.Ordinal)) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index < 0)
+                continue;
+            if (!RuntimeAnalysisCache.TryGetSubscriptionBody(
+                    _domain, info.Subscription, info.StageName, out var body) || body is null) {
+                methods[index] = methods[index] with {
+                    Body = new ThrowStatement(new New(
+                        new NamedTypeReference("System.InvalidOperationException"),
+                        new Constant($"Subscription body is missing on entity '{info.SourceEntity.Name}'.")))
+                };
+                changed = true;
+                continue;
+            }
+            if (!ReferenceEquals(methods[index].Body, body) && ContainsEntityParameter(body)) {
+                // A replaced sentinel assigns through Parameter("entity"). A real
+                // handler does not, and must keep the body the module lowered.
+                methods[index] = methods[index] with { Body = RewriteEntityParameter(body) };
+                changed = true;
+            }
+        }
+        if (!changed)
+            return;
+        // Nested When calls compile against the type provider, not the cache list.
+        // Rebuild so the next action sees the replaced or cleared handler.
+        _module = [.. module.Select(BindParameterBodies)];
+        _types = BuildTypes(_module);
+        _compiled.Clear();
+    }
+
+    private List<KeyValuePair<DomainToCSharpExporter.SubscriptionInfo, string>> HandlerNames() {
+        var entityLookup = _domain.Types.OfType<Entity>()
+            .ToDictionary(e => e.Name, StringComparer.Ordinal);
+        var bySubscriber = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
+            StringComparer.Ordinal);
+        foreach (var entity in _domain.Types.OfType<Entity>()) {
+            void Collect(SubscriptionDispatchPlanMetadata? plan, string? stageName) {
+                if (plan is null)
+                    return;
+                var list = new List<DomainToCSharpExporter.SubscriptionInfo>();
+                var byTarget = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
+                    StringComparer.Ordinal);
+                DomainToCSharpExporter.CollectSubscriptionInfo(
+                    plan, entity, stageName, entityLookup, list, byTarget);
+                if (list.Count == 0)
+                    return;
+                if (!bySubscriber.TryGetValue(entity.Name, out var existing))
+                    bySubscriber[entity.Name] = existing = [];
+                existing.AddRange(list);
+            }
+            var analysis = RuntimeAnalysisCache.Analysis(_domain);
+            Collect(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(entity), null);
+            foreach (var stage in entity.Stages)
+                Collect(analysis.GetMetadata<SubscriptionDispatchPlanMetadata>(stage), stage.Name);
+        }
+        if (bySubscriber.Count == 0)
+            return [];
+        return [.. DomainToCSharpExporter.BuildHandlerNames(bySubscriber)];
+    }
+
+    private static bool ContainsEntityParameter(Node node) {
+        if (node is Parameter { Name: "entity" })
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && ContainsEntityParameter(child))
+                return true;
+        }
+        return false;
+    }
+
+    private static Node RewriteEntityParameter(Node node) {
+        if (node is Parameter { Name: "entity" })
+            return new ThisReference();
+        return node switch {
+            Block b => new Block(b.Nodes.Select(RewriteEntityParameter), b.Variables.Select(RewriteEntityParameter)),
+            Assignment a => new Assignment(RewriteEntityParameter(a.Destination), RewriteEntityParameter(a.Value)),
+            Member m => new Member(RewriteEntityParameter(m.Value), m.MemberName),
+            _ => node
+        };
     }
 
     // ── module access ─────────────────────────────────────────────────────────
@@ -376,17 +609,29 @@ public sealed partial class ModuleInstanceExecutor {
     }
 
     private MethodDefinitionNode? FindMethod(string entityName, string methodName, bool isStatic) {
-        foreach (var type in _module) {
+        var module = RuntimeAnalysisCache.GetOrLower(_domain);
+        foreach (var type in module) {
             if (!string.Equals(type.Name, entityName, StringComparison.Ordinal))
                 continue;
             foreach (var method in type.Methods ?? []) {
                 if (string.Equals(method.Name, methodName, StringComparison.Ordinal)
                     && method.IsStatic == isStatic)
-                    return method;
+                    return BindOne(entityName, method);
             }
             break;
         }
         return null;
+    }
+
+    private static MethodDefinitionNode BindOne(string entityName, MethodDefinitionNode method) {
+        if (method.Body is null || (method.Parameters?.Count ?? 0) == 0)
+            return method;
+        try {
+            return method with { Body = ModuleMethodBinding.BindTypedParameters(entityName, method).Tree };
+        }
+        catch (InvalidOperationException) {
+            return method;
+        }
     }
 
     private object? Run(string entityName, MethodDefinitionNode method, object? self, object?[] args) {
@@ -398,12 +643,13 @@ public sealed partial class ModuleInstanceExecutor {
         setArgs[0] = self;
         args.CopyTo(setArgs, 1);
         using var exec = Interpreter.Execute(compiled.Program, s => s.SetArgs(setArgs));
+        CaptureBorn(exec.State.Heap);
         return exec.Result.Value;
     }
 
     private CompiledBody Compile(
         string entityName, string name, Node body, IReadOnlyList<Parameter> parameters) {
-        if (_compiled.TryGetValue((entityName, name), out var cached))
+        if (_compiled.TryGetValue((entityName, name), out var cached) && ReferenceEquals(cached.Body, body))
             return cached;
         var entityType = _types.GetTypeDefinition(entityName)
             ?? throw new InvalidOperationException(
@@ -416,7 +662,7 @@ public sealed partial class ModuleInstanceExecutor {
         var program = parameters.Count == 0
             ? Interpreter.Compile(body, analysis)
             : Interpreter.Compile(body, analysis, parameters);
-        return _compiled[(entityName, name)] = new CompiledBody(program, parameters);
+        return _compiled[(entityName, name)] = new CompiledBody(body, program, parameters);
     }
 
     /// <summary>

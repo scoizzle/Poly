@@ -15,7 +15,7 @@ A domain is a library of legal operations. Session compile is Load → one analy
 3. **Only what helps the customer** — time-to-value, correctness, or operability.
 4. **Go well to go fast** — small test→code loops; tests specific, production generic.
 5. **Shipped capability over completeness** — thinnest slice through the right seam. Shrink the language before a host escape. Do not ship a known-wrong shape.
-6. **Seam when multiplicity is known** — libraries, artifact producers, and `uses` doors get a named seam. No framework for an imaginary second use. `DomainEntityInstance` as a public path is the cautionary tale.
+6. **Seam when multiplicity is known** — libraries, artifact producers, and `uses` doors get a named seam. No framework for an imaginary second use. A public instance runtime type is the cautionary tale.
 7. **Guardrails only with real consumers.**
 
 When tenets conflict: domain fidelity and CORE seams over a smaller wrong path; a smaller tested loop over a large untested batch; a known multi-impl seam over a one-off; no speculative framework.
@@ -38,13 +38,13 @@ Architecture is AST / Node / Analysis, plus libraries that publish bags and arti
 | Syntax module privileged for meaning + Interpreter sim | Twin trees; producers / DEI / Effect-IR as a second sim |
 | New meaning: lower, analyze, or replace nodes | Emitter patch; ABI one-off |
 
-Compose Interpreter, exporter, DEI, and `uses http`. MCP tool `Description` is usage text, not AST or store types.
+Compose Interpreter, exporter, and `uses http`. MCP tool `Description` is usage text, not AST or store types.
 
 ## Agent target
 
 The lowered operation module is the domain. Depth: [`docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md`](docs/decisions/2026-09-05-lowered-module-is-domain-meaning.md).
 
-Compilation unit = library. Interpreter sim and C# print share the Syntax module body. When they diverge, fix Lower. Put meaning in the operation AST. Prove it on that body (VM on bound `This`, or generated CLR). Lower subs, OnEntry/OnExit, and entity policies into the module. `DomainEntityInstance` is scratch bind for MCP and authoring. Residual, do not grow: [`docs/plans/parked/p3b-followups-2026-09-27.md`](docs/plans/parked/p3b-followups-2026-09-27.md).
+Compilation unit = library. Interpreter sim and C# print share the Syntax module body. When they diverge, fix Lower. Put meaning in the operation AST. Prove it on that body (VM on bound `This`, or generated CLR). Lower subs, OnEntry/OnExit, and entity policies into the module. Simulation is the interpreter host on the module dictionary; there is no instance runtime type. Residual, do not grow: [`docs/plans/parked/p3b-followups-2026-09-27.md`](docs/plans/parked/p3b-followups-2026-09-27.md).
 
 ## Ops
 

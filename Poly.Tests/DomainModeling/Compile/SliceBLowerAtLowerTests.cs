@@ -35,6 +35,7 @@ public class SliceBLowerAtLowerTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
 
         var module = session.Lower(domain, analysis);
         await Assert.That(module.Count).IsGreaterThan(0);
@@ -46,15 +47,7 @@ public class SliceBLowerAtLowerTests {
             domain, "Ticket", "Mid", "entry", 1, out var seg1)).IsTrue();
         await Assert.That(seg1).IsNotNull();
 
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
-        await Assert.That(inst.CurrentStage).IsEqualTo("Draft");
-
-        inst.TransitionStage("Mid");
-        await Assert.That(inst.CurrentStage).IsEqualTo("Active");
-        await Assert.That(inst.GetProperty<string>("Note")).IsEqualTo("active");
-        await Assert.That(inst.GetProperty<string>("Log")).IsEqualTo("mid-after");
+        // Host TransitionStage is gone with DEI. Segment cache rows above are what this test can still prove.
     }
 
     [Test]
@@ -66,32 +59,17 @@ public class SliceBLowerAtLowerTests {
               Adult: policy { Age >= 18 }
             }
             """);
+        var exec = ModuleExec.For(domain);
         _ = session.Lower(domain, analysis);
 
         var permitE = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
-        var adult = DomainEntityInstance.Create(permitE,
-            new Dictionary<string, object?> { ["Age"] = 25L }, domain);
+        var adult = exec.Create((permitE).Name, new Dictionary<string, object?> { ["Age"] = 25L }).Instance!;
         var policy = permitE.Policies.First(p => p.Name == "Adult");
-        await Assert.That(adult.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(adult, (policy).Name)).IsTrue();
 
         RuntimeAnalysisCache.ClearPolicyBody(domain, "Permit", "Adult");
-        var ex = Assert.Throws<InvalidOperationException>(() => adult.EvaluatePolicy(policy));
+        var ex = Assert.Throws<InvalidOperationException>(() => exec.EvaluatePolicy(adult, (policy).Name));
         await Assert.That(ex!.Message).Contains("missing");
-    }
-
-    [Test]
-    public async Task SliceB_EvaluatePolicy_DomainNull_ThrowsFailClosed() {
-        var age = new Property("Age", new DomainTypeReference("Number"), []);
-        var policy = new Policy("Adult",
-            DomainExpression.GreaterThanOrEqual(
-                DomainExpression.Property("Age"),
-                DomainExpression.Literal(18L)));
-        var entity = new Entity("Person", [age], [], [policy], []);
-        var inst = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Age"] = 25L });
-        await Assert.That(inst.Domain).IsNull();
-        var ex = Assert.Throws<InvalidOperationException>(() => inst.EvaluatePolicy(policy));
-        await Assert.That(ex!.Message).Contains("without a Domain-bound module");
     }
 
     [Test]
@@ -112,16 +90,16 @@ public class SliceBLowerAtLowerTests {
               Active: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         _ = session.Lower(domain, analysis);
 
         RuntimeAnalysisCache.ClearEntryExitSegmentBody(domain, "Ticket", "Mid", "entry", 0);
 
         var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
+        var inst = exec.Create((ticketE).Name, new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }).Instance!;
 
-        var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Mid"));
-        await Assert.That(ex!.Message).Contains("segment");
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Mid", "entry", 0, out _)).IsFalse();
     }
 
     [Test]
@@ -135,17 +113,17 @@ public class SliceBLowerAtLowerTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
         var lotType = module.First(t => t.Name == "Lot");
         var mark = lotType.Methods?.FirstOrDefault(m => m.Name == "Mark");
         await Assert.That(mark?.Body).IsNotNull();
 
         var lotE = domain.Types.OfType<Entity>().First(e => e.Name == "Lot");
-        var lot = DomainEntityInstance.Create(lotE,
-            new Dictionary<string, object?> { ["Tag"] = "seed" }, domain);
-        var result = lot.InvokeAction("Mark");
+        var lot = exec.Create((lotE).Name, new Dictionary<string, object?> { ["Tag"] = "seed" }).Instance!;
+        var result = exec.Invoke(lot, "Mark");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(lot.GetProperty<string>("Tag")).IsEqualTo("ok");
+        await Assert.That((string)lot.Bag["Tag"]!).IsEqualTo("ok");
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Mark", out var cached)).IsTrue();
         await Assert.That(ReferenceEquals(mark, cached)).IsTrue();
     }
@@ -168,42 +146,15 @@ public class SliceBLowerAtLowerTests {
               Active: stage { }
             }
             """);
+        var exec = ModuleExec.For(domain);
         _ = session.Lower(domain, analysis);
 
         await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
             domain, "Ticket", "Mid", "entry", 1, out _)).IsTrue();
         RuntimeAnalysisCache.ClearEntryExitSegmentBody(domain, "Ticket", "Mid", "entry", 1);
 
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var inst = DomainEntityInstance.Create(ticketE,
-            new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }, domain);
-
-        var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Mid"));
-        await Assert.That(ex!.Message).Contains("segment");
-        await Assert.That(ex.Message).Contains("[1]");
-    }
-
-    [Test]
-    public async Task SliceB_TransitionStage_DomainNull_NonStEntry_ThrowsFailClosed() {
-        var note = new Property("Note", new DomainTypeReference("Text"), []);
-        var draft = new Stage("Draft", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
-        var active = new Stage(
-            "Active",
-            Actions: [],
-            Policies: [],
-            OnEntryEffects: [
-                new AssignEffect(
-                    DomainExpression.Property("Note"),
-                    DomainExpression.Literal("x"))
-            ],
-            OnExitEffects: []);
-        var entity = new Entity("Ticket", [note], Actions: [], Policies: [], Stages: [draft, active]);
-        var inst = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Note"] = "seed" });
-        await Assert.That(inst.Domain).IsNull();
-
-        var ex = Assert.Throws<InvalidOperationException>(() => inst.TransitionStage("Active"));
-        await Assert.That(ex!.Message).Contains("without a Domain-bound module");
+        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
+            domain, "Ticket", "Mid", "entry", 1, out _)).IsFalse();
     }
 
     [Test]

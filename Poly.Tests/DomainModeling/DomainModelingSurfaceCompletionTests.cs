@@ -108,46 +108,48 @@ public class DomainModelingSurfaceCompletionTests {
 
     [Test]
     public async Task InvokeAction_UnknownArgKey_FailsClosed() {
-        var entity = new Entity("Item",
-            [new Property("Age", new DomainTypeReference("Number"), [])],
-            [new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [], [], [])],
-            [], []);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Age"] = 15L });
-        var result = instance.InvokeAction("Go", new Dictionary<string, object?> { ["Age"] = 40L });
+        var exec = ModuleExec.For(Apply("""
+            domain T
+            Item: entity {
+              Age: Number
+              Go: action { assign Age to 1 }
+            }
+            """));
+        var instance = exec.Create("Item", new Dictionary<string, object?> { ["Age"] = 15L }).Instance!;
+        var result = exec.Invoke(instance, "Go", new Dictionary<string, object?> { ["Age"] = 40L });
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Unknown argument");
-        await Assert.That(instance.GetProperty<object>("Age")).IsEqualTo(15L);
+        await Assert.That(result.Error).Contains("Unknown argument");
+        await Assert.That(instance.Bag["Age"]).IsEqualTo(15L);
     }
 
     [Test]
     public async Task InvokeAction_MissingDeclaredParam_FailsClosed() {
-        var entity = new Entity("Item",
-            [new Property("Qty", new DomainTypeReference("Number"), [])],
-            [new Poly.DomainModeling.Ontology.Action("Add", InvocationResult.Void,
-                [new Property("amount", new DomainTypeReference("Number"), [])],
-                [], [])],
-            [], []);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Qty"] = 1L });
+        var exec = ModuleExec.For(Apply("""
+            domain T
+            Item: entity {
+              Qty: Number
+              Add: action (amount: Number) { assign Qty to amount }
+            }
+            """));
+        var instance = exec.Create("Item", new Dictionary<string, object?> { ["Qty"] = 1L }).Instance!;
 
-        var result = instance.InvokeAction("Add");
+        var result = exec.Invoke(instance, "Add");
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("Missing argument");
-        await Assert.That(result.ErrorMessage).Contains("amount");
+        await Assert.That(result.Error).Contains("Missing argument");
+        await Assert.That(result.Error).Contains("amount");
     }
 
     [Test]
     public async Task Store_DuplicateUnique_FailsClosed() {
-        var entity = new Entity("Item",
-            [new Property("Sku", new DomainTypeReference("Text"), [new UniqueConstraint()])],
-            [], [], []);
-        var store = new DomainInstanceStore();
-        store.Add(DomainEntityInstance.Create(entity, new Dictionary<string, object?> { ["Sku"] = "A" }));
-        var dup = DomainEntityInstance.Create(entity, new Dictionary<string, object?> { ["Sku"] = "A" });
-        var ex = Assert.Throws<InvalidOperationException>(() => store.Add(dup));
-        await Assert.That(ex!.Message).Contains("Unique");
+        var exec = ModuleExec.For(Apply("""
+            domain T
+            Item: entity { Sku: Text unique }
+            """));
+        exec.Create("Item", new Dictionary<string, object?> { ["Sku"] = "A" });
+        var dup = exec.Create("Item", new Dictionary<string, object?> { ["Sku"] = "A" });
+        await Assert.That(dup.Succeeded).IsFalse();
+        await Assert.That(dup.Error).Contains("Unique");
     }
 
     [Test]
@@ -171,19 +173,11 @@ public class DomainModelingSurfaceCompletionTests {
             }
             """;
         var domain = Apply(poly);
-        var store = new DomainInstanceStore();
-        var parent = DomainEntityInstance.Create(
-            domain.Types.OfType<Entity>().Single(e => e.Name == "Parent"),
-            new Dictionary<string, object?> { ["Name"] = "p" },
-            domain);
-        var child = DomainEntityInstance.Create(
-            domain.Types.OfType<Entity>().Single(e => e.Name == "Child"),
-            new Dictionary<string, object?> { ["Name"] = "c" },
-            domain);
-        store.Add(parent);
-        store.Add(child);
-        store.Link("kids", parent, child);
-        var result = child.InvokeAction("Activate");
+        var exec = ModuleExec.For(domain);
+        var parent = exec.Create((domain.Types.OfType<Entity>().Single(e => e.Name == "Parent")).Name, new Dictionary<string, object?> { ["Name"] = "p" }).Instance!;
+        var child = exec.Create((domain.Types.OfType<Entity>().Single(e => e.Name == "Child")).Name, new Dictionary<string, object?> { ["Name"] = "c" }).Instance!;
+        exec.Link("kids", parent, child);
+        var result = exec.Invoke(child, "Activate");
         await Assert.That(result.Succeeded).IsTrue();
     }
 
@@ -241,22 +235,16 @@ public class DomainModelingSurfaceCompletionTests {
             }
             """;
         var domain = Apply(poly);
-        var store = new DomainInstanceStore();
-        var board = DomainEntityInstance.Create(
-            domain.Types.OfType<Entity>().Single(e => e.Name == "Board"),
-            new Dictionary<string, object?> { ["Flag"] = "no" },
-            domain);
+        var exec = ModuleExec.For(domain);
+        var board = exec.Create((domain.Types.OfType<Entity>().Single(e => e.Name == "Board")).Name, new Dictionary<string, object?> { ["Flag"] = "no" }).Instance!;
         var itemE = domain.Types.OfType<Entity>().Single(e => e.Name == "Item");
-        var a = DomainEntityInstance.Create(itemE, domain: domain);
-        var b = DomainEntityInstance.Create(itemE, domain: domain);
-        store.Add(board);
-        store.Add(a);
-        store.Add(b);
-        store.Link("items", board, a);
-        store.Link("items", board, b);
-        a.InvokeAction("Prep");
-        await Assert.That(board.GetProperty<string>("Flag")).IsEqualTo("no");
-        b.InvokeAction("Finish");
-        await Assert.That(board.GetProperty<string>("Flag")).IsEqualTo("set");
+        var a = exec.Create((itemE).Name, new Dictionary<string, object?>()).Instance!;
+        var b = exec.Create((itemE).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("items", board, a);
+        exec.Link("items", board, b);
+        exec.Invoke(a, "Prep");
+        await Assert.That((string)board.Bag["Flag"]!).IsEqualTo("no");
+        exec.Invoke(b, "Finish");
+        await Assert.That((string)board.Bag["Flag"]!).IsEqualTo("set");
     }
 }

@@ -47,30 +47,25 @@ public class CrossEntityInvokeHostAbiTests {
     [Test]
     public async Task CrossEntityInvoke_Runtime_InvokesOnLinkedTarget() {
         var (orchestrator, service, domain) = CreateLinkedDomain();
-        var store = new DomainInstanceStore();
-        var svc = DomainEntityInstance.Create(service,
-            new Dictionary<string, object?> { ["Status"] = "idle" }, domain: domain);
-        var orch = DomainEntityInstance.Create(orchestrator, domain: domain);
-        store.Add(svc);
-        store.Add(orch);
-        store.Link("ServiceCall", orch, svc);
+        var exec = ModuleExec.For(domain);
+        var svc = exec.Create((service).Name, new Dictionary<string, object?> { ["Status"] = "idle" }).Instance!;
+        var orch = exec.Create((orchestrator).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("ServiceCall", orch, svc);
 
-        var result = orch.InvokeAction("Run");
+        var result = exec.Invoke(orch, "Run");
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(svc.GetProperty<object>("Status")).IsEqualTo("processed");
+        await Assert.That(svc.Bag["Status"]).IsEqualTo("processed");
     }
 
     [Test]
     public async Task CrossEntityInvoke_Unlinked_FailsWithDomainMessage() {
         var (orchestrator, _, domain) = CreateLinkedDomain();
-        var store = new DomainInstanceStore();
-        var orch = DomainEntityInstance.Create(orchestrator, domain: domain);
-        store.Add(orch);
-
-        var result = orch.InvokeAction("Run");
+        var exec = ModuleExec.For(domain);
+        var orch = exec.Create((orchestrator).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(orch, "Run");
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.ErrorMessage).Contains("requires a linked 'ServiceCall'");
+        await Assert.That(result.Error).Contains("requires a linked 'ServiceCall'");
     }
 
     [Test]

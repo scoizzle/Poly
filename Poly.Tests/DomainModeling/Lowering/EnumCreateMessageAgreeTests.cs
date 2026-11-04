@@ -46,13 +46,12 @@ public class EnumCreateMessageAgreeTests {
     [Test]
     public async Task Create_NonMemberValue_NamesTheValue_AgreesOnSimulateAndPrintedCsharp() {
         var (domain, _) = EvolvedDomain.FromDsl(Dsl);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Member");
 
-        var thrown = Assert.Throws<ConstraintFailureException>(() =>
-            DomainEntityInstance.Create(entity,
-                new Dictionary<string, object?> { ["Name"] = "Cy", ["Level"] = "Gold" },
-                domain: domain));
-        await Assert.That(thrown!.Message)
+        var thrown = exec.Create(entity.Name, new Dictionary<string, object?> { ["Name"] = "Cy", ["Level"] = "Gold" });
+        await Assert.That(thrown.Succeeded).IsFalse();
+        await Assert.That(thrown.Error)
             .IsEqualTo("'Gold' is not a valid member of Tier for property 'Level'.");
 
         var asm = ExportedCSharp.CompileAndLoad(PrintMember());
@@ -68,13 +67,12 @@ public class EnumCreateMessageAgreeTests {
     [Test]
     public async Task Create_EnumOmitted_ReadsRequired_AgreesOnSimulateAndPrintedCsharp() {
         var (domain, _) = EvolvedDomain.FromDsl(Dsl);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Member");
 
-        var thrown = Assert.Throws<ConstraintFailureException>(() =>
-            DomainEntityInstance.Create(entity,
-                new Dictionary<string, object?> { ["Name"] = "Ada" },
-                domain: domain));
-        await Assert.That(thrown!.Message).IsEqualTo("'Level' is required.");
+        var thrown = exec.Create(entity.Name, new Dictionary<string, object?> { ["Name"] = "Ada" });
+        await Assert.That(thrown.Succeeded).IsFalse();
+        await Assert.That(thrown.Error).IsEqualTo("'Level' is required.");
 
         // The printed factory carries the same required guard and message the VM emits
         // for an omitted slot (and the value-naming message for a supplied non-member).

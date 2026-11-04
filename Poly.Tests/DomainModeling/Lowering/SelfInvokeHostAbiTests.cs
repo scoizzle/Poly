@@ -55,13 +55,13 @@ public class SelfInvokeHostAbiTests {
     public async Task SelfInvoke_Runtime_UpdatesBagViaVmPath() {
         var entity = CreateCartEntity();
         var domain = ValidDomain.Create("Shop", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "open" }, domain: domain);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "open" }).Instance!;
 
-        var result = instance.InvokeAction("Checkout");
+        var result = exec.Invoke(instance, "Checkout");
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<object>("Status")).IsEqualTo("paid");
+        await Assert.That(instance.Bag["Status"]).IsEqualTo("paid");
     }
 
     [Test]
@@ -83,12 +83,12 @@ public class SelfInvokeHostAbiTests {
             Policies: [],
             Stages: [draft]);
         var domain = ValidDomain.Create("Loops", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "x" }, domain: domain);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "x" }).Instance!;
 
-        var bounceResult = instance.InvokeAction("Bounce");
+        var bounceResult = exec.Invoke(instance, "Bounce");
         await Assert.That(bounceResult.Succeeded).IsFalse();
-        await Assert.That(bounceResult.ErrorMessage).Contains("depth exceeded");
+        await Assert.That(bounceResult.Error).Contains("depth exceeded");
     }
 
     private static Invoke? FindInvoke(Node node) {

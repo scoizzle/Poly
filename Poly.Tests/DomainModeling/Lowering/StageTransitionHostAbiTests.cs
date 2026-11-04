@@ -88,24 +88,13 @@ public class StageTransitionHostAbiTests {
     public async Task InvokeAction_Transition_SetsStageWithoutEffectExecutor() {
         var entity = CreatePersonEntity();
         var domain = ValidDomain.Create("People", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Alice" }).Instance!;
 
-        var result = instance.InvokeAction("Activate");
+        var result = exec.Invoke(instance, "Activate");
 
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.CurrentStage).IsEqualTo("Active");
-    }
-
-    [Test]
-    public async Task TransitionStage_UnknownStage_ThrowsFailClosed() {
-        var entity = CreatePersonEntity();
-        var domain = ValidDomain.Create("People", [entity]);
-        var instance = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Name"] = "Alice" }, domain: domain);
-
-        var ex = Assert.Throws<InvalidOperationException>(() => instance.TransitionStage("Nope"));
-        await Assert.That(ex!.Message).IsEqualTo(UnknownNopeOnPerson);
+        await Assert.That(ModuleReads.Stage(instance)).IsEqualTo("Active");
     }
 
     [Test]

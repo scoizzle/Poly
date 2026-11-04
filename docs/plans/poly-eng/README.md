@@ -1,6 +1,6 @@
 # Poly eng: how the plan is kept
 
-[`board.md`](board.md) is the one live queue. It says what is current, what is next, and what Scot must decide. Each slice has one file in [`tasks/`](tasks/) ([template](tasks/_TEMPLATE.md)). The slices come from [`pipeline-convergence-plan.md`](../../domain-modeling/pipeline-convergence-plan.md) (decisions in [`pipeline-convergence-plan.decisions.md`](../../domain-modeling/pipeline-convergence-plan.decisions.md)). Open pull requests are the live in-flight state.
+The live queue is the sub-issues of [#305](https://github.com/scoizzle/Poly/issues/305); [`board.md`](board.md) is a pointer kept so old links resolve. A slice plan is a draft-PR body frozen by a pinned `PLAN |` comment; open pull requests are the live in-flight state. This directory is historical execution.
 
 ## Pipeline in brief
 

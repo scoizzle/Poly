@@ -47,19 +47,20 @@ public class CreateInitializerDateTimeOffsetTests {
     [Test]
     public async Task Login_ExpiresAtOffset_Succeeds() {
         var (domain, _) = Evolve();
+        var exec = ModuleExec.For(domain);
         var user = domain.Types.OfType<Entity>().Single(e => e.Name == "User");
-        var instance = DomainEntityInstance.Create(user, domain: domain);
+        var instance = exec.Create((user).Name, new Dictionary<string, object?>()).Instance!;
 
         var before = DateTime.UtcNow;
-        var result = instance.InvokeAction("Login");
+        var result = exec.Invoke(instance, "Login");
         var after = DateTime.UtcNow;
 
         await Assert.That(result.Succeeded).IsTrue();
-        var session = instance.CreatedChildren.Single();
-        await Assert.That(session.Entity.Name).IsEqualTo("Session");
-        await Assert.That(session.GetProperty<string>("Token")).IsEqualTo("t");
-        await Assert.That(session.GetProperty<object>("ExpiresAt")).IsTypeOf<DateTime>();
-        var expiresAt = session.GetProperty<DateTime>("ExpiresAt");
+        var session = result.CreatedChildren.Single();
+        await Assert.That(session.EntityName).IsEqualTo("Session");
+        await Assert.That((string)session.Bag["Token"]!).IsEqualTo("t");
+        await Assert.That(session.Bag["ExpiresAt"]).IsTypeOf<DateTime>();
+        var expiresAt = (DateTime)session.Bag["ExpiresAt"]!;
         await Assert.That(expiresAt).IsGreaterThanOrEqualTo(before.AddMinutes(30));
         await Assert.That(expiresAt).IsLessThanOrEqualTo(after.AddMinutes(30));
     }

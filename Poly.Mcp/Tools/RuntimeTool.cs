@@ -505,9 +505,9 @@ Use case — reassign a child from one parent to another:
 
     /// <summary>
     /// Returns a full snapshot of a runtime instance: current stage, all property values,
-    /// deletion status, and count of child instances created by effects.
+    /// and the number of children currently linked through owned relationships.
     /// </summary>
-    [McpServerTool(Name = "get_instance"), Description("Returns a snapshot of a runtime instance: current stage, property values, deletion status, and created-child count.")]
+    [McpServerTool(Name = "get_instance"), Description("Returns a snapshot of a runtime instance: current stage, property values, and the count of children linked through owned relationships.")]
     public DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
@@ -522,7 +522,7 @@ Use case — reassign a child from one parent to another:
                 SessionId: sessionId,
                 Affordances: ["create_instance", "list_instances"]);
 
-        var snapshot = BuildSnapshot(state, instance);
+        var snapshot = BuildSnapshot(state, instance, executor.OwnedChildCount(instance));
 
         // Navigation links come from the bag's relationship fields, per relationship.
         var navs = new List<NavigationLinkData>();

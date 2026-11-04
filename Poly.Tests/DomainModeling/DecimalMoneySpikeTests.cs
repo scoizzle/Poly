@@ -34,12 +34,13 @@ public class DecimalMoneySpikeTests {
     [Test]
     public async Task Create_DecimalRate_StoresValueAndRejectsPastRange() {
         var (domain, booking) = Evolve();
-        var stay = DomainEntityInstance.Create(booking, Bag(199.50m, 3L, 0m), domain);
-        await Assert.That(stay.GetProperty<decimal>("NightlyRate")).IsEqualTo(199.50m);
+        var exec = ModuleExec.For(domain);
+        var stay = exec.Create((booking).Name, Bag(199.50m, 3L, 0m)).Instance!;
+        await Assert.That((decimal)stay.Bag["NightlyRate"]!).IsEqualTo(199.50m);
 
-        var past = Assert.Throws<ConstraintFailureException>(() =>
-            DomainEntityInstance.Create(booking, Bag(10000.01m, 1L, 0m), domain));
-        await Assert.That(past!.Message).IsNotEmpty();
+        var past = exec.Create(booking.Name, Bag(10000.01m, 1L, 0m));
+        await Assert.That(past.Succeeded).IsFalse();
+        await Assert.That(past.Error).IsNotNull().And.IsNotEmpty();
     }
 
     [Test]
@@ -68,28 +69,31 @@ public class DecimalMoneySpikeTests {
     [Test]
     public async Task Arithmetic_NightlyRateTimesNights_IsExactDecimal() {
         var (domain, booking) = Evolve();
-        var stay = DomainEntityInstance.Create(booking, Bag(199.50m, 3L, 0m), domain);
-        var priced = stay.InvokeAction("Price");
+        var exec = ModuleExec.For(domain);
+        var stay = exec.Create((booking).Name, Bag(199.50m, 3L, 0m)).Instance!;
+        var priced = exec.Invoke(stay, "Price");
         await Assert.That(priced.Succeeded).IsTrue();
-        await Assert.That(stay.GetProperty<decimal>("Total")).IsEqualTo(598.50m);
+        await Assert.That((decimal)stay.Bag["Total"]!).IsEqualTo(598.50m);
     }
 
     [Test]
     public async Task Add_DecimalParameter_AddsToDecimalProperty() {
         var (domain, booking) = Evolve();
-        var stay = DomainEntityInstance.Create(booking, Bag(199.50m, 3L, 0m), domain);
-        var added = stay.InvokeAction("Add", new Dictionary<string, object?> { ["amount"] = 10m });
+        var exec = ModuleExec.For(domain);
+        var stay = exec.Create((booking).Name, Bag(199.50m, 3L, 0m)).Instance!;
+        var added = exec.Invoke(stay, "Add", new Dictionary<string, object?> { ["amount"] = 10m });
         await Assert.That(added.Succeeded).IsTrue();
-        await Assert.That(stay.GetProperty<decimal>("Total")).IsEqualTo(209.50m);
+        await Assert.That((decimal)stay.Bag["Total"]!).IsEqualTo(209.50m);
     }
 
     [Test]
     public async Task Assign_LongLiteral_StoresDecimalZero() {
         var (domain, booking) = Evolve();
-        var stay = DomainEntityInstance.Create(booking, Bag(199.50m, 3L, 199.50m), domain);
-        var cleared = stay.InvokeAction("Clear");
+        var exec = ModuleExec.For(domain);
+        var stay = exec.Create((booking).Name, Bag(199.50m, 3L, 199.50m)).Instance!;
+        var cleared = exec.Invoke(stay, "Clear");
         await Assert.That(cleared.Succeeded).IsTrue();
-        await Assert.That(stay.GetProperty<decimal>("Total")).IsEqualTo(0m);
+        await Assert.That((decimal)stay.Bag["Total"]!).IsEqualTo(0m);
     }
 
     private static Dictionary<string, object?> Bag(decimal rate, long nights, decimal total) =>

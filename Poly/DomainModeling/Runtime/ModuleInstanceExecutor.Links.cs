@@ -129,6 +129,28 @@ public sealed partial class ModuleInstanceExecutor {
         }
     }
 
+    /// <summary>
+    /// Distinct registered children linked to <paramref name="owner"/> through
+    /// relationships it owns. A child linked by two owned relationships counts once.
+    /// A non-owned link does not count, and neither does an inbound owned edge.
+    /// </summary>
+    public int OwnedChildCount(ModuleInstance owner) {
+        ArgumentNullException.ThrowIfNull(owner);
+        lock (_gate) {
+            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            var count = 0;
+            foreach (var contract in ContractsFrom(owner.EntityName)) {
+                if (!contract.SourceOwnsTarget)
+                    continue;
+                foreach (var item in ReadLinked(owner.Bag, contract)) {
+                    if (_byBag.ContainsKey(item) && seen.Add(item))
+                        count++;
+                }
+            }
+            return count;
+        }
+    }
+
     // ── contracts and fields ──────────────────────────────────────────────────
 
     private IEnumerable<RelationshipContract> ContractsFrom(string sourceEntityName) =>

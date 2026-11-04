@@ -84,200 +84,178 @@ public class HotelDogfoodTests {
     [Test]
     public async Task Hotel_Runtime_WalksStayFolioAndMeetingAirwall() {
         var (domain, _) = Evolve();
-        var store = new DomainInstanceStore();
+        var exec = ModuleExec.For(domain);
         Entity E(string n) => domain.Types.OfType<Entity>().First(t => t.Name == n);
 
-        var roomType = DomainEntityInstance.Create(E("RoomType"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Deluxe",
-                ["NightlyRate"] = 220m,
-                ["MaxOccupancy"] = 3L
-            }, domain);
-        var room = DomainEntityInstance.Create(E("Room"),
-            new Dictionary<string, object?> {
-                ["Number"] = "101",
-                ["Floor"] = 1L,
-                ["NightlyRate"] = 220m,
-                ["MaxOccupancy"] = 3L
-            }, domain);
-        var guest = DomainEntityInstance.Create(E("Guest"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Alice Chen",
-                ["Email"] = "alice@example.com",
-                ["Phone"] = "55501001234"
-            }, domain);
-        store.Add(roomType);
-        store.Add(room);
-        store.Add(guest);
-        store.Link("roomType", room, roomType);
+        var roomType = exec.Create("RoomType", new Dictionary<string, object?> {
+            ["Name"] = "Deluxe",
+            ["NightlyRate"] = 220m,
+            ["MaxOccupancy"] = 3L
+        }).Instance!;
+        var room = exec.Create("Room", new Dictionary<string, object?> {
+            ["Number"] = "101",
+            ["Floor"] = 1L,
+            ["NightlyRate"] = 220m,
+            ["MaxOccupancy"] = 3L
+        }).Instance!;
+        var guest = exec.Create("Guest", new Dictionary<string, object?> {
+            ["Name"] = "Alice Chen",
+            ["Email"] = "alice@example.com",
+            ["Phone"] = "55501001234"
+        }).Instance!;
+        exec.Link("roomType", room, roomType);
 
-        var blockedBook = guest.InvokeAction("BookStay");
+        var blockedBook = exec.Invoke(guest, "BookStay");
         await Assert.That(blockedBook.Succeeded).IsFalse();
 
-        var stay = guest.InvokeAction("BookStay",
-            new Dictionary<string, object?> {
-                ["room"] = room,
-                ["party"] = 2L,
-                ["nights"] = 2L,
-                ["arrive"] = new DateOnly(2026, 9, 10),
-                ["depart"] = new DateOnly(2026, 9, 12)
-            });
+        var stay = exec.Invoke(guest, "BookStay", new Dictionary<string, object?> {
+            ["room"] = room,
+            ["party"] = 2L,
+            ["nights"] = 2L,
+            ["arrive"] = new DateOnly(2026, 9, 10),
+            ["depart"] = new DateOnly(2026, 9, 12)
+        });
         await Assert.That(stay.Succeeded).IsTrue();
-        var reservation = stay.ResultInstance!;
-        await Assert.That(reservation.CurrentStage).IsEqualTo("Requested");
-        await Assert.That(reservation.GetProperty<object>("NightlyRate")).IsEqualTo(220m);
-        await Assert.That(guest.EvaluatePolicy(E("Guest").Policies.First(p => p.Name == "HasStays"))).IsTrue();
+        var reservation = stay.Instance!;
+        await Assert.That(ModuleReads.Stage(reservation)).IsEqualTo("Requested");
+        await Assert.That(reservation.Bag["NightlyRate"]).IsEqualTo(220m);
+        await Assert.That(exec.EvaluatePolicy(guest, (E("Guest").Policies.First(p => p.Name == "HasStays")).Name)).IsTrue();
 
-        var oversized = guest.InvokeAction("BookStay",
-            new Dictionary<string, object?> {
-                ["room"] = room,
-                ["party"] = 8L,
-                ["nights"] = 1L,
-                ["arrive"] = new DateOnly(2026, 9, 15),
-                ["depart"] = new DateOnly(2026, 9, 16)
-            });
+        var oversized = exec.Invoke(guest, "BookStay", new Dictionary<string, object?> {
+            ["room"] = room,
+            ["party"] = 8L,
+            ["nights"] = 1L,
+            ["arrive"] = new DateOnly(2026, 9, 15),
+            ["depart"] = new DateOnly(2026, 9, 16)
+        });
         await Assert.That(oversized.Succeeded).IsTrue();
-        var tooBig = oversized.ResultInstance!;
-        var confirmTooBig = tooBig.InvokeAction("Confirm");
+        var tooBig = oversized.Instance!;
+        var confirmTooBig = exec.Invoke(tooBig, "Confirm");
         await Assert.That(confirmTooBig.Succeeded).IsFalse();
-        await Assert.That(confirmTooBig.FailedGuards).Contains("PartyFits");
+        await Assert.That(confirmTooBig.Error).Contains("PartyFits");
 
-        await Assert.That(reservation.InvokeAction("Confirm").Succeeded).IsTrue();
-        await Assert.That(reservation.CurrentStage).IsEqualTo("Confirmed");
-        await Assert.That(reservation.InvokeAction("CheckIn").Succeeded).IsTrue();
-        await Assert.That(reservation.CurrentStage).IsEqualTo("InHouse");
-        await Assert.That(room.GetProperty<bool>("Occupied")).IsTrue();
+        await Assert.That(exec.Invoke(reservation, "Confirm").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(reservation)).IsEqualTo("Confirmed");
+        await Assert.That(exec.Invoke(reservation, "CheckIn").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(reservation)).IsEqualTo("InHouse");
+        await Assert.That((bool)room.Bag["Occupied"]!).IsTrue();
 
-        var offlineBusy = room.InvokeAction("TakeOutOfService");
+        var offlineBusy = exec.Invoke(room, "TakeOutOfService");
         await Assert.That(offlineBusy.Succeeded).IsFalse();
-        await Assert.That(offlineBusy.FailedGuards).Contains("IsVacant");
+        await Assert.That(offlineBusy.Error).Contains("IsVacant");
 
-        await Assert.That(reservation.InvokeAction("PostStayCharge").Succeeded).IsTrue();
-        var folio = store.GetRelatedInstances("folio", reservation).Single();
-        await Assert.That(folio.GetProperty<object>("Balance")).IsEqualTo(220m);
+        await Assert.That(exec.Invoke(reservation, "PostStayCharge").Succeeded).IsTrue();
+        var folio = ModuleReads.Related(exec, "folio", reservation).Single();
+        await Assert.That(folio.Bag["Balance"]).IsEqualTo(220m);
 
-        var unpaid = reservation.InvokeAction("CheckOut");
+        var unpaid = exec.Invoke(reservation, "CheckOut");
         await Assert.That(unpaid.Succeeded).IsFalse();
-        await Assert.That(unpaid.FailedGuards).Contains("BillSettled");
+        await Assert.That(unpaid.Error).Contains("BillSettled");
 
-        await Assert.That(folio.InvokeAction("Settle").Succeeded).IsTrue();
-        await Assert.That(reservation.InvokeAction("CheckOut").Succeeded).IsTrue();
-        await Assert.That(reservation.CurrentStage).IsEqualTo("Departed");
-        await Assert.That(room.GetProperty<bool>("Occupied")).IsFalse();
-        await Assert.That(room.GetProperty<bool>("Dirty")).IsTrue();
-        await Assert.That(guest.GetProperty<object>("StayCount")).IsEqualTo(1L);
-        await Assert.That(guest.GetProperty<object>("NightCount")).IsEqualTo(2L);
-        await Assert.That(room.EvaluatePolicy(E("Room").Policies.First(p => p.Name == "IsReady"))).IsFalse();
-        await Assert.That(room.InvokeAction("Inspect").Succeeded).IsTrue();
-        await Assert.That(room.EvaluatePolicy(E("Room").Policies.First(p => p.Name == "IsReady"))).IsTrue();
+        await Assert.That(exec.Invoke(folio, "Settle").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(reservation, "CheckOut").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(reservation)).IsEqualTo("Departed");
+        await Assert.That((bool)room.Bag["Occupied"]!).IsFalse();
+        await Assert.That((bool)room.Bag["Dirty"]!).IsTrue();
+        await Assert.That(guest.Bag["StayCount"]).IsEqualTo(1L);
+        await Assert.That(guest.Bag["NightCount"]).IsEqualTo(2L);
+        await Assert.That(exec.EvaluatePolicy(room, (E("Room").Policies.First(p => p.Name == "IsReady")).Name)).IsFalse();
+        await Assert.That(exec.Invoke(room, "Inspect").Succeeded).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(room, (E("Room").Policies.First(p => p.Name == "IsReady")).Name)).IsTrue();
 
-        var bob = DomainEntityInstance.Create(E("Guest"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Bob Ruiz",
-                ["Email"] = "bob@example.com",
-                ["Phone"] = "55501998877"
-            }, domain);
-        store.Add(bob);
-        await Assert.That(bob.InvokeAction("Block").Succeeded).IsTrue();
-        var blockedStay = bob.InvokeAction("BookStay",
-            new Dictionary<string, object?> {
-                ["room"] = room,
-                ["party"] = 1L,
-                ["nights"] = 1L,
-                ["arrive"] = new DateOnly(2026, 9, 20),
-                ["depart"] = new DateOnly(2026, 9, 21)
-            });
+        var bob = exec.Create("Guest", new Dictionary<string, object?> {
+            ["Name"] = "Bob Ruiz",
+            ["Email"] = "bob@example.com",
+            ["Phone"] = "55501998877"
+        }).Instance!;
+        await Assert.That(exec.Invoke(bob, "Block").Succeeded).IsTrue();
+        var blockedStay = exec.Invoke(bob, "BookStay", new Dictionary<string, object?> {
+            ["room"] = room,
+            ["party"] = 1L,
+            ["nights"] = 1L,
+            ["arrive"] = new DateOnly(2026, 9, 20),
+            ["depart"] = new DateOnly(2026, 9, 21)
+        });
         await Assert.That(blockedStay.Succeeded).IsFalse();
 
-        var property = DomainEntityInstance.Create(E("Property"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Harbor Inn",
-                ["City"] = "Seattle"
-            }, domain);
-        store.Add(property);
-        var addHall = property.InvokeAction("AddHall",
-            new Dictionary<string, object?> {
-                ["name"] = "Grand Ballroom",
-                ["seats"] = 300L,
-                ["rate"] = 4000L
-            });
+        var property = exec.Create("Property", new Dictionary<string, object?> {
+            ["Name"] = "Harbor Inn",
+            ["City"] = "Seattle"
+        }).Instance!;
+        var addHall = exec.Invoke(property, "AddHall", new Dictionary<string, object?> {
+            ["name"] = "Grand Ballroom",
+            ["seats"] = 300L,
+            ["rate"] = 4000L
+        });
         await Assert.That(addHall.Succeeded).IsTrue();
-        var hall = addHall.ResultInstance!;
-        await Assert.That(property.EvaluatePolicy(E("Property").Policies.First(p => p.Name == "HasHalls"))).IsTrue();
+        var hall = addHall.Instance!;
+        await Assert.That(exec.EvaluatePolicy(property, (E("Property").Policies.First(p => p.Name == "HasHalls")).Name)).IsTrue();
 
-        var salonA = DomainEntityInstance.Create(E("Section"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Salon A",
-                ["Capacity"] = 100L,
-                ["DayRate"] = 1500m,
-            }, domain);
-        var salonB = DomainEntityInstance.Create(E("Section"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Salon B",
-                ["Capacity"] = 100L,
-                ["DayRate"] = 1500m,
-            }, domain);
-        var salonC = DomainEntityInstance.Create(E("Section"),
-            new Dictionary<string, object?> {
-                ["Name"] = "Salon C",
-                ["Capacity"] = 100L,
-                ["DayRate"] = 1500m,
-            }, domain);
-        store.Add(salonA);
-        store.Add(salonB);
-        store.Add(salonC);
-        store.Link("sections", hall, salonA);
-        store.Link("hall", salonA, hall);
-        store.Link("sections", hall, salonB);
-        store.Link("hall", salonB, hall);
-        store.Link("sections", hall, salonC);
-        store.Link("hall", salonC, hall);
+        var salonA = exec.Create("Section", new Dictionary<string, object?> {
+            ["Name"] = "Salon A",
+            ["Capacity"] = 100L,
+            ["DayRate"] = 1500m,
+        }).Instance!;
+        var salonB = exec.Create("Section", new Dictionary<string, object?> {
+            ["Name"] = "Salon B",
+            ["Capacity"] = 100L,
+            ["DayRate"] = 1500m,
+        }).Instance!;
+        var salonC = exec.Create("Section", new Dictionary<string, object?> {
+            ["Name"] = "Salon C",
+            ["Capacity"] = 100L,
+            ["DayRate"] = 1500m,
+        }).Instance!;
+        exec.Link("sections", hall, salonA);
+        exec.Link("hall", salonA, hall);
+        exec.Link("sections", hall, salonB);
+        exec.Link("hall", salonB, hall);
+        exec.Link("sections", hall, salonC);
+        exec.Link("hall", salonC, hall);
 
-        var sectionHold = guest.InvokeAction("BookSection",
-            new Dictionary<string, object?> {
-                ["section"] = salonA,
-                ["hall"] = hall,
-                ["party"] = 80L,
-                ["arrive"] = new DateOnly(2026, 9, 20),
-                ["depart"] = new DateOnly(2026, 9, 21)
-            });
+        var sectionHold = exec.Invoke(guest, "BookSection", new Dictionary<string, object?> {
+            ["section"] = salonA,
+            ["hall"] = hall,
+            ["party"] = 80L,
+            ["arrive"] = new DateOnly(2026, 9, 20),
+            ["depart"] = new DateOnly(2026, 9, 21)
+        });
         await Assert.That(sectionHold.Succeeded).IsTrue();
-        var holdA = sectionHold.ResultInstance!;
-        await Assert.That(holdA.InvokeAction("Confirm").Succeeded).IsTrue();
-        var startAsWhole = holdA.InvokeAction("StartHall");
+        var holdA = sectionHold.Instance!;
+        await Assert.That(exec.Invoke(holdA, "Confirm").Succeeded).IsTrue();
+        var startAsWhole = exec.Invoke(holdA, "StartHall");
         await Assert.That(startAsWhole.Succeeded).IsFalse();
         await Assert.That(startAsWhole.FailedGuards).Contains("not_HasSection");
-        await Assert.That(holdA.InvokeAction("StartSection").Succeeded).IsTrue();
-        await Assert.That(salonA.GetProperty<bool>("Occupied")).IsTrue();
-        await Assert.That(hall.GetProperty<object>("BusySections")).IsEqualTo(1L);
-        await Assert.That(hall.EvaluatePolicy(E("Hall").Policies.First(p => p.Name == "CanBook"))).IsFalse();
+        await Assert.That(exec.Invoke(holdA, "StartSection").Succeeded).IsTrue();
+        await Assert.That((bool)salonA.Bag["Occupied"]!).IsTrue();
+        await Assert.That(hall.Bag["BusySections"]).IsEqualTo(1L);
+        await Assert.That(exec.EvaluatePolicy(hall, (E("Hall").Policies.First(p => p.Name == "CanBook")).Name)).IsFalse();
 
-        await Assert.That(salonB.InvokeAction("Occupy").Succeeded).IsTrue();
-        await Assert.That(hall.GetProperty<object>("BusySections")).IsEqualTo(2L);
+        await Assert.That(exec.Invoke(salonB, "Occupy").Succeeded).IsTrue();
+        await Assert.That(hall.Bag["BusySections"]).IsEqualTo(2L);
 
-        var wholeHold = guest.InvokeAction("BookHall",
-            new Dictionary<string, object?> {
-                ["hall"] = hall,
-                ["party"] = 250L,
-                ["arrive"] = new DateOnly(2026, 9, 22),
-                ["depart"] = new DateOnly(2026, 9, 23)
-            });
+        var wholeHold = exec.Invoke(guest, "BookHall", new Dictionary<string, object?> {
+            ["hall"] = hall,
+            ["party"] = 250L,
+            ["arrive"] = new DateOnly(2026, 9, 22),
+            ["depart"] = new DateOnly(2026, 9, 23)
+        });
         await Assert.That(wholeHold.Succeeded).IsTrue();
-        var holdHall = wholeHold.ResultInstance!;
-        await Assert.That(holdHall.InvokeAction("Confirm").Succeeded).IsTrue();
-        var startBusy = holdHall.InvokeAction("StartHall");
+        var holdHall = wholeHold.Instance!;
+        await Assert.That(exec.Invoke(holdHall, "Confirm").Succeeded).IsTrue();
+        var startBusy = exec.Invoke(holdHall, "StartHall");
         await Assert.That(startBusy.Succeeded).IsFalse();
-        await Assert.That(startBusy.ErrorMessage).Contains("CanBook");
+        await Assert.That(startBusy.Error).Contains("CanBook");
 
-        await Assert.That(holdA.InvokeAction("ReleaseSection").Succeeded).IsTrue();
-        await Assert.That(salonB.InvokeAction("Vacate").Succeeded).IsTrue();
-        await Assert.That(hall.GetProperty<object>("BusySections")).IsEqualTo(0L);
-        await Assert.That(guest.GetProperty<object>("EventCount")).IsEqualTo(1L);
+        await Assert.That(exec.Invoke(holdA, "ReleaseSection").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(salonB, "Vacate").Succeeded).IsTrue();
+        await Assert.That(hall.Bag["BusySections"]).IsEqualTo(0L);
+        await Assert.That(guest.Bag["EventCount"]).IsEqualTo(1L);
 
-        await Assert.That(holdHall.InvokeAction("StartHall").Succeeded).IsTrue();
-        await Assert.That(hall.GetProperty<bool>("Occupied")).IsTrue();
-        var occupyC = salonC.InvokeAction("Occupy");
+        await Assert.That(exec.Invoke(holdHall, "StartHall").Succeeded).IsTrue();
+        await Assert.That((bool)hall.Bag["Occupied"]!).IsTrue();
+        var occupyC = exec.Invoke(salonC, "Occupy");
         await Assert.That(occupyC.Succeeded).IsFalse();
-        await Assert.That(occupyC.FailedGuards).Contains("ParentFree");
+        await Assert.That(occupyC.Error).Contains("ParentFree");
     }
 }

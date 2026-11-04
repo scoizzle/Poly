@@ -35,10 +35,11 @@ public class ClockLoweringTests {
     public async Task Assign_DateToNowIr_StoresDateOnly() {
         var (entity, _) = DateAssignAction(new Now());
         var domain = ValidDomain.Create("Clocks", [entity], extensions: [ExtensionCatalog.TemporalId]);
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
-        var result = instance.InvokeAction("Touch");
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(instance, "Touch");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<object>("Due")).IsTypeOf<DateOnly>();
+        await Assert.That(instance.Bag["Due"]).IsTypeOf<DateOnly>();
     }
 
     [Test]
@@ -69,16 +70,13 @@ public class ClockLoweringTests {
             new DomainTypeReference("Lot"), new DomainTypeReference("Permit"),
             RelationshipCardinality.OneToMany, []);
         var domain = ValidDomain.Create("Parking", [permit, lot], [rel], extensions: [ExtensionCatalog.TemporalId]);
-        var store = new DomainInstanceStore();
-        var instance = DomainEntityInstance.Create(lot, domain: domain);
-        store.Add(instance);
-
-        var result = instance.InvokeAction("Issue",
-            new Dictionary<string, object?> { ["plate"] = "ABC123" });
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((lot).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(instance, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        var child = instance.CreatedChildren.Single();
-        await Assert.That(child.GetProperty<object>("Issued")).IsTypeOf<DateOnly>();
-        await Assert.That(child.GetProperty<string>("Plate")).IsEqualTo("ABC123");
+        var child = result.CreatedChildren.Single();
+        await Assert.That(child.Bag["Issued"]).IsTypeOf<DateOnly>();
+        await Assert.That((string)child.Bag["Plate"]!).IsEqualTo("ABC123");
     }
 
     [Test]
@@ -94,11 +92,12 @@ public class ClockLoweringTests {
         await Assert.That(assign.Value is Constant).IsFalse();
 
         var domain = ValidDomain.Create("Ids", [entity]);
-        var instance = DomainEntityInstance.Create(entity, domain: domain);
-        var result = instance.InvokeAction("Stamp");
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        var result = exec.Invoke(instance, "Stamp");
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(instance.GetProperty<object>("ExternalId")).IsTypeOf<string>();
-        await Assert.That(Guid.TryParse(instance.GetProperty<string>("ExternalId"), out _)).IsTrue();
+        await Assert.That(instance.Bag["ExternalId"]).IsTypeOf<string>();
+        await Assert.That(Guid.TryParse((string)instance.Bag["ExternalId"]!, out _)).IsTrue();
     }
 
     private static (Entity Entity, Poly.DomainModeling.Ontology.Action Action) DateAssignAction(

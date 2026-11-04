@@ -423,6 +423,7 @@ public class SubscriptionAnalysisTests {
             RelationshipCardinality.OneToOne, []);
 
         var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
+        var exec = ModuleExec.For(domain);
 
         // Verify analysis is clean
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -430,17 +431,14 @@ public class SubscriptionAnalysisTests {
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
 
         // Create instances
-        var store = new DomainInstanceStore();
-        var orderInstance = DomainEntityInstance.Create(order, domain: domain);
-        var trackerInstance = DomainEntityInstance.Create(tracker, domain: domain);
-        store.Add(orderInstance);
-        store.Add(trackerInstance);
-        store.Link("Tracks", trackerInstance, orderInstance);
+        var orderInstance = exec.Create((order).Name, new Dictionary<string, object?>()).Instance!;
+        var trackerInstance = exec.Create((tracker).Name, new Dictionary<string, object?>()).Instance!;
+        exec.Link("Tracks", trackerInstance, orderInstance);
 
         // Order starts in Draft, then Activate → StageTransition → Active
-        orderInstance.InvokeAction("Activate");
+        exec.Invoke(orderInstance, "Activate");
 
-        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Triggered");
+        await Assert.That((string)trackerInstance.Bag["Status"]!).IsEqualTo("Triggered");
     }
 
     [Test]
@@ -476,21 +474,18 @@ public class SubscriptionAnalysisTests {
             RelationshipCardinality.OneToOne, []);
 
         var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
+        var exec = ModuleExec.For(domain);
 
-        var store = new DomainInstanceStore();
-        var orderInstance = DomainEntityInstance.Create(order, domain: domain);
+        var orderInstance = exec.Create((order).Name, new Dictionary<string, object?>()).Instance!;
         // Tracker starts in "Idle" — NOT "Pending" (the stage that has the subscription)
-        var trackerInstance = DomainEntityInstance.Create(tracker,
-            new Dictionary<string, object?> { ["Status"] = "Untouched" }, domain: domain);
-        store.Add(orderInstance);
-        store.Add(trackerInstance);
+        var trackerInstance = exec.Create((tracker).Name, new Dictionary<string, object?> { ["Status"] = "Untouched" }).Instance!;
         // Link present so the only reason subscription must not fire is wrong stage
-        store.Link("Tracks", trackerInstance, orderInstance);
+        exec.Link("Tracks", trackerInstance, orderInstance);
 
         // Tracker is in Idle — subscription is on Pending, should NOT fire
-        orderInstance.InvokeAction("Activate");
+        exec.Invoke(orderInstance, "Activate");
 
-        await Assert.That(trackerInstance.GetProperty<string>("Status")).IsEqualTo("Untouched");
+        await Assert.That((string)trackerInstance.Bag["Status"]!).IsEqualTo("Untouched");
     }
 
     [Test]

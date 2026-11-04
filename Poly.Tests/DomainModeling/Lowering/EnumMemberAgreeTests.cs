@@ -19,25 +19,21 @@ public class EnumMemberAgreeTests {
               IsActive: policy { Status is "Active" }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
         var policy = entity.Policies.First(p => p.Name == "IsActive");
-        var store = new DomainInstanceStore();
-        var active = DomainEntityInstance.Create(entity, domain: domain);
-        var suspended = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "Suspended" }, domain);
-        store.Add(active);
-        store.Add(suspended);
-
+        var active = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        var suspended = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "Suspended" }).Instance!;
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedActive = ExportedCSharp.CreateEntity(asm, "Patron");
         var printedSuspended = ExportedCSharp.CreateEntity(asm, "Patron",
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
 
-        await Assert.That(active.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(active, (policy).Name)).IsTrue();
         await Assert.That((bool)printedActive.GetType().GetMethod("IsActive")!.Invoke(printedActive, null)!)
             .IsTrue();
-        await Assert.That(suspended.EvaluatePolicy(policy)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(suspended, (policy).Name)).IsFalse();
         await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive")!.Invoke(printedSuspended, null)!)
             .IsFalse();
     }
@@ -52,25 +48,21 @@ public class EnumMemberAgreeTests {
               IsActive: policy { Status is Active }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
         var policy = entity.Policies.First(p => p.Name == "IsActive");
-        var store = new DomainInstanceStore();
-        var active = DomainEntityInstance.Create(entity, domain: domain);
-        var suspended = DomainEntityInstance.Create(entity,
-            new Dictionary<string, object?> { ["Status"] = "Suspended" }, domain);
-        store.Add(active);
-        store.Add(suspended);
-
+        var active = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        var suspended = exec.Create((entity).Name, new Dictionary<string, object?> { ["Status"] = "Suspended" }).Instance!;
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedActive = ExportedCSharp.CreateEntity(asm, "Patron");
         var printedSuspended = ExportedCSharp.CreateEntity(asm, "Patron",
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
 
-        await Assert.That(active.EvaluatePolicy(policy)).IsTrue();
+        await Assert.That(exec.EvaluatePolicy(active, (policy).Name)).IsTrue();
         await Assert.That((bool)printedActive.GetType().GetMethod("IsActive")!.Invoke(printedActive, null)!)
             .IsTrue();
-        await Assert.That(suspended.EvaluatePolicy(policy)).IsFalse();
+        await Assert.That(exec.EvaluatePolicy(suspended, (policy).Name)).IsFalse();
         await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive")!.Invoke(printedSuspended, null)!)
             .IsFalse();
     }
@@ -87,14 +79,11 @@ public class EnumMemberAgreeTests {
               }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var store = new DomainInstanceStore();
-        var patron = DomainEntityInstance.Create(entity, domain: domain);
-        store.Add(patron);
-
-        await Assert.That(patron.InvokeAction("SetStatus",
-            new Dictionary<string, object?> { ["status"] = "Suspended" }).Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Status")).IsEqualTo("Suspended");
+        var patron = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(patron, "SetStatus", new Dictionary<string, object?> { ["status"] = "Suspended" }).Succeeded).IsTrue();
+        await Assert.That((string)patron.Bag["Status"]!).IsEqualTo("Suspended");
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -117,13 +106,11 @@ public class EnumMemberAgreeTests {
               Suspend: action { assign Status to Suspended }
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");
-        var store = new DomainInstanceStore();
-        var patron = DomainEntityInstance.Create(entity, domain: domain);
-        store.Add(patron);
-
-        await Assert.That(patron.InvokeAction("Suspend").Succeeded).IsTrue();
-        await Assert.That(patron.GetProperty<string>("Status")).IsEqualTo("Suspended");
+        var patron = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(patron, "Suspend").Succeeded).IsTrue();
+        await Assert.That((string)patron.Bag["Status"]!).IsEqualTo("Suspended");
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
@@ -146,14 +133,12 @@ public class EnumMemberAgreeTests {
               Placed: stage {}
             }
             """);
+        var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Item");
-        var store = new DomainInstanceStore();
-        var item = DomainEntityInstance.Create(entity, domain: domain);
-        store.Add(item);
-
-        await Assert.That(item.InvokeAction("Submit").Succeeded).IsTrue();
-        await Assert.That(item.CurrentStage).IsEqualTo("Placed");
-        await Assert.That(item.GetProperty<long>("Count")).IsEqualTo(1L);
+        var item = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(item, "Submit").Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Stage(item)).IsEqualTo("Placed");
+        await Assert.That((long)item.Bag["Count"]!).IsEqualTo(1L);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));

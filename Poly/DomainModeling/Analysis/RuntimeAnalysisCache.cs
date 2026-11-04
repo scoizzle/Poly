@@ -64,14 +64,15 @@ internal static class RuntimeAnalysisCache {
         var holder = Cache.GetValue(domain, _ => new Holder { Session = session });
         lock (holder) {
             var sessionChanged = !ReferenceEquals(holder.Session, session);
-            var analysisChanged = analysis is not null && !ReferenceEquals(holder.Analysis, analysis);
             holder.Session = session;
             // A new session without an analysis must not keep the old session's analysis.
             if (analysis is not null)
                 holder.Analysis = analysis;
             else if (sessionChanged)
                 holder.Analysis = null;
-            if (sessionChanged || analysisChanged) {
+            // A second Analyze on the same session must not drop the module the
+            // executor is running. Only a different compilation (session) invalidates it.
+            if (sessionChanged) {
                 holder.Module = null;
                 holder.Index = null;
                 holder.SubscriptionBodies = null;
@@ -221,11 +222,46 @@ internal static class RuntimeAnalysisCache {
         ArgumentException.ThrowIfNullOrEmpty(targetStageName);
         body = null;
         var holder = GetHolder(domain);
-        if (holder.SubscriptionBodies is null
-            || !holder.SubscriptionBodies.TryGetValue(entry, out var byStage)
-            || byStage.Count == 0)
+        if (holder.SubscriptionBodies is null)
             return false;
+        if (!holder.SubscriptionBodies.TryGetValue(entry, out var byStage) || byStage.Count == 0) {
+            // A second Analyze on the same session publishes new entry instances.
+            // The cache stays keyed by the entries from the lower that built the
+            // module. Match that one plan by signature so the handler is not
+            // replaced with a missing-body throw.
+            byStage = null;
+            Dictionary<string, Node>? only = null;
+            var matches = 0;
+            foreach (var pair in holder.SubscriptionBodies) {
+                if (!SameSubscription(pair.Key, entry))
+                    continue;
+                matches++;
+                only = pair.Value;
+            }
+            if (matches != 1 || only is null || only.Count == 0)
+                return false;
+            byStage = only;
+        }
         return byStage.TryGetValue(targetStageName, out body) && body is not null;
+    }
+
+    private static bool SameSubscription(
+        SubscriptionDispatchPlanEntry cached, SubscriptionDispatchPlanEntry lookup) =>
+        string.Equals(cached.RelationshipName, lookup.RelationshipName, StringComparison.Ordinal)
+        && string.Equals(cached.SourceEntityName, lookup.SourceEntityName, StringComparison.Ordinal)
+        && string.Equals(cached.TargetEntityName, lookup.TargetEntityName, StringComparison.Ordinal)
+        && cached.Quantifier == lookup.Quantifier
+        && string.Equals(cached.PeerBinding, lookup.PeerBinding, StringComparison.Ordinal)
+        && SameStages(cached.StageNames, lookup.StageNames);
+
+    private static bool SameStages(IReadOnlySet<string> cached, IReadOnlySet<string> lookup) {
+        if (cached.Count != lookup.Count)
+            return false;
+        foreach (var name in cached) {
+            if (!lookup.Contains(name))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>

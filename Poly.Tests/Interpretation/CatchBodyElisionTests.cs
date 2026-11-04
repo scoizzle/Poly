@@ -51,7 +51,7 @@ public class CatchBodyElisionTests {
     [Test]
     public async Task Try_WithInvoke_CatchBodyIsReachable() {
         var (program, catchBody) = Build(new Block(
-            new Invoke(new Member(new ClrTypeReference(typeof(string)), "Concat"), Wrap("a"), Wrap("b"))));
+            new Invoke(new Lambda([], Wrap(1)))));
 
         var analysis = Analyze(program);
 
@@ -98,5 +98,77 @@ public class CatchBodyElisionTests {
 
         await Assert.That(analysis.CanElide(catchBody)).IsTrue()
             .Because("a lambda body throws when it is called, not in the try that creates it");
+    }
+
+    [Test]
+    public async Task Try_WithThrowExpressionOfAVariable_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(
+            new Assignment(new Variable("x"), new ThrowExpression(new Variable("ex")))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("a throw expression raises even when its payload is a variable, not a new exception");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
+
+    [Test]
+    public async Task Try_WithUsingStatement_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(
+            new UsingStatement(new Variable("resource"), Wrap(0L))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("Dispose runs in a finally and can raise into the enclosing catch");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
+
+    [Test]
+    public async Task Try_WithArrayCreation_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(
+            new NewArray(TypeReference.To<int>(), new Variable("n"))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("a negative length raises OverflowException from the allocation");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
+
+    [Test]
+    public async Task Try_WithDecimalArithmetic_KeepsCatchReachable() {
+        var d = new Variable("d");
+        var (program, catchBody) = Build(new Block(
+            new Assignment(d, new Add(new Constant(1m), new Constant(2m)))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("decimal addition throws OverflowException where the integer operator wraps");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
+
+    [Test]
+    public async Task Try_WithIntegerArithmetic_StillElidesCatch() {
+        var n = new Variable("n");
+        var (program, catchBody) = Build(new Block(
+            new Assignment(n, new Add(new Constant(1), new Constant(2)))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsTrue()
+            .Because("integer addition wraps and cannot raise, so the optimization still applies");
+    }
+
+    [Test]
+    public async Task Try_WithMemberOnly_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(
+            new Member(new Variable("holder"), "Length")));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("a member read on a null receiver raises");
     }
 }

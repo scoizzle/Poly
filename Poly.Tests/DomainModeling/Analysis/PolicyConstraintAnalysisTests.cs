@@ -312,6 +312,41 @@ public class PolicyConstraintAnalysisTests {
     }
 
     [Test]
+    public async Task Quantifier_Any_EnumMemberComparison_IsNotMissingProperty() {
+        var result = Parse("""
+            domain Test
+            State: enum { Open, Closed }
+            Ticket: entity {
+              Status: State
+            }
+            Queue: entity {
+              tickets: many Ticket
+              HasOpen: policy { any tickets where Status is Open }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsTrue();
+        var messages = string.Join("\n", result.Analysis.Diagnostics.Select(d => d.Message));
+        await Assert.That(messages).DoesNotContain("does not exist");
+    }
+
+    [Test]
+    public async Task Quantifier_Any_NonMemberComparison_StillFailsEvolution() {
+        var result = Parse("""
+            domain Test
+            State: enum { Open, Closed }
+            Ticket: entity {
+              Status: State
+            }
+            Queue: entity {
+              tickets: many Ticket
+              HasOpen: policy { any tickets where Status is Nope }
+            }
+            """);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailureSummary!).Contains("Nope");
+    }
+
+    [Test]
     public async Task Quantifier_Any_OnOneToOne_FailsEvolution() {
         var start = DomainFactory.Create("Test", builder =>
             builder.AddEntity("Target")

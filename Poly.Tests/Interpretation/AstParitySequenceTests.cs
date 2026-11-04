@@ -21,16 +21,6 @@ public class AstParitySequenceTests {
             Finding: "the writer drops the leading statements of a multi-statement block used as a catch "
                 + "body: the printed catch is `{ acc = 41; }` and `caught = 1` is absent, so the finally "
                 + "and the fold after it see a flag the VM set and the printed side never did"),
-        new(
-            Where: "IntOverflow_OrderChangesResult",
-            Vm: ParityDisposal.Executed,
-            VmOutcome: "long:-2147483648",
-            Printed: ParityDisposal.Executed,
-            PrintedOutcomePrefix: "long:-2147483647",
-            Finding: "integer division whose right operand is a bare Constant node is computed in IEEE and "
-                + "floored: -2147483647 / 2 gives -1073741824 instead of -1073741823. The same expression "
-                + "with a Variable divisor agrees, and the divergence is shape-sensitive, so it is the "
-                + "operand's slot classification rather than the operator"),
     ];
 
     /// <summary>
@@ -138,44 +128,6 @@ public class AstParitySequenceTests {
         var first = AstParitySequence.FirstDivergence(sequence);
         await Assert.That(first is null).IsEqualTo(whole.Agrees)
             .Because($"{sequence.Label}: the prefix walk and the whole-program run disagree about whether the sequence diverges");
-    }
-
-    /// <summary>
-    /// Pin 2's attribution, made executable: swapping only the divisor's node kind — a <c>Constant</c>
-    /// versus a <c>Variable</c> holding the same 2 — decides whether the two sides agree. If the defect
-    /// is fixed this fails, which is the signal to delete that pin and this control together.
-    /// </summary>
-    [Test]
-    public async Task ConstantDivisor_IsWhatMakesIntegerDivisionDiverge() {
-        static AstParitySequence.SequenceCase Build(bool constantDivisor) {
-            var acc = new Variable("acc");
-            var x = new Variable("x");
-            var b = new Variable("b");
-            var divisor = constantDivisor ? (Node)Wrap(2) : b;
-            Variable[] variables = constantDivisor ? [acc, x] : [acc, x, b];
-            List<Node> seed = [new Assignment(acc, Wrap(0)), new Assignment(x, Wrap(-2147483647))];
-            if (!constantDivisor)
-                seed.Add(new Assignment(b, Wrap(2)));
-            return new($"ConstantDivisor={constantDivisor}", [
-                new("seed", new Block(seed)),
-                new("halve", new Assignment(acc, new Divide(x, divisor))),
-            ], variables, acc);
-        }
-
-        var withVariable = AstParitySequence.Compare(Build(false));
-        var withConstant = AstParitySequence.Compare(Build(true));
-
-        await Assert.That(withVariable.Vm).IsEqualTo(ParityDisposal.Executed).Because(withVariable.Describe());
-        await Assert.That(withVariable.Printed).IsEqualTo(ParityDisposal.Executed).Because(withVariable.Describe());
-        await Assert.That(withConstant.Vm).IsEqualTo(ParityDisposal.Executed).Because(withConstant.Describe());
-        await Assert.That(withConstant.Printed).IsEqualTo(ParityDisposal.Executed).Because(withConstant.Describe());
-
-        await Assert.That(withVariable.Agrees).IsTrue()
-            .Because($"a Variable divisor agrees: {withVariable.Describe()}");
-        await Assert.That(withConstant.Agrees).IsFalse()
-            .Because("the constant-divisor divergence is gone; delete its pin in PinnedDivergences and this control");
-        await Assert.That(withConstant.VmOutcome).IsEqualTo("long:-1073741824");
-        await Assert.That(withConstant.PrintedOutcome).IsEqualTo("long:-1073741823");
     }
 
     // ── The cases ───────────────────────────────────────────────

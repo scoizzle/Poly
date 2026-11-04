@@ -343,8 +343,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     private Node? SimplifyDivision(AnalysisContext context, Divide divide) {
         if (IsOne(context, divide.RightHandValue))
             return divide.LeftHandValue;
-        // x / 2^n → shift right by n (integer operands only)
-        if (IsIntegerOperand(context, divide.LeftHandValue)) {
+        // x / 2^n → shift right by n. Only for an unsigned dividend: a signed x >> n floors toward
+        // negative infinity while x / 2^n truncates toward zero, so -7 / 2 is -3 but -7 >> 1 is -4.
+        if (IsUnsignedOperand(context, divide.LeftHandValue)) {
             var divRightVal = GetConstantValue(context, divide.RightHandValue);
             if (divRightVal.HasValue && ToLong(divRightVal.Value) is long dr && IsPowerOf2(dr))
                 return new ShiftRight(divide.LeftHandValue, new Constant((int)double.Log2(dr)));
@@ -354,8 +355,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private Node? SimplifyModulo(AnalysisContext context, Modulo mod) {
         // x % 2^n → bitwise and with (2^n - 1); the mask must match the
-        // left operand's integer type so the emitted And is type-correct.
-        if (!IsIntegerOperand(context, mod.LeftHandValue))
+        // left operand's unsigned type so the emitted And is type-correct.
+        // Unsigned only, for the same reason as division: -7 % 2 is -1, and -7 & 1 is 1.
+        if (!IsUnsignedOperand(context, mod.LeftHandValue))
             return null;
 
         var modRightVal = GetConstantValue(context, mod.RightHandValue);
@@ -369,15 +371,21 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
         context.GetResolvedType(node)?.PrimitiveType is { } primitive && primitive.IsInteger();
 
+    /// <summary>
+    /// True only for an unsigned integral operand. <c>x &gt;&gt; n</c> and <c>x &amp; (2^n - 1)</c> equal
+    /// <c>x / 2^n</c> and <c>x % 2^n</c> for an unsigned <c>x</c>. A signed <c>x</c> does not qualify:
+    /// C# division and remainder truncate toward zero, while a shift and a mask work on the two's
+    /// complement bits, so the two disagree for every negative dividend.
+    /// </summary>
+    private static bool IsUnsignedOperand(AnalysisContext context, Node node) =>
+        context.GetResolvedType(node)?.PrimitiveType is
+            PrimitiveType.UInt8 or PrimitiveType.UInt16 or PrimitiveType.UInt32 or PrimitiveType.UInt64;
+
     private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
         object? value = context.GetResolvedType(left)?.PrimitiveType switch {
-            PrimitiveType.Int8 => (sbyte)mask,
-            PrimitiveType.Int16 => (short)mask,
             PrimitiveType.UInt8 => (byte)mask,
             PrimitiveType.UInt16 => (ushort)mask,
-            PrimitiveType.Int32 => (int)mask,
             PrimitiveType.UInt32 => (uint)mask,
-            PrimitiveType.Int64 => mask,
             PrimitiveType.UInt64 => (ulong)mask,
             _ => (object?)null
         };

@@ -76,8 +76,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     IEnumerable<ITypeMethod> ITypeDefinition.Methods => Methods;
     IEnumerable<ITypeConstructor> ITypeDefinition.Constructors => Constructors;
     IEnumerable<ITypeMember> ITypeDefinition.Members => Members;
-    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters; PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
-    TypeCategory ITypeDefinition.TypeCategory => GetTypeCategory(RuntimeType);
+    IEnumerable<IParameter> ITypeDefinition.GenericParameters => GenericParameters;
+    PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
+    public TypeKind Kind => GetTypeKind(RuntimeType);
     public override string ToString() => FullName;
 
     internal ClrMethod? FindConversionFrom(ClrTypeDefinition source, ConversionOperatorKind kind) {
@@ -376,31 +377,20 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private static PrimitiveType? GetPrimitiveTypeId(Type type) =>
         type.GetPrimitiveType();
 
-    private static TypeCategory GetTypeCategory(Type type) {
+    private static TypeKind GetTypeKind(Type type) {
         ArgumentNullException.ThrowIfNull(type);
 
-        var primitiveId = GetPrimitiveTypeId(type);
-        if (primitiveId.HasValue) {
-            return primitiveId.Value.GetCategory();
-        }
-
-        // Handle complex types
-        if (type.IsArray || type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))) {
-            return TypeCategory.Collection;
-        }
-
-        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>)) {
-            return TypeCategory.Nullable;
-        }
-
-        if (type.IsEnum) {
-            return TypeCategory.Enumeration;
-        }
-
-        if (type.IsClass || type.IsInterface) {
-            return TypeCategory.None; // Complex reference types
-        }
-
-        return TypeCategory.None;
+        if (GetPrimitiveTypeId(type) is not null)
+            return TypeKind.Primitive;
+        if (type.IsEnum)
+            return TypeKind.Enum;
+        // Nullable<T> lands here: it is a value type, not a primitive.
+        if (type.IsValueType)
+            return TypeKind.Struct;
+        if (type.IsInterface)
+            return TypeKind.Interface;
+        if (typeof(Delegate).IsAssignableFrom(type))
+            return TypeKind.Delegate;
+        return TypeKind.Class;
     }
 }

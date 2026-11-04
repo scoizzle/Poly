@@ -12,7 +12,7 @@ namespace Poly.DomainModeling.Compile;
 /// </summary>
 public sealed class SessionBuilder {
     private readonly List<IStorageConvention> _storageConventions = [];
-    private readonly List<(string LibraryId, string Name, TypeCategory Category)> _primitiveSeeds = [];
+    private readonly List<(string LibraryId, string Name, PrimitiveSemantics Semantics)> _primitiveSeeds = [];
     private readonly List<IArtifactContributor> _artifacts = [];
     private readonly List<INodeAnalyzer> _analyzers = [];
     private readonly HashSet<string> _analyzerPassNames = new(StringComparer.Ordinal);
@@ -38,8 +38,8 @@ public sealed class SessionBuilder {
     public SessionBuilder Load(IDomainLibrary library) {
         Register(library);
         _loadedIds.Add(library.Id);
-        foreach (var (name, category) in library.PrimitiveSeeds)
-            _primitiveSeeds.Add((library.Id, name, category));
+        foreach (var (name, semantics) in library.PrimitiveSeeds)
+            _primitiveSeeds.Add((library.Id, name, semantics));
         return this;
     }
 
@@ -59,8 +59,8 @@ public sealed class SessionBuilder {
     public SessionBuilder LoadTemporal() {
         var library = new TemporalLibrary();
         Register(library);
-        foreach (var (name, category) in library.PrimitiveSeeds)
-            _primitiveSeeds.Add((library.Id, name, category));
+        foreach (var (name, semantics) in library.PrimitiveSeeds)
+            _primitiveSeeds.Add((library.Id, name, semantics));
         return this;
     }
 

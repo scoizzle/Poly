@@ -71,8 +71,8 @@ public static class DomainFactory {
     private static Domain ApplyBuiltins(Domain empty) {
         var changes = CanonicalBuiltInTypeCatalog.CreateChanges().ToList();
         var session = DomainSession.ForExtensions(empty.Extensions);
-        foreach (var (_, name, category) in session.PrimitiveSeeds)
-            changes.Add(new AddPrimitiveTypeChange(name, category, []));
+        foreach (var (_, name, semantics) in session.PrimitiveSeeds)
+            changes.Add(new AddPrimitiveTypeChange(name, semantics, []));
         var result = new DomainEvolution(empty).ApplyAndAnalyze(changes);
         return result.Succeeded
             ? result.Root

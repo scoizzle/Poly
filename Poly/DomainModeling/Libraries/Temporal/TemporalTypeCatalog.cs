@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Temporal;
 
@@ -7,14 +8,14 @@ namespace Poly.DomainModeling.Libraries.Temporal;
 /// <c>uses temporal</c> is imported (product language default includes it).
 /// </summary>
 public static class TemporalTypeCatalog {
-    public static IReadOnlyList<(string Name, TypeCategory Category)> Definitions { get; } =
+    public static IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> Definitions { get; } =
     [
-        ("Date",     TypeCategory.Primitive | TypeCategory.DateOnly),
-        ("Time",     TypeCategory.Primitive | TypeCategory.TimeOfDay),
-        ("DateTime", TypeCategory.Primitive | TypeCategory.DateTime),
-        ("Duration", TypeCategory.Primitive | TypeCategory.Duration),
+        ("Date",     PrimitiveSemantics.Date),
+        ("Time",     PrimitiveSemantics.Time),
+        ("DateTime", PrimitiveSemantics.DateTime),
+        ("Duration", PrimitiveSemantics.Duration),
     ];
 
     public static IReadOnlyList<DomainChange> CreateChanges() =>
-        Definitions.Select(d => new AddPrimitiveTypeChange(d.Name, d.Category, [])).ToList();
+        Definitions.Select(d => new AddPrimitiveTypeChange(d.Name, d.Semantics, [])).ToList();
 }

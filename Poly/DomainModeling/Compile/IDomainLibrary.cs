@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Ontology;
+
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
@@ -16,5 +18,5 @@ public interface IDomainLibrary {
     /// Primitive types this library seeds onto a domain that lists its id.
     /// Empty when the library adds no catalog types.
     /// </summary>
-    IReadOnlyList<(string Name, TypeCategory Category)> PrimitiveSeeds => [];
+    IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> PrimitiveSeeds => [];
 }

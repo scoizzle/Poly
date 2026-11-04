@@ -102,7 +102,7 @@ public class TypeDefinitionProviderCollectionTests {
     }
 
     [Test]
-    public async Task PrimitiveTypeIdAndTypeCategory_AreExposedForClrTypes() {
+    public async Task PrimitiveTypeIdAndKind_AreExposedForClrTypes() {
         var registry = new ClrTypeDefinitionRegistry();
 
         // Test primitive types
@@ -111,22 +111,22 @@ public class TypeDefinitionProviderCollectionTests {
         ITypeDefinition dateTimeType = registry.GetTypeDefinition(typeof(DateTime));
         ITypeDefinition listType = registry.GetTypeDefinition(typeof(List<int>));
 
-        // int should be primitive
+        // int is primitive
         await Assert.That(intType.PrimitiveType).IsEqualTo(PrimitiveType.Int32);
-        await Assert.That(intType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.Integer | TypeCategory.Signed);
+        await Assert.That(intType.Kind).IsEqualTo(TypeKind.Primitive);
 
-        // string should be primitive
+        // string is primitive
         await Assert.That(stringType.PrimitiveType).IsEqualTo(PrimitiveType.String);
-        await Assert.That(stringType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.Text);
+        await Assert.That(stringType.Kind).IsEqualTo(TypeKind.Primitive);
 
-        // DateTime should be primitive
+        // DateTime is primitive, not a DateTime-shaped category bit
         await Assert.That(dateTimeType.PrimitiveType).IsEqualTo(PrimitiveType.DateTime);
-        await Assert.That(dateTimeType.TypeCategory).IsEqualTo(TypeCategory.Primitive | TypeCategory.DateTime);
-        await Assert.That(dateTimeType.TypeCategory.IsDateTime).IsTrue();
+        await Assert.That(dateTimeType.Kind).IsEqualTo(TypeKind.Primitive);
 
-        // List<int> should not be primitive
+        // List<int> is a class; its element type is structural, not a flag
         await Assert.That(listType.PrimitiveType).IsNull();
-        await Assert.That(listType.TypeCategory).IsEqualTo(TypeCategory.Collection);
+        await Assert.That(listType.Kind).IsEqualTo(TypeKind.Class);
+        await Assert.That(listType.GetElementType()!.GetRuntimeTypeOrThrow()).IsEqualTo(typeof(int));
     }
 
     // Mock implementations for testing
@@ -139,7 +139,7 @@ public class TypeDefinitionProviderCollectionTests {
         public IEnumerable<ITypeDefinition> Interfaces => [];
         public IEnumerable<IParameter> GenericParameters => [];
         public PrimitiveType? PrimitiveType => null;
-        public TypeCategory TypeCategory => TypeCategory.None;
+        public TypeKind Kind => TypeKind.Class;
 
         public IEnumerable<ITypeMember> GetMembers(string name) => Enumerable.Empty<ITypeMember>();
         public bool IsAssignableTo(ITypeDefinition targetType) => false;

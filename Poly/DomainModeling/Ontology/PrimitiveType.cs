@@ -5,6 +5,6 @@ namespace Poly.DomainModeling.Ontology;
 /// </summary>
 public sealed record PrimitiveType(
     string Name,
-    TypeCategory TypeCategory,
+    PrimitiveSemantics Semantics,
     IReadOnlyList<Constraint> Constraints
 ) : DomainType(Name, [], Constraints);

@@ -22,7 +22,7 @@ public class StructuralAnalysisTests {
     public async Task ReservedQuantifierNav_AnyAsRelationshipName_FailsClosed() {
         // P7-4: a navigation named `any`/`all`/`none`/`count` is silently consumed as
         // a quantifier keyword in expression reads — reject it at analysis.
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var foo = new Entity("Foo", [], [], [], []);
         var order = new Entity("Order", [], [], [], []);
         var rel = new Relationship("any",
@@ -40,7 +40,7 @@ public class StructuralAnalysisTests {
 
     [Test]
     public async Task StructuralOwnership_ManyToManyWithOwnership_ReportsError() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var source = new Entity("Source", [], [], [], []);
         var target = new Entity("Target", [], [], [], []);
         var rel = new Relationship("OwnsMany",
@@ -56,7 +56,7 @@ public class StructuralAnalysisTests {
 
     [Test]
     public async Task StructuralOwnership_ManyToManyOwnedByTarget_ReportsError() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var source = new Entity("Source", [], [], [], []);
         var target = new Entity("Target", [], [], [], []);
         var rel = new Relationship("OwnedByMany",
@@ -72,7 +72,7 @@ public class StructuralAnalysisTests {
 
     [Test]
     public async Task StructuralOwnership_OneToOneSourceOwned_IsValid() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var source = new Entity("Source", [], [], [], []);
         var target = new Entity("Target", [], [], [], []);
         var rel = new Relationship("OwnsOne",
@@ -90,24 +90,17 @@ public class StructuralAnalysisTests {
 public class SemanticAnalysisTests {
     [Test]
     public async Task SemanticTypeCompatibility_DisallowedNullableCategory_ReportsError() {
-        var nullable = new Poly.DomainModeling.Ontology.PrimitiveType("NullableInt", TypeCategory.Nullable, []);
-        var domain = DomainTestFactory.Create("Test", [nullable], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // The old nullable category bit is unrepresentable: no primitive can carry it,
+        // so the diagnostic it guarded cannot fire. Domain nullability is requiredness.
+        await Assert.That(Enum.GetNames<PrimitiveSemantics>().Contains("Nullable")).IsFalse();
     }
 
     [Test]
     public async Task SemanticTypeCompatibility_DisallowedCollectionCategory_ReportsError() {
-        var collection = new Poly.DomainModeling.Ontology.PrimitiveType("CollectionInt", TypeCategory.Collection, []);
-        var domain = DomainTestFactory.Create("Test", [collection], []);
-
-        var analysis = DomainModelAnalyzer.Analyze(domain);
-
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // Collection shapes belong to type expressions, not to a primitive's semantics.
+        var members = Enum.GetNames<PrimitiveSemantics>();
+        await Assert.That(members.Contains("Collection")).IsFalse();
+        await Assert.That(members.Contains("Keyed")).IsFalse();
     }
 
 
@@ -122,7 +115,7 @@ public class SemanticAnalysisTests {
         ]);
         var parent = new Entity("BaseTicket", [parentProp], [], [], []);
         var child = new Entity("Ticket", [childProp], [], [], []);
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var domain = DomainTestFactory.Create("Test", [text, parent, child], []);
 
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -203,7 +196,7 @@ public class EffectBindingTests {
 
     [Test]
     public async Task EffectBinding_UnknownPropertyInAssign_ReportsError() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var action = new Poly.DomainModeling.Ontology.Action("Assign", InvocationResult.Void, [], [
             new AssignEffect(new PropertyAccess("NonExistent"), new Literal("value"))
         ], []);
@@ -547,7 +540,7 @@ public class EffectBindingTests {
 public class UnsatisfiedRequirementTests {
     [Test]
     public async Task EffectUnsatisfiedRequirement_StageTransitionSatisfied_DoesNotReport() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
         var stage = new Stage("Open", [],
             [new Policy("RequiresTitle", DomainExpression.Exists(new PropertyAccess("Title")))],
@@ -569,7 +562,7 @@ public class UnsatisfiedRequirementTests {
 
     [Test]
     public async Task EffectUnsatisfiedRequirement_StageTransitionMissingAssignment_ReportsWarning() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), []);
         // Stage-scoped requirement: a stage policy requires Title to exist while in
         // the stage — entering without assigning it is a genuine gap.
@@ -595,7 +588,7 @@ public class UnsatisfiedRequirementTests {
         // requirement, so transitioning into a stage must not warn (false positive:
         // TinyCompiler's EntryPath warned on every transition despite being set at
         // `create in builds { EntryPath: ... }`).
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entryPath = new Property("EntryPath", new DomainTypeReference("Text"), [new RequiredConstraint()]);
         var stage = new Stage("Lexing", [], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("Begin", InvocationResult.Void, [], [
@@ -618,7 +611,7 @@ public class UnsatisfiedRequirementTests {
         // Exists targets are not transition-entry concerns (same class as the
         // creation-required false positives). Pins the intentional semantic so a
         // future "restore the entity fallback" cannot silently reintroduce the noise.
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var source = new Property("source", new DomainTypeReference("SourceFile"), []);
         var policy = new Policy("HasSource", DomainExpression.Exists(new PropertyAccess("source")));
         var stage = new Stage("Lexing", [], [], [], []);
@@ -636,7 +629,7 @@ public class UnsatisfiedRequirementTests {
 
     [Test]
     public async Task EffectUnsatisfiedRequirement_CreateEntityMissingBareProperty_ReportsWarning() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), []);
         var target = new Entity("Order", [title], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("CreateOrder", InvocationResult.Void, [], [
@@ -653,7 +646,7 @@ public class UnsatisfiedRequirementTests {
 
     [Test]
     public async Task EffectUnsatisfiedRequirement_CreateEntityMissingOptionalProperty_DoesNotWarn() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var note = new Property("Note", new DomainTypeReference("Text"), [new OptionalConstraint()]);
         var target = new Entity("Order", [note], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("CreateOrder", InvocationResult.Void, [], [
@@ -670,7 +663,7 @@ public class UnsatisfiedRequirementTests {
 
     [Test]
     public async Task EffectUnsatisfiedRequirement_CreateEntityMissingRequiredProperty_ReportsWarning() {
-        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", TypeCategory.Text, []);
+        var text = new Poly.DomainModeling.Ontology.PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var title = new Property("Title", new DomainTypeReference("Text"), [new RequiredConstraint()]);
         var target = new Entity("Order", [title], [], [], []);
         var action = new Poly.DomainModeling.Ontology.Action("CreateOrder", InvocationResult.Void, [], [

@@ -12,14 +12,14 @@ public static class CanonicalBuiltInTypeCatalog {
     /// <summary>
     /// The canonical built-in type definitions with their names and type categories.
     /// </summary>
-    public static IReadOnlyList<(string Name, TypeCategory Category)> Definitions { get; } =
+    public static IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> Definitions { get; } =
     [
-        ("Boolean",  TypeCategory.Boolean),
-        ("Number",   TypeCategory.Primitive | TypeCategory.Numeric),
-        ("Decimal",  TypeCategory.Primitive | TypeCategory.Numeric | TypeCategory.HighPrecision | TypeCategory.Signed),
-        ("Text",     TypeCategory.Primitive | TypeCategory.Text),
-        ("Uuid",     TypeCategory.Primitive | TypeCategory.Identifier),
-        ("Binary",   TypeCategory.Primitive | TypeCategory.Binary),
+        ("Boolean",  PrimitiveSemantics.Boolean),
+        ("Number",   PrimitiveSemantics.Number),
+        ("Decimal",  PrimitiveSemantics.Decimal),
+        ("Text",     PrimitiveSemantics.Text),
+        ("Uuid",     PrimitiveSemantics.Uuid),
+        ("Binary",   PrimitiveSemantics.Binary),
     ];
 
     /// <summary>
@@ -30,7 +30,7 @@ public static class CanonicalBuiltInTypeCatalog {
     /// </summary>
     public static IReadOnlyList<DomainChange> CreateChanges() {
         return Definitions
-            .Select(d => new AddPrimitiveTypeChange(d.Name, d.Category, []))
+            .Select(d => new AddPrimitiveTypeChange(d.Name, d.Semantics, []))
             .ToList();
     }
 
@@ -49,8 +49,8 @@ public static class CanonicalBuiltInTypeCatalog {
     /// via the evolution builder, for use in chained fluent construction.
     /// </summary>
     public static EvolutionBuilder AddTo(EvolutionBuilder builder) {
-        foreach (var (name, category) in Definitions) {
-            builder.AddPrimitiveType(name, category);
+        foreach (var (name, semantics) in Definitions) {
+            builder.AddPrimitiveType(name, semantics);
         }
         return builder;
     }

@@ -265,7 +265,7 @@ internal sealed class AstTypeDefinition : ITypeDefinition, IClrTypeDefinition {
     public IEnumerable<IParameter> GenericParameters => _genericParameters.Value;
 
     public PrimitiveType? PrimitiveType => _node.PrimitiveTypeId;
-    public TypeCategory TypeCategory => _node.TypeCategory;
+    TypeKind ITypeDefinition.Kind => _node.EffectiveKind;
 
     private List<AstPropertyDefinition> BuildDeclaredProperties() {
         var properties = new List<PropertyDefinitionNode>();
@@ -1089,7 +1089,7 @@ internal sealed class AstCollectionTypeDefinition : ITypeDefinition, IClrTypeDef
     public IEnumerable<ITypeMethod> Methods => [_add];
     public IEnumerable<ITypeConstructor> Constructors => [_ctor, _copy];
     public PrimitiveType? PrimitiveType => null;
-    public TypeCategory TypeCategory => TypeCategory.Collection;
+    TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(System.Collections.IList);
 }
 
@@ -1164,7 +1164,7 @@ internal sealed class AstGenericParameterTypeDefinition : ITypeDefinition, IClrT
     public IEnumerable<ITypeMethod> Methods => [];
     public IEnumerable<ITypeConstructor> Constructors => [];
     public PrimitiveType? PrimitiveType => null;
-    public TypeCategory TypeCategory => TypeCategory.None;
+    TypeKind ITypeDefinition.Kind => TypeKind.Class;
     public Type RuntimeType => typeof(object);
 }
 

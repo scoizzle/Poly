@@ -32,11 +32,13 @@ Provider-based type abstraction decoupled from CLR reflection. Interfaces allow 
 
 **Why keep:** Consumed by `DomainTools.cs` (MCP server) and test files. Not dormant — actively used.
 
-### TypeCategory unused flags — KEEP
+### TypeKind — closed, not a flag set
 
-**What they are:** 12 of 26 `TypeCategory` flags with no current consumers.
+**What it is:** `TypeKind` (`Primitive`, `Class`, `Struct`, `Interface`, `Enum`, `Delegate`, `Union`, `Tuple`) is the one shape an `ITypeDefinition` reports through `ITypeDefinition.Kind`. `Union` and `Tuple` are reserved for a future `ITypeExpression` model; no provider produces them today and the C# writer has no arm for them.
 
-**Why keep:** `TypeCategory` is a classification system that describes types across multiple dimensions. Removing flags because no current code queries them couples the classification scheme to current consumers. The flags represent real type characteristics — a type can be `DateOnly`, `Boolean`, or `FlagEnumeration` regardless of whether anyone checks. Part of the coherent type-classification model.
+**Why it replaced `TypeCategory`:** the old `[Flags]` enum carried representation, type constructor, and role bits in one field, so `Integer | FloatingPoint` and `Nullable | Duration` were legal description values and every provider had to remember which parent bits to OR in. A closed enum makes those states unrepresentable and forces `PrimitiveType != null` to coincide with `Kind == Primitive` on every provider.
+
+**Where the old distinction went:** `Collection` is now structural (`TypeDefinitionExtensions.IsCollectionShape` — an array, a type that implements a closed `IEnumerable<>`, or a synthetic AST collection), `Enumeration` is `Kind == Enum`, and integer-ness is the exact `PrimitiveType.IsInteger()`. Domain vocabulary lives in `Poly.DomainModeling.Ontology.PrimitiveSemantics`, not in core: core describes shape, the domain describes meaning.
 
 ### TypeDefinitionProviderCollection ICollection surface — KEEP
 

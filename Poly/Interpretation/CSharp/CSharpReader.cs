@@ -199,7 +199,7 @@ public static class CSharpReader {
             var typeDef = match.PatternName switch {
                 "enum" => new TypeDefinitionNode(name,
                     Fields: FoldEnumFields(Child(match, "enum-body")),
-                    TypeCategory: TypeCategory.Enumeration,
+                    Kind: TypeKind.Enum,
                     AccessModifier: modifiers.Access),
                 "interface" => new TypeDefinitionNode(name,
                     Properties: FoldProperties(body),
@@ -207,7 +207,7 @@ public static class CSharpReader {
                     BaseType: baseType,
                     Interfaces: interfaces,
                     GenericParameters: genericParameters,
-                    IsInterface: true,
+                    Kind: TypeKind.Interface,
                     AccessModifier: modifiers.Access),
                 "record-semi" or "record" => new TypeDefinitionNode(name,
                     Constructors: FoldConstructors(body),

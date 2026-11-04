@@ -11,11 +11,6 @@ public sealed record PrimitiveTypeReference(
     bool IsNullable = false
 ) : Node {
 
-    /// <summary>
-    /// Gets the type category for this primitive type.
-    /// </summary>
-    public TypeCategory Category => PrimitiveId.GetCategory();
-
     public override string ToString() {
         var name = PrimitiveId.ToString();
         return IsNullable ? $"{name}?" : name;

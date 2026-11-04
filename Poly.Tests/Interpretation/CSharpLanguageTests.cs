@@ -176,10 +176,10 @@ public class CSharpLanguageTests {
         var tree = CSharpSyntaxTree.ParseText(text);
         var root = tree.GetRoot();
 
-        await Assert.That(unit.Types.Count(t => (t.TypeCategory & Poly.Introspection.TypeCategory.Enumeration) == Poly.Introspection.TypeCategory.None))
+        await Assert.That(unit.Types.Count(t => t.EffectiveKind != Poly.Introspection.TypeKind.Enum))
             .IsEqualTo(root.DescendantNodes().OfType<TypeDeclarationSyntax>().Count())
             .Because($"{Path.GetFileName(path)} type declarations");
-        await Assert.That(unit.Types.Count(t => (t.TypeCategory & Poly.Introspection.TypeCategory.Enumeration) != Poly.Introspection.TypeCategory.None))
+        await Assert.That(unit.Types.Count(t => t.EffectiveKind == Poly.Introspection.TypeKind.Enum))
             .IsEqualTo(root.DescendantNodes().OfType<EnumDeclarationSyntax>().Count())
             .Because($"{Path.GetFileName(path)} enum declarations");
 
@@ -304,7 +304,7 @@ public class CSharpLanguageTests {
         var objectCreations = 0;
         var lambdas = 0;
         foreach (var type in unit.Types) {
-            if ((type.TypeCategory & Poly.Introspection.TypeCategory.Enumeration) != Poly.Introspection.TypeCategory.None) {
+            if (type.EffectiveKind is Poly.Introspection.TypeKind.Enum) {
                 enumMembers += type.Fields?.Count ?? 0;
                 continue;
             }

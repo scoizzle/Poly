@@ -660,7 +660,7 @@ public class CSharpGeneratorTests {
                     IsStatic: true,
                     IsConst: true)
             ],
-            TypeCategory: TypeCategory.Enumeration);
+            Kind: TypeKind.Enum);
 
         var result = new CSharpGenerator().Generate(node);
 

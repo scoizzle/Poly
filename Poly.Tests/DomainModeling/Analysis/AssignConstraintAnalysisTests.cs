@@ -18,8 +18,8 @@ using DmPrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
 /// </summary>
 public class AssignConstraintAnalysisTests {
     // ── Primitives used across tests ───────────────────────────────────────
-    private static readonly DmPrimitiveType Text = new("Text", TypeCategory.Text, []);
-    private static readonly DmPrimitiveType Number = new("Number", TypeCategory.Numeric, []);
+    private static readonly DmPrimitiveType Text = new("Text", PrimitiveSemantics.Text, []);
+    private static readonly DmPrimitiveType Number = new("Number", PrimitiveSemantics.Number, []);
 
     // ════════════════════════════════════════════════════════════════════════
     //  Literal assignments against property constraints

@@ -47,7 +47,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_AddPropertyToExistingEntity_Works() {
         // Seed common primitive so property reference resolves
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Order", [], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, textPrimitive], []);
 
@@ -64,7 +64,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_MixedBatch_ProducesCorrectResult() {
         // Seed primitives used by the batch
-        var intPrimitive = new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []);
+        var intPrimitive = new PrimitiveType("Int", PrimitiveSemantics.Number, []);
         var start = DomainTestFactory.Create("Test", [intPrimitive], []);
 
         var changes = new DomainChange[]
@@ -97,7 +97,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task UnchangedEntities_RetainOriginalNodeId() {
         // Create a domain with two entities + required primitive
-        var intPrimitive = new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []);
+        var intPrimitive = new PrimitiveType("Int", PrimitiveSemantics.Number, []);
         var untouched = new Entity("Customer", [], [], [], []);
         var touched = new Entity("Order", [], [], [], []);
         var start = DomainTestFactory.Create("Test", [untouched, touched, intPrimitive], []);
@@ -203,9 +203,9 @@ public class DomainEvolutionApplicatorTests {
         // Seed primitives and owned doc ValueTypes first (required for the analysis gate)
         var result2 = new DomainEvolution(afterFirst.Root)
             .Evolve()
-            .AddPrimitiveType("Text", Poly.Introspection.TypeCategory.Text)
-            .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
-            .AddPrimitiveType("Boolean", Poly.Introspection.TypeCategory.Boolean)
+            .AddPrimitiveType("Text", PrimitiveSemantics.Text)
+            .AddPrimitiveType("Timestamp", PrimitiveSemantics.DateTime)
+            .AddPrimitiveType("Boolean", PrimitiveSemantics.Boolean)
             // Add owned documents (ValueTypes) — key for PersonLifecycle style
             .AddValueType("BirthCertificate", new Property("Time", new DomainTypeReference("Timestamp"), []))
             .AddValueType("DeathCertificate",
@@ -393,13 +393,13 @@ public class DomainEvolutionApplicatorTests {
         var start = DomainTestFactory.Create("Test", [], []);
 
         var result1 = new DomainEvolution(start).ApplyAndAnalyze([
-            new AddPrimitiveTypeChange("MyText", Poly.Introspection.TypeCategory.Text, [])
+            new AddPrimitiveTypeChange("MyText", PrimitiveSemantics.Text, [])
         ]);
 
         await Assert.That(result1.Succeeded).IsTrue();
         var primitive = result1.Root.Types.OfType<PrimitiveType>().SingleOrDefault(p => p.Name == "MyText");
         await Assert.That(primitive).IsNotNull();
-        await Assert.That(primitive!.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Text);
+        await Assert.That(primitive!.Semantics).IsEqualTo(PrimitiveSemantics.Text);
 
         var result2 = new DomainEvolution(result1.Root).ApplyAndAnalyze([
             new RemovePrimitiveTypeChange("MyText")
@@ -419,7 +419,7 @@ public class DomainEvolutionApplicatorTests {
         );
 
         var result = new DomainEvolution(start).ApplyAndAnalyze([
-            new AddPrimitiveTypeChange("Timestamp", Poly.Introspection.TypeCategory.DateTime, []),
+            new AddPrimitiveTypeChange("Timestamp", PrimitiveSemantics.DateTime, []),
             new AddValueTypeChange("BirthCertificate", [new Property("Time", new DomainTypeReference("Timestamp"), [])]),
             new AddEntityChange("Person", []),
             new AddActionChange("Person", "Register"),
@@ -445,7 +445,7 @@ public class DomainEvolutionApplicatorTests {
 
         var result = new DomainEvolution(start)
             .Evolve()
-            .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
+            .AddPrimitiveType("Timestamp", PrimitiveSemantics.DateTime)
             .AddEntity("Person")
             .AddStage("Person", "Dead")
             .AddAction("Person", "Die")
@@ -468,7 +468,7 @@ public class DomainEvolutionApplicatorTests {
 
         var result = new DomainEvolution(start)
             .Evolve()
-            .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
+            .AddPrimitiveType("Timestamp", PrimitiveSemantics.DateTime)
             .AddValueType("BirthCertificate", new Property("Time", new DomainTypeReference("Timestamp"), []))
             .AddEntity("Person")
             .AddStage("Person", "Alive")
@@ -488,7 +488,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task NodeId_Continuity_PreservesIdsOnUnchangedSubtrees() {
         // Build a small domain with depth (Entity > Stage + Action + Effect + Property)
-        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var text = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var someDoc = new Poly.DomainModeling.Ontology.ValueType("SomeDoc", [], []);
         var createEffect = new CreateEntityInstance(new DomainTypeReference("SomeDoc"));
         var dieAction = new Poly.DomainModeling.Ontology.Action("Die", InvocationResult.Void, [], [createEffect], []);
@@ -685,9 +685,9 @@ public class DomainEvolutionApplicatorTests {
         var step1 = new DomainEvolution(start)
             .Evolve()
             // Primitives required by the documented example
-            .AddPrimitiveType("Text", Poly.Introspection.TypeCategory.Text)
-            .AddPrimitiveType("Timestamp", Poly.Introspection.TypeCategory.DateTime)
-            .AddPrimitiveType("Duration", Poly.Introspection.TypeCategory.Duration)
+            .AddPrimitiveType("Text", PrimitiveSemantics.Text)
+            .AddPrimitiveType("Timestamp", PrimitiveSemantics.DateTime)
+            .AddPrimitiveType("Duration", PrimitiveSemantics.Duration)
             // ValueTypes (owned documents) — documented shape
             .AddValueType("BirthCertificate", new Property("Time", new DomainTypeReference("Timestamp"), []))
             .AddValueType("DeathCertificate",
@@ -822,12 +822,12 @@ public class DomainEvolutionApplicatorTests {
         var step1 = new DomainEvolution(start)
             .Evolve()
             // Primitives
-            .AddPrimitiveType("Text", Poly.Introspection.TypeCategory.Text)
-            .AddPrimitiveType("Int", Poly.Introspection.TypeCategory.Integer)
-            .AddPrimitiveType("Bool", Poly.Introspection.TypeCategory.Boolean)
-            .AddPrimitiveType("Decimal", Poly.Introspection.TypeCategory.HighPrecision)
-            .AddPrimitiveType("Instant", Poly.Introspection.TypeCategory.DateTime)
-            .AddPrimitiveType("Date", Poly.Introspection.TypeCategory.DateTime)
+            .AddPrimitiveType("Text", PrimitiveSemantics.Text)
+            .AddPrimitiveType("Int", PrimitiveSemantics.Number)
+            .AddPrimitiveType("Bool", PrimitiveSemantics.Boolean)
+            .AddPrimitiveType("Decimal", PrimitiveSemantics.Decimal)
+            .AddPrimitiveType("Instant", PrimitiveSemantics.DateTime)
+            .AddPrimitiveType("Date", PrimitiveSemantics.DateTime)
             // Entities (flat — no inheritance; V3 Entity has no ParentEntity concept)
             .AddEntity("Person")
             .AddPropertyToEntity("Person", new Property("FirstName", new DomainTypeReference("Text"), []))
@@ -1050,7 +1050,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task DomainExpression_Add_CanBeStoredInAssignEffect() {
         var start = DomainTestFactory.Create("Test", [
-            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+            new PrimitiveType("Int", PrimitiveSemantics.Number, []),
             new Entity("Counter", [
                 new Property("Value", new DomainTypeReference("Int"), [])
             ], [], [], [])
@@ -1075,7 +1075,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task DomainExpression_Multiply_CanBeStoredInAssignEffect() {
         var result = new DomainEvolution(DomainTestFactory.Create("Test", [], []))
             .Evolve()
-            .AddPrimitiveType("Int", Poly.Introspection.TypeCategory.Integer)
+            .AddPrimitiveType("Int", PrimitiveSemantics.Number)
             .AddEntity("Cart")
             .AddPropertyToEntity("Cart", new Property("Total", new DomainTypeReference("Int"), []))
             .AddAction("Cart", "ScaleTotal")
@@ -1095,7 +1095,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task DomainExpression_Divide_CanBeStoredInAssignEffect() {
         var result = new DomainEvolution(DomainTestFactory.Create("Test", [], []))
             .Evolve()
-            .AddPrimitiveType("Int", Poly.Introspection.TypeCategory.Integer)
+            .AddPrimitiveType("Int", PrimitiveSemantics.Number)
             .AddEntity("Splitter")
             .AddPropertyToEntity("Splitter", new Property("Amount", new DomainTypeReference("Int"), []))
             .AddAction("Splitter", "Halve")
@@ -1115,7 +1115,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task DomainExpression_DateOperation_CanBeStoredInAssignEffect() {
         var result = new DomainEvolution(DomainTestFactory.Create("Test", [], []))
             .Evolve()
-            .AddPrimitiveType("Date", Poly.Introspection.TypeCategory.DateTime)
+            .AddPrimitiveType("Date", PrimitiveSemantics.DateTime)
             .AddEntity("Schedule")
             .AddPropertyToEntity("Schedule", new Property("Start", new DomainTypeReference("Date"), []))
             .AddAction("Schedule", "Extend")
@@ -1136,7 +1136,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task DomainExpression_RelationshipNavigation_CanBeStoredInAssignEffectValue() {
         var start = DomainTestFactory.Create("Test", [
-            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+            new PrimitiveType("Int", PrimitiveSemantics.Number, []),
             new Entity("Project", [
                 new Property("MaxDueDate", new DomainTypeReference("Int"), [])
             ], [], [], []),
@@ -1349,7 +1349,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddPropertyToRelationship_AddsProperty() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Person", [], [], [], []);
         var rel = new Relationship("Friends",
             new DomainTypeReference("Person"), new DomainTypeReference("Person"),
@@ -1365,7 +1365,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemovePropertyFromRelationship_RemovesProperty() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Person", [], [], [], []);
         var prop = new Property("Since", new DomainTypeReference("Text"), []);
         var rel = new Relationship("Friends",
@@ -1380,7 +1380,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddConstraintToProperty_AddsConstraint() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Customer", [
             new Property("Email", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -1397,7 +1397,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemoveConstraintFromProperty_RemovesConstraint() {
         var constraint = new RequiredConstraint();
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Customer", [
             new Property("Email", new DomainTypeReference("Text"), [constraint])
         ], [], [], []);
@@ -1411,7 +1411,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddConstraintToDomainType_AddsConstraint() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
         var constraint = new RequiredConstraint();
         var result = new DomainEvolution(start).ApplyAndAnalyze([new AddConstraintToDomainTypeChange("Text", constraint)]);
@@ -1423,7 +1423,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task Apply_RemoveConstraintFromDomainType_RemovesConstraint() {
         var constraint = new RequiredConstraint();
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, [constraint]);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, [constraint]);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
         var result = new DomainEvolution(start).ApplyAndAnalyze([new RemoveConstraintFromDomainTypeChange("Text", constraint)]);
         await Assert.That(result.Succeeded).IsTrue();
@@ -1433,8 +1433,8 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ChangePropertyType_UpdatesType() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var intPrimitive = new PrimitiveType("Integer", Poly.Introspection.TypeCategory.Integer, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
+        var intPrimitive = new PrimitiveType("Integer", PrimitiveSemantics.Number, []);
         var entity = new Entity("Product", [
             new Property("Count", new DomainTypeReference("Text"), [])
         ], [], [], []);
@@ -1461,13 +1461,13 @@ public class DomainEvolutionApplicatorTests {
     }
 
     [Test]
-    public async Task Apply_SetPrimitiveTypeCategory_UpdatesCategory() {
-        var textPrimitive = new PrimitiveType("MyText", Poly.Introspection.TypeCategory.Text, []);
+    public async Task Apply_SetPrimitiveSemantics_UpdatesSemantics() {
+        var textPrimitive = new PrimitiveType("MyText", PrimitiveSemantics.Text, []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []);
-        var result = new DomainEvolution(start).ApplyAndAnalyze([new SetPrimitiveTypeCategoryChange("MyText", Poly.Introspection.TypeCategory.Numeric)]);
+        var result = new DomainEvolution(start).ApplyAndAnalyze([new SetPrimitiveSemanticsChange("MyText", PrimitiveSemantics.Number)]);
         await Assert.That(result.Succeeded).IsTrue();
         var updated = result.Root.Types.OfType<PrimitiveType>().Single(t => t.Name == "MyText");
-        await Assert.That(updated.TypeCategory).IsEqualTo(Poly.Introspection.TypeCategory.Numeric);
+        await Assert.That(updated.Semantics).IsEqualTo(PrimitiveSemantics.Number);
     }
 
     // --- Contract integration tests ---
@@ -1522,7 +1522,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddContractBindingChange_AddsBinding() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
@@ -1550,7 +1550,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_AddContractFieldMapChange_AddsFieldMap() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
@@ -1571,7 +1571,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_RemoveContractFieldMapChange_RemovesFieldMap() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("SomeAction", InvocationResult.Void,
@@ -1591,7 +1591,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingSourceIdentifier() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "", "v1", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ImportedContracts = [contract] };
         var result = new DomainEvolution(start).ApplyAndAnalyze([]);
@@ -1601,7 +1601,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingVersion() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var contract = new ImportedContract("BadContract", ContractSourceKind.ExternalProvider, "crm://api", "", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ImportedContracts = [contract] };
         var result = new DomainEvolution(start).ApplyAndAnalyze([]);
@@ -1611,7 +1611,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingContractForBinding() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var binding = new ContractBinding("MyBinding", "NonExistentContract", "GetTicket", "SomeAction", "input", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with { ContractBindings = [binding] };
         var result = new DomainEvolution(start).ApplyAndAnalyze([]);
@@ -1621,7 +1621,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingEndpointOnBinding() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", []);
         var binding = new ContractBinding("MyBinding", "CrmContract", "NonExistentEndpoint", "SomeAction", "input", []);
         var start = DomainTestFactory.Create("Test", [textPrimitive], []) with {
@@ -1635,7 +1635,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingAction() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "NonExistentAction", "input", []);
@@ -1650,7 +1650,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsMissingParameter() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
@@ -1668,8 +1668,8 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ContractIntegrationAnalyzer_DetectsTypeMismatch() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
-        var ticketDataPrimitive = new PrimitiveType("TicketData", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
+        var ticketDataPrimitive = new PrimitiveType("TicketData", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("TicketData"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
@@ -1687,7 +1687,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task ContractDomainObject_SupportsTreeWalk() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api", "v1", [endpoint]);
         var binding = new ContractBinding("MyBinding", "CrmContract", "GetTicket", "SomeAction", "input", [
@@ -1708,7 +1708,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Apply_ValidContractIntegration_PassesAnalysis() {
-        var textPrimitive = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var textPrimitive = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var endpoint = new ContractEndpoint("GetTicket", ContractEndpointKind.Operation, ContractEndpointDirection.Inbound, new DomainTypeReference("Text"));
         var contract = new ImportedContract("CrmContract", ContractSourceKind.ExternalProvider, "crm://api/ticket", "v1", [endpoint]);
         var action = new Poly.DomainModeling.Ontology.Action("MyAction", InvocationResult.Void,
@@ -1729,7 +1729,7 @@ public class DomainEvolutionApplicatorTests {
     [Test]
     public async Task DomainExpression_Comparison_AllKinds_CanBeConstructed() {
         var start = DomainTestFactory.Create("Test", [
-            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+            new PrimitiveType("Int", PrimitiveSemantics.Number, []),
             new Entity("Stock", [
                 new Property("Quantity", new DomainTypeReference("Int"), []),
                 new Property("Min", new DomainTypeReference("Int"), []),
@@ -1831,7 +1831,7 @@ public class DomainEvolutionApplicatorTests {
     public async Task Evolution_ApplyChanges_ReturnsModifiedNodes() {
         // Verify the allocation fix: ApplyChanges now returns modified nodes list
         var start = DomainTestFactory.Create("Test", [
-            new PrimitiveType("Int", Poly.Introspection.TypeCategory.Integer, []),
+            new PrimitiveType("Int", PrimitiveSemantics.Number, []),
         ], []);
 
         var evolution = new DomainEvolution(start);
@@ -1851,7 +1851,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task RemoveProperty_MissingName_FailsWithClearError() {
-        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var text = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Order", [new Property("Total", new DomainTypeReference("Int"), [])], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, text], []);
 
@@ -1907,7 +1907,7 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task Remove_ExistingProperty_Succeeds() {
-        var text = new PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []);
+        var text = new PrimitiveType("Text", PrimitiveSemantics.Text, []);
         var entity = new Entity("Order", [new Property("Status", new DomainTypeReference("Text"), [])], [], [], []);
         var start = DomainTestFactory.Create("Test", [entity, text], []);
 

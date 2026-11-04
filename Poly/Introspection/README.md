@@ -27,7 +27,9 @@ Common members include:
 - `Name`
 - `Namespace`
 - `FullName`
-- `ReflectedType`
+- `RuntimeType` (via `IClrTypeDefinition`)
+- `Kind`
+- `PrimitiveType`
 - `Members`
 - `GetMembers(string name)`
 - `IsAssignableFrom` / `GetConversionFrom` (conversion operators are not in `Methods`)

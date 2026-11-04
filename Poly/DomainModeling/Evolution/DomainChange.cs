@@ -568,16 +568,16 @@ public sealed record RemoveValueTypeChange(
 /// </summary>
 public sealed record AddPrimitiveTypeChange(
     string Name,
-    TypeCategory TypeCategory,
+    PrimitiveSemantics Semantics,
     IReadOnlyList<Constraint> Constraints
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        var newPrimitive = new PrimitiveType(Name, TypeCategory, Constraints);
+        var newPrimitive = new PrimitiveType(Name, Semantics, Constraints);
         context.Types.Add(newPrimitive);
         context.ModifiedNodes.Add(newPrimitive);
     }
 
-    internal override string GetDescription() => $"Add PrimitiveType '{Name}' ({TypeCategory})";
+    internal override string GetDescription() => $"Add PrimitiveType '{Name}' ({Semantics})";
 }
 
 public sealed record RemovePrimitiveTypeChange(
@@ -686,11 +686,11 @@ public sealed record AddDomainExtensionChange(
         context.Extensions.Add(ExtensionId);
         if (!ExtensionCatalog.Core.Contains(ExtensionId))
             return;
-        foreach (var (name, category) in ExtensionCatalog.Core.Resolve(ExtensionId).PrimitiveSeeds) {
+        foreach (var (name, semantics) in ExtensionCatalog.Core.Resolve(ExtensionId).PrimitiveSeeds) {
             if (context.Types.Any(t => t is PrimitiveType p
                 && string.Equals(p.Name, name, StringComparison.Ordinal)))
                 continue;
-            new AddPrimitiveTypeChange(name, category, []).ApplyTo(context);
+            new AddPrimitiveTypeChange(name, semantics, []).ApplyTo(context);
         }
     }
 
@@ -876,21 +876,21 @@ public sealed record SetRelationshipShapeChange(
 }
 
 /// <summary>
-/// Changes the TypeCategory of a PrimitiveType.
+/// Changes the semantics of a PrimitiveType.
 /// </summary>
-public sealed record SetPrimitiveTypeCategoryChange(
+public sealed record SetPrimitiveSemanticsChange(
     string TypeName,
-    TypeCategory NewCategory
+    PrimitiveSemantics NewSemantics
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
             context.UpdateType(TypeName, t => t is PrimitiveType pt
-                ? pt with { TypeCategory = NewCategory }
+                ? pt with { Semantics = NewSemantics }
                 : t),
-            $"Type '{TypeName}' not found — cannot set category");
+            $"Type '{TypeName}' not found — cannot set semantics");
     }
 
-    internal override string GetDescription() => $"Set primitive type '{TypeName}' category to {NewCategory}";
+    internal override string GetDescription() => $"Set primitive type '{TypeName}' semantics to {NewSemantics}";
 }
 
 public sealed record AddStageToRelationshipChange(

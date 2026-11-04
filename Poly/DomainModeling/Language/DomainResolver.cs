@@ -139,10 +139,10 @@ public sealed class DomainResolver : DslCursor {
         var adding = changes.OfType<AddDomainExtensionChange>()
             .Select(c => c.ExtensionId)
             .ToHashSet(StringComparer.Ordinal);
-        foreach (var (libraryId, name, category) in _session.PrimitiveSeeds) {
+        foreach (var (libraryId, name, semantics) in _session.PrimitiveSeeds) {
             if (adding.Contains(libraryId))
                 continue;
-            changes.Add(new AddPrimitiveTypeChange(name, category, []));
+            changes.Add(new AddPrimitiveTypeChange(name, semantics, []));
         }
         IndexPrimitiveNames(changes);
     }

@@ -290,23 +290,23 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         var resolved = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type);
         if (resolved?.Type is not PrimitiveType primitiveType) return;
 
-        var category = primitiveType.TypeCategory;
+        var semantics = primitiveType.Semantics;
 
-        if (hasRange && !category.Is(TypeCategory.Numeric)) {
+        if (hasRange && semantics is not (PrimitiveSemantics.Number or PrimitiveSemantics.Decimal)) {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' has a RangeConstraint but its type '{property.Type.TypeName}' does not resolve to a numeric type.",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
 
-        if (hasLength && !category.Is(TypeCategory.Text)) {
+        if (hasLength && semantics is not PrimitiveSemantics.Text) {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' has a LengthConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
 
-        if (hasPattern && !category.Is(TypeCategory.Text)) {
+        if (hasPattern && semantics is not PrimitiveSemantics.Text) {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' has a PatternConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",

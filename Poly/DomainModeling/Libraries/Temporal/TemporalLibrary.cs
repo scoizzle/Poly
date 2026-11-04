@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Libraries.Temporal;
 
@@ -14,7 +15,7 @@ public sealed record TemporalVocabularyMetadata : IAnalysisMetadata;
 public sealed class TemporalLibrary : IDomainLibrary {
     public string Id => "temporal";
 
-    public IReadOnlyList<(string Name, TypeCategory Category)> PrimitiveSeeds =>
+    public IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> PrimitiveSeeds =>
         TemporalTypeCatalog.Definitions;
 
     public void Register(SessionBuilder builder) {

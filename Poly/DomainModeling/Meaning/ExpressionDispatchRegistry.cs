@@ -10,7 +10,7 @@ namespace Poly.DomainModeling.Meaning;
 /// core naming pack types.
 /// </summary>
 /// <typeparam name="TResult">The concern's result type (e.g. <c>DomainExpression</c>,
-/// <c>Syntax.Node</c>, <c>TypeCategory</c>).</typeparam>
+/// <c>Syntax.Node</c>, <c>string</c>).</typeparam>
 public interface IExpressionDispatchHandler<TResult> {
     /// <summary>The concrete expression type this handler owns.</summary>
     Type ExpressionType { get; }

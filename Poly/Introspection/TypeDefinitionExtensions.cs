@@ -17,6 +17,22 @@ public enum ConversionOperatorKind {
 public readonly record struct ConversionOperator(ConversionOperatorKind Kind, ITypeMethod Method);
 
 public static class TypeDefinitionExtensions {
+    /// <summary>
+    /// True when <paramref name="type"/> exposes a sequence shape: a synthetic AST
+    /// collection, or a CLR type that is an array or closes <c>IEnumerable&lt;&gt;</c>
+    /// and is not itself a primitive (so <c>byte[]</c> stays binary). Used instead of
+    /// a category flag because a shape is structural, not a declaration.
+    /// </summary>
+    internal static bool IsCollectionShape(ITypeDefinition type) {
+        ArgumentNullException.ThrowIfNull(type);
+        return type is AstCollectionTypeDefinition
+            || (type is ClrTypeDefinition clr
+                && ((ITypeDefinition)clr).PrimitiveType is null
+                && (clr.RuntimeType.IsArray
+                    || clr.RuntimeType.GetInterfaces().Any(static i =>
+                        i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))));
+    }
+
     extension(ITypeDefinition typeDefinition) {
         /// <summary>
         /// Gets the best-matching method overloads for the given name and argument types.
@@ -82,12 +98,13 @@ public static class TypeDefinitionExtensions {
                     Parameters = property.Parameters.ToArray(),
                     ReturnsObject = property.MemberTypeDefinition.TryGetRuntimeType(out var runtimeType) && runtimeType == typeof(object)
                 })
-                .Where(candidate => candidate.Parameters.All(static parameter => parameter.ParameterTypeDefinition.TypeCategory.Is(TypeCategory.Integer)))
+                .Where(candidate => candidate.Parameters.All(static parameter =>
+                    parameter.ParameterTypeDefinition.PrimitiveType is { } primitive && primitive.IsInteger()))
                 .OrderBy(candidate => candidate.Parameters.Length)
                 .ThenBy(candidate => candidate.ReturnsObject)
                 .FirstOrDefault();
 
-            if (positionalIndexer != null && (typeDefinition.TypeCategory.IsCollection || !typeDefinition.TypeCategory.Is(TypeCategory.Keyed))) {
+            if (positionalIndexer != null && TypeDefinitionExtensions.IsCollectionShape(typeDefinition)) {
                 return positionalIndexer.Property.MemberTypeDefinition;
             }
 

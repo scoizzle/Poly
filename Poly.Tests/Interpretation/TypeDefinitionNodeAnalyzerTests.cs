@@ -153,7 +153,6 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(resolvedHolder).IsNotNull();
         await Assert.That(resolvedWidget).IsNotNull();
         var itemsType = resolvedHolder!.Properties.Single().MemberTypeDefinition;
-        await Assert.That(itemsType.TypeCategory.IsCollection).IsTrue();
         await Assert.That(itemsType.GetElementType()).IsEqualTo(resolvedWidget);
     }
 
@@ -476,7 +475,7 @@ public class TypeDefinitionNodeAnalyzerTests {
                     IsStatic: true,
                     IsConst: true)
             ],
-            TypeCategory: TypeCategory.Enumeration);
+            Kind: TypeKind.Enum);
 
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();
@@ -490,8 +489,8 @@ public class TypeDefinitionNodeAnalyzerTests {
         await Assert.That(result).IsEqualTo("Active");
         await Assert.That(field.IsStatic).IsTrue();
         await Assert.That(field.Mutability.HasFlag(Mutability.CompileTimeConst)).IsTrue();
-        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.TypeCategory)
-            .IsEqualTo(TypeCategory.Enumeration);
+        await Assert.That(ctx.TypeDefinitions.GetTypeDefinition("PatronStatus")!.Kind)
+            .IsEqualTo(TypeKind.Enum);
     }
 
     [Test]

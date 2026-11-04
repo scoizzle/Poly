@@ -218,8 +218,8 @@ public sealed class EvolutionBuilder {
         string name, string contractName, string endpointName, string actionName, string localParameterName) =>
         Apply(new AddContractBindingChange(name, contractName, endpointName, actionName, localParameterName));
 
-    public EvolutionBuilder AddPrimitiveType(string name, TypeCategory typeCategory) =>
-        Apply(new AddPrimitiveTypeChange(name, typeCategory, []));
+    public EvolutionBuilder AddPrimitiveType(string name, PrimitiveSemantics semantics) =>
+        Apply(new AddPrimitiveTypeChange(name, semantics, []));
 
     public EvolutionBuilder RemovePrimitiveType(string name) =>
         Apply(new RemovePrimitiveTypeChange(name));
@@ -441,8 +441,8 @@ public sealed class EvolutionBuilder {
         RelationshipCardinality? newCardinality = null) =>
         Apply(new SetRelationshipShapeChange(sourceEntityName, relationshipName, newSource, newTarget, newCardinality));
 
-    public EvolutionBuilder SetPrimitiveTypeCategory(string typeName, TypeCategory category) =>
-        Apply(new SetPrimitiveTypeCategoryChange(typeName, category));
+    public EvolutionBuilder SetPrimitiveSemantics(string typeName, PrimitiveSemantics semantics) =>
+        Apply(new SetPrimitiveSemanticsChange(typeName, semantics));
 
     public EvolutionBuilder RemoveParameterFromAction(string entityName, string actionName, string parameterName) =>
         Apply(new RemoveParameterFromActionChange(entityName, actionName, parameterName));

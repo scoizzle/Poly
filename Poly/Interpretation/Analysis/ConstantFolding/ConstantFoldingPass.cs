@@ -367,7 +367,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     }
 
     private static bool IsIntegerOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.TypeCategory.Is(TypeCategory.Integer) ?? false;
+        context.GetResolvedType(node)?.PrimitiveType is { } primitive && primitive.IsInteger();
 
     private static Constant? BuildMaskConstant(AnalysisContext context, Node left, long mask) {
         object? value = context.GetResolvedType(left)?.PrimitiveType switch {

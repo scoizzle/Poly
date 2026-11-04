@@ -366,7 +366,7 @@ public class InfrastructureAnalyzerTests {
         var patron = new Entity("Patron",
             [new Property("Status", new DomainTypeReference("Text"), [])],
             [], [entityPolicy], [activeStage, doneStage]);
-        var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.Ontology.PrimitiveType("Text", Poly.Introspection.TypeCategory.Text, []), patron]);
+        var domain = DomainTestFactory.Create("Test", [new Poly.DomainModeling.Ontology.PrimitiveType("Text", Poly.DomainModeling.Ontology.PrimitiveSemantics.Text, []), patron]);
 
         var analyzed = DomainModelAnalyzer.Analyze(domain);
         var behavior = BehaviorMetadata.From(domain, analyzed);

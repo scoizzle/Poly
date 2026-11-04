@@ -2,7 +2,6 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
-using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Analysis;
@@ -20,9 +19,6 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
         switch (node) {
             case Domain domain:
                 PublishCatalog(context, domain);
-                break;
-            case PrimitiveType primitiveType:
-                AnalyzePrimitiveType(context, primitiveType);
                 break;
             case Property property:
                 ResolveTypeReference(context, property.Type, property, $"Property '{property.Name}'");
@@ -185,22 +181,6 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
             context.SetMetadata(stage, new OwnerEntityMetadata(entity));
             foreach (var action in stage.Actions)
                 context.SetMetadata(action, new OwnerEntityMetadata(entity));
-        }
-    }
-
-    private static void AnalyzePrimitiveType(AnalysisContext context, PrimitiveType primitiveType) {
-        if (primitiveType.TypeCategory.Is(TypeCategory.Nullable)) {
-            context.ReportError(
-                primitiveType,
-                $"Primitive '{primitiveType.Name}' must not use TypeCategory.Nullable. Domain nullability is modeled by requiredness (required unless marked `optional`).",
-                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-        }
-
-        if (primitiveType.TypeCategory.Is(TypeCategory.Collection) || primitiveType.TypeCategory.Is(TypeCategory.Keyed)) {
-            context.ReportError(
-                primitiveType,
-                $"Primitive '{primitiveType.Name}' must not use collection categories. Domain multiplicity is modeled through relationships.",
-                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
     }
 

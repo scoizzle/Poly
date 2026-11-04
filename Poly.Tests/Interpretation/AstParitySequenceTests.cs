@@ -13,15 +13,6 @@ public class AstParitySequenceTests {
     /// </summary>
     public static IReadOnlyList<KnownDivergence> PinnedDivergences { get; } = [
         new(
-            Where: "TryCatch_UnwindThenReuseLocals",
-            Vm: ParityDisposal.Executed,
-            VmOutcome: "long:41",
-            Printed: ParityDisposal.Executed,
-            PrintedOutcomePrefix: "long:42",
-            Finding: "the writer drops the leading statements of a multi-statement block used as a catch "
-                + "body: the printed catch is `{ acc = 41; }` and `caught = 1` is absent, so the finally "
-                + "and the fold after it see a flag the VM set and the printed side never did"),
-        new(
             Where: "IntOverflow_OrderChangesResult",
             Vm: ParityDisposal.Executed,
             VmOutcome: "long:-2147483648",

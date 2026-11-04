@@ -426,12 +426,12 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = ContainsThrow(context, tryCatch.TryBlock);
+        bool mayThrow = MayThrow(context, tryCatch.TryBlock);
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
                 if (!mayThrow) {
-                    MarkSubtreeElidable(context, catchClause.Body, "CF0010", "Catch clause is unreachable - no throw statement in try block");
+                    MarkSubtreeElidable(context, catchClause.Body, "CF0010", "Catch clause is unreachable - no operation in the try block can throw");
                     continue;
                 }
                 var catchEntry = state.Cfg.CreateBlock();
@@ -469,10 +469,21 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
 
-    private bool ContainsThrow(AnalysisContext context, Node node) {
-        if (node is ThrowStatement) return true;
-        return this.AnyChild<ControlFlowMetadata>(context, node, static (_, ch) => ch is ThrowStatement);
-    }
+    /// <summary>
+    /// True when anything in the try block can raise at run time, so its catch clauses are reachable.
+    /// An explicit <see cref="ThrowStatement"/> is the obvious case; division, member access, calls,
+    /// indexing, construction and casts all throw too. Answering "no" is only sound for a block with
+    /// none of them, because the wrong answer elides a reachable catch body — a silently changed
+    /// program rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and
+    /// its throw belongs to the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
+    /// </summary>
+    private bool MayThrow(AnalysisContext context, Node node) =>
+        CanRaise(node)
+        || this.AnyChild<ControlFlowMetadata>(context, node, static (_, child) => CanRaise(child));
+
+    private static bool CanRaise(Node node) => node is
+        ThrowStatement or Divide or Modulo or Invoke or Await or IndexAccess
+        or Member or New or TypeCast or ForEachLoop;
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

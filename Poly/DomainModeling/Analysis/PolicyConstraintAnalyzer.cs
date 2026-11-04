@@ -381,12 +381,33 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
                 return;
             case ParameterAccess:
                 return;
+            case Comparison cmp:
+                // `Status is Open`: the bare name is an enum member of the target
+                // entity's property, not a property of that entity.
+                var lookup = context.GetTypeLookup();
+                ValidateRelatedComparisonOperand(context, lookup, cmp.Left, cmp.Right, targetEntity, targetPropMap);
+                ValidateRelatedComparisonOperand(context, lookup, cmp.Right, cmp.Left, targetEntity, targetPropMap);
+                return;
         }
 
         // Recurse into children
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
             ValidateRelatedPropertyAccess(context, child, targetEntity, targetPropMap);
         }
+    }
+
+    private static void ValidateRelatedComparisonOperand(
+        AnalysisContext context,
+        DomainTypeLookupMetadata? lookup,
+        DomainExpression side,
+        DomainExpression other,
+        Entity targetEntity,
+        Dictionary<string, Property> targetPropMap) {
+        if (side is PropertyAccess pa
+            && !targetPropMap.ContainsKey(pa.Name)
+            && IsEnumMemberReference(lookup, other, targetPropMap, pa.Name))
+            return;
+        ValidateRelatedPropertyAccess(context, side, targetEntity, targetPropMap);
     }
 
     /// <summary>

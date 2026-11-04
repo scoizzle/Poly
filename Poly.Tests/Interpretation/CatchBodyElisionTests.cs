@@ -171,4 +171,19 @@ public class CatchBodyElisionTests {
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
             .Because("a member read on a null receiver raises");
     }
+
+    [Test]
+    public async Task Try_WithNullableDecimalArithmetic_KeepsCatchReachable() {
+        var left = new Parameter("left", TypeReference.To<decimal?>());
+        var right = new Parameter("right", TypeReference.To<decimal?>());
+        var acc = new Variable("acc");
+        var (program, catchBody) = Build(new Block(
+            new Assignment(acc, new Add(left, right))));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("lifted decimal addition throws OverflowException, and a Nullable<> has no PrimitiveType to read");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
 }

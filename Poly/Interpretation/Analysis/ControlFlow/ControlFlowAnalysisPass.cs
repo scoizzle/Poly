@@ -499,7 +499,9 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     };
 
     private static bool IsDecimalOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node)?.PrimitiveType == PrimitiveType.Decimal;
+        context.GetResolvedType(node) is { } type
+        && type.TryGetRuntimeType(out var runtime)
+        && (Nullable.GetUnderlyingType(runtime) ?? runtime) == typeof(decimal);
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

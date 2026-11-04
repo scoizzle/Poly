@@ -169,7 +169,9 @@ public sealed class TemporalPackPrintRoundTripTests {
 
     [Test]
     public async Task TemporalParse_WithoutUses_NowMinusDays_Parses() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 12 Days");
+        var parsed = DslExpressionFragment.ParseExpressionFragment("Now - 12 Days");
+        await Assert.That(parsed).IsNotTypeOf<DateOperation>();
+        var expr = DslExpressionFragment.Resolve(parsed, TemporalInputs());
         await Assert.That(expr).IsTypeOf<DateOperation>();
 
         var changes = new PolyDslParser(TemporalDomain).Parse();
@@ -179,8 +181,10 @@ public sealed class TemporalPackPrintRoundTripTests {
     [Test]
     public async Task TemporalParse_WithoutPack_NowMinusDays_Rejects() {
         var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 12 Days", raw))
-            .Throws<FormatException>();
+        await Assert.That(() => DslExpressionFragment.Resolve(
+                DslExpressionFragment.ParseExpressionFragment("Now - 12 Days"), raw))
+            .Throws<FormatException>()
+            .WithMessageContaining("requires uses temporal");
         await Assert.That(() => new PolyDslParser(TemporalDomain, raw).Parse())
             .Throws<FormatException>();
     }

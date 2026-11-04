@@ -13,6 +13,7 @@ public sealed class ExpressionFormRegistry {
     private readonly List<IBinaryExpressionFold> _binaryFolds = [];
     private readonly List<(string? Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
     private readonly Dictionary<string, Func<DomainExpression>> _idents = new(StringComparer.Ordinal);
+    private Func<long, string, DomainExpression>? _durationClaim;
 
     public ExpressionFormRegistry() {
     }
@@ -25,6 +26,7 @@ public sealed class ExpressionFormRegistry {
         _folds.AddRange(source._folds);
         foreach (var (name, fold) in source._idents)
             _idents[name] = fold;
+        _durationClaim = source._durationClaim;
     }
 
     /// <summary>Fold for a pattern name in every rule that uses it.</summary>
@@ -48,6 +50,24 @@ public sealed class ExpressionFormRegistry {
         ArgumentNullException.ThrowIfNull(fold);
         if (!_idents.TryAdd(text, fold))
             throw new InvalidOperationException($"An ident fold for '{text}' is already registered.");
+    }
+
+    /// <summary>Claims a parsed duration spelling. One claim per registry.</summary>
+    public void RegisterDurationClaim(Func<long, string, DomainExpression> claim) {
+        ArgumentNullException.ThrowIfNull(claim);
+        if (_durationClaim is not null)
+            throw new InvalidOperationException("A duration claim is already registered.");
+        _durationClaim = claim;
+    }
+
+    /// <summary>Applies the duration claim, or returns false when none is registered.</summary>
+    public bool TryClaimDuration(long amount, string unit, out DomainExpression expression) {
+        if (_durationClaim is null) {
+            expression = null!;
+            return false;
+        }
+        expression = _durationClaim(amount, unit);
+        return true;
     }
 
     public bool TryRewriteIdent(string text, out DomainExpression expression) {

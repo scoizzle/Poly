@@ -82,7 +82,8 @@ public sealed class DomainResolver : DslCursor {
         return new(tree.Tokens, kind => kind == DslTokenKind.EndOfFile);
     }
 
-    private DomainExpression ParseExpression() => _expressions.ParseExpression();
+    private DomainExpression ParseExpression() =>
+        DslExpressionFragment.RejectUnresolvedDuration(_expressions.ParseExpression());
 
     /// <summary>
     /// Resolves the document and returns a list of <see cref="DomainChange"/>

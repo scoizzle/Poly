@@ -134,6 +134,13 @@ public sealed record Literal(
 }
 
 /// <summary>
+/// A duration amount and unit spelling with no library meaning. Resolve claims it.
+/// </summary>
+public sealed record UnresolvedDuration(long Amount, string Unit) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => [];
+}
+
+/// <summary>
 /// Navigates into an owned structure (document / composite value) on the current entity.
 /// </summary>
 public sealed record OwnedAccess(

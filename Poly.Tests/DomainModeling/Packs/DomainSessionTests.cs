@@ -9,6 +9,9 @@ using Poly.Tests.TestHelpers;
 namespace Poly.Tests.DomainModeling.Packs;
 
 public sealed class DomainSessionTests {
+    private static DomainExpression Resolved(string text, DomainSession session) =>
+        DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment(text), session);
+
     [Test]
     public async Task ForSource_ParserAndPrinter_ShareGrammar() {
         var session = DomainSession.ForSource(
@@ -37,7 +40,7 @@ public sealed class DomainSessionTests {
         await Assert.That(session.PrimitiveSeeds.Any(seed => seed.Name == "Date")).IsTrue();
         await Assert.That(session.Contributions.Any(c =>
             c.Stage == PipelineStage.Load && c.LibraryId == ExtensionCatalog.TemporalId)).IsTrue();
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
+        var expr = Resolved("Now", session);
         await Assert.That(expr).IsTypeOf<Now>();
     }
 
@@ -46,7 +49,7 @@ public sealed class DomainSessionTests {
         var session = DomainSession.ForExtensions([]);
         await Assert.That(session.Extensions).IsEmpty();
         await Assert.That(session.PrimitiveSeeds.Any(seed => seed.Name == "Date")).IsTrue();
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
+        var expr = Resolved("Now", session);
         await Assert.That(expr).IsTypeOf<Now>();
     }
 
@@ -139,7 +142,7 @@ public sealed class DomainSessionTests {
     public async Task Open_ProductLanguage_ParsesNow() {
         var domain = DomainFactory.Create("D") with { Extensions = [.. ExtensionCatalog.ProductLanguage] };
         var session = DomainSession.Open(domain);
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", session);
+        var expr = Resolved("Now", session);
         await Assert.That(expr).IsTypeOf<Poly.DomainModeling.Libraries.Temporal.Now>();
     }
 

@@ -124,8 +124,7 @@ public sealed class DslExpressionParser {
         return match.PatternName switch {
             "group" => FoldGroup(match, inWhere),
             "not" => DomainExpression.Not(FoldRule(match.Children[0], inWhere)),
-            "duration" => throw _c.Error(
-                $"Duration '{string.Join(' ', match.Tokens.Select(t => t.Text))}' requires uses temporal."),
+            "duration" => FoldUnresolvedDuration(match),
             "exists" => DomainExpression.Exists(DomainExpression.Property(CaptureText(match, "rel"))),
             "where-nav" => FoldWhereNav(match, inWhere),
             "quant-where" => FoldQuantWhere(match, inWhere),
@@ -137,6 +136,13 @@ public sealed class DslExpressionParser {
             _ => throw new InvalidOperationException(
                 $"Cannot fold primary '{match.RuleName}/{match.PatternName}'."),
         };
+    }
+
+    private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
+        var amountText = CaptureText(match, "amount");
+        if (!long.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+            throw _c.Error($"Duration amount '{amountText}' is not an integer.");
+        return new UnresolvedDuration(amount, CaptureText(match, "unit"));
     }
 
     private DomainExpression RewriteIdent(DomainExpression expression) =>

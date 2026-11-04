@@ -343,7 +343,7 @@ public class TemporalFailClosedAnalysisTests {
     [Test]
     public async Task Now_WithoutTemporalPack_ExpressionLowersAsPropertyAccess_NotClock() {
         var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now", raw);
+        var expr = DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment("Now"), raw);
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
 
         var lowered = new DomainExpressionLoweringPass().Lower(expr, new ParameterReference());
@@ -356,8 +356,10 @@ public class TemporalFailClosedAnalysisTests {
     [Test]
     public async Task Duration_WithoutTemporalPack_ParseFailsClosed() {
         var raw = SessionBuilder.CreateEmpty().LoadCore().Build();
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("5 Days", raw))
-            .Throws<FormatException>();
+        await Assert.That(() => DslExpressionFragment.Resolve(
+                DslExpressionFragment.ParseExpressionFragment("5 Days"), raw))
+            .Throws<FormatException>()
+            .WithMessageContaining("requires uses temporal");
     }
 
     [Test]

@@ -11,6 +11,9 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// parse. Unknown units (<c>12 fortnights</c>) fail closed — never a DateOperation.
 /// </summary>
 public class DurationExpressionFormTests {
+    private static DomainExpression Resolved(string text, DomainSession session) =>
+        DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment(text), session);
+
     private static DomainSession DurationInputs() =>
         ExtensionCatalog.Core.Language;
 
@@ -22,7 +25,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Duration_12Days_Form_Parses() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("12 Days", DurationInputs());
+        var expr = Resolved("12 Days", DurationInputs());
 
         await Assert.That(expr).IsTypeOf<Duration>();
         var duration = (Duration)expr;
@@ -32,7 +35,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Duration_3Months_Form_Parses() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("3 Months", DurationInputs());
+        var expr = Resolved("3 Months", DurationInputs());
 
         await Assert.That(expr).IsTypeOf<Duration>();
         var duration = (Duration)expr;
@@ -42,7 +45,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Duration_SingularUnits_Form_Parses() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("1 Day", DurationInputs());
+        var expr = Resolved("1 Day", DurationInputs());
 
         await Assert.That(expr).IsTypeOf<Duration>();
         var duration = (Duration)expr;
@@ -67,7 +70,7 @@ public class DurationExpressionFormTests {
     [Arguments("1 Week", DurationUnit.Weeks)]
     [Arguments("1 Year", DurationUnit.Years)]
     public async Task Duration_CommonUnits_Form_Parses(string spelling, DurationUnit unit) {
-        var expr = DslExpressionFragment.ParseExpressionFragment(spelling, DurationInputs());
+        var expr = Resolved(spelling, DurationInputs());
 
         await Assert.That(expr).IsTypeOf<Duration>();
         var duration = (Duration)expr;
@@ -77,7 +80,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Now_Minus_12Days_BecomesDateOperation() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 12 Days", TemporalInputs());
+        var expr = Resolved("Now - 12 Days", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -98,7 +101,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Now_Minus_50Ms_BecomesDateOperation_AddMilliseconds() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 50 ms", TemporalInputs());
+        var expr = Resolved("Now - 50 ms", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -112,7 +115,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Now_Minus_2Hours_BecomesDateOperation_AddHours() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now - 2 Hours", TemporalInputs());
+        var expr = Resolved("Now - 2 Hours", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -127,7 +130,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Now_Plus_2Weeks_LowersToAddDays_Scaled() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Now + 2 Weeks", TemporalInputs());
+        var expr = Resolved("Now + 2 Weeks", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -141,7 +144,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Today_Plus_1Year_BecomesDateOperation_AddYears() {
-        var expr = DslExpressionFragment.ParseExpressionFragment("Today + 1 Year", TemporalInputs());
+        var expr = Resolved("Today + 1 Year", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
         var dateOp = (DateOperation)expr;
@@ -154,7 +157,7 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Now_Plus_2Hours_Plus_3Minutes_NestsDateOperations() {
-        var expr = DslExpressionFragment.ParseExpressionFragment(
+        var expr = Resolved(
             "Now + 2 Hours + 3 Minutes", TemporalInputs());
 
         await Assert.That(expr).IsTypeOf<DateOperation>();
@@ -180,16 +183,16 @@ public class DurationExpressionFormTests {
 
     [Test]
     public async Task Duration_LowercaseUnit_IsNotDuration() {
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("12 days", DurationInputs()))
+        await Assert.That(() => Resolved("12 days", DurationInputs()))
             .Throws<FormatException>();
     }
 
     [Test]
     public async Task UnknownUnit_Fortnights_DoesNotSucceedAsTemporal() {
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("12 fortnights", DurationInputs()))
+        await Assert.That(() => Resolved("12 fortnights", DurationInputs()))
             .Throws<FormatException>();
 
-        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 12 Fortnights", TemporalInputs()))
+        await Assert.That(() => Resolved("Now - 12 Fortnights", TemporalInputs()))
             .Throws<FormatException>();
     }
 }

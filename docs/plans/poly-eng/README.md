@@ -1,6 +1,6 @@
 # Poly eng: how the plan is kept
 
-The live queue is the sub-issues of [#305](https://github.com/scoizzle/Poly/issues/305); [`board.md`](board.md) is a pointer kept so old links resolve. A slice plan is a draft-PR body frozen by a pinned `PLAN |` comment; open pull requests are the live in-flight state. This directory is historical execution.
+The live queue is open GitHub issues; umbrella [#305](https://github.com/scoizzle/Poly/issues/305) closed 2026-11-04. [`board.md`](board.md) is a pointer kept so old links resolve. A slice plan is a draft-PR body frozen by a pinned `PLAN |` comment; open pull requests are the live in-flight state. This directory is historical execution.
 
 ## Pipeline in brief
 

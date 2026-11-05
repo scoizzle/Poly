@@ -3,16 +3,17 @@ using System.Text.RegularExpressions;
 namespace Poly.Tests.Docs;
 
 /// <summary>
-/// Every relative Markdown link under docs/ and .github/ points at a file or directory
-/// that exists. URLs, mail links and in-page anchors are skipped, as are links inside
-/// code fences and inline code; for the rest only the path before '#' is checked.
+/// Every relative Markdown link under docs/, .github/ and Poly/ (every Markdown file there,
+/// including the module READMEs) points at a file or directory that exists. URLs, mail links and
+/// in-page anchors are skipped, as are links inside code fences and inline code; for the rest only
+/// the path before '#' is checked.
 /// </summary>
 public partial class RelativeDocLinkTests {
     [Test]
-    public async Task RelativeLinks_UnderDocsAndGithub_Resolve() {
+    public async Task RelativeLinks_InDocsGithubAndModules_Resolve() {
         var root = RepoRoot();
         var broken = new List<string>();
-        foreach (var scope in new[] { "docs", ".github" }) {
+        foreach (var scope in new[] { "docs", ".github", "Poly" }) {
             var files = Directory.GetFiles(Path.Combine(root, scope), "*.md", SearchOption.AllDirectories);
             Array.Sort(files, StringComparer.Ordinal);
             foreach (var file in files)

@@ -3,7 +3,7 @@
 **Date:** 2026-08-08  
 **Purpose:** Tour every major facet of the platform as a **semantic statement** (what it *is*, not which pattern it uses), then locate where **complexity demons** concentrate.  
 **Audience:** Humans and agents prioritizing simplification vs feature work.  
-**Authority for CURRENT work:** [`plans/poly-eng/board.md`](plans/poly-eng/board.md)  
+**Authority for work:** open GitHub issues (the retired board was `plans/poly-eng/board.md`; umbrella #305 is closed)  
 **Authority for machinery:** [`CORE.md`](CORE.md)  
 
 This is a **map**, not a suite. Update when a facet is deleted, merged, or materially changes meaning.

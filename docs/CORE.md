@@ -179,7 +179,7 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Trust bar | [`decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Domain library / MCP harness | [`decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
 | Lower vision | [`plans/reference/session-lower-plan-2026-09-21.md`](plans/reference/session-lower-plan-2026-09-21.md) |
-| CURRENT suite | [`plans/poly-eng/board.md`](plans/poly-eng/board.md) |
+| Queue | Open GitHub issues ([umbrella #305](https://github.com/scoizzle/Poly/issues/305) is closed; `docs/plans/poly-eng/board.md` is retired) |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 
 ---

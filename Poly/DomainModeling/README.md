@@ -3,7 +3,7 @@
 Immutable domain facts, evolution, analysis, and lower-to-AST. Product surface is `.poly`.
 
 **Platform map:** [`docs/CORE.md`](../../docs/CORE.md).  
-**Metadata and artifacts:** [`docs/plans/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](../../docs/plans/domainmodeling-metadata-artifact-catalog-2026-08-15.md).
+**Metadata and artifacts:** [`docs/plans/archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md`](../../docs/plans/archive/completed-2026-08-late/domainmodeling-metadata-artifact-catalog-2026-08-15.md).
 
 ## Three nouns
 
@@ -78,7 +78,7 @@ Libraries append flags after this list (not mid-list passes). Persistence librar
 
 ## Directory overview
 
-Layout matches [`docs/plans/domainmodeling-target-architecture-2026-08-16.md`](../../docs/plans/domainmodeling-target-architecture-2026-08-16.md). Namespaces follow folders: facts in `Ontology` (and `Ontology.Contract` / `Constraints` / `Effects` / `Bootstrap`), walkers in `Dispatch`, instances in `Runtime`. Do not `global using` `Ontology` in the core `Poly` assembly — `Action`/`Add`/`ValueType`/`PrimitiveType` collide with `System` and `Poly.Ast`. Sibling folders use explicit usings plus aliases.
+Layout matches [`docs/plans/archive/completed-2026-08-late/domainmodeling-target-architecture-2026-08-16.md`](../../docs/plans/archive/completed-2026-08-late/domainmodeling-target-architecture-2026-08-16.md). Namespaces follow folders: facts in `Ontology` (and `Ontology.Contract` / `Constraints` / `Effects` / `Bootstrap`), walkers in `Dispatch`, instances in `Runtime`. Do not `global using` `Ontology` in the core `Poly` assembly — `Action`/`Add`/`ValueType`/`PrimitiveType` collide with `System` and `Poly.Ast`. Sibling folders use explicit usings plus aliases.
 
 | Directory | Purpose |
 |-----------|---------|

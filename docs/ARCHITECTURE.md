@@ -437,9 +437,11 @@ The domain model is an **immutable record graph** — the primary model for anal
 - `DomainExpression` — unified expression model for policies, rules, and guards
 - `Constraint` — validation constraint (Range, Length, Pattern, Required, Unique)
 
-### Builders
+### Construction
 
-`DomainBuilder` → `EntityBuilder` → `StageBuilder` / `ActionBuilder` / ... → `Build()`
+Domains are built by the `.poly` DSL (`Language/`) or by `DomainEvolution` changes (`Evolution/`);
+there is no fluent `DomainBuilder` chain. `DomainSession` (`Compile/`) assembles the domain with
+the libraries its `uses` ids load.
 
 ### Expression System
 
@@ -449,15 +451,18 @@ The domain model is an **immutable record graph** — the primary model for anal
 
 | Directory | Purpose | Lines |
 |-----------|---------|-------|
-| `Analysis/` | Domain-model analyzers (entity structure, effects, topology, storage, transport, ownership, subscriptions, constraints) | ~5,260 |
-| `Lowering/` | DomainExpression→AST lowering, C# code export, policy evaluation via VM | ~2,830 |
-| `Parsing/` | Poly DSL tokenizer, parser, and printer (`.poly` text format) | ~2,340 |
-| `Evolution/` | `DomainEvolution`, `DomainChange`, `EvolutionTransaction` — atomic changes with analysis gate + rollback | ~1,970 |
-| `Bootstrap/` | `DomainFactory`, `CanonicalBuiltInTypeCatalog` — domain creation with built-in types | ~360 |
-| `Queries/` | `DomainQueries` — model-optimized query projections | ~290 |
-| `Builders/` | Fluent construction API (alternative to DSL/evolution) | ~580 |
-| `Effects/` | Effect type records (Create, Transition, Assign, Conditional, Composite, Link, etc.) | ~140 |
-| `Constraints/` | Constraint type records (Range, Length, Pattern, Required, Unique, etc.) | ~30 |
+| `Analysis/` | Domain-model analyzers (entity structure, effects, topology, storage, transport, ownership, subscriptions, constraints) | ~9,980 |
+| `Lowering/` | DomainExpression→AST lowering, C# code export, policy evaluation via VM | ~5,500 |
+| `Language/` | Product `.poly`: tokenizer, grammar, parser, printer, resolver | ~3,785 |
+| `Compile/` | `DomainSession`, `SessionBuilder`, artifact catalog, library + artifact contracts | ~2,780 |
+| `Evolution/` | `DomainEvolution`, `DomainChange`, `EvolutionTransaction` — atomic changes with analysis gate + rollback | ~2,355 |
+| `Runtime/` | `ModuleInstanceExecutor` — interpreter host over the module dictionary | ~1,480 |
+| `Libraries/` | In-assembly seeds (`Temporal/`, `Storage/`, `Http/`) | ~1,280 |
+| `Ontology/` | Facts: `Domain`, `Entity`, effects, constraints, contracts, `Bootstrap/` | ~1,165 |
+| `Meaning/` | Folds, forms, print maps, `ExpressionMeaning`, annotations, type maps | ~1,015 |
+| `Queries/` | `DomainQueries` — model-optimized query projections | ~330 |
+| `ContractFill/` | Another Domain → `ImportedContract` (not session load) | ~170 |
+| `Dispatch/` | Closed-world walkers (`DomainExpressionDispatch`, `EffectDispatch`) | ~130 |
 
 **Note:** The V2 mutable subsystem (`Poly/Data/Modeling/`) has been **deleted**. Only the immutable V3 core remains.
 
@@ -509,4 +514,4 @@ The domain model is an **immutable record graph** — the primary model for anal
 
 ### Domain Modeling
 - Core: `Poly/DomainModeling/` (Domain, Entity, Action, Effect, Policy, Relationship, etc.)
-- Sub-modules: `Analysis/`, `Builders/`, `Bootstrap/`, `Constraints/`, `Effects/`, `Evolution/`, `Lowering/`, `Parsing/`, `Queries/`
+- Sub-modules: `Ontology/`, `Dispatch/`, `Compile/`, `Language/`, `Meaning/`, `Analysis/`, `Lowering/`, `Runtime/`, `Evolution/`, `Queries/`, `Libraries/`, `ContractFill/` (see the table in §10)

@@ -18,8 +18,15 @@ internal interface ISessionStore {
     /// <summary>
     /// Atomically reads, mutates, and writes a session under that session's lock.
     /// A rejected outcome leaves the session as it was. Null when the id is unknown.
+    /// <para>
+    /// The delegate receives the analysis of the domain it is handed, so the evolution gate can
+    /// reuse it instead of re-analyzing the live domain — a re-analysis binds the authored session
+    /// and evicts the module the executor is running (#387).
+    /// </para>
     /// </summary>
-    EvolutionResult? Evolve(string sessionId, Func<Domain, DomainSession, EvolutionResult> mutate);
+    EvolutionResult? Evolve(
+        string sessionId,
+        Func<Domain, DomainSession, AnalysisResult?, EvolutionResult> mutate);
 
     /// <summary>All active session ids.</summary>
     IReadOnlyList<string> ListSessions();

@@ -121,7 +121,7 @@ public class UnifiedRemoveTests {
         McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Order","name":"Active"}""");
         McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Score","typeName":"Number"}""");
 
-        McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToStage("Order", "Active", "Guard",
                     DomainExpression.GreaterThanOrEqual(
@@ -146,7 +146,7 @@ public class UnifiedRemoveTests {
         McpTestTools.Evolve.Add(sessionId, "action", """{"entityName":"Order","name":"Submit"}""");
         McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Order","name":"Score","typeName":"Number"}""");
 
-        McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToAction("Order", "Submit", "Guard",
                     DomainExpression.GreaterThanOrEqual(

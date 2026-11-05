@@ -504,15 +504,22 @@ public class LambdaBridgeVmTests {
 
 
     public static class LambdaBridgeProbe {
-        private static Func<int, bool>? _captured;
+        /// <summary>
+        /// Per-test slot, not a static field: the tests in this class run concurrently, and a
+        /// shared field let one test's <see cref="Reset"/> null another's delegate between
+        /// <see cref="Capture"/> and <see cref="Fire"/> (NullReferenceException, observed once in
+        /// four full-suite runs). The value flows with the execution context, and the VM invokes
+        /// the delegate on the calling thread, so a test always reads the delegate it captured.
+        /// </summary>
+        private static readonly AsyncLocal<Func<int, bool>?> Captured = new();
 
-        public static void Capture(Func<int, bool> predicate) => _captured = predicate;
+        public static void Capture(Func<int, bool> predicate) => Captured.Value = predicate;
 
-        public static bool Fire(int value) => _captured!(value);
+        public static bool Fire(int value) => Captured.Value!(value);
 
         public static double ApplyDouble(Func<int, double> body, int value) => body(value);
 
-        public static void Reset() => _captured = null;
+        public static void Reset() => Captured.Value = null;
 
         public static void Apply(Action<int> action, int value) => action(value);
 

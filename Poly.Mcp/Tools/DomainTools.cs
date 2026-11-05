@@ -998,10 +998,14 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
         var before = GetFingerprint(snapshot.Domain);
         var preRevision = snapshot.Revision;
 
-        var outcome = store.Evolve(sessionId, (domain, modeling) => {
+        var outcome = store.Evolve(sessionId, (domain, modeling, priorAnalysis) => {
             var result = new DomainEvolution(domain).Evolve();
             result = mutate(result);
-            return result.Apply(session: modeling);
+            // Hand the analysis of the domain being changed to the evolution gate. Without it the
+            // gate analyzes the live domain to find its mutation targets, and that analysis binds
+            // Modeling into RuntimeAnalysisCache, evicting the module the executor is running —
+            // so a rejected change disabled `unique` for the rest of the session (#387).
+            return result.Apply(priorAnalysis: priorAnalysis, session: modeling);
         });
 
         // Session was just validated above; null shouldn't happen but guard anyway.

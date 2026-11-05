@@ -16,6 +16,11 @@ namespace Poly.Mcp.Sessions;
 /// the analysis of that root, a monotonically increasing revision number,
 /// the loaded <see cref="DomainSession"/>, and a runtime instance store.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
+/// <para>
+/// Do not copy this record with <c>with</c>: a copy would carry the lock, the cached
+/// <c>_execution</c> pair and any live executor from the original, which belong to the domain
+/// they were built for. Every state change constructs a new instance.
+/// </para>
 /// </summary>
 internal sealed record McpSessionState(
     Domain Domain,
@@ -25,6 +30,47 @@ internal sealed record McpSessionState(
 ) {
     private readonly Lock _executorGate = new();
     private ModuleInstanceExecutor? _executor;
+    private (DomainSession Session, AnalysisResult Analysis)? _execution;
+
+    /// <summary>
+    /// The one compilation this state runs: the session that lowers the module and the analysis
+    /// that produced its constraint anchors. Both are created together, lazily, and never
+    /// replaced.
+    /// <para>
+    /// <see cref="RuntimeAnalysisCache"/> keeps one session, analysis and module per
+    /// <see cref="Domain"/> reference, and binding a different session evicts the module
+    /// (<c>Bind</c>, "sessionChanged"). Two sessions per domain — the authored one and an
+    /// executor-only variant — therefore let any reader evict the module a live executor is
+    /// running, which re-lowered it without the persistence overlay's
+    /// <c>UniqueConstraintCompiler</c>. One pair per state removes the second session, so
+    /// binding it again is a no-op.
+    /// </para>
+    /// </summary>
+    public (DomainSession Session, AnalysisResult Analysis) Execution {
+        get {
+            lock (_executorGate)
+                return EnsureExecution();
+        }
+    }
+
+    /// <summary>
+    /// The session that lowers and runs this domain: the authored session, or the authored one
+    /// plus the persistence library so a <c>unique</c> property is the storage-port check in the
+    /// module's own bodies whether or not the source says <c>uses persistence</c>.
+    /// </summary>
+    public DomainSession ExecutionSession => Execution.Session;
+
+    /// <summary>The analysis of <see cref="ExecutionSession"/>; carries the constraint anchors.</summary>
+    public AnalysisResult ExecutionAnalysis => Execution.Analysis;
+
+    /// <summary>
+    /// The execution analysis when one has been built, without building it. Used by a caller that
+    /// wants to report why <see cref="Execution"/> threw: lowering refuses a domain whose execution
+    /// analysis has errors, and that analysis is the only place the reasons are recorded.
+    /// </summary>
+    public AnalysisResult? ExecutionAnalysisIfCreated {
+        get { lock (_executorGate) return _execution?.Analysis; }
+    }
 
     /// <summary>
     /// The session's module executor: runs the lowered operation module on dictionary
@@ -33,26 +79,30 @@ internal sealed record McpSessionState(
     /// </summary>
     public ModuleInstanceExecutor Executor {
         get {
-            lock (_executorGate)
-                return _executor ??= CreateExecutor();
+            lock (_executorGate) {
+                if (_executor is not null)
+                    return _executor;
+                _ = EnsureExecution();
+                return _executor = new ModuleInstanceExecutor(Domain);
+            }
         }
     }
 
-    /// <summary>
-    /// Binds the domain to a lowering session that also carries the persistence library,
-    /// so a <c>unique</c> property is the storage-port check in the module's own bodies
-    /// whether or not the source says <c>uses persistence</c>. The executor then runs
-    /// the cached module. A domain that already loads a persistence overlay keeps its session.
-    /// </summary>
-    private ModuleInstanceExecutor CreateExecutor() {
+    /// <summary>Caller holds <see cref="_executorGate"/>; <see cref="System.Threading.Lock"/> is not reentrant.</summary>
+    private (DomainSession Session, AnalysisResult Analysis) EnsureExecution() {
+        if (_execution.HasValue)
+            return _execution.Value;
         var ids = Domain.Extensions.ToList();
         var hasOverlay = ids.Any(id => id is "persistence" or "sqlite" or "sqlserver");
         var session = hasOverlay
             ? Modeling
             : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Catalog);
         var analysis = session.Analyze(Domain);
+        // Publish the pair before lowering: lowering refuses a domain whose execution analysis has
+        // errors, and a caller that catches the throw still needs this analysis to report why.
+        _execution = (session, analysis);
         RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
-        return new ModuleInstanceExecutor(Domain);
+        return _execution.Value;
     }
 
     /// <summary>The executor if one exists; read-only paths use it so they never lower.</summary>
@@ -134,7 +184,7 @@ internal sealed class McpSessionStore(
     /// </summary>
     public EvolutionResult? Evolve(
         string sessionId,
-        Func<Domain, DomainSession, EvolutionResult> mutate) {
+        Func<Domain, DomainSession, AnalysisResult?, EvolutionResult> mutate) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
@@ -146,7 +196,7 @@ internal sealed class McpSessionStore(
             var current = entry.State;
             // A rejected outcome leaves the session as it was: its analysis is of the
             // proposal, not of the domain the session keeps.
-            var outcome = mutate(current.Domain, current.Modeling);
+            var outcome = mutate(current.Domain, current.Modeling, current.LatestAnalysis);
             if (!outcome.Succeeded)
                 return outcome;
 

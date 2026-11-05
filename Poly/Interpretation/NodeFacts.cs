@@ -136,11 +136,20 @@ public static class NodeFacts {
     /// This is the whole answer, not the root's row: <c>Or</c>, <c>Conditional</c>, <c>Coalesce</c> and
     /// a nested <c>Block</c> are inert themselves and can hold a division or a call.
     /// </para>
+    /// <para>
+    /// It answers for the tree it is given. A node whose replacement the analysis recorded
+    /// (<c>SetNodeReplacement</c>) is judged by its own kind and children, not by the replacement, so a
+    /// caller that runs after rewriting must ask about the replacement.
+    /// </para>
     /// </summary>
     public static bool MayRaise(Node node) {
         ArgumentNullException.ThrowIfNull(node);
         if (CanRaise(node))
             return true;
+        // A scope boundary is the whole answer for its own node: its body runs when something calls
+        // it. Answering otherwise keeps a lambda statement the writer cannot print.
+        if (node is Lambda or TypeDefinitionNode)
+            return false;
         foreach (var child in node.Children) {
             if (child is null)
                 continue;

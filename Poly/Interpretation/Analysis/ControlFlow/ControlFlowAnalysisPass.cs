@@ -475,7 +475,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     /// row at all, which counts as raising. Answering "no" is only sound for a kind the table calls
     /// inert, because the wrong answer elides a reachable catch body — a silently changed program
     /// rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and its
-    /// throw belongs to the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
+    /// throw belongs to the call that invokes it, which <see cref="NodeFacts.MayRaise"/> honours.
     /// </summary>
     private static bool MayThrow(Node node) => NodeFacts.MayRaise(node);
 

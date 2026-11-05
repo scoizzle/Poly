@@ -91,7 +91,7 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(sum)).IsFalse()
-            .Because("decimal addition throws on overflow where the integer operator wraps");
+            .Because("Add is marked raising because the same kind reaches the decimal operator, which throws; this pair cannot overflow, so the test pins the over-approximation");
     }
 
     [Test]
@@ -117,5 +117,54 @@ public class SideEffectElisionTests {
 
         await Assert.That(analysis.CanElide(init)).IsFalse()
             .Because("a for initializer that can raise must not be elided either");
+    }
+
+    [Test]
+    public async Task LambdaStatementWithARaisingBody_IsStillElidable() {
+        var p = new Parameter("p", TypeReference.To<int>());
+        var lambda = new Lambda([p], new Divide(p, Wrap(2)));
+        var program = new Block([lambda, Wrap(1)]);
+
+        var analysis = Analyze(program);
+        var printed = new CSharpGenerator(analysis).Generate(program);
+
+        await Assert.That(analysis.CanElide(lambda)).IsTrue()
+            .Because("creating a delegate does not run its body, and the writer cannot print a lambda statement");
+        await Assert.That(printed).DoesNotContain("=>");
+    }
+
+    [Test]
+    public async Task ForIncrementThatCanRaise_IsNotElidable() {
+        var a = new Variable("a");
+        var i = new Variable("i");
+        var increment = new IndexAccess(a, i);
+        var loop = new ForLoop(null, Wrap(false), increment, new Block(Wrap(1)));
+        var program = new Block([new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))), loop, Wrap(1)], [a, i]);
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(increment)).IsFalse()
+            .Because("a for increment that can raise must not be elided either");
+    }
+
+    [Test]
+    public async Task RaisingStatement_GetsNoElisionDiagnostic() {
+        var a = new Variable("a");
+        var i = new Variable("i");
+        var read = new IndexAccess(a, i);
+        var program = new Block([
+            new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(1))),
+            new Assignment(i, Wrap(2)),
+            read,
+            Wrap(1),
+        ], [a, i]);
+        var settings = AnalysisSettings.Default.With(new SideEffectAnalysisOptions { EmitElisionDiagnostics = true });
+        var analysis = new AnalyzerBuilder()
+            .UseThisReferenceContext().UseVariableScopeValidator().UseTypeAndMemberResolver()
+            .UseSideEffectAnalysis().UseJumpTargetResolution().UseConstantFolding()
+            .UseControlFlowAnalysis().Build().Analyze(program, settings: settings);
+
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DEAD_CODE_ELIDABLE" && ReferenceEquals(d.Node, read))).IsFalse()
+            .Because("the diagnostic must not claim a statement the writer keeps can be elided");
     }
 }

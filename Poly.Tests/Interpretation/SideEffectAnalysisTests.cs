@@ -51,7 +51,9 @@ public class SideEffectAnalysisTests {
         var settings = AnalysisSettings.Default.With(
             new SideEffectAnalysisOptions { EmitElisionDiagnostics = true });
         var result = SideEffectAnalyzerPipeline().Analyze(block, settings: settings);
-        await Assert.That(result.Diagnostics.Any(d => d.Code == "DEAD_CODE_ELIDABLE")).IsTrue();
+        var reports = result.Diagnostics.Where(d => d.Code == "DEAD_CODE_ELIDABLE").ToArray();
+        await Assert.That(reports.Length).IsEqualTo(1);
+        await Assert.That(reports[0].Node).IsSameReferenceAs(pure);
     }
 
     [Test]

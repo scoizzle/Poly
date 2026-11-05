@@ -5,7 +5,7 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>
 /// The two node-level surface behaviours that outlived the hand-kept inventory: a
-/// <see cref="Comment"/> is a no-op statement and rejected as a value, and a
+/// An empty block is a no-op statement and rejected as a value, and a
 /// <see cref="ClrTypeReference"/> is not a VM value. Which producer honours which kind is
 /// <see cref="NodeFacts"/>'s question, checked by <see cref="NodeFactsTotalityTests"/>.
 /// </summary>

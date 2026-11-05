@@ -39,7 +39,7 @@ The lowering pass should emit Syntax AST that mirrors how a C# developer would e
 | Cross-entity invoke | `this.customer.Activate()` | `this.Rel.Action(args)` with a `DomainResult.Failure` linked-target guard |
 | For-invoke | `foreach (var x in Rel) { x.Action(...); }` | Fail-fast `ForEachLoop` over a **OneToMany** collection nav |
 
-When a domain concept cannot be expressed in the current Syntax AST (e.g. a collaborator the dictionary `This` cannot Member-read), bind a Notify-shaped instance method and lower to `Invoke(Member(This, job), …)` — same as `EnsureUnique` / `Create` / `ExistsRelated`. Unique assign and create / create-in bind Store that way. Do not emit `Comment` as shipped meaning (§2d).
+When a domain concept cannot be expressed in the current Syntax AST (e.g. a collaborator the dictionary `This` cannot Member-read), bind a Notify-shaped instance method and lower to `Invoke(Member(This, job), …)` — same as `EnsureUnique` / `Create` / `ExistsRelated`. Unique assign and create / create-in bind Store that way. Do not emit a placeholder node as shipped meaning (§2d).
 
 ---
 
@@ -149,9 +149,9 @@ ExecuteEffectList(effects)
       └─ CreateEntityInRelationship → this.CreateIn(rel, prop, value, …)
 ```
 
-### 2d. Comment is not shipped meaning
+### 2d. No placeholder node is shipped meaning
 
-`EffectLoweringPass` does **not** emit `Comment` nodes. A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All shipped effects lower on both runtime and emit paths. The `Comment` AST node is not product meaning and must not be used as a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage. Clocks (`now`/`today`/`guid`) lower to static BCL members the VM executes — they are not rewritten to host literals.
+A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All shipped effects lower on both runtime and emit paths. The `Comment` node that once served as such a marker was deleted (#391); no AST node is a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage. Clocks (`now`/`today`/`guid`) lower to static BCL members the VM executes — they are not rewritten to host literals.
 
 ---
 

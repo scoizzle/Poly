@@ -69,7 +69,7 @@ public class EntryExitTransitionEmitTests {
     }
 
     static (Domain Domain, AnalysisResult Analysis, System.Reflection.Assembly Assembly) EmitAndCompile(string poly, string assemblyName) {
-        var session = DomainSession.ForSource(poly, seed: [.. ExtensionCatalog.ProductAuthoring, "persistence"], catalog: ExtensionCatalog.Core);
+        var session = DomainSession.ForSource(poly, seed: [], catalog: ExtensionCatalog.Core);
         var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         if (!outcome.Succeeded)
             throw new InvalidOperationException(string.Join("; ", outcome.Analysis.Diagnostics.Select(d => d.Message)));

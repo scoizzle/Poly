@@ -59,19 +59,19 @@ public class CacheSessionGuardTests {
     }
 
     /// <summary>
-    /// The same libraries in the same order lower a domain identically, so binding that session is
-    /// not an eviction. Note `WithDomain` does *not* produce this shape: it reopens from the
-    /// domain's `uses`, which is why the MCP state keeps one execution pair instead of relying on
-    /// an equivalent session being rebuilt.
+    /// `WithDomain` is the shape a caller might assume is equivalent: it reopens from the domain's
+    /// `uses`. It is not — the new session can load different libraries — so it is refused too.
+    /// This is the case the round-3 review found: same ids, different catalog, module kept.
     /// </summary>
     [Test]
-    public async Task BindingAnEquivalentSession_IsAllowed() {
+    public async Task ReopeningFromTheDomain_OverACachedModule_IsRefused() {
         var (domain, sessionA, analysisA) = Build(withPersistence: true);
-        var moduleA = RuntimeAnalysisCache.GetOrLower(domain, sessionA, analysisA);
+        RuntimeAnalysisCache.GetOrLower(domain, sessionA, analysisA);
 
-        var equivalent = Session(withPersistence: true);
-        var again = RuntimeAnalysisCache.GetOrLower(domain, equivalent, analysisA);
-        await Assert.That(ReferenceEquals(again, moduleA)).IsTrue();
+        var reopened = sessionA.WithDomain(domain);
+        await Assert.That(() => RuntimeAnalysisCache.GetOrLower(domain, reopened, analysisA))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("already has a module");
     }
 
     [Test]

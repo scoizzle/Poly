@@ -51,9 +51,9 @@ public partial class PerfResultsTests {
 
         foreach (var (benchmark, csvName) in Benchmarks) {
             var row = rows.Single(r => r.Benchmark == benchmark);
-            await AssertRow(csv, csvName, "Poly VM", row.PolyAvg, row.PolyMin, averageIsMinimum: false);
-            await AssertRow(csv, csvName, "C# native", row.NativeAvg, null, averageIsMinimum: false);
-            await AssertRow(csv, csvName, "JS", row.Js, null, averageIsMinimum: false);
+            await AssertRow(csv, csvName, "Poly VM", row.PolyAvg, row.PolyMin);
+            await AssertRow(csv, csvName, "C# native", row.NativeAvg, null);
+            await AssertRow(csv, csvName, "JS", row.Js, null);
             // The ratio is Poly / C# native, both host rows, printed to two decimals.
             await Assert.That(row.Ratio).IsEqualTo(Ratio(csv[(csvName, "Poly VM")].Avg, row.NativeAvg))
                 .Because($"{benchmark}: the document says {row.Ratio}x; the CSV implies another ratio");
@@ -98,13 +98,15 @@ public partial class PerfResultsTests {
             if (cells.Length < 7)
                 continue;
             var poly = Numbers().Matches(cells[2]).Select(m => Parse(m.Value)).ToList();
-            if (poly.Count < 2
-                || !Numbers().IsMatch(cells[3])
-                || !Numbers().IsMatch(cells[5]))
-                continue;
+            // Pin the shape, not just the values: an extra number in a cell is drift too.
+            if (poly.Count != 2)
+                throw new InvalidOperationException($"the Poly cell '{cells[2]}' should hold avg and min only");
+            if (Numbers().Matches(cells[3]).Count != 1 || Numbers().Matches(cells[5]).Count != 1)
+                throw new InvalidOperationException(
+                    $"the native/JS cells should hold one number each: '{cells[3]}', '{cells[5]}'");
             var native = Parse(Numbers().Match(cells[3]).Value);
-            if (!RatioCell().IsMatch(cells[4]))
-                continue;
+            if (!RatioCell().IsMatch(cells[4]) || Numbers().Matches(cells[4]).Count != 1)
+                throw new InvalidOperationException($"the Ratio cell '{cells[4]}' should hold one ratio");
             var ratio = decimal.Parse(RatioCell().Match(cells[4]).Groups[1].Value, CultureInfo.InvariantCulture);
             var js = Parse(Numbers().Match(cells[5]).Value);
             rows.Add(new FinalRow(NameCell().Match(cells[1]).Groups[1].Value, poly[0], poly[1], native, ratio, js));
@@ -114,7 +116,7 @@ public partial class PerfResultsTests {
 
     private static async Task AssertRow(
         IReadOnlyDictionary<(string, string), (int Avg, int Min)> csv,
-        string benchmark, string language, int expectedAvg, int? expectedMin, bool averageIsMinimum) {
+        string benchmark, string language, int expectedAvg, int? expectedMin) {
         await Assert.That(csv.TryGetValue((benchmark, language), out var row)).IsTrue()
             .Because($"'{benchmark}' has no '{language}' row in {FinalRun}.csv");
         await Assert.That(expectedAvg).IsEqualTo(row.Avg)
@@ -122,7 +124,6 @@ public partial class PerfResultsTests {
         if (expectedMin is { } min)
             await Assert.That(min).IsEqualTo(row.Min)
                 .Because($"{benchmark}/{language}: the document says min {min} us, the CSV says {row.Min}");
-        _ = averageIsMinimum;
     }
 
     private static Dictionary<(string, string), (int Avg, int Min)> ReadCsv(string path) {

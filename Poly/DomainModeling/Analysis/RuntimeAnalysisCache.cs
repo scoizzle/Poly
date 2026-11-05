@@ -57,13 +57,12 @@ internal static class RuntimeAnalysisCache {
         var holder = Cache.GetValue(domain, _ => new Holder { Session = session });
         lock (holder) {
             var sessionChanged = !ReferenceEquals(holder.Session, session);
-            // Same loaded libraries in the same order lower a domain identically, so a different
-            // session object that loads them is not a different compilation.
-            var equivalent = !sessionChanged || SameExtensions(holder.Session, session);
-            // A cached module belongs to the session that lowered it. Replacing that session with
-            // one that loads different libraries would silently swap the compilation every
-            // consumer runs, which is how #387 turned a unique constraint off. Refuse instead.
-            if (sessionChanged && holder.Module is not null && !equivalent)
+            // The compilation *is* the session object. Two sessions can carry the same `uses` ids
+            // and still load different libraries from different catalogs — different constraint
+            // compilers, different analyzers — so "same ids" is not "same compilation". Refuse a
+            // different session over a cached module rather than swap what every consumer runs;
+            // that silent swap is how #387 turned a unique constraint off.
+            if (sessionChanged && holder.Module is not null)
                 throw new InvalidOperationException(
                     $"Domain '{domain.Name}' already has a module, lowered by a session with "
                     + $"[{string.Join(", ", holder.Session.Extensions)}]. Binding a session with "
@@ -76,33 +75,15 @@ internal static class RuntimeAnalysisCache {
                 holder.Analysis = analysis;
             else if (sessionChanged)
                 holder.Analysis = null;
-            // A second Analyze on the same compilation must not drop the module the executor is
-            // running. Only a different compilation invalidates it.
-            if (sessionChanged && !equivalent) {
+            // A second Analyze on the same session must not drop the module the executor is
+            // running. Only a different session invalidates it.
+            if (sessionChanged) {
                 holder.Module = null;
                 holder.Index = null;
                 holder.SubscriptionBodies = null;
                 holder.PolicyBodies = null;
             }
         }
-    }
-
-    /// <summary>
-    /// Same loaded libraries in the same order: two such sessions lower one domain identically, so
-    /// binding either is not an eviction. `DomainSession.WithDomain` does not build this shape for a
-    /// domain whose `uses` differs from the session's ids (it reopens from the domain), which is why
-    /// the MCP state keeps one pair instead of rebuilding a session per call.
-    /// </summary>
-    private static bool SameExtensions(DomainSession left, DomainSession right) {
-        var a = left.Extensions;
-        var b = right.Extensions;
-        if (a.Count != b.Count)
-            return false;
-        for (var i = 0; i < a.Count; i++) {
-            if (!string.Equals(a[i], b[i], StringComparison.Ordinal))
-                return false;
-        }
-        return true;
     }
 
     public static AnalysisResult GetOrAnalyze(Domain domain) =>
@@ -125,9 +106,10 @@ internal static class RuntimeAnalysisCache {
     }
 
     /// <summary>
-    /// True when this domain already has a lowered module, and hands it back. A caller that only
-    /// needs to *run* the domain must use it rather than lowering again: a second lowering under a
-    /// different session is the eviction `Bind` now refuses.
+    /// True when this domain already has a lowered module, and hands it back. Used by test hosts
+    /// that must decide "run the existing compilation" before asking for one; a production caller
+    /// that only needs to run a domain goes through <see cref="GetOrLower(Domain)"/>, which already
+    /// returns the cached module.
     /// </summary>
     internal static bool TryGetModule(Domain domain, out IReadOnlyList<TypeDefinitionNode> module) {
         ArgumentNullException.ThrowIfNull(domain);

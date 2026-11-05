@@ -54,7 +54,10 @@ The rest of this document marks, as an observation rather than a ranking, whethe
 
 **Observation:** Domain facts (`Domain`, `Entity`, `Action`, `Policy`, `Effect`, `DomainExpression`) are also `Node` subclasses (`Poly/DomainModeling/Ontology/DomainObject.cs`), so they can carry analysis metadata. They are not the syntax tree the interpreter compiles. Meaning for a running operation is supposed to be the lowered syntax tree; the author’s tree is the input to lowering.
 
-**Observation:** `Poly/Ast/Nodes/Comment.cs` is a no-op placeholder node whose own comment says it records “what was not lowered.” The emitter treats `Comment` as empty when used as a statement and rejects it as a value (`Poly/Interpretation/Vm/Abi/AbiEmitter.cs`). A comment is not a simulated operation.
+**Observation (historical):** a `Comment` node used to exist as a no-op placeholder, and the
+emitter treated it as empty when used as a statement and rejected it as a value. It was deleted
+(#391): the node had no producer, and a placeholder that records "what was not lowered" is exactly
+the lowering-gap marker the pipeline forbids.
 
 **Observation:** `LinqExpressionGenerator` (`Poly/Interpretation/LinqExpressions/LinqExpressionGenerator.cs`) compiles the same syntax tree to LINQ expression trees. The file states it is a test/reference path, not the canonical execution engine. A second compile path exists beside the interpreter.
 

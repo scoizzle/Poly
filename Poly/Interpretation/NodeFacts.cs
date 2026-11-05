@@ -12,14 +12,15 @@ public enum Producers {
 }
 
 /// <summary>
-/// One row of <see cref="NodeFacts"/>: the kind's name, the producers that honour it, and —
-/// when the VM rejects the kind on purpose — the message the rejection carries.
+/// One row of <see cref="NodeFacts"/>: the kind's name, the producers that honour it, whether the
+/// kind can raise at run time, and — when the VM rejects the kind on purpose — the message the
+/// rejection carries.
 /// </summary>
-public sealed record NodeFact(string Label, Producers Producers, string? RejectReason = null);
+public sealed record NodeFact(string Label, Producers Producers, bool MayRaise, string? RejectReason = null);
 
 /// <summary>
-/// The one table that answers which producer honours which concrete <see cref="Node"/> kind.
-/// Data plus a totality test; it carries no behaviour.
+/// The one table of per-kind facts: which producer honours the kind, and whether executing it can
+/// raise. Data plus a totality test; it carries no behaviour.
 /// <para>
 /// <c>Vm</c> means the kind executes; <c>Writer</c> means the writer prints it and the printed
 /// text re-reads to the same kind; <c>WriterExpanded</c> means the writer prints it as an
@@ -29,20 +30,28 @@ public sealed record NodeFact(string Label, Producers Producers, string? RejectR
 /// <see cref="NodeFact.RejectReason"/> records a deliberate VM rejection and the message it must
 /// carry.
 /// </para>
+/// <para>
+/// <see cref="NodeFact.MayRaise"/> answers "can this kind raise while it executes", and it is
+/// deliberately conservative. An operator node is marked raising even when the integer operator
+/// wraps, because the same node reaches the decimal operator or a user-defined one, and the table
+/// sees kinds, not operands. A consumer that must be precise refines the answer; a consumer that
+/// forgets costs an optimization, never a program. A new kind is marked raising until it is shown
+/// inert.
+/// </para>
 /// </summary>
 public static class NodeFacts {
     public static IReadOnlyDictionary<Type, NodeFact> All { get; } = new Dictionary<Type, NodeFact> {
-        [typeof(Add)] = Fact<Add>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Add)] = Raises<Add>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(And)] = Fact<And>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Assignment)] = Fact<Assignment>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(AttributeNode)] = Fact<AttributeNode>(Producers.Writer | Producers.Reader),
         [typeof(AttributedNode)] = Fact<AttributedNode>(Producers.None),
-        [typeof(Await)] = Fact<Await>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(Await)] = Raises<Await>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(BaseConstructorInvocationNode)] = Fact<BaseConstructorInvocationNode>(Producers.Writer | Producers.Reader),
-        [typeof(BitwiseAnd)] = Fact<BitwiseAnd>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(BitwiseNot)] = Fact<BitwiseNot>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(BitwiseOr)] = Fact<BitwiseOr>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(BitwiseXor)] = Fact<BitwiseXor>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(BitwiseAnd)] = Raises<BitwiseAnd>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(BitwiseNot)] = Raises<BitwiseNot>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(BitwiseOr)] = Raises<BitwiseOr>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(BitwiseXor)] = Raises<BitwiseXor>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(Block)] = Fact<Block>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(BreakStatement)] = Fact<BreakStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ClrTypeReference)] = Fact<ClrTypeReference>(Producers.None, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
@@ -55,33 +64,33 @@ public static class NodeFacts {
         [typeof(ConstructorDefinitionNode)] = Fact<ConstructorDefinitionNode>(Producers.Writer | Producers.Reader),
         [typeof(ContinueStatement)] = Fact<ContinueStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Default)] = Fact<Default>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(Divide)] = Fact<Divide>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Divide)] = Raises<Divide>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(DoWhileLoop)] = Fact<DoWhileLoop>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(Equal)] = Fact<Equal>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Equal)] = Raises<Equal>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(FieldDefinitionNode)] = Fact<FieldDefinitionNode>(Producers.Writer | Producers.Reader),
-        [typeof(ForEachLoop)] = Fact<ForEachLoop>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(ForEachLoop)] = Raises<ForEachLoop>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(ForLoop)] = Fact<ForLoop>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(GotoStatement)] = Fact<GotoStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(GreaterThan)] = Fact<GreaterThan>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(GreaterThanOrEqual)] = Fact<GreaterThanOrEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(GreaterThan)] = Raises<GreaterThan>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(GreaterThanOrEqual)] = Raises<GreaterThanOrEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(IfStatement)] = Fact<IfStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(IndexAccess)] = Fact<IndexAccess>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(InterpolatedString)] = Fact<InterpolatedString>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(Invoke)] = Fact<Invoke>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(IndexAccess)] = Raises<IndexAccess>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(InterpolatedString)] = Raises<InterpolatedString>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(Invoke)] = Raises<Invoke>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(LabelDeclaration)] = Fact<LabelDeclaration>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Lambda)] = Fact<Lambda>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(LessThan)] = Fact<LessThan>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(LessThanOrEqual)] = Fact<LessThanOrEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(LessThan)] = Raises<LessThan>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(LessThanOrEqual)] = Raises<LessThanOrEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(MapTypeReference)] = Fact<MapTypeReference>(Producers.Writer | Producers.Reader),
-        [typeof(Member)] = Fact<Member>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Member)] = Raises<Member>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(MethodDefinitionNode)] = Fact<MethodDefinitionNode>(Producers.Writer | Producers.Reader),
-        [typeof(Modulo)] = Fact<Modulo>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(Multiply)] = Fact<Multiply>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Modulo)] = Raises<Modulo>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(Multiply)] = Raises<Multiply>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(NamedTypeReference)] = Fact<NamedTypeReference>(Producers.Writer | Producers.Reader, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
-        [typeof(New)] = Fact<New>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(NewArray)] = Fact<NewArray>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(Not)] = Fact<Not>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(NotEqual)] = Fact<NotEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(New)] = Raises<New>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(NewArray)] = Raises<NewArray>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(Not)] = Raises<Not>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(NotEqual)] = Raises<NotEqual>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(NullForgiving)] = Fact<NullForgiving>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(OptionalTypeReference)] = Fact<OptionalTypeReference>(Producers.Writer | Producers.Reader),
         [typeof(Or)] = Fact<Or>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
@@ -95,30 +104,38 @@ public static class NodeFacts {
         [typeof(PropertySetterDefinitionNode)] = Fact<PropertySetterDefinitionNode>(Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ResolvedTypeReference)] = Fact<ResolvedTypeReference>(Producers.None),
         [typeof(Return)] = Fact<Return>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(ShiftLeft)] = Fact<ShiftLeft>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(ShiftRight)] = Fact<ShiftRight>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(StridedSetBits)] = Fact<StridedSetBits>(Producers.Vm),
-        [typeof(Subtract)] = Fact<Subtract>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(ShiftLeft)] = Raises<ShiftLeft>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(ShiftRight)] = Raises<ShiftRight>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(StridedSetBits)] = Raises<StridedSetBits>(Producers.Vm),
+        [typeof(Subtract)] = Raises<Subtract>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(SuspendNode)] = Fact<SuspendNode>(Producers.Vm),
         [typeof(SwitchStatement)] = Fact<SwitchStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ThisReference)] = Fact<ThisReference>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(ThrowExpression)] = Fact<ThrowExpression>(Producers.Vm | Producers.Writer | Producers.Reader),
-        [typeof(ThrowStatement)] = Fact<ThrowStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(ThrowExpression)] = Raises<ThrowExpression>(Producers.Vm | Producers.Writer | Producers.Reader),
+        [typeof(ThrowStatement)] = Raises<ThrowStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TryCatchFinally)] = Fact<TryCatchFinally>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TypeAs)] = Fact<TypeAs>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
-        [typeof(TypeCast)] = Fact<TypeCast>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(TypeCast)] = Raises<TypeCast>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TypeDefinitionNode)] = Fact<TypeDefinitionNode>(Producers.Writer | Producers.Reader),
         [typeof(TypeDefinitionReference)] = Fact<TypeDefinitionReference>(Producers.None, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
         [typeof(TypeIs)] = Fact<TypeIs>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TypeOf)] = Fact<TypeOf>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(TypeReference)] = Fact<TypeReference>(Producers.Writer | Producers.Reader, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
-        [typeof(UnaryMinus)] = Fact<UnaryMinus>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(UnaryMinus)] = Raises<UnaryMinus>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(UnionTypeReference)] = Fact<UnionTypeReference>(Producers.None),
-        [typeof(UsingStatement)] = Fact<UsingStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(UsingStatement)] = Raises<UsingStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Variable)] = Fact<Variable>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(WhileLoop)] = Fact<WhileLoop>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
     };
 
     private static NodeFact Fact<T>(Producers producers, string? rejectReason = null) where T : Node =>
-        new(typeof(T).Name, producers, rejectReason);
+        new(typeof(T).Name, producers, MayRaise: false, rejectReason);
+
+    /// <summary>
+    /// A kind that can raise at run time, so a catch clause over it is reachable. A new kind starts
+    /// here until it is shown inert: the wrong answer in this column is a reachable catch body the
+    /// writer drops while the VM runs it.
+    /// </summary>
+    private static NodeFact Raises<T>(Producers producers, string? rejectReason = null) where T : Node =>
+        new(typeof(T).Name, producers, MayRaise: true, rejectReason);
 }

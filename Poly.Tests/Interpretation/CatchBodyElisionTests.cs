@@ -150,15 +150,15 @@ public class CatchBodyElisionTests {
     }
 
     [Test]
-    public async Task Try_WithIntegerArithmetic_StillElidesCatch() {
-        var n = new Variable("n");
+    public async Task Try_WithStridedSetBits_KeepsCatchReachable() {
         var (program, catchBody) = Build(new Block(
-            new Assignment(n, new Add(new Constant(1), new Constant(2)))));
+            new StridedSetBits(new Variable("a"), Wrap(0), Wrap(1), Wrap(99))));
 
         var analysis = Analyze(program);
 
-        await Assert.That(analysis.CanElide(catchBody)).IsTrue()
-            .Because("integer addition wraps and cannot raise, so the optimization still applies");
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("an indexed write past the array length raises");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
     [Test]

@@ -471,37 +471,18 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
     /// <summary>
     /// True when anything in the try block can raise at run time, so its catch clauses are reachable.
-    /// <see cref="CanRaise"/> is the list: an explicit throw (statement or expression), division,
-    /// remainder, a call, an await, indexing, a member read, construction, array creation, a cast,
-    /// enumeration, and disposal — plus decimal arithmetic, whose operators throw on overflow while
-    /// integer arithmetic wraps. Answering "no" is only sound for a block with none of them, because
-    /// the wrong answer elides a reachable catch body — a silently changed program rather than a
-    /// missed optimization. A <see cref="Lambda"/> body is a separate scope and its throw belongs to
-    /// the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
+    /// The answer is one lookup in <see cref="NodeFacts"/>: a kind marked raising, or a kind with no
+    /// row at all, which counts as raising. Answering "no" is only sound for a kind the table calls
+    /// inert, because the wrong answer elides a reachable catch body — a silently changed program
+    /// rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and its
+    /// throw belongs to the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
     /// </summary>
     private bool MayThrow(AnalysisContext context, Node node) =>
-        CanRaise(context, node)
-        || this.AnyChild<ControlFlowMetadata>(context, node, (ctx, child) => CanRaise(ctx, child));
+        CanRaise(node)
+        || this.AnyChild<ControlFlowMetadata>(context, node, static (_, child) => CanRaise(child));
 
-    private static bool CanRaise(AnalysisContext context, Node node) => node switch {
-        ThrowStatement or ThrowExpression or Divide or Modulo or Invoke or Await or IndexAccess
-            or Member or New or NewArray or TypeCast or ForEachLoop or UsingStatement => true,
-        // Integer arithmetic wraps; decimal arithmetic throws OverflowException on the same operators.
-        Add or Subtract or Multiply => IsDecimalArithmetic(context, node),
-        _ => false
-    };
-
-    private static bool IsDecimalArithmetic(AnalysisContext context, Node node) => node switch {
-        Add add => IsDecimalOperand(context, add.LeftHandValue) || IsDecimalOperand(context, add.RightHandValue),
-        Subtract subtract => IsDecimalOperand(context, subtract.LeftHandValue) || IsDecimalOperand(context, subtract.RightHandValue),
-        Multiply multiply => IsDecimalOperand(context, multiply.LeftHandValue) || IsDecimalOperand(context, multiply.RightHandValue),
-        _ => false
-    };
-
-    private static bool IsDecimalOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node) is { } type
-        && type.TryGetRuntimeType(out var runtime)
-        && (Nullable.GetUnderlyingType(runtime) ?? runtime) == typeof(decimal);
+    private static bool CanRaise(Node node) =>
+        !NodeFacts.All.TryGetValue(node.GetType(), out var fact) || fact.MayRaise;
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

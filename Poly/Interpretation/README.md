@@ -107,7 +107,7 @@ long handle = exec.RawValue;
 
 Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `InterpreterResult.cs`, `NodeFacts.cs`.
 
-`NodeFacts.cs` is the one table of which producer honours which concrete `Node` kind — `Vm`, `Writer`, `WriterExpanded` (the print re-reads as an equivalent executable kind, not as the same kind), `Reader`, `Mermaid` — and the message a deliberate VM rejection carries. It is data, with no behaviour; `Poly.Tests/Interpretation/NodeFactsTotalityTests.cs` checks every row against a corpus of the C# this suite already carries, so a new kind without a row, a producer that loses an arm, or a rejection whose message drifts is a failing test that names the kind. Adding a node kind means adding its row.
+`NodeFacts.cs` is the one table of per-kind facts — which of `Vm`, `Writer`, `WriterExpanded` (the print re-reads as an equivalent executable kind, not as the same kind), `Reader` and `Mermaid` honours the kind, whether executing it can raise, and the message a deliberate VM rejection carries. It is data, with no behaviour; `Poly.Tests/Interpretation/NodeFactsTotalityTests.cs` checks every row against a corpus of the C# this suite already carries, so a new kind without a row, a producer that loses an arm, or a rejection whose message drifts is a failing test that names the kind. The raising column is conservative: an operator is marked raising because the same kind reaches a decimal or user-defined operator, and a consumer that refines it can only narrow what it elides. Adding a node kind means adding its row, and a new kind is marked raising until it is shown inert.
 
 ---
 

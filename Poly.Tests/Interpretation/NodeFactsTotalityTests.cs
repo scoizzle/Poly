@@ -33,6 +33,30 @@ public class NodeFactsTotalityTests {
             .Because(Explain("a fact for a type that is not a concrete Node is stale", stale));
     }
 
+    /// <summary>
+    /// The raising column is an independent statement of which kinds can raise, so a new row or a
+    /// reclassification cannot slip through as a local decision on one consumer. Every kind here can
+    /// reach user code or a runtime exception; the operator kinds are deliberate over-approximations,
+    /// because the same node reaches a decimal or user-defined operator and the table sees kinds.
+    /// </summary>
+    [Test]
+    public async Task RaisingKinds_AreTheExpectedSet() {
+        string[] expected = [
+            nameof(Add), nameof(Await), nameof(BitwiseAnd), nameof(BitwiseNot), nameof(BitwiseOr),
+            nameof(BitwiseXor), nameof(Divide), nameof(Equal), nameof(GreaterThan),
+            nameof(GreaterThanOrEqual), nameof(IndexAccess), nameof(InterpolatedString),
+            nameof(Invoke), nameof(LessThan), nameof(LessThanOrEqual), nameof(Member), nameof(Modulo),
+            nameof(Multiply), nameof(New), nameof(NewArray), nameof(Not), nameof(NotEqual),
+            nameof(ShiftLeft), nameof(ShiftRight), nameof(StridedSetBits), nameof(Subtract),
+            nameof(ThrowExpression), nameof(ThrowStatement), nameof(TypeCast), nameof(UnaryMinus),
+            nameof(UsingStatement), nameof(ForEachLoop),
+        ];
+        var actual = Ordered().Where(kv => kv.Value.MayRaise).Select(kv => kv.Value.Label);
+        await Assert.That(string.Join(", ", actual.OrderBy(n => n, StringComparer.Ordinal)))
+            .IsEqualTo(string.Join(", ", expected.OrderBy(n => n, StringComparer.Ordinal)))
+            .Because("a kind's raising decision is part of the table's contract, not a local choice");
+    }
+
     /// <summary>A claim with no corpus case is either a missing case or a false claim.</summary>
     [Test]
     public async Task EveryClaim_HasCorpusEvidence() {

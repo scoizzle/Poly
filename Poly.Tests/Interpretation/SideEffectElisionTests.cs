@@ -7,10 +7,10 @@ using Poly.Interpretation.CSharp;
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// A non-final statement whose result is unused is elided only when executing it cannot raise.
+/// A non-final statement whose result is unused is elided only when executing it cannot throw.
 /// <see cref="SideEffectAnalyzer"/> used to decide that from the side-effect kind alone, and a bare
 /// indexed read is classified <c>Read</c> — so the writer deleted it and the printed program could
-/// no longer throw where the VM does. The guard is the raising column, walked through inert wrappers,
+/// no longer throw where the VM does. The guard is the throwing column, walked through inert wrappers,
 /// because <c>Or</c>, <c>Conditional</c>, <c>Coalesce</c> and a nested <c>Block</c> are inert at the
 /// root and can hold the division or the call.
 /// </summary>
@@ -47,7 +47,7 @@ public class SideEffectElisionTests {
     }
 
     [Test]
-    public async Task RaisingChildUnderAnInertWrapper_IsNotElidable() {
+    public async Task ThrowingChildUnderAnInertWrapper_IsNotElidable() {
         var x = new Variable("x");
         var y = new Variable("y");
         var root = new Or(Wrap(true), new GreaterThan(new Divide(x, y), Wrap(0)));
@@ -61,11 +61,11 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(root)).IsFalse()
-            .Because("Or is inert itself and short-circuits, but the division on the right still raises");
+            .Because("Or is inert itself and short-circuits, but the division on the right still throws");
     }
 
     [Test]
-    public async Task NestedBlockWithARaisingChild_IsNotElidable() {
+    public async Task NestedBlockWithAThrowingChild_IsNotElidable() {
         var a = new Variable("a");
         var i = new Variable("i");
         var nested = new Block(new IndexAccess(a, i), Wrap(1));
@@ -91,7 +91,7 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(sum)).IsFalse()
-            .Because("Add is marked raising because the same kind reaches the decimal operator, which throws; this pair cannot overflow, so the test pins the over-approximation");
+            .Because("Add is marked throwing because the same kind reaches the decimal operator, which throws; this pair cannot overflow, so the test pins the over-approximation");
     }
 
     [Test]
@@ -102,11 +102,11 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(pure)).IsTrue()
-            .Because("a constant cannot raise, so the optimization still applies");
+            .Because("a constant cannot throw, so the optimization still applies");
     }
 
     [Test]
-    public async Task ForInitializerThatCanRaise_IsNotElidable() {
+    public async Task ForInitializerThatThrows_IsNotElidable() {
         var a = new Variable("a");
         var i = new Variable("i");
         var init = new IndexAccess(a, i);
@@ -116,11 +116,11 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(init)).IsFalse()
-            .Because("a for initializer that can raise must not be elided either");
+            .Because("a for initializer that can throw must not be elided either");
     }
 
     [Test]
-    public async Task LambdaStatementWithARaisingBody_IsStillElidable() {
+    public async Task LambdaStatementWithAThrowingBody_IsStillElidable() {
         var p = new Parameter("p", TypeReference.To<int>());
         var lambda = new Lambda([p], new Divide(p, Wrap(2)));
         var program = new Block([lambda, Wrap(1)]);
@@ -134,7 +134,7 @@ public class SideEffectElisionTests {
     }
 
     [Test]
-    public async Task ForIncrementThatCanRaise_IsNotElidable() {
+    public async Task ForIncrementThatThrows_IsNotElidable() {
         var a = new Variable("a");
         var i = new Variable("i");
         var increment = new IndexAccess(a, i);
@@ -144,11 +144,11 @@ public class SideEffectElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(increment)).IsFalse()
-            .Because("a for increment that can raise must not be elided either");
+            .Because("a for increment that can throw must not be elided either");
     }
 
     [Test]
-    public async Task RaisingStatement_GetsNoElisionDiagnostic() {
+    public async Task ThrowingStatement_GetsNoElisionDiagnostic() {
         var a = new Variable("a");
         var i = new Variable("i");
         var read = new IndexAccess(a, i);

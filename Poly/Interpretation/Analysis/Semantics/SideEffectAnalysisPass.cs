@@ -42,13 +42,13 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                     context.SetMetadata(child, new AssignmentValueUsedMetadata(i == n - 1));
                 }
 
-                // A statement whose result is unused can go only when executing it cannot raise:
+                // A statement whose result is unused can go only when executing it cannot throw:
                 // a decimal addition looks pure and still throws, and the writer deleting it is a
                 // silently different program. A Read is never elided — a volatile read is observable
-                // on its own, whether or not it can raise.
+                // on its own, whether or not it can throw.
                 if (i < n - 1
                     && childKind == SideEffectKind.Pure
-                    && !NodeFacts.MayRaise(child)) {
+                    && !NodeFacts.MayThrow(child)) {
                     ElisionFacts.Mark(context, child, ElisionReason.NoObservableEffect);
                     if (emitDiags) {
                         context.ReportInformation(
@@ -86,7 +86,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
                 if (initMeta is not null
                     && initMeta.Kind == SideEffectKind.Pure
-                    && !NodeFacts.MayRaise(forLoop.Initializer!)) {
+                    && !NodeFacts.MayThrow(forLoop.Initializer!)) {
                     ElisionFacts.Mark(context, forLoop.Initializer!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Initializer is not null) {
                         context.ReportInformation(
@@ -98,7 +98,7 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 var incMeta = forLoop.Increment is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Increment) : null;
                 if (incMeta is not null
                     && incMeta.Kind == SideEffectKind.Pure
-                    && !NodeFacts.MayRaise(forLoop.Increment!)) {
+                    && !NodeFacts.MayThrow(forLoop.Increment!)) {
                     ElisionFacts.Mark(context, forLoop.Increment!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Increment is not null) {
                         context.ReportInformation(
@@ -156,7 +156,7 @@ public enum ElisionReason {
     /// <summary>The node cannot execute: the control flow graph proved it unreachable.</summary>
     Unreachable = 1,
     /// <summary>The node executes, its result is unused, its effects are at most a read, and it cannot
-    /// raise. Every condition matters: the writer deletes the statement, so a node that can throw
+    /// throw. Every condition matters: the writer deletes the statement, so a node that can throw
     /// must keep it.</summary>
     NoObservableEffect = 2,
 }

@@ -142,8 +142,9 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
         }
         catch (Exception ex) {
             // The execution analysis can carry errors the authoring analysis does not (the
-            // persistence overlay adds analyzers), so report them rather than the bare message.
-            var diagnostics = execution?.Analysis.Diagnostics
+            // persistence overlay adds analyzers), and lowering refuses the domain for them. Report
+            // them rather than the bare message.
+            var diagnostics = state.ExecutionAnalysisIfCreated?.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Select(d => d.Message)
                 .Take(3)

@@ -64,6 +64,15 @@ internal sealed record McpSessionState(
     public AnalysisResult ExecutionAnalysis => Execution.Analysis;
 
     /// <summary>
+    /// The execution analysis when one has been built, without building it. Used by a caller that
+    /// wants to report why <see cref="Execution"/> threw: lowering refuses a domain whose execution
+    /// analysis has errors, and that analysis is the only place the reasons are recorded.
+    /// </summary>
+    public AnalysisResult? ExecutionAnalysisIfCreated {
+        get { lock (_executorGate) return _execution?.Analysis; }
+    }
+
+    /// <summary>
     /// The session's module executor: runs the lowered operation module on dictionary
     /// instances. Created on first use, so a session that never creates an instance never
     /// lowers. A state replaced by <c>apply_dsl</c> or evolve starts with a fresh one.
@@ -89,8 +98,10 @@ internal sealed record McpSessionState(
             ? Modeling
             : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Catalog);
         var analysis = session.Analyze(Domain);
-        RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
+        // Publish the pair before lowering: lowering refuses a domain whose execution analysis has
+        // errors, and a caller that catches the throw still needs this analysis to report why.
         _execution = (session, analysis);
+        RuntimeAnalysisCache.GetOrLower(Domain, session, analysis);
         return _execution.Value;
     }
 

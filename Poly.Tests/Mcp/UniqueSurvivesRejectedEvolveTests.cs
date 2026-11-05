@@ -54,6 +54,23 @@ public class UniqueSurvivesRejectedEvolveTests {
         await Assert.That(duplicate.Message).Contains("Unique constraint");
     }
 
+    /// <summary>A rejected removal is the same gate by the other half of the same tool family.</summary>
+    [Test]
+    public async Task Create_DuplicateUnique_AfterRejectedRemove_StillFails() {
+        var (sessionId, _) = McpTestTools.Store.Create("EvolveUnique");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+
+        await Assert.That(McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""").Success).IsTrue();
+
+        var rejected = McpTestTools.Evolve.Remove(sessionId, "entity", """{"name":"Nope"}""");
+        await Assert.That(rejected.Success).IsFalse().Because("the entity does not exist");
+
+        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Success).IsFalse()
+            .Because("a rejected removal must leave the running module exactly as it was");
+        await Assert.That(duplicate.Message).Contains("Unique constraint");
+    }
+
     /// <summary>
     /// An accepted evolve replaces the state and its executor, and a replacement executor starts
     /// with no instances — so the duplicate is made twice after the change. This is the control

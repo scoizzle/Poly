@@ -101,6 +101,22 @@ public class CacheSessionGuardTests {
         return (domain, session, session.AnalyzeWithoutBind(domain));
     }
 
+    /// <summary>
+    /// Evolving a domain that has already been lowered, without passing a session, must reuse the
+    /// compilation's session rather than open a fresh one: a fresh one is refused. Review found this
+    /// only by reading the code, so it is pinned here.
+    /// </summary>
+    [Test]
+    public async Task EvolveWithoutASession_AfterLower_ReusesTheCompilationSession() {
+        var (domain, session, analysis) = Build(withPersistence: true);
+        RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+
+        // No session argument: the gate must reuse the bound one, not open a fresh session over a
+        // domain that already has a module (which Bind refuses).
+        var outcome = new DomainEvolution(domain).ApplyAndAnalyze(Array.Empty<DomainChange>());
+        await Assert.That(outcome.Succeeded).IsTrue();
+    }
+
     private static DomainSession Session(bool withPersistence) =>
         DomainSession.ForExtensions(
             withPersistence

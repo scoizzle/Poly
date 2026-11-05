@@ -167,7 +167,7 @@ internal static class RuntimeAnalysisCache {
             // #387 produced, reached by a race instead of a rebind.
             if (!ReferenceEquals(holder.Session, session))
                 throw new InvalidOperationException(
-                    $"Domain '{domain.Name}' was bound to another session while it was being lowered. ");
+                    $"Domain '{domain.Name}' was bound to another session while it was being lowered.");
             var policyBodies = new Dictionary<(string, string), Node>();
             var subscriptionBodies = new Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>(
                 ReferenceEqualityComparer.Instance);

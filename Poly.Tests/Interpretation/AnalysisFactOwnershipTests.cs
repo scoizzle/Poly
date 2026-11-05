@@ -32,6 +32,12 @@ public class AnalysisFactOwnershipTests {
             (new Add(new Constant(1L), new Constant(2L)), false, false, false),
             (new Invoke(new Variable("f")), true, false, false),
             (new IndexAccess(new Variable("a"), new Constant(0L)), true, false, false),
+            // A throw is not a state effect: the branch cannot change, so a constant condition is
+            // still constant. The node is not deletable, because it can fail.
+            (new Divide(new Constant(1L), new Constant(0L)), false, false, false),
+            // A property read and an allocation are state effects, where they used to be "pure".
+            (new Member(new Variable("o"), "Flag"), true, false, false),
+            (new NewArray(TypeReference.To<int>(), new Constant(1L)), true, false, false),
         };
 
         foreach (var (condition, hasEffects, elidesThen, elidesElse) in cases) {

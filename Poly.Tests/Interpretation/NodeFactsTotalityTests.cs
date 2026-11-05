@@ -67,7 +67,7 @@ public class NodeFactsTotalityTests {
             nameof(BreakStatement), nameof(ContinueStatement), nameof(GotoStatement),
             nameof(LabelDeclaration), nameof(IndexAccess), nameof(Member), nameof(New),
             nameof(NewArray), nameof(StridedSetBits), nameof(ForEachLoop), nameof(Invoke),
-            nameof(Await), nameof(ThrowStatement), nameof(UsingStatement), nameof(IfStatement),
+            nameof(Await), nameof(UsingStatement), nameof(IfStatement),
             nameof(SwitchStatement), nameof(SuspendNode),
         ];
         var actual = Ordered()

@@ -426,8 +426,9 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        // The try block's composed answer: the side-effect pass ran before this one, so a catch-all
-        // inside the block has already absorbed its own throw. Absent metadata fails closed.
+        // Ask the try block's own composed effects. A catch-all on THIS statement absorbs the throw
+        // for the statement's own effects, but the block's metadata keeps it — that is exactly what
+        // makes this question answerable. Absent metadata fails closed.
         var tryEffects = context.GetMetadata<SideEffectMetadata>(tryCatch.TryBlock);
         bool mayThrow = tryEffects is null || tryEffects.Throws;
 
@@ -471,9 +472,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
-
-    /// <summary>
-
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;
@@ -648,11 +646,22 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     internal static bool? GetConstBool(INodeMetadataProvider provider, Node? n) =>
         GetConstValue(provider, n) as bool?;
 
+    /// <summary>
+    /// A condition is statically constant when evaluating it cannot change anything and its value is
+    /// known. Both short-circuit operators need the left operand alone: <c>true || X</c> is constant
+    /// true and <c>false &amp;&amp; X</c> is constant false whatever <c>X</c> does, because <c>X</c>
+    /// never runs. Reading the whole node's effects would union the dead right-hand side and lose the
+    /// fact that the branch cannot be taken.
+    /// </summary>
     private static bool IsStaticallyConstantTrue(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
+        cond is Or or
+        ? IsStaticallyConstantTrue(ctx, ((Or)cond).LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
 
     private static bool IsStaticallyConstantFalse(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
+        cond is And and
+        ? IsStaticallyConstantFalse(ctx, and.LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
 
     private static void MarkElidable(AnalysisContext ctx, Node node, string code, string message) {
         ElisionFacts.Mark(ctx, node, ElisionReason.Unreachable);

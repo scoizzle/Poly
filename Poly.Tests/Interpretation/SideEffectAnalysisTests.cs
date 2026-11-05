@@ -4,7 +4,7 @@ using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;
 
-/// <summary>Side-effect kind / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
+/// <summary>NodeEffect classification / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
 public class SideEffectAnalysisTests {
     private static Analyzer SideEffectAnalyzerPipeline() =>
         new AnalyzerBuilder()

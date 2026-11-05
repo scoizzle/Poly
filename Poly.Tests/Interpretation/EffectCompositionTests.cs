@@ -107,10 +107,99 @@ public class EffectCompositionTests {
     [Test]
     public async Task Lambda_KeepsStateEffectsButNotItsThrow() {
         var p = new Parameter("p", TypeReference.To<int>());
-        var lambda = new Lambda([p], new Divide(p, Wrap(2)));
+        var target = new Variable("t");
+        var body = new Block(new Assignment(target, p), new Divide(p, Wrap(2)));
+        var lambda = new Lambda([p], body);
         var analysis = Analyze(new Block([lambda, Wrap(1)]));
 
-        await Assert.That(analysis.GetMetadata<SideEffectMetadata>(lambda)!.Throws).IsFalse()
+        var effects = analysis.GetMetadata<SideEffectMetadata>(lambda)!.Effects;
+        await Assert.That(effects & NodeEffect.Throws).IsEqualTo(NodeEffect.None)
             .Because("the body throws when something calls it, not when the delegate is created");
+        await Assert.That(effects & NodeEffect.Write).IsEqualTo(NodeEffect.Write)
+            .Because("the state half is a deliberate over-approximation: the write also happens only on call");
+    }
+
+    [Test]
+    public async Task CatchBodyThatThrows_KeepsTheThrow() {
+        var tryCatch = new TryCatchFinally(
+            new Divide(Wrap(1), Wrap(0)),
+            [new CatchClause(null, null, new ThrowStatement(new Variable("ex")))]);
+
+        var analysis = Analyze(tryCatch);
+
+        await Assert.That(analysis.GetMetadata<SideEffectMetadata>(tryCatch)!.Throws).IsTrue()
+            .Because("the catch-all absorbs the try block, then the catch body throws");
+    }
+
+    [Test]
+    public async Task FinallyThatThrows_KeepsTheThrow() {
+        var tryCatch = new TryCatchFinally(
+            new Divide(Wrap(1), Wrap(0)),
+            [new CatchClause(null, null, Wrap(1))],
+            new ThrowStatement(new Variable("ex")));
+
+        var analysis = Analyze(tryCatch);
+
+        await Assert.That(analysis.GetMetadata<SideEffectMetadata>(tryCatch)!.Throws).IsTrue()
+            .Because("absorbs the try block, but the finally block can still throw");
+    }
+
+    [Test]
+    public async Task NestedCatchAll_WithAnotherThrow_KeepsTheOuterCatchReachable() {
+        var outerCatchBody = new Block(new Constant(1L));
+        var inner = new TryCatchFinally(
+            new Divide(Wrap(1), Wrap(0)),
+            [new CatchClause(null, null, Wrap(1))]);
+        var outer = new TryCatchFinally(
+            new Block(inner, new Divide(Wrap(2), Wrap(0))),
+            [new CatchClause(TypeReference.To<Exception>(), null, outerCatchBody)]);
+        var analysis = Analyze(outer);
+
+        await Assert.That(analysis.GetMetadata<SideEffectMetadata>(outer)!.Throws).IsTrue()
+            .Because("the inner catch-all swallows one division, the second still throws");
+        await Assert.That(analysis.CanElide(outerCatchBody)).IsFalse();
+    }
+
+    [Test]
+    public async Task MixedTypedAndCatchAll_StillAbsorbs() {
+        var tryCatch = new TryCatchFinally(
+            new Divide(Wrap(1), Wrap(0)),
+            [
+                new CatchClause(TypeReference.To<InvalidOperationException>(), null, Wrap(1)),
+                new CatchClause(null, null, Wrap(2)),
+            ]);
+
+        var analysis = Analyze(tryCatch);
+
+        await Assert.That(analysis.GetMetadata<SideEffectMetadata>(tryCatch)!.Throws).IsFalse()
+            .Because("one catch-all clause takes anything the typed clause does not");
+    }
+
+    [Test]
+    public async Task ElidableTry_IsDroppedByTheWriter() {
+        var tryCatch = new TryCatchFinally(
+            new Divide(Wrap(1), Wrap(0)),
+            [new CatchClause(null, null, Wrap(1))]);
+        var program = new Block([tryCatch, Wrap(1)]);
+        var analysis = Analyze(program);
+
+        var printed = new Poly.Interpretation.CSharp.CSharpGenerator(analysis).Generate(program);
+
+        await Assert.That(analysis.CanElide(tryCatch)).IsTrue();
+        await Assert.That(printed).DoesNotContain("catch")
+            .Because("the statement is free, so the writer drops it whole");
+    }
+
+    [Test]
+    public async Task DeadShortCircuitBranch_StillPrunesWhenTheRightSideReads() {
+        var body = new Block(new Constant(1L));
+        var loop = new WhileLoop(
+            new And(Wrap(false), new Member(new Variable("o"), "Flag")),
+            body);
+
+        var analysis = Analyze(loop);
+
+        await Assert.That(analysis.CanElide(body)).IsTrue()
+            .Because("false && X never evaluates X, so the member read cannot stop the prune");
     }
 }

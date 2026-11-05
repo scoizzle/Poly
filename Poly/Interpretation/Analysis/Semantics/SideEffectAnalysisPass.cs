@@ -25,13 +25,13 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Block block) {
+            var blockEffects = NodeEffect.None;
             foreach (var v in block.Variables) {
-                if (v != null) {
-                    Analyze(context, v);
-                }
+                if (v is null) continue;
+                Analyze(context, v);
+                blockEffects |= EffectsOf(context, v);
             }
 
-            var blockEffects = NodeEffect.None;
             var opts = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags = opts.EmitElisionDiagnostics;
 

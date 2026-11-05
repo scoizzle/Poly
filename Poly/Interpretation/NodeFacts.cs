@@ -52,12 +52,19 @@ public sealed record NodeFact(string Label, Producers Producers, NodeEffect Effe
 /// carry.
 /// </para>
 /// <para>
-/// <see cref="NodeFact.MayThrow"/> answers "can this kind throw while it executes", and it is
-/// deliberately conservative. An operator node is marked throwing even when the integer operator
-/// wraps, because the same node reaches the decimal operator or a user-defined one, and the table
-/// sees kinds, not operands. A consumer that must be precise refines the answer; a consumer that
-/// forgets costs an optimization, never a program. <c>Fact</c> is the throwing default, so a new kind
-/// starts throwing and has to be declared <c>Inert</c> to lose that claim.
+/// <see cref="NodeFact.Effects"/> is the kind's intrinsic effect, before any child runs. It is
+/// deliberately conservative: an operator carries <see cref="NodeEffect.Throws"/> even where the
+/// integer operator wraps, because the same kind reaches the decimal operator or a user-defined one,
+/// and the table sees kinds, not operands. The flags are independent — a read can throw, a write
+/// cannot — so a consumer asks for the one it needs: <c>HasStateEffect</c> to prune a branch,
+/// <c>Throws</c> to decide a catch is reachable, <c>Effects == None</c> to delete a statement.
+/// Composition over a subtree is <see cref="Analysis.Semantics.SideEffectAnalysisPass"/>'s job, not
+/// this table's, and the table never answers for a replacement.
+/// </para>
+/// <para>
+/// An unknown kind answers <see cref="NodeEffect.Throws"/>, and every row states its effects at the
+/// call site: a new kind cannot inherit "no effect" by silence, because that is the answer that lets
+/// a consumer delete code.
 /// </para>
 /// </summary>
 public static class NodeFacts {
@@ -133,7 +140,7 @@ public static class NodeFacts {
         [typeof(SwitchStatement)] = Fact<SwitchStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.External),
         [typeof(ThisReference)] = Inert<ThisReference>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(ThrowExpression)] = Fact<ThrowExpression>(Producers.Vm | Producers.Writer | Producers.Reader, NodeEffect.Throws),
-        [typeof(ThrowStatement)] = Fact<ThrowStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.External | NodeEffect.Throws),
+        [typeof(ThrowStatement)] = Fact<ThrowStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Throws),
         [typeof(TryCatchFinally)] = Inert<TryCatchFinally>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TypeAs)] = Inert<TypeAs>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(TypeCast)] = Fact<TypeCast>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Throws),

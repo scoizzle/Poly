@@ -88,9 +88,15 @@ public partial class PerfResultsTests {
         if (start < 0)
             throw new InvalidOperationException("the 'exec avg (min)' table is missing from the document");
         var rows = new List<FinalRow>();
+        var inTable = false;
         foreach (var line in lines.Skip(start)) {
-            if (!line.StartsWith("|", StringComparison.Ordinal))
+            if (!line.StartsWith("|", StringComparison.Ordinal)) {
+                // A table ends at the first line that is not a row; a later table is not ours.
+                if (inTable)
+                    break;
                 continue;
+            }
+            inTable = true;
             var cells = line.Split('|', StringSplitOptions.TrimEntries);
             if (cells.Length < 6 || !NameCell().IsMatch(cells[1]))
                 continue;

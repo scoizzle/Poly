@@ -14,9 +14,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// that loads different libraries used to evict the module a caller was running — silently, so the
 /// next consumer ran a lower without the previous session's constraint compilers. It now refuses.
 /// <para>
-/// The guard fires on a real difference in loaded libraries, not on a distinct session object:
-/// `DomainSession.WithDomain` builds an equivalent session on every evolve, and refusing that would
-/// break every caller that keeps one.
+/// The guard compares the session object, not the `uses` ids: two sessions can load the same ids
+/// from different catalogs and lower differently, which was the round-3 hole. A distinct session is
+/// refused even when its ids match, including the one `WithDomain` reopens from a domain.
 /// </para>
 /// </summary>
 public class CacheSessionGuardTests {

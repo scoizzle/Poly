@@ -162,6 +162,12 @@ internal static class RuntimeAnalysisCache {
         lock (holder) {
             if (holder.Module is not null)
                 return holder.Module;
+            // Bind ran outside this lock; another thread may have taken the domain since. Storing
+            // our module now would pair it with a session that did not lower it — the mismatch
+            // #387 produced, reached by a race instead of a rebind.
+            if (!ReferenceEquals(holder.Session, session))
+                throw new InvalidOperationException(
+                    $"Domain '{domain.Name}' was bound to another session while it was being lowered. ");
             var policyBodies = new Dictionary<(string, string), Node>();
             var subscriptionBodies = new Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>(
                 ReferenceEqualityComparer.Instance);

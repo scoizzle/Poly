@@ -117,8 +117,13 @@ public sealed class DomainEvolution {
                 $"Domain analysis did not produce catalog mutation-target index for mutation-target resolution.");
     }
 
+    /// <summary>
+    /// The caller's session, or the one that already compiled this domain. A fresh
+    /// `ForExtensions` here would be a different session object over a domain that may already have
+    /// a module, which `RuntimeAnalysisCache.Bind` refuses (#398).
+    /// </summary>
     private static DomainSession ResolveSession(Domain domain, DomainSession? session) =>
-        session ?? DomainSession.ForExtensions(domain.Extensions);
+        session ?? RuntimeAnalysisCache.Session(domain);
 
     // The passed session is the link of this compile. A uses id it did not
     // load is an unresolved import, not a successful analysis.

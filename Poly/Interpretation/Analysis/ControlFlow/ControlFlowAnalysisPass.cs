@@ -426,7 +426,10 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = NodeFacts.MayThrow(tryCatch.TryBlock);
+        // The try block's composed answer: the side-effect pass ran before this one, so a catch-all
+        // inside the block has already absorbed its own throw. Absent metadata fails closed.
+        var tryEffects = context.GetMetadata<SideEffectMetadata>(tryCatch.TryBlock);
+        bool mayThrow = tryEffects is null || tryEffects.Throws;
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
@@ -470,13 +473,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     }
 
     /// <summary>
-    /// True when anything in the try block can throw at run time, so its catch clauses are reachable.
-    /// The answer is one lookup in <see cref="NodeFacts"/>: a kind marked throwing, or a kind with no
-    /// row at all, which counts as throwing. Answering "no" is only sound for a kind the table calls
-    /// inert, because the wrong answer elides a reachable catch body — a silently changed program
-    /// rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and its
-    /// throw belongs to the call that invokes it, which <see cref="NodeFacts.MayThrow"/> honours.
-    /// </summary>
+
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

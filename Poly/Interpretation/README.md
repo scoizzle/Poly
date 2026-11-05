@@ -43,7 +43,7 @@ Domain constructs lower to generic Syntax nodes — no domain opcodes or domain 
        │
        ▼
   AnalyzerBuilder  ──►  AnalysisResult
-  (14 passes)            metadata + diagnostics
+  (15 passes)            metadata + diagnostics
        │
        ▼
   AbiEmitter ──►  VmProgram
@@ -113,7 +113,7 @@ Root files: `Interpreter.cs` (pipeline + execute), `ExecutionResult.cs`, `Interp
 
 ## Standard analysis pipeline
 
-`Interpreter._analyzer` is 14 passes. **`Use*` registration is the run order** — asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not invent a separate insert schedule; `Build` is registration order.
+`Interpreter._analyzer` is 15 passes. **`Use*` registration is the run order** — asserted by `StandardAnalyzer_PassNames_MatchInterpreterPipeline` and listed in [`Analysis/README.md`](Analysis/README.md). Do not invent a separate insert schedule; `Build` is registration order.
 
 `Interpreter.Compile` is the one compile door: it fails closed on every `DiagnosticSeverity.Error`. `CompileChecked` is an alias. Use `Analyze` to inspect diagnostics without emitting. `Await` and `ParameterReference` compile-reject. `Comment` is a statement no-op and compile-rejects as a value (never dummy `0`).
 

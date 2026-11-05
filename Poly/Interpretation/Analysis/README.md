@@ -15,6 +15,8 @@ Each pass implements `INodeAnalyzer` and is registered via an extension method o
 | `JumpTargetAnalyzer` | `.UseJumpTargetResolution()` | `ResolvedJumpTarget` (break/continue/goto targets) | `JT0001`-`JT0004` |
 | `ConstantFoldingPass` | `.UseConstantFolding()` | `ConstantValueMetadata`, node replacement | (none) |
 | `ControlFlowAnalysisPass` | `.UseControlFlowAnalysis()` | `ControlFlowMetadata`; contributes the `Unreachable` elision reason | `CF0001`-`CF0013` |
+| `AvailableExpressionPass` | `.UseAvailableExpressions()` | node replacement for a repeated pure operator or array element read; `PlaceLoanMetadata` on the root | (none) |
+| `LoopInvariantMotionPass` | `.UseLoopInvariantMotion()` | node replacement lifting an invariant pure tree ahead of a `while` | (none) |
 | `CallSiteCatalogAnalyzer` | `.UseCallSiteCatalog()` | `CallSiteCatalogMetadata`, `CallSiteIndexMetadata` | (none) |
 | `DefiniteAssignmentAnalyzer` | `.UseDefiniteAssignmentAnalysis()` | `DefiniteAssignmentMetadata` | (none) |
 | `LambdaReturnTypeAnalyzer` | `.UseLambdaReturnTypeResolution()` | Invoke return types from lambda bodies (including stored closures); does not retarget the `Lambda` node itself | (none) |
@@ -35,10 +37,12 @@ Built order of `Interpreter.Analyzer` (asserted by `StandardAnalyzer_PassNames_M
  7. ConstantFoldingPass
  8. JumpTargetAnalyzer
  9. ControlFlowAnalysisPass
-10. ExceptionRegionAnalyzer
-11. SyntaxTypeCompatibilityAnalyzer
-12. CallSiteCatalogAnalyzer
-13. DefiniteAssignmentAnalyzer
+10. AvailableExpressionPass
+11. LoopInvariantMotionPass
+12. ExceptionRegionAnalyzer
+13. SyntaxTypeCompatibilityAnalyzer
+14. CallSiteCatalogAnalyzer
+15. DefiniteAssignmentAnalyzer
 ```
 
 Ad-hoc test pipelines may omit `TypeDefinitionNodeAnalyzer`. CLR-only trees still analyze.

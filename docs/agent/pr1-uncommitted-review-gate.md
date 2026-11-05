@@ -56,8 +56,10 @@ then assign its **severity** from phenomenal §6 (🔴 and 🟠 block; 🟡 is a
 suggestion; 🟢 is a nit).
 
 The category says what kind of defect it is; it does **not** set severity. A 🔴
-or 🟠 is fixed in this gate even when its category is Edge case or Hygiene.
-"Note as known gap" and "file as follow-up" apply only to 🟡 and 🟢.
+or 🟠 is fixed in this gate even when its category is Edge case or Hygiene,
+unless a person's ruling defers it — quoted in the finding list, dated, naming
+the decision it addresses. "Note as known gap" and "file as
+follow-up" apply only to 🟡 and 🟢.
 
 | Category | Example | Action |
 |----------|---------|--------|
@@ -110,12 +112,21 @@ finding.
 
 Only mark the suite/slice "Done" when:
 - [ ] The Step 1 evidence (status, diff, and the contents of every untracked file) shows no dirty file belonging to **this task**, and every other dirty file is itemized in the finding list with its category — a preserved pre-existing edit, drift from an earlier task, or named next-task work; no dirty file is left unnamed. A review note or follow-ups written for this gate belong to this task and are **committed before this box is checked**, not left dirty and itemized as someone else's
-- [ ] All 🔴 and 🟠 findings resolved, each with a named green repro test
+- [ ] All 🔴 and 🟠 findings resolved, each with a named green repro test — or
+      disposed by that quoted ruling
 - [ ] No finding is `open (unproven)` or `pending red`; no repro was deleted, skipped, weakened, or retargeted
 - [ ] 🟡 findings filed or resolved — filed means under `docs/` (phenomenal §5.2), which is evidence, not admitted work
 - [ ] Hygiene clean or deferred with a doc note
+- [ ] No reproducible bug in hand at this gate is left as a doc note, an issue,
+      or a follow-up: it is fixed here, or a person's ruling defers it, quoted in
+      the finding list, dated, and naming the decision it addresses. A 🔴 or 🟠
+      you can write the red test for is in hand. A "not a patch" call names the
+      estimated diff and the decision it violates; a fix inside T1's limits is
+      T1, not a deferral, and a larger one is T2, which also continues
 - [ ] `dotnet build` passes
-- [ ] Full suite passes (`dotnet run --project Poly.Tests/Poly.Tests.csproj`)
+- [ ] Full suite passes (`dotnet run --project Poly.Tests/Poly.Tests.csproj`),
+      recorded with the commit it ran on, from this tree, with `git status` read
+      and every untracked file accounted for
 
 ## Verification (of this process)
 

@@ -29,6 +29,8 @@ public static class Interpreter {
         .UseConstantFolding()
         .UseJumpTargetResolution()
         .UseControlFlowAnalysis()
+        .UseAvailableExpressions()
+        .UseLoopInvariantMotion()
         .UseExceptionRegionAnalysis()
         .UseSyntaxTypeCompatibility()
         .UseCallSiteCatalog()

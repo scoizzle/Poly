@@ -462,6 +462,8 @@ public class InterpretationStabilizationTests {
             ConstantFoldingPass.Id,
             JumpTargetAnalyzer.Id,
             ControlFlowAnalysisPass.Id,
+            AvailableExpressionPass.Id,
+            LoopInvariantMotionPass.Id,
             ExceptionRegionAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,

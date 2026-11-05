@@ -38,11 +38,10 @@ internal sealed record McpSessionState(
     /// replaced.
     /// <para>
     /// <see cref="RuntimeAnalysisCache"/> keeps one session, analysis and module per
-    /// <see cref="Domain"/> reference, and binding a different session evicts the module
-    /// (<c>Bind</c>, "sessionChanged"). Two sessions per domain — the authored one and an
-    /// executor-only variant — therefore let any reader evict the module a live executor is
-    /// running, which re-lowered it without the persistence overlay's
-    /// <c>UniqueConstraintCompiler</c>. One pair per state removes the second session, so
+    /// <see cref="Domain"/> reference. A second session over one domain used to evict the module a
+    /// live executor was running and re-lower it without the persistence overlay's
+    /// <c>UniqueConstraintCompiler</c>; <c>Bind</c> now refuses that. One pair per state means the
+    /// refusal is never reached, so
     /// binding it again is a no-op.
     /// </para>
     /// </summary>

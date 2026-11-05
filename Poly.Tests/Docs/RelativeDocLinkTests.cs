@@ -3,22 +3,34 @@ using System.Text.RegularExpressions;
 namespace Poly.Tests.Docs;
 
 /// <summary>
-/// Every relative Markdown link under docs/ and .github/ points at a file or directory
-/// that exists. URLs, mail links and in-page anchors are skipped, as are links inside
-/// code fences and inline code; for the rest only the path before '#' is checked.
+/// Every relative Markdown link in **every** Markdown file in the repository points at a file or
+/// directory that exists: the root README and AGENTS.md, docs/, .github/, the module READMEs under
+/// `Poly/`, the DSL guide under `Poly.Mcp/`, the packs under `src/`, and the demos. URLs, mail
+/// links and in-page anchors are skipped, as are links inside code fences and inline code; for the
+/// rest only the path before '#' is checked.
+/// <para>
+/// The scope is discovered, not listed: a hand-written list of folders is how `Poly/*/README.md`
+/// went unchecked for weeks (#390).
+/// </para>
 /// </summary>
 public partial class RelativeDocLinkTests {
     [Test]
-    public async Task RelativeLinks_UnderDocsAndGithub_Resolve() {
+    public async Task RelativeLinks_EveryMarkdownFile_Resolve() {
         var root = RepoRoot();
-        var broken = new List<string>();
-        foreach (var scope in new[] { "docs", ".github" }) {
-            var files = Directory.GetFiles(Path.Combine(root, scope), "*.md", SearchOption.AllDirectories);
-            Array.Sort(files, StringComparer.Ordinal);
-            foreach (var file in files)
-                broken.AddRange(BrokenLinks(root, file));
-        }
+        var files = Directory.EnumerateFiles(root, "*.md", SearchOption.AllDirectories)
+            .Where(file => !IsBuildOutput(root, file))
+            .OrderBy(file => file, StringComparer.Ordinal)
+            .ToList();
+        await Assert.That(files.Count).IsGreaterThan(100)
+            .Because("the sweep should see the whole repository, not a slice of it");
+        var broken = files.SelectMany(file => BrokenLinks(root, file)).ToList();
         await Assert.That(string.Join("\n", broken)).IsEqualTo(string.Empty);
+    }
+
+    private static bool IsBuildOutput(string root, string file) {
+        var relative = Path.GetRelativePath(root, file);
+        return relative.Split(Path.DirectorySeparatorChar)
+            .Any(segment => segment is "bin" or "obj" or ".git" or "node_modules" or ".vs");
     }
 
     private static IEnumerable<string> BrokenLinks(string root, string file) {

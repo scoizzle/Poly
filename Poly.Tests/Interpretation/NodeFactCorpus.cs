@@ -61,6 +61,7 @@ internal static class NodeFactCorpus {
         ("ThrowExpression", "var e = new System.InvalidOperationException(); var y = true ? 1L : throw e;"),
         ("ForEachLoop", "var a = new long[2]; foreach (var v in a) { var w = v; }"),
         ("IndexAccess", "var a = new long[2]; var y = a[0];"),
+        ("Comment", "class C { void M() { // a line note\n var y = 1L;\n /* a block note */\n } }"),
         ("And", "true && false;"),
         ("Or", "true || false;"),
         ("Not", "!true;"),
@@ -233,9 +234,9 @@ internal static class NodeFactCorpus {
         yield return Sample<BitwiseNot>("LanguageVmTests", new BitwiseNot(new Constant(1L)));
         yield return Sample<BitwiseOr>("LanguageVmTests", new BitwiseOr(new Constant(6L), new Constant(3L)));
         yield return Sample<BitwiseXor>("LanguageVmTests", new BitwiseXor(new Constant(6L), new Constant(3L)));
+        yield return Sample<Comment>("CSharpCommentTests.Comment_Compiles_AsInert", new Block([new Comment("note")]));
         yield return Sample<Coalesce>("LanguageVmTests.Coalesce_EmptyString_KeepsLeft",
             new Coalesce(new Constant("a"), new Constant("b")));
-        yield return Sample<Comment>("LanguageVmTests.Comment_AsProgram_IsVoid", new Comment("note"));
         yield return Sample<Default>("LanguageVmTests.Default_Untyped_IsZero", new Default());
         yield return Sample<ForEachLoop>("ForEachLoopTests.ForEachLoop_UsesLoopVariableInsideBody", new Block([
             new Assignment(x, new Constant(0L)),

@@ -131,6 +131,8 @@ Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke 
 
 **Constraint contributions.** A library may register an `IConstraintCompiler`; core places its AST at a semantic anchor (`ConstraintAnchor`), inserts contributed parameters before the method's first optional parameter, and threads them along the lowered call set. The storage libraries own `unique`: the guard calls the in-process `IStoragePort` (`Exists` = pending key or database), and the post-construction call records the pending key. The port is read-only — no writes and no `SaveChanges` — and is implemented by the generated `{Domain}DbContext` and by the interpreter host's session port. The module never names a host context type, and there is no second persistence runtime.
 
+**Instance handles, not runtime types.** `ModuleInstance` (`Runtime/ModuleInstance.cs`) is a public record of `(Id, EntityName, Bag)` — the executor's handle onto the dictionary the interpreter already runs. It carries no behaviour: no methods, no dispatch, no lifecycle. That is the line the tenet draws. "There is no instance runtime type" means no second object model with its own semantics; a bag handle is the host's index into the module's dictionary and is not one.
+
 ### 3.5 Introspection
 
 Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consumers use `ITypeDefinition` / providers — not ad-hoc reflection or a second registry. Adapt missing shapes via analysis replacement, not emitter special cases. Detail: `Poly/Introspection/README.md`, `docs/technical/introspection.md`.
@@ -179,7 +181,7 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Trust bar | [`decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Domain library / MCP harness | [`decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
 | Lower vision | [`plans/reference/session-lower-plan-2026-09-21.md`](plans/reference/session-lower-plan-2026-09-21.md) |
-| CURRENT suite | [`plans/poly-eng/board.md`](plans/poly-eng/board.md) |
+| Queue | Open GitHub issues ([umbrella #305](https://github.com/scoizzle/Poly/issues/305) is closed; `docs/plans/poly-eng/board.md` is retired) |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 
 ---

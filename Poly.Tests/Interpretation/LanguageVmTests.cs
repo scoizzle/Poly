@@ -8,14 +8,14 @@ namespace Poly.Tests.Interpretation;
 /// <summary>Language-VM oracles: Interpreter.Compile + execute (or compile-reject) per executable CompileNodeInner kind, no DomainModeling.</summary>
 public class LanguageVmTests {
     [Test]
-    public async Task Comment_AsProgram_IsVoid() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
+    public async Task EmptyBlock_AsProgram_IsVoid() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([])));
         await Assert.That(exec.Result.IsVoid).IsTrue();
     }
 
     [Test]
-    public async Task Comment_AsValue_CompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new Add(new Comment("x"), new Constant(1L))))
+    public async Task EmptyBlock_AsValue_CompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Add(new Block([]), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 
@@ -554,8 +554,8 @@ public class LanguageVmTests {
     }
 
     [Test]
-    public async Task Comment_OnlyInBlock_IsVoid() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([new Comment("note")])));
+    public async Task EmptyBlock_OnlyInBlock_IsVoid() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([new Block([])])));
         await Assert.That(exec.Result.IsVoid).IsTrue();
     }
 

@@ -15,9 +15,12 @@ namespace Poly.Tests.TestHelpers;
 static class ModuleExec {
     public static ModuleInstanceExecutor For(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        // A domain that already has a module keeps it. Lowering again under a second session
+        // would evict the compilation the caller is about to run — `Bind` refuses it now.
+        if (RuntimeAnalysisCache.TryGetModule(domain, out _))
+            return new ModuleInstanceExecutor(domain);
         // A domain already compiled against a library session (a probe compiler, a
-        // vendor pack) must keep that compilation. Replacing it with a fresh storage
-        // session drops the cached bodies the test is about to run.
+        // vendor pack) keeps that compilation too.
         var bound = RuntimeAnalysisCache.Session(domain);
         if (bound.ConstraintCompilers.Any(c => c is not BuiltinConstraintCompiler)) {
             var boundAnalysis = bound.Analyze(domain);

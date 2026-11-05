@@ -199,8 +199,8 @@ public static partial class AbiEmitter {
         Context.StatementScope? open = null;
         for (int i = 0; i < block.Nodes.Count; i++) {
             var statement = block.Nodes[i];
-            // A comment or a label emits no code and no value, so it must not release
-            // what the previous statement left: that value is still the block's result
+            // A comment or a label emits no code and no value, so it must not release what the
+            // previous statement left: that value is still the block's result
             // (`[return x, comment]` yields x).
             bool resetsDepth = statement is not (Comment or LabelDeclaration);
             if (resetsDepth) {
@@ -307,8 +307,7 @@ public static partial class AbiEmitter {
 
     /// <summary>True when the last statement that produces the block's value is the
     /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
-    /// expression still observes it, and recycling it there would dangle a live handle.
-    /// A comment produces no value, so it does not end the search.</summary>
+    /// expression still observes it, and recycling it there would dangle a live handle.</summary>
     private static bool IsBlockValue(Block block, Variable variable) {
         for (int i = block.Nodes.Count - 1; i >= 0; i--) {
             if (block.Nodes[i] is Comment)

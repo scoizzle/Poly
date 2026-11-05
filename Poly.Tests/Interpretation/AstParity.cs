@@ -114,10 +114,33 @@ public static class AstParity {
     /// <summary>
     /// The corpus programs whose printed C# does not agree with the VM, each pinned with the defect
     /// it records. Empty, and it stays empty: IS2d fixed all eleven classes the differential found
-    /// (#279), so an entry here is now a writer defect to fix rather than a way to keep a red row
-    /// green.
+    /// (#279).
+    /// <para>
+    /// An empty list is <b>corpus-scoped</b> evidence, not a proof of equivalence. It says the
+    /// shapes below agree; it says nothing about a shape the corpus cannot build (see
+    /// <see cref="BlindSpots"/>). It is also not a place to park a red row: a divergence is a writer
+    /// defect to fix, and an entry here would only be defensible for a defect with a filed issue
+    /// and a removal plan.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<KnownDivergence> KnownDivergences { get; } = [];
+
+    /// <summary>
+    /// Program shapes this differential cannot currently see, and why. #389: an empty
+    /// <see cref="KnownDivergences"/> list is only as strong as the corpus, so the corpus's own
+    /// blind spots are named here rather than left implied. Anything added to the corpus comes off
+    /// this list; anything left is a known gap, not a passing check.
+    /// </summary>
+    public static IReadOnlyList<(string Shape, string Why)> BlindSpots { get; } = [
+        ("domain-generated async method body (IsAsync + Await + a later statement)",
+            "the corpus builds nodes by hand; no test generates a domain and lowers it into the parity harness"),
+        ("custom awaitable types",
+            "resolving GetAwaiter/OnCompleted goes through the type provider, which the harness does not register"),
+        ("resumable state (SuspendNode)",
+            "SuspendNode is VM-only and unprintable today, so it can only ever be a rejection row"),
+        ("ValueTask and ValueTask<T> method bodies",
+            "no corpus entry returns one; the Await arm is exercised only through Task/Task<T>"),
+    ];
 
     static readonly ConcurrentDictionary<string, (ParityDisposal Disposal, string Outcome)> PrintedBySource =
         new(StringComparer.Ordinal);
@@ -164,8 +187,10 @@ public static class AstParity {
         if (KnownDivergences.Any(d => d.Matches(row)))
             return;
         throw new InvalidOperationException(
-            $"{row.Describe()}\nthe VM and the printed C# must dispose of a corpus program the same way; "
-            + $"if this is a new writer defect, add a {nameof(KnownDivergence)} naming it.");
+            $"{row.Describe()}\nthe VM and the printed C# must dispose of a corpus program the same way. "
+            + $"Fix the writer, or fix Lower; do not add a {nameof(KnownDivergence)} — the list is for a "
+            + "defect with a filed issue and a removal plan. If the shape is simply not expressible here, "
+            + $"add it to {nameof(BlindSpots)} instead.");
     }
 
     /// <summary>
@@ -253,7 +278,6 @@ public static class AstParity {
         var voidType = new TypeReference("void");
         return node switch {
             Return => (objectType, node, null),
-            Comment => (voidType, node, null),
             Block block when Yields(block) => (objectType, Hoisted(block), null),
             Block => (voidType, node, null),
             Lambda lambda => LambdaEntry(lambda),

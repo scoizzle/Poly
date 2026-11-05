@@ -27,13 +27,6 @@ internal static class RuntimeAnalysisCache {
         public IReadOnlyList<TypeDefinitionNode>? Module { get; set; }
         /// <summary>Plan entry → watched-stage → module handler body.</summary>
         public Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? SubscriptionBodies { get; set; }
-        /// <summary>OnEntry/OnExit bodies shared with module methods.</summary>
-        public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
-        /// <summary>
-        /// Contiguous non-StageTransition segments of OnEntry/OnExit, lowered at GetOrLower.
-        /// Mixed lists flush/recurse at execute by binding these — never LowerActionBody.
-        /// </summary>
-        public Dictionary<(string Entity, string Stage, string Kind, int Segment), Node>? EntryExitSegmentBodies { get; set; }
         /// <summary>Policy expression trees from session.Lower (same Lower as print).</summary>
         public Dictionary<(string Entity, string Policy), Node>? PolicyBodies { get; set; }
         /// <summary>Catalog index after Index Lowers; dropped when Bind replaces session or analysis.</summary>
@@ -64,20 +57,30 @@ internal static class RuntimeAnalysisCache {
         var holder = Cache.GetValue(domain, _ => new Holder { Session = session });
         lock (holder) {
             var sessionChanged = !ReferenceEquals(holder.Session, session);
+            // The compilation *is* the session object. Two sessions can carry the same `uses` ids
+            // and still load different libraries from different catalogs — different constraint
+            // compilers, different analyzers — so "same ids" is not "same compilation". Refuse a
+            // different session over a cached module rather than swap what every consumer runs;
+            // that silent swap is how #387 turned a unique constraint off.
+            if (sessionChanged && holder.Module is not null)
+                throw new InvalidOperationException(
+                    $"Domain '{domain.Name}' already has a module, lowered by a session with "
+                    + $"[{string.Join(", ", holder.Session.Extensions)}]. Binding a session with "
+                    + $"[{string.Join(", ", session.Extensions)}] would evict it. Lower a new Domain, "
+                    + "or reuse the session that lowered this one.");
             holder.Session = session;
-            // A new session without an analysis must not keep the old session's analysis.
+            // A new session without an analysis must not keep the old session's analysis, even an
+            // equivalent one: two catalogs can load the same ids and differ underneath.
             if (analysis is not null)
                 holder.Analysis = analysis;
             else if (sessionChanged)
                 holder.Analysis = null;
-            // A second Analyze on the same session must not drop the module the
-            // executor is running. Only a different compilation (session) invalidates it.
+            // A second Analyze on the same session must not drop the module the executor is
+            // running. Only a different session invalidates it.
             if (sessionChanged) {
                 holder.Module = null;
                 holder.Index = null;
                 holder.SubscriptionBodies = null;
-                holder.EntryExitBodies = null;
-                holder.EntryExitSegmentBodies = null;
                 holder.PolicyBodies = null;
             }
         }
@@ -99,6 +102,21 @@ internal static class RuntimeAnalysisCache {
             DomainModelAnalyzer.RequireCatalog(analysis, domain);
             holder.Analysis = analysis;
             return analysis;
+        }
+    }
+
+    /// <summary>
+    /// True when this domain already has a lowered module, and hands it back. Used by test hosts
+    /// that must decide "run the existing compilation" before asking for one; a production caller
+    /// that only needs to run a domain goes through <see cref="GetOrLower(Domain)"/>, which already
+    /// returns the cached module.
+    /// </summary>
+    internal static bool TryGetModule(Domain domain, out IReadOnlyList<TypeDefinitionNode> module) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            module = holder.Module ?? [];
+            return holder.Module is not null;
         }
     }
 
@@ -144,25 +162,26 @@ internal static class RuntimeAnalysisCache {
         lock (holder) {
             if (holder.Module is not null)
                 return holder.Module;
+            // Bind ran outside this lock; another thread may have taken the domain since. Storing
+            // our module now would pair it with a session that did not lower it — the mismatch
+            // #387 produced, reached by a race instead of a rebind.
+            if (!ReferenceEquals(holder.Session, session))
+                throw new InvalidOperationException(
+                    $"Domain '{domain.Name}' was bound to another session while it was being lowered.");
             var policyBodies = new Dictionary<(string, string), Node>();
             var subscriptionBodies = new Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>(
                 ReferenceEqualityComparer.Instance);
             var module = DomainProgramProjection.ToSyntax(
                 domain, analysis, policyBodies, subscriptionBodies);
-            var (module2, entryExit, entryExitSegments) = PopulateEntryExitMethods(domain, analysis, module);
-            var contributed = ConstraintCompilation.Apply(module2, domain, analysis, session.ConstraintCompilers);
-            module2 = contributed.Module;
+            var contributed = ConstraintCompilation.Apply(module, domain, analysis, session.ConstraintCompilers);
+            var module2 = contributed.Module;
             if (contributed.ReplacedBodies.Count > 0) {
-                Retarget(entryExit, contributed.ReplacedBodies);
-                Retarget(entryExitSegments, contributed.ReplacedBodies);
                 Retarget(policyBodies, contributed.ReplacedBodies);
                 foreach (var byStage in subscriptionBodies.Values)
                     Retarget(byStage, contributed.ReplacedBodies);
             }
             holder.Module = module2;
             holder.SubscriptionBodies = subscriptionBodies;
-            holder.EntryExitBodies = entryExit;
-            holder.EntryExitSegmentBodies = entryExitSegments;
             holder.PolicyBodies = CompletePolicyBodies(domain, analysis, policyBodies);
             return holder.Module;
         }
@@ -192,22 +211,6 @@ internal static class RuntimeAnalysisCache {
         }
         method = null;
         return false;
-    }
-
-    internal static bool TryGetEntryMethod(
-        Domain domain, string entityName, string stageName, out MethodDefinitionNode? method) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentException.ThrowIfNullOrEmpty(entityName);
-        ArgumentException.ThrowIfNullOrEmpty(stageName);
-        return TryGetModuleMethod(domain, entityName, $"OnEntry{stageName}", out method) && method is not null;
-    }
-
-    internal static bool TryGetExitMethod(
-        Domain domain, string entityName, string stageName, out MethodDefinitionNode? method) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentException.ThrowIfNullOrEmpty(entityName);
-        ArgumentException.ThrowIfNullOrEmpty(stageName);
-        return TryGetModuleMethod(domain, entityName, $"OnExit{stageName}", out method) && method is not null;
     }
 
     /// <summary>
@@ -264,59 +267,6 @@ internal static class RuntimeAnalysisCache {
         return true;
     }
 
-    /// <summary>
-    /// Module ToSyntax inlines first-stage entry in the ctor only — populate
-    /// OnEntry{Stage}/OnExit{Stage} methods once. EntryExitBodies holds the same
-    /// bodies Domain-bound execute compiles.
-    /// </summary>
-    private static (IReadOnlyList<TypeDefinitionNode> Module,
-        Dictionary<(string, string, string), Node> EntryExit,
-        Dictionary<(string, string, string, int), Node> EntryExitSegments)
-        PopulateEntryExitMethods(
-            Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
-        var types = module.ToList();
-        var entryExit = new Dictionary<(string, string, string), Node>();
-        var entryExitSegments = new Dictionary<(string, string, string, int), Node>();
-        for (var i = 0; i < types.Count; i++) {
-            var td = types[i];
-            var entity = domain.Types.OfType<Entity>()
-                .FirstOrDefault(e => string.Equals(e.Name, td.Name, StringComparison.Ordinal));
-            if (entity is null || entity.Stages.Count == 0)
-                continue;
-
-            var esm = analysis.GetStructure(entity);
-            foreach (var stage in entity.Stages) {
-                // Whole-batch EntryExitBodies exclude nested StageTransitionEffect (no-nested
-                // TransitionStage path). Segments cache contiguous non-ST fragments for the
-                // mixed flush/recurse path — execute binds those, never LowerActionBody.
-                // The bodies stay in the cache; the printed type no longer carries the
-                // dead OnEntry*/OnExit* members (D10).
-                var entryBatch = stage.OnEntryEffects
-                    .Where(e => e is not StageTransitionEffect).ToList();
-                if (entryBatch.Count > 0) {
-                    var entryMethod = BuildStageBatchMethodExport(
-                        entity, domain, analysis, esm, $"OnEntry{stage.Name}", entryBatch);
-                    entryExit[(entity.Name, stage.Name, "entry")] = entryMethod.Body!;
-                }
-                CacheEntryExitSegments(
-                    entryExitSegments, entity, domain, analysis, esm,
-                    stage.Name, "entry", stage.OnEntryEffects);
-
-                var exitBatch = stage.OnExitEffects
-                    .Where(e => e is not StageTransitionEffect).ToList();
-                if (exitBatch.Count > 0) {
-                    var exitMethod = BuildStageBatchMethodExport(
-                        entity, domain, analysis, esm, $"OnExit{stage.Name}", exitBatch);
-                    entryExit[(entity.Name, stage.Name, "exit")] = exitMethod.Body!;
-                }
-                CacheEntryExitSegments(
-                    entryExitSegments, entity, domain, analysis, esm,
-                    stage.Name, "exit", stage.OnExitEffects);
-            }
-        }
-        return (types, entryExit, entryExitSegments);
-    }
-
     private static void Retarget<TKey>(
         Dictionary<TKey, Node> map,
         IReadOnlyList<(Node From, Node To)> replaced) where TKey : notnull {
@@ -331,96 +281,6 @@ internal static class RuntimeAnalysisCache {
                 break;
             }
         }
-    }
-
-    /// <summary>
-    /// Lower nonempty contiguous non-<see cref="StageTransitionEffect"/> segments of an
-    /// OnEntry/OnExit list. Mixed lists flush these at execute via
-    /// <see cref="TryGetEntryExitSegmentBody"/>. Lists with no StageTransitionEffect
-    /// skip segment cache — execute uses EntryExitBodies / module methods already.
-    /// </summary>
-    private static void CacheEntryExitSegments(
-        Dictionary<(string, string, string, int), Node> map,
-        Entity entity,
-        Domain domain,
-        AnalysisResult analysis,
-        EntityStructureMetadata? esm,
-        string stageName,
-        string kind,
-        IReadOnlyList<Effect> effects) {
-        // No ST → no mixed flush path; avoid unused seg0 twin of EntryExitBodies.
-        if (effects.All(e => e is not StageTransitionEffect))
-            return;
-        var segmentIndex = 0;
-        var batch = new List<Effect>();
-        void Flush() {
-            if (batch.Count == 0) return;
-            var method = BuildStageBatchMethodExport(
-                entity, domain, analysis, esm,
-                $"On{(kind == "entry" ? "Entry" : "Exit")}{stageName}_Seg{segmentIndex}",
-                batch);
-            map[(entity.Name, stageName, kind, segmentIndex)] = method.Body!;
-            segmentIndex++;
-            batch.Clear();
-        }
-        foreach (var effect in effects) {
-            if (effect is StageTransitionEffect) {
-                Flush();
-            }
-            else {
-                batch.Add(effect);
-            }
-        }
-        Flush();
-    }
-
-
-    private static MethodDefinitionNode BuildStageBatchMethodExport(
-        Entity entity,
-        Domain domain,
-        AnalysisResult analysis,
-        EntityStructureMetadata? esm,
-        string methodName,
-        IReadOnlyList<Effect> effects) {
-        var ctx = new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis,
-            Domain: domain,
-            EnumPropertyNames: esm?.EnumPropertyNames,
-            LifecyclePropertyName: esm?.LifecyclePropertyName,
-            LifecycleEnumTypeName: esm?.LifecycleEnumTypeName);
-        var pass = new EffectLoweringPass(entity, ctx);
-        var body = pass.LowerActionBody(effects) ?? new Block([]);
-        return new MethodDefinitionNode(
-            methodName,
-            new TypeReference("void"),
-            Body: body,
-            AccessModifier: AccessModifier.Private);
-    }
-
-    internal static bool TryGetEntryExitBody(
-        Domain domain, string entityName, string stageName, string kind, out Node? body) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        if (holder.EntryExitBodies is not null
-            && holder.EntryExitBodies.TryGetValue((entityName, stageName, kind), out body)
-            && body is not null)
-            return true;
-        body = null;
-        return false;
-    }
-
-    internal static bool TryGetEntryExitSegmentBody(
-        Domain domain, string entityName, string stageName, string kind, int segmentIndex, out Node? body) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        if (holder.EntryExitSegmentBodies is not null
-            && holder.EntryExitSegmentBodies.TryGetValue(
-                (entityName, stageName, kind, segmentIndex), out body)
-            && body is not null)
-            return true;
-        body = null;
-        return false;
     }
 
     /// <summary>
@@ -488,37 +348,6 @@ internal static class RuntimeAnalysisCache {
         var holder = GetHolder(domain);
         lock (holder) {
             holder.PolicyBodies?.Remove((entity, policy));
-        }
-    }
-
-    /// <summary>Test hook: replace a GetOrLower-cached OnEntry/OnExit body.</summary>
-    internal static void ReplaceEntryExitBody(
-        Domain domain, string entity, string stage, string kind, Node body) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentNullException.ThrowIfNull(body);
-        var holder = GetHolder(domain);
-        lock (holder) {
-            holder.EntryExitBodies ??= new Dictionary<(string, string, string), Node>();
-            holder.EntryExitBodies[(entity, stage, kind)] = body;
-        }
-    }
-
-    /// <summary>Test hook: clear an OnEntry/OnExit body (fail-closed Domain-bound).</summary>
-    internal static void ClearEntryExitBody(Domain domain, string entity, string stage, string kind) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        lock (holder) {
-            holder.EntryExitBodies?.Remove((entity, stage, kind));
-        }
-    }
-
-    /// <summary>Test hook: clear a mixed-list OnEntry/OnExit segment body.</summary>
-    internal static void ClearEntryExitSegmentBody(
-        Domain domain, string entity, string stage, string kind, int segmentIndex) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        lock (holder) {
-            holder.EntryExitSegmentBodies?.Remove((entity, stage, kind, segmentIndex));
         }
     }
 

@@ -13,7 +13,7 @@ namespace Poly.Interpretation.Vm.Abi;
 /// <para>Naming the location is what lets a consumer release it. Every arm of
 /// <c>CompileNodeInner</c> leaves one — a node with no value leaves <c>0L</c> — so
 /// <see cref="Result"/> is null only for a node that emits no code at all (a
-/// <c>Comment</c>), and <see cref="RequireResult"/> is the fail-closed answer for a
+/// a node that emits no code), and <see cref="RequireResult"/> is the fail-closed answer for a
 /// caller that needs a value.</para>
 /// </summary>
 internal readonly record struct CompiledNode(Expression Code, SlotLocation? Result) {

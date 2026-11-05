@@ -90,13 +90,6 @@ public class SliceASharedModuleBodyTests {
         var onExit = ticket.Methods?.FirstOrDefault(m => m.Name == "OnExitDraft");
         await Assert.That(onExit).IsNull();
 
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Draft", "exit", out var exitBody)).IsTrue();
-        await Assert.That(exitBody).IsNotNull();
-        await Assert.That(ContainsNode<ThisReference>(exitBody!)).IsTrue();
-
-        var printed = new CSharpGenerator().Generate(exitBody!);
-        await Assert.That(printed.Length).IsGreaterThan(0);
 
         // Host TransitionStage is gone with DEI. The cached exit body above is what this test can still prove.
     }
@@ -112,7 +105,7 @@ public class SliceASharedModuleBodyTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
-        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)

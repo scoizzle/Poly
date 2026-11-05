@@ -25,8 +25,8 @@ public class Item3LowerPopulateTests {
               IsAdult: policy { Age >= 18 }
             }
             """);
-        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
+        var exec = new ModuleInstanceExecutor(domain);
         await Assert.That(RuntimeAnalysisCache.TryGetPolicyBody(domain, "Gate", "IsAdult", out var before))
             .IsTrue();
         await Assert.That(before).IsNotNull();
@@ -42,65 +42,6 @@ public class Item3LowerPopulateTests {
         RuntimeAnalysisCache.ReplacePolicyBody(domain, "Gate", "IsAdult", new Constant(false));
         var adult = exec.Create((gateE).Name, new Dictionary<string, object?> { ["Age"] = 21L }).Instance!;
         await Assert.That(exec.EvaluatePolicy(adult, (policy).Name)).IsFalse();
-    }
-
-    [Test]
-    public async Task OnExit_TransitionStage_UsesCachedBody_NotReloweredAssign() {
-        // Action StageTransition inlines exit into the module body; EntryExitBodies
-        // are consumed by TransitionStage / ApplyInitialStageEntryEffects.
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Draft: stage {
-                exit { assign Note to "left-draft" }
-              }
-              Done: stage { }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Draft", "exit", out var exitBody)).IsTrue();
-        await Assert.That(exitBody).IsNotNull();
-
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Draft", "exit",
-            AssignEntityProp("Ticket", "Note", "sentinel-exit"));
-
-        // Host TransitionStage is gone with DEI. The cache row above is what this test can still prove.
-    }
-
-    [Test]
-    public async Task OnEntry_ApplyInitial_AndTransition_UsesCachedBody() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Draft: stage {
-                entry { assign Note to "entered" }
-              }
-              Done: stage {
-                entry { assign Note to "entered-done" }
-              }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Draft", "entry", out _)).IsTrue();
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Done", "entry", out _)).IsTrue();
-
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Draft", "entry",
-            AssignEntityProp("Ticket", "Note", "sentinel-entry"));
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Done", "entry",
-            AssignEntityProp("Ticket", "Note", "sentinel-done-entry"));
-
-        // Host TransitionStage / first-stage entry execution is gone with DEI.
-        // The cache rows above are what this test can still prove.
     }
 
     [Test]
@@ -122,8 +63,8 @@ public class Item3LowerPopulateTests {
               }
             }
             """);
-        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
+        var exec = new ModuleInstanceExecutor(domain);
 
         var pending = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker")
             .Stages.First(s => s.Name == "Pending");
@@ -155,8 +96,8 @@ public class Item3LowerPopulateTests {
               IsAdult: policy { Age >= 18 }
             }
             """);
-        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
+        var exec = new ModuleInstanceExecutor(domain);
         RuntimeAnalysisCache.ClearPolicyBody(domain, "Gate", "IsAdult");
 
         var gateE = domain.Types.OfType<Entity>().First(e => e.Name == "Gate");
@@ -186,8 +127,8 @@ public class Item3LowerPopulateTests {
               }
             }
             """);
-        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
+        var exec = new ModuleInstanceExecutor(domain);
 
         var pending = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker")
             .Stages.First(s => s.Name == "Pending");
@@ -327,8 +268,8 @@ public class Item3LowerPopulateTests {
               Done: stage { }
             }
             """);
-        var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
+        var exec = new ModuleInstanceExecutor(domain);
 
         var orderE = domain.Types.OfType<Entity>().First(e => e.Name == "Order");
         var trackerE = domain.Types.OfType<Entity>().First(e => e.Name == "Tracker");
@@ -350,7 +291,7 @@ public class Item3LowerPopulateTests {
         ]);
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
-        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)

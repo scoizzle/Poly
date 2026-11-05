@@ -569,8 +569,6 @@ public class AstParityTests {
     /// <summary>The kinds the writer does not print as themselves, with the disposal each side must
     /// have today: a refusal, an erasure, or — for PopCount — an expansion that executes.</summary>
     static Dictionary<Type, PrintDisposition> Samples() => new() {
-        // The writer prints a comment, so both sides execute as void.
-        [typeof(Comment)] = new(ParityDisposal.Executed, ParityDisposal.Executed, "void", "void", Agrees: true),
         // The writer expands the kind to its only faithful spelling, the library call, so the
         // printed side executes to the same value as the VM.
         [typeof(PopCount)] = new(ParityDisposal.Executed, ParityDisposal.Executed, "long:3", "long:3", Agrees: true),
@@ -587,7 +585,6 @@ public class AstParityTests {
         ParityDisposal Vm, ParityDisposal Printed, string VmOutcome, string PrintedOutcomePrefix, bool Agrees);
 
     static Node Sample(Type kind) => kind switch {
-        _ when kind == typeof(Comment) => new Comment("note"),
         _ when kind == typeof(PopCount) => new PopCount(new Constant(7L)),
         _ when kind == typeof(StridedSetBits) => new StridedSetBits(
             new Variable("bits"), new Constant(0L), new Constant(1L), new Constant(63L)),

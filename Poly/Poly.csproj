@@ -7,26 +7,21 @@
         <LangVersion>latest</LangVersion>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <OutputType>Library</OutputType>
-        <SynchReleaseVersion>false</SynchReleaseVersion>
         <RootNamespace>Poly</RootNamespace>
-        
-        <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
         <PackageId>Poly</PackageId>
         <Authors>Scot 'Scoizzle' Murphy</Authors>
-        <Company />
         <Product>Poly</Product>
-        <Description>Poly is an application development extension providing multiple classes for improving developer life.</Description>
+        <Description>Domain models as libraries: a .poly DSL lowered to one symbolic operation module, analyzed fail-closed, then run on a stack VM or printed as C#.</Description>
         <Copyright>Scot 'Scoizzle' Murphy</Copyright>
-        <PackageProjectUrl>http://github.com/scoizzle/Poly/</PackageProjectUrl>
-        <RepositoryUrl>http://github.com/scoizzle/Poly/</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/scoizzle/Poly/</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/scoizzle/Poly/</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-        <PackOnBuild>true</PackOnBuild>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
         <Owners>Scot 'Scoizzle' Murphy</Owners>
-        <ReleaseVersion>1.0.1</ReleaseVersion>
-        <PackageVersion>1.0.1</PackageVersion>
-        <Version>1.0</Version>
+        <Version>1.0.1</Version>
     </PropertyGroup>
 
     <ItemGroup>

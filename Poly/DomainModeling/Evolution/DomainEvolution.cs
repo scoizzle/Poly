@@ -47,8 +47,9 @@ public sealed class DomainEvolution {
     /// <summary>
     /// Applies a batch, analyzes the proposal, and returns either that proposal and its
     /// analysis or the original root when analysis or mutation failed.
-    /// <paramref name="session"/> supplies the pipeline; when null,
-    /// <see cref="DomainSession.ForExtensions"/> resolves the domain's extensions.
+    /// <paramref name="session"/> supplies the pipeline; when null, the domain's existing
+    /// compilation session is reused (<see cref="RuntimeAnalysisCache.Session"/>), or an equivalent
+    /// one is opened from its extensions if it has never been bound.
     /// A prior analysis that already carries the mutation index is used as-is.
     /// Otherwise an empty seed is not analyzed, and a non-empty seed is analyzed
     /// once for that index. The proposal is always analyzed.
@@ -117,8 +118,13 @@ public sealed class DomainEvolution {
                 $"Domain analysis did not produce catalog mutation-target index for mutation-target resolution.");
     }
 
+    /// <summary>
+    /// The caller's session, or the one that already compiled this domain. A fresh
+    /// `ForExtensions` here would be a different session object over a domain that may already have
+    /// a module, which `RuntimeAnalysisCache.Bind` refuses (#398).
+    /// </summary>
     private static DomainSession ResolveSession(Domain domain, DomainSession? session) =>
-        session ?? DomainSession.ForExtensions(domain.Extensions);
+        session ?? RuntimeAnalysisCache.Session(domain);
 
     // The passed session is the link of this compile. A uses id it did not
     // load is an unresolved import, not a successful analysis.

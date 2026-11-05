@@ -36,12 +36,6 @@ public class C1bConstraintFailureTests {
             }
             """);
         var module = session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Widget", "Draft", "entry", out var body)).IsTrue();
-        await Assert.That(body).IsNotNull();
-        await Assert.That(HasConstraintFailureThrow(body!)).IsTrue();
-        await Assert.That(HasDomainResultFailureReturn(body!)).IsFalse();
-
         var widget = module.First(t => t.Name == "Widget");
         var ctor = widget.Constructors!.First(c => c.Parameters is { Count: > 0 });
         await Assert.That(HasConstraintFailureThrow(ctor.Body!)).IsTrue();
@@ -169,7 +163,7 @@ public class C1bConstraintFailureTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
-        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)

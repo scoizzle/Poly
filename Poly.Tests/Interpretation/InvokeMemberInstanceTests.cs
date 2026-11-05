@@ -203,7 +203,7 @@ public class InvokeMemberInstanceTests {
                 new MethodDefinitionNode(
                     "Reset",
                     new TypeReference("void"),
-                    Body: new Block([new Comment("nothing to do")]))
+                    Body: new Block([new Block([])]))
             ]);
         var analyzer = new TypeDefinitionNodeAnalyzer();
         var ctx = AnalysisContext.CreateDefault();

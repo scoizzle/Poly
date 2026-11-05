@@ -8,7 +8,9 @@ A Poly row's `prep_ms` is compile + analysis for that program, measured on its f
 
 Poly and the two C# entries run as **native arm64 .NET processes on the macOS host**. C, C++, Rust, JavaScript, Bun, Deno and Python run as **linux/arm64 images inside Docker Desktop**, compiled there (`gcc -O3 -march=native`, `rustc -O -C target-cpu=native`).
 
-That boundary is not free, and its direction is not constant. The same C source, both arm64, measured through each path:
+That boundary is not free, and its direction is not constant. The same C source, both arm64,
+measured through each path. Rows from `results/results_20261023_151722.csv`; the host columns are
+ad-hoc clang-on-host measurements, not CSV rows:
 
 | Benchmark | clang 21 (host) | gcc 14 (docker) | CSV `C` row |
 |---|---|---|---|
@@ -65,7 +67,14 @@ This section measures the *VM*, not the cross-language table; the 1.40 ns figure
 
 ## Final run on `plan/interpretation-simplification` (2026-10-23 15:17)
 
-`results/results_20261023_151722.csv`, exec avg (min) against the same-environment baselines:
+**Run:** `results/results_20261023_151722.csv`, 2026-10-23 15:17 CT.
+**Environment:** the `Poly VM` and `C# native` columns are host rows (macOS arm64, one .NET
+runtime). The `JS` column is a **linux/arm64 Docker** row and is shown for scale only — it is not a
+like-for-like comparison. The `Ratio` column is Poly ÷ C# native, which does not cross an
+environment. This is **not the newest CSV** in `results/`; the newest is
+`results_20261027_215607.csv` (2026-10-27).
+
+exec avg (min):
 
 | Benchmark | Poly VM | C# native | Ratio | JS |
 |---|---:|---:|---:|---:|
@@ -76,7 +85,8 @@ This section measures the *VM*, not the cross-language table; the 1.40 ns figure
 
 Poly is ahead of C# native on sieve and collatz, and ahead of JavaScript on every program by min. Nqueens is the one place the average loses to JS (56 vs 46) because of a single 70 us outlier - its min (41) is at JS's 43.
 
-**Change against the 07:08 run on the same machine:**
+**Change against the 07:08 run on the same machine** (`results_20261023_070816.csv` and
+`results_20261023_151722.csv`; both host rows):
 
 | Workload | 07:08 | 15:17 | |
 |---|---:|---:|---|

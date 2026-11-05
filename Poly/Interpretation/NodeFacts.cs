@@ -13,14 +13,14 @@ public enum Producers {
 
 /// <summary>
 /// One row of <see cref="NodeFacts"/>: the kind's name, the producers that honour it, whether the
-/// kind can raise at run time, and — when the VM rejects the kind on purpose — the message the
+/// kind can throw at run time, and — when the VM rejects the kind on purpose — the message the
 /// rejection carries.
 /// </summary>
-public sealed record NodeFact(string Label, Producers Producers, bool MayRaise, string? RejectReason = null);
+public sealed record NodeFact(string Label, Producers Producers, bool MayThrow, string? RejectReason = null);
 
 /// <summary>
 /// The one table of per-kind facts: which producer honours the kind, and whether executing it can
-/// raise. Data plus a totality test; it carries no behaviour.
+/// throw. Data plus a totality test; it carries no behaviour.
 /// <para>
 /// <c>Vm</c> means the kind executes; <c>Writer</c> means the writer prints it and the printed
 /// text re-reads to the same kind; <c>WriterExpanded</c> means the writer prints it as an
@@ -31,12 +31,12 @@ public sealed record NodeFact(string Label, Producers Producers, bool MayRaise, 
 /// carry.
 /// </para>
 /// <para>
-/// <see cref="NodeFact.MayRaise"/> answers "can this kind raise while it executes", and it is
-/// deliberately conservative. An operator node is marked raising even when the integer operator
+/// <see cref="NodeFact.MayThrow"/> answers "can this kind throw while it executes", and it is
+/// deliberately conservative. An operator node is marked throwing even when the integer operator
 /// wraps, because the same node reaches the decimal operator or a user-defined one, and the table
 /// sees kinds, not operands. A consumer that must be precise refines the answer; a consumer that
-/// forgets costs an optimization, never a program. <c>Fact</c> is the raising default, so a new kind
-/// starts raising and has to be declared <c>Inert</c> to lose that claim.
+/// forgets costs an optimization, never a program. <c>Fact</c> is the throwing default, so a new kind
+/// starts throwing and has to be declared <c>Inert</c> to lose that claim.
 /// </para>
 /// </summary>
 public static class NodeFacts {
@@ -129,18 +129,57 @@ public static class NodeFacts {
     };
 
     /// <summary>
-    /// A kind that can raise at run time, so a catch clause over it is reachable. This is the default
-    /// on purpose: a new kind starts raising until it is shown inert, because the wrong answer in this
+    /// True when executing <paramref name="node"/> can throw: the node's row says so, or a descendant
+    /// does. A descendant walk stops at a <see cref="Lambda"/> or <see cref="TypeDefinitionNode"/>,
+    /// because those bodies execute in their own scope. An unknown kind answers true.
+    /// <para>
+    /// This is the whole answer, not the root's row: <c>Or</c>, <c>Conditional</c>, <c>Coalesce</c> and
+    /// a nested <c>Block</c> are inert themselves and can hold a division or a call.
+    /// </para>
+    /// <para>
+    /// It answers for the tree it is given. A node whose replacement the analysis recorded
+    /// (<c>SetNodeReplacement</c>) is judged by its own kind and children, not by the replacement, so a
+    /// caller that runs after rewriting must ask about the replacement.
+    /// </para>
+    /// </summary>
+    public static bool MayThrow(Node node) {
+        ArgumentNullException.ThrowIfNull(node);
+        if (Throws(node))
+            return true;
+        // A scope boundary is the whole answer for its own node: its body runs when something calls
+        // it. Answering otherwise keeps a lambda statement the writer cannot print.
+        if (node is Lambda or TypeDefinitionNode)
+            return false;
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            if (Throws(child))
+                return true;
+            if (child is Lambda or TypeDefinitionNode)
+                continue;
+            if (MayThrow(child))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>True when the node's own kind can throw; an unknown kind answers true.</summary>
+    public static bool Throws(Node node) =>
+        !All.TryGetValue(node.GetType(), out var fact) || fact.MayThrow;
+
+    /// <summary>
+    /// A kind whose execution can throw, so a catch clause over it is reachable. This is the default
+    /// on purpose: a new kind is throwing until it is shown inert, because the wrong answer in this
     /// column is a reachable catch body the writer drops while the VM runs it.
     /// </summary>
     private static NodeFact Fact<T>(Producers producers, string? rejectReason = null) where T : Node =>
-        new(typeof(T).Name, producers, MayRaise: true, rejectReason);
+        new(typeof(T).Name, producers, MayThrow: true, rejectReason);
 
     /// <summary>
-    /// A kind that cannot raise while it executes, so a catch clause over it is unreachable when
-    /// nothing else in the try block raises. The claim is explicit because it is the one that lets a
-    /// consumer delete code.
+    /// A kind whose execution cannot throw, so a catch clause over it is unreachable when nothing
+    /// else in the try block throws. The claim is explicit because it is the one that lets a consumer
+    /// delete code.
     /// </summary>
     private static NodeFact Inert<T>(Producers producers, string? rejectReason = null) where T : Node =>
-        new(typeof(T).Name, producers, MayRaise: false, rejectReason);
+        new(typeof(T).Name, producers, MayThrow: false, rejectReason);
 }

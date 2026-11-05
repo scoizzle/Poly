@@ -426,7 +426,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = MayThrow(context, tryCatch.TryBlock);
+        bool mayThrow = NodeFacts.MayThrow(tryCatch.TryBlock);
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
@@ -470,19 +470,13 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     }
 
     /// <summary>
-    /// True when anything in the try block can raise at run time, so its catch clauses are reachable.
-    /// The answer is one lookup in <see cref="NodeFacts"/>: a kind marked raising, or a kind with no
-    /// row at all, which counts as raising. Answering "no" is only sound for a kind the table calls
+    /// True when anything in the try block can throw at run time, so its catch clauses are reachable.
+    /// The answer is one lookup in <see cref="NodeFacts"/>: a kind marked throwing, or a kind with no
+    /// row at all, which counts as throwing. Answering "no" is only sound for a kind the table calls
     /// inert, because the wrong answer elides a reachable catch body — a silently changed program
     /// rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and its
-    /// throw belongs to the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
+    /// throw belongs to the call that invokes it, which <see cref="NodeFacts.MayThrow"/> honours.
     /// </summary>
-    private bool MayThrow(AnalysisContext context, Node node) =>
-        CanRaise(node)
-        || this.AnyChild<ControlFlowMetadata>(context, node, static (_, child) => CanRaise(child));
-
-    private static bool CanRaise(Node node) =>
-        !NodeFacts.All.TryGetValue(node.GetType(), out var fact) || fact.MayRaise;
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

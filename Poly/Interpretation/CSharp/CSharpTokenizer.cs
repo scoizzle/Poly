@@ -14,11 +14,23 @@ namespace Poly.Interpretation.CSharp;
 /// </summary>
 public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTokenKind> {
     private readonly string _text;
+    private readonly List<CSharpComment> _comments = [];
     private int _pos;
     private int _line = 1;
     private int _col = 1;
 
     public CSharpTokenizer(string text) => _text = text ?? throw new ArgumentNullException(nameof(text));
+
+    /// <summary>Comments seen so far, in source order. Complete after <see cref="Prime"/>.</summary>
+    public IReadOnlyList<CSharpComment> Comments => _comments;
+
+    /// <summary>
+    /// Scans the whole text once so every comment is recorded before the reader folds anything.
+    /// The scanner already skips trivia; this only forces it to reach the end.
+    /// </summary>
+    public void Prime() {
+        for (var offset = 0; !EndOfStream(Peek(offset).Kind); offset++) { }
+    }
 
     public override bool EndOfStream(CSharpTokenKind kind) => kind == CSharpTokenKind.EndOfFile;
 
@@ -133,14 +145,25 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
             var ch = PeekChar();
             if (ch is ' ' or '\t' or '\r' or '\n') { AdvanceChar(); continue; }
             if (ch == '/' && PeekChar(1) == '/') {
+                var line = _line;
+                var col = _col;
+                AdvanceChar();
+                AdvanceChar();
+                var start = _pos;
                 while (_pos < _text.Length && PeekChar() != '\n') AdvanceChar();
+                _comments.Add(new CSharpComment(_text[start.._pos].Trim(), IsBlock: false, line, col));
                 continue;
             }
             if (ch == '/' && PeekChar(1) == '*') {
+                var line = _line;
+                var col = _col;
                 AdvanceChar();
                 AdvanceChar();
+                var start = _pos;
                 while (_pos < _text.Length && !(PeekChar() == '*' && PeekChar(1) == '/')) AdvanceChar();
+                var body = _text[start.._pos];
                 if (_pos < _text.Length) { AdvanceChar(); AdvanceChar(); }
+                _comments.Add(new CSharpComment(body.Trim(), IsBlock: true, line, col));
                 continue;
             }
             if (ch == '#') {

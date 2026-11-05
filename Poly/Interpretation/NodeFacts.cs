@@ -72,6 +72,7 @@ public static class NodeFacts {
         [typeof(Add)] = Fact<Add>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Throws),
         [typeof(And)] = Inert<And>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Assignment)] = Fact<Assignment>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Write),
+        [typeof(Comment)] = Inert<Comment>(Producers.Vm | Producers.Writer | Producers.Reader),
         [typeof(AttributeNode)] = Inert<AttributeNode>(Producers.Writer | Producers.Reader),
         [typeof(AttributedNode)] = Inert<AttributedNode>(Producers.None),
         [typeof(Await)] = Fact<Await>(Producers.Vm | Producers.Writer | Producers.Reader, NodeEffect.External | NodeEffect.Throws),

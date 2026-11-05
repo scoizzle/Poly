@@ -29,11 +29,17 @@ public static class CSharpReader {
         private readonly Matcher<CSharpToken, CSharpTokenKind> _matcher;
         private readonly string _text;
         private readonly List<string> _usings = [];
+        private readonly IReadOnlyList<CSharpComment> _comments;
+        private int _nextComment;
         private HashSet<string>? _valueNames;
 
         public Parser(string text) {
             _text = text;
             _reader = new CSharpTokenizer(text);
+            // Every comment must be known before folding: blocks are built while matching, and a
+            // comment after the current token would otherwise be invisible to them.
+            _reader.Prime();
+            _comments = _reader.Comments;
             _matcher = new Matcher<CSharpToken, CSharpTokenKind>(CSharpGrammar.Table, _reader);
         }
 
@@ -660,6 +666,8 @@ public static class CSharpReader {
             var nodes = new List<Node>();
             var variables = new List<Node>();
             foreach (var statement in Children(match, "statement")) {
+                // Comments belong to the statement that follows them, in the block that holds it.
+                EmitCommentsBefore(nodes, statement.Tokens[0]);
                 if (statement.PatternName is "var-decl" or "typed-decl" or "const-decl" or "typed-decl-bare") {
                     var (variable, value) = statement.PatternName == "typed-decl-bare"
                         ? FoldBareDeclaration(statement)
@@ -670,7 +678,26 @@ public static class CSharpReader {
                 }
                 nodes.Add(FoldStatement(statement));
             }
+            // A comment after the last statement belongs to this block, before its close brace.
+            if (match.Tokens.Count > 0)
+                EmitCommentsBefore(nodes, match.Tokens[^1]);
             return new Block(nodes, variables);
+        }
+
+        /// <summary>
+        /// Appends every not-yet-attached comment that starts before <paramref name="next"/>. The
+        /// cursor is global and folding walks source order, so a nested block takes the comments
+        /// inside it and the enclosing block keeps the ones before the statement that opened it.
+        /// </summary>
+        private void EmitCommentsBefore(List<Node> nodes, CSharpToken next) {
+            while (_nextComment < _comments.Count) {
+                var comment = _comments[_nextComment];
+                if (comment.Line > next.Line
+                    || (comment.Line == next.Line && comment.Col >= next.Col))
+                    return;
+                nodes.Add(new Comment(comment.Text, comment.IsBlock));
+                _nextComment++;
+            }
         }
 
         /// <summary>The binary node a compound assignment desugars into.</summary>

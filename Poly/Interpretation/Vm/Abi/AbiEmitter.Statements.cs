@@ -199,9 +199,10 @@ public static partial class AbiEmitter {
         Context.StatementScope? open = null;
         for (int i = 0; i < block.Nodes.Count; i++) {
             var statement = block.Nodes[i];
-            // A label emits no code and no value, so it must not release what the previous
-            // statement left: that value is still the block's result.
-            bool resetsDepth = statement is not LabelDeclaration;
+            // A comment or a label emits no code and no value, so it must not release what the
+            // previous statement left: that value is still the block's result
+            // (`[return x, comment]` yields x).
+            bool resetsDepth = statement is not (Comment or LabelDeclaration);
             if (resetsDepth) {
                 open?.Dispose();
                 open = ctx.OpenStatement(entryDepth);
@@ -220,7 +221,8 @@ public static partial class AbiEmitter {
                 ctx.PopReadsAfter();
             }
             stmtExprs.Add(code);
-            valueClrType = code.Type;
+            if (statement is not Comment)
+                valueClrType = code.Type;
         }
         if (open is not null) {
             open.Hold();
@@ -306,10 +308,14 @@ public static partial class AbiEmitter {
     /// <summary>True when the last statement that produces the block's value is the
     /// variable's definition, so that value <em>is</em> the array's handle: the enclosing
     /// expression still observes it, and recycling it there would dangle a live handle.</summary>
-    private static bool IsBlockValue(Block block, Variable variable) =>
-        block.Nodes.Count > 0
-        && block.Nodes[^1] is Assignment assignment
-        && Binds(assignment.Destination, variable);
+    private static bool IsBlockValue(Block block, Variable variable) {
+        for (int i = block.Nodes.Count - 1; i >= 0; i--) {
+            if (block.Nodes[i] is Comment)
+                continue;
+            return block.Nodes[i] is Assignment assignment && Binds(assignment.Destination, variable);
+        }
+        return false;
+    }
 
     /// <summary>The typed CLR local that caches <paramref name="variable"/>'s array, when
     /// every reference the declaring block makes to it is an element access. Anything else

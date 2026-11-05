@@ -346,10 +346,10 @@ public class ClosureCaptureTests {
     }
 
     [Test]
-    public async Task Invoke_LambdaBlock_ReturnThenComment_YieldsReturnValue() {
+    public async Task Invoke_LambdaBlock_ReturnThenEmptyBlock_YieldsReturnValue() {
         var lambda = new Lambda([], new Block([
             new IfStatement(new Constant(true), new Return(new Constant(7L))),
-            new Comment("x")
+            new Block([])
         ]));
         var node = new Invoke(lambda);
         using var exec = Interpreter.Execute(Interpreter.Compile(node));

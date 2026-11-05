@@ -310,10 +310,6 @@ public sealed class CSharpWriter {
                 sb.Append(Pad(indent));
                 sb.AppendLine(ExpressionStatementText(variable));
                 return;
-            case Comment c:
-                sb.Append(Pad(indent));
-                sb.AppendLine(c.Text.EndsWith('.') ? $"// {c.Text}" : $"// {c.Text}.");
-                return;
             default:
                 sb.Append(Pad(indent));
                 sb.AppendLine(ExpressionStatementText(node));
@@ -1098,8 +1094,6 @@ public sealed class CSharpWriter {
                 return Expr(suspend.Inner);
             case BaseConstructorInvocationNode baseCtor:
                 return Render("ctor-base", "base", ArgsText(baseCtor.Arguments));
-            case Comment c:
-                return $"/* {c.Text} */";
             default:
                 return Unprintable(node);
         }

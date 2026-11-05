@@ -356,10 +356,6 @@ public static partial class AbiEmitter {
             TryCatchFinally tcf => EmitTryCatchFinally(tcf, ctx),
             UsingStatement us => Statement(ctx, () => EmitUsingStatement(us, ctx)),
             SuspendNode sn => Statement(ctx, () => EmitSuspendNode(sn, ctx)),
-            // Transparent, not a statement: a comment emits nothing and leaves whatever the
-            // previous statement put on the ring, so `[x, comment]` still yields x. It is the
-            // one arm with no ring location, and a consumer that asks for one fails closed.
-            Comment => Empty(),
             Assignment a => EmitAssignment(a, ctx),
             Block b => EmitBlock(b, ctx),
             Parameter p => EmitParameter(p, ctx),

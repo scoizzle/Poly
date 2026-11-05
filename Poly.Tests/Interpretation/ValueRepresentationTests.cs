@@ -255,7 +255,7 @@ public class ValueRepresentationTests {
     public async Task Block_EarlyReturn_HasReturnKindWhenLastIsVoid() {
         var node = new Block([
             new IfStatement(new Constant(true), new Return(new Constant(7L))),
-            new Comment("after")
+            new Block([])
         ]);
         var result = Analyzer.Analyze(node);
         var (kind, clr) = ValueRepresentationClassifier.Classify(result, node);
@@ -263,10 +263,10 @@ public class ValueRepresentationTests {
     }
 
     [Test]
-    public async Task Invoke_LambdaBlock_ReturnThenComment_IsStackScalar() {
+    public async Task Invoke_LambdaBlock_ReturnThenEmptyBlock_IsStackScalar() {
         var invoke = new Invoke(new Lambda([], new Block([
             new IfStatement(new Constant(true), new Return(new Constant(7L))),
-            new Comment("x")
+            new Block([])
         ])));
         var result = Analyzer.Analyze(invoke);
         var (kind, clr) = ValueRepresentationClassifier.Classify(result, invoke);
@@ -289,8 +289,7 @@ public class ValueRepresentationTests {
     [Test]
     public async Task Block_IfFalseReturn_VoidFallthrough() {
         var node = new Block([
-            new IfStatement(new Constant(false), new Return(new Constant(7L))),
-            new Comment("fall")
+            new IfStatement(new Constant(false), new Return(new Constant(7L)))
         ]);
         var result = Analyzer.Analyze(node);
         var (kind, clr) = ValueRepresentationClassifier.Classify(result, node);

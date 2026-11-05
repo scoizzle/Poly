@@ -82,7 +82,7 @@ public class PrintedSubsetVmTests {
     }
 
     [Test]
-    public async Task ErasedKinds_PrintAsAChildOrAComment() {
+    public async Task ErasedKinds_PrintAsAChild() {
         await Assert.That(CSharpLanguage.Write(new SuspendNode(new Constant(7L))))
             .IsEqualTo(CSharpLanguage.Write(new Constant(7L)));
     }

@@ -920,11 +920,8 @@ public class CSharpGeneratorTests {
     }
 
     [Test]
-    public async Task Generate_Comment_Default_TypeOf_NewArray_Suspend_Print() {
+    public async Task Generate_Default_TypeOf_NewArray_Suspend_Print() {
         var g = new CSharpGenerator();
-        var commentOut = g.Generate(new Comment("note"));
-        await Assert.That(commentOut.Contains("//") || commentOut.Contains("/*")).IsTrue();
-        await Assert.That(commentOut).Contains("note");
         await Assert.That(g.Generate(new Default(TypeReference.To<int>()))).Contains("default");
         await Assert.That(g.Generate(new TypeOf(TypeReference.To<string>()))).Contains("typeof");
         await Assert.That(g.Generate(new NewArray(TypeReference.To<long>(), new Constant(3L)))).Contains("Int64");

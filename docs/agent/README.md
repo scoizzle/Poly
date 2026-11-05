@@ -1,6 +1,6 @@
 # Agent protocols
 
-Plain markdown. Any tool can follow them. Always-on policy is [`../../AGENTS.md`](../../AGENTS.md). Machinery is [`../CORE.md`](../CORE.md). Admission is GitHub issues under umbrella #305 (or its successor); the slice plan is the draft PR body. [`../plans/poly-eng/board.md`](../plans/poly-eng/board.md) is superseded.
+Plain markdown. Any tool can follow them. Always-on policy is [`../../AGENTS.md`](../../AGENTS.md). Machinery is [`../CORE.md`](../CORE.md). Admission is open GitHub issues (umbrella #305 closed 2026-11-04); the slice plan is the draft PR body. [`../plans/poly-eng/board.md`](../plans/poly-eng/board.md) is superseded.
 
 | Protocol | When |
 |---|---|

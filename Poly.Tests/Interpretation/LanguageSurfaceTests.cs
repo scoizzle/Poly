@@ -11,10 +11,10 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class LanguageSurfaceTests {
     [Test]
-    public async Task CommentAsExpression_IsCompileReject_StatementIsNoOp() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
+    public async Task EmptyBlockAsExpression_IsCompileReject_StatementIsNoOp() {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([])));
         await Assert.That(exec.Result.IsVoid).IsTrue();
-        await Assert.That(() => Interpreter.Compile(new Add(new Comment("x"), new Constant(1L))))
+        await Assert.That(() => Interpreter.Compile(new Add(new Block([]), new Constant(1L))))
             .Throws<InvalidOperationException>();
     }
 

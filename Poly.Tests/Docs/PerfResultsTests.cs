@@ -1,22 +1,28 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Poly.Tests.Docs;
 
 /// <summary>
-/// The performance document quotes concrete result files, and a hand-typed table drifts from the
-/// CSV it claims to come from. This is the cheap half of that guard: every CSV the document names
-/// must exist, and the document must say which run its tables came from.
+/// The performance document quotes concrete numbers from concrete runs. A hand-typed table drifts:
+/// someone re-runs `run.sh`, updates the CSV, and leaves the prose behind. These tests tie the two
+/// together — the newest table is checked value by value against the CSV it names — so a number can
+/// only change by changing the run it came from.
 /// <para>
-/// It cannot prove the numbers match — that needs a generator — but it does catch a table pointing
-/// at a deleted or renamed run, and a table with no provenance at all.
+/// They cannot verify a table that names no CSV, which is why the document also has to say its
+/// provenance; <see cref="RatioTable_StatesItsEnvironment"/> checks that it does.
 /// </para>
 /// </summary>
 public partial class PerfResultsTests {
+    /// <summary>The run the "Final run" table is generated from, and the languages it compares.</summary>
+    private const string FinalRun = "results_20261023_151722";
+    private static readonly (string Benchmark, string Csv)[] Benchmarks = [
+        ("nqueens", "nqueens"), ("sieve", "sieve"), ("mandelbrot", "mandelbrot"), ("collatz", "collatz"),
+    ];
+
     [Test]
     public async Task EveryQuotedResultsCsv_Exists() {
-        var root = RepoRoot();
-        var document = Path.Combine(root, "docs", "perf-comparison", "README.md");
-        var quoted = ResultsCsv().Matches(File.ReadAllText(document))
+        var quoted = ResultsCsv().Matches(Document())
             .Select(match => match.Groups[1].Value)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(name => name, StringComparer.Ordinal)
@@ -26,26 +32,134 @@ public partial class PerfResultsTests {
             .Because("the document must name at least one run it was generated from");
 
         var missing = quoted
-            .Where(name => !File.Exists(Path.Combine(root, "docs", "perf-comparison", "results", name + ".csv")))
+            .Where(name => !File.Exists(Path.Combine(ResultsDirectory(), name + ".csv")))
             .ToList();
         await Assert.That(missing).IsEmpty()
             .Because($"these CSVs are quoted but not in results/: {string.Join(", ", missing)}");
     }
 
     /// <summary>
-    /// A ratio column is only meaningful when both sides ran in one environment. The document says
-    /// which columns are host rows and which are container rows; the table that carries a ratio
-    /// must say its ratio does not cross the boundary.
+    /// The one table that is quoted as "the final run" must equal the CSV it names, row by row.
+    /// Changing a number in the prose without re-running is a red test.
+    /// </summary>
+    [Test]
+    public async Task FinalRunTable_MatchesItsCsv() {
+        var csv = ReadCsv(Path.Combine(ResultsDirectory(), FinalRun + ".csv"));
+        var rows = FinalRunRows();
+        await Assert.That(rows.Count).IsEqualTo(Benchmarks.Length)
+            .Because("the final-run table should have one row per benchmark");
+
+        foreach (var (benchmark, csvName) in Benchmarks) {
+            var row = rows.Single(r => r.Benchmark == benchmark);
+            await AssertRow(csv, csvName, "Poly VM", row.PolyAvg, row.PolyMin, averageIsMinimum: false);
+            await AssertRow(csv, csvName, "C# native", row.NativeAvg, null, averageIsMinimum: false);
+            await AssertRow(csv, csvName, "JS", row.Js, null, averageIsMinimum: false);
+        }
+    }
+
+    /// <summary>
+    /// A ratio column is only meaningful when both sides ran in one environment, and a table older
+    /// than the newest run must say so. The JS column is a container row and must not be presented
+    /// as host.
     /// </summary>
     [Test]
     public async Task RatioTable_StatesItsEnvironment() {
-        var root = RepoRoot();
-        var text = File.ReadAllText(Path.Combine(root, "docs", "perf-comparison", "README.md"));
-        await Assert.That(text).Contains("the `Ratio` column is Poly ÷ C# native")
+        var text = Document();
+        await Assert.That(text).Contains("The `Ratio` column is Poly ÷ C# native")
             .Because("a ratio across the host/container boundary is not a comparison");
+        await Assert.That(text).Contains("The `JS` column is a **linux/arm64 Docker** row")
+            .Because("JS runs in Docker; calling it a host row was false");
         await Assert.That(text).Contains("not the newest CSV")
             .Because("the quoted table is older than the newest run and must say so");
     }
+
+    // ── the table ────────────────────────────────────────────────────────────
+
+    internal sealed record FinalRow(
+        string Benchmark, int PolyAvg, int PolyMin, int NativeAvg, int Js);
+
+    /// <summary>Rows of the table under "exec avg (min):", parsed from the Markdown itself.</summary>
+    private static List<FinalRow> FinalRunRows() {
+        var lines = Document().Split('\n');
+        var start = Array.FindIndex(lines, line => line.Contains("exec avg (min):", StringComparison.Ordinal));
+        if (start < 0)
+            throw new InvalidOperationException("the 'exec avg (min)' table is missing from the document");
+        var rows = new List<FinalRow>();
+        foreach (var line in lines.Skip(start)) {
+            if (!line.StartsWith("|", StringComparison.Ordinal))
+                continue;
+            var cells = line.Split('|', StringSplitOptions.TrimEntries);
+            if (cells.Length < 6 || !NameCell().IsMatch(cells[1]))
+                continue;
+            // cells: [_, benchmark, poly, native, ratio, js, _]; skip anything that is not a data row.
+            if (cells.Length < 7)
+                continue;
+            var poly = Numbers().Matches(cells[2]).Select(m => Parse(m.Value)).ToList();
+            if (poly.Count < 2
+                || !Numbers().IsMatch(cells[3])
+                || !Numbers().IsMatch(cells[5]))
+                continue;
+            var native = Parse(Numbers().Match(cells[3]).Value);
+            var js = Parse(Numbers().Match(cells[5]).Value);
+            rows.Add(new FinalRow(NameCell().Match(cells[1]).Groups[1].Value, poly[0], poly[1], native, js));
+        }
+        return rows;
+    }
+
+    private static async Task AssertRow(
+        IReadOnlyDictionary<(string, string), (int Avg, int Min)> csv,
+        string benchmark, string language, int expectedAvg, int? expectedMin, bool averageIsMinimum) {
+        await Assert.That(csv.TryGetValue((benchmark, language), out var row)).IsTrue()
+            .Because($"'{benchmark}' has no '{language}' row in {FinalRun}.csv");
+        await Assert.That(expectedAvg).IsEqualTo(row.Avg)
+            .Because($"{benchmark}/{language}: the document says {expectedAvg} us, the CSV says {row.Avg}");
+        if (expectedMin is { } min)
+            await Assert.That(min).IsEqualTo(row.Min)
+                .Because($"{benchmark}/{language}: the document says min {min} us, the CSV says {row.Min}");
+        _ = averageIsMinimum;
+    }
+
+    private static Dictionary<(string, string), (int Avg, int Min)> ReadCsv(string path) {
+        var lines = File.ReadAllLines(path);
+        var header = lines[0].Split(',');
+        var benchmark = Array.IndexOf(header, "benchmark");
+        var language = Array.IndexOf(header, "language");
+        var avg = Array.IndexOf(header, "avg_us");
+        var min = Array.IndexOf(header, "min_us");
+        var rows = new Dictionary<(string, string), (int, int)>();
+        foreach (var line in lines.Skip(1)) {
+            var cells = line.Split(',');
+            if (cells.Length <= Math.Max(Math.Max(benchmark, language), Math.Max(avg, min)))
+                continue;
+            rows[(cells[benchmark], cells[language])] = (
+                Round(cells[avg]), Round(cells[min]));
+        }
+        return rows;
+    }
+
+    private static int Round(string value) =>
+        (int)Math.Round(double.Parse(value, CultureInfo.InvariantCulture), MidpointRounding.AwayFromZero);
+
+    private static int Parse(string value) =>
+        int.Parse(Commas().Replace(value, string.Empty), CultureInfo.InvariantCulture);
+
+    // ── plumbing ─────────────────────────────────────────────────────────────
+
+    private static string Document() =>
+        File.ReadAllText(Path.Combine(RepoRoot(), "docs", "perf-comparison", "README.md"));
+
+    private static string ResultsDirectory() =>
+        Path.Combine(RepoRoot(), "docs", "perf-comparison", "results");
+
+    /// <summary>`nqueens 8` -> nqueens; keeps only the benchmark name in front of the size.</summary>
+    [GeneratedRegex(@"^(nqueens|sieve|mandelbrot|collatz)\b")]
+    private static partial Regex NameCell();
+
+    [GeneratedRegex(@"\d[\d,]*(?:\.\d+)?")]
+    private static partial Regex Numbers();
+
+    [GeneratedRegex(",")]
+    private static partial Regex Commas();
 
     [GeneratedRegex(@"results/(results_\d{8}_\d{6})\.csv")]
     private static partial Regex ResultsCsv();

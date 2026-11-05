@@ -85,7 +85,6 @@ public static class NodeFacts {
         [typeof(ClrTypeReference)] = Inert<ClrTypeReference>(Producers.None, "Type name is not a VM value; use it as a Member/Invoke/New receiver."),
         [typeof(Coalesce)] = Inert<Coalesce>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(CollectionTypeReference)] = Inert<CollectionTypeReference>(Producers.Writer | Producers.Reader),
-        [typeof(Comment)] = Inert<Comment>(Producers.Vm),
         [typeof(CompilationUnitNode)] = Inert<CompilationUnitNode>(Producers.Writer | Producers.Reader),
         [typeof(Conditional)] = Inert<Conditional>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
         [typeof(Constant)] = Inert<Constant>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),

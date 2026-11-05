@@ -366,7 +366,7 @@ Use this as a kill/keep board:
 | [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) | Token/exception re-vision lock (D17) |
 | [`plans/dsl-delta-fragments.md`](plans/archive/completed-2026-08-late/dsl-delta-fragments.md) | Fragment authoring design (D7 consolidation — MCP `add`/`remove` retirement) |
 | [`plans/grammar-pure-end-state.md`](plans/archive/completed-2026-08-late/grammar-pure-end-state.md) | Pure Grammar product direction |
-| [`plans/poly-eng/board.md`](plans/poly-eng/board.md) | CURRENT admit |
+| Open GitHub issues | the queue (the board is retired) |
 | [`Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) | Product DSL surface |
 | [`agent/reviews/2026-08-08-long-term-growth-review.md`](agent/reviews/2026-08-08-long-term-growth-review.md) | Full-project growth review (demons → roadmap) |
 

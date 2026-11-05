@@ -87,10 +87,10 @@ public class RingLivenessTests {
     /// <summary>A comment emits nothing, so it must not release the result the
     /// preceding statement left: <c>[return 7, comment]</c> still yields 7.</summary>
     [Test, Timeout(10_000)]
-    public async Task Comment_DoesNotReleaseThePendingResult(CancellationToken ct) {
+    public async Task EmptyBlock_DoesNotReleaseThePendingResult(CancellationToken ct) {
         var node = new Invoke(new Lambda([], new Block([
             new IfStatement(new Constant(true), new Return(new Constant(7L))),
-            new Comment("trailing"),
+            new Block([]),
         ])));
 
         using var exec = Interpreter.Execute(Interpreter.Compile(node));

@@ -53,7 +53,8 @@ jobs:
 
       - name: Audit direct and transitive packages
         # NuGet audit reports as warnings; promote only the audit ids so an unrelated
-        # warning does not fail this job.
+        # warning does not fail this job. The list is %3B-escaped: bash strips the quotes,
+        # MSBuild then reads the second id as a switch and dies with MSB1006.
         run: |
-          dotnet restore Poly.slnx --nologo -p:NuGetAudit=true -p:WarningsAsErrors="NU1901;NU1902;NU1903;NU1904"
+          dotnet restore Poly.slnx --nologo -p:NuGetAudit=true "-p:WarningsAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904"
           dotnet list Poly.slnx package --vulnerable --include-transitive

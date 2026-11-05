@@ -60,7 +60,7 @@ public class AsyncMethodVmTests {
     [Test]
     public async Task Await_AstAsyncTask_IsVoid() {
         var tda = Analyze(ItemWith(
-            AsyncReturning("Ping", typeof(Task), new Block([new Comment("noop")]))));
+            AsyncReturning("Ping", typeof(Task), new Block([new Block([])]))));
         using var exec = Execute(Compile(tda, new Await(new Invoke(new Member(Item, "Ping")))));
         await Assert.That(exec.Result.IsVoid).IsTrue();
     }

@@ -235,7 +235,6 @@ internal static class NodeFactCorpus {
         yield return Sample<BitwiseXor>("LanguageVmTests", new BitwiseXor(new Constant(6L), new Constant(3L)));
         yield return Sample<Coalesce>("LanguageVmTests.Coalesce_EmptyString_KeepsLeft",
             new Coalesce(new Constant("a"), new Constant("b")));
-        yield return Sample<Comment>("LanguageVmTests.Comment_AsProgram_IsVoid", new Comment("note"));
         yield return Sample<Default>("LanguageVmTests.Default_Untyped_IsZero", new Default());
         yield return Sample<ForEachLoop>("ForEachLoopTests.ForEachLoop_UsesLoopVariableInsideBody", new Block([
             new Assignment(x, new Constant(0L)),

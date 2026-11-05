@@ -278,7 +278,6 @@ public static class AstParity {
         var voidType = new TypeReference("void");
         return node switch {
             Return => (objectType, node, null),
-            Comment => (voidType, node, null),
             Block block when Yields(block) => (objectType, Hoisted(block), null),
             Block => (voidType, node, null),
             Lambda lambda => LambdaEntry(lambda),

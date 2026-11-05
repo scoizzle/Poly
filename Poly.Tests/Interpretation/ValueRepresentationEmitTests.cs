@@ -212,7 +212,7 @@ public class ValueRepresentationEmitTests {
 
     [Test]
     public async Task StatementTail_WithNoValuedReturn_IsVoid() {
-        var node = new Block([new Constant(1), new Comment("tail")]);
+        var node = new Block([new Constant(1), new Block([])]);
         var result = Analyze(node);
 
         using var exec = Interpreter.Execute(Interpreter.Compile(node, result));

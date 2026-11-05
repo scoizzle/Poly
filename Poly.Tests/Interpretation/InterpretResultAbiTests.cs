@@ -28,7 +28,7 @@ public class InterpretResultAbiTests {
 
     [Test]
     public async Task VoidProgram_HasNoValue() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(new Comment("note")));
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Block([])));
         await Assert.That(exec.Result.IsVoid).IsTrue();
         await Assert.That(exec.Result.HasValue).IsFalse();
         await Assert.That(exec.Result.GetValue<long>()).IsEqualTo(0L);

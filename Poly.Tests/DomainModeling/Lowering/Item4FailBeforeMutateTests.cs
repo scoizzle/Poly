@@ -233,7 +233,7 @@ public class Item4FailBeforeMutateTests {
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) EvolveWithSession(
         string poly) {
-        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)

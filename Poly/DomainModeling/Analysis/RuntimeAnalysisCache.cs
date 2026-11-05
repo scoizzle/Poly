@@ -57,21 +57,52 @@ internal static class RuntimeAnalysisCache {
         var holder = Cache.GetValue(domain, _ => new Holder { Session = session });
         lock (holder) {
             var sessionChanged = !ReferenceEquals(holder.Session, session);
+            // Same loaded libraries in the same order lower a domain identically, so a different
+            // session object that loads them is not a different compilation.
+            var equivalent = !sessionChanged || SameExtensions(holder.Session, session);
+            // A cached module belongs to the session that lowered it. Replacing that session with
+            // one that loads different libraries would silently swap the compilation every
+            // consumer runs, which is how #387 turned a unique constraint off. Refuse instead.
+            if (sessionChanged && holder.Module is not null && !equivalent)
+                throw new InvalidOperationException(
+                    $"Domain '{domain.Name}' already has a module, lowered by a session with "
+                    + $"[{string.Join(", ", holder.Session.Extensions)}]. Binding a session with "
+                    + $"[{string.Join(", ", session.Extensions)}] would evict it. Lower a new Domain, "
+                    + "or reuse the session that lowered this one.");
             holder.Session = session;
-            // A new session without an analysis must not keep the old session's analysis.
+            // A new session without an analysis must not keep the old session's analysis, even an
+            // equivalent one: two catalogs can load the same ids and differ underneath.
             if (analysis is not null)
                 holder.Analysis = analysis;
             else if (sessionChanged)
                 holder.Analysis = null;
-            // A second Analyze on the same session must not drop the module the
-            // executor is running. Only a different compilation (session) invalidates it.
-            if (sessionChanged) {
+            // A second Analyze on the same compilation must not drop the module the executor is
+            // running. Only a different compilation invalidates it.
+            if (sessionChanged && !equivalent) {
                 holder.Module = null;
                 holder.Index = null;
                 holder.SubscriptionBodies = null;
                 holder.PolicyBodies = null;
             }
         }
+    }
+
+    /// <summary>
+    /// Same loaded libraries in the same order: two such sessions lower one domain identically, so
+    /// binding either is not an eviction. `DomainSession.WithDomain` does not build this shape for a
+    /// domain whose `uses` differs from the session's ids (it reopens from the domain), which is why
+    /// the MCP state keeps one pair instead of rebuilding a session per call.
+    /// </summary>
+    private static bool SameExtensions(DomainSession left, DomainSession right) {
+        var a = left.Extensions;
+        var b = right.Extensions;
+        if (a.Count != b.Count)
+            return false;
+        for (var i = 0; i < a.Count; i++) {
+            if (!string.Equals(a[i], b[i], StringComparison.Ordinal))
+                return false;
+        }
+        return true;
     }
 
     public static AnalysisResult GetOrAnalyze(Domain domain) =>
@@ -90,6 +121,20 @@ internal static class RuntimeAnalysisCache {
             DomainModelAnalyzer.RequireCatalog(analysis, domain);
             holder.Analysis = analysis;
             return analysis;
+        }
+    }
+
+    /// <summary>
+    /// True when this domain already has a lowered module, and hands it back. A caller that only
+    /// needs to *run* the domain must use it rather than lowering again: a second lowering under a
+    /// different session is the eviction `Bind` now refuses.
+    /// </summary>
+    internal static bool TryGetModule(Domain domain, out IReadOnlyList<TypeDefinitionNode> module) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var holder = GetHolder(domain);
+        lock (holder) {
+            module = holder.Module ?? [];
+            return holder.Module is not null;
         }
     }
 

@@ -163,7 +163,7 @@ public class C1bConstraintFailureTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
-        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded)

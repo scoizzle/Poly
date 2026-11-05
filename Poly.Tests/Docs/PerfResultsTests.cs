@@ -161,7 +161,7 @@ public partial class PerfResultsTests {
     [GeneratedRegex(",")]
     private static partial Regex Commas();
 
-    [GeneratedRegex(@"results/(results_\d{8}_\d{6})\.csv")]
+    [GeneratedRegex(@"(?:results/)?(results_\d{8}_\d{6})\.csv")]
     private static partial Regex ResultsCsv();
 
     private static string RepoRoot() {

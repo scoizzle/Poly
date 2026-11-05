@@ -212,7 +212,7 @@ public static partial class AbiEmitter {
 
     /// <summary>The expression and metadata produced by <see cref="Build"/>.
     /// <c>RootResult</c> is where the root's result lives — the slot the program copies
-    /// out — or null for a root that leaves none (a <c>Comment</c>).</summary>
+    /// out — or null for a root that leaves none.</summary>
     internal sealed record BuiltVmProgram(
         LambdaExpression Expression,
         int MaxRingDepth,
@@ -260,7 +260,7 @@ public static partial class AbiEmitter {
     /// <summary>Compile a node and report where its result lives. Every arm of
     /// <see cref="CompileNodeInner"/> leaves its result at the top of the ring — a node
     /// with no value leaves <c>0L</c> — so <see cref="CompiledNode.Result"/> is the slot a
-    /// consumer reads. Only a node that emits no code at all (<see cref="Comment"/>) has no
+    /// consumer reads. Only a node that emits no code at all has no
     /// location, and a consumer that needs one asks with
     /// <see cref="CompiledNode.RequireResult"/>, which fails closed.</summary>
     private static CompiledNode Compile(Node node, Context ctx) {

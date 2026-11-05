@@ -1,10 +1,10 @@
 # Poly — Semantic feature map & complexity demons
 
-**Date:** 2026-08-08  
-**Purpose:** Tour every major facet of the platform as a **semantic statement** (what it *is*, not which pattern it uses), then locate where **complexity demons** concentrate.  
-**Audience:** Humans and agents prioritizing simplification vs feature work.  
-**Authority for work:** open GitHub issues (the retired board was `plans/poly-eng/board.md`; umbrella #305 is closed)  
-**Authority for machinery:** [`CORE.md`](CORE.md)  
+**Date:** 2026-08-08
+**Purpose:** Tour every major facet of the platform as a **semantic statement** (what it *is*, not which pattern it uses), then locate where **complexity demons** concentrate.
+**Audience:** Humans and agents prioritizing simplification vs feature work.
+**Authority for work:** open GitHub issues (the retired board was `plans/poly-eng/board.md`; umbrella #305 is closed)
+**Authority for machinery:** [`CORE.md`](CORE.md)
 
 This is a **map**, not a suite. Update when a facet is deleted, merged, or materially changes meaning.
 
@@ -311,8 +311,8 @@ Everything else is either a **facet of that spine** or a **satellite** (export, 
                     High concentration, still live
 ```
 
-**Sweet spot to attack first (high demon, low product risk):** D11 (Validation/Text.Matching D8/D9 already deleted).  
-**Sweet spot for product honesty:** D4, D5, D7.  
+**Sweet spot to attack first (high demon, low product risk):** D11 (Validation/Text.Matching D8/D9 already deleted).
+**Sweet spot for product honesty:** D4, D5, D7.
 **Do not “simplify” without a design:** D1, D2, D3.
 
 ---
@@ -344,14 +344,14 @@ Use this as a kill/keep board:
 
 ## 8. Recommended use
 
-1. **Before starting a feature:** find its facet row — if Demon ≥ 4, state how you avoid a new dual.  
-2. **Before admitting a suite:** map it to D1–D20; prefer closing a demon over opening a parallel one.  
-3. **Simplification order (suggested):**  
+1. **Before starting a feature:** find its facet row — if Demon ≥ 4, state how you avoid a new dual.
+2. **Before admitting a suite:** map it to D1–D20; prefer closing a demon over opening a parallel one.
+3. **Simplification order (suggested):**
    - Status monopath (done)
    - Delete Validation + Text.Matching (dead-dual) — ✅ **done 2026-08-09**
-   - **grammar-revision tier A (D17)** — **before** wrap-up: the LeftAssoc fold (D4) touches the same engine files the migration rewrites; revision-first avoids folding twice (see [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) §Status P1)  
-   - Grammar wrap-up (D4) on the revised stack  
-   - Instance/effect split only when invoke path hurts  
+   - **grammar-revision tier A (D17)** — **before** wrap-up: the LeftAssoc fold (D4) touches the same engine files the migration rewrites; revision-first avoids folding twice (see [`plans/grammar-revision.md`](plans/archive/completed-2026-08-late/grammar-revision.md) §Status P1)
+   - Grammar wrap-up (D4) on the revised stack
+   - Instance/effect split only when invoke path hurts
 
 4. **Do not** start a “rewrite Poly” mega-suite. Demons die one dual at a time.
 

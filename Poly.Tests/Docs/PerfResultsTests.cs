@@ -54,6 +54,9 @@ public partial class PerfResultsTests {
             await AssertRow(csv, csvName, "Poly VM", row.PolyAvg, row.PolyMin, averageIsMinimum: false);
             await AssertRow(csv, csvName, "C# native", row.NativeAvg, null, averageIsMinimum: false);
             await AssertRow(csv, csvName, "JS", row.Js, null, averageIsMinimum: false);
+            // The ratio is Poly / C# native, both host rows, printed to two decimals.
+            await Assert.That(row.Ratio).IsEqualTo(Ratio(csv[(csvName, "Poly VM")].Avg, row.NativeAvg))
+                .Because($"{benchmark}: the document says {row.Ratio}x; the CSV implies another ratio");
         }
     }
 
@@ -76,7 +79,7 @@ public partial class PerfResultsTests {
     // ── the table ────────────────────────────────────────────────────────────
 
     internal sealed record FinalRow(
-        string Benchmark, int PolyAvg, int PolyMin, int NativeAvg, int Js);
+        string Benchmark, int PolyAvg, int PolyMin, int NativeAvg, decimal Ratio, int Js);
 
     /// <summary>Rows of the table under "exec avg (min):", parsed from the Markdown itself.</summary>
     private static List<FinalRow> FinalRunRows() {
@@ -100,8 +103,11 @@ public partial class PerfResultsTests {
                 || !Numbers().IsMatch(cells[5]))
                 continue;
             var native = Parse(Numbers().Match(cells[3]).Value);
+            if (!RatioCell().IsMatch(cells[4]))
+                continue;
+            var ratio = decimal.Parse(RatioCell().Match(cells[4]).Groups[1].Value, CultureInfo.InvariantCulture);
             var js = Parse(Numbers().Match(cells[5]).Value);
-            rows.Add(new FinalRow(NameCell().Match(cells[1]).Groups[1].Value, poly[0], poly[1], native, js));
+            rows.Add(new FinalRow(NameCell().Match(cells[1]).Groups[1].Value, poly[0], poly[1], native, ratio, js));
         }
         return rows;
     }
@@ -137,6 +143,10 @@ public partial class PerfResultsTests {
         return rows;
     }
 
+    /// <summary>Poly / C# native to two decimals, from the same CSV values the table shows.</summary>
+    private static decimal Ratio(int polyAvg, int nativeAvg) =>
+        Math.Round((decimal)polyAvg / nativeAvg, 2, MidpointRounding.AwayFromZero);
+
     private static int Round(string value) =>
         (int)Math.Round(double.Parse(value, CultureInfo.InvariantCulture), MidpointRounding.AwayFromZero);
 
@@ -160,6 +170,9 @@ public partial class PerfResultsTests {
 
     [GeneratedRegex(",")]
     private static partial Regex Commas();
+
+    [GeneratedRegex(@"\*{0,2}(\d+\.\d{2})x\*{0,2}")]
+    private static partial Regex RatioCell();
 
     [GeneratedRegex(@"(?:results/)?(results_\d{8}_\d{6})\.csv")]
     private static partial Regex ResultsCsv();

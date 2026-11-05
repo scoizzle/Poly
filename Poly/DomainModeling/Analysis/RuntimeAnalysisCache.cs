@@ -225,22 +225,6 @@ internal static class RuntimeAnalysisCache {
         return false;
     }
 
-    internal static bool TryGetEntryMethod(
-        Domain domain, string entityName, string stageName, out MethodDefinitionNode? method) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentException.ThrowIfNullOrEmpty(entityName);
-        ArgumentException.ThrowIfNullOrEmpty(stageName);
-        return TryGetModuleMethod(domain, entityName, $"OnEntry{stageName}", out method) && method is not null;
-    }
-
-    internal static bool TryGetExitMethod(
-        Domain domain, string entityName, string stageName, out MethodDefinitionNode? method) {
-        ArgumentNullException.ThrowIfNull(domain);
-        ArgumentException.ThrowIfNullOrEmpty(entityName);
-        ArgumentException.ThrowIfNullOrEmpty(stageName);
-        return TryGetModuleMethod(domain, entityName, $"OnExit{stageName}", out method) && method is not null;
-    }
-
     /// <summary>
     /// Module handler body cached at <see cref="GetOrLower"/> for Domain-bound
     /// subscription dispatch. <paramref name="targetStageName"/> selects the

@@ -4,7 +4,7 @@ using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;
 
-/// <summary>Side-effect kind / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
+/// <summary>NodeEffect classification / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
 public class SideEffectAnalysisTests {
     private static Analyzer SideEffectAnalyzerPipeline() =>
         new AnalyzerBuilder()
@@ -20,7 +20,7 @@ public class SideEffectAnalysisTests {
         var result = SideEffectAnalyzerPipeline().Analyze(c);
         var meta = result.GetMetadata<SideEffectMetadata>(c);
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(SideEffectKind.Pure);
+        await Assert.That(meta!.Effects).IsEqualTo(NodeEffect.None);
         await Assert.That(result.HasSideEffects(c)).IsFalse();
     }
 
@@ -32,7 +32,7 @@ public class SideEffectAnalysisTests {
         var result = SideEffectAnalyzerPipeline().Analyze(block);
         var meta = result.GetMetadata<SideEffectMetadata>(assign);
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(SideEffectKind.Write);
+        await Assert.That(meta!.Effects).IsEqualTo(NodeEffect.Write);
     }
 
     [Test]
@@ -46,12 +46,14 @@ public class SideEffectAnalysisTests {
 
     [Test]
     public async Task EmitElisionDiagnostics_ReportsDeadCodeElidable() {
-        var pure = new Add(new Constant(1L), new Constant(2L));
+        var pure = new Constant(1L);
         var block = new Block([pure, new Constant(9L)]);
         var settings = AnalysisSettings.Default.With(
             new SideEffectAnalysisOptions { EmitElisionDiagnostics = true });
         var result = SideEffectAnalyzerPipeline().Analyze(block, settings: settings);
-        await Assert.That(result.Diagnostics.Any(d => d.Code == "DEAD_CODE_ELIDABLE")).IsTrue();
+        var reports = result.Diagnostics.Where(d => d.Code == "DEAD_CODE_ELIDABLE").ToArray();
+        await Assert.That(reports.Length).IsEqualTo(1);
+        await Assert.That(reports[0].Node).IsSameReferenceAs(pure);
     }
 
     [Test]

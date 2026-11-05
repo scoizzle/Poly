@@ -11,17 +11,7 @@ public class AstParitySequenceTests {
     /// disposals exactly: the row still runs on both sides, and a pin only matches that exact pair.
     /// An entry here is a defect to fix, not a way to keep a red row green.
     /// </summary>
-    public static IReadOnlyList<KnownDivergence> PinnedDivergences { get; } = [
-        new(
-            Where: "TryCatch_UnwindThenReuseLocals",
-            Vm: ParityDisposal.Executed,
-            VmOutcome: "long:41",
-            Printed: ParityDisposal.Executed,
-            PrintedOutcomePrefix: "long:42",
-            Finding: "the writer drops the leading statements of a multi-statement block used as a catch "
-                + "body: the printed catch is `{ acc = 41; }` and `caught = 1` is absent, so the finally "
-                + "and the fold after it see a flag the VM set and the printed side never did"),
-    ];
+    public static IReadOnlyList<KnownDivergence> PinnedDivergences { get; } = [];
 
     /// <summary>
     /// Sequences that pair state axes the single-row corpus keeps apart: ring depth against statement
@@ -40,6 +30,11 @@ public class AstParitySequenceTests {
         yield return IntOverflow_OrderChangesResult();
         yield return IntDivision_TruncatesTowardZero();
         yield return IntDivision_NegativeOperandsTruncateTowardZero();
+        yield return DoWhile_AccumulatesUntilCondition();
+        yield return Switch_SelectsBranchThenContinues();
+        yield return Array_IndexAssignAndLength();
+        yield return NestedTry_InsideLoop_ResetsOnThrow();
+        yield return InterpolatedString_BuiltInsideLoop();
     }
 
     [Test]
@@ -92,8 +87,8 @@ public class AstParitySequenceTests {
     [Test]
     public async Task Pins_NameLiveCases_AndEveryCaseHasAStepAfterTheSeed() {
         var labels = Cases().Select(sequence => sequence.Label).ToArray();
-        await Assert.That(labels.Length).IsEqualTo(10)
-            .Because("the planned sequence set is ten cases; changing it is a deliberate edit of this guard");
+        await Assert.That(labels.Length).IsEqualTo(15)
+            .Because("the planned sequence set is fifteen cases; changing it is a deliberate edit of this guard");
         await Assert.That(PinnedDivergences.Select(pin => pin.Where).Except(labels)).IsEmpty()
             .Because("a pin with no live case is a stale finding, not evidence");
         foreach (var sequence in Cases())
@@ -102,19 +97,22 @@ public class AstParitySequenceTests {
     }
 
     /// <summary>
-    /// Every step after the seed must carry the sequence: a step that changes nothing is dead weight
-    /// and would let a case report agreement while exercising less than it claims.
+    /// The sequence must carry its observable: a case whose last step changes nothing, or whose
+    /// steps sum to the seed value, is dead weight that would report agreement while exercising
+    /// less than it claims. An intermediate step may legitimately only prepare state a later step
+    /// reads, which is why this checks the whole sequence and its final step rather than every step.
     /// </summary>
     [Test]
     [MethodDataSource(nameof(Cases))]
-    public async Task EveryStepChangesTheObservableOutcome(AstParitySequence.SequenceCase sequence) {
-        var previous = AstParitySequence.Compare(sequence, prefixSteps: 1).VmOutcome;
-        for (var count = 2; count <= sequence.Steps.Count; count++) {
-            var row = AstParitySequence.Compare(sequence, prefixSteps: count);
-            await Assert.That(row.VmOutcome).IsNotEqualTo(previous)
-                .Because($"{sequence.Label}: step {count - 1} '{sequence.Steps[count - 1].Label}' left the observable untouched");
-            previous = row.VmOutcome;
-        }
+    public async Task TheSequenceChangesTheObservableOutcome(AstParitySequence.SequenceCase sequence) {
+        var seed = AstParitySequence.Compare(sequence, prefixSteps: 1).VmOutcome;
+        var beforeLast = AstParitySequence.Compare(sequence, prefixSteps: sequence.Steps.Count - 1).VmOutcome;
+        var whole = AstParitySequence.Compare(sequence).VmOutcome;
+
+        await Assert.That(whole).IsNotEqualTo(beforeLast)
+            .Because($"{sequence.Label}: the last step '{sequence.Steps[^1].Label}' left the observable untouched");
+        await Assert.That(whole).IsNotEqualTo(seed)
+            .Because($"{sequence.Label}: the steps sum to the seed value, so the case proves nothing");
     }
 
     /// <summary>
@@ -282,5 +280,84 @@ public class AstParitySequenceTests {
                 new Assignment(b, Wrap(2)))),
             new("negative seven halves", new Assignment(acc, new Divide(a, b))),
         ], [acc, a, b], acc);
+    }
+
+    static AstParitySequence.SequenceCase DoWhile_AccumulatesUntilCondition() {
+        var acc = new Variable("acc");
+        var i = new Variable("i");
+        return new("DoWhile_AccumulatesUntilCondition", [
+            new("seed", new Block(
+                new Assignment(acc, Wrap(0)),
+                new Assignment(i, Wrap(0)))),
+            new("body runs before the test", new DoWhileLoop(
+                new Block(
+                    new Assignment(acc, new Add(acc, new Multiply(i, Wrap(2)))),
+                    new Assignment(i, new Add(i, Wrap(1)))),
+                new LessThan(i, Wrap(4)))),
+        ], [acc, i], acc);
+    }
+
+    static AstParitySequence.SequenceCase Switch_SelectsBranchThenContinues() {
+        var acc = new Variable("acc");
+        var i = new Variable("i");
+        return new("Switch_SelectsBranchThenContinues", [
+            new("seed", new Block(
+                new Assignment(acc, Wrap(0)),
+                new Assignment(i, Wrap(2)))),
+            new("select a branch", new SwitchStatement(
+                i,
+                [
+                    new SwitchCase(Wrap(1), new Assignment(acc, Wrap(11))),
+                    new SwitchCase(Wrap(2), new Assignment(acc, Wrap(22))),
+                ],
+                new Assignment(acc, Wrap(99)))),
+            new("carry on after the merge", new Assignment(acc, new Add(acc, new Multiply(i, Wrap(3))))),
+        ], [acc, i], acc);
+    }
+
+    static AstParitySequence.SequenceCase Array_IndexAssignAndLength() {
+        var acc = new Variable("acc");
+        var a = new Variable("a");
+        return new("Array_IndexAssignAndLength", [
+            new("seed", new Block(
+                new Assignment(acc, Wrap(0)),
+                new Assignment(a, new NewArray(TypeReference.To<int>(), Wrap(3))))),
+            new("write two slots", new Block(
+                new Assignment(new IndexAccess(a, Wrap(0)), Wrap(5)),
+                new Assignment(new IndexAccess(a, Wrap(1)), Wrap(7)))),
+            new("read them back with the length", new Assignment(acc,
+                new Add(new IndexAccess(a, Wrap(0)), new Add(new IndexAccess(a, Wrap(1)), new Member(a, "Length"))))),
+        ], [acc, a], acc);
+    }
+
+    static AstParitySequence.SequenceCase NestedTry_InsideLoop_ResetsOnThrow() {
+        var acc = new Variable("acc");
+        var i = new Variable("i");
+        return new("NestedTry_InsideLoop_ResetsOnThrow", [
+            new("seed", new Assignment(acc, Wrap(0))),
+            new("unwind on the second iteration", new ForLoop(
+                new Assignment(i, Wrap(0)),
+                new LessThan(i, Wrap(3)),
+                new Assignment(i, new Add(i, Wrap(1))),
+                new TryCatchFinally(
+                    new Assignment(acc, new Divide(new Add(acc, Wrap(10)), new Subtract(i, Wrap(1)))),
+                    [new CatchClause(TypeReference.To<DivideByZeroException>(), null,
+                        new Assignment(acc, new Add(acc, Wrap(1))))]),
+                DeclaredVariables: [i])),
+        ], [acc], acc);
+    }
+
+    static AstParitySequence.SequenceCase InterpolatedString_BuiltInsideLoop() {
+        var s = new Variable("s");
+        var i = new Variable("i");
+        return new("InterpolatedString_BuiltInsideLoop", [
+            new("seed", new Assignment(s, Wrap(""))),
+            new("interpolate", new ForLoop(
+                new Assignment(i, Wrap(0)),
+                new LessThan(i, Wrap(3)),
+                new Assignment(i, new Add(i, Wrap(1))),
+                new Assignment(s, new InterpolatedString(["", ":"], [s, i])),
+                DeclaredVariables: [i])),
+        ], [s], s);
     }
 }

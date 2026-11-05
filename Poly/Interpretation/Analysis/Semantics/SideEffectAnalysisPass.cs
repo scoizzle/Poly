@@ -10,19 +10,28 @@ public sealed record SideEffectAnalysisOptions {
     public bool EmitElisionDiagnostics { get; init; }
 }
 
+/// <summary>
+/// Classifies what each node's execution can do and composes the answer post-order, so a consumer
+/// asks one bag instead of re-walking a tree. The per-kind half is <see cref="NodeFacts.Effects"/>;
+/// this pass adds the children, and the one place composition is not a plain union is
+/// <see cref="TryCatchFinally"/>, where a catch-all clause absorbs the try block's throw.
+/// </summary>
 internal sealed class SideEffectAnalyzer : INodeAnalyzer {
     public const string Id = "SideEffect";
     public string PassName => Id;
-    private static readonly SideEffectMetadata PureMeta = new(SideEffectKind.Pure);
+
+    /// <summary>What a node with no metadata answers: fail closed on both axes.</summary>
+    private const NodeEffect Unanalyzed = NodeEffect.External | NodeEffect.Throws;
+
     public void Analyze(AnalysisContext context, Node node) {
         if (node is Block block) {
+            var blockEffects = NodeEffect.None;
             foreach (var v in block.Variables) {
-                if (v != null) {
-                    Analyze(context, v);
-                }
+                if (v is null) continue;
+                Analyze(context, v);
+                blockEffects |= EffectsOf(context, v);
             }
 
-            SideEffectKind blockKind = SideEffectKind.Pure;
             var opts = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags = opts.EmitElisionDiagnostics;
 
@@ -34,15 +43,16 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 if (child is null) continue;
 
                 Analyze(context, child);
-                var childMeta = context.GetMetadata<SideEffectMetadata>(child);
-                var childKind = childMeta?.Kind ?? SideEffectKind.External;
-                blockKind = ClassifyWorst(blockKind, childKind);
+                var childEffects = EffectsOf(context, child);
+                blockEffects |= childEffects;
 
                 if (child is Assignment) {
                     context.SetMetadata(child, new AssignmentValueUsedMetadata(i == n - 1));
                 }
 
-                if (i < n - 1 && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)) {
+                // A statement whose result is unused can go only when executing it has no effect at
+                // all. A decimal addition looks inert and throws; a read observes state on its own.
+                if (i < n - 1 && childEffects == NodeEffect.None) {
                     ElisionFacts.Mark(context, child, ElisionReason.NoObservableEffect);
                     if (emitDiags) {
                         context.ReportInformation(
@@ -53,44 +63,30 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                 }
             }
 
-            context.SetMetadata(node, new SideEffectMetadata(blockKind));
+            context.SetMetadata(node, new SideEffectMetadata(blockEffects));
         }
         else {
-            SideEffectKind kind = ClassifyIntrinsic(node);
             this.AnalyzeChildren(context, node);
-            foreach (var child in node.Children) {
-                if (child is null) continue;
-                var childMeta = context.GetMetadata<SideEffectMetadata>(child);
-                if (childMeta is not null)
-                    kind = ClassifyWorst(kind, childMeta.Kind);
-            }
-
-            if (kind == SideEffectKind.Pure && node is Member memberAccess) {
-                var resolved = context.GetResolvedMember(memberAccess);
-                if (resolved?.Mutability.HasFlag(Mutability.VolatileAccess) == true) {
-                    kind = SideEffectKind.Read;
-                }
-            }
-            context.SetMetadata(node, new SideEffectMetadata(kind));
+            context.SetMetadata(node, new SideEffectMetadata(Compose(context, node)));
 
             var opts2 = context.Settings.Get<SideEffectAnalysisOptions>() ?? SideEffectAnalysisOptions.Default;
             bool emitDiags2 = opts2.EmitElisionDiagnostics;
 
             if (node is ForLoop forLoop) {
-                var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
-                if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {
-                    ElisionFacts.Mark(context, forLoop.Initializer!, ElisionReason.NoObservableEffect);
-                    if (emitDiags2 && forLoop.Initializer is not null) {
+                var initEffects = EffectsOf(context, forLoop.Initializer);
+                if (forLoop.Initializer is not null && initEffects == NodeEffect.None) {
+                    ElisionFacts.Mark(context, forLoop.Initializer, ElisionReason.NoObservableEffect);
+                    if (emitDiags2) {
                         context.ReportInformation(
                             forLoop.Initializer,
                             "Pure initializer with unused result can be elided (dead code).",
                             "DEAD_CODE_ELIDABLE");
                     }
                 }
-                var incMeta = forLoop.Increment is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Increment) : null;
-                if (incMeta is not null && (incMeta.Kind == SideEffectKind.Pure || incMeta.Kind == SideEffectKind.Read)) {
-                    ElisionFacts.Mark(context, forLoop.Increment!, ElisionReason.NoObservableEffect);
-                    if (emitDiags2 && forLoop.Increment is not null) {
+                var incEffects = EffectsOf(context, forLoop.Increment);
+                if (forLoop.Increment is not null && incEffects == NodeEffect.None) {
+                    ElisionFacts.Mark(context, forLoop.Increment, ElisionReason.NoObservableEffect);
+                    if (emitDiags2) {
                         context.ReportInformation(
                             forLoop.Increment,
                             "Pure increment with unused result can be elided (dead code).",
@@ -98,45 +94,66 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                     }
                 }
             }
-            else if (node is ForEachLoop forEach) {
-            }
         }
     }
 
-    private static bool GetHasSideEffects(AnalysisContext context, Node? node) {
-        if (node is null) return false;
-        var meta = context.GetMetadata<SideEffectMetadata>(node);
-        return meta is null || meta.Kind != SideEffectKind.Pure;
+    /// <summary>
+    /// The node's intrinsic effects plus its children's, with two exceptions. A catch-all clause
+    /// absorbs the try block's throw, because the block's exception cannot leave the statement. A
+    /// lambda or a type declaration keeps its body's state effects but not its throw: the body runs
+    /// when something calls it.
+    /// </summary>
+    private static NodeEffect Compose(AnalysisContext context, Node node) {
+        var effects = NodeFacts.Effects(node);
+
+        if (node is TryCatchFinally tryCatch) {
+            var tryEffects = EffectsOf(context, tryCatch.TryBlock);
+            if (tryCatch.CatchClauses?.Any(clause => clause.ExceptionType is null) == true)
+                tryEffects &= ~NodeEffect.Throws;
+            effects |= tryEffects;
+
+            if (tryCatch.CatchClauses is not null) {
+                foreach (var clause in tryCatch.CatchClauses) {
+                    effects |= EffectsOf(context, clause.ExceptionType);
+                    effects |= EffectsOf(context, clause.Body);
+                }
+            }
+            effects |= EffectsOf(context, tryCatch.FinallyBlock);
+        }
+        else {
+            foreach (var child in node.Children) {
+                effects |= EffectsOf(context, child);
+            }
+        }
+
+        if (node is Lambda or TypeDefinitionNode)
+            effects &= ~NodeEffect.Throws;
+
+        return effects;
     }
 
-    private static SideEffectKind ClassifyWorst(SideEffectKind a, SideEffectKind b) =>
-        (SideEffectKind)int.Max((int)a, (int)b);
-
-    private static SideEffectKind ClassifyIntrinsic(Node node) => node switch {
-        Assignment => SideEffectKind.Write,
-        SuspendNode => SideEffectKind.External,
-        Return => SideEffectKind.Write,
-        IndexAccess => SideEffectKind.Read,
-        New => SideEffectKind.Allocate,
-        WhileLoop or DoWhileLoop or ForLoop or ForEachLoop => SideEffectKind.Write,
-        IfStatement or SwitchStatement or ThrowStatement => SideEffectKind.External,
-        Invoke => SideEffectKind.External,
-        Await => SideEffectKind.External,
-        TryCatchFinally or UsingStatement => SideEffectKind.External,
-        BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => SideEffectKind.Write,
-        _ => SideEffectKind.Pure
-    };
+    private static NodeEffect EffectsOf(AnalysisContext context, Node? node) =>
+        node is null
+            ? NodeEffect.None
+            : context.GetMetadata<SideEffectMetadata>(node)?.Effects ?? Unanalyzed;
 }
 
-public enum SideEffectKind {
-    Pure,
-    Read,
-    Write,
-    Allocate,
-    External,
-}
+/// <summary>
+/// What a node's execution can do, composed over its subtree. <see cref="HasStateEffect"/> and
+/// <see cref="Throws"/> are separate questions because a consumer usually needs only one:
+/// control-flow pruning asks whether a condition can change, elision asks whether the whole thing
+/// is free. <see cref="IsFree"/> is that second, single answer.
+/// </summary>
+public sealed record SideEffectMetadata(NodeEffect Effects) : IAnalysisMetadata {
+    /// <summary>Reads, writes, allocates or reaches external code. A throw alone is not a state effect.</summary>
+    public bool HasStateEffect => (Effects & ~NodeEffect.Throws) != NodeEffect.None;
 
-public sealed record SideEffectMetadata(SideEffectKind Kind) : IAnalysisMetadata;
+    /// <summary>Can throw out of its own evaluation.</summary>
+    public bool Throws => (Effects & NodeEffect.Throws) != NodeEffect.None;
+
+    /// <summary>Neither changes nor observes state and cannot throw: safe to delete.</summary>
+    public bool IsFree => Effects == NodeEffect.None;
+}
 
 /// <summary>Why a node may be elided. The reasons accumulate on one
 /// <see cref="ElisionMetadata"/> so a reader can see every reason that applies.</summary>
@@ -145,7 +162,8 @@ public enum ElisionReason {
     None = 0,
     /// <summary>The node cannot execute: the control flow graph proved it unreachable.</summary>
     Unreachable = 1,
-    /// <summary>The node executes, its result is unused, and its effects are at most a read.</summary>
+    /// <summary>The node executes, its result is unused, and it is free: it changes nothing, observes
+    /// nothing, and cannot throw. Every condition matters, because the writer deletes the statement.</summary>
     NoObservableEffect = 2,
 }
 
@@ -188,14 +206,17 @@ public static class SideEffectAnalysisExtensions {
     }
 
     extension(INodeMetadataProvider provider) {
+        /// <summary>True when the node can change or observe state. A throw alone does not count:
+        /// control-flow pruning asks whether a condition can change, not whether it can fail.</summary>
         public bool HasSideEffects(Node? node) {
             if (node is null) return false;
             var meta = provider.GetMetadata<SideEffectMetadata>(node);
-            return meta is null || meta.Kind != SideEffectKind.Pure;
+            return meta is null || meta.HasStateEffect;
         }
 
         /// <summary>
-        /// Returns true if the node/subtree can be elided (pure with unused result, e.g. non-final in Block).
+        /// Returns true if the node/subtree can be elided (free, with an unused result, e.g.
+        /// non-final in a Block).
         /// </summary>
         public bool CanElide(Node? node) {
             if (node is null) {

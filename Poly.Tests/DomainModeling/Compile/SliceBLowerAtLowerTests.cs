@@ -12,44 +12,14 @@ namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
 /// Slice B oracle: Lower at Lower — execute never lowers.
-/// Interpreter runs cached module / EntryExit / segment / policy bodies only.
+/// Interpreter runs cached module / EntryExit / policy bodies only.
+/// <para>
+/// The segment-cache cases were deleted with the cache itself (#388): contiguous non-transition
+/// fragments of a mixed OnEntry list had no production reader, and the feature they described —
+/// execute binding segments — was never implemented.
+/// </para>
 /// </summary>
 public class SliceBLowerAtLowerTests {
-    [Test]
-    public async Task SliceB_NestedStageTransition_OnEntry_BindsCachedSegments() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Log: Text
-              Draft: stage { }
-              Mid: stage {
-                entry {
-                  assign Note to "mid-before"
-                  transition to Active
-                  assign Log to "mid-after"
-                }
-              }
-              Active: stage {
-                entry { assign Note to "active" }
-              }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-
-        var module = session.Lower(domain, analysis);
-        await Assert.That(module.Count).IsGreaterThan(0);
-
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 0, out var seg0)).IsTrue();
-        await Assert.That(seg0).IsNotNull();
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 1, out var seg1)).IsTrue();
-        await Assert.That(seg1).IsNotNull();
-
-        // Host TransitionStage is gone with DEI. Segment cache rows above are what this test can still prove.
-    }
-
     [Test]
     public async Task SliceB_EvaluatePolicy_UsesCachedBody_ClearThrowsFailClosed() {
         var (domain, analysis, session) = Evolve("""
@@ -70,36 +40,6 @@ public class SliceBLowerAtLowerTests {
         RuntimeAnalysisCache.ClearPolicyBody(domain, "Permit", "Adult");
         var ex = Assert.Throws<InvalidOperationException>(() => exec.EvaluatePolicy(adult, (policy).Name));
         await Assert.That(ex!.Message).Contains("missing");
-    }
-
-    [Test]
-    public async Task SliceB_ClearEntryExitSegment_ThrowsFailClosed_NoRelower() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Log: Text
-              Draft: stage { }
-              Mid: stage {
-                entry {
-                  assign Note to "before"
-                  transition to Active
-                  assign Log to "after"
-                }
-              }
-              Active: stage { }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        _ = session.Lower(domain, analysis);
-
-        RuntimeAnalysisCache.ClearEntryExitSegmentBody(domain, "Ticket", "Mid", "entry", 0);
-
-        var ticketE = domain.Types.OfType<Entity>().First(e => e.Name == "Ticket");
-        var inst = exec.Create((ticketE).Name, new Dictionary<string, object?> { ["Note"] = "seed", ["Log"] = "seed" }).Instance!;
-
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 0, out _)).IsFalse();
     }
 
     [Test]
@@ -126,76 +66,6 @@ public class SliceBLowerAtLowerTests {
         await Assert.That((string)lot.Bag["Tag"]!).IsEqualTo("ok");
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Mark", out var cached)).IsTrue();
         await Assert.That(ReferenceEquals(mark, cached)).IsTrue();
-    }
-
-    [Test]
-    public async Task SliceB_ClearEntryExitSegment1_ThrowsFailClosed_NoRelower() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Log: Text
-              Draft: stage { }
-              Mid: stage {
-                entry {
-                  assign Note to "before"
-                  transition to Active
-                  assign Log to "after"
-                }
-              }
-              Active: stage { }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        _ = session.Lower(domain, analysis);
-
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 1, out _)).IsTrue();
-        RuntimeAnalysisCache.ClearEntryExitSegmentBody(domain, "Ticket", "Mid", "entry", 1);
-
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 1, out _)).IsFalse();
-    }
-
-    [Test]
-    public async Task SliceB_EntryExitSegmentBody_MatchesGetOrLowerIdentity() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Log: Text
-              Draft: stage { }
-              Mid: stage {
-                entry {
-                  assign Note to "before"
-                  transition to Active
-                  assign Log to "after"
-                }
-              }
-              Active: stage {
-                entry { assign Note to "active" }
-              }
-            }
-            """);
-        _ = session.Lower(domain, analysis);
-
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 0, out var seg0)).IsTrue();
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Mid", "entry", 0, out var seg0Again)).IsTrue();
-        await Assert.That(ReferenceEquals(seg0, seg0Again)).IsTrue();
-
-        // No-ST Active entry: EntryExitBodies populated; segment map skipped (F5).
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Active", "entry", out var activeEntry)).IsTrue();
-        await Assert.That(activeEntry).IsNotNull();
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitSegmentBody(
-            domain, "Ticket", "Active", "entry", 0, out _)).IsFalse();
-
-        // Mixed Mid: segments are distinct from the whole-batch EntryExitBodies twin.
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Mid", "entry", out var midEntry)).IsTrue();
-        await Assert.That(ReferenceEquals(seg0, midEntry)).IsFalse();
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {

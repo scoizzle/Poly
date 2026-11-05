@@ -29,11 +29,6 @@ internal static class RuntimeAnalysisCache {
         public Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? SubscriptionBodies { get; set; }
         /// <summary>OnEntry/OnExit bodies shared with module methods.</summary>
         public Dictionary<(string Entity, string Stage, string Kind), Node>? EntryExitBodies { get; set; }
-        /// <summary>
-        /// Contiguous non-StageTransition segments of OnEntry/OnExit, lowered at GetOrLower.
-        /// Mixed lists flush/recurse at execute by binding these — never LowerActionBody.
-        /// </summary>
-        public Dictionary<(string Entity, string Stage, string Kind, int Segment), Node>? EntryExitSegmentBodies { get; set; }
         /// <summary>Policy expression trees from session.Lower (same Lower as print).</summary>
         public Dictionary<(string Entity, string Policy), Node>? PolicyBodies { get; set; }
         /// <summary>Catalog index after Index Lowers; dropped when Bind replaces session or analysis.</summary>
@@ -77,7 +72,6 @@ internal static class RuntimeAnalysisCache {
                 holder.Index = null;
                 holder.SubscriptionBodies = null;
                 holder.EntryExitBodies = null;
-                holder.EntryExitSegmentBodies = null;
                 holder.PolicyBodies = null;
             }
         }
@@ -149,12 +143,11 @@ internal static class RuntimeAnalysisCache {
                 ReferenceEqualityComparer.Instance);
             var module = DomainProgramProjection.ToSyntax(
                 domain, analysis, policyBodies, subscriptionBodies);
-            var (module2, entryExit, entryExitSegments) = PopulateEntryExitMethods(domain, analysis, module);
+            var (module2, entryExit) = PopulateEntryExitMethods(domain, analysis, module);
             var contributed = ConstraintCompilation.Apply(module2, domain, analysis, session.ConstraintCompilers);
             module2 = contributed.Module;
             if (contributed.ReplacedBodies.Count > 0) {
                 Retarget(entryExit, contributed.ReplacedBodies);
-                Retarget(entryExitSegments, contributed.ReplacedBodies);
                 Retarget(policyBodies, contributed.ReplacedBodies);
                 foreach (var byStage in subscriptionBodies.Values)
                     Retarget(byStage, contributed.ReplacedBodies);
@@ -162,7 +155,6 @@ internal static class RuntimeAnalysisCache {
             holder.Module = module2;
             holder.SubscriptionBodies = subscriptionBodies;
             holder.EntryExitBodies = entryExit;
-            holder.EntryExitSegmentBodies = entryExitSegments;
             holder.PolicyBodies = CompletePolicyBodies(domain, analysis, policyBodies);
             return holder.Module;
         }
@@ -270,13 +262,11 @@ internal static class RuntimeAnalysisCache {
     /// bodies Domain-bound execute compiles.
     /// </summary>
     private static (IReadOnlyList<TypeDefinitionNode> Module,
-        Dictionary<(string, string, string), Node> EntryExit,
-        Dictionary<(string, string, string, int), Node> EntryExitSegments)
+        Dictionary<(string, string, string), Node> EntryExit)
         PopulateEntryExitMethods(
             Domain domain, AnalysisResult analysis, IReadOnlyList<TypeDefinitionNode> module) {
         var types = module.ToList();
         var entryExit = new Dictionary<(string, string, string), Node>();
-        var entryExitSegments = new Dictionary<(string, string, string, int), Node>();
         for (var i = 0; i < types.Count; i++) {
             var td = types[i];
             var entity = domain.Types.OfType<Entity>()
@@ -287,10 +277,10 @@ internal static class RuntimeAnalysisCache {
             var esm = analysis.GetStructure(entity);
             foreach (var stage in entity.Stages) {
                 // Whole-batch EntryExitBodies exclude nested StageTransitionEffect (no-nested
-                // TransitionStage path). Segments cache contiguous non-ST fragments for the
-                // mixed flush/recurse path — execute binds those, never LowerActionBody.
-                // The bodies stay in the cache; the printed type no longer carries the
-                // dead OnEntry*/OnExit* members (D10).
+                // TransitionStage path). They are lowered here, at Lower, through
+                // EffectLoweringPass; no execute path calls LowerActionBody. The bodies stay in
+                // the cache for the tests that assert their shape; the printed type no longer
+                // carries the dead OnEntry*/OnExit* members (D10).
                 var entryBatch = stage.OnEntryEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
                 if (entryBatch.Count > 0) {
@@ -298,9 +288,6 @@ internal static class RuntimeAnalysisCache {
                         entity, domain, analysis, esm, $"OnEntry{stage.Name}", entryBatch);
                     entryExit[(entity.Name, stage.Name, "entry")] = entryMethod.Body!;
                 }
-                CacheEntryExitSegments(
-                    entryExitSegments, entity, domain, analysis, esm,
-                    stage.Name, "entry", stage.OnEntryEffects);
 
                 var exitBatch = stage.OnExitEffects
                     .Where(e => e is not StageTransitionEffect).ToList();
@@ -309,12 +296,9 @@ internal static class RuntimeAnalysisCache {
                         entity, domain, analysis, esm, $"OnExit{stage.Name}", exitBatch);
                     entryExit[(entity.Name, stage.Name, "exit")] = exitMethod.Body!;
                 }
-                CacheEntryExitSegments(
-                    entryExitSegments, entity, domain, analysis, esm,
-                    stage.Name, "exit", stage.OnExitEffects);
             }
         }
-        return (types, entryExit, entryExitSegments);
+        return (types, entryExit);
     }
 
     private static void Retarget<TKey>(
@@ -332,48 +316,6 @@ internal static class RuntimeAnalysisCache {
             }
         }
     }
-
-    /// <summary>
-    /// Lower nonempty contiguous non-<see cref="StageTransitionEffect"/> segments of an
-    /// OnEntry/OnExit list. Mixed lists flush these at execute via
-    /// <see cref="TryGetEntryExitSegmentBody"/>. Lists with no StageTransitionEffect
-    /// skip segment cache — execute uses EntryExitBodies / module methods already.
-    /// </summary>
-    private static void CacheEntryExitSegments(
-        Dictionary<(string, string, string, int), Node> map,
-        Entity entity,
-        Domain domain,
-        AnalysisResult analysis,
-        EntityStructureMetadata? esm,
-        string stageName,
-        string kind,
-        IReadOnlyList<Effect> effects) {
-        // No ST → no mixed flush path; avoid unused seg0 twin of EntryExitBodies.
-        if (effects.All(e => e is not StageTransitionEffect))
-            return;
-        var segmentIndex = 0;
-        var batch = new List<Effect>();
-        void Flush() {
-            if (batch.Count == 0) return;
-            var method = BuildStageBatchMethodExport(
-                entity, domain, analysis, esm,
-                $"On{(kind == "entry" ? "Entry" : "Exit")}{stageName}_Seg{segmentIndex}",
-                batch);
-            map[(entity.Name, stageName, kind, segmentIndex)] = method.Body!;
-            segmentIndex++;
-            batch.Clear();
-        }
-        foreach (var effect in effects) {
-            if (effect is StageTransitionEffect) {
-                Flush();
-            }
-            else {
-                batch.Add(effect);
-            }
-        }
-        Flush();
-    }
-
 
     private static MethodDefinitionNode BuildStageBatchMethodExport(
         Entity entity,
@@ -404,19 +346,6 @@ internal static class RuntimeAnalysisCache {
         var holder = GetHolder(domain);
         if (holder.EntryExitBodies is not null
             && holder.EntryExitBodies.TryGetValue((entityName, stageName, kind), out body)
-            && body is not null)
-            return true;
-        body = null;
-        return false;
-    }
-
-    internal static bool TryGetEntryExitSegmentBody(
-        Domain domain, string entityName, string stageName, string kind, int segmentIndex, out Node? body) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        if (holder.EntryExitSegmentBodies is not null
-            && holder.EntryExitSegmentBodies.TryGetValue(
-                (entityName, stageName, kind, segmentIndex), out body)
             && body is not null)
             return true;
         body = null;
@@ -509,16 +438,6 @@ internal static class RuntimeAnalysisCache {
         var holder = GetHolder(domain);
         lock (holder) {
             holder.EntryExitBodies?.Remove((entity, stage, kind));
-        }
-    }
-
-    /// <summary>Test hook: clear a mixed-list OnEntry/OnExit segment body.</summary>
-    internal static void ClearEntryExitSegmentBody(
-        Domain domain, string entity, string stage, string kind, int segmentIndex) {
-        ArgumentNullException.ThrowIfNull(domain);
-        var holder = GetHolder(domain);
-        lock (holder) {
-            holder.EntryExitSegmentBodies?.Remove((entity, stage, kind, segmentIndex));
         }
     }
 

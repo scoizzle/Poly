@@ -127,11 +127,11 @@ public class UniqueSurvivesExportTests {
             }
             """;
 
-        var (implicitId, _) = McpTestTools.Store.Create("Implicit");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(implicitId, $"domain Implicit\n{Body}").Success).IsTrue();
+        var (implicitId, _) = McpTestTools.Store.Create("Alpha");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(implicitId, $"domain Alpha\n{Body}").Success).IsTrue();
 
-        var (explicitId, _) = McpTestTools.Store.Create("Explicit");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(explicitId, $"domain Explicit\nuses persistence\n{Body}").Success).IsTrue();
+        var (explicitId, _) = McpTestTools.Store.Create("Beta");
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(explicitId, $"domain Beta\nuses persistence\n{Body}").Success).IsTrue();
 
         var implicitExport = McpTestTools.Oracle.ExportDomainToCSharp(implicitId);
         var explicitExport = McpTestTools.Oracle.ExportDomainToCSharp(explicitId);
@@ -154,12 +154,14 @@ public class UniqueSurvivesExportTests {
         return document.RootElement.GetProperty("csharp").GetString()!;
     }
 
-    /// <summary>The domain name is the only expected difference between the two exports.</summary>
+    /// <summary>
+    /// The only expected difference between the two exports is the authored domain name, so only
+    /// those two names are neutralised. Do not widen this: replacing a term that can appear in real
+    /// generated code (a C# keyword, a member name) would hide a genuine divergence.
+    /// </summary>
     private static string Normalise(string source) =>
-        source.Replace("Implicit", "Domain", StringComparison.Ordinal)
-              .Replace("Explicit", "Domain", StringComparison.Ordinal)
-              .Replace("implicit", "domain", StringComparison.Ordinal)
-              .Replace("explicit", "domain", StringComparison.Ordinal);
+        source.Replace("Alpha", "Domain", StringComparison.Ordinal)
+              .Replace("Beta", "Domain", StringComparison.Ordinal);
 
     /// <summary>The instance id the tool handed back, so the test does not depend on the payload shape.</summary>
     private static string InstanceIdOf(DomainToolResponse response) {

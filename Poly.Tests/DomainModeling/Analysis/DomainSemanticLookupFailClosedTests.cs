@@ -379,7 +379,7 @@ public class DomainSemanticLookupFailClosedTests {
     public async Task DescribeStage_EffectiveCounts_MatchHelpers() {
         var (sessionId, _) = McpTestTools.Store.Create("W2Effective");
 
-        var outcome = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        var outcome = McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddEntity("Order")
                 .AddPropertyToEntity("Order", new Property("Age", new DomainTypeReference("Number"), []))

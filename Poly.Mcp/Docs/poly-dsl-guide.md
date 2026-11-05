@@ -970,15 +970,16 @@ diverging:
 
 - **`unique` is enforced by the session's storage port** (the compiled module's own
   check, run on every create and on every assign to the property) and projected to
-  storage. `export_domain_to_csharp` prints that same compiled module, so its `Create`
-  factory takes an `IStoragePort` and returns `Unique constraint violated` before the
-  instance is constructed — the guard is the module's, not a separate export-only stub.
-  This is the same body a source that writes `uses persistence` prints; the overlay is
-  implicit in MCP so `unique` behaves identically either way. `EnsureUnique` remains for
-  assign and still refuses without a port. The EF model uses a synthetic integer `Id`
-  key. Every `unique` property, including a second one on the same entity, is
-  `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session storage port
-  and at the database.
+  storage. `export_domain_to_csharp` prints that same compiled module, so both the
+  create factory and any action that assigns the property take an `IStoragePort db`
+  parameter and return `Unique constraint violated` before the write — the guard is the
+  module's, not a separate export-only stub. This is the same body a source that writes
+  `uses persistence` prints; the overlay is implicit in MCP so `unique` behaves
+  identically either way. The printed `EnsureUnique` member is a residual with no
+  caller: it refuses with "A unique assign needs the storage port." The EF model uses a
+  synthetic integer `Id` key. Every `unique` property, including a second one on the
+  same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
+  storage port and at the database.
 - **`Now`/`Today`/`Guid` are authorable in `default(...)`, assign RHS, and policy bodies**
   (with the temporal library, default in MCP `apply_dsl`). Policy/VM evaluation of `Now`/`Today`
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a

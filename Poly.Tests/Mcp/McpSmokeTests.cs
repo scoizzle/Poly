@@ -442,7 +442,7 @@ public class McpSmokeTests {
         McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Person"}"""); // no-op duplicate handled
 
         // Add policy via direct evolve — uses atomic Evolve for concurrency safety
-        McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddPolicyToEntity("Person", "Adult",
                     DomainExpression.GreaterThanOrEqual(
@@ -1861,7 +1861,7 @@ public class McpSmokeTests {
         // Manually add stage transition effect via evolution
         var state = McpTestTools.Store.TryGet(sessionId, out var s) ? s : null;
         await Assert.That(state).IsNotNull();
-        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Start", "Active")
                 .Apply(session: session));
@@ -1965,7 +1965,7 @@ public class McpSmokeTests {
         await Assert.That(r2.Success).IsTrue();
 
         // Step 3: Add stage transition effect to entity-level action
-        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Go", "Active")
                 .Apply(session: session));
@@ -2008,7 +2008,7 @@ public class McpSmokeTests {
         await Assert.That(r1.Success).IsTrue();
 
         // Step 2: add a parameter to the entity action (entity-first)
-        var paramResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        var paramResult = McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddParameterToAction("Task", "Submit",
                     new Property("Note", new DomainTypeReference("Text"), []))
@@ -2022,7 +2022,7 @@ public class McpSmokeTests {
         await Assert.That(r3.Success).IsTrue();
 
         // Step 4: add the transition effect entity-only — the stage copy stays effect-less.
-        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session) =>
+        var evolveResult = McpTestTools.Store.Evolve(sessionId, (domain, session, _) =>
             new DomainEvolution(domain).Evolve()
                 .AddStageTransitionEffect("Task", "Submit", "Active")
                 .Apply(session: session));

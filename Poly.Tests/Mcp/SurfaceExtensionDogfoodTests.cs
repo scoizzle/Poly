@@ -870,7 +870,7 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(errors).IsNotEmpty();
         // DomainEvolution rolls back an analysis with Errors, so build a successful
         // result by hand to put one in the session.
-        McpTestTools.Store.Evolve(sessionId, (_, _) =>
+        McpTestTools.Store.Evolve(sessionId, (_, _, _) =>
             EvolutionResult.Success(broken, analysis, new EvolutionTrace([], false, TimeSpan.Zero, errors.Count, 0)));
 
         var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);

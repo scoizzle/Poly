@@ -16,6 +16,11 @@ namespace Poly.Mcp.Sessions;
 /// the analysis of that root, a monotonically increasing revision number,
 /// the loaded <see cref="DomainSession"/>, and a runtime instance store.
 /// Workspace/session management lives here in MCP — not in DomainModeling.
+/// <para>
+/// Do not copy this record with <c>with</c>: a copy would carry the lock, the cached
+/// <c>_execution</c> pair and any live executor from the original, which belong to the domain
+/// they were built for. Every state change constructs a new instance.
+/// </para>
 /// </summary>
 internal sealed record McpSessionState(
     Domain Domain,
@@ -168,7 +173,7 @@ internal sealed class McpSessionStore(
     /// </summary>
     public EvolutionResult? Evolve(
         string sessionId,
-        Func<Domain, DomainSession, EvolutionResult> mutate) {
+        Func<Domain, DomainSession, AnalysisResult?, EvolutionResult> mutate) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
 
@@ -180,7 +185,7 @@ internal sealed class McpSessionStore(
             var current = entry.State;
             // A rejected outcome leaves the session as it was: its analysis is of the
             // proposal, not of the domain the session keeps.
-            var outcome = mutate(current.Domain, current.Modeling);
+            var outcome = mutate(current.Domain, current.Modeling, current.LatestAnalysis);
             if (!outcome.Succeeded)
                 return outcome;
 

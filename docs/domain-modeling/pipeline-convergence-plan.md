@@ -108,6 +108,8 @@ _Lane B · Size M · Review 2 · Depends on: C4d, C6c, M1_
 
 **Wrong today (verified).** `DomainSession.Lower`, `RuntimeAnalysisCache.GetOrLower` and `DomainProgramProjection.ToSyntax` never look at `HasErrors`. `Interpreter.FailLoudOnAnalysisErrors` throws on the first Error at the VM level (`Interpreter.cs:76-81`), but the domain level does not. MCP `export_domain_to_csharp` only checks that an analysis exists. `McpSessionStore.Evolve` keeps a failed analysis next to the old domain; a failed `apply_dsl` stores nothing.
 
+> **Resolved after this plan was written (2026-11).** The gate landed: `DomainSession.LowerToCatalog` and `RuntimeAnalysisCache.GetOrLower` both call `DomainModelAnalyzer.ThrowIfHasErrors(analysis)` before lowering, `DomainSession.Emit` refuses through `ThrowIfVmHasErrors`, and `export_domain_to_csharp` checks `LatestAnalysis.HasErrors` first. The paragraph above is kept as the state this section was written against; do not read it as current.
+
 **Target.** Compile refuses an analysis with Errors, naming the first error, in the VM's style (`InvalidOperationException`). The catalog stays empty on refusal. Simulation refuses too (decision 7).
 
 **What v1 got wrong.** It said the gate should break nothing. Run for real, it breaks 110 of 2895 tests (measured on master `9db8868f`, 2026-10-03; the count has since grown with PRs 82/83), because hand-built domains in tests and in the MCP oracle declare no primitive types. So the fixture (T1) comes first and the gate (G1) is "0 failures, measured". G2's follow-up is mandatory, and the G2 oracle test was vacuous. G3 needs the same primitives. K0 pulls a three-line fail-open fix forward.

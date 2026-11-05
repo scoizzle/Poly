@@ -65,7 +65,13 @@ This section measures the *VM*, not the cross-language table; the 1.40 ns figure
 
 ## Final run on `plan/interpretation-simplification` (2026-10-23 15:17)
 
-`results/results_20261023_151722.csv`, exec avg (min) against the same-environment baselines:
+**Run:** `results/results_20261023_151722.csv`, 2026-10-23 15:17 CT.
+**Environment:** the `Poly VM`, `C# native` and `JS` columns of this table are all host rows
+(macOS arm64, one .NET runtime) — the `Ratio` column is Poly ÷ C# native and does not cross an
+environment. This is **not the newest CSV** in `results/`; the newest is
+`results_20261027_215607.csv` (2026-10-27). Any table shown as current must name its CSV.
+
+exec avg (min):
 
 | Benchmark | Poly VM | C# native | Ratio | JS |
 |---|---:|---:|---:|---:|

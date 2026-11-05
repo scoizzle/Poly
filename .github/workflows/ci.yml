@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  schedule:
+    # Vulnerability data changes without a commit; one audit a day keeps a clean
+    # pull request from hiding a package that was fine when it was written.
+    - cron: '17 6 * * *'
 
 permissions:
   contents: read
@@ -25,8 +29,31 @@ jobs:
       - name: Restore
         run: dotnet restore --nologo -p:NuGetAudit=false
 
+      # Every project the solution names, not one entry point: a compile break in a
+      # shipped pack (src/Poly.Packs.*) or in demo/Poly.RestApi used to be invisible.
       - name: Build
-        run: dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj --no-restore --nologo
+        run: dotnet build Poly.slnx --no-restore --nologo
 
       - name: Run tests
         run: dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore
+
+  audit:
+    name: Vulnerability audit
+    runs-on: ubuntu-latest
+    # Restore above turns the audit off so a PR is not blocked on the network; this
+    # job turns it back on and is the thing that gates.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Audit direct and transitive packages
+        # NuGet audit reports as warnings; promote only the audit ids so an unrelated
+        # warning does not fail this job.
+        run: |
+          dotnet restore Poly.slnx --nologo -p:NuGetAudit=true -p:WarningsAsErrors="NU1901;NU1902;NU1903;NU1904"
+          dotnet list Poly.slnx package --vulnerable --include-transitive

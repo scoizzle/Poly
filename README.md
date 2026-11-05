@@ -36,12 +36,19 @@ Poly.Benchmarks/           BenchmarkDotNet benchmarks
 
 src/                       Extension packs
   Poly.DslCompiler/        DSL compiler
+  Poly.Packs.Product/      Product door set (packs + HTTP), the MCP catalog
   Poly.Packs.Sqlite/       SQLite persistence pack
   Poly.Packs.SqlServer/    SQL Server persistence pack
   Poly.Packs.MySql/        MySQL persistence pack
 
 demo/                      Demo applications
   Poly.RestApi/            REST API demo
+
+Poly.Demo/                 MAUI + Blazor IDE demo (Poly.Demo.Shared is in Poly.slnx;
+                           the MAUI host needs the maui workload and is not gated)
+  Poly.Demo.Shared/        Razor IDE/REPL pages and the in-browser compiler
+  Poly.Demo/               MAUI host
+  Poly.Demo.Web/           Blazor Web host
 ```
 
 ## Quick Start

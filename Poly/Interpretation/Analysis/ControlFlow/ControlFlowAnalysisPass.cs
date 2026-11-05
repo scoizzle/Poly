@@ -426,7 +426,11 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = MayThrow(context, tryCatch.TryBlock);
+        // Ask the try block's own composed effects. A catch-all on THIS statement absorbs the throw
+        // for the statement's own effects, but the block's metadata keeps it — that is exactly what
+        // makes this question answerable. Absent metadata fails closed.
+        var tryEffects = context.GetMetadata<SideEffectMetadata>(tryCatch.TryBlock);
+        bool mayThrow = tryEffects is null || tryEffects.Throws;
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
@@ -468,40 +472,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
 
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
     }
-
-    /// <summary>
-    /// True when anything in the try block can raise at run time, so its catch clauses are reachable.
-    /// <see cref="CanRaise"/> is the list: an explicit throw (statement or expression), division,
-    /// remainder, a call, an await, indexing, a member read, construction, array creation, a cast,
-    /// enumeration, and disposal — plus decimal arithmetic, whose operators throw on overflow while
-    /// integer arithmetic wraps. Answering "no" is only sound for a block with none of them, because
-    /// the wrong answer elides a reachable catch body — a silently changed program rather than a
-    /// missed optimization. A <see cref="Lambda"/> body is a separate scope and its throw belongs to
-    /// the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
-    /// </summary>
-    private bool MayThrow(AnalysisContext context, Node node) =>
-        CanRaise(context, node)
-        || this.AnyChild<ControlFlowMetadata>(context, node, (ctx, child) => CanRaise(ctx, child));
-
-    private static bool CanRaise(AnalysisContext context, Node node) => node switch {
-        ThrowStatement or ThrowExpression or Divide or Modulo or Invoke or Await or IndexAccess
-            or Member or New or NewArray or TypeCast or ForEachLoop or UsingStatement => true,
-        // Integer arithmetic wraps; decimal arithmetic throws OverflowException on the same operators.
-        Add or Subtract or Multiply => IsDecimalArithmetic(context, node),
-        _ => false
-    };
-
-    private static bool IsDecimalArithmetic(AnalysisContext context, Node node) => node switch {
-        Add add => IsDecimalOperand(context, add.LeftHandValue) || IsDecimalOperand(context, add.RightHandValue),
-        Subtract subtract => IsDecimalOperand(context, subtract.LeftHandValue) || IsDecimalOperand(context, subtract.RightHandValue),
-        Multiply multiply => IsDecimalOperand(context, multiply.LeftHandValue) || IsDecimalOperand(context, multiply.RightHandValue),
-        _ => false
-    };
-
-    private static bool IsDecimalOperand(AnalysisContext context, Node node) =>
-        context.GetResolvedType(node) is { } type
-        && type.TryGetRuntimeType(out var runtime)
-        && (Nullable.GetUnderlyingType(runtime) ?? runtime) == typeof(decimal);
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;
@@ -676,11 +646,22 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     internal static bool? GetConstBool(INodeMetadataProvider provider, Node? n) =>
         GetConstValue(provider, n) as bool?;
 
+    /// <summary>
+    /// A condition is statically constant when evaluating it cannot change anything and its value is
+    /// known. Both short-circuit operators need the left operand alone: <c>true || X</c> is constant
+    /// true and <c>false &amp;&amp; X</c> is constant false whatever <c>X</c> does, because <c>X</c>
+    /// never runs. Reading the whole node's effects would union the dead right-hand side and lose the
+    /// fact that the branch cannot be taken.
+    /// </summary>
     private static bool IsStaticallyConstantTrue(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
+        cond is Or or
+        ? IsStaticallyConstantTrue(ctx, ((Or)cond).LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
 
     private static bool IsStaticallyConstantFalse(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
+        cond is And and
+        ? IsStaticallyConstantFalse(ctx, and.LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
 
     private static void MarkElidable(AnalysisContext ctx, Node node, string code, string message) {
         ElisionFacts.Mark(ctx, node, ElisionReason.Unreachable);

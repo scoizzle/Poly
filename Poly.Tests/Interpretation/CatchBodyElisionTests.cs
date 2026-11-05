@@ -7,9 +7,9 @@ using Poly.Interpretation.CSharp;
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// A catch clause is reachable when anything in its try block can raise. The control-flow pass used
+/// A catch clause is reachable when anything in its try block can throw. The control-flow pass used
 /// to answer that question with "does the try block contain a literal throw statement", so a try
-/// block whose only raising operation was a division had its catch body marked unreachable — and the
+/// block whose only throwing operation was a division had its catch body marked unreachable — and the
 /// writer, honouring that fact, dropped all but the last statement of the catch. The VM ran it. Two
 /// consumers of one tree disagreed.
 /// </summary>
@@ -44,7 +44,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
-            .Because("a division in the try block can raise, so the catch body executes");
+            .Because("a division in the try block can throw, so the catch body executes");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
@@ -85,7 +85,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsTrue()
-            .Because("a literal cannot raise, so the optimization still applies");
+            .Because("a literal cannot throw, so the optimization still applies");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsTrue();
     }
 
@@ -108,7 +108,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
-            .Because("a throw expression raises even when its payload is a variable, not a new exception");
+            .Because("a throw expression throws even when its payload is a variable, not a new exception");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
@@ -120,7 +120,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
-            .Because("Dispose runs in a finally and can raise into the enclosing catch");
+            .Because("Dispose runs in a finally and can throw into the enclosing catch");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
@@ -132,7 +132,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
-            .Because("a negative length raises OverflowException from the allocation");
+            .Because("a negative length throws OverflowException from the allocation");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
@@ -150,15 +150,15 @@ public class CatchBodyElisionTests {
     }
 
     [Test]
-    public async Task Try_WithIntegerArithmetic_StillElidesCatch() {
-        var n = new Variable("n");
+    public async Task Try_WithStridedSetBits_KeepsCatchReachable() {
         var (program, catchBody) = Build(new Block(
-            new Assignment(n, new Add(new Constant(1), new Constant(2)))));
+            new StridedSetBits(new Variable("a"), Wrap(0), Wrap(1), Wrap(99))));
 
         var analysis = Analyze(program);
 
-        await Assert.That(analysis.CanElide(catchBody)).IsTrue()
-            .Because("integer addition wraps and cannot raise, so the optimization still applies");
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("an indexed write past the array length throws");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 
     [Test]
@@ -169,7 +169,7 @@ public class CatchBodyElisionTests {
         var analysis = Analyze(program);
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
-            .Because("a member read on a null receiver raises");
+            .Because("a member read on a null receiver throws");
     }
 
     [Test]
@@ -184,6 +184,20 @@ public class CatchBodyElisionTests {
 
         await Assert.That(analysis.CanElide(catchBody)).IsFalse()
             .Because("lifted decimal addition throws OverflowException, and a Nullable<> has no PrimitiveType to read");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
+
+    /// <summary>A kind with no <see cref="NodeFacts"/> row: the table cannot classify it.</summary>
+    private sealed record UnclassifiedNode : Node;
+
+    [Test]
+    public async Task Try_WithAnUnclassifiedKind_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(new UnclassifiedNode()));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("a kind the table does not know must count as throwing, not as inert");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
 }

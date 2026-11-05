@@ -129,6 +129,36 @@ public static class NodeFacts {
     };
 
     /// <summary>
+    /// True when executing <paramref name="node"/> can raise: the node's row says so, or a descendant
+    /// does. A descendant walk stops at a <see cref="Lambda"/> or <see cref="TypeDefinitionNode"/>,
+    /// because those bodies execute in their own scope. An unknown kind answers true.
+    /// <para>
+    /// This is the whole answer, not the root's row: <c>Or</c>, <c>Conditional</c>, <c>Coalesce</c> and
+    /// a nested <c>Block</c> are inert themselves and can hold a division or a call.
+    /// </para>
+    /// </summary>
+    public static bool MayRaise(Node node) {
+        ArgumentNullException.ThrowIfNull(node);
+        if (CanRaise(node))
+            return true;
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            if (CanRaise(child))
+                return true;
+            if (child is Lambda or TypeDefinitionNode)
+                continue;
+            if (MayRaise(child))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>True when the node's own kind can raise; an unknown kind answers true.</summary>
+    public static bool CanRaise(Node node) =>
+        !All.TryGetValue(node.GetType(), out var fact) || fact.MayRaise;
+
+    /// <summary>
     /// A kind that can raise at run time, so a catch clause over it is reachable. This is the default
     /// on purpose: a new kind starts raising until it is shown inert, because the wrong answer in this
     /// column is a reachable catch body the writer drops while the VM runs it.

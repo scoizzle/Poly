@@ -426,7 +426,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = MayThrow(context, tryCatch.TryBlock);
+        bool mayThrow = MayThrow(tryCatch.TryBlock);
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
@@ -477,12 +477,7 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     /// rather than a missed optimization. A <see cref="Lambda"/> body is a separate scope and its
     /// throw belongs to the call that invokes it, which <see cref="AnyChild{TMetadata}"/> honours.
     /// </summary>
-    private bool MayThrow(AnalysisContext context, Node node) =>
-        CanRaise(node)
-        || this.AnyChild<ControlFlowMetadata>(context, node, static (_, child) => CanRaise(child));
-
-    private static bool CanRaise(Node node) =>
-        !NodeFacts.All.TryGetValue(node.GetType(), out var fact) || fact.MayRaise;
+    private static bool MayThrow(Node node) => NodeFacts.MayRaise(node);
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
         if (state.CurrentBlock == null) return;

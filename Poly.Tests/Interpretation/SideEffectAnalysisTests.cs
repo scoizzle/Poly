@@ -46,7 +46,7 @@ public class SideEffectAnalysisTests {
 
     [Test]
     public async Task EmitElisionDiagnostics_ReportsDeadCodeElidable() {
-        var pure = new Add(new Constant(1L), new Constant(2L));
+        var pure = new Constant(1L);
         var block = new Block([pure, new Constant(9L)]);
         var settings = AnalysisSettings.Default.With(
             new SideEffectAnalysisOptions { EmitElisionDiagnostics = true });

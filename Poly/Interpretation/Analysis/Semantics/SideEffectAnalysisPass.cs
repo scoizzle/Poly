@@ -42,7 +42,12 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                     context.SetMetadata(child, new AssignmentValueUsedMetadata(i == n - 1));
                 }
 
-                if (i < n - 1 && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)) {
+                // A statement whose result is unused can go only when executing it cannot raise:
+                // a bare read or a decimal addition looks inert by kind and still throws, and the
+                // writer deleting it is a silently different program.
+                if (i < n - 1
+                    && (childKind == SideEffectKind.Pure || childKind == SideEffectKind.Read)
+                    && !NodeFacts.MayRaise(child)) {
                     ElisionFacts.Mark(context, child, ElisionReason.NoObservableEffect);
                     if (emitDiags) {
                         context.ReportInformation(
@@ -78,7 +83,9 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
 
             if (node is ForLoop forLoop) {
                 var initMeta = forLoop.Initializer is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Initializer) : null;
-                if (initMeta is not null && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)) {
+                if (initMeta is not null
+                    && (initMeta.Kind == SideEffectKind.Pure || initMeta.Kind == SideEffectKind.Read)
+                    && forLoop.Initializer is not null && !NodeFacts.MayRaise(forLoop.Initializer)) {
                     ElisionFacts.Mark(context, forLoop.Initializer!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Initializer is not null) {
                         context.ReportInformation(
@@ -88,7 +95,9 @@ internal sealed class SideEffectAnalyzer : INodeAnalyzer {
                     }
                 }
                 var incMeta = forLoop.Increment is not null ? context.GetMetadata<SideEffectMetadata>(forLoop.Increment) : null;
-                if (incMeta is not null && (incMeta.Kind == SideEffectKind.Pure || incMeta.Kind == SideEffectKind.Read)) {
+                if (incMeta is not null
+                    && (incMeta.Kind == SideEffectKind.Pure || incMeta.Kind == SideEffectKind.Read)
+                    && forLoop.Increment is not null && !NodeFacts.MayRaise(forLoop.Increment)) {
                     ElisionFacts.Mark(context, forLoop.Increment!, ElisionReason.NoObservableEffect);
                     if (emitDiags2 && forLoop.Increment is not null) {
                         context.ReportInformation(

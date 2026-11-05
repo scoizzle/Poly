@@ -131,7 +131,11 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
             return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis"]);
 
         try {
-            var files = state.Modeling.Emit(state.Domain, state.LatestAnalysis);
+            // Emit through the compilation the executor runs, not the authored session: the
+            // constraint-compiled module is the one consumers get, and binding a second session
+            // here would evict it from RuntimeAnalysisCache (#387).
+            var execution = state.Execution;
+            var files = execution.Session.Emit(state.Domain, execution.Analysis);
             var csharp = string.Join("\n\n", files.Select(f => f.Source));
             return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {files.Count} file(s).", SessionId: sessionId, Data: new { csharp, fileCount = files.Count, files = files.Select(f => f.FileName).ToArray() }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
         }

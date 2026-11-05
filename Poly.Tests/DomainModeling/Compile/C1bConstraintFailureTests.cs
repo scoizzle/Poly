@@ -36,12 +36,6 @@ public class C1bConstraintFailureTests {
             }
             """);
         var module = session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Widget", "Draft", "entry", out var body)).IsTrue();
-        await Assert.That(body).IsNotNull();
-        await Assert.That(HasConstraintFailureThrow(body!)).IsTrue();
-        await Assert.That(HasDomainResultFailureReturn(body!)).IsFalse();
-
         var widget = module.First(t => t.Name == "Widget");
         var ctor = widget.Constructors!.First(c => c.Parameters is { Count: > 0 });
         await Assert.That(HasConstraintFailureThrow(ctor.Body!)).IsTrue();

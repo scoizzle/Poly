@@ -45,65 +45,6 @@ public class Item3LowerPopulateTests {
     }
 
     [Test]
-    public async Task OnExit_TransitionStage_UsesCachedBody_NotReloweredAssign() {
-        // Action StageTransition inlines exit into the module body; EntryExitBodies
-        // are consumed by TransitionStage / ApplyInitialStageEntryEffects.
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Draft: stage {
-                exit { assign Note to "left-draft" }
-              }
-              Done: stage { }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Draft", "exit", out var exitBody)).IsTrue();
-        await Assert.That(exitBody).IsNotNull();
-
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Draft", "exit",
-            AssignEntityProp("Ticket", "Note", "sentinel-exit"));
-
-        // Host TransitionStage is gone with DEI. The cache row above is what this test can still prove.
-    }
-
-    [Test]
-    public async Task OnEntry_ApplyInitial_AndTransition_UsesCachedBody() {
-        var (domain, analysis, session) = Evolve("""
-            domain Flow
-            Ticket: entity {
-              Note: Text
-              Draft: stage {
-                entry { assign Note to "entered" }
-              }
-              Done: stage {
-                entry { assign Note to "entered-done" }
-              }
-            }
-            """);
-        var exec = ModuleExec.For(domain);
-        session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Draft", "entry", out _)).IsTrue();
-        await Assert.That(RuntimeAnalysisCache.TryGetEntryExitBody(
-            domain, "Ticket", "Done", "entry", out _)).IsTrue();
-
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Draft", "entry",
-            AssignEntityProp("Ticket", "Note", "sentinel-entry"));
-        RuntimeAnalysisCache.ReplaceEntryExitBody(
-            domain, "Ticket", "Done", "entry",
-            AssignEntityProp("Ticket", "Note", "sentinel-done-entry"));
-
-        // Host TransitionStage / first-stage entry execution is gone with DEI.
-        // The cache rows above are what this test can still prove.
-    }
-
-    [Test]
     public async Task Subscription_FiresFromCachedBody_OnPeerTransition() {
         var (domain, analysis, session) = Evolve("""
             domain Watch

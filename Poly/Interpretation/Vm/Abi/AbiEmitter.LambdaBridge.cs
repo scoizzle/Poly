@@ -497,6 +497,7 @@ public static partial class AbiEmitter {
                     ?? throw RejectPure(@default, "its target type is unresolved")
                 : TargetClrType(@default.TargetType, @default, ctx)),
             NullForgiving forgiving => CompilePureNode(forgiving.Operand, ctx),
+            Comment => Empty(),
             ThisReference => throw RejectPure(node, "'this' is not a pure CLR expression"),
             _ => throw RejectPure(node, "the node is not on the lambda-bridge allow-list"),
         };

@@ -355,6 +355,10 @@ public static partial class AbiEmitter {
             // the classifier reads a TryCatchFinally as what its try block yields.
             TryCatchFinally tcf => EmitTryCatchFinally(tcf, ctx),
             UsingStatement us => Statement(ctx, () => EmitUsingStatement(us, ctx)),
+            // Transparent, not a statement: a comment emits nothing and leaves whatever the
+            // previous statement put on the ring, so `[x, comment]` still yields x. It has no
+            // ring location, and a consumer that asks for one fails closed.
+            Comment => Empty(),
             SuspendNode sn => Statement(ctx, () => EmitSuspendNode(sn, ctx)),
             Assignment a => EmitAssignment(a, ctx),
             Block b => EmitBlock(b, ctx),

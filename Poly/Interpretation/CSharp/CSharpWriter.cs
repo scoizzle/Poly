@@ -214,6 +214,10 @@ public sealed class CSharpWriter {
 
     private static Dictionary<string, string> Braces() => Names(("open", "{"), ("close", "}"));
 
+    /// <summary>The text a comment statement prints: <c>// body</c> or <c>/* body */</c>.</summary>
+    private static string CommentText(Comment comment) =>
+        comment.IsBlock ? $"/* {comment.Text} */" : $"// {comment.Text}";
+
     private static string Pad(int indent) => new(' ', indent * 4);
 
     // ── statements ───────────────────────────────────────────────────────────
@@ -309,6 +313,10 @@ public sealed class CSharpWriter {
             case Variable variable:
                 sb.Append(Pad(indent));
                 sb.AppendLine(ExpressionStatementText(variable));
+                return;
+            case Comment comment:
+                sb.Append(Pad(indent));
+                sb.AppendLine(CommentText(comment));
                 return;
             default:
                 sb.Append(Pad(indent));
@@ -1094,6 +1102,8 @@ public sealed class CSharpWriter {
                 return Expr(suspend.Inner);
             case BaseConstructorInvocationNode baseCtor:
                 return Render("ctor-base", "base", ArgsText(baseCtor.Arguments));
+            case Comment comment:
+                return $"/* {comment.Text} */";
             default:
                 return Unprintable(node);
         }

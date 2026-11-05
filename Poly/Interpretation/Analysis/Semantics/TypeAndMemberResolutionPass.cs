@@ -760,7 +760,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     }
 
     private static bool IsVoidYieldNode(Node node) =>
-        node is IfStatement or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
+        node is Comment or IfStatement or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
             or UsingStatement or BreakStatement or ContinueStatement or GotoStatement
             or ThrowStatement
         || node is Return { Value: null };

@@ -4,7 +4,7 @@ using Poly.Interpretation.Analysis.Semantics;
 
 namespace Poly.Tests.Interpretation;
 
-/// <summary>Side-effect kind / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
+/// <summary>NodeEffect classification / elision metadata and optional DEAD_CODE_ELIDABLE diagnostics.</summary>
 public class SideEffectAnalysisTests {
     private static Analyzer SideEffectAnalyzerPipeline() =>
         new AnalyzerBuilder()
@@ -20,7 +20,7 @@ public class SideEffectAnalysisTests {
         var result = SideEffectAnalyzerPipeline().Analyze(c);
         var meta = result.GetMetadata<SideEffectMetadata>(c);
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(SideEffectKind.Pure);
+        await Assert.That(meta!.Effects).IsEqualTo(NodeEffect.None);
         await Assert.That(result.HasSideEffects(c)).IsFalse();
     }
 
@@ -32,7 +32,7 @@ public class SideEffectAnalysisTests {
         var result = SideEffectAnalyzerPipeline().Analyze(block);
         var meta = result.GetMetadata<SideEffectMetadata>(assign);
         await Assert.That(meta).IsNotNull();
-        await Assert.That(meta!.Kind).IsEqualTo(SideEffectKind.Write);
+        await Assert.That(meta!.Effects).IsEqualTo(NodeEffect.Write);
     }
 
     [Test]

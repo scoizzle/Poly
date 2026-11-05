@@ -33,6 +33,51 @@ public class NodeFactsTotalityTests {
             .Because(Explain("a fact for a type that is not a concrete Node is stale", stale));
     }
 
+    /// <summary>
+    /// The effects column is an independent statement of what each kind does, so a new row or a
+    /// reclassification cannot slip through as a local decision on one consumer. Every kind here can
+    /// reach user code or a runtime exception; the operator kinds are deliberate over-approximations,
+    /// because the same node reaches a decimal or user-defined operator and the table sees kinds.
+    /// </summary>
+    [Test]
+    public async Task ThrowingKinds_AreTheExpectedSet() {
+        string[] expected = [
+            nameof(Add), nameof(Await), nameof(BitwiseAnd), nameof(BitwiseNot), nameof(BitwiseOr),
+            nameof(BitwiseXor), nameof(Divide), nameof(Equal), nameof(GreaterThan),
+            nameof(GreaterThanOrEqual), nameof(IndexAccess), nameof(InterpolatedString),
+            nameof(Invoke), nameof(LessThan), nameof(LessThanOrEqual), nameof(Member), nameof(Modulo),
+            nameof(Multiply), nameof(New), nameof(NewArray), nameof(Not), nameof(NotEqual),
+            nameof(ShiftLeft), nameof(ShiftRight), nameof(StridedSetBits), nameof(Subtract),
+            nameof(ThrowExpression), nameof(ThrowStatement), nameof(TypeCast), nameof(UnaryMinus),
+            nameof(UsingStatement), nameof(ForEachLoop),
+        ];
+        var actual = Ordered().Where(kv => (kv.Value.Effects & NodeEffect.Throws) != 0).Select(kv => kv.Value.Label);
+        await Assert.That(string.Join(", ", actual.OrderBy(n => n, StringComparer.Ordinal)))
+            .IsEqualTo(string.Join(", ", expected.OrderBy(n => n, StringComparer.Ordinal)))
+            .Because("a kind's throwing decision is part of the table's contract, not a local choice");
+    }
+
+    /// <summary>The state half of the column, asserted the same way: it is what a consumer reads to
+    /// decide that a condition can change, and a new kind defaulting to "no state effect" is the
+    /// direction that silently deletes code.</summary>
+    [Test]
+    public async Task StateEffectKinds_AreTheExpectedSet() {
+        string[] expected = [
+            nameof(Assignment), nameof(Return), nameof(WhileLoop), nameof(DoWhileLoop), nameof(ForLoop),
+            nameof(BreakStatement), nameof(ContinueStatement), nameof(GotoStatement),
+            nameof(LabelDeclaration), nameof(IndexAccess), nameof(Member), nameof(New),
+            nameof(NewArray), nameof(StridedSetBits), nameof(ForEachLoop), nameof(Invoke),
+            nameof(Await), nameof(UsingStatement), nameof(IfStatement),
+            nameof(SwitchStatement), nameof(SuspendNode),
+        ];
+        var actual = Ordered()
+            .Where(kv => (kv.Value.Effects & ~NodeEffect.Throws) != NodeEffect.None)
+            .Select(kv => kv.Value.Label);
+        await Assert.That(string.Join(", ", actual.OrderBy(n => n, StringComparer.Ordinal)))
+            .IsEqualTo(string.Join(", ", expected.OrderBy(n => n, StringComparer.Ordinal)))
+            .Because("the state half of the column is a claim too");
+    }
+
     /// <summary>A claim with no corpus case is either a missing case or a false claim.</summary>
     [Test]
     public async Task EveryClaim_HasCorpusEvidence() {

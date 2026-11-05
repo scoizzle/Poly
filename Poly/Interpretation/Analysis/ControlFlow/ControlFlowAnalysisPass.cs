@@ -426,12 +426,16 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         BuildCfg(context, tryCatch.TryBlock, state);
         var afterTry = state.CurrentBlock;
 
-        bool mayThrow = ContainsThrow(context, tryCatch.TryBlock);
+        // Ask the try block's own composed effects. A catch-all on THIS statement absorbs the throw
+        // for the statement's own effects, but the block's metadata keeps it — that is exactly what
+        // makes this question answerable. Absent metadata fails closed.
+        var tryEffects = context.GetMetadata<SideEffectMetadata>(tryCatch.TryBlock);
+        bool mayThrow = tryEffects is null || tryEffects.Throws;
 
         if (tryCatch.CatchClauses != null) {
             foreach (var catchClause in tryCatch.CatchClauses) {
                 if (!mayThrow) {
-                    MarkSubtreeElidable(context, catchClause.Body, "CF0010", "Catch clause is unreachable - no throw statement in try block");
+                    MarkSubtreeElidable(context, catchClause.Body, "CF0010", "Catch clause is unreachable - no operation in the try block can throw");
                     continue;
                 }
                 var catchEntry = state.Cfg.CreateBlock();
@@ -467,11 +471,6 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
         }
 
         state.CurrentBlock = mergeBlock.Predecessors.Count > 0 ? mergeBlock : null;
-    }
-
-    private bool ContainsThrow(AnalysisContext context, Node node) {
-        if (node is ThrowStatement) return true;
-        return this.AnyChild<ControlFlowMetadata>(context, node, static (_, ch) => ch is ThrowStatement);
     }
 
     private void BuildSwitchCfg(AnalysisContext context, SwitchStatement switchStmt, CfgState state) {
@@ -647,11 +646,22 @@ public sealed class ControlFlowAnalysisPass : INodeAnalyzer {
     internal static bool? GetConstBool(INodeMetadataProvider provider, Node? n) =>
         GetConstValue(provider, n) as bool?;
 
+    /// <summary>
+    /// A condition is statically constant when evaluating it cannot change anything and its value is
+    /// known. Both short-circuit operators need the left operand alone: <c>true || X</c> is constant
+    /// true and <c>false &amp;&amp; X</c> is constant false whatever <c>X</c> does, because <c>X</c>
+    /// never runs. Reading the whole node's effects would union the dead right-hand side and lose the
+    /// fact that the branch cannot be taken.
+    /// </summary>
     private static bool IsStaticallyConstantTrue(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
+        cond is Or or
+        ? IsStaticallyConstantTrue(ctx, ((Or)cond).LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is true;
 
     private static bool IsStaticallyConstantFalse(AnalysisContext ctx, Node? cond) =>
-        !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
+        cond is And and
+        ? IsStaticallyConstantFalse(ctx, and.LeftHandValue)
+        : !ctx.HasSideEffects(cond) && GetConstBool(ctx, cond) is false;
 
     private static void MarkElidable(AnalysisContext ctx, Node node, string code, string message) {
         ElisionFacts.Mark(ctx, node, ElisionReason.Unreachable);

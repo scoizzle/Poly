@@ -186,4 +186,18 @@ public class CatchBodyElisionTests {
             .Because("lifted decimal addition throws OverflowException, and a Nullable<> has no PrimitiveType to read");
         await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
     }
+
+    /// <summary>A kind with no <see cref="NodeFacts"/> row: the table cannot classify it.</summary>
+    private sealed record UnclassifiedNode : Node;
+
+    [Test]
+    public async Task Try_WithAnUnclassifiedKind_KeepsCatchReachable() {
+        var (program, catchBody) = Build(new Block(new UnclassifiedNode()));
+
+        var analysis = Analyze(program);
+
+        await Assert.That(analysis.CanElide(catchBody)).IsFalse()
+            .Because("a kind the table does not know must count as raising, not as inert");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "CF0010")).IsFalse();
+    }
 }

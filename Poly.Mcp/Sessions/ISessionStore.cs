@@ -38,8 +38,12 @@ internal interface ISessionStore {
     /// Atomically replaces a session's domain and analysis (revision + 1) and clears
     /// runtime instances. <paramref name="modeling"/> is the ForSource session, so a
     /// <c>uses</c> change does not re-open against Core.
+    /// <paramref name="sourceText"/> is the authored document; <paramref name="expectedRevision"/>, when set
+    /// and no longer current, writes nothing and returns false.
     /// </summary>
-    bool Replace(string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling);
+    bool Replace(
+        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling,
+        string? sourceText = null, long? expectedRevision = null);
 
     /// <summary>Locked access to a session's state for runtime instance operations.</summary>
     bool TryModifyInstances(string sessionId, Action<McpSessionState> action);

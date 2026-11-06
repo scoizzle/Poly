@@ -14,7 +14,7 @@ internal static class UnknownArgumentFilter {
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal) {
         ["poly_guide"] = ["topic"],
         ["poly_workspace"] = ["op", "name", "workspace"],
-        ["poly_define"] = ["workspace", "poly", "apply"],
+        ["poly_define"] = ["workspace", "poly", "apply", "edit"],
         ["poly_check"] = ["workspace", "select", "args", "expression", "bindings"],
         ["poly_inspect"] = ["workspace", "select", "detail"],
         ["poly_export"] = ["workspace", "format", "inline"],

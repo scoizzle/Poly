@@ -14,14 +14,14 @@ public static class PolyMcpInstructions {
         Loop:
         1. poly_guide — learn the .poly surface.
         2. poly_workspace — one workspace.
-        3. poly_define — write one .poly document and apply it; apply:false dry-runs. Fix
-           the findings until it is valid.
+        3. poly_define — write one .poly document and apply it, or change the one
+           already applied with edit; apply:false dry-runs. Fix the findings until it is valid.
         4. poly_check — proven, violated, or unknown.
         5. poly_export (dsl, json-schema, csharp, markdown, html, json-ld, shacl) or
            poly_simulate. poly_inspect reads the model back.
 
-        Rules: poly_define replaces model and clears instances; a rejected define
-        changes nothing. Stateful calls need the handle; WORKSPACE_REQUIRED means
+        Rules: poly_define replaces, or edits, the model and clears instances; a rejected
+        define changes nothing. Stateful calls need the handle; WORKSPACE_REQUIRED means
         call poly_workspace. Fix the model; never weaken a constraint to pass a diagnostic.
         """;
 }

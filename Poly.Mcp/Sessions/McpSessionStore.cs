@@ -26,7 +26,8 @@ internal sealed record McpSessionState(
     Domain Domain,
     AnalysisResult? LatestAnalysis,
     long Revision,
-    DomainSession Modeling
+    DomainSession Modeling,
+    string? SourceText = null
 ) {
     private readonly Lock _executorGate = new();
     private ModuleInstanceExecutor? _executor;
@@ -243,12 +244,16 @@ internal sealed class McpSessionStore(
     /// <summary>
     /// Atomically replaces a session's domain and analysis. The revision counter
     /// is set to the current revision + 1. Runtime instances are cleared.
+    /// <paramref name="sourceText"/> is the authored document the domain came from (null when it
+    /// did not come from one). A non-null <paramref name="expectedRevision"/> that no longer matches
+    /// writes nothing and returns false.
     /// Used by <c>apply_dsl</c> to replace the session with a freshly-parsed domain.
     /// <paramref name="modeling"/> is the ForSource session; required so a <c>uses</c>
     /// change does not re-open against Core.
     /// </summary>
     public bool Replace(
-        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling) {
+        string sessionId, Domain domain, AnalysisResult? analysis, DomainSession modeling,
+        string? sourceText = null, long? expectedRevision = null) {
         if (string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("Session ID is required.", nameof(sessionId));
         ArgumentNullException.ThrowIfNull(modeling);
@@ -259,11 +264,14 @@ internal sealed class McpSessionStore(
         lock (entry.Sync) {
             Interlocked.Exchange(ref entry.LastUsedTicks, NowTicks);
             var current = entry.State;
+            if (expectedRevision is { } expected && current.Revision != expected)
+                return false;
             entry.State = new McpSessionState(
                 domain,
                 analysis,
                 current.Revision + 1,
-                modeling.WithDomain(domain));
+                modeling.WithDomain(domain),
+                sourceText);
             return true;
         }
     }

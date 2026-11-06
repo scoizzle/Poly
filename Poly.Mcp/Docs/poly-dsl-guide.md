@@ -1291,6 +1291,39 @@ property may also be named `Text`, `Number`, or `Boolean` when its type is a pri
 A name that is a C# keyword (`ref`, `event`, `value`) is legal. The C# export writes
 it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they are the type.
 
+### Editing the applied document (`poly_define edit`)
+
+`poly_define(workspace, edit: "[...]")` changes the document you last applied instead of
+re-sending it. Pass exactly one of `poly` or `edit`. The ops splice your own stored text, so
+comments, order and formatting survive; the result runs through the same analysis gate and
+revision bump as a whole-document define. A rejected edit changes nothing.
+
+| Op | Fields | Effect |
+|---|---|---|
+| `add` | `parent`, `dsl` | Inserts `dsl` before the closing `}` of the entity or stage `parent` (`Product`, `Product.Draft`). `parent: ""` adds at top level. |
+| `remove` | `path` | Deletes the member (`Product.Total`, `Product.Draft.Publish`) and its line. |
+| `replace` | `path`, `dsl` | Replaces the member with `dsl`, re-indented. A trailing `//` comment on the last line stays. |
+
+```json
+[{"op":"add","parent":"Product","dsl":"Amount: Decimal"},
+ {"op":"remove","path":"Product.Note"}]
+```
+
+Top-level `add` placement: `uses` after the domain header; `enum`, `value` and `contract` before
+the first entity; `entity` and `bind` after the last declaration. Ops run in order against the
+text the earlier ops produced, and all of them apply or none do. `apply:false` splices and
+validates but stores nothing; `data.spliced` returns the edited document when it is small.
+
+Edit needs a document that `poly_define(poly)` applied; any other change to the model (the
+incremental tools) drops the stored text and `edit` answers `EDIT_NO_SOURCE`. Errors, all
+leaving the model unchanged: `EDIT_NO_SOURCE`, `EDIT_STALE` (the model moved meanwhile),
+`EDIT_PATH_NOT_FOUND` (lists near misses), `EDIT_NOT_ADDRESSABLE` (stage `entry`/`exit`/`when`,
+or two members on one line), `EDIT_NAME_COLLISION`, `EDIT_UNKNOWN_OP`, `EDIT_BAD_JSON`,
+`EDIT_ARGUMENT_CONFLICT`. Rename is not an op yet: renaming misses references, so redefine
+with `poly`. Comments are invisible to the tokenizer: `remove` deletes a member's own trailing
+comment but can orphan a comment on the line above it, and `replace` can leave a trailing
+comment describing the old member.
+
 **Golden workflow:** `poly_guide` → write `.poly` → `poly_define(apply:false)` →
 `poly_define` → `poly_check` → `poly_export(format:"dsl")` → `poly_simulate`.
 

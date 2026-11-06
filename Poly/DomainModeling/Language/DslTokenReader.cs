@@ -15,6 +15,9 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     private int _pos;
     private int _line = 1;
     private int _col = 1;
+    private int _startPos;
+    private int _startLine = 1;
+    private int _startCol = 1;
 
     public DslTokenReader(string text) => _text = text;
 
@@ -22,6 +25,9 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
 
     protected override DslToken ScanNextToken() {
         SkipWhitespaceAndComments();
+        _startPos = _pos;
+        _startLine = _line;
+        _startCol = _col;
 
         if (_pos >= _text.Length)
             return Make(DslTokenKind.EndOfFile, "");
@@ -67,7 +73,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         throw GrammarError.Error($"Unexpected character '{ch}'", _line, _col);
     }
 
-    private DslToken Make(DslTokenKind kind, string text) => new(kind, text, _line, _col);
+    private DslToken Make(DslTokenKind kind, string text) => new(kind, text, _startLine, _startCol, _startPos, _pos - _startPos);
 
     private DslToken Advance(DslTokenKind kind) {
         var text = PeekChar().ToString();
@@ -94,8 +100,6 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     }
 
     private DslToken ScanString() {
-        var startLine = _line;
-        var startCol = _col;
         AdvanceChar(); // skip opening "
         var sb = new StringBuilder();
         while (_pos < _text.Length) {
@@ -113,12 +117,10 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
             sb.Append(ch);
             AdvanceChar();
         }
-        return new DslToken(DslTokenKind.StringLiteral, sb.ToString(), startLine, startCol);
+        return Make(DslTokenKind.StringLiteral, sb.ToString());
     }
 
     private DslToken ScanNumber() {
-        var startLine = _line;
-        var startCol = _col;
         var sb = new StringBuilder();
         while (_pos < _text.Length && char.IsDigit(PeekChar())) {
             sb.Append(PeekChar());
@@ -134,7 +136,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
                 AdvanceChar();
             }
         }
-        return new DslToken(DslTokenKind.Number, sb.ToString(), startLine, startCol);
+        return Make(DslTokenKind.Number, sb.ToString());
     }
 
     private string ScanWord() {

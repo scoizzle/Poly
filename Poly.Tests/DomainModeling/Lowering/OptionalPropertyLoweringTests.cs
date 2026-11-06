@@ -1,6 +1,7 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -172,5 +173,30 @@ public class OptionalPropertyLoweringTests {
         var thrown = Assert.Throws<ConstraintFailureException>(() =>
             Create(domain, person, ("Age", 151L)));
         await Assert.That(thrown!.Message).Contains("'Age' must be <= 150.");
+    }
+
+    [Test]
+    public async Task Emit_DomainWithOptionalProperty_WritesNullableMember() {
+        // None of the golden sample domains uses `optional`; emit a small fixture
+        // through the same DomainSession.Emit path to cover it structurally.
+        const string poly = """
+            domain OptionalEmit
+            Token: entity {
+              Name: Text
+              Note: Text optional
+            }
+            """;
+        var session = DomainSession.ForSource(poly, ExtensionCatalog.ProductAuthoring);
+        var outcome = new DomainEvolution(new Domain("_", []))
+            .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
+        await Assert.That(outcome.Succeeded).IsTrue();
+
+        var files = session.Emit(outcome.Root!, outcome.Analysis);
+
+        var token = files.Single(f => f.FileName == "Token.cs").Source;
+        await Assert.That(token).Contains("string? note = null");
+        await Assert.That(token).Contains("string name");
+        await Assert.That(token).DoesNotContain("string name = null");
+        await Assert.That(token).DoesNotContain("string? name");
     }
 }

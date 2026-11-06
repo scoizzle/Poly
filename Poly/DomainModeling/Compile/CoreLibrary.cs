@@ -4,7 +4,9 @@ namespace Poly.DomainModeling.Compile;
 
 /// <summary>
 /// Core's analyzer passes and builtin constraint compiler, loaded implicitly at
-/// <see cref="PipelineStage.Load"/>. <c>core</c> is never an authored <c>uses</c> id.
+/// <see cref="PipelineStage.Load"/>; its passes enter at <see cref="PipelineStage.Analyze"/>
+/// and its compiler at <see cref="PipelineStage.Lower"/>. <c>core</c> is never an authored
+/// <c>uses</c> id.
 /// </summary>
 public sealed class CoreLibrary : IDomainLibrary {
     public const string CoreId = "core";

@@ -18,6 +18,47 @@ public sealed class CoreLibraryTests {
     }
 
     [Test]
+    public async Task Core_RegistrationEntersThroughLoad() {
+        var core = SessionBuilder.CreateEmpty().LoadCore().Build();
+        await Assert.That(core.Contributions
+                .Count(c => c == new StageContribution(PipelineStage.Analyze, CoreLibrary.CoreId))).IsEqualTo(1);
+        await Assert.That(core.Contributions
+                .Count(c => c == new StageContribution(PipelineStage.Lower, CoreLibrary.CoreId))).IsEqualTo(1);
+
+        var bare = SessionBuilder.CreateEmpty().Load(new MarkerLibrary()).Build();
+        var domain = DomainFactory.Create("D");
+        var analysis = DomainSession.ForExtensions([]).Analyze(domain);
+
+        await Assert.That(() => bare.Compile(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("core");
+        await Assert.That(() => bare.Analyze(domain))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("core");
+        await Assert.That(() => bare.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("core");
+        var untouchedCatalog = bare.ArtifactCatalog;
+        await Assert.That(() => bare.Emit(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("core");
+        // Emit refuses before replacing the catalog; pin the guard's placement, not only its message.
+        await Assert.That(ReferenceEquals(bare.ArtifactCatalog, untouchedCatalog)).IsTrue();
+    }
+
+    [Test]
+    public async Task Core_RegisteredOutsideLoad_AnalyzeStillRefuses() {
+        var builder = SessionBuilder.CreateEmpty().Load(new MarkerLibrary());
+        builder.AddContribution(PipelineStage.Analyze, CoreLibrary.CoreId);
+
+        var session = builder.Build();
+
+        await Assert.That(() => session.Analyze(DomainFactory.Create("D")))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("core");
+    }
+
+    [Test]
     public async Task Core_AnalyzerPipelineRequiresCoreLibrary() {
         var session = SessionBuilder.CreateEmpty().Load(new MarkerLibrary()).Build();
 

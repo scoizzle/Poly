@@ -14,7 +14,10 @@ namespace Poly.DomainModeling.Lowering;
 /// and the assign composer. It owns the condition, message, presence predicate,
 /// ordering, and type gates for required, range, length, pattern, equality, and
 /// the enum slot/member checks. Call sites own only the failure node and whether
-/// length checks sit in a Block.
+/// length checks sit in a Block. <c>unique</c> stays storage-owned (create in
+/// <c>UniqueConstraintCompiler.Compile</c>, assign via its <c>AssignObligations</c>
+/// and <c>AfterApply</c>); <see cref="CoverageByConstraint"/> names that owner so
+/// it cannot bypass the one-writer claim silently.
 /// </summary>
 internal static class ConstraintCheckWriter {
     internal enum Kind {
@@ -240,6 +243,38 @@ internal static class ConstraintCheckWriter {
             checks = [.. checks.OrderBy(c => CategoryRank(c.Kind))];
         return checks;
     }
+
+    /// <summary>
+    /// The writer's coverage of <see cref="Constraint"/> records. <see cref="Coverage.Kinds"/>
+    /// are the checks <see cref="ChecksFor"/> can emit for that record; an empty list means
+    /// this writer emits no guard, and <see cref="Coverage.Owner"/> must name the writer
+    /// that does (or, with a <c>marker:</c> prefix, say why no guard exists). A record with
+    /// neither fails <c>ConstraintWriterCoverageTests</c>, so a new constraint cannot bypass
+    /// this writer by adding another switch arm.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<Type, Coverage> CoverageByConstraint =
+        new Dictionary<Type, Coverage> {
+            [typeof(RequiredConstraint)] = new([Kind.Required], null),
+            [typeof(RangeConstraint)] = new([Kind.RangeMinimum, Kind.RangeMaximum], null),
+            [typeof(LengthConstraint)] = new([Kind.LengthMinimum, Kind.LengthMaximum], null),
+            [typeof(PatternConstraint)] = new([Kind.Pattern], null),
+            [typeof(EqualityConstraint)] = new([Kind.Equality], null),
+            [typeof(UniqueConstraint)] = new([],
+                "storage port: create guard in UniqueConstraintCompiler.Compile, assign via AssignObligations + AfterApply"),
+            [typeof(OptionalConstraint)] = new([],
+                "marker: optionality is a requiredness fact, not a guard"),
+            [typeof(DefaultValueConstraint)] = new([],
+                "marker: the default feeds requiredness and default lowering, not a guard"),
+        };
+
+    /// <summary>One constraint record's check kinds, or the writer that owns its guard instead.</summary>
+    internal sealed record Coverage(IReadOnlyList<Kind> Kinds, string? Owner);
+
+    /// <summary>The checks this writer emits for <paramref name="constraint"/>, empty when another writer owns it.</summary>
+    internal static IReadOnlyList<Kind> KindsFor(Constraint constraint) =>
+        CoverageByConstraint.TryGetValue(constraint.GetType(), out var coverage)
+            ? coverage.Kinds
+            : [];
 
     /// <summary>Assign's historical pass order: required, range, length, pattern, equality, enum.</summary>
     private static int CategoryRank(Kind kind) => kind switch {

@@ -20,7 +20,7 @@ public sealed class DomainSession {
 
     public IReadOnlyList<string> Extensions { get; }
 
-    /// <summary>Each loaded library's entry into its pipeline stage, in load order.</summary>
+    /// <summary>One entry per library and pipeline stage it enters, in registration order.</summary>
     public IReadOnlyList<StageContribution> Contributions { get; }
 
     public Language<DslToken, DslTokenKind> Language { get; }
@@ -97,10 +97,14 @@ public sealed class DomainSession {
     private Analyzer Analyzer => _analyzer ??= BuildAnalyzer();
 
     private Analyzer BuildAnalyzer() {
+        RequireCoreLoaded();
+        return new Analyzer(Analyzers);
+    }
+
+    private void RequireCoreLoaded() {
         if (!Contributions.Any(contribution =>
                 contribution.Stage == PipelineStage.Load && contribution.LibraryId == CoreLibrary.CoreId))
-            throw new InvalidOperationException("The analyzer pipeline requires the core library loaded at Load.");
-        return new Analyzer(Analyzers);
+            throw new InvalidOperationException("The compilation pipeline requires the core library loaded at Load.");
     }
 
     internal DomainSession(
@@ -235,6 +239,7 @@ public sealed class DomainSession {
     /// </summary>
     public AnalysisResult Analyze(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        RequireCoreLoaded();
         RuntimeAnalysisCache.Bind(domain, this);
         var analysis = Analyzer.Analyze(domain);
         RuntimeAnalysisCache.Bind(domain, this, analysis);
@@ -262,6 +267,7 @@ public sealed class DomainSession {
     public IReadOnlyList<TypeDefinitionNode> Lower(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        RequireCoreLoaded();
         var (module, catalog) = LowerToCatalog(domain, analysis);
         RegisterCatalogReferenceReport(catalog, domain, LowerProducer);
         ArtifactCatalog = catalog;
@@ -357,6 +363,7 @@ public sealed class DomainSession {
     public IReadOnlyList<(string FileName, string Source)> Emit(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        RequireCoreLoaded();
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
         // whole module, because the writer resolves types across entities from one analysis.
@@ -438,6 +445,7 @@ public sealed class DomainSession {
     internal CompiledDomain Compile(Domain domain, AnalysisResult analysis) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
+        RequireCoreLoaded();
         var module = RuntimeAnalysisCache.GetOrLower(domain, this, analysis);
         return VmAnalysisOf(domain, analysis, module);
     }

@@ -105,6 +105,7 @@ public sealed record AddEntityChange(
     IReadOnlyList<Property> InitialProperties
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        TermFacetGuard.ValidateFacets(InitialProperties.SelectMany(p => p.Facets));
         AddToTypes(context, new Entity(Name, InitialProperties, [], [], []));
     }
 
@@ -131,6 +132,7 @@ public sealed record AddPropertyToEntityChange(
     Property Property
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        TermFacetGuard.ValidateFacets(Property.Facets);
         context.RequireUpdate(
             context.AppendChildToEntity(EntityName, e => e.Properties, (e, props) => e with { Properties = props }, Property),
             $"Entity '{EntityName}' not found — cannot add property '{Property.Name}'");
@@ -545,6 +547,7 @@ public sealed record AddValueTypeChange(
     IReadOnlyList<Property> Properties
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        TermFacetGuard.ValidateFacets(Properties.SelectMany(p => p.Facets));
         var newValueType = new ValueType(Name, Properties, []);
         context.Types.Add(newValueType);
         context.ModifiedNodes.Add(newValueType);
@@ -813,6 +816,7 @@ public sealed record AddFacetToPropertyChange(
     Facet Facet
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        TermFacetGuard.Validate(Facet);
         context.RequireUpdate(
             context.UpdateProperty(EntityName, PropertyName, p => p with {
                 Facets = p.Facets.Append(Facet).ToList()
@@ -831,6 +835,7 @@ public sealed record AddFacetToDomainTypeChange(
     Facet Facet
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        TermFacetGuard.Validate(Facet);
         context.RequireUpdate(
             context.UpdateType(TypeName, t => t with { Facets = t.Facets.Append(Facet).ToList() }),
             $"Type '{TypeName}' not found — cannot add facet");
@@ -949,14 +954,87 @@ public sealed record AddPolicyToRelationshipChange(
 
 public sealed record AddEnumTypeChange(
     string Name,
-    IReadOnlyList<string> MemberNames
+    IReadOnlyList<string> MemberNames,
+    IReadOnlyDictionary<string, IReadOnlyList<Facet>>? MemberFacets = null,
+    IReadOnlyList<Facet>? Facets = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
-        context.Types.Add(new EnumType(Name, MemberNames, []));
+        TermFacetGuard.ValidateFacets(Facets);
+        TermFacetGuard.ValidateMembers(Name, MemberNames, MemberFacets);
+        context.Types.Add(new EnumType(Name, MemberNames, []) {
+            Facets = Facets ?? [],
+            MemberFacets = MemberFacets
+                ?? new Dictionary<string, IReadOnlyList<Facet>>(StringComparer.Ordinal),
+        });
         context.ModifiedNodes.Add(context.Types[^1]);
     }
 
     internal override string GetDescription() => $"Add enum type '{Name}' with {MemberNames.Count} members";
+}
+
+/// <summary>
+/// Fail-closed guards for term metadata on the programmatic evolution surface. The DSL
+/// parser validates too; a change constructed in code must not be able to persist a
+/// malformed term or member facets for a member that does not exist.
+/// </summary>
+internal static class TermFacetGuard {
+    public static void Validate(Facet facet) {
+        if (facet is not Annotation annotation || !TermFacets.IsTermKeyword(annotation.Name))
+            return;
+        if (annotation.Name == TermFacets.Term)
+            throw new InvalidOperationException("'term(...)' applies to enum members only.");
+        ValidateShape(annotation);
+    }
+
+    /// <summary>
+    /// Validates every term facet on one element: shape, one value per key, and
+    /// <c>term</c> only where it has meaning (an enum member).
+    /// </summary>
+    public static void ValidateFacets(IEnumerable<Facet>? facets) {
+        if (facets is null)
+            return;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var facet in facets) {
+            if (facet is not Annotation annotation || !TermFacets.IsTermKeyword(annotation.Name))
+                continue;
+            if (annotation.Name == TermFacets.Term)
+                throw new InvalidOperationException("'term(...)' applies to enum members only.");
+            if (!seen.Add(annotation.Name))
+                throw new InvalidOperationException(
+                    $"Duplicate term annotation '{annotation.Name}(...)' on one element.");
+            ValidateShape(annotation);
+        }
+    }
+
+    public static void ValidateMembers(
+        string enumName,
+        IReadOnlyList<string> memberNames,
+        IReadOnlyDictionary<string, IReadOnlyList<Facet>>? memberFacets) {
+        if (memberFacets is null)
+            return;
+        foreach (var (member, facets) in memberFacets) {
+            if (!memberNames.Contains(member, StringComparer.Ordinal))
+                throw new InvalidOperationException(
+                    $"Enum '{enumName}' has term metadata for '{member}', which is not a declared member.");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var facet in facets) {
+                if (facet is not Annotation annotation || !TermFacets.IsTermKeyword(annotation.Name))
+                    continue;
+                if (!seen.Add(annotation.Name))
+                    throw new InvalidOperationException(
+                        $"Duplicate term annotation '{annotation.Name}(...)' on enum member '{member}'.");
+                ValidateShape(annotation);
+            }
+        }
+    }
+
+    private static void ValidateShape(Annotation annotation) {
+        if (TermFacets.IsWellFormed(annotation.Name, annotation.Arguments))
+            return;
+        throw new InvalidOperationException(annotation.Name == TermFacets.Iri
+            ? "Term annotation 'iri(...)' expects one absolute http(s) or urn IRI."
+            : $"Term annotation '{annotation.Name}(...)' expects exactly one non-empty string argument.");
+    }
 }
 
 public sealed record AddFunctionChange(

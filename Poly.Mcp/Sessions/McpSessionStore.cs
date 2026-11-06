@@ -110,6 +110,18 @@ internal sealed record McpSessionState(
     }
 
     /// <summary>
+    /// Drops every runtime instance while keeping the lowered module and the session that
+    /// lowered it. Replacing the state instead would bind the same domain to a second
+    /// session and evict the module (see <see cref="RuntimeAnalysisCache"/>), which broke
+    /// the next create after a simulation reset.
+    /// </summary>
+    public void ResetInstances() {
+        lock (_executorGate) {
+            _executor = null;
+        }
+    }
+
+    /// <summary>
     /// Instance ids (GUID strings) to the dictionary that is each instance, in creation
     /// order. A view over the executor, not a second store.
     /// </summary>

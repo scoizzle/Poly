@@ -9,4 +9,16 @@ public sealed record EnumType(
     string Name,
     IReadOnlyList<string> MemberNames,
     IReadOnlyList<Constraint> Constraints
-) : DomainType(Name, Properties: [], Constraints);
+) : DomainType(Name, Properties: [], Constraints) {
+    /// <summary>
+    /// Metadata attached to individual members (term IRI, term name, label, description).
+    /// Keyed by member name (ordinal); a member with no metadata has no entry. The member
+    /// list itself stays <see cref="MemberNames"/>, so every existing member comparison and
+    /// emission path is unchanged.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<Facet>> MemberFacets { get; init; } =
+        new Dictionary<string, IReadOnlyList<Facet>>(StringComparer.Ordinal);
+
+    public override IEnumerable<Node?> Children =>
+        [.. base.Children, .. MemberFacets.Values.SelectMany(facets => facets)];
+}

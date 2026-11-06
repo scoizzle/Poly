@@ -1,177 +1,89 @@
 # Poly.Mcp — MCP Server for Poly Domain Modeling
 
-**Role:** interactive **harness** for agents using Poly. Holds a `DomainSession` (it is not that session). Author and inspect. Named-policy/action **simulate** is `evaluate_policy(instanceId)` and `invoke_action` on session instances. `oracle_expression` is a fragment probe, not that lock. Not a product entry-point extension (REST is `uses http`). Not a second evaluator.
+**Role:** the agent harness for Poly. It holds a `DomainSession`, lets an agent describe a domain as one `.poly` document, proves it with the constraint solver, and produces an artifact or a simulation. It is not a product entry-point extension (REST is `uses http`) and not a second evaluator.
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen core: [`docs/CORE.md`](../docs/CORE.md) §0. Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
 ## Tool Surface
 
-Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Poly.Data.Modeling`).
-**24 tools** registered via `Program.cs` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
+Seven outcome tools. Server instructions carry the framing: use Poly when a task has a domain, write it down, prove it, then export or simulate.
 
-### Session
+| Tool | Job |
+|------|-----|
+| `poly_guide` | Learn the `.poly` surface: quickstart, workflow, unsupported constructs, section index |
+| `poly_workspace` | Create, list, or close a workspace; the handle every stateful call needs |
+| `poly_define` | Validate and apply one `.poly` document; `apply:false` is a dry run; a rejected document changes nothing |
+| `poly_check` | Prove the model, one selected action/property, or an expression: `proven`, `violated`, or `unknown` |
+| `poly_inspect` | Read the overview, one entity, or `Entity.Member`; brief by default, `detail:"full"` for the element |
+| `poly_export` | One `format` enum: `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, `shacl`; inline under 4 KB, otherwise a file path |
+| `poly_simulate` | Ordered `create`/`link`/`unlink`/`invoke`/`evaluate`/`get`/`list` steps; one trace entry per step |
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `create_domain_session` | `SessionTool` | Creates a bootstrapped domain session with built-in primitive types |
-| `list_sessions` | `SessionTool` | Lists active domain sessions |
+Every response is `{ok, summary, findings[], data?, next[], state{workspace, model, revision, entities, instances}, errorCode?}`. A missing or expired handle returns `WORKSPACE_REQUIRED`; `next` entries are call sketches with the real handle. Unknown arguments are rejected with the valid names.
 
-### Query / inspect
+The legacy 30-tool v1 surface was removed. Its operation adapters remain internal to `PolySurfaceTools` (they are not registered as MCP tools). The historical A/B is the `Poly MCP agent surface implementation.md` note in `../reports/`.
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `get_domain_overview` | `QueryTool` | Returns domain overview with entity/primitive/relationship counts |
-| `get_entity_detail` | `QueryTool` | Returns entity properties, stages, actions, policies, navigations, subscriptions |
-| `get_domain_analysis` | `QueryTool` | Returns analysis diagnostics (errors, warnings, info, hintCount) |
-| `get_domain_suggestions` | `QueryTool` | Authoring suggestions (advisory DMAS001 hints) |
-| `get_relationships` | `QueryTool` | Lists relationships; optional entity filter |
-| `get_constraints` | `EvolveTool` | Lists constraints on an entity's properties |
-| `get_policy_expression` | `PolicyTool` | Inspect-only guard expression text |
+## Workspaces
 
-### Unified evolve (incremental structure)
+`poly_workspace` creates a process-local workspace (a GUID handle). Keep one per task. `poly_define` replaces the model, clears runtime instances, and bumps the revision. `poly_workspace(op:"list")` returns the current workspaces with model/revision/counts; `poly_workspace(op:"close", workspace:…)` removes the workspace and its instances when the task is done. Sessions are scratch; `poly_export(format:"dsl")` is how a model is kept.
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `add` | `EvolveTool` | Creates one domain element: `kind` ∈ entity, property, stage, action, stage_action, relationship, constraint, policy + JSON `payload` |
-| `remove` | `EvolveTool` | Removes one domain element by identity: `kind` + identity `payload` (constraint remove not supported — use apply_dsl) |
+## Authoring
 
-### DSL (bulk structure)
+One path: write the whole domain as one `.poly` document and call `poly_define`. Constraints and relationships are part of that document; there is no incremental element API. A rejected document changes nothing and returns findings with severity, code, element path, and message.
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the session domain |
-| `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
-| `get_dsl_guide` | `DslTool` | Short DSL guide by default. `section` returns one heading; `all` returns `Docs/poly-dsl-guide.md` |
+`poly_guide` returns a ~700-char quickstart by default and a section of [`Docs/poly-dsl-guide.md`](Docs/poly-dsl-guide.md) on request. The guide is the product-true syntax reference.
 
-### Policy
+## Interop Artifacts
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `evaluate_policy` | `PolicyTool` | Evaluates a named policy on an instance from `create_instance` (`instanceId` required) |
+Read-only exports hand the analyzed domain to other toolchains without re-deriving it:
 
-### Oracle
+- **`export_domain_to_csharp`** is folded into `poly_export(format:"csharp")` — the lowered C# model.
+- **JSON Schema** (`format:"json-schema"`) — `$defs` per entity/value type/enum, with range, length, pattern, equality, default, and enum constraints. A property is `required` unless it is `optional`, has a `default`, or is initialized by the first stage's entry effect. Term metadata projects to `title`/`description`/`x-poly-iri`; enum members to `x-poly-enum`. The IRI is deliberately not a subschema `$id` — that would rebase local `#/$defs` refs.
+- **JSON-LD + RDFS** (`format:"json-ld"`) — an `@context` plus an RDFS `@graph`: `rdfs:Class` per type, `rdf:Property` with `rdfs:domain`/`rdfs:range`, enum members typed by their class. Declared IRIs win; untagged elements get stable `urn:poly:` IRIs.
+- **SHACL** (`format:"shacl"`) — `sh:NodeShape` per entity/value type with `sh:targetClass`, `sh:closed`, and `sh:PropertyShape` per property/navigation. Range/length/pattern map to SHACL keywords; `equals` is a one-value `sh:in` list; `unique`/defaults are context-defined `x-poly-*`.
+- **Markdown** (`format:"markdown"`) and **HTML** (`format:"html"`) — the same facts for a human.
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
-| `oracle_expression` | `OracleTool` | Fragment probe: evaluates a **DSL expression fragment** against a JSON property bag. **Not** named-policy evaluate |
-| `export_domain_to_csharp` | `OracleTool` | Exports the domain session as C# record/class definitions |
+All are pure projections over `Domain` under `Poly/DomainModeling/Queries/`.
 
-### Runtime
+## Term Metadata
 
-| Tool | Class | Purpose |
-|------|-------|---------|
-| `create_instance` | `RuntimeTool` | Creates a runtime instance and registers it in the session store |
-| `get_instance` | `RuntimeTool` | Snapshot: stage, properties, deletion status, child count |
-| `list_instances` | `RuntimeTool` | Lists runtime instances (skips deleted); optional entity filter |
-| `link_instances` | `RuntimeTool` | Links two instances via a relationship (store-aware) |
-| `unlink_instances` | `RuntimeTool` | Unlinks two instances via a relationship |
-| `invoke_action` | `RuntimeTool` | Invokes an action: guards → shipped effects (transition, assign, create, create-in, invoke, for-invoke, if) → subscription fan-out. Link/unlink existing instances via `link_instances` / `unlink_instances` |
+`iri`, `label`, `description`, and (on enum members) `term` are **core** annotations, not a vendor pack. They attach to entity/enum headers, property tails, and enum members, round-trip through `poly_export(format:"dsl")`, and are read in code through `TermFacets.Read(...)` / `TermMetadata` (`Poly/DomainModeling/Ontology/TermMetadata.cs`). The parser accepts exactly one non-empty string argument — `iri` must be an absolute `http(s)` or `urn` IRI — and fails closed on anything else.
 
-## Dual Authoring Path
-
-Poly.Mcp supports two complementary ways to build a domain model, each suited to different workflows.
-
-### Bulk Path (`apply_dsl`)
-
-Before authoring a large domain, call **`get_dsl_guide`** to retrieve the product-true syntax guide.
-This avoids inventing unsupported lab constructs.
-
-Write the full domain in a single `.poly` DSL document and apply it in one shot. The session's domain is **replaced** entirely — not merged incrementally.
-
-```
-domain Orders
-
-Customer: entity {
-  Name: Text
-  Email: Text unique
-  Places: many Order
-}
-
-Order: entity {
-  Total: Number
-  Draft: stage {
-    Submit: action { transition to Active }
-  }
-  Active: stage {}
+```poly
+Color: enum iri("https://example.com/Color") {
+  Red iri("https://example.com/Color/Red") term("red"),
+  Green,
 }
 ```
 
-**Use when**: bootstrapping from scratch, iterating in a text editor, or recreating a known state. Parse errors produce line/col diagnostics.
+## Simulation
 
-### Incremental Path (`add` / `remove`)
+`poly_simulate` takes steps as a JSON array:
 
-Use `add(kind, payload)` to create one element (entity, property, stage, action, stage_action, relationship, constraint, policy) and `remove(kind, payload)` to delete one by identity. Each call is a single `DomainChange` that goes through the full analysis pipeline, so errors are caught immediately. The tool Description embeds the kind → payload table.
-
-**Use when**: exploring a model interactively, responding to user prompts in a chat UI, or programmatic construction where each step needs validation.
-
-### Choosing Between Them
-
-| Scenario | Preferred Path |
-|----------|---------------|
-| Starting a new model from a known definition | Bulk (`apply_dsl`) |
-| Iterating on a DSL file in an editor | Bulk (`apply_dsl`) |
-| Reproducing a bug or known state | Bulk (`apply_dsl`) |
-| Interactive exploration | Incremental (`add` / `remove`) |
-| AI agent building a model step by step | Incremental (`add` / `remove`) |
-| Round-tripping (export → edit → re-apply) | Bulk (`export_dsl` → `apply_dsl`) |
-
-Both paths converge to the same internal representation and produce identical models. There is **no third authoring language**: expressions are product DSL text only — never JSON IR bags.
-
-## Tool Honesty Invariant
-
-Every MCP tool's **Name + Description + Success** must match actual behavior:
-
-| If the tool… | Then… |
-|--------------|--------|
-| Name/Description says evaluate / true-false | Must actually evaluate and return `data.result: bool` |
-| Only inspects metadata | Must be named/described as inspect/get/describe — **never** as evaluate |
-| Evaluation fails | `Success: false` (or explicit error), not success without a bool |
-
-**Current policy tools:** `get_policy_expression` (inspect-only), `evaluate_policy` (named session policy on an `instanceId`). `oracle_expression` is an **expression probe** (DSL fragment + property bag, no session) — **not** named-policy evaluate. All satisfy the invariant for what they actually do.
-
-**DSL tools:** `apply_dsl` (parses .poly text → analysis gate → replaces session domain; revision+1; clears runtime instances; action `when Stage` is not a separate runtime gate; subscriptions need instances + `invoke_action` to fire), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
-
-## Runtime Tools — Exercise Domain Lifecycle
-
-The **RuntimeTool** family closes the final feedback loop: agents can create instances, inspect state, and execute actions — all within the MCP session.
-
-### Create → Call → Observe
-
-```text
-1. apply_dsl or add/remove  →  model in session
-2. create_instance          →  instanceId + initial snapshot
-3. invoke_action              →  effects execute, stage transitions, subscriptions fire
-4. get_instance             →  observe new stage + modified properties
-5. list_instances           →  enumerate all instances (optionally by entity)
+```json
+[
+  {"op":"create","entity":"Product","properties":{"Total":42},"as":"p"},
+  {"op":"invoke","instanceId":"p","action":"Submit"},
+  {"op":"get","instanceId":"p"}
+]
 ```
 
-### Instance lifecycle
+`as` aliases a created instance for later steps. Each step is atomic; a guard-blocked invoke is a failed step, not a failed call, and earlier steps stay committed. `reset:true` starts from a clean instance state. No mid-run property writes: a scenario cannot repair data the model forbids.
 
-- Instances are **session-scoped** — each session has its own instance set.
-- The **first defined stage** is the initial stage (if stages exist).
-- `invoke_action` resolves from the **current stage** first, then entity-level actions.
-- Guard policies (action-level, stage-level, entity-level) are evaluated before effects.
-- Shipped action effects: **transition, assign, create, create-in, invoke, for-invoke, if**. Linking existing instances is `link_instances` / `unlink_instances` — not action-body effects.
-- On **stage transition**: OnExit → set new stage → OnEntry → notify store subscribers.
-- Stage subscription fan-out happens automatically for linked subscriber instances.
-  - Subscriptions fire when the relationship **TARGET** entity enters a matching stage (not the source).
-  - Example: `when orders Active { ... }` on Customer fires when a linked Order enters its Active stage.
+## Honesty
 
-### Honesty
-
-- `create_instance` **writes** session instance state (creates + registers an instance).
-- `get_instance` / `list_instances` are **inspect** tools — they read state, no execution.
-- `invoke_action` runs the named action on the session instance (same path as the core library).
-- Successful `apply_dsl` / evolve replaces the domain root and **clears** prior runtime instances (they held the previous entity graph).
-- Related-policy expressions (`Rel.Prop`, `Rel exists`, `Rel where`) evaluate on store instances via `create_instance` + `link_instances` + `evaluate_policy`. `oracle_expression` is bag-only and fail-closed for those reads.
+- `poly_define` writes the model; a rejected document changes nothing.
+- `poly_check` reports `proven` only when it has no error findings; `unknown` when the request is not modelled (argument-specific proofs) or no selector matches.
+- `poly_export` fails closed when an exporter returns no artifact.
+- `poly_workspace`/`poly_inspect`/`poly_check`/`poly_export` are read-only (export may write a temp file); `poly_define`/`poly_simulate` are destructive.
+- Tool annotations, output schemas, and structured content are on every tool; unknown arguments fail with the valid names.
 
 ## Harness Runtime
 
 `Program.cs` composes the server through the host's DI container:
 
-- **Store:** `ISessionStore` is a singleton (`McpSessionStore`). Sessions live in memory only — a restart loses them (keep a model with `export_dsl`). Each session has its own lock, so a slow mutation in one session never blocks another.
+- **Store:** `ISessionStore` is a singleton (`McpSessionStore`). Sessions are in memory only; a restart loses them. Each session has its own lock.
 - **Eviction:** sessions idle longer than `Mcp:Sessions:IdleTimeout` (default 8h) are removed by `SessionEvictionService`; `SweepInterval` (default 15m) controls the sweep. Set `IdleTimeout` to zero to disable eviction.
-- **Boundary:** one `AddCallToolFilter` catches uncaught exceptions and returns a failed call that still carries the `DomainToolResponse` envelope (`success:false`), so an agent sees the same shape as a tool-level failure.
+- **Boundary:** one `AddCallToolFilter` catches uncaught exceptions; another rejects unknown v2 arguments. Both keep the `PolyResponse` envelope.
+- **Transport:** stdio; session identity is the workspace handle, not an HTTP header.
 
-Tool classes are instance classes resolved from DI with `ISessionStore` and `ILogger<T>`. Session identity stays the `sessionId` argument — this process is stdio and has no `Mcp-Session-Id` header.
+See the `Poly MCP agent surface design.md` note in `../reports/` for the rationale and the gate results.

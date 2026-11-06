@@ -1418,9 +1418,14 @@ public class McpSmokeTests {
         var paraEnd = after.IndexOf("\n\n", StringComparison.Ordinal);
         var snippet = paraEnd >= 0 ? after[..paraEnd] : after;
 
-        await Assert.That(snippet).Contains("create_instance");
-        await Assert.That(snippet).Contains("evaluate_policy(instanceId)");
-        await Assert.That(snippet).Contains("invoke_action");
+        await Assert.That(snippet).Contains("poly_guide");
+        await Assert.That(snippet).Contains("poly_define");
+        await Assert.That(snippet).Contains("poly_check");
+        await Assert.That(snippet).Contains("poly_export");
+        await Assert.That(snippet).Contains("poly_simulate");
+        await Assert.That(snippet).DoesNotContain("create_instance");
+        await Assert.That(snippet).DoesNotContain("evaluate_policy");
+        await Assert.That(snippet).DoesNotContain("invoke_action");
         await Assert.That(snippet.Contains("oracle", StringComparison.OrdinalIgnoreCase)).IsFalse();
         await Assert.That(snippet.Contains("bag", StringComparison.OrdinalIgnoreCase)).IsFalse();
         await Assert.That(snippet.Contains("clock", StringComparison.OrdinalIgnoreCase)).IsFalse();

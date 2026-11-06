@@ -8,6 +8,10 @@
 > Do **not** use constructs from experiment docs (`POLY-DSL-MINIMAL.md`, `DOMAIN-DSL-SPEC.md`) —
 > they include lab syntax not accepted by the MCP tools.
 
+> **MCP surface:** `poly_guide`, `poly_workspace`, `poly_define`, `poly_check`,
+> `poly_inspect`, `poly_export`, `poly_simulate`. The 30-tool v1 surface was removed;
+> names such as `apply_dsl` in older sections refer to it historically.
+
 ---
 
 ## 0. Modeling Principles (Read This First)
@@ -219,6 +223,9 @@ MemberStatus: enum {
 }
 ```
 
+Members may carry core term metadata (see §3, Ontology Term Metadata):
+`Active iri("https://example.com/MemberStatus/Active") term("active")`.
+
 A policy compares an enum property to a member name: `Outcome == Pending` and
 `Outcome is Pending`. `Outcome == "Pending"` is the same comparison.
 
@@ -372,8 +379,45 @@ Item: entity table("INVENTORY") {
 Without the annotation library enabled, `column(...)` and `table(...)` produce a parse error.
 This is deliberate — portable domain text stays DBMS-agnostic; storage hints are
 an opt-in projection layer.
+
+### Ontology Term Metadata (Core)
+
+Term annotations link a model to the ontology it describes. They are **core** vocabulary —
+no `uses` is needed — and have no runtime semantics.
+
+| Annotation | Scope | Meaning |
+|-----------|-------|---------|
+| `iri("…")` | entity/enum header, property tail, enum member | the absolute `http(s)` or `urn` IRI this element denotes |
+| `label("…")` | entity/enum header, property tail, enum member | the human label |
+| `description("…")` | entity/enum header, property tail, enum member | the human description |
+| `term("…")` | enum member | the term name inside the vocabulary |
+
+Each takes **exactly one non-empty string**. `iri` must be absolute (`http`, `https`, or
+`urn`); a CURIE such as `schema:Person` has no prefix declaration here and is rejected.
+A number, a boolean, an empty list, an empty string, or a duplicate key is a positioned
+parse error; a typo never becomes a silent term.
+
+```poly
+Color: enum iri("https://example.com/Color") {
+  Red iri("https://example.com/Color/Red") term("red"),
+  Green,
+}
+
+Product: entity iri("https://example.com/Product") label("Product") description("A sellable item") {
+  Sku: Text iri("https://example.com/Product/sku") label("SKU") length(1, 20)
+}
 ```
 
+Term annotations interleave with constraints and storage annotations in any order.
+`export_dsl` round-trips them. `export_domain_to_json_schema` projects an entity's terms to
+`title` / `description` / `x-poly-iri`, property terms to `title` / `description` /
+`x-poly-iri`, and enum-member terms to `x-poly-enum`. `export_domain_to_json_ld` uses the
+same IRIs in an `@context` plus an RDFS `@graph`; `export_domain_to_shacl` publishes the
+same classes and paths as SHACL node/property shapes; `export_domain_to_html` renders the
+same facts as a self-contained page for a person; an untagged element gets a stable
+`urn:poly:` IRI. The IRI is `x-poly-iri`, not a subschema `$id`: in JSON Schema 2020-12 a
+`$defs` `$id` starts an embedded resource and would rebase every local `#/$defs/…`
+reference onto the element IRI.
 ## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
@@ -956,6 +1000,7 @@ handling are out of scope — no `at 9am`, no business-day arithmetic, no TZ con
 - Invoke effect (`invoke ActionName` with optional arguments; cross-entity via `invoke RelName.ActionName`; fan-out via the `for` form — one mode, no `any`/`all`/`each` quantifier)
 - Action parameters (`actionName: action (param: Type, ...)`)
 - `default` constraints and enum-typed properties
+- Ontology term metadata (`iri`, `label`, `description`, `term`) on entities, properties, and enum members — authored, printed, and exported to JSON Schema
 - Owned navigation declaration (`rel: owned Entity`) + **to-one path-prefix** policy reads (single-hop and multi-hop chains; instances + `link_instances` required)
 - Temporal clock dates (`Now`/`Today`, `N days`/`N months`, `DateExpr ± duration`) — authoring, analysis, `export_dsl` round-trip, and VM execution (`DateTime.UtcNow` / `DateOnly.FromDateTime`)
 
@@ -1194,6 +1239,11 @@ Author a closed set as an **enum**, not a property constraint.
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.
 **Replaces** the entire session domain — not merged incrementally.
 
+`validate_dsl` is the dry run for the same document: it parses, evolves, and analyzes
+without changing the session, and returns structured findings (severity, diagnostic code,
+element path, message). Iterate `validate_dsl` until a document has zero errors, then
+`apply_dsl` it; a failed `apply_dsl` returns the same findings and changes nothing.
+
 **Incremental** (unified tools): `add(kind, payload)` creates one element and
 `remove(kind, payload)` deletes one by identity. `kind` is case-sensitive. `payload` is a
 JSON object. An unknown kind, a missing field, or an unknown enum value fails closed.
@@ -1241,8 +1291,8 @@ property may also be named `Text`, `Number`, or `Boolean` when its type is a pri
 A name that is a C# keyword (`ref`, `event`, `value`) is legal. The C# export writes
 it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they are the type.
 
-**Golden workflow:** `get_dsl_guide` → write `.poly` → `apply_dsl` → `get_domain_analysis` →
-`create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.
+**Golden workflow:** `poly_guide` → write `.poly` → `poly_define(apply:false)` →
+`poly_define` → `poly_check` → `poly_export(format:"dsl")` → `poly_simulate`.
 
 ## 13. Example (Round-Trip Safe)
 

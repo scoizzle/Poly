@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 using Poly.Mcp;
 using Poly.Mcp.Sessions;
-using Poly.Mcp.Tools;
+using Poly.Mcp.Surface;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -18,16 +18,15 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ISessionStore, McpSessionStore>();
 builder.Services.AddHostedService<SessionEvictionService>();
 
-builder.Services
-    .AddMcpServer()
+var mcp = builder.Services
+    .AddMcpServer(options => options.ServerInstructions = PolyMcpInstructions.Text)
     .WithStdioServerTransport()
-    .WithRequestFilters(filters => filters.AddCallToolFilter(ToolExceptionBoundary.Filter))
-    .WithTools<SessionTool>()
-    .WithTools<QueryTool>()
-    .WithTools<EvolveTool>()
-    .WithTools<PolicyTool>()
-    .WithTools<DslTool>()
-    .WithTools<OracleTool>()
-    .WithTools<RuntimeTool>();
+    .WithRequestFilters(filters => filters
+        .AddCallToolFilter(ToolExceptionBoundary.Filter)
+        .AddCallToolFilter(UnknownArgumentFilter.Filter));
+
+// v2 is the only surface: seven outcome tools. The old operation adapters remain
+// internal to PolySurfaceTools and are not registered as MCP tools.
+mcp.WithTools<PolySurfaceTools>();
 
 await builder.Build().RunAsync();

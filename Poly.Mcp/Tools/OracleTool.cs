@@ -153,7 +153,168 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
         }
     }
 
+    // ── JSON Schema export ───────────────────────────────────────
+    [McpServerTool(Name = "export_domain_to_json_schema"), Description("Exports the session domain as JSON Schema (draft 2020-12): one $defs entry per entity, value type, and enum, with range/length/pattern/default/enum constraints projected. Read-only; hand the ontology to JSON Schema tooling or diff the model. Stages, actions, and policies are behavior and are not emitted.")]
+    public DomainToolResponse ExportDomainToJsonSchema(
+        [Description("Session ID")] string sessionId) {
+        if (!store.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("export_domain_to_json_schema {SessionId}", sessionId);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "validate_dsl", "get_domain_overview"]);
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis", "validate_dsl"]);
+
+        try {
+            var json = JsonSchemaExporter.Export(state.Domain);
+            var entityCount = state.Domain.Types.OfType<Entity>().Count();
+            return new DomainToolResponse(
+                Success: true,
+                Message: $"Domain exported as JSON Schema: {entityCount} entities.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new JsonSchemaExportData(json, entityCount),
+                Affordances: ["get_domain_overview", "export_dsl", "export_domain_to_csharp"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"JSON Schema export failed: {ex.Message}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new { error = ex.Message },
+                Affordances: ["get_domain_analysis"]);
+        }
+    }
+
+    // ── JSON-LD export ───────────────────────────────────────────
+    [McpServerTool(Name = "export_domain_to_json_ld"), Description("Exports the session domain as JSON-LD: an @context plus an RDFS @graph (classes, properties with domain/range, enum members). Declared term IRIs are used as written; untagged elements get stable urn:poly: IRIs. Read-only; hand the ontology to RDF/JSON-LD tooling.")]
+    public DomainToolResponse ExportDomainToJsonLd(
+        [Description("Session ID")] string sessionId) {
+        if (!store.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("export_domain_to_json_ld {SessionId}", sessionId);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "validate_dsl", "get_domain_overview"]);
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis", "validate_dsl"]);
+
+        try {
+            var jsonLd = JsonLdExporter.Export(state.Domain);
+            var entities = state.Domain.Types.OfType<Entity>().ToList();
+            var valueTypes = state.Domain.Types.OfType<Poly.DomainModeling.Ontology.ValueType>().ToList();
+            var classCount = entities.Count + valueTypes.Count
+                + state.Domain.Types.OfType<EnumType>().Count();
+            var propertyCount = entities.Sum(e => e.Properties.Count + e.Navigations.Count)
+                + valueTypes.Sum(v => v.Properties.Count);
+            return new DomainToolResponse(
+                Success: true,
+                Message: $"Domain exported as JSON-LD: {classCount} classes, {propertyCount} properties.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new JsonLdExportData(jsonLd, classCount, propertyCount),
+                Affordances: ["get_domain_overview", "export_domain_to_json_schema", "export_dsl"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"JSON-LD export failed: {ex.Message}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new { error = ex.Message },
+                Affordances: ["get_domain_analysis"]);
+        }
+    }
+
+    // ── SHACL export ─────────────────────────────────────────────
+    [McpServerTool(Name = "export_domain_to_shacl"), Description("Exports the session domain as SHACL (JSON-LD syntax): a sh:NodeShape per entity targeting its class, and a sh:PropertyShape per property/navigation carrying range/length/pattern/equality constraints and requiredness. Uses the same term IRIs as the JSON-LD export. Read-only.")]
+    public DomainToolResponse ExportDomainToShacl(
+        [Description("Session ID")] string sessionId) {
+        if (!store.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("export_domain_to_shacl {SessionId}", sessionId);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "validate_dsl", "get_domain_overview"]);
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis", "validate_dsl"]);
+
+        try {
+            var shapes = ShaclExporter.Export(state.Domain);
+            var entities = state.Domain.Types.OfType<Entity>().ToList();
+            var propertyCount = entities.Sum(e => e.Properties.Count + e.Navigations.Count);
+            return new DomainToolResponse(
+                Success: true,
+                Message: $"Domain exported as SHACL: {entities.Count} node shapes, {propertyCount} property shapes.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new ShaclExportData(shapes, entities.Count, propertyCount),
+                Affordances: ["get_domain_overview", "export_domain_to_json_ld", "export_domain_to_json_schema"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"SHACL export failed: {ex.Message}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new { error = ex.Message },
+                Affordances: ["get_domain_analysis"]);
+        }
+    }
+
+    // ── HTML docs export ─────────────────────────────────────────
+    [McpServerTool(Name = "export_domain_to_html"), Description("Exports the session domain as a self-contained HTML document (no server, no scripts) for a person: terms, properties with constraints and requiredness, stages, actions, enums, value types, and relationships. Read-only; save it or open it in a browser.")]
+    public DomainToolResponse ExportDomainToHtml(
+        [Description("Session ID")] string sessionId) {
+        if (!store.TryGet(sessionId, out var state))
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' not found.", Affordances: ["create_domain_session", "list_sessions"]);
+        logger.LogDebug("export_domain_to_html {SessionId}", sessionId);
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(Success: false, Message: $"Session '{sessionId}' has no analysis. Apply a domain first (apply_dsl or evolution).", SessionId: sessionId, Affordances: ["apply_dsl", "validate_dsl", "get_domain_overview"]);
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(Success: false, Message: "Domain has analysis errors; nothing was exported.", SessionId: sessionId, Diagnostics: ErrorMessages(state.LatestAnalysis), Affordances: ["get_domain_analysis", "validate_dsl"]);
+
+        try {
+            var html = DomainHtmlExporter.Export(state.Domain);
+            var entityCount = state.Domain.Types.OfType<Entity>().Count();
+            return new DomainToolResponse(
+                Success: true,
+                Message: $"Domain exported as HTML documentation: {entityCount} entities.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new HtmlExportData(html, entityCount),
+                Affordances: ["get_domain_report", "export_domain_to_json_schema", "export_dsl"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"HTML export failed: {ex.Message}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new { error = ex.Message },
+                Affordances: ["get_domain_analysis"]);
+        }
+    }
+
     // ── DTO types ───────────────────────────────────────────────
+
+    internal sealed record HtmlExportData(
+        [property: JsonPropertyName("html")] string Html,
+        [property: JsonPropertyName("entityCount")] int EntityCount);
+
+    internal sealed record ShaclExportData(
+        [property: JsonPropertyName("shapes")] string Shapes,
+        [property: JsonPropertyName("nodeShapeCount")] int NodeShapeCount,
+        [property: JsonPropertyName("propertyShapeCount")] int PropertyShapeCount);
+
+    internal sealed record JsonLdExportData(
+        [property: JsonPropertyName("jsonLd")] string JsonLd,
+        [property: JsonPropertyName("classCount")] int ClassCount,
+        [property: JsonPropertyName("propertyCount")] int PropertyCount);
+
+    internal sealed record JsonSchemaExportData(
+        [property: JsonPropertyName("json")] string Json,
+        [property: JsonPropertyName("entityCount")] int EntityCount);
+
 
     internal sealed record DescribeExpressionData(
         [property: JsonPropertyName("structured")] string Structured,

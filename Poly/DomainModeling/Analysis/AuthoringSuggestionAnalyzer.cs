@@ -76,11 +76,12 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
         if (entity.Properties.Count == 0)
             return;
 
+        var noun = entity.Properties.Count == 1 ? "property" : "properties";
         context.ReportHint(
             entity,
-            $"Entity '{entity.Name}' has {entity.Properties.Count} properties but no stages defined. " +
+            $"Entity '{entity.Name}' has {entity.Properties.Count} {noun} but no stages defined. " +
             "Consider adding lifecycle stages (e.g. 'Active', 'Inactive') to model state transitions. " +
-            "Use 'add_stage' to add stages.",
+            "Use `add(kind: stage)` to add stages.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 
@@ -98,11 +99,12 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
         if (anyStageAction)
             return;
 
+        var stageNoun = entity.Stages.Count == 1 ? "stage" : "stages";
         context.ReportHint(
             entity,
-            $"Entity '{entity.Name}' has {entity.Stages.Count} stages but no actions defined on any stage. " +
+            $"Entity '{entity.Name}' has {entity.Stages.Count} {stageNoun} but no actions defined on any stage. " +
             "Actions define what operations can be performed in each state. " +
-            "Use 'add_action_to_stage' to add actions to stages.",
+            "Use `add(kind: stage_action)` to add actions to stages.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 

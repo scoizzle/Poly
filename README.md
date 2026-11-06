@@ -14,6 +14,7 @@ Domain models, discovered heuristics, and natural-language specifications all ex
 - **Canonical VM.** Every lowered program's meaning is determined by execution on a stack VM — the single source of truth for behavior. The same AST compiles to LINQ expressions, C# source, or runs directly through the VM.
 - **Domain as library.** A domain is a library of legal operations, not a process with a required `Main`. Product entry points (REST, HTTP) are opt-in extensions loaded via `uses`.
 - **Interactive harness.** The MCP server lets agents author, inspect, and simulate domain models — evaluating policies and invoking actions against runtime instances.
+- **Ontology terms.** Entities, properties, and enum members carry `iri`, `label`, `description`, and `term` metadata in `.poly`; the JSON Schema export keeps the model linked to its ontology instead of flattening it to a bare schema.
 
 ## Repository Layout
 
@@ -83,16 +84,30 @@ dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj
 dotnet run --project Poly.Tests/Poly.Tests.csproj
 ```
 
+### Interactive playground
+
+The Blazor IDE/REPL (`Poly.Demo.Web`) compiles and runs Poly snippets in the browser:
+
+```bash
+dotnet run --project Poly.Demo/Poly.Demo.Web/Poly.Demo.Web.csproj
+```
+
+For a human-readable view of an authored domain, `export_domain_to_html` produces a
+single self-contained HTML document (no server, no scripts) from the same facts the
+machine exports read.
+
 For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md).
 
 ## MCP Tools
 
-The MCP server (`Poly.Mcp`) provides 24 tools for agents to author, inspect, and simulate domain models in an interactive session. Two authoring paths:
+The MCP server (`Poly.Mcp`) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
-- **Bulk:** `apply_dsl` — write a `.poly` document, apply in one shot.
-- **Incremental:** `add` / `remove` — build or modify a model one element at a time.
+- **Describe:** `poly_guide`, `poly_workspace`, `poly_define`.
+- **Prove:** `poly_check` (`proven` / `violated` / `unknown`).
+- **Read:** `poly_inspect`.
+- **Produce:** `poly_export` (dsl, JSON Schema, C#, Markdown, HTML, JSON-LD, SHACL) and `poly_simulate` (ordered scenario with a trace).
 
-Runtime tools let agents create instances, invoke actions, and observe state changes — all within the session.
+See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full contract.
 
 See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usage details.
 

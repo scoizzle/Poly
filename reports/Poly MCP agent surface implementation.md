@@ -48,9 +48,9 @@ The v2 fixed surface is ~7.3k chars (~1.8k–2.2k tokens), roughly 40% of v1’s
 
 ## Verification
 
-- `PolySurfaceV2Tests` 25/25, including a real stdio `initialize` + `tools/list` test (seven tools, no v1 catalog), annotations/output schemas, unknown-argument rejection, a reflection test that the filter's accepted names match each tool's parameters, and simulation coverage for create/invoke/get, link/unlink, evaluate, list, guard-blocked steps, `stopOnError`, and reset.
+- `PolySurfaceV2Tests` 28/28, including a real stdio `initialize` + `tools/list` test (seven tools, no v1 catalog), annotations/output schemas, unknown-argument rejection, a reflection test that the filter's accepted names match each tool's parameters, and simulation coverage for create/invoke/get, link/unlink, evaluate, list, guard-blocked steps, `stopOnError`, and reset.
 - `SurfaceParityTests` 4/4: dsl and JSON Schema are byte-identical to the pre-purge operations on four fixtures.
-- Full suite 5049/5049.
+- Full suite 5052/5052.
 - Live stdio sequence (`create_domain_session` → `poly_define` → `poly_check` → `poly_export` → `poly_simulate`) passes.
 
 ## Deterministic A/B (`scripts/mcp-surface-eval.py`)
@@ -64,7 +64,7 @@ Fifteen reference scenarios, each graded by code against both surfaces over real
 | Text-response characters | 43,732 | 30,960 | 0.71× |
 | Structured-content characters | 0 | 30,344 | — |
 | Combined payload (text + structured) | 43,732 | 61,304 | 1.40× |
-| Fixed surface (`tools/list` + instructions) | 17,102 | 8,996 | 0.53× |
+| Fixed surface (`tools/list` + instructions) | 17,102 | 8,997 | 0.53× |
 
 After the shrink: the text gate passes (0.71×), the fixed surface is under the report's 9k-char cap (8,996), and scenario success is parity. The calls gate still misses (0.98× vs 0.7×) because the scripted reference transcripts use the optimal v1 sequence for each task; only a model-driven run can show selection savings. Structured content still duplicates the text payload (combined 1.40×); clients that surface both pay it. The largest per-task win is the ten-entity check: 2,117 text chars vs v1's 18,698. The owner chose to purge v1 on this evidence; the internal operation adapters remain.
 

@@ -36,6 +36,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 - `poly_define` replaces the model; it does not merge. It clears runtime instances and bumps the revision.
 - The state block in every response carries `workspace`, `model`, `revision`, `entities`, `instances`. An unknown/expired handle returns `WORKSPACE_REQUIRED`; call `poly_open`, do not guess.
 - Sessions are process-local scratch. `poly_export(format: "dsl")` is how you keep a model.
+- When the task is done, close the workspace: `poly_open(op: "close", workspace: "<handle>")`.
 
 ## When not to use Poly
 

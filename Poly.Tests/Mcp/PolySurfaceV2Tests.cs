@@ -451,6 +451,44 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    public async Task Open_CloseRemovesTheWorkspace() {
+        var surface = Surface();
+        var workspace = Open(surface, "Closable");
+
+        var closed = surface.Open(op: "close", workspace: workspace);
+        var after = surface.Inspect(workspace);
+        var listed = surface.Open(op: "list");
+        var sessions = JsonSerializer.SerializeToNode(listed.Data)!["sessions"]!.AsArray()
+            .Select(s => s!["workspace"]!.GetValue<string>())
+            .ToList();
+
+        await Assert.That(closed.Ok).IsTrue();
+        await Assert.That(closed.State).IsNull();
+        await Assert.That(closed.Summary).Contains("closed");
+        await Assert.That(after.Ok).IsFalse();
+        await Assert.That(after.ErrorCode).IsEqualTo("WORKSPACE_REQUIRED");
+        await Assert.That(sessions).DoesNotContain(workspace);
+    }
+
+    [Test]
+    public async Task Open_CloseUnknownWorkspaceFailsCleanly() {
+        var response = Surface().Open(op: "close", workspace: "missing");
+
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.ErrorCode).IsEqualTo("WORKSPACE_NOT_FOUND");
+        await Assert.That(response.Next).Contains("poly_open");
+    }
+
+    [Test]
+    public async Task Open_UnknownOpFailsCleanly() {
+        var response = Surface().Open(op: "destroy");
+
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.ErrorCode).IsEqualTo("UNKNOWN_OP");
+        await Assert.That(response.Summary).Contains("create, list, or close");
+    }
+
+    [Test]
     public async Task UnknownWorkspace_ReturnsWorkspaceRequired() {
         var response = Surface().Define("missing", Valid);
 

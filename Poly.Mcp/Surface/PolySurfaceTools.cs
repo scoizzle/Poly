@@ -61,11 +61,13 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 2. open ─────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_open", Title = "Open a Poly workspace", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Creates or lists a Poly workspace. A workspace is the handle every stateful call needs — keep one per task. op=create (default) returns the handle and state; op=list returns the current handles. An expired or unknown handle returns WORKSPACE_REQUIRED, never an empty model.")]
+    [McpServerTool(Name = "poly_open", Title = "Open a Poly workspace", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Creates, lists, or closes a Poly workspace. A workspace is the handle every stateful call needs — keep one per task. op=create (default) returns the handle and state; op=list returns the current workspaces; op=close with workspace removes it when the task is done. An expired or unknown handle returns WORKSPACE_REQUIRED, never an empty model.")]
     public PolyResponse Open(
-        [Description("create (default) or list")] string? op = null,
-        [Description("Optional model name for create, e.g. \"Returns\".")] string? name = null) {
-        if (string.Equals(op, "list", StringComparison.OrdinalIgnoreCase)) {
+        [Description("create (default), list, or close")] string? op = null,
+        [Description("Optional model name for create, e.g. \"Returns\".")] string? name = null,
+        [Description("Workspace handle to close when op=close.")] string? workspace = null) {
+        var action = string.IsNullOrWhiteSpace(op) ? "create" : op.Trim().ToLowerInvariant();
+        if (action == "list") {
             var workspaces = store.ListSessions()
                 .Select(StateOf)
                 .Where(state => state is not null)
@@ -77,6 +79,38 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 Data: new { sessions = workspaces },
                 Next: ["poly_open"],
                 State: null);
+        }
+
+        if (action == "close") {
+            if (string.IsNullOrWhiteSpace(workspace) || !store.TryGet(workspace, out _)) {
+                return new PolyResponse(
+                    Ok: false,
+                    Summary: "Workspace not found; nothing to close. Pass the handle returned by poly_open.",
+                    Findings: [],
+                    Data: null,
+                    Next: ["poly_open"],
+                    State: null,
+                    ErrorCode: "WORKSPACE_NOT_FOUND");
+            }
+            store.Remove(workspace);
+            return new PolyResponse(
+                Ok: true,
+                Summary: "Workspace closed. Its model and instances are gone.",
+                Findings: [],
+                Data: null,
+                Next: ["poly_open"],
+                State: null);
+        }
+
+        if (action != "create") {
+            return new PolyResponse(
+                Ok: false,
+                Summary: $"Unknown op '{op}'. Use create, list, or close.",
+                Findings: [],
+                Data: null,
+                Next: ["poly_open"],
+                State: null,
+                ErrorCode: "UNKNOWN_OP");
         }
 
         var created = _session.CreateDomainSession(string.IsNullOrWhiteSpace(name) ? "Domain" : name);

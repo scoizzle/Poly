@@ -11,7 +11,7 @@ Seven outcome tools. Server instructions carry the framing: use Poly when a task
 | Tool | Job |
 |------|-----|
 | `poly_guide` | Learn the `.poly` surface: quickstart, workflow, unsupported constructs, section index |
-| `poly_open` | Create or list a workspace; the handle every stateful call needs |
+| `poly_open` | Create, list, or close a workspace; the handle every stateful call needs |
 | `poly_define` | Validate and apply one `.poly` document; `apply:false` is a dry run; a rejected document changes nothing |
 | `poly_check` | Prove the model, one selected action/property, or an expression: `proven`, `violated`, or `unknown` |
 | `poly_inspect` | Read the overview, one entity, or `Entity.Member`; brief by default, `detail:"full"` for the element |
@@ -24,7 +24,7 @@ The legacy 30-tool v1 surface was removed. Its operation adapters remain interna
 
 ## Workspaces
 
-`poly_open` creates a process-local workspace (a GUID handle). Keep one per task. `poly_define` replaces the model, clears runtime instances, and bumps the revision. `poly_open(op:"list")` returns the current workspaces with model/revision/counts. Sessions are scratch; `poly_export(format:"dsl")` is how a model is kept.
+`poly_open` creates a process-local workspace (a GUID handle). Keep one per task. `poly_define` replaces the model, clears runtime instances, and bumps the revision. `poly_open(op:"list")` returns the current workspaces with model/revision/counts; `poly_open(op:"close", workspace:…)` removes the workspace and its instances when the task is done. Sessions are scratch; `poly_export(format:"dsl")` is how a model is kept.
 
 ## Authoring
 

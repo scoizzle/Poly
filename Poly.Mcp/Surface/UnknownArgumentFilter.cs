@@ -13,7 +13,7 @@ namespace Poly.Mcp.Surface;
 internal static class UnknownArgumentFilter {
     private static readonly Dictionary<string, string[]> Allowed = new(StringComparer.Ordinal) {
         ["poly_guide"] = ["topic"],
-        ["poly_open"] = ["op", "name"],
+        ["poly_open"] = ["op", "name", "workspace"],
         ["poly_define"] = ["workspace", "poly", "apply"],
         ["poly_check"] = ["workspace", "select", "args", "expression", "bindings"],
         ["poly_inspect"] = ["workspace", "select", "detail"],

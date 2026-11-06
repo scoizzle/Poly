@@ -464,12 +464,11 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     }
 
     private McpSessionState ResetInstances(string workspace, McpSessionState state) {
-        // Replacing with the same domain/analysis builds a fresh state and a fresh executor,
-        // which is the store's own "no instances" path. Revision advances by one.
-        if (state.LatestAnalysis is null)
-            return state;
-        store.Replace(workspace, state.Domain, state.LatestAnalysis, state.Modeling);
-        return store.TryGet(workspace, out var fresh) ? fresh : state;
+        // Clear the instance set in place: the lowered module and the session that lowered
+        // it stay bound. Replacing the state re-binds the same domain to a second session
+        // and the cache refuses to evict the module, which broke the next create.
+        state.ResetInstances();
+        return state;
     }
 
     private static List<PolyFinding> AllFindings(DomainToolResponse response) {

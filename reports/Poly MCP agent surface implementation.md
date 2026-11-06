@@ -48,9 +48,9 @@ The v2 fixed surface is ~7.3k chars (~1.8k–2.2k tokens), roughly 40% of v1’s
 
 ## Verification
 
-- `PolySurfaceV2Tests` 23/23, including a real stdio `initialize` + `tools/list` test (seven tools, no v1 catalog), annotations/output schemas, unknown-argument rejection, and a reflection test that the filter's accepted names match each tool's parameters.
+- `PolySurfaceV2Tests` 25/25, including a real stdio `initialize` + `tools/list` test (seven tools, no v1 catalog), annotations/output schemas, unknown-argument rejection, a reflection test that the filter's accepted names match each tool's parameters, and simulation coverage for create/invoke/get, link/unlink, evaluate, list, guard-blocked steps, `stopOnError`, and reset.
 - `SurfaceParityTests` 4/4: dsl and JSON Schema are byte-identical to the pre-purge operations on four fixtures.
-- Full suite 5047/5047.
+- Full suite 5049/5049.
 - Live stdio sequence (`create_domain_session` → `poly_define` → `poly_check` → `poly_export` → `poly_simulate`) passes.
 
 ## Deterministic A/B (`scripts/mcp-surface-eval.py`)

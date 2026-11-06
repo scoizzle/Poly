@@ -318,6 +318,90 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    public async Task Simulate_LinkEvaluateUnlinkAndList() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        var defined = surface.Define(workspace, """
+            domain Sim
+            Line: entity { Sku: Text }
+            Order: entity {
+              Total: Number
+              CanShip: policy { Total > 0 }
+              lines: many Line
+            }
+            """);
+        await Assert.That(defined.Ok).IsTrue();
+
+        var response = surface.Simulate(workspace, """
+            [
+              {"op":"create","entity":"Order","properties":{"Total":10},"as":"o"},
+              {"op":"create","entity":"Line","properties":{"Sku":"A"},"as":"l"},
+              {"op":"link","sourceInstanceId":"o","relationship":"lines","targetInstanceId":"l"},
+              {"op":"evaluate","entity":"Order","policy":"CanShip","instanceId":"o"},
+              {"op":"get","instanceId":"o"},
+              {"op":"list","entity":"Line"},
+              {"op":"unlink","sourceInstanceId":"o","relationship":"lines","targetInstanceId":"l"},
+              {"op":"list","entity":"Line"}
+            ]
+            """);
+
+        var data = JsonSerializer.SerializeToNode(response.Data)!;
+        await Assert.That(response.Ok).IsTrue();
+        await Assert.That(data["failedAt"]).IsNull();
+        await Assert.That(data["trace"]!.AsArray().Count).IsEqualTo(8);
+        await Assert.That(data["trace"]![3]!["data"]!["result"]!.GetValue<bool>()).IsTrue()
+            .Because("the CanShip policy evaluates on the linked Order instance");
+        await Assert.That(data["trace"]![4]!["data"]!["instance"]!["navigationLinks"]!.AsArray().Count)
+            .IsGreaterThan(0);
+        await Assert.That(data["trace"]![5]!["data"]!["count"]!.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Simulate_GuardBlockedStepAndReset() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        var defined = surface.Define(workspace, """
+            domain Guard
+            Task: entity {
+              Locked: Boolean
+              Attempts: Number
+              CanRun: policy { Locked == false }
+              Run: action require CanRun { assign Attempts to Attempts + 1 }
+            }
+            """);
+        await Assert.That(defined.Ok).IsTrue();
+
+        var stopped = surface.Simulate(workspace, """
+            [
+              {"op":"create","entity":"Task","properties":{"Locked":true,"Attempts":0},"as":"t"},
+              {"op":"invoke","instanceId":"t","action":"Run"},
+              {"op":"get","instanceId":"t"}
+            ]
+            """);
+        var stoppedData = JsonSerializer.SerializeToNode(stopped.Data)!;
+        await Assert.That(stopped.Ok).IsTrue();
+        await Assert.That(stoppedData["trace"]!.AsArray().Count).IsEqualTo(2)
+            .Because("the guard-blocked invoke is a failed step and stopOnError defaults true");
+        await Assert.That(stoppedData["failedAt"]!.GetValue<int>()).IsEqualTo(1);
+
+        var reset = surface.Simulate(workspace, """[{"op":"list","entity":"Task"}]""", reset: true);
+        var resetData = JsonSerializer.SerializeToNode(reset.Data)!;
+        await Assert.That(resetData["trace"]![0]!["data"]!["count"]!.GetValue<int>()).IsEqualTo(0)
+            .Because("reset clears instances before the steps run");
+
+        var continued = surface.Simulate(workspace, """
+            [
+              {"op":"create","entity":"Task","properties":{"Locked":false,"Attempts":0},"as":"t"},
+              {"op":"invoke","instanceId":"t","action":"Run"},
+              {"op":"get","instanceId":"t"}
+            ]
+            """, stopOnError: false);
+        var continuedData = JsonSerializer.SerializeToNode(continued.Data)!;
+        await Assert.That(continuedData["trace"]!.AsArray().Count).IsEqualTo(3);
+        await Assert.That(continuedData["failedAt"]).IsNull();
+    }
+
+    [Test]
     public async Task Check_ExpressionReturnsAVerdict() {
         var surface = Surface();
         var workspace = Open(surface);

@@ -6,8 +6,26 @@ Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../
 
 ## Tool Surface
 
+### v2 surface (default, 7 tools)
+
+The default surface is organized around the agent's job: describe the domain you are working in, prove it, then produce the artifact or simulation the task needs. It lives in `Poly.Mcp/Surface/` and returns one envelope: `{ok, summary, findings[], data?, next[], state{workspace, model, revision, entities, instances}}`.
+
+| Tool | Job |
+|------|-----|
+| `poly_guide` | Learn the `.poly` surface: quickstart, workflow, unsupported constructs, section index |
+| `poly_open` | Create or list a workspace; the handle every stateful call needs |
+| `poly_define` | Validate and apply one `.poly` document; `apply:false` is a dry run; a rejected document changes nothing |
+| `poly_check` | Prove the model, one selected action/property, or an expression: `proven`, `violated`, or `unknown` |
+| `poly_inspect` | Read the overview, one entity, or `Entity.Member`; brief by default, `detail:"full"` for all |
+| `poly_export` | One `format` enum: `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, `shacl`; inline under 4 KB, otherwise a file path |
+| `poly_simulate` | Ordered `create`/`link`/`unlink`/`invoke`/`evaluate`/`get`/`list` steps; one trace entry per step |
+
+Server instructions (`PolyMcpInstructions.cs`) carry the framing: use Poly when a task has a domain, write it down, prove it with the constraint solver, then export or simulate. Set `POLY_MCP_SURFACE=1` to expose the legacy 30-tool surface below (kept for the v1/v2 comparison).
+
+### Legacy v1 surface (30 tools, `POLY_MCP_SURFACE=1`)
+
 Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Poly.Data.Modeling`).
-**30 tools** registered via `Program.cs` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
+**30 tools** registered via `Program.cs` when `POLY_MCP_SURFACE=1` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
 
 ### Session
 

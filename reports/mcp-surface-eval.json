@@ -1,0 +1,230 @@
+{
+  "v1": {
+    "tasks": [
+      {
+        "task": "define_valid",
+        "ok": true,
+        "calls": 2,
+        "chars": 731,
+        "structured": 0
+      },
+      {
+        "task": "invalid_then_fix",
+        "ok": true,
+        "calls": 3,
+        "chars": 2585,
+        "structured": 0
+      },
+      {
+        "task": "check_valid",
+        "ok": true,
+        "calls": 3,
+        "chars": 2246,
+        "structured": 0
+      },
+      {
+        "task": "inspect_overview",
+        "ok": true,
+        "calls": 3,
+        "chars": 1060,
+        "structured": 0
+      },
+      {
+        "task": "inspect_entity",
+        "ok": true,
+        "calls": 3,
+        "chars": 1260,
+        "structured": 0
+      },
+      {
+        "task": "export_dsl",
+        "ok": true,
+        "calls": 3,
+        "chars": 1142,
+        "structured": 0
+      },
+      {
+        "task": "export_json_schema",
+        "ok": true,
+        "calls": 3,
+        "chars": 1843,
+        "structured": 0
+      },
+      {
+        "task": "export_csharp",
+        "ok": true,
+        "calls": 3,
+        "chars": 3999,
+        "structured": 0
+      },
+      {
+        "task": "simulate_lifecycle",
+        "ok": true,
+        "calls": 4,
+        "chars": 1553,
+        "structured": 0
+      },
+      {
+        "task": "requiredness",
+        "ok": true,
+        "calls": 3,
+        "chars": 1876,
+        "structured": 0
+      },
+      {
+        "task": "enum_terms",
+        "ok": true,
+        "calls": 3,
+        "chars": 1994,
+        "structured": 0
+      },
+      {
+        "task": "relationship",
+        "ok": true,
+        "calls": 3,
+        "chars": 1211,
+        "structured": 0
+      },
+      {
+        "task": "dry_run",
+        "ok": true,
+        "calls": 3,
+        "chars": 1440,
+        "structured": 0
+      },
+      {
+        "task": "two_workspaces",
+        "ok": true,
+        "calls": 6,
+        "chars": 2094,
+        "structured": 0
+      },
+      {
+        "task": "large_model",
+        "ok": true,
+        "calls": 3,
+        "chars": 18698,
+        "structured": 0
+      }
+    ],
+    "passed": 15,
+    "total": 15,
+    "calls": 48,
+    "chars": 43732,
+    "structured": 0
+  },
+  "v2": {
+    "tasks": [
+      {
+        "task": "define_valid",
+        "ok": true,
+        "calls": 2,
+        "chars": 951,
+        "structured": 963
+      },
+      {
+        "task": "invalid_then_fix",
+        "ok": true,
+        "calls": 3,
+        "chars": 2280,
+        "structured": 2243
+      },
+      {
+        "task": "check_valid",
+        "ok": true,
+        "calls": 3,
+        "chars": 1407,
+        "structured": 1435
+      },
+      {
+        "task": "inspect_overview",
+        "ok": true,
+        "calls": 3,
+        "chars": 1450,
+        "structured": 1468
+      },
+      {
+        "task": "inspect_entity",
+        "ok": true,
+        "calls": 3,
+        "chars": 1648,
+        "structured": 1688
+      },
+      {
+        "task": "export_dsl",
+        "ok": true,
+        "calls": 3,
+        "chars": 1525,
+        "structured": 1547
+      },
+      {
+        "task": "export_json_schema",
+        "ok": true,
+        "calls": 3,
+        "chars": 2210,
+        "structured": 2006
+      },
+      {
+        "task": "export_csharp",
+        "ok": true,
+        "calls": 3,
+        "chars": 4349,
+        "structured": 4126
+      },
+      {
+        "task": "simulate_lifecycle",
+        "ok": true,
+        "calls": 3,
+        "chars": 2303,
+        "structured": 2316
+      },
+      {
+        "task": "requiredness",
+        "ok": true,
+        "calls": 3,
+        "chars": 2237,
+        "structured": 2017
+      },
+      {
+        "task": "enum_terms",
+        "ok": true,
+        "calls": 3,
+        "chars": 2360,
+        "structured": 2108
+      },
+      {
+        "task": "relationship",
+        "ok": true,
+        "calls": 3,
+        "chars": 1589,
+        "structured": 1628
+      },
+      {
+        "task": "dry_run",
+        "ok": true,
+        "calls": 3,
+        "chars": 1660,
+        "structured": 1654
+      },
+      {
+        "task": "two_workspaces",
+        "ok": true,
+        "calls": 6,
+        "chars": 2874,
+        "structured": 2910
+      },
+      {
+        "task": "large_model",
+        "ok": true,
+        "calls": 3,
+        "chars": 2117,
+        "structured": 2235
+      }
+    ],
+    "passed": 15,
+    "total": 15,
+    "calls": 47,
+    "chars": 30960,
+    "structured": 30344
+  }
+}

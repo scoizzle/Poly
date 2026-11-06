@@ -100,12 +100,14 @@ For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.
 
 ## MCP Tools
 
-The MCP server (`Poly.Mcp`) provides 30 tools for agents to author, inspect, and simulate domain models in an interactive session. Two authoring paths:
+The MCP server (`Poly.Mcp`) provides **seven outcome tools** by default for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
-- **Bulk:** `apply_dsl` — write a `.poly` document, apply in one shot; `validate_dsl` is the dry run that never touches the session.
-- **Incremental:** `add` / `remove` — build or modify a model one element at a time.
+- **Describe:** `poly_guide`, `poly_open`, `poly_define`.
+- **Prove:** `poly_check` (`proven` / `violated` / `unknown`).
+- **Read:** `poly_inspect`.
+- **Produce:** `poly_export` (dsl, JSON Schema, C#, Markdown, HTML, JSON-LD, SHACL) and `poly_simulate` (ordered scenario with a trace).
 
-Runtime tools let agents create instances, invoke actions, and observe state changes — all within the session. Read-only export tools hand the same model to other toolchains: `export_dsl`, `export_domain_to_csharp`, `export_domain_to_json_schema`, `export_domain_to_json_ld`, and `export_domain_to_shacl`; `get_domain_report` renders it as Markdown and `export_domain_to_html` as a self-contained page a person can open.
+The previous 30-tool surface remains available with `POLY_MCP_SURFACE=1` for comparison. See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full contract.
 
 See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usage details.
 

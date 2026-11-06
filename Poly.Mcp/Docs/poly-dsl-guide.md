@@ -8,6 +8,13 @@
 > Do **not** use constructs from experiment docs (`POLY-DSL-MINIMAL.md`, `DOMAIN-DSL-SPEC.md`) —
 > they include lab syntax not accepted by the MCP tools.
 
+> **Default MCP surface (v2):** `poly_guide`, `poly_open`, `poly_define`, `poly_check`,
+> `poly_inspect`, `poly_export`, `poly_simulate`. Names used below such as `apply_dsl`,
+> `validate_dsl`, `export_dsl`, `create_instance`, `invoke_action`, and `evaluate_policy`
+> are the **legacy v1** tools, available only with `POLY_MCP_SURFACE=1`. Map them:
+> `apply_dsl` → `poly_define`, `validate_dsl` → `poly_define(apply:false)`,
+> `export_dsl` → `poly_export(format:"dsl")`, runtime primitives → `poly_simulate`.
+
 ---
 
 ## 0. Modeling Principles (Read This First)
@@ -1287,8 +1294,9 @@ property may also be named `Text`, `Number`, or `Boolean` when its type is a pri
 A name that is a C# keyword (`ref`, `event`, `value`) is legal. The C# export writes
 it as `@ref`. Builtin type keywords (`string`, `int`) stay keywords when they are the type.
 
-**Golden workflow:** `get_dsl_guide` → write `.poly` → `validate_dsl` → `apply_dsl` →
-`export_dsl` → `create_instance` → `evaluate_policy(instanceId)` / `invoke_action`.
+**Golden workflow:** `poly_guide` → write `.poly` → `poly_define(apply:false)` →
+`poly_define` → `poly_check` → `poly_export(format:"dsl")` → `poly_simulate`
+(legacy v1: `create_instance` → `evaluate_policy(instanceId)` / `invoke_action`).
 
 ## 13. Example (Round-Trip Safe)
 

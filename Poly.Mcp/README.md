@@ -7,7 +7,7 @@ Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../
 ## Tool Surface
 
 Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Poly.Data.Modeling`).
-**24 tools** registered via `Program.cs` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
+**30 tools** registered via `Program.cs` (`SessionTool`, `QueryTool`, `EvolveTool`, `PolicyTool`, `DslTool`, `OracleTool`, `RuntimeTool`).
 
 ### Session
 
@@ -23,6 +23,7 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `get_domain_overview` | `QueryTool` | Returns domain overview with entity/primitive/relationship counts |
 | `get_entity_detail` | `QueryTool` | Returns entity properties, stages, actions, policies, navigations, subscriptions |
 | `get_domain_analysis` | `QueryTool` | Returns analysis diagnostics (errors, warnings, info, hintCount) |
+| `get_domain_report` | `QueryTool` | Human-readable Markdown report: terms, properties with constraints and requiredness, stages, actions, enums, value types, relationships |
 | `get_domain_suggestions` | `QueryTool` | Authoring suggestions (advisory DMAS001 hints) |
 | `get_relationships` | `QueryTool` | Lists relationships; optional entity filter |
 | `get_constraints` | `EvolveTool` | Lists constraints on an entity's properties |
@@ -39,7 +40,8 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 
 | Tool | Class | Purpose |
 |------|-------|---------|
-| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the session domain |
+| `apply_dsl` | `DslTool` | Applies a `.poly` DSL document, **replacing** the session domain. On failure, changes nothing and returns structured findings |
+| `validate_dsl` | `DslTool` | **Dry run**: parses, evolves, and analyzes a `.poly` document without changing the session; returns severity, code, element path, message |
 | `export_dsl` | `DslTool` | Exports the current session domain as `.poly` DSL text |
 | `get_dsl_guide` | `DslTool` | Short DSL guide by default. `section` returns one heading; `all` returns `Docs/poly-dsl-guide.md` |
 
@@ -56,6 +58,10 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `describe_domain_element` | `OracleTool` | Describes entity/stage/action/policy/relationship |
 | `oracle_expression` | `OracleTool` | Fragment probe: evaluates a **DSL expression fragment** against a JSON property bag. **Not** named-policy evaluate |
 | `export_domain_to_csharp` | `OracleTool` | Exports the domain session as C# record/class definitions |
+| `export_domain_to_json_schema` | `OracleTool` | Exports the domain as JSON Schema (draft 2020-12), read-only: `$defs` per entity/value type/enum, with range, length, pattern, equality, default, and enum constraints projected (`unique` and other non-schema facts as `x-poly-*`) |
+| `export_domain_to_json_ld` | `OracleTool` | Exports the domain as JSON-LD: an `@context` plus an RDFS `@graph` (classes, properties with `rdfs:domain`/`rdfs:range`, enum members); declared term IRIs are used, untagged elements get stable `urn:poly:` IRIs |
+| `export_domain_to_shacl` | `OracleTool` | Exports the domain as SHACL (JSON-LD syntax): `sh:NodeShape` per entity targeting its class, `sh:PropertyShape` per property/navigation with range, length, pattern, equality, and requiredness constraints |
+| `export_domain_to_html` | `OracleTool` | Exports a self-contained HTML document (no server, no scripts) for a person: terms, properties/constraints/requiredness, stages, actions, enums, value types, relationships |
 
 ### Runtime
 
@@ -68,6 +74,38 @@ Tools live in `Poly.Mcp/Tools/` and use only `Poly.DomainModeling` types (no `Po
 | `unlink_instances` | `RuntimeTool` | Unlinks two instances via a relationship |
 | `invoke_action` | `RuntimeTool` | Invokes an action: guards → shipped effects (transition, assign, create, create-in, invoke, for-invoke, if) → subscription fan-out. Link/unlink existing instances via `link_instances` / `unlink_instances` |
 
+## Interop Artifacts
+
+Read-only exports hand the analyzed domain to other toolchains without re-deriving it:
+
+- **`export_domain_to_csharp`** — the lowered C# model.
+- **`export_domain_to_json_schema`** — JSON Schema (draft 2020-12). Each entity, value type, and enum becomes a `$defs` entry; `range`, `length`, `pattern`, `equals`, `default`, and enum members are projected to `minimum`/`maximum`, `minLength`/`maxLength`, `pattern`, `const`, `default`, and `enum`. A property is `required` unless it is `optional`, has a `default`, or is initialized by the first stage's entry effect — the same create rule the DSL uses. Ontology term metadata is projected too: an entity's `iri` becomes `x-poly-iri`, its `label` becomes `title`, and its `description` becomes `description`; a property's terms become `title`/`description`/`x-poly-iri`; enum-member terms become `x-poly-enum`. The IRI is deliberately not a subschema `$id` — that would start an embedded resource and rebase local `#/$defs` refs. Facts JSON Schema cannot express are kept as `x-poly-*`: `unique` becomes `x-poly-unique`, a non-numeric range bound becomes `x-poly-minimum`/`x-poly-maximum`, and an unrecognized constraint type is named in `x-poly-constraints` rather than dropped.
+
+The exporter is a pure projection over `Domain` (`Poly/DomainModeling/Queries/JsonSchemaExporter.cs`), so the MCP tool, a test, or a human CLI all read the same text.
+
+- **`export_domain_to_json_ld`** — JSON-LD + RDFS. The `@context` carries `rdf`/`rdfs`/`xsd` plus one term key per declared name (a repeated name is qualified as `Owner.Name`); the `@graph` has an `rdfs:Class` per entity/value type/enum, an `rdf:Property` per property and navigation with `rdfs:domain`/`rdfs:range`, and an instance of the enum class per member. Declared term IRIs win; an untagged element gets a stable `urn:poly:<Domain>/...` IRI instead of being dropped. Pure projection (`Poly/DomainModeling/Queries/JsonLdExporter.cs`).
+
+- **`export_domain_to_shacl`** — SHACL in JSON-LD syntax over the same IRIs (`Poly/DomainModeling/Queries/ShaclExporter.cs`). Each entity and value type is a `sh:NodeShape` with `sh:targetClass` and `sh:closed true`; each property/navigation is a `sh:PropertyShape` with `sh:path`, `sh:datatype`/`sh:class` (and an RDF `sh:in` list for enums), `sh:minCount`/`sh:maxCount` from the create rule, and `sh:minInclusive`/`sh:maxInclusive`, `sh:minLength`/`sh:maxLength`, `sh:pattern` from the constraints. `equals` becomes a single-value `sh:in` list (typed literal, so RDF-term equality holds), `unique` and create-time defaults become the context-defined `x-poly-unique` / `x-poly-default`, and a constraint with no mapping is named in `x-poly-constraints`.
+
+### Human Report
+
+`get_domain_report` returns Markdown for a person: the domain header and counts, each entity with its IRI/description and a property table (type, constraints, requiredness, IRI), stages and actions, enum members with IRIs/terms, value types, and relationships. `export_domain_to_html` renders the same facts as one self-contained HTML file — no server, no scripts — so an agent can hand a person a document they can open directly. Both are the same projection discipline (`Poly/DomainModeling/Queries/DomainReportExporter.cs`, `DomainHtmlExporter.cs`): reading views over the facts, not a second summary.
+
+### Term Metadata
+
+`iri`, `label`, `description`, and (on enum members) `term` are **core** annotations, not a vendor pack. They attach to entity/enum headers, property tails, and enum members, round-trip through `export_dsl`, and are read in code through `TermFacets.Read(...)` / `TermMetadata` (`Poly/DomainModeling/Ontology/TermMetadata.cs`). The parser accepts exactly one non-empty string argument — `iri` must be an absolute `http(s)` or `urn` IRI — and fails closed on anything else.
+
+```poly
+Color: enum iri("https://example.com/Color") {
+  Red iri("https://example.com/Color/Red") term("red"),
+  Green,
+}
+
+Product: entity iri("https://example.com/Product") label("Product") {
+  Sku: Text iri("https://example.com/Product/sku") label("SKU")
+}
+```
+
 ## Dual Authoring Path
 
 Poly.Mcp supports two complementary ways to build a domain model, each suited to different workflows.
@@ -77,7 +115,9 @@ Poly.Mcp supports two complementary ways to build a domain model, each suited to
 Before authoring a large domain, call **`get_dsl_guide`** to retrieve the product-true syntax guide.
 This avoids inventing unsupported lab constructs.
 
-Write the full domain in a single `.poly` DSL document and apply it in one shot. The session's domain is **replaced** entirely — not merged incrementally.
+Write the full domain in a single `.poly` DSL document. Iterate with `validate_dsl` until it
+reports zero errors — the dry run leaves the session untouched — then apply it in one shot.
+The session's domain is **replaced** entirely — not merged incrementally.
 
 ```
 domain Orders
@@ -97,7 +137,7 @@ Order: entity {
 }
 ```
 
-**Use when**: bootstrapping from scratch, iterating in a text editor, or recreating a known state. Parse errors produce line/col diagnostics.
+**Use when**: bootstrapping from scratch, iterating in a text editor, or recreating a known state. Parse errors produce line/col diagnostics. A rejected `apply_dsl` returns the same structured findings as `validate_dsl` (severity, code, element path, message) and changes nothing.
 
 ### Incremental Path (`add` / `remove`)
 
@@ -130,7 +170,7 @@ Every MCP tool's **Name + Description + Success** must match actual behavior:
 
 **Current policy tools:** `get_policy_expression` (inspect-only), `evaluate_policy` (named session policy on an `instanceId`). `oracle_expression` is an **expression probe** (DSL fragment + property bag, no session) — **not** named-policy evaluate. All satisfy the invariant for what they actually do.
 
-**DSL tools:** `apply_dsl` (parses .poly text → analysis gate → replaces session domain; revision+1; clears runtime instances; action `when Stage` is not a separate runtime gate; subscriptions need instances + `invoke_action` to fire), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
+**DSL tools:** `validate_dsl` (dry run: parse → analysis gate, no session mutation, structured findings), `apply_dsl` (parses .poly text → analysis gate → replaces session domain; revision+1; clears runtime instances; a rejected document changes nothing and returns the same findings as `validate_dsl`; action `when Stage` is not a separate runtime gate; subscriptions need instances + `invoke_action` to fire), `export_dsl` (printer round-trip, no side effects), `get_dsl_guide` (embedded product guide).
 
 ## Runtime Tools — Exercise Domain Lifecycle
 

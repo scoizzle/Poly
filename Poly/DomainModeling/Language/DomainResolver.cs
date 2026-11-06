@@ -180,7 +180,9 @@ public sealed class DomainResolver : DslCursor {
         changes.Add(new AddEntityChange(entityName, []));
 
         // ── Entity header facets (pack-registered annotations) ──
+        var termKeywords = new HashSet<string>(StringComparer.Ordinal);
         while (TryParseRegisteredAnnotation(out var headerFacet)) {
+            ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
             changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
         }
         if (LooksLikeAnnotationCall()) {
@@ -388,6 +390,7 @@ public sealed class DomainResolver : DslCursor {
     /// (identifier args / trailing <c>:</c>) is left for the entity body loop.
     /// </summary>
     private void ParsePropertyTail(string propertyName, string typeName, List<DomainChange> changes) {
+        var termKeywords = new HashSet<string>(StringComparer.Ordinal);
         while (IsConstraint(Current.Kind)
                || (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen))) {
             if (IsConstraint(Current.Kind)) {
@@ -401,6 +404,8 @@ public sealed class DomainResolver : DslCursor {
 
             // Annotation-shaped identifier(…) — grammar match or fail-closed RD (GI-5).
             if (TryParseRegisteredAnnotation(out var facet)) {
+                ValidateTermFacet(
+                    facet, termKeywords, $"property '{_currentEntityName}.{propertyName}'", allowTerm: false);
                 changes.Add(new AddFacetToPropertyChange(
                     _currentEntityName, propertyName, facet));
                 continue;
@@ -418,6 +423,20 @@ public sealed class DomainResolver : DslCursor {
         }
 
         RejectRetiredRequiredWord();
+    }
+
+    /// <summary>
+    /// Term metadata is one value per key, and <c>term</c> names an enum member rather
+    /// than an entity or property. A repeat or a misplaced <c>term</c> is a typo, not
+    /// metadata, so both fail closed at the position.
+    /// </summary>
+    private void ValidateTermFacet(Facet facet, HashSet<string> seen, string target, bool allowTerm) {
+        if (facet is not Annotation annotation || !TermFacets.IsTermKeyword(annotation.Name))
+            return;
+        if (!allowTerm && annotation.Name == TermFacets.Term)
+            throw Error($"Term annotation 'term(...)' applies to enum members only; found on {target}.");
+        if (!seen.Add(annotation.Name))
+            throw Error($"Duplicate term annotation '{annotation.Name}(...)' on {target}.");
     }
 
     /// <summary>
@@ -1049,12 +1068,44 @@ public sealed class DomainResolver : DslCursor {
         var name = ExpectIdentifier(TokenKind.Identifier, "enum type name");
         Expect(TokenKind.Colon);
         Expect(TokenKind.Enum);
+
+        var typeFacets = new List<Facet>();
+        var typeTermKeywords = new HashSet<string>(StringComparer.Ordinal);
+        while (TryParseRegisteredAnnotation(out var headerFacet)) {
+            ValidateTermFacet(headerFacet, typeTermKeywords, $"enum '{name}'", allowTerm: false);
+            typeFacets.Add(headerFacet);
+        }
+
         Expect(TokenKind.LBrace);
 
         var members = new List<string>();
+        var memberFacets = new Dictionary<string, IReadOnlyList<Facet>>(StringComparer.Ordinal);
         while (Current.Kind == TokenKind.Identifier) {
-            members.Add(Current.Text);
+            var member = Current.Text;
+            members.Add(member);
             Advance();
+
+            // Per-member term metadata: `Red iri("...") term("red")`.
+            var facets = new List<Facet>();
+            var memberTermKeywords = new HashSet<string>(StringComparer.Ordinal);
+            while (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen)) {
+                var keyword = Current.Text;
+                if (!TryParseRegisteredAnnotation(out var facet)) {
+                    throw Error(
+                        $"Unknown or unregistered annotation '{keyword}' on enum member '{member}'. " +
+                        "Enum members accept only iri, term, label, or description.");
+                }
+                if (facet is not Annotation annotation || !TermFacets.IsTermKeyword(annotation.Name)) {
+                    throw Error(
+                        $"Only term annotations (iri, term, label, description) are allowed " +
+                        $"on enum member '{member}'.");
+                }
+                ValidateTermFacet(facet, memberTermKeywords, $"enum member '{member}'", allowTerm: true);
+                facets.Add(facet);
+            }
+            if (facets.Count > 0)
+                memberFacets[member] = facets;
+
             if (Current.Kind == TokenKind.Comma)
                 Advance();
         }
@@ -1077,7 +1128,11 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.RBrace);
 
         _enumTypeNames.Add(name);
-        changes.Add(new AddEnumTypeChange(name, members));
+        changes.Add(new AddEnumTypeChange(
+            name,
+            members,
+            memberFacets.Count > 0 ? memberFacets : null,
+            typeFacets.Count > 0 ? typeFacets : null));
     }
 
     /// <summary>
@@ -1419,6 +1474,12 @@ public sealed class DomainResolver : DslCursor {
         }
 
         Expect(TokenKind.RParen);
+        if (!TermFacets.IsWellFormed(keyword, args)) {
+            throw Error(keyword == TermFacets.Iri
+                ? "Annotation 'iri(...)' expects one absolute http(s) or urn IRI. " +
+                  "A CURIE has no prefix declaration here; write the full IRI."
+                : $"Annotation '{keyword}(...)' expects exactly one non-empty string argument.");
+        }
         return new Annotation(keyword, args);
     }
 

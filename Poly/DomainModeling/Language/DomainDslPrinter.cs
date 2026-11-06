@@ -139,9 +139,21 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintEnumType(EnumType enumType) {
-        _sb.AppendLine($"{enumType.Name}: enum {{");
+        _sb.Append($"{enumType.Name}: enum");
+        foreach (var facet in enumType.Facets) {
+            _sb.Append(' ');
+            _sb.Append(PrintFacet(facet));
+        }
+        _sb.AppendLine(" {");
         foreach (var member in enumType.MemberNames) {
-            _sb.AppendLine($"  {member},");
+            _sb.Append($"  {member}");
+            if (enumType.MemberFacets.TryGetValue(member, out var facets)) {
+                foreach (var facet in facets) {
+                    _sb.Append(' ');
+                    _sb.Append(PrintFacet(facet));
+                }
+            }
+            _sb.AppendLine(",");
         }
         _sb.AppendLine("}");
         _sb.AppendLine();

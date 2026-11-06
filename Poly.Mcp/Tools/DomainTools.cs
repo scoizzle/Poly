@@ -149,6 +149,39 @@ internal sealed record SubscriptionPlanFact(
     [property: JsonPropertyName("quantifiers")] IReadOnlyList<string> Quantifiers
 );
 
+/// <summary>
+/// One finding from a dry-run DSL validation. The code is what a reader categorizes on,
+/// and the path anchors it to the written element when the proposal analyzed far enough
+/// to keep its tree.
+/// </summary>
+internal sealed record DslFinding(
+    [property: JsonPropertyName("severity")] string Severity,
+    [property: JsonPropertyName("code")] string? Code,
+    [property: JsonPropertyName("elementPath")] string ElementPath,
+    [property: JsonPropertyName("message")] string Message
+);
+
+/// <summary>
+/// Structured payload for <c>validate_dsl</c>, and for a rejected <c>apply_dsl</c>.
+/// Counts describe the proposed domain; a rejected proposal has no accepted tree, so its
+/// <see cref="EntityCount"/> and <see cref="RelationshipCount"/> are zero.
+/// </summary>
+internal sealed record DslValidationData(
+    [property: JsonPropertyName("domainName")] string DomainName,
+    [property: JsonPropertyName("valid")] bool Valid,
+    [property: JsonPropertyName("entityCount")] int EntityCount,
+    [property: JsonPropertyName("relationshipCount")] int RelationshipCount,
+    [property: JsonPropertyName("errorCount")] int ErrorCount,
+    [property: JsonPropertyName("warningCount")] int WarningCount,
+    [property: JsonPropertyName("hintCount")] int HintCount,
+    [property: JsonPropertyName("findings")] IReadOnlyList<DslFinding> Findings
+);
+
+/// <summary>Structured payload for <c>get_domain_report</c>.</summary>
+internal sealed record DomainReportData(
+    [property: JsonPropertyName("markdown")] string Markdown,
+    [property: JsonPropertyName("entityCount")] int EntityCount);
+
 // ── Tool classes ───────────────────────────────────────────────
 
 /// <summary>
@@ -432,6 +465,57 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
             Diagnostics: summary.Messages.Count > 0 ? summary.Messages : null,
             Affordances: affordances
         );
+    }
+
+    /// <summary>
+    /// Returns a human-readable Markdown report of the domain. A projection over the same
+    /// facts the machine exports read, so the two cannot drift.
+    /// </summary>
+    [McpServerTool(Name = "get_domain_report"), Description("Returns a human-readable Markdown report of the current domain: terms, properties with constraints and requiredness, stages, actions, enums, value types, and relationships. Read-only; use it to show a person what the model means.")]
+    public DomainToolResponse GetDomainReport(
+        [Description("Session ID")] string sessionId) {
+        if (!store.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+        logger.LogDebug("get_domain_report {SessionId}", sessionId);
+
+        if (state.LatestAnalysis is null)
+            return new DomainToolResponse(
+                Success: false,
+                Message: "No analysis available.",
+                SessionId: sessionId,
+                Affordances: ["apply_dsl", "validate_dsl", "get_domain_overview"]);
+
+        if (state.LatestAnalysis.HasErrors)
+            return new DomainToolResponse(
+                Success: false,
+                Message: "Domain has analysis errors; no report was generated.",
+                SessionId: sessionId,
+                Diagnostics: state.LatestAnalysis.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error)
+                    .Select(d => d.Message)
+                    .ToList(),
+                Affordances: ["get_domain_analysis", "validate_dsl"]);
+
+        try {
+            var markdown = DomainReportExporter.Export(state.Domain);
+            var entityCount = state.Domain.Types.OfType<Entity>().Count();
+            return new DomainToolResponse(
+                Success: true,
+                Message: $"Domain report generated for '{state.Domain.Name}': {entityCount} entities.",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new DomainReportData(markdown, entityCount),
+                Affordances: ["get_domain_overview", "get_entity_detail", "export_dsl"]);
+        }
+        catch (Exception ex) {
+            return new DomainToolResponse(
+                Success: false,
+                Message: $"Domain report failed: {ex.Message}",
+                SessionId: sessionId,
+                Revision: state.Revision,
+                Data: new { error = ex.Message },
+                Affordances: ["get_domain_analysis"]);
+        }
     }
 
     /// <summary>
@@ -1281,98 +1365,89 @@ internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger
 }
 
 /// <summary>
-/// Tools for batch DSL operations: apply_dsl (parse + evolve) and export_dsl (print).
-/// These provide bulk authoring alongside the unified add/remove incremental tools.
+/// Tools for batch DSL operations: validate_dsl (dry run), apply_dsl (parse + evolve),
+/// and export_dsl (print). These provide bulk authoring alongside the unified add/remove
+/// incremental tools.
 /// </summary>
 [McpServerToolType]
 internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// <summary>
+    /// Validates a .poly document without touching the session: parse, evolve a fresh
+    /// domain, and analyze it. This is the iteration half of the authoring loop — an
+    /// agent can fix a rejected document without losing the applied domain or instances.
+    /// </summary>
+    [McpServerTool(Name = "validate_dsl"), Description("Validates a .poly document without changing the session (dry run). Returns structured findings: severity, diagnostic code, element path, and message. Use while authoring, before apply_dsl. A document is valid when it has zero analysis errors; warnings and hints do not block apply_dsl.")]
+    public DomainToolResponse ValidateDsl(
+        [Description("Session ID returned by create_domain_session")] string sessionId,
+        [Description("Phase 1a/1b .poly DSL text to validate; the session domain is not changed")] string polyText) {
+        if (!store.TryGet(sessionId, out var state))
+            return Failure_NotFound(sessionId);
+        logger.LogDebug("validate_dsl {SessionId}", sessionId);
+
+        if (string.IsNullOrWhiteSpace(polyText))
+            return DslFailure(sessionId, "DSL text is empty. Provide a .poly document with at least a domain header.");
+
+        var compile = CompileDsl(state, polyText);
+        if (compile.Error is not null)
+            return DslFailure(sessionId, compile.Error);
+
+        var data = BuildValidationData(compile);
+        return new DomainToolResponse(
+            Success: data.Valid,
+            Message: data.Valid
+                ? $"Document is valid: {data.EntityCount} entities, {data.RelationshipCount} relationships, {data.WarningCount} warning(s)."
+                : $"Document is invalid: {data.ErrorCount} error(s), {data.WarningCount} warning(s). Fix the findings and validate again.",
+            SessionId: sessionId,
+            Revision: state.Revision,
+            Data: data,
+            Diagnostics: data.Findings.Count > 0
+                ? data.Findings.Select(FormatFinding).ToList()
+                : null,
+            Affordances: data.Valid
+                ? ["apply_dsl", "export_dsl"]
+                : ["get_dsl_guide", "validate_dsl"]);
+    }
+
+    /// <summary>
     /// Applies a Phase 1a/1b .poly DSL text to the session, replacing the current domain.
     /// Parses the text, evolves a fresh domain, and — if analysis succeeds — replaces the
-    /// session domain with the result. On failure, returns diagnostics with line/column info.
+    /// session domain with the result. On failure nothing changes and the response carries
+    /// the same structured findings as <c>validate_dsl</c>.
     /// </summary>
-    [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared.")]
+    [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared. On failure nothing changes; the response carries structured findings (severity, code, element path, message) like validate_dsl.")]
     public DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
         // ── 0. Fail fast on missing session or empty text ─────
-        if (!store.TryGet(sessionId, out _))
+        if (!store.TryGet(sessionId, out var parseState))
             return Failure_NotFound(sessionId);
         logger.LogDebug("apply_dsl {SessionId}", sessionId);
 
         if (string.IsNullOrWhiteSpace(polyText))
-            return new DomainToolResponse(
-                Success: false,
-                Message: "DSL text is empty. Provide a .poly document with at least a domain header.",
-                SessionId: sessionId,
-                Affordances: ["get_domain_overview"]);
+            return DslFailure(sessionId, "DSL text is empty. Provide a .poly document with at least a domain header.");
 
-        // ── 1. Parse ───────────────────────────────────────────
-        List<DomainChange> changes;
-        DomainSession parseSession;
-        try {
-            if (!store.TryGet(sessionId, out var parseState))
-                return Failure_NotFound(sessionId);
+        // ── 1. Parse and analyze a fresh domain (no session mutation yet) ──
+        var compile = CompileDsl(parseState, polyText);
+        if (compile.Error is not null)
+            return DslFailure(sessionId, compile.Error);
 
-            var seed = parseState.Domain.Extensions.Count > 0
-                ? parseState.Domain.Extensions
-                : ExtensionCatalog.ProductAuthoring;
-            var tree = DslSyntaxTree.Parse(polyText);
-            parseSession = DomainSession.ForAuthoringDocument(tree, seed, ProductCatalog.Catalog);
-            changes = DomainCompilation.Resolve(tree, parseSession);
-            changes = DomainCompilation.WithSeed(changes, seed).ToList();
-        }
-        catch (FormatException ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Parse error: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_domain_analysis", "get_domain_overview"]);
-        }
-        catch (InvalidOperationException ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: ex.Message,
-                SessionId: sessionId,
-                Affordances: ["get_domain_analysis", "get_domain_overview"]);
-        }
-
-        // ── 2. Evolve from empty domain (self-contained changes include primitives) ──
-        // Extract domain name from changes or use session domain name as fallback.
-        var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
-        var domainName = nameChange?.Name ?? "Imported";
-
-        var emptyDomain = new Domain(domainName, []);
-
-        EvolutionResult outcome;
-        try {
-            outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: parseSession);
-        }
-        catch (Exception ex) {
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Evolution failed: {ex.Message}",
-                SessionId: sessionId,
-                Affordances: ["get_domain_analysis"]);
-        }
+        var outcome = compile.Outcome!;
+        var domainName = compile.DomainName;
 
         if (!outcome.Succeeded) {
-            var errorMessages = outcome.Analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Take(5)
-                .Select(d => d.Message)
-                .ToList();
-
+            var data = BuildValidationData(compile);
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Evolution rolled back: {outcome.FailureSummary ?? "Analysis rejected the domain"}",
                 SessionId: sessionId,
-                Diagnostics: errorMessages.Count > 0 ? errorMessages : null,
-                Affordances: ["get_domain_analysis", "get_domain_overview"]);
+                Revision: parseState.Revision,
+                Data: data,
+                Diagnostics: data.Findings.Select(FormatFinding).ToList(),
+                Affordances: ["validate_dsl", "get_dsl_guide"]);
         }
 
-        // ── 3. Atomically replace the session domain ─────────────
-        var replaced = store.Replace(sessionId, outcome.Root, outcome.Analysis, parseSession);
+        // ── 2. Atomically replace the session domain ─────────────
+        var replaced = store.Replace(sessionId, outcome.Root, outcome.Analysis, compile.ParseSession!);
         if (!replaced) {
             return new DomainToolResponse(
                 Success: false,
@@ -1580,6 +1655,114 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     }
 
     // ── Private helpers ─────────────────────────────────────────
+
+    /// <summary>
+    /// The parse-and-analyze half shared by <c>validate_dsl</c> and <c>apply_dsl</c>.
+    /// <see cref="Error"/> is set when parsing or evolution threw; otherwise
+    /// <see cref="Outcome"/> is the analysis gate's result and <see cref="ParseSession"/>
+    /// is the session that lowered it.
+    /// </summary>
+    private sealed record DslCompileResult(
+        DomainSession? ParseSession,
+        EvolutionResult? Outcome,
+        string DomainName,
+        string? Error);
+
+    private static DslCompileResult CompileDsl(McpSessionState state, string polyText) {
+        List<DomainChange> changes;
+        DomainSession parseSession;
+        try {
+            var seed = state.Domain.Extensions.Count > 0
+                ? state.Domain.Extensions
+                : ExtensionCatalog.ProductAuthoring;
+            var tree = DslSyntaxTree.Parse(polyText);
+            parseSession = DomainSession.ForAuthoringDocument(tree, seed, ProductCatalog.Catalog);
+            changes = DomainCompilation.Resolve(tree, parseSession);
+            changes = DomainCompilation.WithSeed(changes, seed).ToList();
+        }
+        catch (FormatException ex) {
+            return new DslCompileResult(null, null, "", $"Parse error: {ex.Message}");
+        }
+        catch (InvalidOperationException ex) {
+            return new DslCompileResult(null, null, "", ex.Message);
+        }
+
+        // Self-contained changes include primitives, so a fresh empty domain is the seed.
+        var domainName = changes.OfType<SetDomainNameChange>().FirstOrDefault()?.Name ?? "Imported";
+        var emptyDomain = new Domain(domainName, []);
+
+        try {
+            var outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: parseSession);
+            return new DslCompileResult(parseSession, outcome, domainName, null);
+        }
+        catch (Exception ex) {
+            return new DslCompileResult(parseSession, null, domainName, $"Evolution failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Projects the gate's analysis into the response payload. A rejected proposal has been
+    /// discarded, so its tree is not available to anchor paths; report it unanchored rather
+    /// than claim the unchanged empty root is the document.
+    /// </summary>
+    private static DslValidationData BuildValidationData(DslCompileResult compile) {
+        var outcome = compile.Outcome!;
+        var summary = outcome.Succeeded
+            ? DomainQueries.GetAnalysisSummary(outcome.Analysis, outcome.Root)
+            : DomainQueries.GetAnalysisSummary(outcome.Analysis);
+
+        var findings = (summary.Findings ?? [])
+            .Select(f => new DslFinding(f.Severity, f.Code, f.ElementPath, f.Message))
+            .ToList();
+
+        // A mutation-target failure rejects the proposal without an analysis error. Carry it
+        // as an error finding, so `errorCount` is never zero on an invalid document.
+        var mutationErrors = outcome.Succeeded
+            ? []
+            : outcome.MutationErrors.Select(m => new DslFinding("Error", null, "", m)).ToList();
+        findings.InsertRange(0, mutationErrors);
+
+        // Fail closed: a rejected document must never read as "invalid with 0 errors".
+        var rejectedWithoutError = !outcome.Succeeded && !findings.Any(f => f.Severity == "Error");
+        if (rejectedWithoutError)
+            findings.Insert(0, new DslFinding(
+                "Error", null, "", "The proposal was rejected, but no analysis or mutation error was reported."));
+
+        var entityCount = outcome.Succeeded ? outcome.Root.Types.OfType<Entity>().Count() : 0;
+        var relationshipCount = outcome.Succeeded
+            ? outcome.Analysis.GetAllRelationships(outcome.Root).Count
+            : 0;
+        var hintCount = outcome.Analysis.Diagnostics
+            .Count(d => d.Severity == DiagnosticSeverity.Hint);
+
+        return new DslValidationData(
+            DomainName: compile.DomainName,
+            Valid: outcome.Succeeded,
+            EntityCount: entityCount,
+            RelationshipCount: relationshipCount,
+            ErrorCount: summary.ErrorCount + mutationErrors.Count + (rejectedWithoutError ? 1 : 0),
+            WarningCount: summary.WarningCount,
+            HintCount: hintCount,
+            Findings: findings);
+    }
+
+    private static string FormatFinding(DslFinding finding) {
+        var anchor = string.IsNullOrEmpty(finding.ElementPath) ? "" : $" {finding.ElementPath}:";
+        return finding.Code is null
+            ? $"[{finding.Severity}] {finding.Message}"
+            : $"[{finding.Severity}] {finding.Code}{anchor} {finding.Message}";
+    }
+
+    private static DomainToolResponse DslFailure(string sessionId, string message) {
+        var finding = new DslFinding("Error", null, "", message);
+        return new DomainToolResponse(
+            Success: false,
+            Message: message,
+            SessionId: sessionId,
+            Data: new DslValidationData("", false, 0, 0, 1, 0, 0, [finding]),
+            Diagnostics: [message],
+            Affordances: ["get_dsl_guide", "validate_dsl"]);
+    }
 
     private static object BuildSnapshot(Domain domain, AnalysisResult? analysis, long revision) {
         var entities = domain.Types.OfType<Entity>().Select(e => new {

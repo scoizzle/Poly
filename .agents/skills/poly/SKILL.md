@@ -11,10 +11,11 @@ Poly models a domain as a library of legal operations: author `.poly`, analyze f
 
 1. `get_dsl_guide` before authoring. Pass a `section` number for depth (0 principles … 13 example) or `all`.
 2. `create_domain_session` (domain name) → returns a `sessionId`.
-3. Write the whole domain as one `.poly` document and `apply_dsl` in one shot (batch). `apply_dsl` **replaces** the session domain; it does not merge.
-4. `get_domain_analysis` → require **0 errors** before continuing. Read the diagnostics, fix the `.poly`, re-apply. `get_domain_suggestions` adds advisory gaps (not errors).
-5. `export_dsl` to confirm round-trip; `export_domain_to_csharp` when you need the lowered C#.
-6. Run it: `create_instance` → `evaluate_policy` / `invoke_action`; wire existing instances with `link_instances` / `unlink_instances`; inspect with `get_instance` / `list_instances`.
+3. Write the whole domain as one `.poly` document. Iterate with `validate_dsl` — a dry run that parses, analyzes, and returns structured findings (severity, code, element path, message) without touching the session. Apply only when it reports zero errors; a rejected `apply_dsl` changes nothing and returns the same findings.
+4. `apply_dsl` in one shot (batch). `apply_dsl` **replaces** the session domain; it does not merge.
+5. `get_domain_analysis` → require **0 errors** before continuing. `get_domain_suggestions` adds advisory gaps (not errors).
+6. `export_dsl` to confirm round-trip; `export_domain_to_csharp` when you need the lowered C#; `export_domain_to_json_schema` for validation tooling; `export_domain_to_json_ld` for RDF/JSON-LD tooling; `export_domain_to_shacl` for shape validation; `get_domain_report` for Markdown and `export_domain_to_html` for a self-contained page a person can open.
+7. Run it: `create_instance` → `evaluate_policy` / `invoke_action`; wire existing instances with `link_instances` / `unlink_instances`; inspect with `get_instance` / `list_instances`.
 
 ## Authoring rules
 
@@ -24,6 +25,7 @@ Poly models a domain as a library of legal operations: author `.poly`, analyze f
 - **Guards:** use `require` gates, not nested `if`. Cross-entity side effects use stage subscriptions (`when Rel Stage as name { … }`), not action coupling.
 - **Linking existing instances** is a tool/store operation (`link_instances`), not an effect; `create in Rel { … }` links at runtime.
 - **Fail closed.** Analysis errors block Lower/Emit. Never hand-edit generated artifacts to get past a diagnostic — fix the `.poly`.
+- **Term metadata** is core: `iri("…")`, `label("…")`, `description("…")` on an entity header or property tail, and `iri`/`term` on an enum member. Each takes exactly one non-empty string; `export_dsl` round-trips them and `export_domain_to_json_schema` projects them.
 
 ## Sessions
 

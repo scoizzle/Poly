@@ -222,6 +222,11 @@ public class OracleToolTests {
         McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Task","name":"Title","typeName":"Text"}""");
         McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Task","name":"IsComplete","typeName":"Boolean"}""");
 
+        // A second entity with a stage but no actions exercises the stage_action hint.
+        McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Workflow"}""");
+        McpTestTools.Evolve.Add(sessionId, "property", """{"entityName":"Workflow","name":"Label","typeName":"Text"}""");
+        McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Workflow","name":"Active"}""");
+
         var response = McpTestTools.Query.GetDomainSuggestions(sessionId);
         await Assert.That(response.Success).IsTrue();
         var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
@@ -229,6 +234,11 @@ public class OracleToolTests {
         // B4: the policy hint must teach the unified surface, not the deleted add_policy.
         await Assert.That(dataJson).Contains("add(kind: policy)");
         await Assert.That(dataJson).DoesNotContain("add_policy");
+        // The stage and stage-action hints must name the tool that exists.
+        await Assert.That(dataJson).Contains("add(kind: stage)");
+        await Assert.That(dataJson).DoesNotContain("add_stage");
+        await Assert.That(dataJson).Contains("add(kind: stage_action)");
+        await Assert.That(dataJson).DoesNotContain("add_action_to_stage");
     }
 
     [Test]

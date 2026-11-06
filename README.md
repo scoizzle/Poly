@@ -14,6 +14,7 @@ Domain models, discovered heuristics, and natural-language specifications all ex
 - **Canonical VM.** Every lowered program's meaning is determined by execution on a stack VM — the single source of truth for behavior. The same AST compiles to LINQ expressions, C# source, or runs directly through the VM.
 - **Domain as library.** A domain is a library of legal operations, not a process with a required `Main`. Product entry points (REST, HTTP) are opt-in extensions loaded via `uses`.
 - **Interactive harness.** The MCP server lets agents author, inspect, and simulate domain models — evaluating policies and invoking actions against runtime instances.
+- **Ontology terms.** Entities, properties, and enum members carry `iri`, `label`, `description`, and `term` metadata in `.poly`; the JSON Schema export keeps the model linked to its ontology instead of flattening it to a bare schema.
 
 ## Repository Layout
 
@@ -83,16 +84,28 @@ dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj
 dotnet run --project Poly.Tests/Poly.Tests.csproj
 ```
 
+### Interactive playground
+
+The Blazor IDE/REPL (`Poly.Demo.Web`) compiles and runs Poly snippets in the browser:
+
+```bash
+dotnet run --project Poly.Demo/Poly.Demo.Web/Poly.Demo.Web.csproj
+```
+
+For a human-readable view of an authored domain, `export_domain_to_html` produces a
+single self-contained HTML document (no server, no scripts) from the same facts the
+machine exports read.
+
 For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.Mcp/Docs/poly-dsl-guide.md).
 
 ## MCP Tools
 
-The MCP server (`Poly.Mcp`) provides 24 tools for agents to author, inspect, and simulate domain models in an interactive session. Two authoring paths:
+The MCP server (`Poly.Mcp`) provides 30 tools for agents to author, inspect, and simulate domain models in an interactive session. Two authoring paths:
 
-- **Bulk:** `apply_dsl` — write a `.poly` document, apply in one shot.
+- **Bulk:** `apply_dsl` — write a `.poly` document, apply in one shot; `validate_dsl` is the dry run that never touches the session.
 - **Incremental:** `add` / `remove` — build or modify a model one element at a time.
 
-Runtime tools let agents create instances, invoke actions, and observe state changes — all within the session.
+Runtime tools let agents create instances, invoke actions, and observe state changes — all within the session. Read-only export tools hand the same model to other toolchains: `export_dsl`, `export_domain_to_csharp`, `export_domain_to_json_schema`, `export_domain_to_json_ld`, and `export_domain_to_shacl`; `get_domain_report` renders it as Markdown and `export_domain_to_html` as a self-contained page a person can open.
 
 See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usage details.
 

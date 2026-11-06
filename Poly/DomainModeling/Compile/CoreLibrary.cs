@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -18,5 +19,10 @@ public sealed class CoreLibrary : IDomainLibrary {
         foreach (var pass in DomainModelAnalyzer.CorePasses(builder.Meaning, builder.ExpressionForms))
             builder.AddAnalyzer(pass);
         builder.AddConstraintCompiler(new BuiltinConstraintCompiler());
+
+        // Ontology term metadata is core vocabulary, not a vendor pack: every session can
+        // author iri/label/description/term, and the printer can round-trip them.
+        foreach (var keyword in TermFacets.Keywords)
+            builder.Annotations.Register(new TermAnnotationSyntax(keyword));
     }
 }

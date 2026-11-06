@@ -23,6 +23,15 @@ public class OptionalRequirednessTests {
         return (result.Root!, analysis);
     }
 
+    /// <summary>Evolves a domain that is EXPECTED to fail analysis; returns its error diagnostics.</summary>
+    private static IReadOnlyList<Diagnostic> EvolveExpectingErrorDiagnostics(string poly) {
+        var changes = new PolyDslParser(poly).Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
+        if (result.Succeeded)
+            throw new InvalidOperationException("Expected evolution to fail, but it succeeded.");
+        return result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+    }
+
     /// <summary>Evolves a domain that is EXPECTED to fail analysis; returns the
     /// concatenated error messages.</summary>
     private static string EvolveExpectingError(string poly) {
@@ -33,6 +42,24 @@ public class OptionalRequirednessTests {
         return string.Join("; ",
             result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Select(d => d.Message));
+    }
+
+    [Test]
+    public async Task Create_BareCreate_OmittingRequiredProperty_ReportsDMEFF011() {
+        // The bare `create X { }` path shares the required-coverage check with
+        // `create in`; a property without `optional` must be supplied here too.
+        var errors = EvolveExpectingErrorDiagnostics("""
+            domain CreateBareDirect
+            Token: entity { Lexeme: Text }
+            Box: entity {
+              Make: action -> Token {
+                create Token { }
+              }
+            }
+            """);
+        await Assert.That(errors.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.CreateMissingRequiredProperty
+            && d.Message.Contains("required property 'Lexeme'", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]
@@ -113,6 +140,27 @@ public class OptionalRequirednessTests {
             """);
         var token = domain.Types.OfType<Entity>().Single();
         await Assert.That(analysis.GetStructure(token)!.RequiredPropertyNames.Contains("Lexeme")).IsFalse();
+    }
+
+    [Test]
+    public async Task Analyze_CreateOmittingOptionalProperty_HasNoError() {
+        var (domain, analysis) = Evolve("""
+            domain OptionalCreate
+            Token: entity { Lexeme: Text optional }
+            Box: entity {
+              tokens: many Token
+              Make: action -> Token {
+                create in tokens { }
+              }
+            }
+            """);
+        var token = domain.Types.OfType<Entity>().Single(e => e.Name == "Token");
+
+        await Assert.That(analysis.GetStructure(token)!.RequiredPropertyNames.Contains("Lexeme")).IsFalse();
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("required property", StringComparison.Ordinal))).IsFalse();
     }
 
     [Test]

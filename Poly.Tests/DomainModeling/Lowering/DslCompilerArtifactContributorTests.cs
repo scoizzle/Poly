@@ -35,10 +35,10 @@ public class DslCompilerArtifactContributorTests {
         """;
 
     private sealed class HelloContributor : IArtifactContributor {
-        public bool Called { get; private set; }
+        public int Calls { get; private set; }
 
         public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
-            Called = true;
+            Calls++;
             return [ContributedFile.Create(domain, "hello.txt", $"hello from {domain.Name}", nameof(HelloContributor))];
         }
     }
@@ -59,7 +59,7 @@ public class DslCompilerArtifactContributorTests {
         var hello = result.Files!.Single(f => f.FileName == "hello.txt");
         await Assert.That(hello.Source).IsEqualTo("hello from Library");
         await AssertHelloCameFromContributor(result, hello.Source);
-        await Assert.That(contributor.Called).IsTrue();
+        await Assert.That(contributor.Calls).IsEqualTo(1);
     }
 
     [Test]
@@ -74,7 +74,7 @@ public class DslCompilerArtifactContributorTests {
         var hello = result.Files!.Single(f => f.FileName == "hello.txt");
         await Assert.That(hello.Source).IsEqualTo("hello from Library");
         await AssertHelloCameFromContributor(result, hello.Source);
-        await Assert.That(contributor.Called).IsTrue();
+        await Assert.That(contributor.Calls).IsEqualTo(1);
     }
 
     [Test]
@@ -86,7 +86,7 @@ public class DslCompilerArtifactContributorTests {
 
         await Assert.That(result.Success).IsFalse();
         await Assert.That(result.Files).IsNull();
-        await Assert.That(contributor.Called).IsFalse();
+        await Assert.That(contributor.Calls).IsEqualTo(0);
     }
 
     private static async Task AssertHelloCameFromContributor(Compiler.CompileResult result, string source) {

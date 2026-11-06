@@ -20,6 +20,8 @@ public sealed class SessionBuilder {
     private readonly List<string> _loadedIds = [];
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
     private readonly List<StageContribution> _contributions = [];
+    private readonly HashSet<(PipelineStage Stage, string LibraryId)> _contributionKeys = [];
+    private string? _registeringLibraryId;
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
@@ -27,6 +29,22 @@ public sealed class SessionBuilder {
     public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
     public IReadOnlyList<StageContribution> Contributions => _contributions;
     public ExpressionMeaning Meaning { get; } = new();
+
+    /// <summary>
+    /// Records one library's entry into <paramref name="stage"/>, once per stage and library.
+    /// Load, analyzer, and constraint-compiler registration are the write sites. Analyzer and
+    /// compiler registration attribute themselves to the library whose
+    /// <see cref="IDomainLibrary.Register"/> is running; a call made outside <see cref="Load"/>
+    /// or <see cref="LoadCore"/> (for example a storage facet library calling its register
+    /// method directly) has no registering library and records no contribution.
+    /// </summary>
+    internal SessionBuilder AddContribution(PipelineStage stage, string libraryId) {
+        if (string.IsNullOrWhiteSpace(libraryId))
+            throw new ArgumentException("Library id must be non-empty.", nameof(libraryId));
+        if (_contributionKeys.Add((stage, libraryId)))
+            _contributions.Add(new StageContribution(stage, libraryId));
+        return this;
+    }
 
     /// <summary>No extensions loaded.</summary>
     public static SessionBuilder CreateEmpty() => new();
@@ -70,8 +88,15 @@ public sealed class SessionBuilder {
             throw new ArgumentException("Library id must be non-empty.", nameof(library));
         if (!_loadedIdSet.Add(library.Id))
             throw new InvalidOperationException($"A library with id '{library.Id}' is already loaded.");
-        _contributions.Add(new StageContribution(PipelineStage.Load, library.Id));
-        library.Register(this);
+        AddContribution(PipelineStage.Load, library.Id);
+        var previousLibraryId = _registeringLibraryId;
+        _registeringLibraryId = library.Id;
+        try {
+            library.Register(this);
+        }
+        finally {
+            _registeringLibraryId = previousLibraryId;
+        }
     }
 
     public SessionBuilder AddStorageConvention(IStorageConvention convention) {
@@ -99,6 +124,8 @@ public sealed class SessionBuilder {
             throw new InvalidOperationException(
                 $"An analyzer with pass name '{analyzer.PassName}' is already registered.");
         _analyzers.Add(analyzer);
+        if (_registeringLibraryId is not null)
+            AddContribution(PipelineStage.Analyze, _registeringLibraryId);
         return this;
     }
 
@@ -117,6 +144,8 @@ public sealed class SessionBuilder {
             throw new InvalidOperationException(
                 $"Library '{compiler.LibraryId}' already registered constraint compiler '{compiler.GetType().Name}'.");
         _constraintCompilers.Add(compiler);
+        if (_registeringLibraryId is not null)
+            AddContribution(PipelineStage.Lower, _registeringLibraryId);
         return this;
     }
 

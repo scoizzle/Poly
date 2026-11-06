@@ -1,5 +1,7 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.TestHelpers;
 
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 
@@ -37,6 +39,50 @@ public sealed class ArtifactContributorCallerTests {
         await Assert.That(artifact.Descriptor.Producer).IsEqualTo(nameof(HostFileContributor));
         await Assert.That(ContributedFile.Text(artifact)).IsEqualTo(host.Source);
         await Assert.That(session.ArtifactCatalog.Find(GeneratedTree.IdFor(domain, "Host.txt"))).IsNotNull();
+    }
+
+    [Test]
+    public async Task McpExportDomainToCSharp_RunsSessionContributorOnce() {
+        // OracleTool exports through state.Execution. With the persistence overlay that is the
+        // authored session, so the contributor survives Store.Replace; the reference checks below
+        // pin that no export rebinds the domain to a fresh session.
+        const string uses = """
+            domain McpHost
+            uses persistence
+            uses hostfile
+            Item: entity {
+              Name: Text
+              Open: stage { }
+            }
+            """;
+        var contributor = new HostFileContributor();
+        var catalog = ExtensionCatalog.Core.With(new UsesHostLibrary(contributor));
+        var session = DomainSession.ForSource(uses, ExtensionCatalog.ProductAuthoring, catalog);
+        var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(
+            new PolyDslParser(uses, session).Parse(), session: session);
+        await Assert.That(result.Succeeded).IsTrue();
+        var domain = result.Root!;
+        await Assert.That(domain.Extensions.SequenceEqual(session.Extensions)).IsTrue();
+
+        var (sessionId, _) = McpTestTools.Store.Create("McpHost");
+        await Assert.That(McpTestTools.Store.Replace(sessionId, domain, result.Analysis, session)).IsTrue();
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
+        var executionSession = state.Execution.Session;
+        await Assert.That(executionSession.Artifacts.Contains(contributor)).IsTrue();
+        await Assert.That(ReferenceEquals(RuntimeAnalysisCache.Session(domain), executionSession)).IsTrue();
+
+        var export = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+
+        await Assert.That(export.Success).IsTrue();
+        await Assert.That(contributor.Calls).IsEqualTo(1);
+        var files = (string[])export.Data!.GetType().GetProperty("files")!.GetValue(export.Data)!;
+        await Assert.That(files.Any(f => string.Equals(f, "Host.txt", StringComparison.Ordinal))).IsTrue();
+
+        var second = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+
+        await Assert.That(second.Success).IsTrue();
+        await Assert.That(contributor.Calls).IsEqualTo(2);
+        await Assert.That(ReferenceEquals(RuntimeAnalysisCache.Session(domain), executionSession)).IsTrue();
     }
 
     [Test]
@@ -89,6 +135,13 @@ public sealed class ArtifactContributorCallerTests {
 
     private sealed class HostLibrary(HostFileContributor contributor) : IDomainLibrary {
         public string Id => "host-file";
+
+        public void Register(SessionBuilder builder) => builder.AddArtifactContributor(contributor);
+    }
+
+    /// <summary>Same contributor under an id the DSL <c>uses</c> line can spell (no hyphen).</summary>
+    private sealed class UsesHostLibrary(HostFileContributor contributor) : IDomainLibrary {
+        public string Id => "hostfile";
 
         public void Register(SessionBuilder builder) => builder.AddArtifactContributor(contributor);
     }

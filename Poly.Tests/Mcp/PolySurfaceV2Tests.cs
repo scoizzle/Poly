@@ -382,7 +382,7 @@ public class PolySurfaceV2Tests {
     /// </summary>
     [Test]
     public async Task StdioSurface_DefaultAdvertisesSevenToolsAndInstructions() {
-        var (instructions, tools) = await ReadSurfaceAsync(surface: null);
+        var (instructions, tools) = await ReadSurfaceAsync();
         var names = tools.Select(t => t["name"]!.GetValue<string>())
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToList();
@@ -395,14 +395,6 @@ public class PolySurfaceV2Tests {
             await Assert.That(tool["outputSchema"]).IsNotNull();
             await Assert.That(tool["annotations"]!["title"]).IsNotNull();
         }
-    }
-
-    [Test]
-    public async Task StdioSurface_V1FlagAdvertisesThirtyToolsWithoutV2Instructions() {
-        var (instructions, tools) = await ReadSurfaceAsync(surface: "1");
-
-        await Assert.That(tools.Count).IsEqualTo(30);
-        await Assert.That(instructions is null || !instructions.Contains("poly_define")).IsTrue();
     }
 
     [Test]
@@ -420,7 +412,6 @@ public class PolySurfaceV2Tests {
         start.ArgumentList.Add("--runtimeconfig");
         start.ArgumentList.Add(runtimeConfig);
         start.ArgumentList.Add(dll);
-        start.Environment.Remove("POLY_MCP_SURFACE");
 
         using var process = Process.Start(start)!;
         try {
@@ -476,7 +467,7 @@ public class PolySurfaceV2Tests {
         }
     }
 
-    private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync(string? surface) {
+    private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync() {
         var root = RepoRoot();
         var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");
         var runtimeConfig = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.runtimeconfig.json");
@@ -493,9 +484,6 @@ public class PolySurfaceV2Tests {
         start.ArgumentList.Add("--runtimeconfig");
         start.ArgumentList.Add(runtimeConfig);
         start.ArgumentList.Add(dll);
-        start.Environment.Remove("POLY_MCP_SURFACE");
-        if (surface is not null)
-            start.Environment["POLY_MCP_SURFACE"] = surface;
 
         using var process = Process.Start(start)!;
         try {

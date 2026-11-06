@@ -2,16 +2,16 @@
 
 **Date:** 2026-11-06 · **Branch:** `feat/ontology-agent-ux` · **Design:** `Poly MCP agent surface design.md` (this folder)
 
-**Status:** the first implementation slice is complete. The seven-tool v2 surface is the default; v1 remains behind `POLY_MCP_SURFACE=1` until the model-driven gates run.
+**Status:** the first implementation slice is complete and the v1 surface has been purged. Seven tools are the only MCP surface; the old operation adapters remain internal to `PolySurfaceTools` and are not registered as tools.
 
 - [x] Seven outcome tools, one `.poly` authoring path, explicit workspace handle, one envelope.
 - [x] Tool annotations, output schemas, structured content, and unknown-argument rejection.
-- [x] dsl + JSON Schema byte parity with v1 on four fixtures.
+- [x] dsl + JSON Schema byte parity with the pre-purge tools on four fixtures.
 - [x] Deterministic 15-task A/B, with the gate table below.
+- [x] v1 surface removed at the owner's direction (the operation code stays internal).
 - [ ] Model-driven pass@1/pass^5, wrong-tool rate, recovery.
-- [ ] Port the remaining v1 tests and delete v1 after non-inferiority.
 
-The seven-tool surface is implemented and is the default. The legacy 30-tool surface remains behind `POLY_MCP_SURFACE=1` for the A/B the design requires before deletion.
+The seven-tool surface is the only surface. The v1 30-tool registration, the `POLY_MCP_SURFACE` switch, and the v1 tool documentation are gone; the internal operation classes remain because `PolySurfaceTools` is a thin adapter over them.
 
 ## Shipped
 
@@ -29,7 +29,7 @@ Every response is `{ok, summary, findings[], data?, next[], state{workspace, mod
 
 ## Measured
 
-| | v1 (`POLY_MCP_SURFACE=1`) | v2 (default) |
+| | v1 (historical, pre-purge) | v2 (current) | ratio |
 |---|---|---|
 | Tools | 30 | 7 |
 | `tools/list` JSON | 17,102 chars | 5,412 chars |
@@ -48,9 +48,9 @@ The v2 fixed surface is ~7.3k chars (~1.8k–2.2k tokens), roughly 40% of v1’s
 
 ## Verification
 
-- `PolySurfaceV2Tests` 24/24, including a real stdio `initialize` + `tools/list` test for the default (7) and `POLY_MCP_SURFACE=1` (30, no v2 instructions), annotations/output schemas, unknown-argument rejection, and a reflection test that the filter's accepted names match each tool's parameters.
-- `SurfaceParityTests` 4/4: dsl and JSON Schema are byte-identical to the v1 tools on four fixtures.
-- Full suite 5048/5048.
+- `PolySurfaceV2Tests` 23/23, including a real stdio `initialize` + `tools/list` test (seven tools, no v1 catalog), annotations/output schemas, unknown-argument rejection, and a reflection test that the filter's accepted names match each tool's parameters.
+- `SurfaceParityTests` 4/4: dsl and JSON Schema are byte-identical to the pre-purge operations on four fixtures.
+- Full suite 5047/5047.
 - Live stdio sequence (`create_domain_session` → `poly_define` → `poly_check` → `poly_export` → `poly_simulate`) passes.
 
 ## Deterministic A/B (`scripts/mcp-surface-eval.py`)
@@ -66,14 +66,14 @@ Fifteen reference scenarios, each graded by code against both surfaces over real
 | Combined payload (text + structured) | 43,732 | 61,304 | 1.40× |
 | Fixed surface (`tools/list` + instructions) | 17,102 | 8,996 | 0.53× |
 
-After the shrink: the text gate passes (0.71×), the fixed surface is under the report's 9k-char cap (8,996), and scenario success is parity. The calls gate still misses (0.98× vs 0.7×) because the scripted reference transcripts use the optimal v1 sequence for each task; only a model-driven run can show selection savings. Structured content still duplicates the text payload (combined 1.40×); clients that surface both pay it. The largest per-task win is the ten-entity check: 2,117 text chars vs v1's 18,698. **v1 stays until the model-driven gates (pass@1/pass^5, wrong-tool, recovery) run and calls improve; the deterministic gates alone do not justify deletion.**
+After the shrink: the text gate passes (0.71×), the fixed surface is under the report's 9k-char cap (8,996), and scenario success is parity. The calls gate still misses (0.98× vs 0.7×) because the scripted reference transcripts use the optimal v1 sequence for each task; only a model-driven run can show selection savings. Structured content still duplicates the text payload (combined 1.40×); clients that surface both pay it. The largest per-task win is the ten-entity check: 2,117 text chars vs v1's 18,698. The owner chose to purge v1 on this evidence; the internal operation adapters remain.
 
 ## Model-driven pilot
 
-The first `opencode run` against the live v2 server found a real protocol bug: the compact output schema marked `errorCode` required, but the serializer omits nulls, so the client rejected every v2 call and the model fell back to a raw client. `errorCode` is now optional (the schema requires only `ok` and `summary`); a second run called `poly-local.poly_guide` and `poly-local.poly_open` directly. The full pass@k corpus is not run yet — it needs the MCP client connected and a token budget for 15 tasks × 2 surfaces × trials.
+The first `opencode run` against the live v2 server found a real protocol bug: the compact output schema marked `errorCode` required, but the serializer omits nulls, so the client rejected every v2 call and the model fell back to a raw client. `errorCode` is now optional (the schema requires only `ok` and `summary`); a second run called `poly-local.poly_guide` and `poly-local.poly_open` directly. The full pass@k corpus is not run yet — it needs a token budget for 15 tasks × trials against the pre-purge baseline.
 
 ## Next
 
-1. Run the model-driven A/B (pass@1/pass^5, wrong-tool rate, recovery) over the same corpus; the scripted replay is the gate before spending tokens.
-2. Port the remaining v1 tests, then delete v1 (and its `add`/`remove` path) after non-inferiority.
-3. Expose the analyzer's range/precondition facts as a real `poly_check` witness; shrink the remaining envelope overhead on small models.
+1. Run the model-driven v2 corpus (pass@1/pass^5, wrong-tool rate, recovery); the historical v1 baseline is in `reports/mcp-surface-eval.json` and the pre-purge commit.
+2. Remove the structured/text duplication, then re-measure the combined payload.
+3. Expose the analyzer's range/precondition facts as a real `poly_check` witness; optionally port the internal adapters into the v2 tools and delete the old classes.

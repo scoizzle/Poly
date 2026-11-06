@@ -100,14 +100,14 @@ For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.
 
 ## MCP Tools
 
-The MCP server (`Poly.Mcp`) provides **seven outcome tools** by default for agents to describe the domain they are working in, prove it, and produce what the task needs:
+The MCP server (`Poly.Mcp`) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
 - **Describe:** `poly_guide`, `poly_open`, `poly_define`.
 - **Prove:** `poly_check` (`proven` / `violated` / `unknown`).
 - **Read:** `poly_inspect`.
 - **Produce:** `poly_export` (dsl, JSON Schema, C#, Markdown, HTML, JSON-LD, SHACL) and `poly_simulate` (ordered scenario with a trace).
 
-The previous 30-tool surface remains available with `POLY_MCP_SURFACE=1` for comparison. See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full contract.
+See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full contract.
 
 See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usage details.
 

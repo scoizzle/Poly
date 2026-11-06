@@ -41,11 +41,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 
 No domain, no rules, no state: use ordinary code or the task's native tools. Poly is not a database, a query language, or a general code runner.
 
-## Legacy surface
-
-`POLY_MCP_SURFACE=1` exposes the previous 30-tool surface (`create_domain_session`, `apply_dsl`, `add`, `remove`, …) for the v1/v2 comparison. Prefer the seven-tool surface unless you are running that comparison.
-
 ## Reference
 
 - In-repo guide: `Poly.Mcp/Docs/poly-dsl-guide.md` (`poly_guide` reads the same text).
-- Design report: `reports/Poly MCP agent surface design.md`.
+- Design and implementation status: `reports/`.

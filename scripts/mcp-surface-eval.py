@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic surface A/B for Poly MCP v1 vs v2.
+"""Deterministic scenario harness for the Poly MCP v2 surface.
 
-Runs the same fifteen reference scenarios against both surfaces over real stdio and
-grades the outcomes with code. It measures surface mechanics (calls, response characters,
-success), not model selection: the reference transcripts are the replay gate the design
-requires before spending tokens on a model-driven pass@k.
+Runs the fifteen reference scenarios over real stdio and
+grades the outcomes with code. Historical v1 comparison results are in
+reports/mcp-surface-eval.json from before the v1 surface was removed.
 
 Usage: python3 scripts/mcp-surface-eval.py [--json OUT]
 """
@@ -12,7 +11,6 @@ Usage: python3 scripts/mcp-surface-eval.py [--json OUT]
 from __future__ import annotations
 
 import json
-import os
 import select
 import subprocess
 import sys
@@ -25,13 +23,9 @@ BIN = ROOT / "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp"
 
 class Client:
     def __init__(self, surface: int):
-        env = os.environ.copy()
-        env.pop("POLY_MCP_SURFACE", None)
-        if surface == 1:
-            env["POLY_MCP_SURFACE"] = "1"
         self.proc = subprocess.Popen(
             [str(BIN)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env)
+            stderr=subprocess.DEVNULL, text=True, bufsize=1)
         self.next_id = 0
         self.calls = 0
         self.chars = 0
@@ -322,7 +316,8 @@ def main() -> int:
         return 1
 
     summary = {}
-    for surface in (1, 2):
+    print("v1 surface removed; measuring v2 only. Historical A/B: reports/mcp-surface-eval.json")
+    for surface in (2,):
         rows = run(surface)
         summary[f"v{surface}"] = {
             "tasks": rows,
@@ -344,7 +339,7 @@ def main() -> int:
     if out:
         out.write_text(json.dumps(summary, indent=2))
         print(f"\nwrote {out}")
-    return 0 if all(summary[f"v{s}"]["passed"] == summary[f"v{s}"]["total"] for s in (1, 2)) else 2
+    return 0 if summary["v2"]["passed"] == summary["v2"]["total"] else 2
 
 
 if __name__ == "__main__":

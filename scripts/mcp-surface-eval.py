@@ -84,7 +84,7 @@ class Client:
 
 def open_ws(c: Client, surface: int, name: str) -> str:
     if surface == 2:
-        return c.call("poly_open", {"name": name})[0]["state"]["workspace"]
+        return c.call("poly_workspace", {"name": name})[0]["state"]["workspace"]
     return c.call("create_domain_session", {"domainName": name})[0]["sessionId"]
 
 

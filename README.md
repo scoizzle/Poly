@@ -102,7 +102,7 @@ For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.
 
 The MCP server (`Poly.Mcp`) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
-- **Describe:** `poly_guide`, `poly_open`, `poly_define`.
+- **Describe:** `poly_guide`, `poly_workspace`, `poly_define`.
 - **Prove:** `poly_check` (`proven` / `violated` / `unknown`).
 - **Read:** `poly_inspect`.
 - **Produce:** `poly_export` (dsl, JSON Schema, C#, Markdown, HTML, JSON-LD, SHACL) and `poly_simulate` (ordered scenario with a trace).

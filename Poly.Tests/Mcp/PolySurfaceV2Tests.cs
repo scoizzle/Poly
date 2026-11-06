@@ -40,14 +40,14 @@ public class PolySurfaceV2Tests {
         new(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
 
     private static string Open(PolySurfaceTools surface, string name = "V2") {
-        var response = surface.Open(name: name);
+        var response = surface.Workspace(name: name);
         return response.State!.Workspace;
     }
 
     [Test]
     public async Task Open_CreatesWorkspaceWithState() {
         var surface = Surface();
-        var response = surface.Open(name: "Orders");
+        var response = surface.Workspace(name: "Orders");
 
         await Assert.That(response.Ok).IsTrue();
         await Assert.That(response.State).IsNotNull();
@@ -59,9 +59,9 @@ public class PolySurfaceV2Tests {
     [Test]
     public async Task Open_ListReturnsHandles() {
         var surface = Surface();
-        var created = surface.Open(name: "Listed");
+        var created = surface.Workspace(name: "Listed");
 
-        var listed = surface.Open(op: "list");
+        var listed = surface.Workspace(op: "list");
 
         await Assert.That(listed.Ok).IsTrue();
         await Assert.That(listed.Data).IsNotNull();
@@ -309,8 +309,8 @@ public class PolySurfaceV2Tests {
     [Test]
     public async Task Open_ListIncludesTheCreatedWorkspace() {
         var surface = Surface();
-        var created = surface.Open(name: "Listed");
-        var listed = surface.Open(op: "list");
+        var created = surface.Workspace(name: "Listed");
+        var listed = surface.Workspace(op: "list");
         var data = JsonSerializer.SerializeToNode(listed.Data)!;
 
         await Assert.That(data["sessions"]!.AsArray()
@@ -455,9 +455,9 @@ public class PolySurfaceV2Tests {
         var surface = Surface();
         var workspace = Open(surface, "Closable");
 
-        var closed = surface.Open(op: "close", workspace: workspace);
+        var closed = surface.Workspace(op: "close", workspace: workspace);
         var after = surface.Inspect(workspace);
-        var listed = surface.Open(op: "list");
+        var listed = surface.Workspace(op: "list");
         var sessions = JsonSerializer.SerializeToNode(listed.Data)!["sessions"]!.AsArray()
             .Select(s => s!["workspace"]!.GetValue<string>())
             .ToList();
@@ -472,16 +472,16 @@ public class PolySurfaceV2Tests {
 
     [Test]
     public async Task Open_CloseUnknownWorkspaceFailsCleanly() {
-        var response = Surface().Open(op: "close", workspace: "missing");
+        var response = Surface().Workspace(op: "close", workspace: "missing");
 
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(response.ErrorCode).IsEqualTo("WORKSPACE_NOT_FOUND");
-        await Assert.That(response.Next).Contains("poly_open");
+        await Assert.That(response.Next).Contains("poly_workspace");
     }
 
     [Test]
     public async Task Open_UnknownOpFailsCleanly() {
-        var response = Surface().Open(op: "destroy");
+        var response = Surface().Workspace(op: "destroy");
 
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(response.ErrorCode).IsEqualTo("UNKNOWN_OP");
@@ -494,7 +494,7 @@ public class PolySurfaceV2Tests {
 
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(response.ErrorCode).IsEqualTo("WORKSPACE_REQUIRED");
-        await Assert.That(response.Next).Contains("poly_open");
+        await Assert.That(response.Next).Contains("poly_workspace");
     }
 
     /// <summary>
@@ -511,7 +511,7 @@ public class PolySurfaceV2Tests {
 
         await Assert.That(instructions).Contains("describe the domain you are working in");
         await Assert.That(string.Join(",", names)).IsEqualTo(
-            "poly_check,poly_define,poly_export,poly_guide,poly_inspect,poly_open,poly_simulate");
+            "poly_check,poly_define,poly_export,poly_guide,poly_inspect,poly_simulate,poly_workspace");
         foreach (var tool in tools) {
             await Assert.That(tool["annotations"]).IsNotNull();
             await Assert.That(tool["outputSchema"]).IsNotNull();

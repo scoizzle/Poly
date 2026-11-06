@@ -1,6 +1,6 @@
 ---
 name: poly
-description: Use Poly to describe the domain you are working in, prove it with the constraint solver, and produce the tools or artifacts the task needs. Use when a task involves domain rules, state, lifecycle, validation, contradictions, a schema, an API contract, or a simulation of the domain. The default MCP surface is seven outcome tools (`poly_guide`, `poly_open`, `poly_define`, `poly_check`, `poly_inspect`, `poly_export`, `poly_simulate`).
+description: Use Poly to describe the domain you are working in, prove it with the constraint solver, and produce the tools or artifacts the task needs. Use when a task involves domain rules, state, lifecycle, validation, contradictions, a schema, an API contract, or a simulation of the domain. The default MCP surface is seven outcome tools (`poly_guide`, `poly_workspace`, `poly_define`, `poly_check`, `poly_inspect`, `poly_export`, `poly_simulate`).
 ---
 
 # Using Poly
@@ -12,7 +12,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 ## The loop
 
 1. `poly_guide` — the quickstart and the section index. Call it before authoring.
-2. `poly_open` — create the workspace handle (`op: "create"`, optional `name`). Keep one per task.
+2. `poly_workspace` — create the workspace handle (`op: "create"`, optional `name`). Keep one per task.
 3. `poly_define` — write the whole domain as one `.poly` document. It validates and applies; `apply: false` is a dry run. A rejected document changes nothing and returns findings with `severity`, `code`, `path`, and `message`.
 4. `poly_check` — `proven`, `violated`, or `unknown` for the whole model, one selected action/property, or an expression with bindings. Fix the model, not the constraint.
 5. `poly_export` — `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, or `shacl`. Small artifacts return inline; over 4 KB returns `{path, bytes, sha256}`.
@@ -32,11 +32,11 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 
 ## Workspace rules
 
-- One workspace per task; pass the handle from `poly_open` to every stateful call.
+- One workspace per task; pass the handle from `poly_workspace` to every stateful call.
 - `poly_define` replaces the model; it does not merge. It clears runtime instances and bumps the revision.
-- The state block in every response carries `workspace`, `model`, `revision`, `entities`, `instances`. An unknown/expired handle returns `WORKSPACE_REQUIRED`; call `poly_open`, do not guess.
+- The state block in every response carries `workspace`, `model`, `revision`, `entities`, `instances`. An unknown/expired handle returns `WORKSPACE_REQUIRED`; call `poly_workspace`, do not guess.
 - Sessions are process-local scratch. `poly_export(format: "dsl")` is how you keep a model.
-- When the task is done, close the workspace: `poly_open(op: "close", workspace: "<handle>")`.
+- When the task is done, close the workspace: `poly_workspace(op: "close", workspace: "<handle>")`.
 
 ## When not to use Poly
 

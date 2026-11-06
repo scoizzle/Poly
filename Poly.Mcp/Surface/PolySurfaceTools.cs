@@ -45,7 +45,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 Summary: "Poly quickstart.",
                 Findings: [],
                 Data: new { guide = Quickstart },
-                Next: ["poly_open", "poly_define", "poly_check"],
+                Next: ["poly_workspace", "poly_define", "poly_check"],
                 State: null);
         }
 
@@ -61,8 +61,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 2. open ─────────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_open", Title = "Open a Poly workspace", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Creates, lists, or closes a Poly workspace. A workspace is the handle every stateful call needs — keep one per task. op=create (default) returns the handle and state; op=list returns the current workspaces; op=close with workspace removes it when the task is done. An expired or unknown handle returns WORKSPACE_REQUIRED, never an empty model.")]
-    public PolyResponse Open(
+    [McpServerTool(Name = "poly_workspace", Title = "Manage the Poly workspace", ReadOnly = false, Destructive = false, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Creates, lists, or closes a Poly workspace. A workspace is the handle every stateful call needs — keep one per task. op=create (default) returns the handle and state; op=list returns the current workspaces; op=close with workspace removes it when the task is done. An expired or unknown handle returns WORKSPACE_REQUIRED, never an empty model.")]
+    public PolyResponse Workspace(
         [Description("create (default), list, or close")] string? op = null,
         [Description("Optional model name for create, e.g. \"Returns\".")] string? name = null,
         [Description("Workspace handle to close when op=close.")] string? workspace = null) {
@@ -77,7 +77,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 Summary: $"{workspaces.Count} workspace(s) in this process.",
                 Findings: [],
                 Data: new { sessions = workspaces },
-                Next: ["poly_open"],
+                Next: ["poly_workspace"],
                 State: null);
         }
 
@@ -85,10 +85,10 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             if (string.IsNullOrWhiteSpace(workspace) || !store.TryGet(workspace, out _)) {
                 return new PolyResponse(
                     Ok: false,
-                    Summary: "Workspace not found; nothing to close. Pass the handle returned by poly_open.",
+                    Summary: "Workspace not found; nothing to close. Pass the handle returned by poly_workspace.",
                     Findings: [],
                     Data: null,
-                    Next: ["poly_open"],
+                    Next: ["poly_workspace"],
                     State: null,
                     ErrorCode: "WORKSPACE_NOT_FOUND");
             }
@@ -98,7 +98,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 Summary: "Workspace closed. Its model and instances are gone.",
                 Findings: [],
                 Data: null,
-                Next: ["poly_open"],
+                Next: ["poly_workspace"],
                 State: null);
         }
 
@@ -108,7 +108,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 Summary: $"Unknown op '{op}'. Use create, list, or close.",
                 Findings: [],
                 Data: null,
-                Next: ["poly_open"],
+                Next: ["poly_workspace"],
                 State: null,
                 ErrorCode: "UNKNOWN_OP");
         }
@@ -121,7 +121,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             Data: created.Data,
             Next: created.Success && created.SessionId is { } handle
                 ? Next(handle, "poly_define", "poly_guide")
-                : ["poly_open"],
+                : ["poly_workspace"],
             State: created.SessionId is null ? null : StateOf(created.SessionId));
     }
 
@@ -129,7 +129,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. apply=false is a dry run that changes nothing. A rejected document changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged.")]
     public PolyResponse Define(
-        [Description("Workspace handle from poly_open.")] string workspace,
+        [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("The complete .poly document. It replaces the current model; it does not merge.")] string poly,
         [Description("Apply the document when valid (default true). false is a dry run.")] bool apply = true) {
         if (!TryWorkspace(workspace, out _))
@@ -168,7 +168,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     [McpServerTool(Name = "poly_check", Title = "Prove the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Proves a fact about the current model: the whole-model verdict, or one selected action/property, or an expression against a binding bag. Returns proven, violated, or unknown. Findings carry the element path and the analyzer's message. Does not change the model. Use poly_define to fix a violation.")]
     public PolyResponse Check(
-        [Description("Workspace handle from poly_open.")] string workspace,
+        [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional element path to focus, e.g. \"Product\" or \"Product.Submit\".")] string? select = null,
         [Description("Optional JSON object of action arguments; argument-specific proofs are not implemented yet and return unknown.")] string? args = null,
         [Description("Optional DSL expression fragment to evaluate, e.g. \"Total > 100\". Requires bindings.")] string? expression = null,
@@ -261,7 +261,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     [McpServerTool(Name = "poly_inspect", Title = "Inspect the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Reads one part of the model: omit select for an overview, pass an entity name for that entity, or pass \"Entity.Member\" for one action, stage, or policy. Brief by default returns the one-line summary; detail=\"full\" returns the full element. Read-only.")]
     public PolyResponse Inspect(
-        [Description("Workspace handle from poly_open.")] string workspace,
+        [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("Optional \"Entity\" or \"Entity.Member\" path.")] string? select = null,
         [Description("brief (default) or full.")] string? detail = null) {
         if (!TryWorkspace(workspace, out var state))
@@ -307,7 +307,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     [McpServerTool(Name = "poly_export", Title = "Export an artifact", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Produces the artifact the task needs from the current model: dsl, json-schema, csharp, markdown, html, json-ld, or shacl. Small artifacts are returned inline; anything over 4 KB is written to a file and returned as {path, bytes, sha256}. Read-only; the model is unchanged.")]
     public PolyResponse Export(
-        [Description("Workspace handle from poly_open.")] string workspace,
+        [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("dsl | json-schema | csharp | markdown | html | json-ld | shacl")] string format,
         [Description("Return the whole artifact inline even when larger than 4 KB (default false).")] bool inline = false) {
         if (!TryWorkspace(workspace, out _))
@@ -366,7 +366,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. Steps are a JSON array of {op: create|link|unlink|invoke|evaluate|get|list, ...}. A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true starts from a clean instance state.")]
     public PolyResponse Simulate(
-        [Description("Workspace handle from poly_open.")] string workspace,
+        [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42}}]")] string steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
@@ -479,10 +479,10 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     private static PolyResponse WorkspaceRequired() =>
         new(
             Ok: false,
-            Summary: "A workspace handle is required. Call poly_open first, then pass the returned handle as workspace.",
+            Summary: "A workspace handle is required. Call poly_workspace first, then pass the returned handle as workspace.",
             Findings: [],
             Data: null,
-            Next: ["poly_open"],
+            Next: ["poly_workspace"],
             State: null,
             ErrorCode: "WORKSPACE_REQUIRED");
 
@@ -599,7 +599,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         with constraints, stages, actions, and policies. Write the domain down, let the
         analyzer prove it, then export or simulate it.
 
-        Workflow: poly_guide -> poly_open -> poly_define(poly) -> poly_check -> poly_export or poly_simulate.
+        Workflow: poly_guide -> poly_workspace -> poly_define(poly) -> poly_check -> poly_export or poly_simulate.
 
         domain Shop
         Product: entity {

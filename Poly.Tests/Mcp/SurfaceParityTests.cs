@@ -34,7 +34,7 @@ public class SurfaceParityTests {
 
     private static (string Dsl, string Schema) V2Artifacts(string poly) {
         var surface = Surface();
-        var opened = surface.Open(name: "Parity");
+        var opened = surface.Workspace(name: "Parity");
         var workspace = opened.State!.Workspace;
         var defined = surface.Define(workspace, poly);
         if (!defined.Ok)

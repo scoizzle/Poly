@@ -18,7 +18,7 @@ The seven-tool surface is the only surface. The v1 30-tool registration, the `PO
 | Tool | Behaviour |
 |---|---|
 | `poly_guide` | 715-char quickstart by default; `topic` delegates to the full DSL guide (with a v2 tool-name map at the top). |
-| `poly_open` | `create` (workspace handle + state) or `list` (per-workspace state, not bare ids). |
+| `poly_workspace` | `create` (workspace handle + state) or `list` (per-workspace state, not bare ids). |
 | `poly_define` | Validate + apply one `.poly` document; `apply:false` is a dry run; a rejected document leaves revision and model unchanged and returns findings. |
 | `poly_check` | `proven` / `violated` / `unknown` for the whole model, `Entity` / `Entity.Member` select, or an expression with bindings; findings capped at 20 with `findingsTotal` and `truncated`. |
 | `poly_inspect` | Overview, entity, or member; brief by default, `detail:"full"` for the element. |
@@ -64,13 +64,13 @@ Fifteen reference scenarios, each graded by code against both surfaces over real
 | Text-response characters | 43,732 | 30,960 | 0.71× |
 | Structured-content characters | 0 | 30,344 | — |
 | Combined payload (text + structured) | 43,732 | 61,304 | 1.40× |
-| Fixed surface (`tools/list` + instructions) | 17,102 | 8,997 | 0.53× |
+| Fixed surface (`tools/list` + instructions) | 17,102 | 8,995 | 0.53× |
 
 After the shrink: the text gate passes (0.71×), the fixed surface is under the report's 9k-char cap (8,996), and scenario success is parity. The calls gate still misses (0.98× vs 0.7×) because the scripted reference transcripts use the optimal v1 sequence for each task; only a model-driven run can show selection savings. Structured content still duplicates the text payload (combined 1.40×); clients that surface both pay it. The largest per-task win is the ten-entity check: 2,117 text chars vs v1's 18,698. The owner chose to purge v1 on this evidence; the internal operation adapters remain.
 
 ## Model-driven pilot
 
-The first `opencode run` against the live v2 server found a real protocol bug: the compact output schema marked `errorCode` required, but the serializer omits nulls, so the client rejected every v2 call and the model fell back to a raw client. `errorCode` is now optional (the schema requires only `ok` and `summary`); a second run called `poly-local.poly_guide` and `poly-local.poly_open` directly. The full pass@k corpus is not run yet — it needs a token budget for 15 tasks × trials against the pre-purge baseline.
+The first `opencode run` against the live v2 server found a real protocol bug: the compact output schema marked `errorCode` required, but the serializer omits nulls, so the client rejected every v2 call and the model fell back to a raw client. `errorCode` is now optional (the schema requires only `ok` and `summary`); a second run called `poly-local.poly_guide` and `poly-local.poly_workspace` directly. The full pass@k corpus is not run yet — it needs a token budget for 15 tasks × trials against the pre-purge baseline.
 
 ## Next
 

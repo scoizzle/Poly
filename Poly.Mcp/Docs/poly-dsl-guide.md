@@ -8,7 +8,7 @@
 > Do **not** use constructs from experiment docs (`POLY-DSL-MINIMAL.md`, `DOMAIN-DSL-SPEC.md`) —
 > they include lab syntax not accepted by the MCP tools.
 
-> **MCP surface:** `poly_guide`, `poly_open`, `poly_define`, `poly_check`,
+> **MCP surface:** `poly_guide`, `poly_workspace`, `poly_define`, `poly_check`,
 > `poly_inspect`, `poly_export`, `poly_simulate`. The 30-tool v1 surface was removed;
 > names such as `apply_dsl` in older sections refer to it historically.
 

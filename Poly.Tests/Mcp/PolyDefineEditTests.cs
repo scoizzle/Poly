@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Logging.Abstractions;
 
+using Poly.DomainModeling.Language;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Surface;
 using Poly.Mcp.Tools;

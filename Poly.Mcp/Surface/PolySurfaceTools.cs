@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using ModelContextProtocol.Server;
 
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;

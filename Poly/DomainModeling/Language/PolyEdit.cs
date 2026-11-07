@@ -1,16 +1,14 @@
 using System.Text.Json;
 
-using Poly.DomainModeling.Language;
-
-namespace Poly.Mcp.Surface;
+namespace Poly.DomainModeling.Language;
 
 /// <summary>One splice that landed in the edited document.</summary>
-internal sealed record AppliedEdit(int Index, string Op, string Path, int Line);
+public sealed record AppliedEdit(int Index, string Op, string Path, int Line);
 
 /// <summary>The lines of the edited document an op wrote, so a gate error can be traced to its op.</summary>
-internal sealed record EditRegion(int Index, int StartLine, int EndLine);
+public sealed record EditRegion(int Index, int StartLine, int EndLine);
 
-internal sealed record EditOutcome(
+public sealed record EditOutcome(
     string? Text,
     string? ErrorCode,
     string? Error,
@@ -27,7 +25,7 @@ internal sealed record EditOutcome(
 /// later ops address the document the earlier ones produced. Nothing here analyzes the result:
 /// the caller runs the spliced text through the same gate as a whole-document define.
 /// </summary>
-internal static class PolyEdit {
+public static class PolyEdit {
     private sealed record Op(int Index, string Kind, string? Parent, string? Path, string? Dsl);
 
     public static EditOutcome Apply(string source, string editJson) {

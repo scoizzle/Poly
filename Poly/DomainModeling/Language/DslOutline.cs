@@ -1,12 +1,10 @@
-using Poly.DomainModeling.Language;
-
-namespace Poly.Mcp.Surface;
+namespace Poly.DomainModeling.Language;
 
 /// <summary>
 /// One member of a .poly document located by source span. Offsets are into the document text
 /// the outline was built from; <see cref="EndOffset"/> is exclusive.
 /// </summary>
-internal sealed record OutlineNode(
+public sealed record OutlineNode(
     string Kind,
     string Name,
     string Path,
@@ -29,7 +27,7 @@ internal sealed record OutlineNode(
 /// formatting stay exactly as the author wrote them. Containers are the document, entities and
 /// stages; action, policy, enum, value and contract bodies are opaque.
 /// </summary>
-internal sealed class DslOutline {
+public sealed class DslOutline {
     private DslOutline(IReadOnlyList<OutlineNode> roots) => Roots = roots;
 
     public IReadOnlyList<OutlineNode> Roots { get; }

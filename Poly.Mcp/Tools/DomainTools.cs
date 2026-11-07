@@ -1417,7 +1417,14 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared. On failure nothing changes; the response carries structured findings (severity, code, element path, message) like validate_dsl.")]
     public DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
-        [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) {
+        [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) =>
+        ApplyDslAtRevision(sessionId, polyText, expectedRevision: null);
+
+    /// <summary>
+    /// <see cref="ApplyDsl"/> that also writes nothing when the session has moved past
+    /// <paramref name="expectedRevision"/>, so a read-modify-write caller cannot lose an update.
+    /// </summary>
+    public DomainToolResponse ApplyDslAtRevision(string sessionId, string polyText, long? expectedRevision) {
         // ── 0. Fail fast on missing session or empty text ─────
         if (!store.TryGet(sessionId, out var parseState))
             return Failure_NotFound(sessionId);
@@ -1447,8 +1454,14 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
         }
 
         // ── 2. Atomically replace the session domain ─────────────
-        var replaced = store.Replace(sessionId, outcome.Root, outcome.Analysis, compile.ParseSession!);
+        var replaced = store.Replace(
+            sessionId, outcome.Root, outcome.Analysis, compile.ParseSession!, polyText, expectedRevision);
         if (!replaced) {
+            if (expectedRevision is not null && store.TryGet(sessionId, out _))
+                return new DomainToolResponse(
+                    Success: false,
+                    Message: $"Session '{sessionId}' changed since revision {expectedRevision}; nothing was written.",
+                    SessionId: sessionId);
             return new DomainToolResponse(
                 Success: false,
                 Message: $"Session '{sessionId}' not found.",

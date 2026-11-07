@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using ModelContextProtocol.Server;
 
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Tools;
@@ -127,42 +128,101 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 3. define ───────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. apply=false is a dry run that changes nothing. A rejected document changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged.")]
+    [McpServerTool(Name = "poly_define", Title = "Define the domain", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Validates and applies one .poly document to the workspace, or edits the document last applied. This is the only authoring path: write the domain down, let the constraint-aware analysis gate it, and fix what it reports. Pass poly to replace the model with a complete document, or edit to change the stored document in place. apply=false is a dry run that changes nothing. A rejected document or edit changes nothing, returns structured findings (severity, code, element path, message) and leaves the revision unchanged.")]
     public PolyResponse Define(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("The complete .poly document. It replaces the current model; it does not merge.")] string poly,
-        [Description("Apply the document when valid (default true). false is a dry run.")] bool apply = true) {
-        if (!TryWorkspace(workspace, out _))
+        [Description("The complete .poly document. It replaces the current model; it does not merge. Pass exactly one of poly or edit.")] string? poly = null,
+        [Description("Apply the document when valid (default true). false is a dry run.")] bool apply = true,
+        [Description("A JSON array of ops that edit the stored document and keep the rest of it, comments and order included: [{\"op\":\"add\",\"parent\":\"Product\",\"dsl\":\"Amount: Decimal\"},{\"op\":\"remove\",\"path\":\"Product.Total\"},{\"op\":\"replace\",\"path\":\"Product.Note\",\"dsl\":\"Note: Text optional\"}]. add takes parent (\"\" for top level) and dsl; remove takes path; replace takes path and dsl. Needs a document applied by poly_define first.")] string? edit = null) {
+        if (!TryWorkspace(workspace, out var current))
             return WorkspaceRequired();
 
-        logger.LogDebug("poly_define {Workspace} apply={Apply}", workspace, apply);
-        var response = apply
-            ? _dsl.ApplyDsl(workspace, poly)
-            : _dsl.ValidateDsl(workspace, poly);
+        if ((poly is null) == (edit is null))
+            return DefineRejected(workspace, "EDIT_ARGUMENT_CONFLICT",
+                "Pass exactly one of poly (the complete document) or edit (a JSON array of ops).");
 
-        var findings = FindingsFrom(response);
-        return new PolyResponse(
+        logger.LogDebug("poly_define {Workspace} apply={Apply} edit={Edit}", workspace, apply, edit is not null);
+        if (edit is null) {
+            var replaced = apply
+                ? _dsl.ApplyDsl(workspace, poly!)
+                : _dsl.ValidateDsl(workspace, poly!);
+            return DefineResponse(workspace, apply, replaced, ValidationData(replaced));
+        }
+
+        if (current.SourceText is null)
+            return DefineRejected(workspace, "EDIT_NO_SOURCE",
+                "There is no applied document to edit. Send the complete document with poly first; edit only works on a document poly_define applied.");
+
+        var outcome = PolyEdit.Apply(current.SourceText, edit);
+        if (!outcome.Ok)
+            return DefineRejected(workspace, outcome.ErrorCode!, outcome.Error!);
+
+        var response = apply
+            ? _dsl.ApplyDslAtRevision(workspace, outcome.Text!, current.Revision)
+            : _dsl.ValidateDsl(workspace, outcome.Text!);
+
+        if (!response.Success && apply && store.TryGet(workspace, out var after) && after.Revision != current.Revision)
+            return DefineRejected(workspace, "EDIT_STALE",
+                "The model changed while this edit was being applied; nothing was written. Re-read it and send the edit again.");
+
+        var data = new Dictionary<string, object?>();
+        if (ValidationData(response) is { } validation)
+            foreach (var property in JsonSerializer.SerializeToElement(validation).EnumerateObject())
+                data[property.Name] = property.Value.Clone();
+        data["applied"] = outcome.Applied;
+        data["spliced"] = outcome.Text!.Length <= InlineLimit ? outcome.Text : null;
+
+        var summary = response.Message;
+        if (!response.Success && FailedLine(response.Message) is { } line) {
+            data["failedLine"] = line;
+            if (outcome.Regions.FirstOrDefault(r => line >= r.StartLine && line <= r.EndLine) is { } region)
+                summary = $"{summary} (in edit {region.Index})";
+        }
+
+        return DefineResponse(workspace, apply, response, data, summary);
+    }
+
+    private static int? FailedLine(string message) {
+        var match = System.Text.RegularExpressions.Regex.Match(message, @"line (\d+)");
+        return match.Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    private PolyResponse DefineRejected(string workspace, string errorCode, string summary) =>
+        new(
+            Ok: false,
+            Summary: summary,
+            Findings: [],
+            Data: null,
+            Next: Next(workspace, "poly_guide", "poly_define"),
+            State: StateOf(workspace),
+            ErrorCode: errorCode);
+
+    private static object? ValidationData(DomainToolResponse response) =>
+        response.Data is DslValidationData validation
+            ? new {
+                validation.DomainName,
+                validation.Valid,
+                validation.EntityCount,
+                validation.RelationshipCount,
+                validation.ErrorCount,
+                validation.WarningCount,
+                validation.HintCount,
+            }
+            : response.Data;
+
+    private PolyResponse DefineResponse(
+        string workspace, bool apply, DomainToolResponse response, object? data, string? summary = null) =>
+        new(
             Ok: response.Success,
-            Summary: apply ? response.Message : $"Dry run: {response.Message}",
-            Findings: findings,
-            Data: response.Data is DslValidationData validation
-                ? new {
-                    validation.DomainName,
-                    validation.Valid,
-                    validation.EntityCount,
-                    validation.RelationshipCount,
-                    validation.ErrorCount,
-                    validation.WarningCount,
-                    validation.HintCount,
-                }
-                : response.Data,
+            Summary: apply ? summary ?? response.Message : $"Dry run: {summary ?? response.Message}",
+            Findings: FindingsFrom(response),
+            Data: data,
             Next: response.Success
                 ? (apply
                     ? Next(workspace, "poly_check", "poly_export")
                     : Next(workspace, "poly_define", "poly_check"))
                 : Next(workspace, "poly_guide", "poly_define"),
             State: StateOf(workspace));
-    }
 
     // ── 4. check ────────────────────────────────────────────────
 

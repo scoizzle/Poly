@@ -69,7 +69,7 @@ public sealed class PolyCompiler {
     /// host fact: never read from the document's <c>uses</c> line.
     /// </param>
     public CompileResult Compile(
-        string text, string file = "<input>", string? target = null, CancellationToken cancel = default) {
+        string text, string file = "<input>", CancellationToken cancel = default, string? target = null) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
             return CompileCore(text, file, target, cancel, produce: true);
@@ -80,7 +80,7 @@ public sealed class PolyCompiler {
     /// the analyzed domain (a workspace) and produces later through <see cref="Produce"/>.
     /// </summary>
     public CompileResult Analyze(
-        string text, string file = "<input>", string? target = null, CancellationToken cancel = default) {
+        string text, string file = "<input>", CancellationToken cancel = default, string? target = null) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
             return CompileCore(text, file, target, cancel, produce: false);

@@ -130,7 +130,7 @@ public sealed class LspServer {
 
     private void Check(string uri, string text, int version, CancellationTokenSource cts) {
         try {
-            var result = _compiler.Compile(text, FileOf(uri), cancel: cts.Token);
+            var result = _compiler.Compile(text, FileOf(uri), cts.Token);
             lock (_gate) {
                 if (cts.IsCancellationRequested || !_documents.TryGetValue(uri, out var current) || current.Version != version)
                     return;

@@ -111,6 +111,20 @@ public sealed class PlatformTargetTests {
     }
 
     [Test]
+    public async Task HandAuthoredContractBlock_IsNeverAPlatformMismatch() {
+        var (_, analysis, _) = Evolve("""
+            domain Shop
+
+            Billing: contract external billing v1 {}
+
+            Order: entity { Total: Number }
+            """, PlatformCatalog(), "windows");
+
+        await Assert.That(analysis.Diagnostics
+            .Any(d => d.Code == DomainModelDiagnosticCodes.PlatformTargetMismatch)).IsFalse();
+    }
+
+    [Test]
     public async Task SurfaceDigest_IgnoresBodiesAndTargets_MovesOnASurfaceChange() {
         var withBodyA = SessionFor(
             new SurfaceLibrary(
@@ -125,8 +139,16 @@ public sealed class PlatformTargetTests {
                 Bodies(new Poly.Ast.Nodes.Return(new Poly.Ast.Nodes.Constant(1))),
                 targets: ["windows"]));
 
-        var a = withBodyA.ContractContributions.Single().Surface.Fingerprint;
-        var b = withBodyB.ContractContributions.Single().Surface.Fingerprint;
+        var contributionA = withBodyA.ContractContributions.Single();
+        var contributionB = withBodyB.ContractContributions.Single();
+        // The two contributions must really differ in exactly the things the digest ignores.
+        await Assert.That(ReferenceEquals(
+                contributionA.Bodies["Open"].Single(), contributionB.Bodies["Open"].Single())).IsFalse();
+        await Assert.That(contributionA.Targets.SequenceEqual(contributionB.Targets, StringComparer.Ordinal))
+            .IsFalse();
+
+        var a = contributionA.Surface.Fingerprint;
+        var b = contributionB.Surface.Fingerprint;
         await Assert.That(b).IsEqualTo(a);
 
         var wider = SessionFor(
@@ -155,10 +177,16 @@ public sealed class PlatformTargetTests {
         var session = DomainSession.ForExtensions(["storage"], catalog).WithTarget("windows");
 
         var sameUses = Evolve(ShopWithStorage, catalog, "windows").Domain;
-        await Assert.That(session.WithDomain(sameUses).Target).IsEqualTo("windows");
+        var cloned = session.WithDomain(sameUses);
+        await Assert.That(cloned.Target).IsEqualTo("windows");
+        // Same `uses` keeps the tables by reference: the clone branch ran.
+        await Assert.That(cloned.Language).IsSameReferenceAs(session.Language);
 
         var otherUses = new Domain("Other", []);
-        await Assert.That(session.WithDomain(otherUses).Target).IsEqualTo("windows");
+        var reloaded = session.WithDomain(otherUses);
+        await Assert.That(reloaded.Target).IsEqualTo("windows");
+        // A different `uses` list reloads (a new table instance): the reload branch ran too.
+        await Assert.That(ReferenceEquals(reloaded.Language, session.Language)).IsFalse();
     }
 
     private static DomainSession SessionFor(IDomainLibrary library) =>

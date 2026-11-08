@@ -201,9 +201,9 @@ the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
 pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
 A `contract` block remains for a surface no library contributes.
 
-A package may declare the host targets it is for (`posix`, `windows`); the host passes its
-target on the compile (`polyc --target`). `uses posix` names the package, never the OS, and a
-package whose targets omit the host target (or a host with no target) is `DMCON004`.
+A package may declare the host targets it is for (target ids such as `posix`); the host passes
+its target on the compile (`polyc --target`). `uses posix` names the package, never the OS, and
+a package whose targets omit the host target (or a host with no target) is `DMCON004`.
 
 
 ```poly

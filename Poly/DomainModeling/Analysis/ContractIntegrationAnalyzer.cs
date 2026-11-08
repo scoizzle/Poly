@@ -254,7 +254,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
         context.ReportError(
             contract,
-            $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Load the package for this target, or pass the matching target; 'uses {contract.UsesId}' does not choose it.",
+            $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Pass the host target this compilation is for; 'uses {contract.UsesId}' does not choose it.",
             DomainModelDiagnosticCodes.PlatformTargetMismatch);
     }
 

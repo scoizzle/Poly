@@ -185,12 +185,30 @@ public sealed class ContractBindingFactsTests {
             Order: entity { Pay: action (request: ChargeRequest) { } }
             ChargeOrder: bind Billing Charge to Pay request
             """;
-        var (domain, _, analysis) = Analyze(poly, surface);
+        var (domain, session, analysis) = Analyze(poly, surface);
 
         await Assert.That(analysis.HasErrors).IsFalse();
-        var facts = analysis.GetMetadata<ContractSurfaceMetadata>(domain.ImportedContracts.Single())!;
+        var contract = domain.ImportedContracts.Single();
+        var facts = analysis.GetMetadata<ContractSurfaceMetadata>(contract)!;
         await Assert.That(facts.PinKind).IsEqualTo(ContractPinKind.Fingerprint);
         await Assert.That(facts.PinMatched).IsTrue();
+
+        // The pin is the surface the caller named; the package version is its own fact.
+        // A pin copied into Version (or the reverse) fails these.
+        await Assert.That(facts.Pin).IsEqualTo(surface.Fingerprint);
+        await Assert.That(facts.Version).IsEqualTo("v1");
+        await Assert.That(facts.Pin).IsNotEqualTo(facts.Version);
+        await Assert.That(contract.Pin).IsEqualTo(surface.Fingerprint);
+        await Assert.That(contract.Version).IsEqualTo("v1");
+
+        var bind = BindFacts(domain, analysis);
+        await Assert.That(bind.Version).IsEqualTo("v1");
+        await Assert.That(bind.Fingerprint).IsEqualTo(surface.Fingerprint);
+
+        var printed = new DomainDslPrinter(session).Print(domain);
+        await Assert.That(printed.Contains($"uses billing {surface.Fingerprint}", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("Billing: contract", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(printed.Contains("uses billing v1", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]

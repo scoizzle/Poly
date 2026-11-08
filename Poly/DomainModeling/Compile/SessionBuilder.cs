@@ -3,6 +3,9 @@ using Poly.DomainModeling.Contradictions;
 using Poly.DomainModeling.Libraries.Contradictions;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Contract;
+
+using SyntaxNode = Poly.Ast.Node;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -23,6 +26,7 @@ public sealed class SessionBuilder {
     private readonly HashSet<string> _loadedIdSet = new(StringComparer.Ordinal);
     private readonly List<StageContribution> _contributions = [];
     private readonly HashSet<(PipelineStage Stage, string LibraryId)> _contributionKeys = [];
+    private readonly List<ContractContribution> _contracts = [];
     private string? _registeringLibraryId;
     private IReadOnlyList<ContradictionClaim> _contradictionClaims = [];
 
@@ -31,6 +35,7 @@ public sealed class SessionBuilder {
     public TypeMappingRegistry TypeMaps { get; } = new();
     public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
     public IReadOnlyList<StageContribution> Contributions => _contributions;
+    public IReadOnlyList<ContractContribution> Contracts => _contracts;
     public ExpressionMeaning Meaning { get; } = new();
 
     /// <summary>Flow claims bound before the <c>contradictions</c> library loads.</summary>
@@ -169,6 +174,52 @@ public sealed class SessionBuilder {
         return this;
     }
 
+    /// <summary>
+    /// Contributes one library's contract surface and, optionally, the AST implementing each
+    /// endpoint. Only a running <see cref="IDomainLibrary.Register"/> may call this: the
+    /// contribution is attributed to that library, and a second contributor for the same
+    /// contract name fails closed (one contributor per surface).
+    /// </summary>
+    /// <param name="surface">The exported surface. Its version is the package's, never a caller pin.</param>
+    /// <param name="bodies">Endpoint name to implementation AST. Stored for Lower; never run at Load.</param>
+    public SessionBuilder AddContract(
+        ImportedContract surface,
+        IReadOnlyDictionary<string, IReadOnlyList<SyntaxNode>>? bodies = null) {
+        ArgumentNullException.ThrowIfNull(surface);
+        if (_registeringLibraryId is null)
+            throw new InvalidOperationException(
+                "A contract contribution is made from IDomainLibrary.Register so it can be attributed to its library.");
+        if (string.IsNullOrWhiteSpace(surface.Name))
+            throw new ArgumentException("Contract name must be non-empty.", nameof(surface));
+
+        var existing = _contracts.FirstOrDefault(contribution =>
+            string.Equals(contribution.Surface.Name, surface.Name, StringComparison.Ordinal));
+        if (existing is not null)
+            throw new InvalidOperationException(
+                $"Contract '{surface.Name}' is already contributed by library '{existing.LibraryId}'. One contributor.");
+
+        var duplicateEndpoint = surface.Endpoints
+            .GroupBy(endpoint => endpoint.Name, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateEndpoint is not null)
+            throw new InvalidOperationException(
+                $"Contract '{surface.Name}' declares endpoint '{duplicateEndpoint.Key}' more than once.");
+
+        var bodyMap = bodies ?? new Dictionary<string, IReadOnlyList<SyntaxNode>>(StringComparer.Ordinal);
+        foreach (var (endpointName, body) in bodyMap) {
+            if (body is null)
+                throw new ArgumentException(
+                    $"Contract '{surface.Name}' body for endpoint '{endpointName}' must not be null.", nameof(bodies));
+            if (!surface.Endpoints.Any(endpoint =>
+                    string.Equals(endpoint.Name, endpointName, StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    $"Contract '{surface.Name}' has no endpoint '{endpointName}' for the contributed body.");
+        }
+
+        _contracts.Add(new ContractContribution(_registeringLibraryId, surface, bodyMap));
+        return this;
+    }
+
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) {
         if (_contradictionClaims.Count > 0 && !_loadedIdSet.Contains(ContradictionsLibrary.ExtensionId))
@@ -192,6 +243,7 @@ public sealed class SessionBuilder {
             _contributions.ToArray(),
             _primitiveSeeds,
             _constraintCompilers.ToArray(),
-            _contradictionClaims);
+            _contradictionClaims,
+            _contracts.ToArray());
     }
 }

@@ -130,7 +130,7 @@ public sealed class PolyCompiler {
         try {
             session = SessionFor(tree, sessionIds);
             cancel.ThrowIfCancellationRequested();
-            changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), _seed).ToList();
+            changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), _seed, session).ToList();
             if (_hooks?.DomainExtensions is { } rewrite)
                 changes = RewriteExtensions(changes, rewrite);
         }
@@ -248,7 +248,16 @@ public sealed class PolyCompiler {
         var key = string.Join('\n', ids);
         if (_session is not null && _sessionKey == key)
             return _session;
-        var session = DomainSession.ForAuthoringDocument(tree with { Uses = ids }, _seed, _catalog);
+        // A session-extension hook may rewrite the ids. Keep an authored pin only where the
+        // id at that position is unchanged; a rewritten id has no authored surface pin.
+        var versions = ids.Select((id, index) =>
+            index < tree.Uses.Count
+            && index < tree.UsesVersions.Count
+            && string.Equals(tree.Uses[index], id, StringComparison.Ordinal)
+                ? tree.UsesVersions[index]
+                : null).ToList();
+        var session = DomainSession.ForAuthoringDocument(
+            tree with { Uses = ids, UsesVersions = versions }, _seed, _catalog);
         _session = session;
         _sessionKey = key;
         return session;
@@ -312,10 +321,8 @@ public sealed class PolyCompiler {
             reader.Consume(1);
         }
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        for (var i = 2; i + 1 < tokens.Count && tokens[i].Kind == DslTokenKind.Uses; i += 2) {
-            if (tokens[i + 1].Kind != DslTokenKind.Identifier)
-                break;
-            if (!seen.Add(tokens[i + 1].Text)) {
+        for (var i = 2; DslSyntaxTree.TryReadUse(tokens, i, out var id, out _, out var next); i = next) {
+            if (!seen.Add(id)) {
                 var token = tokens[i + 1];
                 return build.Span(token.Offset, token.Length, Severities.Error,
                     DiagnosticCodes.DuplicateExtension, ex.Message, "");

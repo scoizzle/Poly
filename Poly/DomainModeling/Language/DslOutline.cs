@@ -120,9 +120,10 @@ public sealed class DslOutline {
                     continue;
                 }
 
-                if (t.Kind == DslTokenKind.Uses && i + 1 < tokens.Count) {
-                    nodes.Add(Make("uses", tokens[i + 1].Text, "uses:" + tokens[i + 1].Text, i, i + 1, false, -1, -1, []));
-                    i += 2;
+                if (t.Kind == DslTokenKind.Uses
+                    && DslSyntaxTree.TryReadUse(tokens, i, out var usesId, out _, out var usesEnd)) {
+                    nodes.Add(Make("uses", usesId, "uses:" + usesId, i, i + 1, false, -1, -1, []));
+                    i = usesEnd;
                     continue;
                 }
 

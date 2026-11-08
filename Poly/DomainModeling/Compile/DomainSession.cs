@@ -41,6 +41,12 @@ public sealed class DomainSession {
     /// <summary>Primitive types loaded libraries seed, keyed by library id.</summary>
     public IReadOnlyList<(string LibraryId, string Name, PrimitiveSemantics Semantics)> PrimitiveSeeds { get; }
 
+    /// <summary>
+    /// Contract surfaces libraries contributed from <see cref="IDomainLibrary.Register"/>.
+    /// <c>uses &lt;id&gt;</c> seeds the matching surface onto the resolved domain.
+    /// </summary>
+    public IReadOnlyList<ContractContribution> ContractContributions { get; }
+
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
     internal IReadOnlyList<INodeAnalyzer> Analyzers { get; }
@@ -129,7 +135,8 @@ public sealed class DomainSession {
         IReadOnlyList<StageContribution>? contributions = null,
         IReadOnlyList<(string LibraryId, string Name, PrimitiveSemantics Semantics)>? primitiveSeeds = null,
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
-        IReadOnlyList<ContradictionClaim>? contradictionClaims = null) {
+        IReadOnlyList<ContradictionClaim>? contradictionClaims = null,
+        IReadOnlyList<ContractContribution>? contractContributions = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -145,7 +152,13 @@ public sealed class DomainSession {
         PrimitiveSeeds = primitiveSeeds ?? [];
         ConstraintCompilers = constraintCompilers ?? [];
         ContradictionClaims = contradictionClaims ?? [];
+        ContractContributions = contractContributions ?? [];
     }
+
+    /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
+    public ContractContribution? FindContractContribution(string libraryId) =>
+        ContractContributions.FirstOrDefault(contribution =>
+            string.Equals(contribution.LibraryId, libraryId, StringComparison.Ordinal));
 
     /// <summary>Loads libraries for an existing domain's extension ids. Unknown id throws.</summary>
     public static DomainSession Open(
@@ -245,7 +258,7 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers, ContradictionClaims);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers, ContradictionClaims, ContractContributions);
         return Open(domain, claims: ContradictionClaims);
     }
 

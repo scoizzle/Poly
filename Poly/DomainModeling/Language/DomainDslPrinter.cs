@@ -72,6 +72,18 @@ public sealed class DomainDslPrinter {
         foreach (var extensionId in domain.Extensions) {
             if (string.Equals(extensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
                 continue;
+            var seeded = domain.ImportedContracts.FirstOrDefault(contract =>
+                string.Equals(contract.UsesId, extensionId, StringComparison.Ordinal));
+            if (seeded?.Pin is { Length: > 0 } pin) {
+                _sb.AppendLine(_printTable.Print(
+                    "uses",
+                    "pinned",
+                    fills: new Dictionary<string, string>(StringComparer.Ordinal) {
+                        ["id"] = extensionId,
+                        ["version"] = pin,
+                    }));
+                continue;
+            }
             _sb.AppendLine(_printTable.Print(
                 "uses",
                 "id",
@@ -106,7 +118,11 @@ public sealed class DomainDslPrinter {
             _sb.AppendLine();
         }
 
-        foreach (var contract in domain.ImportedContracts.OrderBy(c => c.Name, StringComparer.Ordinal)) {
+        // A contract seeded by `uses <id>` is the export-package reference, already printed
+        // on the uses line; only body-authored blocks print here.
+        foreach (var contract in domain.ImportedContracts
+                     .Where(c => c.UsesId is null || !domain.Extensions.Contains(c.UsesId, StringComparer.Ordinal))
+                     .OrderBy(c => c.Name, StringComparer.Ordinal)) {
             PrintContract(contract);
             _sb.AppendLine();
         }

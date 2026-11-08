@@ -26,6 +26,11 @@ public sealed record Entity(
     public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
 
     /// <summary>
+    /// Export visibility. <see cref="Visibility.Internal"/> unless marked <c>public</c>.
+    /// </summary>
+    public Visibility Visibility { get; init; } = Visibility.Internal;
+
+    /// <summary>
     /// The navigation properties declared on this entity. A relationship is a
     /// source-entity-owned navigation; there is no domain-global relationship member —
     /// the analysis catalog derives the relationship view from these.

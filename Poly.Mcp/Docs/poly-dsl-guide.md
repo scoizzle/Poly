@@ -233,7 +233,8 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 
 Named records without identity or lifecycle. A value type is a **contract payload or
 action parameter** — it has no storage representation and cannot be a stored entity
-property. Analysis fails closed on a property typed as one:
+property. Analysis fails closed on a property typed as one. `public` is optional and
+omitted by default (`public value Money { … }`). It is stored as `Visibility.Public` and printed; export filtering is a later slice:
 
 ```poly
 Money: value {
@@ -296,8 +297,11 @@ never dropped by export.
 ## 3. Entities and Properties
 
 ```
-entity-name ":" "entity" "{" property* stage* action* policy* "}"
+["public"] "entity" entity-name annotation* "{" property* stage* action* policy* "}"
+entity-name ":" "entity" annotation* "{" property* stage* action* policy* "}"
 ```
+
+`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name.
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
@@ -510,10 +514,13 @@ Active: stage {
 ## 6. Actions
 
 ```
+["public"] "action" action-name ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 ```
 
-Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`).
+`public` is an optional leading modifier (`public action Pay (bill: Money) { … }`). Omitting it is internal. Export filtering is a later slice. `public` is a keyword, so it is not a parameter name.
+
+Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`, `public`).
 
 
 

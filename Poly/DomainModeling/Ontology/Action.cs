@@ -14,5 +14,10 @@ public sealed record Action(
     IReadOnlyList<Effect> Effects,
     IReadOnlyList<Policy> Policies
 ) : DomainMember(Name) {
+    /// <summary>
+    /// Export visibility. <see cref="Visibility.Internal"/> unless marked <c>public</c>.
+    /// </summary>
+    public Visibility Visibility { get; init; } = Visibility.Internal;
+
     public sealed override IEnumerable<Node?> Children => [.. Parameters, Result, .. Policies, .. Effects];
 }

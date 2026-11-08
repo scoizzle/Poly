@@ -126,6 +126,12 @@ public sealed class DslOutline {
                     continue;
                 }
 
+                if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count
+                    && (tokens[i + 1].Kind == DslTokenKind.Entity || tokens[i + 1].Text == "value")) {
+                    i = MarkedTop(i, nodes);
+                    continue;
+                }
+
                 if (IsNameColon(i)) {
                     i = TopLevel(i, nodes);
                     continue;
@@ -164,6 +170,35 @@ public sealed class DslOutline {
             }
 
             var children = open >= 0 && kind is "entity" ? Members(open, close, name) : [];
+            nodes.Add(Make(kind, name, name, start, end, true, open, close, children));
+            return j;
+        }
+
+        private int MarkedTop(int start, List<OutlineNode> nodes) {
+            var kind = tokens[start + 1].Text;
+            var name = tokens[start + 2].Text;
+            var end = start + 2;
+            var open = -1;
+            var close = -1;
+            var j = start + 3;
+            var paren = 0;
+            for (; j < tokens.Count; j++) {
+                var t = tokens[j];
+                if (t.Kind == DslTokenKind.LParen) paren++;
+                else if (t.Kind == DslTokenKind.RParen) paren--;
+                else if (paren == 0 && t.Kind == DslTokenKind.LBrace) {
+                    open = j;
+                    close = _match[j] >= 0 ? _match[j] : tokens.Count - 1;
+                    end = close;
+                    j = close + 1;
+                    break;
+                }
+                else if (paren == 0 && (IsNameColon(j) || tokens[j].Kind == DslTokenKind.Public))
+                    break;
+                end = j;
+            }
+
+            var children = open >= 0 && kind == "entity" ? Members(open, close, name) : [];
             nodes.Add(Make(kind, name, name, start, end, true, open, close, children));
             return j;
         }
@@ -248,6 +283,13 @@ public sealed class DslOutline {
                 kind = "unnamed";
                 name = t.Text;
                 skip = 1;
+                return true;
+            }
+
+            if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Action) {
+                kind = "action";
+                name = tokens[i + 2].Text;
+                skip = 3;
                 return true;
             }
 

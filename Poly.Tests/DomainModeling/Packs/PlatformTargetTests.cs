@@ -130,20 +130,22 @@ public sealed class PlatformTargetTests {
             new SurfaceLibrary(
                 "posix",
                 PosixCopy(addEndpoint: false),
-                Bodies(new Poly.Ast.Nodes.Return(new Poly.Ast.Nodes.Constant(0))),
+                Bodies(0),
                 targets: [PosixLibrary.TargetId]));
         var withBodyB = SessionFor(
             new SurfaceLibrary(
                 "posix",
                 PosixCopy(addEndpoint: false),
-                Bodies(new Poly.Ast.Nodes.Return(new Poly.Ast.Nodes.Constant(1))),
+                Bodies(1),
                 targets: ["windows"]));
 
         var contributionA = withBodyA.ContractContributions.Single();
         var contributionB = withBodyB.ContractContributions.Single();
         // The two contributions must really differ in exactly the things the digest ignores.
-        await Assert.That(ReferenceEquals(
-                contributionA.Bodies["Open"].Single(), contributionB.Bodies["Open"].Single())).IsFalse();
+        var bodyA = (Poly.Ast.Nodes.Return)contributionA.Bodies["Open"]().Nodes.Single();
+        var bodyB = (Poly.Ast.Nodes.Return)contributionB.Bodies["Open"]().Nodes.Single();
+        await Assert.That(((Poly.Ast.Nodes.Constant)bodyA.Value!).Value).IsEqualTo(0);
+        await Assert.That(((Poly.Ast.Nodes.Constant)bodyB.Value!).Value).IsEqualTo(1);
         await Assert.That(contributionA.Targets.SequenceEqual(contributionB.Targets, StringComparer.Ordinal))
             .IsFalse();
 
@@ -192,9 +194,10 @@ public sealed class PlatformTargetTests {
     private static DomainSession SessionFor(IDomainLibrary library) =>
         DomainSession.ForExtensions([library.Id], new ExtensionCatalog().With(library));
 
-    private static Dictionary<string, IReadOnlyList<Poly.Ast.Node>> Bodies(Poly.Ast.Node body) =>
+    private static Dictionary<string, Func<Poly.Ast.Nodes.Block>> Bodies(int value) =>
         new(StringComparer.Ordinal) {
-            ["Open"] = [body],
+            ["Open"] = () => new Poly.Ast.Nodes.Block(
+                [new Poly.Ast.Nodes.Return(new Poly.Ast.Nodes.Constant(value))]),
         };
 
     /// <summary>The POSIX surface, optionally with one more prototype, for digest comparisons.</summary>
@@ -227,7 +230,7 @@ public sealed class PlatformTargetTests {
     private sealed class SurfaceLibrary(
         string id,
         ImportedContract surface,
-        IReadOnlyDictionary<string, IReadOnlyList<Poly.Ast.Node>>? bodies = null,
+        IReadOnlyDictionary<string, Func<Poly.Ast.Nodes.Block>>? bodies = null,
         IReadOnlyList<string>? targets = null) : IDomainLibrary {
         public string Id => id;
 

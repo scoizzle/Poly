@@ -376,14 +376,19 @@ public class MinimalApiGeneratorTests {
 
     /// <summary>A billing domain whose Ledger entity must never surface as a public route
     /// when consumed as a produced <c>contract internal</c> (pack-3b producer).</summary>
-    private static Domain BillingSource() =>
-        DomainFactory.Create("billing", b => b
-            .AddValueType("ChargeRequest",
-                new Property("Amount", new DomainTypeReference("Number"), []),
-                new Property("Currency", new DomainTypeReference("Text"), []))
-            .AddEntity("Ledger")
-            .AddActionWithParameters("Ledger", "Charge",
-                new Property("request", new DomainTypeReference("ChargeRequest"), [])));
+    private static Domain BillingSource() => ParseDomain("""
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+          Currency: Text
+        }
+
+        public entity Ledger {
+          public action Charge (request: ChargeRequest) {
+          }
+        }
+        """);
 
     /// <summary>Parent domain with a root entity and a declared internal billing contract.</summary>
     private static Domain ParentWithBillingContract() => ParseDomain("""

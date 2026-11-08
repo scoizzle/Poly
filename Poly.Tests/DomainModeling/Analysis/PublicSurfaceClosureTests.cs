@@ -18,9 +18,14 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// that names a type internal to the declaring domain is <c>DMCON002</c> and refuses
 /// <c>Lower</c> through the existing <c>ThrowIfHasErrors</c> door.
 /// <para>
+/// #418: a public action must also be reachable through public. A public action on an
+/// internal entity is <c>DMCON003</c>, because a public entity exports its name and its
+/// public actions; the export never projects an action through an internal owner.
+/// </para>
+/// <para>
 /// Not checked, by decision: a public entity's properties (decision 13 exports its name
 /// and public actions only), an imported contract's ACL value types (that contract's
-/// surface), and enum payloads (no visibility mark; #418 owns their mark or digest entry).
+/// surface), and enum payloads (no visibility mark; #418 gives them a digest entry).
 /// </para>
 /// </summary>
 public sealed class PublicSurfaceClosureTests {
@@ -51,7 +56,7 @@ public sealed class PublicSurfaceClosureTests {
           Amount: Number
         }
 
-        Order: entity {
+        public entity Order {
           Total: Number
           public action Pay (bill: Money) {
           }
@@ -80,7 +85,7 @@ public sealed class PublicSurfaceClosureTests {
               Draft: stage { }
             }
 
-            Customer: entity {
+            public entity Customer {
               orders: many Order
               public action Place -> Order {
                 create in orders { }
@@ -109,7 +114,7 @@ public sealed class PublicSurfaceClosureTests {
               Draft: stage { }
             }
 
-            Customer: entity {
+            public entity Customer {
               orders: many Order
               public action Place (bill: Money) -> Order {
                 create in orders { }
@@ -179,7 +184,7 @@ public sealed class PublicSurfaceClosureTests {
               Value: Text
             }
 
-            Order: entity {
+            public entity Order {
               Open: stage {
                 public action Close (code: Code) {
                 }
@@ -204,7 +209,7 @@ public sealed class PublicSurfaceClosureTests {
         var analysis = Analyze("""
             domain Test
 
-            Order: entity {
+            public entity Order {
               Total: Number
               public action Pay (request: ChargeRequest) {
               }
@@ -240,7 +245,7 @@ public sealed class PublicSurfaceClosureTests {
               Blue,
             }
 
-            Order: entity {
+            public entity Order {
               public action Paint (color: Color) {
               }
             }
@@ -275,6 +280,146 @@ public sealed class PublicSurfaceClosureTests {
     }
 
     [Test]
+    public async Task PublicAction_OnInternalEntity_ReportsDmcon003() {
+        var analysis = Analyze("""
+            domain Test
+
+            Order: entity {
+              public action Pay {
+              }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.PublicMemberOnInternalOwner);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message)
+            .Contains("Pay")
+            .And.Contains("Order")
+            .And.Contains("internal")
+            .And.Contains("public");
+    }
+
+    [Test]
+    public async Task PublicStageAction_OnInternalEntity_ReportsDmcon003() {
+        var analysis = Analyze("""
+            domain Test
+
+            Order: entity {
+              Open: stage {
+                public action Close {
+                }
+              }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.PublicMemberOnInternalOwner);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message)
+            .Contains("Close")
+            .And.Contains("Order");
+    }
+
+    /// <summary>
+    /// Reachability is checked before signature closure: an action that is not on the
+    /// surface at all reports one fix, not two.
+    /// </summary>
+    [Test]
+    public async Task PublicAction_OnInternalEntity_ReportsOnlyDmcon003() {
+        var analysis = Analyze("""
+            domain Test
+
+            Money: value {
+              Amount: Number
+            }
+
+            Order: entity {
+              public action Pay (bill: Money) {
+              }
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.PublicMemberOnInternalOwner).Count).IsEqualTo(1);
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.PublicSurfaceNotClosed)).IsEmpty();
+    }
+
+    [Test]
+    public async Task PublicAction_OnPublicEntity_AnalyzesClean() {
+        var analysis = Analyze("""
+            domain Test
+
+            public entity Order {
+              Total: Number
+              public action Pay {
+              }
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.PublicMemberOnInternalOwner)).IsEmpty();
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.PublicSurfaceNotClosed)).IsEmpty();
+        await Assert.That(analysis.HasErrors).IsFalse();
+    }
+
+    [Test]
+    public async Task InternalAction_OnInternalEntity_AnalyzesClean() {
+        var analysis = Analyze("""
+            domain Test
+
+            Order: entity {
+              Total: Number
+              Pay: action {
+              }
+              Open: stage {
+                Close: action {
+                }
+              }
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.PublicMemberOnInternalOwner)).IsEmpty();
+        await Assert.That(analysis.HasErrors).IsFalse();
+    }
+
+    [Test]
+    public async Task PublicAction_OnInternalEntity_LowerThrows() {
+        var (domain, analysis, session) = Evolve("""
+            domain Test
+
+            Order: entity {
+              public action Pay {
+              }
+            }
+            """);
+
+        await Assert.That(analysis.HasErrors).IsTrue();
+        await Assert.That(() => session.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("Pay");
+    }
+
+    [Test]
+    public async Task Polyc_ReportsDmcon003PlacedAtTheAction() {
+        const string Dsl = """
+            domain Test
+
+            Order: entity {
+              public action Pay {
+              }
+            }
+            """;
+
+        var compiler = new PolyCompiler(ProductCatalog.Catalog, "authoring");
+        var result = compiler.Compile(Dsl, "reachable.poly");
+
+        var errors = result.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.PublicMemberOnInternalOwner)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Placed).IsTrue();
+        await Assert.That(errors[0].File).IsEqualTo("reachable.poly");
+        await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    [Test]
     public async Task PublicAction_InternalParameterType_LowerThrows() {
         var (domain, analysis, session) = Evolve(InternalParameterDsl);
 
@@ -293,7 +438,7 @@ public sealed class PublicSurfaceClosureTests {
               Amount: Number
             }
 
-            Order: entity {
+            public entity Order {
               Total: Number
               public action Pay (bill: Money) {
               }

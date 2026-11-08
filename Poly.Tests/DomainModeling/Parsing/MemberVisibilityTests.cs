@@ -141,7 +141,7 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Order: entity {
+            public entity Order {
               public action Pay {
               }
               Open: stage {
@@ -161,7 +161,7 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Order: entity {
+            public entity Order {
               Total: Number
               Hidden: action {
               }
@@ -180,7 +180,7 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Order: entity {
+            public entity Order {
               Total: Number
               Open: stage {
                 public action Close {

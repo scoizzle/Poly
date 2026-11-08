@@ -47,6 +47,13 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string PublicSurfaceNotClosed = "DMCON002";
 
+    /// <summary>
+    /// A public action sits on an internal entity. A public entity exports its name and
+    /// its public actions (#418, decision 13), so a public action must be reachable
+    /// through public; the export never projects an action through an internal owner.
+    /// </summary>
+    public const string PublicMemberOnInternalOwner = "DMCON003";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

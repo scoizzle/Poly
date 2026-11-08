@@ -706,6 +706,15 @@ public sealed class DomainDslPrinter {
         return PrintExpression(expression);
     }
 
+    /// <summary>
+    /// Canonical, invariant-culture text for one constraint. Used by the contract surface
+    /// fingerprint, which must not depend on the current locale or a second renderer.
+    /// </summary>
+    public string PrintConstraintText(Constraint constraint) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        return PrintConstraint(constraint);
+    }
+
     private string PrintExpression(DomainExpression expr) {
         return ExpressionPrinter.Run(this, expr);
     }

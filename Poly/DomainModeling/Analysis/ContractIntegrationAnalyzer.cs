@@ -51,9 +51,11 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// <summary>
     /// An exported signature must be closed (decision 12, #417): a public action's parameter
     /// and result types and a public value type's field types may not name a type internal to
-    /// this domain. Not checked: a public entity's properties (decision 13 exports its name and
+    /// this domain. A public action must also be reachable through public (#418): its owning
+    /// entity must be public, because a public entity exports its name and its public actions.
+    /// Not checked: a public entity's properties (decision 13 exports its name and
     /// public actions only), an imported contract's ACL value types (that contract's surface),
-    /// primitives, and enums (no visibility mark; #418 owns their mark or digest entry).
+    /// primitives, and enums (no visibility mark; #418 gives them a digest entry).
     /// </summary>
     private static void ValidatePublicSurface(AnalysisContext context, Domain domain) {
         foreach (var valueType in domain.Types.OfType<ValueType>()) {
@@ -86,6 +88,16 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         Domain domain,
         Entity entity,
         Action action) {
+        if (entity.Visibility != Visibility.Public) {
+            context.ReportError(
+                action,
+                $"Public action '{action.Name}' on entity '{entity.Name}' is not reachable: " +
+                $"entity '{entity.Name}' is internal. Mark '{entity.Name}' public, or remove " +
+                $"the public mark from '{action.Name}'.",
+                DomainModelDiagnosticCodes.PublicMemberOnInternalOwner);
+            return;
+        }
+
         var subject = $"Public action '{action.Name}' on entity '{entity.Name}'";
 
         foreach (var parameter in action.Parameters) {

@@ -19,16 +19,22 @@ public class ContractBindingExportTests {
     private static Compiler CompilerWithHttpHost() =>
         new Compiler().Load(new HttpLibrary());
 
-    /// <summary>A billing domain whose Ledger.Charge action projects to the Billing contract
-    /// endpoint (pack-3b producer). The child's Ledger entity must never surface in export.</summary>
-    private static Domain BillingSource() =>
-        DomainFactory.Create("billing", b => b
-            .AddValueType("ChargeRequest",
-                new Property("Amount", new DomainTypeReference("Number"), []),
-                new Property("Currency", new DomainTypeReference("Text"), []))
-            .AddEntity("Ledger")
-            .AddActionWithParameters("Ledger", "Charge",
-                new Property("request", new DomainTypeReference("ChargeRequest"), [])));
+    /// <summary>A billing domain whose public Ledger.Charge action projects to the Billing
+    /// contract endpoint (pack-3b producer). The child's Ledger entity must never surface in
+    /// export; only its name may appear as a name-only surface entry.</summary>
+    private static Domain BillingSource() => ParseDomain("""
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+          Currency: Text
+        }
+
+        public entity Ledger {
+          public action Charge (request: ChargeRequest) {
+          }
+        }
+        """);
 
     /// <summary>Parent Shop base: root Order entity + a declared (empty) internal Billing contract.
     /// Parsed without the bind because the parent's action references the contract value type, which

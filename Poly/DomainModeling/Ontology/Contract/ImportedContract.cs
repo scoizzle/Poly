@@ -24,5 +24,26 @@ public sealed record ImportedContract(
     /// </summary>
     public string? Pin { get; init; }
 
+    /// <summary>
+    /// Public entity names on this surface (decision 13). A name-only entry: no properties,
+    /// stages, or mutable identity handle. Not a node, so not in <see cref="Children"/>.
+    /// </summary>
+    public IReadOnlyList<string> Entities { get; init; } = [];
+
+    /// <summary>
+    /// Enums named by the public surface. Enums carry no visibility mark; they are exported
+    /// when a public signature (or an exported value type) reaches them, so a consumer can
+    /// resolve the payload. Not a node, so not in <see cref="Children"/>.
+    /// </summary>
+    public IReadOnlyList<EnumType> Enums { get; init; } = [];
+
+    /// <summary>
+    /// SHA-256 of the surface and only the surface (spike #413 §3): endpoints, payloads,
+    /// public entity names, enum members, public property constraints, public action
+    /// preconditions, and the reserved <c>accepts</c> component. Computed, never stored, so
+    /// the pin cannot drift from the contract it describes.
+    /// </summary>
+    public string Fingerprint => ContractSurfaceFingerprint.Compute(this);
+
     public sealed override IEnumerable<Node?> Children => [.. Types, .. Endpoints];
 }

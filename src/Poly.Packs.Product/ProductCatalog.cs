@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Libraries.Contradictions;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
@@ -9,7 +8,7 @@ using Poly.Packs.SqlServer;
 namespace Poly.Packs.Product;
 
 /// <summary>
-/// Core plus sqlite, sqlserver, http, and contradictions. <see cref="Catalog"/> has the host-file contributors
+/// Core plus sqlite, sqlserver, and http. <see cref="Catalog"/> has the host-file contributors
 /// wired: persistence, sqlite and sqlserver emit the DbContext, http emits Program.cs and
 /// demo.http. polyc and the DslCompiler facade resolve from it.
 /// </summary>
@@ -32,7 +31,6 @@ public static class ProductCatalog {
 
     private static ExtensionCatalog Build(bool wired, string? hostVendor) => new ExtensionCatalog()
         .With(new TemporalLibrary())
-        .With(new ContradictionsLibrary())
         .With(new StorageFacetLibrary())
         .With(new PersistenceEmitLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqliteLibrary(wired ? new DbContextArtifactContributor() : null))

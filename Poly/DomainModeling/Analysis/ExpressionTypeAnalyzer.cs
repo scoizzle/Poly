@@ -48,10 +48,42 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
 
+        if (node is Domain domain)
+            AnalyzeObservedFlows(context, domain);
         if (node is Entity entity)
             AnalyzeEntity(context, entity);
 
         this.AnalyzeChildren(context, node);
+    }
+
+    /// <summary>
+    /// Each resolvable <see cref="ObservedFlow"/> is checked as an assign of the source property
+    /// to the target (<see cref="CheckCompatible"/>). A mismatch is DMSEM003 on the target
+    /// property; a matching allowance makes it a warning. Unresolvable paths are reported by
+    /// <see cref="EffectAnalyzer"/>.
+    /// </summary>
+    private void AnalyzeObservedFlows(AnalysisContext context, Domain domain) {
+        var flows = RuntimeAnalysisCache.Session(domain).ObservedFlows;
+        if (flows.Count == 0)
+            return;
+        var enumTypes = ResolveEnums(context);
+        foreach (var flow in flows) {
+            var source = ObservedFlowChecks.Resolve(domain, flow.SourcePath);
+            var target = ObservedFlowChecks.Resolve(domain, flow.TargetPath);
+            if (source is null || target is null)
+                continue;
+            var props = source.Value.Entity.Properties
+                .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+            CheckCompatible(
+                context, new PropertyAccess(source.Value.Property.Name), target.Value.Property.Type.TypeName,
+                enumTypes, $"observed flow '{flow.SourcePath}' -> '{flow.TargetPath}'", props, parameters: null,
+                report: message => context.ReportDiagnostic(
+                    target.Value.Property,
+                    ObservedFlowChecks.SeverityFor(
+                        context, domain, target.Value.Property, DomainModelDiagnosticCodes.SemanticTypeCompatibility),
+                    message,
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility));
+        }
     }
 
     // ── Entry points per entity ────────────────────────────────
@@ -513,7 +545,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes,
         string what,
         Dictionary<string, string>? props = null,
-        Dictionary<string, string>? parameters = null) {
+        Dictionary<string, string>? parameters = null,
+        Action<string>? report = null) {
+        void Report(AnalysisContext ctx, Node where, string message) {
+            if (report is null)
+                ExpressionTypeAnalyzer.Report(ctx, where, message);
+            else
+                report(message);
+        }
+
         value = RewriteLibraryIdent(value);
         if (_meaning.TryClaimAssign(context, value, targetTypeName,
                 new ExpressionTypeCheckScope(

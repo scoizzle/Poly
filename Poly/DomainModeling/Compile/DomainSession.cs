@@ -1,7 +1,6 @@
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Contradictions;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
@@ -52,10 +51,17 @@ public sealed class DomainSession {
     internal IReadOnlyList<INodeAnalyzer> Analyzers { get; }
 
     /// <summary>
-    /// Flow claims bound at build time and frozen for this session. A claim change needs a new
-    /// session (and a new <see cref="Domain"/> instance before lowering).
+    /// Copies the platform's reader found, bound at build time and frozen for this session.
+    /// Analysis checks each with the assign checks.
     /// </summary>
-    public IReadOnlyList<ContradictionClaim> ContradictionClaims { get; }
+    public IReadOnlyList<ObservedFlow> ObservedFlows { get; }
+
+    /// <summary>
+    /// Acknowledgements of the diagnostics the <see cref="ObservedFlows"/> checks emit, frozen
+    /// with the session. A change needs a new session (and a new <see cref="Domain"/> instance
+    /// before lowering).
+    /// </summary>
+    public IReadOnlyList<DiagnosticAllowance> DiagnosticAllowances { get; }
 
     /// <summary>
     /// Compilers libraries added at <see cref="SessionBuilder.AddConstraintCompiler"/>.
@@ -135,7 +141,8 @@ public sealed class DomainSession {
         IReadOnlyList<StageContribution>? contributions = null,
         IReadOnlyList<(string LibraryId, string Name, PrimitiveSemantics Semantics)>? primitiveSeeds = null,
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
-        IReadOnlyList<ContradictionClaim>? contradictionClaims = null,
+        IReadOnlyList<ObservedFlow>? observedFlows = null,
+        IReadOnlyList<DiagnosticAllowance>? diagnosticAllowances = null,
         IReadOnlyList<ContractContribution>? contractContributions = null) {
         Domain = domain;
         Extensions = extensions;
@@ -151,7 +158,8 @@ public sealed class DomainSession {
         Contributions = contributions ?? [];
         PrimitiveSeeds = primitiveSeeds ?? [];
         ConstraintCompilers = constraintCompilers ?? [];
-        ContradictionClaims = contradictionClaims ?? [];
+        ObservedFlows = observedFlows ?? [];
+        DiagnosticAllowances = diagnosticAllowances ?? [];
         ContractContributions = contractContributions ?? [];
     }
 
@@ -163,21 +171,18 @@ public sealed class DomainSession {
     /// <summary>Loads libraries for an existing domain's extension ids. Unknown id throws.</summary>
     public static DomainSession Open(
         Domain domain,
-        ExtensionCatalog? catalog = null,
-        IReadOnlyList<ContradictionClaim>? claims = null) {
+        ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(domain);
-        return ForExtensions(domain.Extensions, catalog ?? ExtensionCatalog.Core, claims).WithDomain(domain);
+        return ForExtensions(domain.Extensions, catalog ?? ExtensionCatalog.Core).WithDomain(domain);
     }
 
     /// <summary>Loads libraries for explicit extension ids (parse/print/analyze before a domain exists). Unknown id throws.</summary>
     public static DomainSession ForExtensions(
         IReadOnlyList<string> extensions,
-        ExtensionCatalog? catalog = null,
-        IReadOnlyList<ContradictionClaim>? claims = null) {
+        ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(extensions);
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
-        builder.WithContradictionClaims(claims);
         builder.LoadCore();
         if (!extensions.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
             builder.LoadTemporal();
@@ -210,14 +215,12 @@ public sealed class DomainSession {
     public static DomainSession ForAuthoringDocument(
         DslSyntaxTree tree,
         IReadOnlyList<string> seed,
-        ExtensionCatalog? catalog = null,
-        IReadOnlyList<ContradictionClaim>? claims = null) {
+        ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
         var ids = tree.Uses.Count > 0 ? tree.Uses : seed;
         var resolved = catalog ?? ExtensionCatalog.Core;
         var builder = SessionBuilder.CreateEmpty();
-        builder.WithContradictionClaims(claims);
         builder.LoadCore();
         if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
             builder.LoadTemporal();
@@ -247,19 +250,19 @@ public sealed class DomainSession {
     public static DomainSession ForAuthoringSource(
         string poly,
         IReadOnlyList<string> seed,
-        ExtensionCatalog? catalog = null,
-        IReadOnlyList<ContradictionClaim>? claims = null) {
+        ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(poly);
         ArgumentNullException.ThrowIfNull(seed);
-        return ForAuthoringDocument(DslSyntaxTree.Parse(poly), seed, catalog, claims);
+        return ForAuthoringDocument(DslSyntaxTree.Parse(poly), seed, catalog);
     }
 
     /// <summary>Keeps tables when <c>uses</c> is unchanged; reloads when it changes.</summary>
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers, ContradictionClaims, ContractContributions);
-        return Open(domain, claims: ContradictionClaims);
+            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers, ObservedFlows, DiagnosticAllowances, ContractContributions);
+        var reloaded = ForExtensions(domain.Extensions, ExtensionCatalog.Core);
+        return new DomainSession(domain, reloaded.Extensions, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions);
     }
 
     /// <summary>

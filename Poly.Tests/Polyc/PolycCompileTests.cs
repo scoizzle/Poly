@@ -38,19 +38,6 @@ public class PolycCompileTests {
     }
 
     [Test]
-    public async Task Polyc_AcceptsUsesContradictions_WithNoClaims() {
-        const string body = "A: entity {\n  X: Text\n}\n";
-        var plain = Compiler().Compile("domain D\n" + body, "x.poly");
-        var tolerant = Compiler().Compile("domain D\nuses contradictions\n" + body, "x.poly");
-        await Assert.That(tolerant.Succeeded).IsEqualTo(plain.Succeeded);
-        await Assert.That(tolerant.Succeeded).IsTrue();
-        await Assert.That(tolerant.Diagnostics.Select(d => d.Code).ToArray())
-            .IsEquivalentTo(plain.Diagnostics.Select(d => d.Code).ToArray());
-        await Assert.That(tolerant.Files.Select(f => f.FileName).ToArray())
-            .IsEquivalentTo(plain.Files.Select(f => f.FileName).ToArray());
-    }
-
-    [Test]
     public async Task Compile_UnknownUses_FailsClosedAtHeaderTokenWithoutAnalyzingBody() {
         var result = Compiler().Compile("domain D\nuses nope\nA: entity {\n  X: Missing\n}\n", "x.poly");
         var only = result.Diagnostics.Single();

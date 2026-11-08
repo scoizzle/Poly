@@ -201,14 +201,6 @@ the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
 pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
 A `contract` block remains for a surface no library contributes.
 
-`uses contradictions` changes no syntax. It marks the document as contradiction-tolerant:
-the platform binds data-flow claims (for example `Customer.Notes` into `Order.Notes`) on the
-session, and analysis records the incompatible ones (width, scale, nullability, type) in a
-bag instead of failing. An `open` entry stops Lower, Emit, and simulation, and names the
-entry; `resolved` and `withdrawn` entries stay in the bag and do not block. Standalone, with
-no claims bound, the bag is empty and nothing changes. Binding claims without the id is an
-error.
-
 ```poly
 domain MyDomain
 uses storage

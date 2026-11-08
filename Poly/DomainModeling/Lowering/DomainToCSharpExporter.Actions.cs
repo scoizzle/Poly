@@ -103,10 +103,10 @@ public sealed partial class DomainToCSharpExporter {
         Domain? domain, INodeMetadataProvider? analysis,
         ContractSplicePlan? splice = null) {
         var representative = variants[0].Action;
-        var paramSignature = string.Join(",", representative.Parameters.Select(p => p.Name));
+        var paramSignature = DomainAnalysis.ParameterSignature(representative);
         foreach (var (action, _) in variants) {
-            var sig = string.Join(",", action.Parameters.Select(p => p.Name));
-            if (!string.Equals(sig, paramSignature, StringComparison.Ordinal))
+            if (!string.Equals(
+                    DomainAnalysis.ParameterSignature(action), paramSignature, StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Action '{action.Name}' on entity '{entity.Name}' has incompatible parameter lists across stages.");
         }

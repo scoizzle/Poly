@@ -354,6 +354,35 @@ public sealed class ContractBindingFactsTests {
     }
 
     [Test]
+    public async Task StageDispatchedBoundAction_DifferingParameterTypes_DoesNotBindOrSplice() {
+        const string poly = """
+            domain Shop
+            uses billing
+
+            Order: entity {
+              Open: stage {
+                Pay: action (request: ChargeRequest) { transition to Done }
+              }
+              Done: stage {
+                Pay: action (request: Text) { }
+              }
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """;
+        var bodies = new Dictionary<string, Func<Poly.Ast.Nodes.Block>>(StringComparer.Ordinal) {
+            ["Charge"] = TraceBody("Billing.Charge"),
+        };
+        var (domain, session, analysis) = Analyze(
+            poly, BillingSurface(ContractSourceKind.ExternalProvider), bodies: bodies);
+        var facts = analysis.GetMetadata<ContractBindingMetadata>(domain.ContractBindings.Single());
+
+        await Assert.That(analysis.HasErrors).IsTrue();
+        await Assert.That(facts!.Status).IsNotEqualTo(ContractBindingStatus.Bound);
+        await Assert.That(() => session.Emit(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
     public async Task StageDispatchedBoundAction_AllocatesDistinctSpliceLocals() {
         const string poly = """
             domain Shop

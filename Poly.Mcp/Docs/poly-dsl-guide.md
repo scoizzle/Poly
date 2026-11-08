@@ -1197,7 +1197,9 @@ When the original name matches several exported endpoints, analysis keeps the en
 whose payload type accepts the bound parameter (the same type, or a narrower value type with
 the same property shape and inside constraints). If one payload is more constrained than the
 others it wins and `DMCON011` names the choice; candidates that are not comparable are
-`DMCON012` with no guess. A name no endpoint carries is `DMCON013`.
+`DMCON012` with no guess. A name no endpoint carries is `DMCON013`. A bind covers every
+stage variant of the action: all variants must share one parameter list (name and type), or
+the bind fails closed rather than splicing into a stage that never accepted that payload.
 
 A hand-written `Name: contract ...` block beside a seeded surface fails closed, as does a
 second block with the same name. A version on an id whose library contributed no surface

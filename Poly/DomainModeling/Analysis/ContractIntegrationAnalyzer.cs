@@ -317,6 +317,18 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             return;
         }
 
+        // One bind covers every variant of the name (entity-level and each stage). If those
+        // variants disagree on a parameter's name or type, there is no single signature to
+        // bind; first-wins would splice a body whose payload the other stage never accepted.
+        if (DisagreeingSignatures(domain, binding.ActionName) is { } signatures) {
+            RecordBinding(context, binding, contract, ContractBindingStatus.Unresolved, endpoint: null);
+            context.ReportError(
+                binding,
+                $"Contract binding '{binding.Name}' references action '{binding.ActionName}', whose variants do not share one parameter list (name and type): {signatures}. A bind needs one signature across stage variants.",
+                DomainModelDiagnosticCodes.ContractIntegration);
+            return;
+        }
+
         var localParam = action.Parameters.FirstOrDefault(p =>
             string.Equals(p.Name, binding.LocalParameterName, StringComparison.Ordinal));
         if (localParam is null) {
@@ -381,6 +393,29 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         contract.Endpoints.Any(endpoint =>
             string.Equals(endpoint.Name, authoredEndpoint, StringComparison.Ordinal)
             || string.Equals(endpoint.SourceName ?? endpoint.Name, authoredEndpoint, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The distinct parameter lists of the named action's variants on the entity that owns the
+    /// name (the same first-entity rule as <see cref="DomainAnalysis.FindAnyNamedActionOnAnyEntity"/>),
+    /// formatted for the diagnostic, or null when every variant agrees.
+    /// </summary>
+    private static string? DisagreeingSignatures(Domain domain, string actionName) {
+        foreach (var type in domain.Types) {
+            if (type is not Entity entity)
+                continue;
+            var actions = DomainAnalysis.FindNamedActions(entity, actionName);
+            if (actions.Count == 0)
+                continue;
+            var signatures = actions
+                .Select(DomainAnalysis.ParameterSignature)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            return signatures.Count > 1
+                ? string.Join(" vs ", signatures.Select(signature => $"'{signature}'"))
+                : null;
+        }
+        return null;
+    }
 
     private static void RecordBinding(
         AnalysisContext context,

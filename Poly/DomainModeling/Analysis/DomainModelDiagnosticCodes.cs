@@ -124,6 +124,13 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string UnconditionalAutomaticTransitionCycle = "DMEFF013";
 
+    /// <summary>
+    /// A bound <see cref="ObservedFlow"/> copies an optional property into a required one: the
+    /// source may carry null where the target cannot. Reported on the target property; a matching
+    /// allowance makes it a warning.
+    /// </summary>
+    public const string ObservedFlowNullability = "DMEFF014";
+
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 
     // DMAGG001 removed — the aggregate now promotes a parentless entity to a root, so

@@ -21,12 +21,15 @@ Two records, in `Poly/DomainModeling/Analysis/DiagnosticAllowance.cs`:
 Both are frozen on `DomainSession` and read by the analyzers from `RuntimeAnalysisCache.Session`;
 `WithDomain` carries them on both branches. No library, no keyword, no load-order rule.
 
-There is no second rules table. The flow is presented to the checks that already decide:
+There is no second rules table. The flow is presented to the checks that decide — the ones that
+already existed, plus the nullability arm #439 adds over the existing `optional` fact:
 `IsConstraintSubsumed` (length, range) gives `DMEFF008` on the target property;
-`CheckCompatible` gives `DMSEM003` on the target property; a path that does not resolve is
-`DMSEM005` on the domain and no allowance clears it. No node is inserted into the domain, so
-nothing lowers and a cross-entity copy is not a `DMEFF012`. Scale and nullability have no
-constraint diagnostic, so they are not checked here.
+`CheckCompatible` gives `DMSEM003` on the target property; an optional source into a required
+target gives `DMEFF014` on the target property, because `optional` is the only way an entity
+property may hold null; a path that does not resolve is `DMSEM005` on the domain and no
+allowance clears it. No node is inserted into the domain, so nothing lowers and a cross-entity
+copy is not a `DMEFF012`. Scale has no constraint diagnostic, so it is not checked here (it is a
+platform mapping row).
 
 - No matching allowance: the diagnostic is an error and `ThrowIfHasErrors` (the only gate) refuses.
 - Matching allowance: the same diagnostic is a warning, kept in the report. Direct `session.Lower`

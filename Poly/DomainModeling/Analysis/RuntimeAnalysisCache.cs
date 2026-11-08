@@ -1,5 +1,4 @@
 using Poly.Ast.Nodes;
-using Poly.DomainModeling.Libraries.Contradictions;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
@@ -156,7 +155,6 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(analysis);
         DomainModelAnalyzer.ThrowIfHasErrors(analysis);
-        RefuseOpenContradictions(domain, session, analysis);
         Bind(domain, session, analysis);
         var holder = GetHolder(domain);
         if (holder.Module is not null)
@@ -187,19 +185,6 @@ internal static class RuntimeAnalysisCache {
             holder.PolicyBodies = CompletePolicyBodies(domain, analysis, policyBodies);
             return holder.Module;
         }
-    }
-
-    // The one contradiction gate: Lower, Emit, simulation, and ModuleInstanceExecutor all pass here.
-    private static void RefuseOpenContradictions(Domain domain, DomainSession session, AnalysisResult analysis) {
-        var bag = analysis.GetMetadata<ContradictionMetadata>(domain)?.Bag;
-        if (session.Extensions.Contains(ContradictionsLibrary.ExtensionId) && bag is null)
-            throw new InvalidOperationException(
-                "Contradictions are on (`uses contradictions`), but analysis published no contradiction bag.");
-        var open = bag?.Open ?? [];
-        if (open.Count > 0)
-            throw new InvalidOperationException(
-                $"Compilation refused: {open.Count} open contradiction(s): {string.Join(", ", open.Select(e => e.Name))}. " +
-                "Resolve or withdraw them before Lower, Produce, or codegen.");
     }
 
     internal static bool TryGetModuleMethod(

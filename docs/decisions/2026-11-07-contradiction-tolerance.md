@@ -1,6 +1,9 @@
 # Contradiction tolerance (engine half, #429)
 
-Status: accepted 2026-11-07. Design source: poly-platform `docs/product/modernization.md`
+Status: **superseded 2026-11-08** by [`2026-11-08-diagnostic-allowance.md`](2026-11-08-diagnostic-allowance.md) (#435). The bag,
+`uses contradictions`, strict mode, and the `GetOrLower` gate were deleted; the text below is history, not current truth.
+
+Was: accepted 2026-11-07. Design source: poly-platform `docs/product/modernization.md`
 (contradiction-tolerant modeling); platform ask scoizzle/poly-platform#29.
 
 ## Decision

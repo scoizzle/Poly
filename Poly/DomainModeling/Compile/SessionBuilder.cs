@@ -1,6 +1,5 @@
 using Poly.Analysis;
-using Poly.DomainModeling.Contradictions;
-using Poly.DomainModeling.Libraries.Contradictions;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
@@ -28,7 +27,8 @@ public sealed class SessionBuilder {
     private readonly HashSet<(PipelineStage Stage, string LibraryId)> _contributionKeys = [];
     private readonly List<ContractContribution> _contracts = [];
     private string? _registeringLibraryId;
-    private IReadOnlyList<ContradictionClaim> _contradictionClaims = [];
+    private IReadOnlyList<ObservedFlow> _observedFlows = [];
+    private IReadOnlyList<DiagnosticAllowance> _diagnosticAllowances = [];
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
@@ -38,20 +38,38 @@ public sealed class SessionBuilder {
     public IReadOnlyList<ContractContribution> Contracts => _contracts;
     public ExpressionMeaning Meaning { get; } = new();
 
-    /// <summary>Flow claims bound before the <c>contradictions</c> library loads.</summary>
-    public IReadOnlyList<ContradictionClaim> ContradictionClaims => _contradictionClaims;
+    /// <summary>Copies the platform's reader found already bound by <see cref="WithObservedFlows"/>.</summary>
+    public IReadOnlyList<ObservedFlow> ObservedFlows => _observedFlows;
+
+    /// <summary>Allowances bound by <see cref="WithDiagnosticAllowances"/>.</summary>
+    public IReadOnlyList<DiagnosticAllowance> DiagnosticAllowances => _diagnosticAllowances;
 
     /// <summary>
-    /// Binds the platform's flow claims. Bind first, then load: a call after
-    /// <c>contradictions</c> is loaded throws, because its pass would have captured the old set.
+    /// Binds the copies the platform's reader found. Analysis checks each one with the assign
+    /// checks. A null element or a repeated source and target pair throws.
     /// </summary>
-    public SessionBuilder WithContradictionClaims(IReadOnlyList<ContradictionClaim>? claims) {
-        if (_loadedIdSet.Contains(ContradictionsLibrary.ExtensionId))
-            throw new InvalidOperationException(
-                $"Contradiction claims must be bound before library '{ContradictionsLibrary.ExtensionId}' is loaded.");
-        if (claims is not null && claims.Any(claim => claim is null))
-            throw new ArgumentException("Contradiction claims must not contain null.", nameof(claims));
-        _contradictionClaims = claims is null ? [] : [.. claims];
+    public SessionBuilder WithObservedFlows(IReadOnlyList<ObservedFlow>? flows) {
+        if (flows is not null && flows.Any(flow => flow is null))
+            throw new ArgumentException("Observed flows must not contain null.", nameof(flows));
+        var copy = flows is null ? [] : flows.ToArray();
+        var seen = new HashSet<ObservedFlow>();
+        foreach (var flow in copy) {
+            if (!seen.Add(flow))
+                throw new ArgumentException(
+                    $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}' is bound more than once.", nameof(flows));
+        }
+        _observedFlows = copy;
+        return this;
+    }
+
+    /// <summary>
+    /// Binds the acknowledgements of the diagnostics those flow checks emit. A null element throws.
+    /// Whether an allowance matches is decided at analysis, not here.
+    /// </summary>
+    public SessionBuilder WithDiagnosticAllowances(IReadOnlyList<DiagnosticAllowance>? allowances) {
+        if (allowances is not null && allowances.Any(allowance => allowance is null))
+            throw new ArgumentException("Diagnostic allowances must not contain null.", nameof(allowances));
+        _diagnosticAllowances = allowances is null ? [] : allowances.ToArray();
         return this;
     }
 
@@ -222,9 +240,6 @@ public sealed class SessionBuilder {
 
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) {
-        if (_contradictionClaims.Count > 0 && !_loadedIdSet.Contains(ContradictionsLibrary.ExtensionId))
-            throw new InvalidOperationException(
-                $"{_contradictionClaims.Count} contradiction claim(s) are bound, but `uses {ContradictionsLibrary.ExtensionId}` is not loaded.");
         var annotations = new AnnotationRegistry(Annotations);
         var expressionForms = new ExpressionFormRegistry(ExpressionForms);
         var language = DslGrammar.LanguageFor(annotations, expressionForms);
@@ -243,7 +258,8 @@ public sealed class SessionBuilder {
             _contributions.ToArray(),
             _primitiveSeeds,
             _constraintCompilers.ToArray(),
-            _contradictionClaims,
+            _observedFlows,
+            _diagnosticAllowances,
             _contracts.ToArray());
     }
 }

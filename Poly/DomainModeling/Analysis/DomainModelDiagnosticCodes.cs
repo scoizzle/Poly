@@ -41,6 +41,13 @@ internal static class DomainModelDiagnosticCodes {
     public const string ContractIntegration = "DMCON001";
 
     /// <summary>
+    /// A <see cref="DiagnosticAllowance"/> that acknowledged no flow diagnostic this analysis emitted
+    /// (wrong code or path, the flow became compatible, or no non-blank provenance ids). An error,
+    /// and not itself acknowledgeable.
+    /// </summary>
+    public const string UnusedDiagnosticAllowance = "DMALW001";
+
+    /// <summary>
     /// A public member's exported signature names a type that is internal to the declaring
     /// domain. The exported contract must be closed (decision 12, #417): mark the named type
     /// <c>public</c> rather than adding an exception.

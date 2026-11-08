@@ -1,0 +1,88 @@
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Ontology;
+
+namespace Poly.DomainModeling.Analysis;
+
+/// <summary>
+/// A copy the platform's reader found between two entity properties, as dotted
+/// <c>Entity.Property</c> paths. The existing assign checks run over it; it lowers nothing.
+/// </summary>
+public sealed record ObservedFlow(string SourcePath, string TargetPath);
+
+/// <summary>
+/// Acknowledges one diagnostic an <see cref="ObservedFlow"/> check emitted: <see cref="Code"/> plus
+/// the finding's <see cref="ElementPath"/> (<c>Domain/Entity/Property</c>). A matching allowance
+/// downgrades that diagnostic to a warning. <see cref="ProvenanceIds"/> are the platform's ids,
+/// required and non-blank; the engine does not interpret them.
+/// </summary>
+public sealed record DiagnosticAllowance(
+    string Code,
+    string ElementPath,
+    IReadOnlyList<string> ProvenanceIds);
+
+/// <summary>Allowances a flow diagnostic matched during this analysis; read by the unused check.</summary>
+internal sealed class AllowanceLedger : IAnalysisMetadata {
+    public HashSet<DiagnosticAllowance> Consumed { get; } = new(ReferenceEqualityComparer.Instance);
+}
+
+/// <summary>
+/// What the two flow arms (<see cref="EffectAnalyzer"/>, <see cref="ExpressionTypeAnalyzer"/>)
+/// share: path resolution, the allowance lookup that picks a flow diagnostic's severity, and the
+/// unused-allowance check. The compatibility decisions stay in those analyzers.
+/// </summary>
+internal static class ObservedFlowChecks {
+    /// <summary>Exactly two segments, the owner an Entity.</summary>
+    public static (Entity Entity, Property Property)? Resolve(Domain domain, string? path) {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+        var parts = path.Split('.');
+        if (parts.Length != 2)
+            return null;
+        var entity = domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == parts[0]);
+        var property = entity?.Properties.FirstOrDefault(p => p.Name == parts[1]);
+        return property is null ? null : (entity!, property);
+    }
+
+    /// <summary>
+    /// Warning when an acknowledged allowance matches <paramref name="code"/> and the target
+    /// property's element path, else Error. A match is recorded so it is not reported unused.
+    /// </summary>
+    public static DiagnosticSeverity SeverityFor(
+        AnalysisContext context, Domain domain, Property target, string code) {
+        var allowances = RuntimeAnalysisCache.Session(domain).DiagnosticAllowances;
+        if (allowances.Count == 0)
+            return DiagnosticSeverity.Error;
+        var path = DomainElementPath.Resolve(domain, target);
+        foreach (var allowance in allowances) {
+            if (!string.Equals(allowance.Code, code, StringComparison.Ordinal)
+                || !string.Equals(allowance.ElementPath, path, StringComparison.Ordinal)
+                || !IsAcknowledged(allowance))
+                continue;
+            context.GetOrAddMetadata(domain, () => new AllowanceLedger()).Consumed.Add(allowance);
+            return DiagnosticSeverity.Warning;
+        }
+        return DiagnosticSeverity.Error;
+    }
+
+    /// <summary>DMALW001 for each allowance no flow diagnostic consumed. Run after both flow arms.</summary>
+    public static void ReportUnusedAllowances(AnalysisContext context, Domain domain) {
+        var allowances = RuntimeAnalysisCache.Session(domain).DiagnosticAllowances;
+        if (allowances.Count == 0)
+            return;
+        var consumed = context.GetMetadata<AllowanceLedger>(domain)?.Consumed;
+        foreach (var allowance in allowances) {
+            if (consumed is not null && consumed.Contains(allowance))
+                continue;
+            var why = IsAcknowledged(allowance)
+                ? "no flow diagnostic with that code was reported at that element path"
+                : "it carries no non-blank provenance ids";
+            context.ReportError(
+                domain,
+                $"Diagnostic allowance '{allowance.Code}' at '{allowance.ElementPath}' acknowledges nothing: {why}.",
+                DomainModelDiagnosticCodes.UnusedDiagnosticAllowance);
+        }
+    }
+
+    private static bool IsAcknowledged(DiagnosticAllowance allowance) =>
+        allowance.ProvenanceIds is { Count: > 0 } ids && ids.All(id => !string.IsNullOrWhiteSpace(id));
+}

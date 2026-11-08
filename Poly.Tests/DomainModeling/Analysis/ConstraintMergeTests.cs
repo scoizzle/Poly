@@ -3,6 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 
@@ -33,6 +34,13 @@ public class ConstraintMergeTests {
         if (result.Succeeded)
             session.Lower(result.Root!, result.Analysis);
         return result;
+    }
+
+    private static EvolutionResult ParseTemporal(string dsl) {
+        var session = SessionBuilder.CreateEmpty().LoadCore().Load(new TemporalLibrary()).Build();
+        var changes = new PolyDslParser(dsl, session).Parse();
+        return new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(changes, session: session);
     }
 
     private static IEnumerable<string> Errors(EvolutionResult result) =>
@@ -71,6 +79,13 @@ public class ConstraintMergeTests {
     [Test]
     public async Task MergeResult_DisjointRanges_IsEmpty() {
         var result = new RangeConstraint(0d, 5d).MergeResult(new RangeConstraint(10d, 20d));
+
+        await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Empty);
+    }
+
+    [Test]
+    public async Task MergeResult_DisjointLengths_IsEmpty() {
+        var result = new LengthConstraint(1, 3).MergeResult(new LengthConstraint(5, 8));
 
         await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Empty);
     }
@@ -205,6 +220,58 @@ public class ConstraintMergeTests {
             domain Test
             Person: entity {
               Kind: Text default("a") default("b")
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(m => m.Contains("contradictory"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Dsl_DuplicateClockDefault_AnalyzesCleanAndKeepsOne() {
+        // Today is a library-contributed node, not a PropertyAccess: compare it structurally.
+        var result = ParseTemporal("""
+            domain Test
+            uses temporal
+            Event: entity {
+              RecordedOn: Date default(Today) default(Today)
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(Errors(result).Any(m => m.Contains("contradictory"))).IsFalse();
+        var constraints = result.Root!.Types.OfType<Entity>().Single()
+            .Properties.Single().Constraints;
+        await Assert.That(constraints.Count(c => c is DefaultValueConstraint)).IsEqualTo(1);
+        await Assert.That(constraints.OfType<DefaultValueConstraint>().Single().Expression)
+            .IsTypeOf<Today>();
+    }
+
+    [Test]
+    public async Task Dsl_DuplicateDateOperationDefault_AnalyzesCleanAndKeepsOne() {
+        var result = ParseTemporal("""
+            domain Test
+            uses temporal
+            Event: entity {
+              RecordedOn: Date default(Today - 1 Days) default(Today - 1 Days)
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(Errors(result).Any(m => m.Contains("contradictory"))).IsFalse();
+        var constraints = result.Root!.Types.OfType<Entity>().Single()
+            .Properties.Single().Constraints;
+        await Assert.That(constraints.Count(c => c is DefaultValueConstraint)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Dsl_DifferentClockDefaults_IsStillError() {
+        // Different defaults must not silently pick the first.
+        var result = ParseTemporal("""
+            domain Test
+            uses temporal
+            Event: entity {
+              RecordedOn: Date default(Today) default(Today - 1 Days)
             }
             """);
 

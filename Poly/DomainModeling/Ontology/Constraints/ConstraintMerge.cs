@@ -111,19 +111,12 @@ public static class ConstraintMerge {
     }
 
     /// <summary>
-    /// The default expressions a <c>default(...)</c> may hold: a literal or a runtime default
-    /// name. Compared by value/name, never by record equality.
+    /// The default expressions a <c>default(...)</c> may hold. Compared structurally, ignoring
+    /// node identity and position, so a library-contributed clock (<c>Today</c>) or date
+    /// arithmetic (<c>Today - 1 Days</c>) compares like any other expression.
     /// </summary>
-    private static bool SameDefault(DomainExpression a, DomainExpression b) => (a, b) switch {
-        (Literal x, Literal y) => Equals(x.Value, y.Value),
-        (PropertyAccess x, PropertyAccess y) =>
-            string.Equals(x.Name, y.Name, StringComparison.Ordinal),
-        (ParameterAccess x, ParameterAccess y) =>
-            string.Equals(x.Name, y.Name, StringComparison.Ordinal),
-        (UnresolvedDuration x, UnresolvedDuration y) =>
-            x.Amount == y.Amount && string.Equals(x.Unit, y.Unit, StringComparison.Ordinal),
-        _ => false,
-    };
+    private static bool SameDefault(DomainExpression a, DomainExpression b) =>
+        DomainExpressionStructuralComparer.Equal(a, b);
 
     /// <summary>
     /// The net constraint, or <c>null</c> when the intersection is empty or unmergeable.

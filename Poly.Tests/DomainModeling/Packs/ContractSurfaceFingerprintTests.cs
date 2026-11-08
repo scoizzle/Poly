@@ -167,6 +167,47 @@ public sealed class ContractSurfaceFingerprintTests {
     /// domains with the same export and different effects fingerprint the same.
     /// </summary>
     [Test]
+    public async Task RequireNot_IsAPublicPrecondition_AndChangesFingerprint() {
+        const string Plain = """
+            domain billing
+
+            public value Money {
+              Amount: Number
+            }
+
+            public entity Order {
+              Total: Number
+              Positive: policy { Total > 0 }
+              public action Charge (request: Money) {
+              }
+            }
+            """;
+
+        const string Negated = """
+            domain billing
+
+            public value Money {
+              Amount: Number
+            }
+
+            public entity Order {
+              Total: Number
+              Positive: policy { Total > 0 }
+              public action Charge (request: Money)
+                require not Positive
+              {
+              }
+            }
+            """;
+
+        var plain = Produce(Plain);
+        var negated = Produce(Negated);
+
+        await Assert.That(negated.Endpoints.Single().Preconditions.Select(p => p.Name)).Contains("not_Positive");
+        await Assert.That(negated.Fingerprint).IsNotEqualTo(plain.Fingerprint);
+    }
+
+    [Test]
     public async Task SameSurface_DifferentImplementation_SameFingerprint() {
         var empty = Produce("""
             domain billing

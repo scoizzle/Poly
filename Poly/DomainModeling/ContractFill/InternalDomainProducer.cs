@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
@@ -100,6 +101,7 @@ public sealed class InternalDomainProducer {
 
     private static IReadOnlyList<ContractEndpoint> ProjectEndpoints(Domain source) {
         var endpoints = new List<ContractEndpoint>();
+        var printer = new DomainDslPrinter();
         foreach (var entity in source.Types.OfType<Entity>()) {
             if (entity.Visibility != Visibility.Public)
                 continue;
@@ -132,8 +134,9 @@ public sealed class InternalDomainProducer {
                     : $"{representative.Name}__{payloadType}";
 
                 var preconditions = publicOccurrences
-                    .SelectMany(o => EffectInvariantAnalyzer.CollectPreconditions(o.Action, entity, o.Stage))
-                    .DistinctBy(p => (p.Name, p.Expression))
+                    .SelectMany(o => ExportPreconditions(o.Action, entity, o.Stage))
+                    .GroupBy(p => (p.Name, Expression: printer.PrintExpressionText(p.Expression)))
+                    .Select(g => g.First())
                     .OrderBy(p => p.Name, StringComparer.Ordinal)
                     .ToList();
 
@@ -183,6 +186,18 @@ public sealed class InternalDomainProducer {
 
     private static string Signature(Action action) =>
         string.Join(",", action.Parameters.Select(p => p.Type.TypeName));
+
+    /// <summary>
+    /// The endpoint's public precondition set. <see cref="EffectInvariantAnalyzer.CollectPreconditions"/>
+    /// is the effect-invariant abstract environment, and it deliberately drops <c>not_*</c>
+    /// policies; a <c>require not Positive</c> gate is still runtime surface, so the export set
+    /// adds the action's negated policies back. Dedupe is by name plus canonical printed
+    /// expression (never record equality: a node's <c>Id</c> participates, and each
+    /// <c>require not</c> allocates a fresh <c>Not</c>).
+    /// </summary>
+    private static IEnumerable<Policy> ExportPreconditions(Action action, Entity entity, Stage? stage) =>
+        EffectInvariantAnalyzer.CollectPreconditions(action, entity, stage)
+            .Concat(action.Policies.Where(p => p.Name.StartsWith("not_", StringComparison.Ordinal)));
 
     /// <summary>
     /// Walks the surface from the endpoint payloads through exported value-type properties.

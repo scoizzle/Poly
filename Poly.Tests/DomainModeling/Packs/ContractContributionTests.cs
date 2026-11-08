@@ -173,12 +173,12 @@ public sealed class ContractContributionTests {
 
             Order: entity { Total: Number }
             """;
-        var catalog = Catalog(new SurfaceLibrary("billing", BillingSurface()));
+        var catalog = Catalog(new SurfaceLibrary("billing", BillingSurface(version: "2024-11-20")));
         var domain = ParseWith(poly, catalog);
 
         var contract = domain.ImportedContracts.Single();
         await Assert.That(contract.Pin).IsEqualTo("2024-11-20");
-        await Assert.That(contract.Version).IsEqualTo("v1");
+        await Assert.That(contract.Version).IsEqualTo("2024-11-20");
 
         var printed = new DomainDslPrinter(DomainSession.Open(domain, catalog)).Print(domain);
         await Assert.That(printed.Contains("uses billing 2024-11-20", StringComparison.Ordinal)).IsTrue();
@@ -187,7 +187,7 @@ public sealed class ContractContributionTests {
         var reparsed = ParseWith(printed, catalog);
         var again = reparsed.ImportedContracts.Single();
         await Assert.That(again.Pin).IsEqualTo("2024-11-20");
-        await Assert.That(again.Version).IsEqualTo("v1");
+        await Assert.That(again.Version).IsEqualTo("2024-11-20");
         await Assert.That(new DomainDslPrinter(DomainSession.Open(reparsed, catalog)).Print(reparsed))
             .IsEqualTo(printed);
     }

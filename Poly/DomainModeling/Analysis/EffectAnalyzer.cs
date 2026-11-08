@@ -66,6 +66,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     ValidateEffects(context, sub.Effects, null, entity, domain, lookup, stage.Name, sub.PeerBinding);
             }
             ValidateUnconditionalAutomaticTransitionCycles(context, entity);
+            ProvableGuards.Validate(context, domain, entity);
         });
 
         ValidateObservedFlows(context, domain);
@@ -76,9 +77,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     /// Each <see cref="ObservedFlow"/> is a copy the existing assign checks decide on. An
     /// unresolvable or self flow is DMSEM005 on the domain (no allowance clears it). Otherwise
     /// the length and range of the source must sit inside the target's (<see cref="IsConstraintSubsumed"/>),
-    /// else DMEFF008 on the target property, and an optional source cannot flow into a required
-    /// target (DMEFF014, #439); a matching allowance makes either a warning. Nothing is inserted
-    /// into the tree.
+    /// else DMEFF008 on the target property (a matching allowance makes it a warning), and an
+    /// optional source cannot flow into a required target (DMEFF014, #439): an observed flow has no
+    /// guard site, so no allowance or guard clears it. Nothing is inserted into the tree.
     /// </summary>
     private static void ValidateObservedFlows(AnalysisContext context, Domain domain) {
         foreach (var flow in RuntimeAnalysisCache.Session(domain).ObservedFlows) {
@@ -116,14 +117,12 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             // target paired with a non-required source may write null where the target cannot.
             if (EntityStructureAnalyzer.IsRequired(target.Value.Property)
                 && !EntityStructureAnalyzer.IsRequired(source.Value.Property)) {
-                var severity = ObservedFlowChecks.SeverityFor(
-                    context, domain, target.Value.Property, DomainModelDiagnosticCodes.ObservedFlowNullability);
-                context.ReportDiagnostic(
+                context.ReportError(
                     target.Value.Property,
-                    severity,
                     $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': the source is optional " +
                     $"and may carry null, but '{flow.TargetPath}' is required.",
                     DomainModelDiagnosticCodes.ObservedFlowNullability);
+                ObservedFlowChecks.NoteNullabilityFinding(context, domain, target.Value.Property);
             }
         }
     }

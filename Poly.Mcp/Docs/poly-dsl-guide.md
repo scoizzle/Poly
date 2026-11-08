@@ -513,6 +513,22 @@ Active: stage { }
 Done: stage { }
 ```
 
+### Stage require
+
+A stage may `require` an entity policy (identifier list; `require not` negates). It is an invariant:
+every action that can run in the stage must keep it true. Policies are defined on the entity, never
+inside the stage. A `require` that proves a property present (`Note is not null`) also clears
+copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
+that can assign null to it is DMEFF015.
+
+```poly
+HasNote: policy { Note is not null }
+Open: stage {
+  require HasNote
+  Copy: action { assign Memo to Note }
+}
+```
+
 ### Entry/Exit Effects
 
 ```poly

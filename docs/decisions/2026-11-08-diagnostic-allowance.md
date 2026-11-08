@@ -52,3 +52,25 @@ then drops the allowance, and a leftover one fails the next analyze (`DMALW001`)
   `ForExtensions`, `ForAuthoringDocument`, `ForAuthoringSource`; they were never pin-bumped.
 - A rename changes the element path, so the allowance stops matching and the diagnostic is an error
   again: visible, not a silent reattach.
+
+## Amendment 2026-11-07: DMEFF014 is not acknowledgeable (#444)
+
+Scot's ruling after the #444 PLAN. The accepted text above stands as written for `DMEFF008` and
+`DMSEM003`; for `DMEFF014` it is superseded.
+
+A possibly-null source copied into a required target is `DMEFF014` unless a provable guard clears
+it. Clearing means no finding, not a warning, so an allowance can no longer downgrade it.
+`optional` is still the only way an entity property may hold null; no keyword, library, mode or
+solver is added.
+
+- Guards: a dominating `if` presence check; an action `require` that proves presence; an entry
+  policy on every transition into a non-initial stage (and no action in the stage can re-null the
+  source); a stage `require` of an entity policy, which is an invariant (`DMEFF015` on an assign
+  that can null what the stage proves present). Entry, exit and subscription bodies are never
+  cleared.
+- In-tree `DMEFF014` is reported on the assign. An observed flow has no action and no stage, so no
+  guard clears it and it stays on the target property.
+- An allowance naming a reported `DMEFF014` is `DMALW002` (error); an allowance with no finding at
+  its path stays `DMALW001`. `DMEFF008` and `DMSEM003` allowances are unchanged.
+- `DMEFF002` stays a warning.
+

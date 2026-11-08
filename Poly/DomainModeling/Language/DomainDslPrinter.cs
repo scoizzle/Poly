@@ -312,7 +312,7 @@ public sealed class DomainDslPrinter {
 
         // Stages (in declared order)
         foreach (var stage in entity.Stages) {
-            PrintStage(stage, "  ");
+            PrintStage(stage, "  ", entity);
         }
 
         // Entity-level actions
@@ -323,11 +323,24 @@ public sealed class DomainDslPrinter {
         _sb.AppendLine("}");
     }
 
-    private void PrintStage(Stage stage, string indent) {
+    private void PrintStage(Stage stage, string indent, Entity entity) {
         _sb.Append(indent);
         _sb.Append(stage.Name);
         _sb.Append(": stage {");
         _sb.AppendLine();
+
+        // A stage requires entity policies by name; only those can be read back.
+        foreach (var policy in stage.Policies) {
+            var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
+            var required = negated ? policy.Name.Substring(4) : policy.Name;
+            if (!entity.Policies.Any(p => string.Equals(p.Name, required, StringComparison.Ordinal)))
+                continue;
+            _sb.Append(indent);
+            _sb.Append("  require ");
+            if (negated)
+                _sb.Append("not ");
+            _sb.AppendLine(required);
+        }
 
         // P2.4: Print OnEntry/OnExit effects
         if (stage.OnEntryEffects.Count > 0) {

@@ -4,7 +4,7 @@
 
 **Method.** Read the domain-modeling pipeline (`Poly/DomainModeling/{Ontology,Analysis,Runtime,Libraries,Language}`), the MCP DSL guide, the storage/pack emitters, and the tests that pin `unique`. Compared the semantics with SQL unique indexes (PostgreSQL, SQL Server, SQLite), EF Core keys, OWL 2 `hasKey`, and the weak-entity/identifying-relationship model. No repo files were modified.
 
-**Current state in one paragraph.** `unique` is a bare property-constraint marker ([UniqueConstraint.cs](../../Poly/DomainModeling/Ontology/Constraints/UniqueConstraint.cs)). It is enforced by a storage-port check keyed only by `(entity, property, value)` ([IStoragePort.cs](../../Poly/DomainModeling/Runtime/IStoragePort.cs), [ModuleStoragePort.cs](../../Poly/DomainModeling/Runtime/ModuleStoragePort.cs)), compared with ordinal string equality, with null skipped only on the lowered assign path ([ModuleInstanceExecutor.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs)). The first globally unique property is also used as the entity's natural key for storage and HTTP routes ([StorageAnalyzer.cs](../../Poly/DomainModeling/Analysis/StorageAnalyzer.cs), [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs)), while the physical primary key is a synthetic integer ([DbContextGenerator.cs](../../src/Poly.DslCompiler/DbContextGenerator.cs)). A scoped constraint must therefore be a *new semantic kind*, not a flag on the existing one, or every `is UniqueConstraint` site silently treats it as global.
+**Current state in one paragraph.** `unique` is a bare property-constraint marker ([UniqueConstraint.cs](../../Poly/DomainModeling/Ontology/Constraints/UniqueConstraint.cs)). It is enforced by a storage-port check keyed only by `(entity, property, value)` ([IStoragePort.cs](../../Poly/DomainModeling/Runtime/IStoragePort.cs), [ModuleStoragePort.cs](../../Poly/DomainModeling/Runtime/ModuleStoragePort.cs)), compared with ordinal string equality, with null skipped only on the lowered assign path ([ModuleInstanceExecutor.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs)). The first globally unique property is also used as the entity's natural key for storage and HTTP routes ([StorageAnalyzer.cs](../../Poly/DomainModeling/Analysis/StorageAnalyzer.cs), [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs)), while the physical primary key is a synthetic integer ([DbContextGenerator.cs](../../src/Poly.Packs.Product/DbContextGenerator.cs)). A scoped constraint must therefore be a *new semantic kind*, not a flag on the existing one, or every `is UniqueConstraint` site silently treats it as global.
 
 ---
 
@@ -196,7 +196,7 @@ A pack that cannot express the canonical comparison must fail closed at compile 
 - Constraints are attached to a single `Property` as a list — [Property.cs](../../Poly/DomainModeling/Ontology/Property.cs); the parser builds each constraint from a keyword in that position — [DomainResolver.cs](../../Poly/DomainModeling/Language/DomainResolver.cs).
 - `unique` takes no arguments today; `range`/`length`/`pattern`/`default` take parenthesized arguments — [DslGrammar.cs](../../Poly/DomainModeling/Language/DslGrammar.cs), [DomainResolver.cs](../../Poly/DomainModeling/Language/DomainResolver.cs).
 - `ConstraintMerge` merges range, length, required, optional, equality, and pattern, but **not** unique: the fallback returns null for a different type, and unique has no arm — [ConstraintMerge.cs](../../Poly/DomainModeling/Ontology/Constraints/ConstraintMerge.cs).
-- The storage column records uniqueness as a single boolean, `IsUnique` — [StorageModel.cs](../../Poly/DomainModeling/Analysis/StorageModel.cs); the index is emitted per column — [DbContextGenerator.cs](../../src/Poly.DslCompiler/DbContextGenerator.cs).
+- The storage column records uniqueness as a single boolean, `IsUnique` — [StorageModel.cs](../../Poly/DomainModeling/Analysis/StorageModel.cs); the index is emitted per column — [DbContextGenerator.cs](../../src/Poly.Packs.Product/DbContextGenerator.cs).
 - EF Core distinguishes a composite key/alternate key from a plain unique index; an alternate key is a unique constraint that can be the target of a foreign key — [EF Core keys](https://learn.microsoft.com/en-us/ef/core/modeling/keys?tabs=data-annotations).
 
 ### Inferences
@@ -217,7 +217,7 @@ A pack that cannot express the canonical comparison must fail closed at compile 
 ### Gaps
 - `StorageColumn.IsUnique` is a single-column boolean; a scoped or composite index needs a new storage-model shape (a constraint/index record with a column list and an optional scope). This is implementation, but the semantic model should not pretend `IsUnique` can carry it.
 - The parser/printer have no `unique_within` token or case; the printer currently maps `UniqueConstraint => "unique"` — [DomainDslPrinter.cs](../../Poly/DomainModeling/Language/DomainDslPrinter.cs).
-- No repo test covers multiple `unique` constraints on one entity beyond the "second unique is stored, not dropped" case — [DbContextGenerator.cs](../../src/Poly.DslCompiler/DbContextGenerator.cs).
+- No repo test covers multiple `unique` constraints on one entity beyond the "second unique is stored, not dropped" case — [DbContextGenerator.cs](../../src/Poly.Packs.Product/DbContextGenerator.cs).
 
 ---
 
@@ -229,10 +229,10 @@ Uniqueness is a **post-state invariant**. Every transition that can add a `(scop
 ### Cited Findings
 - `SetProperty` checks `Exists`, releases the previous key, records the new key, and rolls the bag back on failure — [ModuleInstanceExecutor.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs).
 - `Transact` captures bag state and the port mark, and restores both on failure — [ModuleInstanceExecutor.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs); `ModuleStoragePort` journals every add/remove and can roll back to a mark — [ModuleStoragePort.cs](../../Poly/DomainModeling/Runtime/ModuleStoragePort.cs).
-- The generated context's `Exists` checks both the database and `_pendingKeys` within the current invocation — [DbContextGenerator.cs](../../src/Poly.DslCompiler/DbContextGenerator.cs).
+- The generated context's `Exists` checks both the database and `_pendingKeys` within the current invocation — [DbContextGenerator.cs](../../src/Poly.Packs.Product/DbContextGenerator.cs).
 - `Link` is idempotent; a second link on a to-one source fails; `Unlink` is a no-op if not linked and refuses to drop the last owner of an owned target — [ModuleInstanceExecutor.Links.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.Links.cs).
 - `create in Relationship { ... }` creates the child and links it to the source at runtime — [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md).
-- A unique collision maps to HTTP 409 in the generated API — [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs).
+- A unique collision maps to HTTP 409 in the generated API — [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs).
 - No instance-delete operation exists in the runtime or MCP tools (repo search on 2026-11-06).
 
 ### Inferences
@@ -302,7 +302,7 @@ Analysis proves **well-formedness** and refuses **instance-level uniqueness**. R
 - Constraint-quality analysis reports hints for constraints that are enforced at write time but not projected to SQL (`pattern`, length minimum) — [ConstraintQualityAnalyzer.cs](../../Poly/DomainModeling/Analysis/ConstraintQualityAnalyzer.cs).
 - The diagnostic codes include `DMCS001 ConstraintSatisfiability` and `DMCS002 ConstraintFixedPoint` — [DomainModelDiagnosticCodes.cs](../../Poly/DomainModeling/Analysis/DomainModelDiagnosticCodes.cs).
 - The runtime message today is "Unique constraint violated: '<property>' value is already used on another '<entity>'." — [ModuleInstanceExecutor.cs](../../Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs), [UniqueConstraintCompiler.cs](../../Poly/DomainModeling/Libraries/Storage/UniqueConstraintCompiler.cs).
-- The generated API maps unique and link conflicts to 409 — [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs).
+- The generated API maps unique and link conflicts to 409 — [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs).
 - SHACL export marks `x-poly-unique`; JSON Schema cannot express uniqueness and says so — [ShaclExporter.cs](../../Poly/DomainModeling/Queries/ShaclExporter.cs), [JsonSchemaExporter.cs](../../Poly/DomainModeling/Queries/JsonSchemaExporter.cs).
 
 ### Inferences
@@ -336,7 +336,7 @@ Analysis proves **well-formedness** and refuses **instance-level uniqueness**. R
 - Hint: `'Email' is globally unique and unique within 'tenant'; the scoped declaration is redundant.`
 - Runtime: `Unique constraint violated: 'Email' is already used by another 'User' in this tenant (value 'sam@x').`
   Name the scope **kind**, not the other instance's id or natural key, to avoid leaking "this email is taken" beyond what the product intends. MCP/debug output may add the scope handle and witness id in a structured field.
-- 409 remains the transport mapping for a unique or link conflict — [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs).
+- 409 remains the transport mapping for a unique or link conflict — [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs).
 
 **Projection obligations.** The DSL printer must round-trip `unique_within(...)`; SHACL has no scoped-unique keyword, so it needs a documented `x-poly-*` annotation (and must not pretend `x-poly-unique` means the same thing); JSON Schema cannot express it and should keep saying so; the MCP `describe_domain_element` and `get_dsl_guide` surfaces need the new vocabulary. These are consequences of the semantics, not optional polish: a constraint that cannot be described or printed is not part of the language.
 
@@ -354,8 +354,8 @@ Global `unique` is the degenerate case `unique_within(⊤)` (one implicit scope)
 
 ### Cited Findings
 - `StorageAnalyzer` picks the first property with a `UniqueConstraint` as the entity's `KeyProperty`, and derives the key name/CLR type from it; when there is none, it uses `Id`/`int` — [StorageAnalyzer.cs](../../Poly/DomainModeling/Analysis/StorageAnalyzer.cs).
-- The generated API routes `/api/{key}` through that natural key; `FindAsync` is the shadow key — [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs).
-- The EF model uses a synthetic integer `Id` primary key, and every `unique` property is `HasIndex(...).IsUnique()`; the unique property is not the primary key — [DbContextGenerator.cs](../../src/Poly.DslCompiler/DbContextGenerator.cs), [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md).
+- The generated API routes `/api/{key}` through that natural key; `FindAsync` is the shadow key — [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs).
+- The EF model uses a synthetic integer `Id` primary key, and every `unique` property is `HasIndex(...).IsUnique()`; the unique property is not the primary key — [DbContextGenerator.cs](../../src/Poly.Packs.Product/DbContextGenerator.cs), [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md).
 - The guide says "Every `unique` property, including a second one on the same entity, is `HasIndex(...).IsUnique()`" — [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md).
 - EF Core's alternate key is a unique constraint usable as an FK target; a plain unique index is not — [EF Core keys](https://learn.microsoft.com/en-us/ef/core/modeling/keys?tabs=data-annotations).
 - Relationship cardinality is `one`/`many`; `owned` is composition; the two are separate flags — [Relationship.cs](../../Poly/DomainModeling/Ontology/Relationship.cs), [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md).
@@ -393,7 +393,7 @@ Global `unique` is the degenerate case `unique_within(⊤)` (one implicit scope)
 
 ### Cited Findings
 - The DSL constraint table lists `unique` as a bare property keyword — [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md); the token is `Unique` — [DslGrammar.cs](../../Poly/DomainModeling/Language/DslGrammar.cs); the parser constructs `new UniqueConstraint()` — [DomainResolver.cs](../../Poly/DomainModeling/Language/DomainResolver.cs); the printer emits `"unique"` — [DomainDslPrinter.cs](../../Poly/DomainModeling/Language/DomainDslPrinter.cs).
-- The guide's shipped-surface section describes the port check, the synthetic `Id`, the per-property unique index, and that duplicate values fail loud at the session port and the database — [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md). The 409 mapping for unique and link conflicts is in the API generator, not the guide — [MinimalApiGenerator.cs](../../src/Poly.DslCompiler/MinimalApiGenerator.cs).
+- The guide's shipped-surface section describes the port check, the synthetic `Id`, the per-property unique index, and that duplicate values fail loud at the session port and the database — [poly-dsl-guide.md](../../Poly.Mcp/Docs/poly-dsl-guide.md). The 409 mapping for unique and link conflicts is in the API generator, not the guide — [MinimalApiGenerator.cs](../../src/Poly.Packs.Product/MinimalApiGenerator.cs).
 - The repo's tenets favor the thinnest slice through the right seam, no framework for an imaginary second use, and guardrails only with real consumers — [AGENTS.md](../../AGENTS.md).
 
 ### Inferences

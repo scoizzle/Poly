@@ -17,6 +17,8 @@
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />
 		<ProjectReference Include="..\Poly.Mcp\Poly.Mcp.csproj" />
+		<ProjectReference Include="..\src\Poly.Compile\Poly.Compile.csproj" />
+		<ProjectReference Include="..\src\polyc\polyc.csproj" />
 		<ProjectReference Include="..\src\Poly.DslCompiler\Poly.DslCompiler.csproj" />
 		<ProjectReference Include="..\src\Poly.Packs.Sqlite\Poly.Packs.Sqlite.csproj" />
 		<ProjectReference Include="..\src\Poly.Packs.SqlServer\Poly.Packs.SqlServer.csproj" />

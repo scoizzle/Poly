@@ -96,7 +96,7 @@ internal sealed record McpSessionState(
         var hasOverlay = ids.Any(id => id is "persistence" or "sqlite" or "sqlserver");
         var session = hasOverlay
             ? Modeling
-            : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Catalog);
+            : DomainSession.ForExtensions([.. ids, "persistence"], ProductCatalog.Model);
         var analysis = session.Analyze(Domain);
         // Publish the pair before lowering: lowering refuses a domain whose execution analysis has
         // errors, and a caller that catches the throw still needs this analysis to report why.
@@ -167,7 +167,7 @@ internal sealed class McpSessionStore(
         var domain = DomainFactory.Create(domainName) with {
             Extensions = [.. ExtensionCatalog.ProductAuthoring]
         };
-        var modeling = DomainSession.Open(domain, ProductCatalog.Catalog);
+        var modeling = DomainSession.Open(domain, ProductCatalog.Model);
         var analysis = modeling.Analyze(domain);
         var state = new McpSessionState(domain, analysis, Revision: 0, modeling);
         _sessions[sessionId] = new Entry(state, NowTicks);

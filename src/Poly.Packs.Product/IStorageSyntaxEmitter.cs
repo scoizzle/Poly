@@ -1,6 +1,6 @@
 using Poly.Ast.Nodes;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// Optional extension point for storage-specific syntax decoration.

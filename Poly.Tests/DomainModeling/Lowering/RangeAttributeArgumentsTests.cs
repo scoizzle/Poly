@@ -22,7 +22,7 @@ public class RangeAttributeArgumentsTests {
 
     private static (Constant Minimum, Constant Maximum) Bounds(
         string clrType, object? minimum, object? maximum) {
-        var args = Poly.DslCompiler.RangeAttributeArguments.Build(clrType, minimum, maximum);
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build(clrType, minimum, maximum);
         return ((Constant)args[0], (Constant)args[1]);
     }
 
@@ -127,7 +127,7 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task DecimalTarget_UsesTypeofDecimalAndInvariantStrings() {
-        var args = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", 0.0, 100.0);
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build("decimal", 0.0, 100.0);
         await Assert.That(args.Count).IsEqualTo(3);
         var printed = string.Concat(args.Select(a => new CSharpWriter().Write(a)));
         await Assert.That(printed).Contains("typeof(decimal)");
@@ -147,7 +147,7 @@ public class RangeAttributeArgumentsTests {
 
     [Test]
     public async Task OpenDecimalRange_CapsAtDecimalBoundsAsStrings() {
-        var args = Poly.DslCompiler.RangeAttributeArguments.Build("decimal", null, null);
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build("decimal", null, null);
         var minText = decimal.MinValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var maxText = decimal.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
         await Assert.That(((Constant)args[1]).Value).IsEqualTo(minText);

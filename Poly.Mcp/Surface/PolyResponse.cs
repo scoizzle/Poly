@@ -25,7 +25,9 @@ internal sealed record PolyFinding(
     [property: JsonPropertyName("path")] string Path,
     [property: JsonPropertyName("message")] string Message,
     [property: JsonPropertyName("hint")] string? Hint = null,
-    [property: JsonPropertyName("fix")] string? Fix = null
+    [property: JsonPropertyName("fix")] string? Fix = null,
+    [property: JsonPropertyName("line"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Line = null,
+    [property: JsonPropertyName("column"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Column = null
 );
 
 /// <summary>What the caller needs to know about the workspace after every call.</summary>

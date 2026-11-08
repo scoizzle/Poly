@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -10,13 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The [Range] argument rule is internal; Poly.Tests proves it directly across the
-         CLR numeric types, including short/byte targets the DSL cannot name. -->
-    <InternalsVisibleTo Include="Poly.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="../../Poly/Poly.csproj" />
+    <ProjectReference Include="../Poly.Compile/Poly.Compile.csproj" />
     <ProjectReference Include="../Poly.Packs.Product/Poly.Packs.Product.csproj" />
   </ItemGroup>
 

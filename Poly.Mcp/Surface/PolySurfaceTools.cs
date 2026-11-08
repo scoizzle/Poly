@@ -568,7 +568,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     private static List<PolyFinding> AllFindings(DomainToolResponse response) {
         if (response.Data is DslValidationData validation)
             return validation.Findings
-                .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message))
+                .Select(f => new PolyFinding(f.Severity, f.Code, f.ElementPath, f.Message, Line: f.Line, Column: f.Column))
                 .ToList();
 
         if (response.Data is AnalysisData analysis && analysis.DiagnosticFacts is { Count: > 0 } facts)

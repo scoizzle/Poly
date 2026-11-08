@@ -255,7 +255,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 **Composition.** Libraries may depend on other libraries, but every dependency chain ends at core. Here “core” means the `Poly` project (`Poly/Poly.csproj`), which holds the syntax tree, the interpreter, and the domain pipeline.
 
-- Project references in code: `Poly/Poly.csproj` references no other project. `src/Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj`, `src/Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj`, and `src/Poly.Packs.MySql/Poly.Packs.MySql.csproj` each reference only `Poly`. `src/Poly.Packs.Product/Poly.Packs.Product.csproj` references `Poly`, the SQLite pack, and the SQL Server pack. `src/Poly.DslCompiler/Poly.DslCompiler.csproj` and `Poly.Mcp/Poly.Mcp.csproj` each reference `Poly` and the Product pack. `Poly.Tests/Poly.Tests.csproj` references all of the above. `Poly.Benchmarks/Poly.Benchmarks.csproj` references only `Poly`. Every project chain ends at `Poly`, and there are no cycles.
+- Project references in code: `Poly/Poly.csproj` references no other project. `src/Poly.Packs.Sqlite/Poly.Packs.Sqlite.csproj`, `src/Poly.Packs.SqlServer/Poly.Packs.SqlServer.csproj`, and `src/Poly.Packs.MySql/Poly.Packs.MySql.csproj` each reference only `Poly`. `src/Poly.Packs.Product/Poly.Packs.Product.csproj` references `Poly`, the SQLite pack, and the SQL Server pack. `src/Poly.Compile/Poly.Compile.csproj` references only `Poly`. `src/Poly.DslCompiler/Poly.DslCompiler.csproj` references `Poly`, `Poly.Compile`, and the Product pack. `src/polyc/polyc.csproj` references those plus `Poly.Mcp`. `Poly.Mcp/Poly.Mcp.csproj` references `Poly` and the Product pack. `Poly.Tests/Poly.Tests.csproj` references the projects it tests. `Poly.Benchmarks/Poly.Benchmarks.csproj` references only `Poly`. Every project chain ends at `Poly`, and there are no cycles.
 - Library registration in code: `IDomainLibrary` (`Poly/DomainModeling/Compile/IDomainLibrary.cs`) has `Id`, `Register`, and `PrimitiveSeeds`. It has no way to declare that one library needs another.
 
 **Observation:** Library-to-library dependencies exist only implicitly. The HTTP library (`Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`) registers only an HTTP flag, but `DslCompiler` refuses to emit `Program.cs` unless storage mapping metadata is present, which only a persistence or vendor library (`persistence`, `sqlite`, `sqlserver`, `mysql`) produces. Nothing in the library record states that.
@@ -298,8 +298,8 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 - Contributor contract: `Poly/DomainModeling/Compile/IArtifactContributor.cs`. Registration: `SessionBuilder.AddArtifactContributor`. Session list: `DomainSession.Artifacts`.
 - Entity C# from the lowered types: `DomainSession.Emit` (not an `IArtifactContributor`; it *is* print of the syntax trees).
-- Compiler consume step after `session.Lower` / `session.Emit`: `src/Poly.DslCompiler/DslCompiler.cs` concatenates session contributors and extra contributors. HTTP host contributor: `MinimalApiHostArtifactContributor` in `src/Poly.DslCompiler/MinimalApiGenerator.cs` (`Program.cs` via `CSharpGenerator` on a compilation unit, plus `demo.http` from `src/Poly.DslCompiler/HttpFileGenerator.cs`).
-- Persistence file today is built inside `DslCompiler` when the persistence metadata is present: `src/Poly.DslCompiler/DbContextGenerator.cs` produces a syntax-tree compilation unit, then `CSharpGenerator` prints it.
+- Compiler consume step after `session.Lower` / `session.Emit`: `src/Poly.Compile/PolyCompiler.cs` drives the session and returns its files. HTTP host contributor: `MinimalApiHostArtifactContributor` in `src/Poly.Packs.Product/MinimalApiGenerator.cs` (`Program.cs` via `CSharpGenerator` on a compilation unit, plus `demo.http` from `src/Poly.Packs.Product/HttpFileGenerator.cs`).
+- Persistence file today is built when a persistence library is loaded with its contributor: `src/Poly.Packs.Product/DbContextGenerator.cs` produces a syntax-tree compilation unit, then `CSharpGenerator` prints it.
 
 **Roadmap phase.** **Earning its place for phase 1.** Extra files are how a lowered domain becomes a runnable service.
 
@@ -321,7 +321,7 @@ There is a second analyze, on the *syntax* tree, immediately before the interpre
 
 - Flags: `PersistenceSurfacePass` / `PersistenceSurfaceMetadata`, `HttpSurfacePass` / `HttpSurfaceMetadata`. Storage structure: `StoragePass` producing `StorageMappingMetadata`.
 - `DslCompiler.CompileCore`: if persistence metadata is present, require storage mapping and add `{Domain}DbContext.cs`. If HTTP metadata is present, require storage, behavior, and aggregate metadata, require module methods, then add `Program.cs` and `demo.http`. `CompileMode` seeds language and optionally a vendor id; it does not seed `http`.
-- HTTP library: `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`. Minimal API generator: `src/Poly.DslCompiler/MinimalApiGenerator.cs`.
+- HTTP library: `Poly/DomainModeling/Libraries/Http/HttpLibrary.cs`. Minimal API generator: `src/Poly.Packs.Product/MinimalApiGenerator.cs`.
 - Runtime persistence of *instances* during simulate is the executor's in-memory dictionaries and relationship fields, not Entity Framework. Unique collision goes through the session `IStoragePort`. Create-in is the module body writing the relationship field; the executor registers the new dictionary.
 
 **Roadmap phase.** **Earning its place for phase 1.** This is the sellable web-API shape. Other process shapes (CLI, gRPC, OpenAPI as further libraries) are not implemented; they would be phase 2 expansion.

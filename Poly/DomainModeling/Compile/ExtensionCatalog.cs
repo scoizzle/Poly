@@ -18,6 +18,23 @@ public sealed class ExtensionCatalog {
     /// <summary>MCP authoring seed: <c>column</c>/<c>table</c>. Temporal stays implicit.</summary>
     public static readonly IReadOnlyList<string> ProductAuthoring = [StorageFacetsId];
 
+    /// <summary>Names a seed can be looked up by: <c>authoring</c> and <c>language</c>.</summary>
+    public static IReadOnlyList<string> SeedNames { get; } = ["authoring", "language"];
+
+    /// <summary>
+    /// Looks up a named seed: <c>authoring</c> is <see cref="ProductAuthoring"/>, <c>language</c>
+    /// is <see cref="ProductLanguage"/>. Unknown name fails closed.
+    /// </summary>
+    public static IReadOnlyList<string> Seed(string name) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return name.Trim().ToLowerInvariant() switch {
+            "authoring" => ProductAuthoring,
+            "language" => ProductLanguage,
+            _ => throw new ArgumentException(
+                $"Unknown seed '{name}'. Valid values: {string.Join(", ", SeedNames)}.", nameof(name)),
+        };
+    }
+
     /// <summary>Session for <see cref="ProductLanguage"/>.</summary>
     public DomainSession Language => DomainSession.ForExtensions(ProductLanguage, this);
 

@@ -3,7 +3,7 @@ using System.Text;
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// Generates a <c>demo.http</c> file with REST Client requests for every

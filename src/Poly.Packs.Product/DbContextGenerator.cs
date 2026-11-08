@@ -7,7 +7,7 @@ using Poly.Introspection;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// Generates an EF Core DbContext from a <see cref="Domain"/>.

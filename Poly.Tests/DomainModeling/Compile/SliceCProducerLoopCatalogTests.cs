@@ -9,9 +9,9 @@ using Poly.DomainModeling.Ontology;
 using Artifact = Poly.DomainModeling.Compile.Artifact;
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
-using DbContextArtifactContributor = Poly.DslCompiler.DbContextArtifactContributor;
+using DbContextArtifactContributor = Poly.Packs.Product.DbContextArtifactContributor;
 using DbmsPack = Poly.DslCompiler.DbmsPack;
-using MinimalApiHostArtifactContributor = Poly.DslCompiler.MinimalApiHostArtifactContributor;
+using MinimalApiHostArtifactContributor = Poly.Packs.Product.MinimalApiHostArtifactContributor;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

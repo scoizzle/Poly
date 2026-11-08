@@ -74,6 +74,29 @@ Order: entity {
 }
 ```
 
+### Check and build with polyc
+
+```bash
+dotnet run --project src/polyc -- check Orders.poly
+dotnet run --project src/polyc -- build Orders.poly --out ./polyc-out
+```
+
+`polyc check` runs the same pipeline as `build` (load, parse, evolve, analyze, lower) and writes
+nothing. `build` writes `<out>/<DomainName>/`. A directory means every `*.poly` directly in it,
+each its own compilation unit; with no path and piped stdin, stdin is one document.
+
+- **Exit codes:** `0` no errors, `1` errors or usage, `2` unexpected failure. Warnings do not fail
+  unless `--warn-as-error`.
+- **`--format json`** prints every diagnostic (file, line, column, endLine, endColumn, severity,
+  code, message, path, placed); text shows errors and warnings, and `--verbosity info|hint` shows
+  more. Codes: `DSL0001` parse, `DSL0002` unknown extension, `DSL0003` duplicate extension,
+  `DSL0004` lower or emit refused; analyzer codes pass through.
+- **`uses` resolution:** the document's own `uses` wins. With none, `--seed authoring` (default,
+  the storage annotations) or `--seed language` supplies the extension ids. An unknown id is
+  `DSL0002` on its header token.
+- **`polyc lsp`** serves diagnostics, hover, go-to-definition and document symbols over stdio;
+  its diagnostics are the `check --format json` records. **`polyc mcp`** serves the seven tools below.
+
 ### Build and run
 
 ```bash
@@ -100,7 +123,7 @@ For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.
 
 ## MCP Tools
 
-The MCP server (`Poly.Mcp`) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
+The MCP server (`polyc mcp`; `dotnet run --project Poly.Mcp` still launches the same host for one release) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
 - **Describe:** `poly_guide`, `poly_workspace`, `poly_define`.
 - **Prove:** `poly_check` (`proven` / `violated` / `unknown`).

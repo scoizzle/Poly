@@ -8,7 +8,7 @@ using Poly.Interpretation.CSharp;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// Generates an ASP.NET Minimal API Program.cs from a <see cref="Domain"/>.
@@ -28,7 +28,7 @@ public sealed class MinimalApiGenerator {
     private readonly CatalogIndex? _catalog;
 
     private readonly IStorageSyntaxEmitter? _emitter;
-    private readonly DbmsPack _dbms;
+    private readonly string? _vendor;
 
     public MinimalApiGenerator(Domain domain,
         AnalysisResult analysis,
@@ -36,11 +36,11 @@ public sealed class MinimalApiGenerator {
         BehaviorModel behaviorModel,
         AggregateModel aggregateModel,
         IStorageSyntaxEmitter? emitter = null,
-        DbmsPack dbms = DbmsPack.Generic,
+        string? vendor = null,
         CatalogIndex? catalog = null) {
         ArgumentNullException.ThrowIfNull(analysis);
         _emitter = emitter;
-        _dbms = dbms;
+        _vendor = vendor;
         _catalog = catalog;
         _domain = domain;
         _entities = domain.Types.OfType<Entity>().ToList();
@@ -113,11 +113,11 @@ public sealed class MinimalApiGenerator {
     /// </summary>
     private Node BuildProviderRegistration(Parameter optionsParam) {
         var dbName = _domainName.ToLowerInvariant();
-        switch (_dbms) {
-            case DbmsPack.Sqlite:
+        switch (_vendor) {
+            case "sqlite":
                 return new Invoke(new Member(optionsParam, "UseSqlite"),
                     new Constant($"Data Source={dbName}.db"));
-            case DbmsPack.SqlServer:
+            case "sqlserver":
                 return new Invoke(new Member(optionsParam, "UseSqlServer"),
                     new Constant($"Server=(localdb)\\mssqllocaldb;Database={_domainName};Trusted_Connection=True"));
             default:
@@ -322,7 +322,7 @@ public sealed class MinimalApiGenerator {
                     TypeArguments = [new TypeReference(dbContextName)]
                 })
         };
-        if (_dbms == DbmsPack.Sqlite) {
+        if (string.Equals(_vendor, "sqlite", StringComparison.Ordinal)) {
             scopeBody.Add(new Await(
                 new Invoke(
                     new Member(
@@ -1317,19 +1317,19 @@ public sealed class MinimalApiGenerator {
 /// </summary>
 public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
     private readonly IStorageSyntaxEmitter? _emitter;
-    private readonly DbmsPack? _dbmsOverride;
+    private readonly string? _vendorOverride;
 
     /// <summary>
-    /// Compile registration always passes a non-null <paramref name="dbms"/>;
-    /// that pack always wins for Program.cs provider selection. When null
-    /// (harness / Load without an override), DBMS is resolved from domain
-    /// extensions at contribute time via ResolveDbms.
+    /// A non-null <paramref name="vendor"/> (a loaded library id such as <c>sqlite</c> or
+    /// <c>sqlserver</c>; anything else means the generic in-memory provider) always wins for
+    /// Program.cs provider selection. When null, the vendor is the first of those ids the
+    /// domain lists, resolved at contribute time.
     /// </summary>
     public MinimalApiHostArtifactContributor(
         IStorageSyntaxEmitter? emitter = null,
-        DbmsPack? dbms = null) {
+        string? vendor = null) {
         _emitter = emitter;
-        _dbmsOverride = dbms;
+        _vendorOverride = vendor;
     }
 
     public IReadOnlyList<Artifact> Contribute(Domain domain, AnalysisResult analysis, ArtifactCatalog catalog) {
@@ -1352,11 +1352,11 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         }
 
         var behavior = BehaviorMetadata.From(domain, analysis);
-        var dbms = _dbmsOverride ?? ResolveDbms(domain);
+        var vendor = _vendorOverride ?? ResolveVendor(domain);
         RequireHttpActionsInModule(domain, analysis, catalog);
 
         var dbContextName = $"{domain.Name}DbContext";
-        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, dbms,
+        var apiGen = new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate, _emitter, vendor,
             new CatalogIndex(catalog));
         var httpGen = new HttpFileGenerator(domain, analysis, storage, behavior, aggregate);
         var programUnit = apiGen.GenerateCompilationUnit(dbContextName);
@@ -1374,14 +1374,13 @@ public sealed class MinimalApiHostArtifactContributor : IArtifactContributor {
         ];
     }
 
-    private static DbmsPack ResolveDbms(Domain domain) {
+    private static string? ResolveVendor(Domain domain) {
         foreach (var id in domain.Extensions) {
-            if (string.Equals(id, "sqlite", StringComparison.Ordinal))
-                return DbmsPack.Sqlite;
-            if (string.Equals(id, "sqlserver", StringComparison.Ordinal))
-                return DbmsPack.SqlServer;
+            if (string.Equals(id, "sqlite", StringComparison.Ordinal)
+                || string.Equals(id, "sqlserver", StringComparison.Ordinal))
+                return id;
         }
-        return DbmsPack.Generic;
+        return null;
     }
 
     /// <summary>

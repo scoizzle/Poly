@@ -3,7 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.Interpretation.CSharp;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// Persistence host call-site: emits <c>{Domain}DbContext.cs</c> from the

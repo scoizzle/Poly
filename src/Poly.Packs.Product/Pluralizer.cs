@@ -1,4 +1,4 @@
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// English plural for generated names (route segments, <c>demo.http</c> labels,

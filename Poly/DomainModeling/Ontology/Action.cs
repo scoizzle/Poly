@@ -14,5 +14,10 @@ public sealed record Action(
     IReadOnlyList<Effect> Effects,
     IReadOnlyList<Policy> Policies
 ) : DomainMember(Name) {
+    /// <summary>
+    /// True when the action is marked <c>public</c> for the exported contract. Internal by default.
+    /// </summary>
+    public bool Public { get; init; }
+
     public sealed override IEnumerable<Node?> Children => [.. Parameters, Result, .. Policies, .. Effects];
 }

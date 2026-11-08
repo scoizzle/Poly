@@ -26,6 +26,11 @@ public sealed record Entity(
     public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
 
     /// <summary>
+    /// True when the entity is marked <c>public</c> for the exported contract. Internal by default.
+    /// </summary>
+    public bool Public { get; init; }
+
+    /// <summary>
     /// The navigation properties declared on this entity. A relationship is a
     /// source-entity-owned navigation; there is no domain-global relationship member —
     /// the analysis catalog derives the relationship view from these.

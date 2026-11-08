@@ -177,14 +177,26 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.Entity);
 
         _entityNames.Add(entityName);
+        var addEntityIndex = changes.Count;
         changes.Add(new AddEntityChange(entityName, []));
 
-        // ── Entity header facets (pack-registered annotations) ──
+        // ── Entity header facets (pack-registered annotations) and the bare `public` mark ──
         var termKeywords = new HashSet<string>(StringComparer.Ordinal);
-        while (TryParseRegisteredAnnotation(out var headerFacet)) {
-            ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
-            changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
+        var isPublic = false;
+        while (true) {
+            if (TryParseRegisteredAnnotation(out var headerFacet)) {
+                ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
+                changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
+                continue;
+            }
+            if (!isPublic && TryConsumePublicMark()) {
+                isPublic = true;
+                continue;
+            }
+            break;
         }
+        if (isPublic)
+            changes[addEntityIndex] = new AddEntityChange(entityName, [], Public: true);
         if (LooksLikeAnnotationCall()) {
             throw Error(
                 $"Unknown or unregistered annotation '{Current.Text}'. " +
@@ -556,6 +568,17 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.RBrace);
     }
 
+    /// <summary>
+    /// Consumes a bare <c>public</c> mark. <c>public</c> stays an identifier so it remains a
+    /// legal property or parameter name; only the header/tail positions treat it as the mark.
+    /// </summary>
+    private bool TryConsumePublicMark() {
+        if (Current.Kind != TokenKind.Identifier || !string.Equals(Current.Text, "public", StringComparison.Ordinal))
+            return false;
+        Advance();
+        return true;
+    }
+
     private void ParseStandaloneAction(string name, List<DomainChange> changes) {
         // standalone action declared at entity level
         if (Current.Kind == TokenKind.Action)
@@ -609,6 +632,8 @@ public sealed class DomainResolver : DslCursor {
             ]);
         }
 
+        var isPublic = TryConsumePublicMark();
+
         // Stage gates and require policies (collected — resolved after entity body)
         while (Current.Kind == TokenKind.When || Current.Kind == TokenKind.Require) {
             if (Current.Kind == TokenKind.When) {
@@ -634,10 +659,10 @@ public sealed class DomainResolver : DslCursor {
         // Create the action BEFORE parameters or effects
         // (AddParameterToActionChange references the action by name, so it must exist first)
         if (stageName is not null) {
-            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName));
+            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName, isPublic));
         }
         else {
-            changes.Add(new AddActionChange(_currentEntityName, actionName));
+            changes.Add(new AddActionChange(_currentEntityName, actionName, isPublic));
         }
 
         if (paramList is not null) {
@@ -1143,9 +1168,10 @@ public sealed class DomainResolver : DslCursor {
         var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
         Expect(TokenKind.Colon);
         ExpectWord("value");
+        var isPublic = TryConsumePublicMark();
         var properties = ParseValueTypeProperties();
         _valueTypeNames.Add(name);
-        changes.Add(new AddValueTypeChange(name, properties));
+        changes.Add(new AddValueTypeChange(name, properties, isPublic));
     }
 
     private IReadOnlyList<Property> ParseValueTypeProperties() {

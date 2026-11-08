@@ -8,4 +8,9 @@ public sealed record ValueType(
     string Name,
     IReadOnlyList<Property> Properties,
     IReadOnlyList<Constraint> Constraints
-) : DomainType(Name, Properties, Constraints);
+) : DomainType(Name, Properties, Constraints) {
+    /// <summary>
+    /// True when the value type is marked <c>public</c> for the exported contract. Internal by default.
+    /// </summary>
+    public bool Public { get; init; }
+}

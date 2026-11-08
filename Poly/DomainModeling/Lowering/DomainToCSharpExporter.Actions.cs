@@ -483,8 +483,13 @@ public sealed partial class DomainToCSharpExporter {
         var contract = domain.ImportedContracts.FirstOrDefault(c =>
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) return effectsBody;
+        // #420: analysis recorded the resolved exported identity (an original action name may
+        // map to a suffixed endpoint). Splice that identity; the authored text is the fallback
+        // for a hand-built domain lowered without an analysis.
+        var resolvedEndpoint = analysis?.GetMetadata<ContractBindingMetadata>(binding)?.Endpoint
+            ?? binding.EndpointName;
         var endpoint = contract.Endpoints.FirstOrDefault(e =>
-            string.Equals(e.Name, binding.EndpointName, StringComparison.Ordinal));
+            string.Equals(e.Name, resolvedEndpoint, StringComparison.Ordinal));
         if (endpoint is null) return effectsBody;
 
         var body = splice.BodyFor(contract, endpoint);

@@ -7,8 +7,11 @@ using ValueType = Poly.DomainModeling.Ontology.ValueType;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// Lint-only: imported-contract / binding checks and exported-surface closure checks;
-/// writes no metadata others read.
+/// Imported-contract / binding facts and checks, plus exported-surface closure checks.
+/// Writes two facts the rest of the pipeline reads: <see cref="ContractSurfaceMetadata"/> on
+/// each contract (the resolved surface, its fingerprint, and the pin outcome) and
+/// <see cref="ContractBindingMetadata"/> on each bind (the resolved endpoint identity and
+/// status). Lower splices or erases the recorded identity; it does not resolve again.
 /// </summary>
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainContractIntegrationAnalyzer";
@@ -196,6 +199,19 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateContract(AnalysisContext context, Domain domain, ImportedContract contract) {
+        var pin = contract.Pin;
+        var pinKind = ContractPin.KindOf(pin);
+        var pinMatched = pin is null || ContractPin.Matches(contract, pin);
+        context.SetMetadata(contract, new ContractSurfaceMetadata(
+            contract.UsesId,
+            contract.Name,
+            contract.SourceIdentifier,
+            contract.Version,
+            contract.Fingerprint,
+            pin,
+            pinKind,
+            pinMatched));
+
         if (string.IsNullOrWhiteSpace(contract.SourceIdentifier)) {
             context.ReportError(
                 contract,
@@ -211,6 +227,16 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
 
         ValidatePlatformTarget(context, domain, contract);
+
+        if (pin is not null && !pinMatched) {
+            var pinnedBy = contract.UsesId is null ? "on the contract" : $"on `uses {contract.UsesId}`";
+            context.ReportError(
+                contract,
+                $"Contract '{contract.Name}' is pinned to '{pin}' {pinnedBy}, but the loaded surface is " +
+                $"version '{contract.Version}' with fingerprint '{contract.Fingerprint}'. A pin is the " +
+                "public surface only; re-pin to the loaded surface.",
+                DomainModelDiagnosticCodes.ContractPinMismatch);
+        }
 
         foreach (var endpoint in contract.Endpoints) {
             if (!PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
@@ -262,6 +288,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         var contract = domain.ImportedContracts.FirstOrDefault(c =>
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) {
+            RecordBinding(context, binding, contract: null, ContractBindingStatus.Unresolved, endpoint: null);
             context.ReportError(
                 binding,
                 $"Contract binding '{binding.Name}' references imported contract '{binding.ContractName}' that is not registered in the domain.",
@@ -269,25 +296,20 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             return;
         }
 
-        var endpoint = contract.Endpoints.FirstOrDefault(e =>
-            string.Equals(e.Name, binding.EndpointName, StringComparison.Ordinal));
-        if (endpoint is null) {
+        // Before the action lookup: a missing endpoint keeps its historical precedence over a
+        // missing action in the diagnostic. The resolver repeats the same match below.
+        if (!HasEndpointCandidate(contract, binding.EndpointName)) {
+            RecordBinding(context, binding, contract, ContractBindingStatus.NotOnSurface, endpoint: null);
             context.ReportError(
                 binding,
-                $"Contract binding '{binding.Name}' references endpoint '{binding.EndpointName}' that does not belong to contract '{binding.ContractName}'.",
-                DomainModelDiagnosticCodes.ContractIntegration);
+                $"Contract binding '{binding.Name}' references endpoint '{binding.EndpointName}' that does not belong to contract '{binding.ContractName}'{PinSuffix(contract)}.",
+                DomainModelDiagnosticCodes.ContractEndpointNotOnSurface);
             return;
         }
 
-        if (!PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
-            context.ReportError(
-                endpoint,
-                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' payload type '{endpoint.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
-                DomainModelDiagnosticCodes.ContractIntegration);
-        }
-
-        var action = DomainAnalysis.FindActionOnAnyEntity(domain, binding.ActionName);
+        var action = DomainAnalysis.FindAnyNamedActionOnAnyEntity(domain, binding.ActionName);
         if (action is null) {
+            RecordBinding(context, binding, contract, ContractBindingStatus.Unresolved, endpoint: null);
             context.ReportError(
                 binding,
                 $"Contract binding '{binding.Name}' references action '{binding.ActionName}' that was not found on any entity in the domain.",
@@ -298,6 +320,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         var localParam = action.Parameters.FirstOrDefault(p =>
             string.Equals(p.Name, binding.LocalParameterName, StringComparison.Ordinal));
         if (localParam is null) {
+            RecordBinding(context, binding, contract, ContractBindingStatus.Unresolved, endpoint: null);
             context.ReportError(
                 binding,
                 $"Contract binding '{binding.Name}' references missing local parameter '{binding.LocalParameterName}' on action '{binding.ActionName}'.",
@@ -305,10 +328,42 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (!string.Equals(localParam.Type.TypeName, endpoint.PayloadType.TypeName, StringComparison.Ordinal)) {
+        var resolution = ContractEndpointResolver.Resolve(
+            contract, domain, binding.EndpointName, localParam.Type.TypeName);
+        var pinMismatch = contract.Pin is not null && !ContractPin.Matches(contract, contract.Pin);
+        var status = pinMismatch && resolution.Endpoint is not null
+            ? ContractBindingStatus.PinMismatch
+            : resolution.Status;
+        RecordBinding(context, binding, contract, status, resolution.Endpoint?.Name);
+
+        switch (resolution.Status) {
+            case ContractBindingStatus.Incompatible:
+                context.ReportError(
+                    binding,
+                    $"Contract binding '{binding.Name}' parameter '{localParam.Name}' type '{localParam.Type.TypeName}' is incompatible with {DescribeCandidates(resolution.Candidates)} on contract '{contract.Name}'.",
+                    DomainModelDiagnosticCodes.ContractIntegration);
+                break;
+
+            case ContractBindingStatus.Ambiguous:
+                context.ReportError(
+                    binding,
+                    $"Contract binding '{binding.Name}' names '{binding.EndpointName}', which matches {DescribeCandidates(resolution.Candidates)} and no payload is more constrained than the others. Name the exported endpoint instead.",
+                    DomainModelDiagnosticCodes.ContractOverloadAmbiguous);
+                break;
+
+            case ContractBindingStatus.Bound when resolution.RequiredChoice:
+                context.ReportWarning(
+                    binding,
+                    $"Contract binding '{binding.Name}' names '{binding.EndpointName}', which matches {DescribeCandidates(resolution.Candidates)}. Selected '{resolution.Endpoint!.Name}' as the more constrained payload; name the exported endpoint to make the choice explicit.",
+                    DomainModelDiagnosticCodes.ContractOverloadSelected);
+                break;
+        }
+
+        if (resolution.Endpoint is { } endpoint
+            && !PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
             context.ReportError(
-                binding,
-                $"Contract binding '{binding.Name}' parameter '{localParam.Name}' type '{localParam.Type.TypeName}' is incompatible with endpoint payload '{endpoint.PayloadType.TypeName}'.",
+                endpoint,
+                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' payload type '{endpoint.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
                 DomainModelDiagnosticCodes.ContractIntegration);
         }
 
@@ -322,4 +377,38 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
     }
 
+    private static bool HasEndpointCandidate(ImportedContract contract, string authoredEndpoint) =>
+        contract.Endpoints.Any(endpoint =>
+            string.Equals(endpoint.Name, authoredEndpoint, StringComparison.Ordinal)
+            || string.Equals(endpoint.SourceName ?? endpoint.Name, authoredEndpoint, StringComparison.Ordinal));
+
+    private static void RecordBinding(
+        AnalysisContext context,
+        ContractBinding binding,
+        ImportedContract? contract,
+        ContractBindingStatus status,
+        string? endpoint) {
+        context.SetMetadata(binding, new ContractBindingMetadata(
+            contract?.UsesId,
+            contract?.Name ?? binding.ContractName,
+            contract?.SourceIdentifier,
+            contract?.Version,
+            contract?.Fingerprint,
+            binding.EndpointName,
+            endpoint,
+            binding.ActionName,
+            binding.LocalParameterName,
+            status));
+    }
+
+    private static string PinSuffix(ImportedContract contract) =>
+        contract.Pin is { Length: > 0 } pin ? $" (pinned '{pin}')" : "";
+
+    private static string DescribeCandidates(IReadOnlyList<ContractEndpoint> candidates) =>
+        candidates.Count switch {
+            0 => "no endpoint",
+            1 => $"endpoint '{candidates[0].Name}' ({candidates[0].PayloadType.TypeName})",
+            _ => "endpoints " + string.Join(", ",
+                candidates.Select(candidate => $"'{candidate.Name}' ({candidate.PayloadType.TypeName})")),
+        };
 }

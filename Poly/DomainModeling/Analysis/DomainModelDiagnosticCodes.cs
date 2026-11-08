@@ -69,6 +69,34 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string PlatformTargetMismatch = "DMCON004";
 
+    // #420 takes 010-013 after #424's 004 (its PR merged first); 005-009 stay free.
+
+    /// <summary>
+    /// A <c>uses</c> pin does not match the loaded surface: the author pinned a version the
+    /// package does not publish, or a fingerprint the current export does not compute.
+    /// </summary>
+    public const string ContractPinMismatch = "DMCON010";
+
+    /// <summary>
+    /// A bind named the original action and more than one exported endpoint accepted the
+    /// parameter type; the unique most-constrained payload was chosen. Advisory: names the
+    /// choice so a reviewer sees it.
+    /// </summary>
+    public const string ContractOverloadSelected = "DMCON011";
+
+    /// <summary>
+    /// A bind named the original action and several exported endpoints accepted the parameter
+    /// type, but none was more constrained than the others. Naming one exported endpoint is
+    /// the only sound fix.
+    /// </summary>
+    public const string ContractOverloadAmbiguous = "DMCON012";
+
+    /// <summary>
+    /// A bind names an endpoint the loaded contract does not have (or an original action no
+    /// exported endpoint carries).
+    /// </summary>
+    public const string ContractEndpointNotOnSurface = "DMCON013";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

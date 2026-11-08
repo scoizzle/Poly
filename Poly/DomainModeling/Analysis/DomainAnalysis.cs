@@ -99,11 +99,27 @@ internal static class DomainAnalysis {
 
     /// <summary>
     /// First action of <paramref name="actionName"/> on any entity (entity-level or stage).
+    /// Uses the current-stage dispatch: differing stage bodies fail closed.
     /// </summary>
     public static Action? FindActionOnAnyEntity(Domain domain, string actionName) {
         foreach (var type in domain.Types) {
             if (type is not Entity entity) continue;
             var action = FindAction(entity, actionName);
+            if (action is not null) return action;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Existence lookup across entities: the first action of <paramref name="actionName"/>,
+    /// entity-level or any stage. Used by a signature check that has no current stage (a
+    /// contract bind): it needs a representative parameter list, not a body, so differing
+    /// stage bodies do not make the name unresolvable.
+    /// </summary>
+    public static Action? FindAnyNamedActionOnAnyEntity(Domain domain, string actionName) {
+        foreach (var type in domain.Types) {
+            if (type is not Entity entity) continue;
+            var action = FindAnyNamedAction(entity, actionName);
             if (action is not null) return action;
         }
         return null;

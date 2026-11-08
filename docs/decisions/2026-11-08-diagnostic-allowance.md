@@ -33,12 +33,32 @@ platform mapping row).
 
 - No matching allowance: the diagnostic is an error and `ThrowIfHasErrors` (the only gate) refuses.
 - Matching allowance: the same diagnostic is a warning, kept in the report. Direct `session.Lower`
-  of an acknowledged domain succeeds.
+  of an acknowledged **flow** domain succeeds; an acknowledged contract finding still refuses
+  (see "Contract findings" below).
 - An allowance no flow diagnostic consumed is `DMALW001` (error, not acknowledgeable): wrong code or
   path, stale after the flow became compatible, or empty or blank provenance ids.
 
 Ordinary parameter assigns keep their own path and severity; the allowance is consulted only by the
-flow arms, never by a pass over the diagnostic list.
+flow arms and the contract arm, never by a pass over the diagnostic list.
+
+## Contract findings (#422)
+
+The same `DiagnosticAllowance` record covers the contract findings decision 8 puts in the tolerant
+set: `DMCON002`, `DMCON003`, `DMCON004`, `DMCON005`, `DMCON010`, and `DMCON013`. A match reports the
+finding as a warning on the shared diagnostic record and stores one `ContractToleranceMetadata` fact
+per (code, element path) on the domain; `polyc check` shows the warning and does not drop it.
+
+Lower, Emit, Compile, and direct projection still refuse, through `ContractToleranceGate`, naming the
+fact's code and element path. A recorded `ContractBindingMetadata.Status` other than `Bound` also
+refuses in the splice. This is not the deleted #430 contradiction gate: that gate re-derived severity
+from a second rules table for flow diagnostics. This one reads a fact that exists only because an
+acknowledged **contract** finding was recorded, covers contract findings only, and never re-derives
+severity. `ThrowIfHasErrors` remains the only severity gate.
+
+Not acknowledgeable through this arm: `DMCON012` (an ambiguous overload is an authoring error),
+the package-metadata and signature `DMCON001` errors, the unresolved-bind action/parameter cases,
+and every flow code. `DMEFF014` is #444's rule and is not in this arm. `InternalDomainProducer`
+takes no analysis and is not a Lower door.
 
 ## Platform
 

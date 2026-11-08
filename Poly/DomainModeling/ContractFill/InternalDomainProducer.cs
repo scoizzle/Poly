@@ -18,7 +18,8 @@ namespace Poly.DomainModeling.ContractFill;
 /// <list type="bullet">
 /// <item><description>Only <c>public</c> members are exported. Unmarked members are absent.
 /// A public action on an internal entity is not projected; analysis reports
-/// <c>DMCON003</c> and refuses <c>Lower</c>.</description></item>
+/// <c>DMCON003</c> and refuses <c>Lower</c> (a matching allowance stores the fact,
+/// and <c>Lower</c> still refuses).</description></item>
 /// <item><description>A public entity contributes its name only
 /// (<see cref="ImportedContract.Entities"/>): no properties, stages, or identity handle.</description></item>
 /// <item><description>A public action becomes one <c>outbound operation</c> endpoint. Actions with
@@ -29,7 +30,8 @@ namespace Poly.DomainModeling.ContractFill;
 /// payload parameter, so a public zero/multi-parameter action fails closed.</description></item>
 /// <item><description>Value types and enums are exported when a public signature reaches them,
 /// transitively through exported value-type properties. An internal referenced type is skipped;
-/// <c>DMCON002</c> already refuses that domain at <c>Lower</c>.</description></item>
+/// <c>DMCON002</c> already refuses that domain at <c>Lower</c>. This producer is not a gate: it
+/// takes no analysis, so the product door (<c>Lower</c>/<c>Emit</c>) is what refuses.</description></item>
 /// <item><description>Public action preconditions (<c>require</c> policies, and a stage action's
 /// stage policies) travel on the endpoint. Those constraints are surface meaning and enter the
 /// <see cref="ImportedContract.Fingerprint"/>; effects never do.</description></item>

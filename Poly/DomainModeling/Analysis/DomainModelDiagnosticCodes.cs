@@ -69,6 +69,14 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string PlatformTargetMismatch = "DMCON004";
 
+    /// <summary>
+    /// A bind names an imported contract that is not registered in the domain (no <c>uses</c> or
+    /// contract block seeded it). Split from <see cref="ContractIntegration"/> by #422 so the
+    /// unresolved-reference case is acknowledgeable as a tolerance fact without covering the
+    /// package-metadata, payload-type, and signature errors that share the old code.
+    /// </summary>
+    public const string ContractReferenceUnresolved = "DMCON005";
+
     // #420 takes 010-013 after #424's 004 (its PR merged first); 005-009 stay free.
 
     /// <summary>

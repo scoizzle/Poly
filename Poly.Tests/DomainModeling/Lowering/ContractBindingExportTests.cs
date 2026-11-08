@@ -10,10 +10,9 @@ using DbmsPack = Poly.DslCompiler.DbmsPack;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// pack-3c-3: an exported root action that <c>bind</c>s to a contract endpoint
-/// invokes the adapter (a DomainResult.Failure stub until an in-process adapter
-/// is registered), rather than a bodyless local implementation. The binding is
-/// never dropped by export.
+/// #421: a bind to a surface-only in-solution contract compiles away. The exporter emits
+/// no <c>{Contract}Adapters</c> type and no adapter invoke; the local action still runs.
+/// An external endpoint with no body is covered by ContractSpliceTests.
 /// </summary>
 public class ContractBindingExportTests {
     private static Compiler CompilerWithHttpHost() =>
@@ -58,8 +57,8 @@ public class ContractBindingExportTests {
     }
 
     /// <summary>Parent domain after the billing contract is filled and the root Order.Pay action is
-    /// bound to Billing.Charge. Pay has no local effects — a bodyless implementation would silently
-    /// succeed, which is exactly what the export must not do.</summary>
+    /// bound to Billing.Charge. Pay has no local effects; the surface-only sibling bind erases, so
+    /// the emitted action is the empty local implementation.</summary>
     private static Domain FilledParent() {
         var baseParent = BaseParent();
         var filled = new DomainSuite([BillingSource(), baseParent])
@@ -74,25 +73,23 @@ public class ContractBindingExportTests {
     }
 
     [Test]
-    public async Task BoundAction_Export_InvokesAdapterThroughBinding() {
+    public async Task BoundAction_Export_ErasesSiblingBind() {
         var poly = new DomainDslPrinter().Print(FilledParent());
         var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
 
         await Assert.That(result.Success).IsTrue();
         var files = result.Files!;
 
-        // The bound root action's generated method calls through the binding — the
-        // adapter for Billing.Charge — instead of a bodyless local implementation.
+        // A surface-only sibling bind is compiled away: no adapter, no invoke. The
+        // local action remains, and the contract value type stays in the module.
         var order = files.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
-        await Assert.That(order).Contains("if (!adapterResult.IsSuccess)");
+        await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(order.Contains("adapterResult", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
 
-        // The adapter is emitted, not dropped: it traces the request and succeeds
-        // until a real in-process adapter seam lands.
         var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
-        await Assert.That(types).Contains("class BillingAdapters");
-        await Assert.That(types).Contains("public static DomainResult Charge(");
-        await Assert.That(types).Contains("System.Diagnostics.Debug.WriteLine");
+        await Assert.That(types.Contains("class BillingAdapters", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(types).Contains("ChargeRequest");
 
         // Child Ledger entity never becomes a public route.
         var program = files.Single(f => f.FileName == "Program.cs").Source;
@@ -100,9 +97,9 @@ public class ContractBindingExportTests {
     }
 
     [Test]
-    public async Task BoundAction_Export_TwoBindingsSameEndpoint_EmitsSingleAdapterMethod() {
-        // Two bindings may target the same contract endpoint; the emitted adapter has one
-        // method per endpoint (shared by every binding to it) — never a duplicate member.
+    public async Task BoundAction_Export_TwoBindingsSameEndpoint_EraseWithoutSharedType() {
+        // Two bindings may target the same contract endpoint. With a surface-only sibling
+        // contribution both erase, and no shared adapter member is emitted for either.
         var baseParent = BaseParent();
         var filled = new DomainSuite([BillingSource(), baseParent]).FillInternalContracts(baseParent);
         var result = new DomainEvolution(filled).Evolve()
@@ -120,23 +117,24 @@ public class ContractBindingExportTests {
         await Assert.That(compiled.Success).IsTrue();
 
         var types = compiled.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
-        await Assert.That(types.Split("public static DomainResult Charge(").Length - 1).IsEqualTo(1);
+        await Assert.That(types.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var order = compiled.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
+        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order).Contains("public DomainResult Refund(ChargeRequest request)");
     }
 
     [Test]
-    public async Task BoundAction_Export_MethodBodyNotSilentSuccess() {
+    public async Task BoundAction_Export_ErasedBindLeavesTheLocalActionMethod() {
         var poly = new DomainDslPrinter().Print(FilledParent());
         var result = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
 
         await Assert.That(result.Success).IsTrue();
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
 
-        // The bound action is not exported as an expression-bodied silent success —
-        // the adapter invocation is a real statement in the method body.
-        await Assert.That(order.Contains("Pay(ChargeRequest request) => DomainResult.Success()")).IsFalse();
-        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
+        // Erase removes the call, not the action: the method is still emitted and
+        // contains no adapter expression.
+        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
     }
 }

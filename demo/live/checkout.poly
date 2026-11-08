@@ -7,7 +7,8 @@ Order: entity {
   }
 }
 
-Stripe: contract external stripe v1 {
+// Surface-only sibling: Lower erases the bind and Pay still runs.
+Stripe: contract internal stripe v1 {
   ChargeRequest: value {
     Amount: Number
     Currency: Text

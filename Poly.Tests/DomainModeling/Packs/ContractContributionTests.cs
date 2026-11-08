@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
@@ -14,7 +15,7 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// body parses and seeds it onto the domain as an <see cref="ImportedContract"/>.
 /// </summary>
 public sealed class ContractContributionTests {
-    private static readonly Dictionary<string, IReadOnlyList<Poly.Ast.Node>> NoBodies =
+    private static readonly Dictionary<string, Func<Block>> NoBodies =
         new(StringComparer.Ordinal);
 
     private static ImportedContract BillingSurface(string version = "v1") =>
@@ -82,8 +83,8 @@ public sealed class ContractContributionTests {
 
     [Test]
     public async Task AddContract_BodyForUnknownEndpoint_FailsClosed() {
-        var bodies = new Dictionary<string, IReadOnlyList<Poly.Ast.Node>>(StringComparer.Ordinal) {
-            ["Nope"] = [],
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Nope"] = () => new Block([Return.True]),
         };
         var library = new SurfaceLibrary("stripe", BillingSurface(), bodies);
 
@@ -130,9 +131,9 @@ public sealed class ContractContributionTests {
 
     [Test]
     public async Task Register_ContributedSurfaceAndBodies_SessionHoldsThemBeforeTheBody() {
-        var body = new Poly.Ast.Nodes.Return(new Poly.Ast.Nodes.Constant(1));
-        var bodies = new Dictionary<string, IReadOnlyList<Poly.Ast.Node>>(StringComparer.Ordinal) {
-            ["Charge"] = [body],
+        var block = new Block([new Return(new Constant(1))]);
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => block,
         };
         var library = new SurfaceLibrary("stripe", BillingSurface(), bodies);
 
@@ -141,7 +142,7 @@ public sealed class ContractContributionTests {
         var contribution = session.ContractContributions.Single();
         await Assert.That(contribution.LibraryId).IsEqualTo("stripe");
         await Assert.That(contribution.Surface.Name).IsEqualTo("Billing");
-        await Assert.That(contribution.Bodies["Charge"].Single()).IsSameReferenceAs(body);
+        await Assert.That(contribution.Bodies["Charge"]()).IsSameReferenceAs(block);
         await Assert.That(session.FindContractContribution("stripe")).IsSameReferenceAs(contribution);
         await Assert.That(session.FindContractContribution("billing") is null).IsTrue();
     }
@@ -303,7 +304,7 @@ public sealed class ContractContributionTests {
     private sealed class SurfaceLibrary(
         string id,
         ImportedContract surface,
-        IReadOnlyDictionary<string, IReadOnlyList<Poly.Ast.Node>>? bodies = null) : IDomainLibrary {
+        IReadOnlyDictionary<string, Func<Block>>? bodies = null) : IDomainLibrary {
         public string Id => id;
 
         public void Register(SessionBuilder builder) => builder.AddContract(surface, bodies ?? NoBodies);

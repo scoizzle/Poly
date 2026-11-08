@@ -40,3 +40,4 @@ Folder homes stay under `Packs/` until a deletion pass. No MEF. Live `IDomainLib
 - Unknown or duplicate extension ids fail closed.
 - Process-wide Temporal meaning tables still fill when a unit that lists `temporal` is resolved (per-domain meaning tables are follow-up).
 - **Amended 2026-08-15:** Host / entry-point libraries (REST, …) and the MCP harness are locked in [`2026-08-15-domain-library-extensions-mcp-harness.md`](2026-08-15-domain-library-extensions-mcp-harness.md). “Pack” is a leftover folder name; the noun is **extension** / **library**.
+- **#421:** Lower splices a contributed endpoint body at its bind, erases a surface-only in-solution bind (the local action still runs), and refuses an external endpoint with no body. The hard-coded `{Contract}Adapters` stub is gone. A body is a `Func<Block>` called once per bind so every splice gets fresh node ids.

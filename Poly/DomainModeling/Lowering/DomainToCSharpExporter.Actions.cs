@@ -19,7 +19,8 @@ public sealed partial class DomainToCSharpExporter {
         string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
-        Domain? domain, INodeMetadataProvider? analysis) {
+        Domain? domain, INodeMetadataProvider? analysis,
+        ContractSplicePlan? splice = null) {
         var variants = new List<(Action Action, string? SourceStage)>();
         foreach (var action in entity.Actions)
             variants.Add((action, null));
@@ -33,12 +34,12 @@ public sealed partial class DomainToCSharpExporter {
                 var (action, source) = items[0];
                 AddActionMethod(entity, action, methods, stageEnumTypeName,
                     postTransitionNotifyStages, previousStageNotifyStages,
-                    source, domain, analysis);
+                    source, domain, analysis, splice);
                 continue;
             }
 
             AddStageDispatchedActionMethod(entity, items, methods, stageEnumTypeName,
-                postTransitionNotifyStages, previousStageNotifyStages, domain, analysis);
+                postTransitionNotifyStages, previousStageNotifyStages, domain, analysis, splice);
         }
     }
 
@@ -47,12 +48,12 @@ public sealed partial class DomainToCSharpExporter {
         IReadOnlySet<string>? postTransitionNotifyStages = null,
         IReadOnlySet<string>? previousStageNotifyStages = null,
         string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null) {
+        INodeMetadataProvider? analysis = null, ContractSplicePlan? splice = null) {
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildFullActionBody(entity, action, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
             loweringSourceStage: sourceStageName, guardSourceStage: sourceStageName,
-            domain, analysis, isVoid);
+            domain, analysis, isVoid, splice: splice);
 
         // All actions return DomainResult (void) or DomainResult<T> (typed).
         // This lets callers pattern-match on IsSuccess without exceptions.
@@ -82,13 +83,14 @@ public sealed partial class DomainToCSharpExporter {
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
         string? loweringSourceStage, string? guardSourceStage, Domain? domain,
-        INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null) {
+        INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null,
+        ContractSplicePlan? splice = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
             loweringSourceStage, domain, analysis, isVoid, names);
-        effectsBody = PrependAdapterInvocation(domain, action, effectsBody, isVoid, analysis);
+        effectsBody = SpliceContractBody(domain, action, effectsBody, isVoid, analysis, splice, names);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage);
     }
@@ -98,7 +100,8 @@ public sealed partial class DomainToCSharpExporter {
         List<MethodDefinitionNode> methods, string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
-        Domain? domain, INodeMetadataProvider? analysis) {
+        Domain? domain, INodeMetadataProvider? analysis,
+        ContractSplicePlan? splice = null) {
         var representative = variants[0].Action;
         var paramSignature = string.Join(",", representative.Parameters.Select(p => p.Name));
         foreach (var (action, _) in variants) {
@@ -136,7 +139,7 @@ public sealed partial class DomainToCSharpExporter {
                 : entityLevel ?? stageAction ?? variants[0].Action;
             AddActionMethod(entity, chosen, methods,
                 stageEnumTypeName, postTransitionNotifyStages, previousStageNotifyStages,
-                sourceStageName: null, domain, analysis);
+                sourceStageName: null, domain, analysis, splice);
             return;
         }
 
@@ -180,7 +183,7 @@ public sealed partial class DomainToCSharpExporter {
             var branchBody = BuildFullActionBody(entity, group.Action, stageEnumTypeName,
                 postTransitionNotifyStages, previousStageNotifyStages,
                 loweringSourceStage: group.Stages[0], guardSourceStage: null,
-                domain, analysis, isVoid, names);
+                domain, analysis, isVoid, names, splice);
             nodes.Add(new IfStatement(
                 InWatchedStages(
                     new Member(new ThisReference(), "CurrentStage"),
@@ -193,7 +196,7 @@ public sealed partial class DomainToCSharpExporter {
             var tail = BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
                 postTransitionNotifyStages, previousStageNotifyStages,
                 loweringSourceStage: null, guardSourceStage: null,
-                domain, analysis, isVoid, names);
+                domain, analysis, isVoid, names, splice);
             nodes.AddRange(tail.Nodes);
             locals.AddRange(tail.Variables);
         }
@@ -462,17 +465,18 @@ public sealed partial class DomainToCSharpExporter {
     // ── Lowering helpers ────────────────────────────────────────
 
     /// <summary>
-    /// When <paramref name="action"/> is bound to a contract endpoint, prepends
-    /// <c>adapterResult = {Contract}Adapters.{Endpoint}({param})</c> and
-    /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void
-    /// <c>DomainResult</c>) or <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c>
-    /// (typed). Unknown contract/endpoint/binding are left untouched: analysis
-    /// already rejected them, and the projection never second-guesses a valid model.
+    /// When <paramref name="action"/> is bound to a contract endpoint, splices the library's
+    /// contributed body at the bind: the bound `request` parameter, the body's leading statements, then
+    /// <c>adapterResult = &lt;final expression&gt;</c> and
+    /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void <c>DomainResult</c>) or
+    /// <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c> (typed). A surface-only in-solution
+    /// contribution erases the call and leaves the local action body untouched. Unknown
+    /// contract/endpoint/binding are left untouched: analysis already rejected them.
     /// </summary>
-    private static Node? PrependAdapterInvocation(
-        Domain? domain, Action action, Node? effectsBody,
-        bool isVoid, INodeMetadataProvider? analysis) {
-        if (domain is null) return effectsBody;
+    private static Node? SpliceContractBody(
+        Domain? domain, Action action, Node? effectsBody, bool isVoid,
+        INodeMetadataProvider? analysis, ContractSplicePlan? splice, LocalNames? names) {
+        if (domain is null || splice is null) return effectsBody;
         var binding = domain.ContractBindings.FirstOrDefault(b =>
             string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
         if (binding is null) return effectsBody;
@@ -483,10 +487,33 @@ public sealed partial class DomainToCSharpExporter {
             string.Equals(e.Name, binding.EndpointName, StringComparison.Ordinal));
         if (endpoint is null) return effectsBody;
 
-        var adapterResult = new Variable("adapterResult");
-        var call = new Invoke(
-            new Member(new TypeReference($"{contract.Name}Adapters"), endpoint.Name),
-            new Parameter(binding.LocalParameterName));
+        var body = splice.BodyFor(contract, endpoint);
+        if (body is null) return effectsBody;
+
+        foreach (var local in body.Variables.OfType<Variable>()) {
+            if (action.Parameters.Any(p => string.Equals(p.Name, local.Name, StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    $"Contract '{contract.Name}' endpoint '{endpoint.Name}' body local '{local.Name}' collides with a parameter on action '{action.Name}'.");
+        }
+
+        var locals = new List<Node>(body.Variables);
+        var prefix = new List<Node>();
+        if (!string.Equals(binding.LocalParameterName, "request", StringComparison.Ordinal)
+            && ReferencesParameter(body, "request")) {
+            throw new InvalidOperationException(
+                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' body reads 'request', but action '{action.Name}' binds '{binding.LocalParameterName}'. A bound action with a contributed body must name its payload parameter 'request'.");
+        }
+
+        var adapterResult = names?.Next("adapterResult") ?? new Variable("adapterResult");
+        if (action.Parameters.Any(p => string.Equals(p.Name, adapterResult.Name, StringComparison.Ordinal))
+            || locals.OfType<Variable>().Any(v => string.Equals(v.Name, adapterResult.Name, StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' body collides with splice local '{adapterResult.Name}' on action '{action.Name}'.");
+
+        var final = (Return)body.Nodes[^1];
+        prefix.AddRange(body.Nodes.Take(body.Nodes.Count - 1));
+        prefix.Add(new Assignment(adapterResult, final.Value!));
+
         Node failureReturn;
         if (isVoid) {
             failureReturn = new Return(adapterResult);
@@ -501,62 +528,26 @@ public sealed partial class DomainToCSharpExporter {
                         new Member(adapterResult, "ErrorMessage"),
                         new Constant(""))));
         }
-        Node[] prefix = [
-            new Assignment(adapterResult, call),
-            new IfStatement(
-                new Syntactic.Not(new Member(adapterResult, "IsSuccess")),
-                new Block([failureReturn])),
-        ];
+        prefix.Add(new IfStatement(
+            new Syntactic.Not(new Member(adapterResult, "IsSuccess")),
+            new Block([failureReturn])));
+        locals.Add(adapterResult);
+
         return effectsBody is Block block
-            ? new Block([.. prefix, .. block.Nodes], [adapterResult, .. block.Variables])
+            ? new Block([.. prefix, .. block.Nodes], [.. locals, .. block.Variables])
             : effectsBody is null
-                ? new Block(prefix, [adapterResult])
-                : new Block([.. prefix, effectsBody], [adapterResult]);
+                ? new Block(prefix, locals)
+                : new Block([.. prefix, effectsBody], locals);
     }
 
-    /// <summary>
-    /// Builds the fail-closed adapter class for a contract with at least one bound endpoint.
-    /// One static <c>DomainResult</c> method per bound endpoint; each returns
-    /// <c>Failure</c> until an in-process adapter is registered.
-    /// </summary>
-    internal static TypeDefinitionNode BuildContractAdapterTypeDef(
-        ImportedContract contract, IReadOnlyList<ContractEndpoint> boundEndpoints, Domain? domain = null) {
-        var methods = new List<MethodDefinitionNode>();
-        foreach (var endpoint in boundEndpoints) {
-            var payload = new NamedTypeReference(
-                RuntimeAnalysisCache.ClrTypeName(domain, endpoint.PayloadType.TypeName));
-            var domainResult = new NamedTypeReference("DomainResult");
-            var request = new Parameter("request", payload);
-            methods.Add(new MethodDefinitionNode(
-                endpoint.Name,
-                domainResult,
-                Parameters: [request],
-                Body: new Block([
-                    new Invoke(
-                        new Member(new ClrTypeReference(typeof(System.Diagnostics.Debug)), "WriteLine"),
-                        [new Invoke(
-                            new Member(TypeReference.To<string>(), "Concat"),
-                            [new Constant(
-                                $"Contract endpoint '{contract.Name}.{endpoint.Name}' request: "),
-                             request])]),
-                    new Return(new Invoke(new Member(domainResult, "Success"), [])),
-                ]),
-                IsStatic: true,
-                AccessModifier: AccessModifier.Public
-            ));
+    private static bool ReferencesParameter(Node node, string name) {
+        if (node is Parameter parameter && string.Equals(parameter.Name, name, StringComparison.Ordinal))
+            return true;
+        foreach (var child in node.Children) {
+            if (child is not null && ReferencesParameter(child, name))
+                return true;
         }
-
-        return new TypeDefinitionNode(
-            $"{contract.Name}Adapters",
-            Constructors: [
-                new ConstructorDefinitionNode(
-                    Parameters: [],
-                    Body: new Block([]),
-                    AccessModifier: AccessModifier.Private),
-            ],
-            Methods: methods,
-            Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-        );
+        return false;
     }
 
     internal static Node? LowerActionToMethodBody(

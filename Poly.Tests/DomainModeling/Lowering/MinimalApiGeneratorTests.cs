@@ -465,9 +465,9 @@ public class MinimalApiGeneratorTests {
     }
     [Test]
     public async Task Compile_All_BoundActionHandler_CallsThroughBinding() {
-        // pack-3c-3: the API handler for a bound root action goes through the binding.
-        // The handler calls entity.Pay(...), whose generated body invokes the emitted
-        // Billing adapter (fail-closed) — the binding is never dropped by export.
+        // #421: the API handler still routes the bound root action. The surface-only
+        // sibling bind erases the call, so the handler calls the local action with no
+        // adapter invoke and the binding is not dropped from the graph.
         var filled = new DomainSuite([BillingSource(), ParentWithBillingBind()])
             .FillInternalContracts(ParentWithBillingBind());
         var poly = new DomainDslPrinter().Print(filled);
@@ -479,7 +479,8 @@ public class MinimalApiGeneratorTests {
         await Assert.That(program.Contains("/api/orders/{number}/pay")).IsTrue();
 
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("BillingAdapters.Charge(request)");
+        await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
     }
 
     [Test]

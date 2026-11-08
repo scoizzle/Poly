@@ -172,7 +172,7 @@ internal static class RuntimeAnalysisCache {
             var subscriptionBodies = new Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>(
                 ReferenceEqualityComparer.Instance);
             var module = DomainProgramProjection.ToSyntax(
-                domain, analysis, policyBodies, subscriptionBodies);
+                domain, analysis, policyBodies, subscriptionBodies, session.ContractContributions);
             var contributed = ConstraintCompilation.Apply(module, domain, analysis, session.ConstraintCompilers);
             var module2 = contributed.Module;
             if (contributed.ReplacedBodies.Count > 0) {

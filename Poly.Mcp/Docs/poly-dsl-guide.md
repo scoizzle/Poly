@@ -265,7 +265,7 @@ Value types declared **inside** the contract belong to that sub-domain. Action
 parameters at the bind seam may use those types. **Stored entity properties may not.**
 
 ```poly
-Stripe: contract external stripe v1 {
+Billing: contract internal billing v1 {
   ChargeRequest: value {
     Amount: Number
     Currency: Text
@@ -279,22 +279,34 @@ Order: entity {
   }
 }
 
-ChargeOrder: bind Stripe Charge to Pay request
+ChargeOrder: bind Billing Charge to Pay request
 ```
+
+This is the surface-only **sibling** case: the bind compiles away and `Pay` still runs.
+An external provider is a library: `uses stripe` contributes the surface and the
+endpoint body. A hand-authored `external` contract has no body, so a bind to it fails
+Lower rather than guessing an implementation.
 
 `external` / `internal`, `inbound` / `outbound`, `operation` / `event`. Analysis fails
 closed if the contract, endpoint, action, or parameter is missing, if the parameter
 type does not match the payload, if a payload type is unknown, or if two contracts
 (or the parent domain) share a value-type name.
 
-The `InternalDomain` producer may fill the body of a `contract internal` from another
-loaded domain; a hand-authored body is still legal and unchanged.
+The `InternalDomain` producer fills a `contract internal`'s value types and endpoints
+from another loaded domain; it contributes no implementation body. A surface-only
+in-solution bind therefore compiles away.
 
-A `bind` is a **call in export**: the bound action's generated method invokes a
-`{Contract}Adapters` adapter for the endpoint. Until an in-process adapter is registered,
-the emitted adapter returns `DomainResult.Failure("… no in-process adapter.")` — an
-unimplemented binding fails closed at runtime, never a silent no-op. The binding is
-never dropped by export.
+A `bind` attaches the parent action to the endpoint. A library loaded by `uses` may
+contribute the endpoint's implementation AST; Lower **splices** it at the bind: the
+body's leading statements run, its final `return <DomainResult>;` becomes the call
+outcome, and `if (!adapterResult.IsSuccess)` returns the failure. The body reads its
+payload as `request`, so the bound action's parameter must be named `request`. No
+`{Contract}Adapters` type or adapter invoke is emitted.
+
+A **surface-only in-solution** contract (`InternalDomain`, no body) compiles the call
+away: no adapter, no invoke, and the local action still runs. An **external** contract
+(`ExternalProvider`) with no contributed body fails Lower — and MCP simulate — naming
+the contract and endpoint; it is never erased.
 
 ## 3. Entities and Properties
 

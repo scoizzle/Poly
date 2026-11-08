@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
@@ -40,13 +41,15 @@ public static class DomainProgramProjection {
         Domain domain,
         INodeMetadataProvider metadata,
         Dictionary<(string Entity, string Policy), Node>? policyBodies,
-        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies) {
+        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies,
+        IReadOnlyList<ContractContribution>? contractContributions = null) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(metadata);
         var domainRelationships = metadata.GetAllRelationships(domain);
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);
         var result = new List<TypeDefinitionNode>();
+        var splice = new ContractSplicePlan(contractContributions);
 
         // ── Collect all subscriptions ─────────────────────────────
         var subscriptionsByTarget = new Dictionary<string, List<DomainToCSharpExporter.SubscriptionInfo>>(
@@ -102,24 +105,6 @@ public static class DomainProgramProjection {
         result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
         result.Add(DomainToCSharpExporter.BuildConstraintFailureExceptionTypeDef());
 
-        // ── Emit fail-closed adapters for bound contracts (pack-3c-3) ──
-        // A bind is a call in export: each contract with at least one bound endpoint gets
-        // an {Contract}Adapters class whose bound-endpoint methods return
-        // DomainResult.Failure until an in-process adapter is registered. The binding
-        // is never dropped.
-        foreach (var contract in domain.ImportedContracts) {
-            var boundEndpoints = domain.ContractBindings
-                .Where(b => string.Equals(b.ContractName, contract.Name, StringComparison.Ordinal))
-                .Select(b => contract.Endpoints.FirstOrDefault(e =>
-                    string.Equals(e.Name, b.EndpointName, StringComparison.Ordinal)))
-                .Where(e => e is not null)
-                .Cast<ContractEndpoint>()
-                .DistinctBy(e => e.Name)
-                .ToList();
-            if (boundEndpoints.Count == 0) continue;
-            result.Add(DomainToCSharpExporter.BuildContractAdapterTypeDef(contract, boundEndpoints, domain));
-        }
-
         // ── Build entity type definitions ─────────────────────────
         var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);
         foreach (var entity in entities) {
@@ -129,7 +114,7 @@ public static class DomainProgramProjection {
             result.AddRange(DomainToCSharpExporter.BuildTypeDefsForEntity(
                 entity, domain, domainRelationships, entityLookup, metadata,
                 targetSubs, subscriberSubs, handlerNames,
-                policyBodies, subscriptionBodies));
+                policyBodies, subscriptionBodies, splice));
         }
 
         return result;

@@ -57,14 +57,3 @@ public class ConstraintFailureException : System.Exception
 {
     public ConstraintFailureException(string message) : base(message) { }
 }
-
-public class BillingAdapters
-{
-    private BillingAdapters()
-    { }
-    public static DomainResult Charge(ChargeRequest request)
-    {
-        System.Diagnostics.Debug.WriteLine(System.String.Concat("Contract endpoint 'Billing.Charge' request: ", request));
-        return DomainResult.Success();
-    }
-}

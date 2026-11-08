@@ -53,7 +53,7 @@ then drops the allowance, and a leftover one fails the next analyze (`DMALW001`)
 - A rename changes the element path, so the allowance stops matching and the diagnostic is an error
   again: visible, not a silent reattach.
 
-## Amendment 2026-11-07: DMEFF014 is not acknowledgeable (#444)
+## Amendment 2026-11-08: DMEFF014 is not acknowledgeable (#444)
 
 Scot's ruling after the #444 PLAN. The accepted text above stands as written for `DMEFF008` and
 `DMSEM003`; for `DMEFF014` it is superseded.

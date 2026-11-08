@@ -527,7 +527,8 @@ public sealed partial class DomainToCSharpExporter {
         // One unqualified method per policy name. Entity, stage, and action-local
         // definitions share that namespace with the action methods. A require copy
         // (same expression instance as the definition) and a not_ use do not emit a
-        // second method. Any other name clash throws (analysis reports it first).
+        // second method, whether the require sits on a stage or an action. Any other
+        // name clash throws (analysis reports it first).
         var definedPolicies = new Dictionary<string, Policy>(StringComparer.Ordinal);
         void AddPolicyMethod(Policy policy) {
             if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
@@ -545,21 +546,21 @@ public sealed partial class DomainToCSharpExporter {
             ));
         }
 
+        bool IsRequireUse(Policy policy) =>
+            policy.Name.StartsWith("not_", StringComparison.Ordinal)
+            || (definedPolicies.TryGetValue(policy.Name, out var existing)
+                && ReferenceEquals(existing.Expression, policy.Expression));
+
         foreach (var policy in entity.Policies)
             AddPolicyMethod(policy);
         foreach (var stage in entity.Stages)
             foreach (var policy in stage.Policies)
-                AddPolicyMethod(policy);
-        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))) {
-            foreach (var policy in action.Policies) {
-                if (policy.Name.StartsWith("not_", StringComparison.Ordinal))
-                    continue;
-                if (definedPolicies.TryGetValue(policy.Name, out var existing)
-                    && ReferenceEquals(existing.Expression, policy.Expression))
-                    continue;
-                AddPolicyMethod(policy);
-            }
-        }
+                if (!IsRequireUse(policy))
+                    AddPolicyMethod(policy);
+        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions)))
+            foreach (var policy in action.Policies)
+                if (!IsRequireUse(policy))
+                    AddPolicyMethod(policy);
 
         // ── Target entity: subscription registry ──────────────────
         // One registry field + register method per (relationship, stage, subscriber)

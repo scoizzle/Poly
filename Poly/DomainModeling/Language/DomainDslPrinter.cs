@@ -329,17 +329,15 @@ public sealed class DomainDslPrinter {
         _sb.Append(": stage {");
         _sb.AppendLine();
 
-        // A stage requires entity policies by name; only those can be read back.
+        // A stage require is a use of an entity policy (same expression instance), or the
+        // negation of one. Anything else cannot be read back; do not drop it.
         foreach (var policy in stage.Policies) {
-            var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
-            var required = negated ? policy.Name.Substring(4) : policy.Name;
-            if (!entity.Policies.Any(p => string.Equals(p.Name, required, StringComparison.Ordinal)))
-                continue;
+            var line = StageRequireLine(entity, policy)
+                ?? throw new InvalidOperationException(
+                    $"Stage '{stage.Name}' policy '{policy.Name}' is not a require of an entity policy, so it cannot be printed.");
             _sb.Append(indent);
-            _sb.Append("  require ");
-            if (negated)
-                _sb.Append("not ");
-            _sb.AppendLine(required);
+            _sb.Append("  ");
+            _sb.AppendLine(line);
         }
 
         // P2.4: Print OnEntry/OnExit effects
@@ -379,6 +377,27 @@ public sealed class DomainDslPrinter {
 
         _sb.Append(indent);
         _sb.AppendLine("}");
+    }
+
+    /// <summary>
+    /// <c>require Name</c> when the stage policy is the entity policy's expression instance,
+    /// or <c>require not Name</c> when it is <c>Not</c> of that instance. A <c>not_</c> prefix
+    /// alone is not enough. Null when the policy cannot be printed as a require.
+    /// </summary>
+    private static string? StageRequireLine(Entity entity, Policy policy) {
+        var same = entity.Policies.FirstOrDefault(p =>
+            string.Equals(p.Name, policy.Name, StringComparison.Ordinal)
+            && ReferenceEquals(p.Expression, policy.Expression));
+        if (same is not null)
+            return "require " + same.Name;
+        if (policy.Expression is Not not) {
+            var negated = entity.Policies.FirstOrDefault(p =>
+                string.Equals("not_" + p.Name, policy.Name, StringComparison.Ordinal)
+                && ReferenceEquals(p.Expression, not.Operand));
+            if (negated is not null)
+                return "require not " + negated.Name;
+        }
+        return null;
     }
 
     private void PrintAction(Action action, string indent, string? stageName) {

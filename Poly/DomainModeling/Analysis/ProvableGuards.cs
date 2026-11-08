@@ -18,87 +18,122 @@ namespace Poly.DomainModeling.Analysis;
 /// it, and a stage <c>require</c> that proves a property present is an invariant (DMEFF015). The
 /// guards are a dominating <c>if</c>, an action <c>require</c>, an entry policy on every
 /// transition into the stage, and a stage <c>require</c>. Facts are keys: <c>P:Name</c> for an
-/// entity property, <c>A:name</c> for an action parameter.
+/// entity property, <c>A:name</c> for an action parameter. Stage and entry facts are borrowed:
+/// a <c>transition to</c> drops them. Action <c>require</c> and <c>if</c> facts are local and stay.
 /// </summary>
 internal static class ProvableGuards {
     private const string Property = "P:";
     private const string Parameter = "A:";
 
-    private interface IFlowVisitor {
-        void OnAssign(AssignEffect assign, HashSet<string> facts);
-        void OnTransition(StageTransitionEffect transition, HashSet<string> facts);
+    /// <summary>Local facts survive a stage transition. Borrowed facts are the stage and entry guards.</summary>
+    private sealed class FactSet {
+        public HashSet<string> Local { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> Borrowed { get; } = new(StringComparer.Ordinal);
+
+        public bool Has(string key) => Local.Contains(key) || Borrowed.Contains(key);
+
+        public void Drop(string key) {
+            Local.Remove(key);
+            Borrowed.Remove(key);
+        }
+
+        public void ProveLocal(string key) {
+            Borrowed.Remove(key);
+            Local.Add(key);
+        }
+
+        public void Borrow(string key) {
+            if (!Local.Contains(key))
+                Borrowed.Add(key);
+        }
+
+        public void LeaveStage() => Borrowed.Clear();
+
+        public FactSet Clone() {
+            var copy = new FactSet();
+            copy.Local.UnionWith(Local);
+            copy.Borrowed.UnionWith(Borrowed);
+            return copy;
+        }
+
+        public HashSet<string> PropertyNames() =>
+            [.. Local.Concat(Borrowed)
+                .Where(k => k.StartsWith(Property, StringComparison.Ordinal))
+                .Select(k => k[Property.Length..])];
     }
 
-    private sealed class Visitor(
-        System.Action<AssignEffect, HashSet<string>>? assign,
-        System.Action<StageTransitionEffect, HashSet<string>>? transition) : IFlowVisitor {
-        public void OnAssign(AssignEffect a, HashSet<string> facts) => assign?.Invoke(a, facts);
-        public void OnTransition(StageTransitionEffect t, HashSet<string> facts) => transition?.Invoke(t, facts);
+    private sealed class EntryHit {
+        public required string Target { get; init; }
+        public required HashSet<string> Proven { get; init; }
+        public HashSet<string> RenulledAfter { get; } = new(StringComparer.Ordinal);
     }
 
     /// <summary>Runs every in-tree nullable-copy check for one entity.</summary>
     public static void Validate(AnalysisContext context, Domain domain, Entity entity) {
         var stages = entity.Stages;
-        var stageRequired = stages.ToDictionary(
-            s => s.Name, s => Presence(s.Policies), StringComparer.Ordinal);
+        var hits = CollectEntries(entity);
 
-        var allActions = new List<(Action Action, Stage? Stage)>();
-        foreach (var action in entity.Actions)
-            allActions.Add((action, null));
-        foreach (var stage in stages)
-            foreach (var action in stage.Actions)
-                allActions.Add((action, stage));
-
-        // Assigns that may null their target, judged on what the action itself establishes.
-        var renulls = new Dictionary<Action, List<(AssignEffect Node, string Property)>>(
-            ReferenceEqualityComparer.Instance);
-        foreach (var (action, _) in allActions) {
-            var list = new List<(AssignEffect, string)>();
-            renulls[action] = list;
-            Walk(action.Effects, Facts(Presence(action.Policies)), action, entity,
-                new Visitor((assign, facts) => {
-                    if (assign.Target is PropertyAccess target && MayBeNull(assign.Value, facts, action, entity))
-                        list.Add((assign, target.Name));
-                }, null));
+        var entryProven = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        for (var i = 1; i < stages.Count; i++) {
+            var name = stages[i].Name;
+            var into = hits.Where(h => string.Equals(h.Target, name, StringComparison.Ordinal)).ToList();
+            if (into.Count == 0)
+                continue;
+            HashSet<string>? common = null;
+            foreach (var hit in into) {
+                var held = new HashSet<string>(hit.Proven, StringComparer.Ordinal);
+                held.ExceptWith(hit.RenulledAfter);
+                if (common is null)
+                    common = held;
+                else
+                    common.IntersectWith(held);
+            }
+            entryProven[name] = common ?? [];
         }
 
-        // DMEFF015: an action that can run in a stage must not null what the stage proves present.
-        foreach (var stage in stages) {
-            if (stageRequired[stage.Name].Count == 0)
-                continue;
-            foreach (var (action, owner) in allActions) {
-                if (owner is not null && !ReferenceEquals(owner, stage))
+        HashSet<string> EntrySeed(Stage stage) =>
+            entryProven.TryGetValue(stage.Name, out var proven) ? proven : [];
+
+        void ReportViolations(Action action, Stage stage) {
+            var required = StagePresence(action, stage);
+            if (required.Count == 0)
+                return;
+            foreach (var (node, property) in Renulls(action, stage, entity, EntrySeed(stage))) {
+                if (!required.Contains(property))
                     continue;
-                foreach (var (node, property) in renulls[action]) {
-                    if (!stageRequired[stage.Name].Contains(property))
-                        continue;
-                    context.ReportError(
-                        node,
-                        $"Action '{action.Name}' may assign null to '{property}', but stage '{stage.Name}' " +
-                        $"requires '{property}' to be present. No action that can run in the stage may null it.",
-                        DomainModelDiagnosticCodes.StagePresenceInvalidated);
-                }
+                context.ReportError(
+                    node,
+                    $"Action '{action.Name}' may assign null to '{property}', but stage '{stage.Name}' " +
+                    $"requires '{property}' to be present. No action that can run in the stage may null it.",
+                    DomainModelDiagnosticCodes.StagePresenceInvalidated);
             }
         }
 
-        var entryProven = EntryProven(entity, stages);
+        foreach (var stage in stages) {
+            foreach (var action in stage.Actions)
+                ReportViolations(action, stage);
+            foreach (var action in entity.Actions)
+                ReportViolations(action, stage);
+        }
 
-        bool EntryCovers(Stage stage, string property) =>
-            entryProven.TryGetValue(stage.Name, out var proven)
-            && proven.Contains(property)
-            && !allActions.Any(a => (a.Stage is null || ReferenceEquals(a.Stage, stage))
-                && renulls[a.Action].Any(r => r.Property == property));
+        bool EntryCovers(Stage stage, string property) {
+            if (!entryProven.TryGetValue(stage.Name, out var proven) || !proven.Contains(property))
+                return false;
+            var seed = EntrySeed(stage);
+            return !stage.Actions.Concat(entity.Actions).Any(action =>
+                Renulls(action, stage, entity, seed).Any(r => r.Property == property));
+        }
 
-        void Check(IReadOnlyList<Effect> effects, HashSet<string> initial, Action? action) =>
-            Walk(effects, initial, action, entity,
-                new Visitor((assign, facts) => CheckCopy(context, domain, entity, action, assign, facts), null));
+        void Check(IReadOnlyList<Effect> effects, FactSet facts, Action? action) =>
+            Walk(effects, facts, action, entity,
+                (assign, current) => CheckCopy(context, domain, entity, action, assign, current));
 
         foreach (var action in entity.Actions) {
-            var facts = Facts(Presence(action.Policies));
+            var facts = FactsOf(Presence(action.Policies));
             if (stages.Count > 0) {
-                foreach (var property in stageRequired[stages[0].Name]) {
-                    if (stages.All(s => stageRequired[s.Name].Contains(property)))
-                        facts.Add(Property + property);
+                foreach (var property in StagePresence(action, stages[0])) {
+                    if (stages.All(s => StagePresence(action, s).Contains(property)))
+                        facts.Borrow(Property + property);
                 }
             }
             Check(action.Effects, facts, action);
@@ -106,79 +141,172 @@ internal static class ProvableGuards {
         for (var i = 0; i < stages.Count; i++) {
             var stage = stages[i];
             foreach (var action in stage.Actions) {
-                var facts = Facts(Presence(action.Policies));
-                facts.UnionWith(Facts(stageRequired[stage.Name]));
+                var facts = FactsOf(Presence(action.Policies));
+                foreach (var property in StagePresence(action, stage))
+                    facts.Borrow(Property + property);
                 if (i > 0) {
-                    foreach (var property in entryProven.GetValueOrDefault(stage.Name) ?? [])
+                    foreach (var property in EntrySeed(stage))
                         if (EntryCovers(stage, property))
-                            facts.Add(Property + property);
+                            facts.Borrow(Property + property);
                 }
                 Check(action.Effects, facts, action);
             }
-            Check(stage.OnEntryEffects, [], null);
-            Check(stage.OnExitEffects, [], null);
+            Check(stage.OnEntryEffects, new FactSet(), null);
+            Check(stage.OnExitEffects, new FactSet(), null);
             foreach (var sub in stage.Subscriptions)
-                Check(sub.Effects, [], null);
+                Check(sub.Effects, new FactSet(), null);
         }
         foreach (var sub in entity.Subscriptions)
-            Check(sub.Effects, [], null);
+            Check(sub.Effects, new FactSet(), null);
     }
 
     /// <summary>
-    /// Per stage (never the first): the properties proven present on every transition into it.
-    /// A transition from entry, exit or a subscription has no action policies, so it proves nothing.
+    /// Properties a stage <c>require</c> proves present for this action. An action
+    /// <c>require not Policy</c> suppresses that policy, matching <c>EmitStagePolicyGuards</c>.
     /// </summary>
-    private static Dictionary<string, HashSet<string>> EntryProven(Entity entity, IReadOnlyList<Stage> stages) {
-        var snapshots = new Dictionary<string, List<HashSet<string>>>(StringComparer.Ordinal);
+    private static HashSet<string> StagePresence(Action action, Stage stage) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var policy in stage.Policies) {
+            if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
+                continue;
+            names.UnionWith(Presence([policy]));
+        }
+        return names;
+    }
 
-        void Collect(IReadOnlyList<Effect> effects, HashSet<string> initial, Action? action) =>
-            Walk(effects, initial, action, entity, new Visitor(null, (transition, facts) => {
-                var target = transition.TargetStage.StageName;
-                if (!snapshots.TryGetValue(target, out var list))
-                    snapshots[target] = list = [];
-                list.Add([.. facts.Where(f => f.StartsWith(Property, StringComparison.Ordinal))
-                    .Select(f => f.Substring(Property.Length))]);
-            }));
+    private static List<(AssignEffect Node, string Property)> Renulls(
+        Action action, Stage stage, Entity entity, IReadOnlySet<string> entrySeed) {
+        var facts = FactsOf(Presence(action.Policies));
+        foreach (var property in StagePresence(action, stage))
+            facts.Borrow(Property + property);
+        foreach (var property in entrySeed)
+            facts.Borrow(Property + property);
+        var list = new List<(AssignEffect, string)>();
+        Walk(action.Effects, facts, action, entity, (assign, current) => {
+            if (assign.Target is PropertyAccess target && MayBeNull(assign.Value, current, action, entity))
+                list.Add((assign, target.Name));
+        });
+        return list;
+    }
+
+    /// <summary>
+    /// One hit per transition. Proven is the property facts at the transition. RenulledAfter is
+    /// what that path may null after it, including effects that follow an <c>if</c> the transition
+    /// sat in. A transition from entry, exit or a subscription starts with no action policies.
+    /// </summary>
+    private static List<EntryHit> CollectEntries(Entity entity) {
+        var hits = new List<EntryHit>();
+
+        void Collect(IReadOnlyList<Effect> effects, FactSet facts, Action? action, List<EntryHit> open) {
+            foreach (var effect in effects) {
+                switch (effect) {
+                    case AssignEffect assign:
+                        if (assign.Target is PropertyAccess target && MayBeNull(assign.Value, facts, action, entity)) {
+                            foreach (var hit in open)
+                                hit.RenulledAfter.Add(target.Name);
+                        }
+                        NoteAssign(facts, assign, action, entity);
+                        break;
+                    case StageTransitionEffect transition:
+                        var entered = new EntryHit {
+                            Target = transition.TargetStage.StageName,
+                            Proven = facts.PropertyNames(),
+                        };
+                        hits.Add(entered);
+                        open.Add(entered);
+                        facts.LeaveStage();
+                        break;
+                    case ConditionalEffect conditional: {
+                            var thenFacts = facts.Clone();
+                            var elseFacts = facts.Clone();
+                            Prove(conditional.Condition, true, thenFacts, action);
+                            Prove(conditional.Condition, false, elseFacts, action);
+                            var thenOpen = CloneHits(open);
+                            var elseOpen = CloneHits(open);
+                            Collect(conditional.ThenEffects, thenFacts, action, thenOpen);
+                            if (conditional.ElseEffects is not null)
+                                Collect(conditional.ElseEffects, elseFacts, action, elseOpen);
+                            for (var i = 0; i < open.Count; i++) {
+                                open[i].RenulledAfter.UnionWith(thenOpen[i].RenulledAfter);
+                                if (conditional.ElseEffects is not null)
+                                    open[i].RenulledAfter.UnionWith(elseOpen[i].RenulledAfter);
+                            }
+                            foreach (var created in thenOpen.Skip(open.Count))
+                                open.Add(created);
+                            if (conditional.ElseEffects is not null) {
+                                foreach (var created in elseOpen.Skip(open.Count))
+                                    open.Add(created);
+                            }
+                            Intersect(facts, thenFacts, elseFacts, conditional.ElseEffects is not null);
+                            break;
+                        }
+                    case CompositeEffect composite:
+                        Collect(composite.Effects, facts, action, open);
+                        break;
+                }
+            }
+        }
 
         foreach (var action in entity.Actions)
-            Collect(action.Effects, Facts(Presence(action.Policies)), action);
+            Collect(action.Effects, FactsOf(Presence(action.Policies)), action, []);
         foreach (var sub in entity.Subscriptions)
-            Collect(sub.Effects, [], null);
-        foreach (var stage in stages) {
+            Collect(sub.Effects, new FactSet(), null, []);
+        foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions)
-                Collect(action.Effects, Facts(Presence(action.Policies)), action);
-            Collect(stage.OnEntryEffects, [], null);
-            Collect(stage.OnExitEffects, [], null);
+                Collect(action.Effects, FactsOf(Presence(action.Policies)), action, []);
+            Collect(stage.OnEntryEffects, new FactSet(), null, []);
+            Collect(stage.OnExitEffects, new FactSet(), null, []);
             foreach (var sub in stage.Subscriptions)
-                Collect(sub.Effects, [], null);
+                Collect(sub.Effects, new FactSet(), null, []);
         }
+        return hits;
+    }
 
-        var proven = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        for (var i = 1; i < stages.Count; i++) {
-            if (!snapshots.TryGetValue(stages[i].Name, out var list) || list.Count == 0)
-                continue;
-            var common = new HashSet<string>(list[0], StringComparer.Ordinal);
-            foreach (var other in list.Skip(1))
-                common.IntersectWith(other);
-            proven[stages[i].Name] = common;
+    private static List<EntryHit> CloneHits(List<EntryHit> open) {
+        var copy = new List<EntryHit>(open.Count);
+        foreach (var hit in open) {
+            var clone = new EntryHit {
+                Target = hit.Target,
+                Proven = new HashSet<string>(hit.Proven, StringComparer.Ordinal),
+            };
+            clone.RenulledAfter.UnionWith(hit.RenulledAfter);
+            copy.Add(clone);
         }
-        return proven;
+        return copy;
+    }
+
+    /// <summary>
+    /// A fact stays local only when both branches proved it locally. A fact both branches still
+    /// hold, but not both locally, stays borrowed so a later transition can drop it. A missing
+    /// else keeps the facts the then-branch did not drop.
+    /// </summary>
+    private static void Intersect(FactSet into, FactSet thenSide, FactSet elseSide, bool hasElse) {
+        var elseLocal = hasElse ? elseSide.Local : into.Local;
+        var elseBorrowed = hasElse ? elseSide.Borrowed : into.Borrowed;
+        var elseHeld = elseLocal.Concat(elseBorrowed).ToHashSet(StringComparer.Ordinal);
+        var thenHeld = thenSide.Local.Concat(thenSide.Borrowed).ToHashSet(StringComparer.Ordinal);
+        var local = thenSide.Local.Where(elseLocal.Contains).ToHashSet(StringComparer.Ordinal);
+        var borrowed = thenHeld.Where(k => elseHeld.Contains(k) && !local.Contains(k)).ToHashSet(StringComparer.Ordinal);
+        into.Local.Clear();
+        into.Borrowed.Clear();
+        into.Local.UnionWith(local);
+        into.Borrowed.UnionWith(borrowed);
     }
 
     private static void CheckCopy(
-        AnalysisContext context, Domain domain, Entity entity, Action? action, AssignEffect assign, HashSet<string> facts) {
+        AnalysisContext context, Domain domain, Entity entity, Action? action, AssignEffect assign, FactSet facts) {
         if (assign.Target is not PropertyAccess target)
             return;
         var targetProperty = entity.Properties.FirstOrDefault(p => p.Name == target.Name);
         if (targetProperty is null || !EntityStructureAnalyzer.IsRequired(targetProperty))
             return;
-        if (SourceKey(assign.Value, action) is not { } key || !IsNullable(key, action, entity) || facts.Contains(key))
+        if (SourceKey(assign.Value, action) is not { } key || !IsNullable(key, action, entity) || facts.Has(key))
             return;
 
         context.ReportError(
             assign,
-            $"Assign copies '{key.Substring(2)}', which may be null, into required '{target.Name}'. " +
-            $"Guard the copy with an if ({key.Substring(2)} is not null), require a policy that proves it present, " +
+            $"Assign copies '{key[2..]}', which may be null, into required '{target.Name}'. " +
+            $"Guard the copy with an if ({key[2..]} is not null), require a policy that proves it present, " +
             $"or declare '{target.Name}' optional.",
             DomainModelDiagnosticCodes.ObservedFlowNullability);
         ObservedFlowChecks.NoteNullabilityFinding(context, domain, assign);
@@ -192,26 +320,26 @@ internal static class ProvableGuards {
     };
 
     private static bool IsNullable(string key, Action? action, Entity entity) {
-        var name = key.Substring(2);
+        var name = key[2..];
         var property = key.StartsWith(Parameter, StringComparison.Ordinal)
             ? action?.Parameters.FirstOrDefault(p => p.Name == name)
             : entity.Properties.FirstOrDefault(p => p.Name == name);
         return property is not null && !EntityStructureAnalyzer.IsRequired(property);
     }
 
-    private static bool MayBeNull(DomainExpression value, HashSet<string> facts, Action? action, Entity entity) {
+    private static bool MayBeNull(DomainExpression value, FactSet facts, Action? action, Entity entity) {
         switch (value) {
             case Literal literal:
                 return literal.Value is null;
             case PropertyAccess or ParameterAccess:
                 var key = SourceKey(value, action)!;
-                var name = key.Substring(2);
+                var name = key[2..];
                 var known = key.StartsWith(Parameter, StringComparison.Ordinal)
                     ? action?.Parameters.Any(p => p.Name == name) == true
                     : entity.Properties.Any(p => p.Name == name);
-                return !known || (IsNullable(key, action, entity) && !facts.Contains(key));
+                return !known || (IsNullable(key, action, entity) && !facts.Has(key));
             case Add or Subtract or Multiply or Divide or Comparison or And or Or or Not
-                or Exists or NotExists or CountExpr or SumExpr or AnyExpr or AllExpr or NoneExpr:
+                or Exists or NotExists or CountExpr or AnyExpr or AllExpr or NoneExpr or SumExpr:
                 return false;
             default:
                 return true;
@@ -219,51 +347,58 @@ internal static class ProvableGuards {
     }
 
     /// <summary>
-    /// Walks effects in order, tracking which keys are proven present. An <c>if</c> adds what its
-    /// condition proves to each branch and keeps what both branches keep; an assign that may carry
-    /// null drops its target.
+    /// Walks effects in order. An <c>if</c> adds what its condition proves to each branch and keeps
+    /// what both branches keep. A <c>transition to</c> drops borrowed stage and entry facts and
+    /// keeps action-<c>require</c> and <c>if</c> facts. An assign that may carry null drops its target.
     /// </summary>
     private static void Walk(
-        IReadOnlyList<Effect> effects, HashSet<string> facts, Action? action, Entity entity, IFlowVisitor visitor) {
+        IReadOnlyList<Effect> effects,
+        FactSet facts,
+        Action? action,
+        Entity entity,
+        System.Action<AssignEffect, FactSet> onAssign) {
         foreach (var effect in effects) {
             switch (effect) {
                 case AssignEffect assign:
-                    visitor.OnAssign(assign, facts);
-                    if (assign.Target is PropertyAccess target) {
-                        var key = Property + target.Name;
-                        if (MayBeNull(assign.Value, facts, action, entity))
-                            facts.Remove(key);
-                        else
-                            facts.Add(key);
-                    }
+                    onAssign(assign, facts);
+                    NoteAssign(facts, assign, action, entity);
                     break;
-                case StageTransitionEffect transition:
-                    visitor.OnTransition(transition, facts);
+                case StageTransitionEffect:
+                    facts.LeaveStage();
                     break;
                 case ConditionalEffect conditional: {
-                        var whenTrue = new HashSet<string>(facts);
-                        var whenFalse = new HashSet<string>(facts);
+                        var whenTrue = facts.Clone();
+                        var whenFalse = facts.Clone();
                         Prove(conditional.Condition, true, whenTrue, action);
                         Prove(conditional.Condition, false, whenFalse, action);
-                        Walk(conditional.ThenEffects, whenTrue, action, entity, visitor);
+                        Walk(conditional.ThenEffects, whenTrue, action, entity, onAssign);
                         if (conditional.ElseEffects is not null)
-                            Walk(conditional.ElseEffects, whenFalse, action, entity, visitor);
-                        facts.Clear();
-                        facts.UnionWith(whenTrue.Where(whenFalse.Contains));
+                            Walk(conditional.ElseEffects, whenFalse, action, entity, onAssign);
+                        Intersect(facts, whenTrue, whenFalse, conditional.ElseEffects is not null);
                         break;
                     }
                 case CompositeEffect composite:
-                    Walk(composite.Effects, facts, action, entity, visitor);
+                    Walk(composite.Effects, facts, action, entity, onAssign);
                     break;
             }
         }
+    }
+
+    private static void NoteAssign(FactSet facts, AssignEffect assign, Action? action, Entity entity) {
+        if (assign.Target is not PropertyAccess target)
+            return;
+        var key = Property + target.Name;
+        if (MayBeNull(assign.Value, facts, action, entity))
+            facts.Drop(key);
+        else
+            facts.ProveLocal(key);
     }
 
     /// <summary>
     /// Adds the keys <paramref name="expression"/> proves present when it evaluates to
     /// <paramref name="truth"/>. A conjunct proves if one side does; an <c>or</c> proves nothing true.
     /// </summary>
-    private static void Prove(DomainExpression expression, bool truth, HashSet<string> facts, Action? action) {
+    private static void Prove(DomainExpression expression, bool truth, FactSet facts, Action? action) {
         switch (expression) {
             case Not negation:
                 Prove(negation.Operand, !truth, facts, action);
@@ -281,28 +416,31 @@ internal static class ProvableGuards {
                 if (!present)
                     break;
                 if (comparison.Right is Literal { Value: null } && SourceKey(comparison.Left, action) is { } left)
-                    facts.Add(left);
+                    facts.ProveLocal(left);
                 else if (comparison.Left is Literal { Value: null } && SourceKey(comparison.Right, action) is { } right)
-                    facts.Add(right);
+                    facts.ProveLocal(right);
                 break;
             case Exists exists when truth && SourceKey(exists.Target, action) is { } existing:
-                facts.Add(existing);
+                facts.ProveLocal(existing);
                 break;
             case NotExists notExists when !truth && SourceKey(notExists.Target, action) is { } missing:
-                facts.Add(missing);
+                facts.ProveLocal(missing);
                 break;
         }
     }
 
     /// <summary>The entity properties the given policies prove present (all must hold).</summary>
     private static HashSet<string> Presence(IReadOnlyList<Policy> policies) {
-        var facts = new HashSet<string>();
+        var facts = new FactSet();
         foreach (var policy in policies)
             Prove(policy.Expression, true, facts, action: null);
-        return [.. facts.Where(f => f.StartsWith(Property, StringComparison.Ordinal))
-            .Select(f => f.Substring(Property.Length))];
+        return facts.PropertyNames();
     }
 
-    private static HashSet<string> Facts(IEnumerable<string> properties) =>
-        [.. properties.Select(p => Property + p)];
+    private static FactSet FactsOf(IEnumerable<string> properties) {
+        var facts = new FactSet();
+        foreach (var property in properties)
+            facts.ProveLocal(Property + property);
+        return facts;
+    }
 }

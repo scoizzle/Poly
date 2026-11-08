@@ -4,6 +4,7 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -138,16 +139,134 @@ public class ProvableGuardTests {
               Copy: action { assign Memo to Note }
             }
             """;
-        var (_, domain, analysis) = Run(Doc(stage));
+        var (session, domain, analysis) = Run(Doc(stage));
         await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(0);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
 
         var open = domain.Types.OfType<Entity>().Single().Stages.Single();
         await Assert.That(open.Policies.Select(p => p.Name).ToList()).IsEquivalentTo(["HasNote"]);
+        await Assert.That(ReferenceEquals(
+            open.Policies.Single().Expression,
+            domain.Types.OfType<Entity>().Single().Policies.Single(p => p.Name == "HasNote").Expression)).IsTrue();
 
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed).Contains("require HasNote");
         var reparsed = Run(printed).Domain;
         await Assert.That(new DomainDslPrinter().Print(reparsed)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task StageRequireNot_RoundTrips() {
+        var (_, domain, analysis) = Run(Doc("""
+            Open: stage {
+              require not HasNote
+              Copy: action { assign Memo to "x" }
+            }
+            """));
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var printed = new DomainDslPrinter().Print(domain);
+        await Assert.That(printed).Contains("require not HasNote");
+        var reparsed = Run(printed).Domain;
+        await Assert.That(new DomainDslPrinter().Print(reparsed)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task TransitionOut_DropsStageFacts_IsDMEFF014() {
+        var (session, domain, analysis) = Run(Doc("""
+            Draft: stage {
+              Start: action require HasNote { transition to Open }
+            }
+            Open: stage {
+              Late: action {
+                transition to Closed
+                assign Memo to Note
+              }
+            }
+            Closed: stage {
+              entry { assign Note to null }
+            }
+            """));
+        var finding = Of(analysis, "DMEFF014").Single();
+        await Assert.That(finding.Node).IsTypeOf<AssignEffect>();
+        Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+    }
+
+    [Test]
+    public async Task EntryPolicy_RenullAfterTransition_DoesNotClear() {
+        await AssertCopyFinding("""
+            Draft: stage {
+              Start: action require HasNote {
+                transition to Open
+                assign Note to null
+              }
+            }
+            Open: stage {
+              Copy: action { assign Memo to Note }
+            }
+            """);
+    }
+
+    [Test]
+    public async Task StageRequire_AssignFromProvenOptional_IsNotDMEFF015() {
+        var (_, _, analysis) = Run("""
+            domain Notes
+            Doc: entity {
+              Note: Text optional
+              Memo: Text optional
+              HasNote: policy { Note is not null }
+              HasMemo: policy { Memo is not null }
+              Open: stage {
+                require HasNote
+                require HasMemo
+                Copy: action { assign Note to Memo }
+                Refresh: action { assign Note to Note }
+              }
+            }
+            """);
+        await Assert.That(Of(analysis, "DMEFF015").Count()).IsEqualTo(0);
+        await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task EntryPolicy_SelfAssignSibling_StillClears() {
+        await AssertNoCopyFinding("""
+            Draft: stage {
+              Start: action require HasNote { transition to Open }
+            }
+            Open: stage {
+              Refresh: action { assign Note to Note }
+              Copy: action { assign Memo to Note }
+            }
+            """);
+    }
+
+    [Test]
+    public async Task StageRequire_SuppressedByRequireNot_IsDMEFF014() {
+        await AssertCopyFinding("""
+            Open: stage {
+              require HasNote
+              Copy: action require not HasNote { assign Memo to Note }
+            }
+            """);
+        await AssertCopyFinding("""
+            Open: stage {
+              require HasNote
+            }
+            Copy: action require not HasNote { assign Memo to Note }
+            """);
+    }
+
+    [Test]
+    public async Task Printer_ApiStagePolicy_NotAnEntityRequire_Throws() {
+        var result = new DomainEvolution(DomainFactory.Create("D")).Evolve()
+            .AddEntity("Item")
+            .AddStage("Item", "Open")
+            .AddPolicyToStage("Item", "Open", "Ready", DomainExpression.Literal(true))
+            .Apply();
+        await Assert.That(result.Succeeded).IsTrue();
+        Assert.Throws<InvalidOperationException>(() => new DomainDslPrinter().Print(result.Root));
     }
 
     [Test]
